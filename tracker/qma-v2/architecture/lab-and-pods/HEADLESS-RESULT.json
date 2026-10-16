@@ -1,0 +1,42 @@
+{
+  "status": "partial",
+  "intent": "create",
+  "altitude": "feature",
+  "purpose": "build-substrate",
+  "doc_workspace": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/lab-and-pods",
+  "spine": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/lab-and-pods/ARCHITECTURE-SPINE.md",
+  "memlog": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/lab-and-pods/.memlog.md",
+  "companions": [
+    "HLD.md",
+    "LLD.md",
+    "UI-TO-BACKEND-MAP.md",
+    "PLAIN-WORDS.md",
+    "OPEN-DECISIONS.md",
+    "DOC-CHANGES.md",
+    "ui-shots/36-58 (new screenshots)",
+    "reviews/review-rubric-walker.md",
+    "reviews/review-currency.md",
+    "reviews/review-adversary.md",
+    "reviews/reconcile-inputs.md"
+  ],
+  "assumptions": [
+    "Requirements were taken from the screenshots and screen intent (operator correction); UI code and demo arrays were read only to learn which kinds of things exist.",
+    "The Data, Compute and Agents panels were reached only as entries in the + Panel menu and through research file 10; their internals are design intent at menu-note depth.",
+    "The pod simulator's measures (luck share, steps in, noise band) are defined here from what the cards show; the formulas are the template's scripts, not spine values.",
+    "Deflated Sharpe over every family trial is [remembered]; the spine binds only that every trial counts.",
+    "The day-one kernel adapter is a python -I subprocess under the engine's script envelope until the environment study picks the sandbox (ruling 53)."
+  ],
+  "open_questions": [
+    "OPEN-1 pod composition now: Book+BMS adapter with named unsupported blocks (recommended) vs wait for the risk session",
+    "OPEN-2 paper money in v1: server paper ledger on live prices (recommended); broker demo and testnet through the node later",
+    "OPEN-3 who starts a paper run: the operator's MANAGE yes (recommended) vs the Lab rule",
+    "OPEN-4 a mix is a pod with members and a split-across-pods allocator (recommended) vs a separate kind",
+    "OPEN-5 Lab-scoped schedules under one standing allow rule (recommended) vs MANAGE per schedule",
+    "OPEN-6 pairs in the scenario builder: defer until QMB has a spread instrument (recommended) vs cut"
+  ],
+  "conflicts_with_prior_decisions": [
+    "Library spine AD-3 maps book-definition -> pod and bms-definition -> pod-block; the screens' pod is a stack of blocks across seven slots and a pod block is one pure rule, so this design reads the mirrors as two added governed kinds `book` and `bms` and keeps `pod` / `pod-block` as ungoverned design kinds (schema-file addition under library AD-3). The Library agent must ratify or reject.",
+    "DEC-0261 / DEC-0275 say the node runs no per-bot paper lane and QMA-paper does not exist; this design adds a Lab paper run outside the node (an engine run on a paper ledger over live prices), which is neither, and routes demo-account paper through the node later (ruling 29 vs TN-9).",
+    "qmx_tools run_backtest(config_ref) and the pre-registered-config door retire in favour of qmb.compile + the qmb node pack (AD-5)."
+  ]
+}

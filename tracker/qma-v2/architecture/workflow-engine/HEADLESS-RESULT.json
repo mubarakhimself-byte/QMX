@@ -1,0 +1,46 @@
+{
+  "status": "partial",
+  "intent": "create",
+  "altitude": "initiative",
+  "purpose": "build-substrate",
+  "doc_workspace": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine",
+  "spine": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine/ARCHITECTURE-SPINE.md",
+  "memlog": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine/.memlog.md",
+  "companions": [
+    "SOLUTION-DESIGN.md",
+    "PLAIN-WORDS.md",
+    "OPEN-DECISIONS.md",
+    "HARNESS-REQUESTS.md",
+    "DOC-CHANGES.md",
+    "reviews/reconcile-inputs.md",
+    "reviews/review-rubric-walker.md",
+    "reviews/review-verification-lens.md",
+    "reviews/review-adversary.md"
+  ],
+  "assumptions": [
+    "The engine running in the qma.serve process beside the harness, apart from every chat, satisfies ruling 24; a separate OS process would need new harness REST doors for Background chats and injected text.",
+    "Python 3.14 provides uuid.uuid7(); otherwise a vendored helper (ids stay time-ordered strings).",
+    "All numeric defaults (tick 60 s, grace 15 min, cooldown 1 h, alert_after 6 h, max tries 3, soft lease cap 2, fan-out = max_live_chats - 2) are Claude's defaults, UI-editable."
+  ],
+  "open_questions": [
+    "Engine seat confirmation (in-process beside the harness).",
+    "Real models in draft test runs: fake by default, real on explicit click.",
+    "Default pool routing: all configured providers, OpenRouter test-only, GPT capacity one.",
+    "Catch-up after downtime: one merged run per trigger, with a per-trigger record-only switch.",
+    "Who may enable a schedule: operator only; copilot creates disabled triggers.",
+    "Run doctor reach: re-run once with hint or stronger model; propose logic changes only.",
+    "claude_workflow node: off in v1 unless harness request H4 is granted.",
+    "Alert threshold for long pauses: 6 h."
+  ],
+  "conflicts_with_prior_decisions": [
+    "DEC-0417 board client-only (and six mirrors) vs ruling 31: board is a saved draft.",
+    "DEC-0487/0499 'Run refuses a mutable draft' and no test step vs ruling 23: tested state, test-mode runs on drafts.",
+    "DEC-0420/0439 QMA Mission Compiler + RoutineScheduler vs the new qmx-engine as the one runtime.",
+    "DEC-0312 node-kind vocabulary vs AD-5 names.",
+    "DEC-0328 missed fires recorded-not-replayed vs ruling 25: one merged catch-up run.",
+    "DEC-0271/DEC-0476/LIBRARY-AND-ATTACHMENTS no Library database, ten kinds vs ruling 28: one Library storing everything.",
+    "DEC-0443 pack state 'uninstalled' vs ruling 9: archived.",
+    "10-13 'exactly one Claude Max account' and 01-requirements R5 vs rulings 26/39: account pool."
+  ],
+  "reason": "partial: open_questions non-empty (8 operator calls recorded with recommendations); no sub-agent tool was available in this process, so the reviewer gate ran inline and sequentially per the skill's fallback."
+}

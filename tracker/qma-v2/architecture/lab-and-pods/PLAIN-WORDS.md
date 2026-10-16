@@ -1,0 +1,29 @@
+# The Lab and the Pods, in plain words
+
+**What the Lab is.** One place where an idea becomes a tested strategy. You pick what you are working on (a bot, a workflow, a model), you see it as boxes and arrows or as code (the same thing, two views), you run it, you sweep it across markets and timeframes, you check it is not a fluke, you train a model and plug it in, and you compare versions. The pods bench is where you build the thing that sizes and guards the trades, test it against your bots and against crises, soak it on paper money, and then hand it to Portfolio.
+
+**What runs underneath.** Nothing new. Every button in the Lab starts a job on the one job engine QMX already has, and every result lands in the one Library. The Lab adds three things: the *kinds of documents* the editor can hold (a workflow, a bot's code, a pod block, a notebook board), the *steps* the engine can run for the Lab (load bars, make features, train, backtest through QMB, replay a pod, step a paper run), and *templates* (backtest, sweep, walk-forward, robustness, optimise, training, pod test, stress, paper; and the research recipes such as "idea to first result" and "overnight loop"). The Lab keeps no files and no job table of its own.
+
+**Graph and code.** Each thing you edit has one draft. The graph and the code are two views of it. For a workflow the stored thing is the graph's JSON and the code is drawn from it, one cell per step; for a bot the stored thing is the Python and the graph is drawn from it. Edit either view and the other follows. If an edit breaks the match, the Lab tells you and will not publish.
+
+**Run just this part.** Click a step and run it. The engine remembers what it already computed; steps whose inputs did not change show *fresh* and are not rerun; the one you touched shows *reran*; anything downstream shows *stale*. Nothing finished is paid for twice.
+
+**Backtests.** The Lab compiles a *setup* (which bot version, which pod or Book, which data and split, which costs, which parameter values) and hands it to QMB, the backtester, as one job per machine. QMB keeps its own ledger and its own result files; the Lab only points at them. A sweep of 72 cells is one QMB job that runs 72 isolated backtests. Runs done on a rented machine are marked *exploration only*; to make them evidence you rerun the winner on your PC.
+
+**Honesty rules.** Every run counts as a trial in its family, dead ones included, so the "luck" warning and the deflated Sharpe are real. The sealed test year is opened once per family and the opening is logged. Gate thresholds live in Settings and are tied to the exact version they judged; the copilot may tighten a gate, never loosen one.
+
+**Training and slots.** Training is a template: dataset, features, split with a sealed year, leakage check, train on the machine you picked, evaluate. The model becomes a Library object. A *slot* is a named place in a bot (entry signal), a pod block (sizing, throttle) or an MIS setting (regime) where a model can plug in; plugging one in makes a new version of that bot or block, which has to be tested again before it trades.
+
+**Where things run.** The machine picker asks the engine whether a machine is set up, signed in, reachable and healthy before anything runs. A document names a machine by its name, never a vendor. Time and cost estimates come from the engine, not the browser.
+
+**Notebooks.** A notebook is a board: cells are steps, so a cell runs like any step, on a kernel the engine starts inside the run. Which sandbox the kernel lives in is decided by another study; the Lab only fixes the plug.
+
+**Pods.** A pod is a stack of blocks in seven fixed slots: inputs, guards, allocator, sizer, throttles, caps, ledger. A block is a pure rule (a form, a small graph, a Python function, or a model under a rule ceiling). One simulator turns the stack into numbers for every screen: the size trail of one trade, the replay over your bots, the stress board, the drawdown fan, the head-to-head cards, a mix of pods. Edit a pod and you get a draft; save and it is the next version.
+
+**From the pod to trading.** The trading node is read through an adapter, never guessed. A pod version is compiled into the Book and BMS documents the node already understands; blocks the node cannot run yet are named, run only in the Lab, and show up as a failed "Ready for live?" row. Units (bot + pod + MIS needs) are read as a list of parts, so the risk session can change them later without touching the Lab.
+
+**Paper.** Sending a pod to paper starts a long-running job that feeds live prices through your bots and the pod on a paper ledger, writing every decision, every refusal and the equity against the band the pod's own test predicted. You can pause, resume, add days, or stop (the record is kept). When the five checks pass, *Promote* builds a promotion card and hands it to Portfolio; signing and activation are two human clicks there. The Lab never places an order and no agent can promote.
+
+**The copilot.** The seventeen tools the Lab copilot shows are real operations of the Lab's service, with the same permissions as the operator's buttons. Inside the Lab the copilot is not asked for permission step by step; it asks only for money (which is always read-only), for spend above your threshold, and for anything that leaves the Lab: putting a pod on paper, publishing outside, a schedule outside the Lab. The hub copilot loads the same tools.
+
+**What is not ready yet.** Pairs (one market against another) need a spread instrument in QMB. Colab is not a machine provider yet; cloud GPUs come in over SSH. Paper on a broker demo or exchange testnet goes through the trading node later; version one soaks on the server's paper ledger. Several throttle and cap blocks run only in the Lab until the risk session decides where they live on the node.

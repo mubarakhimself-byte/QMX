@@ -1,0 +1,464 @@
+{
+  "title": "QMX: how the agent system fits together",
+  "source": "19-centralized-design.md revision 2, after 21-lead-verdict.md",
+  "date": "2026-10-16",
+  "audience": "Mubarak. Plain words. The lead renders this as an animated one-page explainer.",
+  "system_steps": [
+    {
+      "title": "You talk to one copilot",
+      "caption": "There is one copilot. You talk to it wherever you are. It never does long work itself; it hands work out and explains results.",
+      "highlight": [
+        "you",
+        "hub"
+      ]
+    },
+    {
+      "title": "Your settings and the safety rules sit above everything",
+      "caption": "Model choices, spending limits and the checks live in Settings. The harness keeps money read-only and asks you when it must.",
+      "highlight": [
+        "settings",
+        "harness"
+      ]
+    },
+    {
+      "title": "The engine runs recipes while you sleep",
+      "caption": "A recipe is a list of steps. Cheap steps are scripts. The engine saves every finished step, pauses at your usage cap, and never redoes paid work.",
+      "highlight": [
+        "engine"
+      ]
+    },
+    {
+      "title": "Everything is a folder",
+      "caption": "Agents, workflows, skills, packs, mini apps and methodologies are folders of one shape. Old versions are kept; nothing is deleted.",
+      "highlight": [
+        "registry"
+      ]
+    },
+    {
+      "title": "A session is born in a home and carries its packs",
+      "caption": "A session born in the Lab keeps its Lab tools even when you open it in the copilot. Packs add reach; the stricter rule wins.",
+      "highlight": [
+        "homes",
+        "subagents",
+        "workflows"
+      ]
+    },
+    {
+      "title": "Work lands in rooms",
+      "caption": "The Lab and Board, the Library called Strats, Portfolio, mini apps and the QMX browser. Agents read money and never move it.",
+      "highlight": [
+        "lab",
+        "library",
+        "portfolio",
+        "apps",
+        "browser"
+      ]
+    },
+    {
+      "title": "The trading node stays outside",
+      "caption": "A unit is a strategy with its risk settings. It lives in the node, a server you upload it to. Agents only read facts from it.",
+      "highlight": [
+        "node"
+      ]
+    },
+    {
+      "title": "Every result is checked, then drawn",
+      "caption": "Agents produce data, not pages. A checker confirms every number has a source. Then QMX draws one of six fixed page types.",
+      "highlight": [
+        "renderer",
+        "ui"
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "you",
+      "label": "Mubarak",
+      "group": "people"
+    },
+    {
+      "id": "settings",
+      "label": "Settings: model tiers, checks, spending limit",
+      "group": "top"
+    },
+    {
+      "id": "harness",
+      "label": "Harness: chats, approvals, money read-only, usage cap",
+      "group": "top"
+    },
+    {
+      "id": "engine",
+      "label": "Engine: steps, saved results, night planner, inbox",
+      "group": "core"
+    },
+    {
+      "id": "registry",
+      "label": "Folders: agents, workflows, skills, packs, apps, methodologies",
+      "group": "core"
+    },
+    {
+      "id": "homes",
+      "label": "Homes and packs",
+      "group": "session"
+    },
+    {
+      "id": "hub",
+      "label": "The copilot you talk to",
+      "group": "session"
+    },
+    {
+      "id": "subagents",
+      "label": "Helper agents",
+      "group": "session"
+    },
+    {
+      "id": "workflows",
+      "label": "Workflows: scheduled, autonomous, scripted",
+      "group": "session"
+    },
+    {
+      "id": "lab",
+      "label": "Lab and Board",
+      "group": "rooms"
+    },
+    {
+      "id": "library",
+      "label": "Library (Strats)",
+      "group": "rooms"
+    },
+    {
+      "id": "portfolio",
+      "label": "Portfolio: reads and proposal cards",
+      "group": "rooms"
+    },
+    {
+      "id": "apps",
+      "label": "Mini apps",
+      "group": "rooms"
+    },
+    {
+      "id": "browser",
+      "label": "QMX browser: read-only first",
+      "group": "rooms"
+    },
+    {
+      "id": "node",
+      "label": "Trading node (outside): unit, account guard",
+      "group": "outside"
+    },
+    {
+      "id": "renderer",
+      "label": "Checker and renderer: six page types",
+      "group": "output"
+    },
+    {
+      "id": "ui",
+      "label": "QMX screen: chat, inbox, run timeline",
+      "group": "output"
+    }
+  ],
+  "edges": [
+    {
+      "from": "you",
+      "to": "hub",
+      "label": "talks, picks, signs"
+    },
+    {
+      "from": "settings",
+      "to": "engine",
+      "label": "limits and checks"
+    },
+    {
+      "from": "settings",
+      "to": "hub",
+      "label": "model tiers"
+    },
+    {
+      "from": "harness",
+      "to": "engine",
+      "label": "runs chats for steps"
+    },
+    {
+      "from": "registry",
+      "to": "engine",
+      "label": "recipes"
+    },
+    {
+      "from": "registry",
+      "to": "hub",
+      "label": "packs and skills"
+    },
+    {
+      "from": "homes",
+      "to": "hub",
+      "label": "sets reach"
+    },
+    {
+      "from": "hub",
+      "to": "subagents",
+      "label": "hands out tasks"
+    },
+    {
+      "from": "hub",
+      "to": "workflows",
+      "label": "starts or edits"
+    },
+    {
+      "from": "engine",
+      "to": "workflows",
+      "label": "runs"
+    },
+    {
+      "from": "workflows",
+      "to": "subagents",
+      "label": "uses"
+    },
+    {
+      "from": "workflows",
+      "to": "lab",
+      "label": ""
+    },
+    {
+      "from": "workflows",
+      "to": "library",
+      "label": ""
+    },
+    {
+      "from": "workflows",
+      "to": "portfolio",
+      "label": "cards only"
+    },
+    {
+      "from": "workflows",
+      "to": "apps",
+      "label": ""
+    },
+    {
+      "from": "workflows",
+      "to": "browser",
+      "label": "read pages"
+    },
+    {
+      "from": "node",
+      "to": "portfolio",
+      "label": "read-only facts",
+      "style": "dotted"
+    },
+    {
+      "from": "lab",
+      "to": "renderer",
+      "label": ""
+    },
+    {
+      "from": "library",
+      "to": "renderer",
+      "label": ""
+    },
+    {
+      "from": "portfolio",
+      "to": "renderer",
+      "label": ""
+    },
+    {
+      "from": "apps",
+      "to": "renderer",
+      "label": ""
+    },
+    {
+      "from": "renderer",
+      "to": "ui",
+      "label": "checked pages"
+    },
+    {
+      "from": "ui",
+      "to": "you",
+      "label": "pages, cards, alerts"
+    }
+  ],
+  "waves": [
+    {
+      "wave": 0,
+      "title": "Now: your decisions, the written contracts, the probes",
+      "bullets": [
+        "You answer eight short questions",
+        "Claude writes the contracts as specs",
+        "Twelve probes test the real code first",
+        "The guard gets a no-write lock"
+      ],
+      "pilots": []
+    },
+    {
+      "wave": 1,
+      "title": "Prerequisites, harness extensions, thin engine",
+      "bullets": [
+        "Merge the harness, run the deletion, fix SQLite",
+        "Add homes, structured output, limits, plugin registry",
+        "Build the thin engine inside the server",
+        "Build the renderer, the night planner, the inbox"
+      ],
+      "pilots": []
+    },
+    {
+      "wave": 2,
+      "title": "Pilots, one at a time",
+      "bullets": [
+        "Each pilot proves one contract",
+        "Lab and Board come first for you",
+        "One mini app loads as a plugin",
+        "Exit: one clean night under the cap"
+      ],
+      "pilots": [
+        "Paper scout (proves the engine)",
+        "Board: idea to first result",
+        "One mini app as a plugin",
+        "Minimal workflow builder",
+        "Combined-session pilot",
+        "Daily book report, if cheap"
+      ]
+    },
+    {
+      "wave": 3,
+      "title": "The rest of the catalogue and the builders",
+      "bullets": [
+        "Research, desk, Lab and developer templates",
+        "Builders for agents, skills, packs, methodologies",
+        "Full strategy funnel once QMB opens its door",
+        "Browser reads as you, after your yes"
+      ],
+      "pilots": []
+    },
+    {
+      "wave": 4,
+      "title": "After other sessions rule",
+      "bullets": [
+        "Everything that reads a live unit or the guard",
+        "Mini apps that need Docker",
+        "Server runs and the cloud browser",
+        "Big-data research step"
+      ],
+      "pilots": []
+    }
+  ],
+  "decisions": [
+    {
+      "id": 1,
+      "question": "Inside the Lab, may agents start and schedule their own jobs without asking you, as long as background use stays under your 50% cap? (This changes your 10-13 rule that scheduling always asks.)",
+      "recommended": "Yes",
+      "why": "Without it every unattended Lab run stops at its first ask."
+    },
+    {
+      "id": 2,
+      "question": "When something proven in the Lab goes into Strats, should QMX just tell you instead of asking first?",
+      "recommended": "Yes",
+      "why": "Otherwise every promotion parks a run until you answer."
+    },
+    {
+      "id": 3,
+      "question": "Agents must ask you before one run spends more than $___ on paid keys such as OpenRouter. What number? (Or say \"always ask\".)",
+      "recommended": "Always ask, until you pick a number",
+      "why": "Only you can set a money number. No run spends keys without it."
+    },
+    {
+      "id": 4,
+      "question": "Lift the browser hold for one first step: a separate QMX browser you log into once and can watch live, which agents use to read pages, one job at a time, with no clicking?",
+      "recommended": "Yes",
+      "why": "The funnel needs TradingView and playlist pages. Read-only keeps the hold's spirit."
+    },
+    {
+      "id": 5,
+      "question": "Rules like \"a run may not skip a check\" bind agents only. You can drop any check in your own workflows, and the result shows a badge. Agree?",
+      "recommended": "Yes",
+      "why": "Total creative freedom for you; the brakes stay on the agents."
+    },
+    {
+      "id": 6,
+      "question": "May the Experimentation Board be saved on the backend, so a board survives restarts and workflows can run it? (This changes two docs that say the Board lives only in the browser.)",
+      "recommended": "Yes",
+      "why": "A board that vanishes on restart cannot be run overnight."
+    },
+    {
+      "id": 7,
+      "question": "Build order: a small paper scout runs first, only as a quiet test that the engine works. Then the Lab and Board (the first thing built for you), then one mini app as a plugin. The morning brief and Portfolio reports come later. Agree?",
+      "recommended": "Yes",
+      "why": "The Lab is the core. Desk briefs need a trading node that is not ready."
+    },
+    {
+      "id": 8,
+      "question": "Urgent alerts: which phone channel may QMX send to, if any? (Until you pick one, everything goes to the in-app inbox.)",
+      "recommended": "Inbox only, until you pick a channel",
+      "why": "Sending to your phone is sending on your behalf; the channel is yours."
+    }
+  ],
+  "assumptions": [
+    "Step kinds: script, rule, model, agent, human, grader, subflow.",
+    "Finished steps are saved and never redone; failures go to your inbox.",
+    "Everything is one folder shape, a valid plugin; archive, never delete.",
+    "A session keeps its birth home; packs add reach; stricter rule wins.",
+    "Settings show four model tiers; a second model family costs a key.",
+    "Agents produce data; QMX draws six fixed page types; R before dollars.",
+    "Default checks: costs on, out-of-sample, minimum trades, deflated Sharpe.",
+    "Two iterations per idea is Claude's starting goal, not yours.",
+    "One heavy job per night; calibration on five headline claims only.",
+    "All loop caps, widths and counts are Claude's defaults, editable."
+  ],
+  "templates_by_quant": {
+    "Researcher": [
+      "Fill the Library",
+      "Build and prove",
+      "Idea grill to term sheet",
+      "Paper scout to research note",
+      "Source to component card",
+      "Source to a Lab test",
+      "Literature review on a topic",
+      "Hypotheses from dead ends",
+      "Big-data question",
+      "Weekly review"
+    ],
+    "Trader": [
+      "Desk brief",
+      "News and macro calendar watch",
+      "Research desk overnight",
+      "Demo monitor and execution quality",
+      "Trade journal review"
+    ],
+    "Risk": [
+      "Guard watchdogs",
+      "Correlation and exposure drift",
+      "Decay and limit report",
+      "Stress tests",
+      "Incident post-mortem"
+    ],
+    "Lab": [
+      "Idea to first result (the Board)",
+      "Overnight Lab loop"
+    ],
+    "Developer": [
+      "Build a component or indicator",
+      "Iterate against QMB with overfit guards",
+      "Variant generation and comparison",
+      "ML training run with a holdout",
+      "Mini app: create, check, maintain, archive",
+      "Mini-app-to-mini-app pipeline"
+    ],
+    "Portfolio manager": [
+      "Portfolio combination study",
+      "Daily book report",
+      "Proposal pack you sign"
+    ]
+  },
+  "numbers": {
+    "decisions": 8,
+    "assumptions_listed": 10,
+    "central_pieces": 12,
+    "templates_user_facing": 31,
+    "templates_before_merge": 48,
+    "shared_blocks": 26,
+    "probes": 12,
+    "waves": 5,
+    "wave2_pilots": 6,
+    "tickets_total": 69,
+    "tickets_on_frontier": 25,
+    "tickets_blocked": 42,
+    "tickets_closed": 2
+  }
+}
