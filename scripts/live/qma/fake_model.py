@@ -18,6 +18,7 @@ from __future__ import annotations
 import itertools
 import json
 import threading
+import time
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Final
@@ -57,6 +58,8 @@ class Seen:
     headers: dict[str, str]
     body: bytes
     scripted: bool
+    at: float = field(default_factory=time.perf_counter)
+    """`time.perf_counter()` when the request arrived."""
 
     @property
     def json(self) -> dict[str, Any]:

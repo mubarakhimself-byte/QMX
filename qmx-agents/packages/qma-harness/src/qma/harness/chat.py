@@ -36,12 +36,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import json
 import logging
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
@@ -79,6 +80,7 @@ from qma.harness.home import (
 from qma.harness.launch import (
     ChatConfig,
     ChatKind,
+    Child,
     Launch,
     LaunchRefused,
     PlanLaunch,
@@ -351,7 +353,7 @@ def _tokens(count: int) -> str:
 def warning(
     old: ChatConfig, new: ChatConfig, steps: tuple[Step, ...], tokens: int, tasks: int
 ) -> str | None:
-    """"Switching to kimi resends ~182k tokens uncached and stops 1 background task.", or None
+    """ "Switching to kimi resends ~182k tokens uncached and stops 1 background task.", or None
     when the change loses no cache and stops nothing."""
     parts = []
     if resets_cache(old, new) and tokens > 0:
@@ -408,6 +410,8 @@ class ChatDeps:
     which may stop every plan chat."""
     vetted: VetCache = field(default_factory=VetCache)
     """External MCP tool lists already vetted, by config digest, for this harness."""
+    delegate: Callable[[SessionId, str, str], Awaitable[str]] | None = None
+    """`Harness._delegate`, called with the calling chat's id, a profile and a prompt."""
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
 
@@ -467,8 +471,9 @@ def track_task(running: set[str], message: Message) -> None:
     match message:
         case TaskStartedMessage(task_id=task):
             running.add(task)
-        case TaskNotificationMessage(task_id=task, status=status) | TaskUpdatedMessage(
-            task_id=task, status=status
+        case (
+            TaskNotificationMessage(task_id=task, status=status)
+            | TaskUpdatedMessage(task_id=task, status=status)
         ) if status in TERMINAL_TASK_STATUSES:
             running.discard(task)
         case _:
@@ -546,6 +551,11 @@ class _Live:
     grant: RelayGrant | None
     reader: asyncio.Task[None] | None = None
     keeper: asyncio.Task[None] | None = None
+    ending: bool = False
+    """Set when the chat starts ending this process itself, so the reader does not treat the
+    process going away as lost."""
+    teardown: asyncio.Task[None] | None = None
+    """Set once by `Chat._end`; a second end of the same process waits on it."""
 
 
 @dataclass
@@ -581,7 +591,6 @@ class Chat:
         self._deps = deps
         self._live: _Live | None = None
         self._lock = asyncio.Lock()
-        self._closing = False
         self._children: dict[str, str] = {}
         self._stream = _Stream()
         self._grants = Grants()
@@ -595,6 +604,8 @@ class Chat:
         self._epoch = 0
         """Prompts sent since this object was made. A quote from an older epoch is stale."""
         self._quotes: dict[str, Quote] = {}
+        self._ends: list[asyncio.Future[TurnEnded | None]] = []
+        self._teardowns: set[asyncio.Task[None]] = set()
 
     @property
     def session_id(self) -> SessionId:
@@ -702,6 +713,18 @@ class Chat:
                 raise LaunchRefused(f"/effort {effort} got no reply in {EFFORT_WAIT_S:.0f} s")
             await asyncio.sleep(0.05)
 
+    def next_end(self) -> asyncio.Future[TurnEnded | None]:
+        """Resolves with the next turn's end, or None when the process ends first."""
+        end: asyncio.Future[TurnEnded | None] = asyncio.get_running_loop().create_future()
+        self._ends.append(end)
+        return end
+
+    def _resolve_ends(self, ended: TurnEnded | None) -> None:
+        ends, self._ends = self._ends, []
+        for end in ends:
+            if not end.done():
+                end.set_result(ended)
+
     @property
     def idle_seconds(self) -> float:
         """Seconds since the CLI last spoke or a prompt went in, or 0 while the chat is Cold,
@@ -733,12 +756,9 @@ class Chat:
             live, self._live = self._live, None
             if live is None:
                 return
-            self._closing = True
-            try:
-                await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
-                await self._end(live)
-            finally:
-                self._closing = False
+            live.ending = True
+            await asyncio.to_thread(self._deps.procs.stop_chat, self.session_id)
+            await self._end(live)
             self._stream.close_all()
             self._write(turn="idle")
             await self._note("needs_you", {"reason": f"plan use stopped: {reason}"})
@@ -783,21 +803,31 @@ class Chat:
         become `expired`. Idempotent."""
         async with self._lock:
             await self._shut()
+        await asyncio.gather(*self._teardowns, return_exceptions=True)
 
     async def _shut(self) -> None:
         live, self._live = self._live, None
         if live is None:
             return
-        self._closing = True
-        try:
-            await self._end(live)
-        finally:
-            self._closing = False
+        live.ending = True
+        await self._end(live)
 
     async def _end(self, live: _Live) -> None:
-        self._tasks.clear()
-        for n in list(self._asks):
-            self._settle(n, "expired", _Expired(ENDED))
+        """Tear `live` down in a task of its own, so the process is stopped even when the caller
+        is cancelled, including by a cancel scope that cancels every later await (the SDK does
+        that to an interrupted tool call). The caller's cancellation still reaches it at once."""
+        live.ending = True
+        if live.teardown is None:
+            self._tasks.clear()
+            self._resolve_ends(None)
+            for n in list(self._asks):
+                self._settle(n, "expired", _Expired(ENDED))
+            live.teardown = asyncio.ensure_future(self._teardown(live, asyncio.current_task()))
+            self._teardowns.add(live.teardown)
+            live.teardown.add_done_callback(self._teardowns.discard)
+        await asyncio.shield(live.teardown)
+
+    async def _teardown(self, live: _Live, caller: asyncio.Task[Any] | None) -> None:
         if live.grant is not None:
             await self._deps.relay.revoke(live.grant)
         with contextlib.suppress(Exception):
@@ -806,7 +836,7 @@ class Chat:
             live.keeper.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await live.keeper
-        if live.reader is not None and live.reader is not asyncio.current_task():
+        if live.reader is not None and live.reader is not caller:
             live.reader.cancel()
             with contextlib.suppress(Exception, asyncio.CancelledError):
                 await live.reader
@@ -924,7 +954,14 @@ class Chat:
         external tools in an unattended chat or mode."""
         deps = self._deps
         control = deps.control
-        defs = await tool_defs(control=control, broker=deps.broker, domain=deps.domain)
+        delegate = (
+            None
+            if deps.delegate is None or isinstance(self.record.config.kind, Child)
+            else functools.partial(deps.delegate, self.session_id)
+        )
+        defs = await tool_defs(
+            control=control, broker=deps.broker, domain=deps.domain, delegate=delegate
+        )
         policy = domain_write_policy(await asyncio.to_thread(control.settings_get, "agents"))
         try:
             qmx = build_server(
@@ -991,7 +1028,7 @@ class Chat:
                     UnreadableLimits(f"a rate-limit event could not be read: {error}")
                 )
         finally:
-            if not self._closing:
+            if not live.ending:
                 await self._lost(live)
 
     async def _lost(self, live: _Live) -> None:
@@ -1028,6 +1065,7 @@ class Chat:
             case TurnEnded():
                 self._stream.close(Here())
                 self._write(turn="idle", started=True)
+                self._resolve_ends(fact)
             case Compacted(trigger=trigger):
                 await self._note("changed", {"kind": "compacted", "trigger": trigger})
             case TurnUsage() if self.on_plan:

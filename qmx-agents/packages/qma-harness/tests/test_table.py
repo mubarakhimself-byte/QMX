@@ -131,9 +131,10 @@ def test_only_background_and_child_chats_launch_verbatim_and_bounded(home: QmxHo
 
     async def body(harness: Harness) -> None:
         read_plan(harness, 0.1)
-        await finished(harness, home, await chat(harness, "operator"))
+        operator = await chat(harness, "operator")
+        await finished(harness, home, operator)
         await harness.send(await chat(harness, "news", Background()), InjectedText("news"))
-        child = await chat(harness, "helper", Child(CHILD, unattended=True))
+        child = await chat(harness, "helper", Child(operator, unattended=True))
         await harness.send(child, InjectedText("review"))
 
     run(body, home)

@@ -3,7 +3,8 @@ throwaway HOME whose `~/.claude` login, hold a canary of the real token shape. A
 the fake model (the echo server) tries every read: Read, Grep and Glob on the plan login,
 `cat "$CLAUDE_CONFIG_DIR/.credentials.json"`, a relative-path `cat`, and the same on
 `~/.claude`. It runs in default mode, in bypass mode, and inside a native sub-agent.
-`delegate` is not built yet, so the delegated leg is not run.
+This script does not run the delegated leg. The HP13 check ran it with a delegated child
+(`evidence/hp13/check-canary.log`).
 
 PASS when every read attempt is denied, the canary appears in no QMX file, no fake-model
 request body or header, and no evidence log, and the relay saw zero unknown bearers.
