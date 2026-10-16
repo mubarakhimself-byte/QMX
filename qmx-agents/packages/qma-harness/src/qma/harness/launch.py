@@ -20,6 +20,8 @@ Everything not set here is the vanilla CLI default, which is the operator's floo
 from __future__ import annotations
 
 import itertools
+import logging
+import math
 import os
 import subprocess
 import sys
@@ -46,6 +48,8 @@ type PermissionMode = Literal[
     "default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"
 ]
 type Effort = Literal["low", "medium", "high", "xhigh", "max"]
+
+log = logging.getLogger(__name__)
 
 
 class LaunchRefused(RuntimeError):
@@ -101,6 +105,51 @@ class ChatConfig:
     mode: PermissionMode
     workspace: Path
     kind: ChatKind
+
+
+@dataclass(frozen=True)
+class Budgets:
+    """settings.toml [budgets], read at each send so an edit in the UI applies to the next one.
+    `max_turns` and `max_budget_usd` bound Background and Child chats only; an Interactive
+    chat runs unbounded, as Claude Code does."""
+
+    max_live_chats: int = 4
+    idle_reap_seconds: float = 900.0
+    unattended_ask_seconds: float = 300.0
+    background_cap: float = 0.5
+    """A share of the plan's five-hour window, above 0 and at most 1."""
+    max_turns: int = 50
+    max_budget_usd: float = 5.0
+
+
+def parse_budgets(raw: Mapping[str, object]) -> Budgets:
+    """Each value that is missing or out of range falls back to its default, with a warning
+    for one that was set."""
+    default = Budgets()
+
+    def number(name: str, *, whole: bool = False, at_most: float = math.inf) -> Any:
+        fallback = getattr(default, name)
+        value = raw.get(name, fallback)
+        fits = (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and (isinstance(value, int) or not whole)
+            and 0 < value <= at_most
+            and value < math.inf
+        )
+        if fits:
+            return value if whole else float(value)
+        log.warning("[budgets] %s = %r is out of range; using %s", name, value, fallback)
+        return fallback
+
+    return Budgets(
+        max_live_chats=number("max_live_chats", whole=True),
+        idle_reap_seconds=number("idle_reap_seconds"),
+        unattended_ask_seconds=number("unattended_ask_seconds"),
+        background_cap=number("background_cap", at_most=1),
+        max_turns=number("max_turns", whole=True),
+        max_budget_usd=number("max_budget_usd"),
+    )
 
 
 @dataclass(frozen=True)
@@ -257,12 +306,14 @@ def build_options(
     can_use_tool: CanUseTool,
     mcp_servers: Mapping[str, McpServerConfig],
     gate: money.GateRules,
+    budgets: Budgets,
     test: TestMode | None = None,
 ) -> ClaudeAgentOptions:
     """One chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
     `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The money
     gate runs as a PreToolUse callback on every tool, with an explicit timeout, and the deny
     rules ride in `disallowed_tools`; `test` switches either off for a layer check."""
+    bounded = not isinstance(config.kind, Interactive)
     gate_hook = test is None or test.gate_hook
     rules_on = test is None or test.deny_rules
     hooks: dict[HookEvent, list[HookMatcher]] = (
@@ -301,4 +352,6 @@ def build_options(
         enable_file_checkpointing=True,
         extra_args={"replay-user-messages": None},
         verbatim_prompts=verbatim(config.kind),
+        max_turns=budgets.max_turns if bounded else None,
+        max_budget_usd=budgets.max_budget_usd if bounded else None,
     )

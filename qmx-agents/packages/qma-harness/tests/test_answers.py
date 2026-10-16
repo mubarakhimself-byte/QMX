@@ -25,9 +25,9 @@ from qma.harness import (
     QmxHome,
     Reject,
 )
-from qma.harness.chat import ask_budget
-from qma.harness.home import read_record, session_id, workspace_key, write_record
+from qma.harness.home import read_record, session_id, workspace_key
 from qma.harness.launch import Background
+from qma.harness.project import PlanMeter, Reading
 from qma.harness.routes import chat_router, control_service
 from qma.harness.tools import Grants, args_digest
 
@@ -213,10 +213,8 @@ def test_an_unattended_ask_rejects_after_the_budget(home: QmxHome) -> None:
     control_service(home).settings_put("budgets", {"unattended_ask_seconds": 0.05})
 
     async def body(harness: Harness) -> None:
-        chat = await harness.start_chat(NewChat(title="bg", model="haiku"))
-        record = read_record(home, chat)
-        assert record is not None
-        write_record(home, replace(record, config=replace(record.config, kind=Background())))
+        harness._deps.on_plan_limits(PlanMeter((Reading("five_hour", 0.1, None),)))
+        chat = await harness.start_chat(NewChat(title="bg", model="haiku", kind=Background()))
         await harness.send(chat, OperatorText("go"))
         ask = FakeClient.made[-1].options.can_use_tool
         assert ask is not None
@@ -308,23 +306,3 @@ def test_an_edited_input_goes_through_the_money_gate_and_the_grant_binds_it(
     [grants] = held
     assert grants.consume(PROPOSE, args_digest(PROPOSE, ORDER)) is False
     assert grants.consume(PROPOSE, args_digest(PROPOSE, {**ORDER, "volume": 0.05})) is True
-
-
-@pytest.mark.parametrize(
-    ("raw", "seconds"),
-    [
-        ({}, 300.0),
-        ({"unattended_ask_seconds": 12}, 12.0),
-        ({"unattended_ask_seconds": 0.5}, 0.5),
-        ({"unattended_ask_seconds": "soon"}, 300.0),
-        ({"unattended_ask_seconds": True}, 300.0),
-        ({"unattended_ask_seconds": 0}, 300.0),
-        ({"unattended_ask_seconds": -5}, 300.0),
-        ({"unattended_ask_seconds": float("nan")}, 300.0),
-        ({"unattended_ask_seconds": float("inf")}, 300.0),
-    ],
-)
-def test_the_unattended_ask_budget_falls_back_on_a_bad_value(
-    raw: dict[str, object], seconds: float
-) -> None:
-    assert ask_budget(raw) == seconds

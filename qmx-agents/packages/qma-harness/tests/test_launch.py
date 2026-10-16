@@ -15,6 +15,7 @@ from qma.harness.launch import (
     CONSTANT_ENV,
     GATE_TIMEOUT_S,
     Background,
+    Budgets,
     ChatConfig,
     Child,
     Interactive,
@@ -149,6 +150,7 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         can_use_tool=refuse,
         mcp_servers={},
         gate=GATE,
+        budgets=Budgets(),
     )
     [matcher] = options.hooks["PreToolUse"] if options.hooks else []
     assert (matcher.matcher, matcher.timeout, len(matcher.hooks)) == (None, GATE_TIMEOUT_S, 1)
@@ -179,6 +181,8 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         enable_file_checkpointing=True,
         extra_args={"replay-user-messages": None},
         verbatim_prompts=False,
+        max_turns=None,
+        max_budget_usd=None,
     )
     resumed = build_options(
         ChatConfig(PLAN, "haiku", "high", "plan", workspace, Background()),
@@ -191,11 +195,13 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         can_use_tool=refuse,
         mcp_servers={},
         gate=GATE,
+        budgets=Budgets(),
         test=TestMode(gate_hook=False, deny_rules=False),
     )
     assert (resumed.hooks, resumed.disallowed_tools) == (None, [])
     seen = (resumed.session_id, resumed.resume, resumed.verbatim_prompts, resumed.effort)
     assert seen == (None, CHAT, True, "high")
+    assert (resumed.max_turns, resumed.max_budget_usd) == (50, 5.0)
 
 
 def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
@@ -213,6 +219,7 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
         can_use_tool=refuse,
         mcp_servers={},
         gate=GATE,
+        budgets=Budgets(),
     )
     with pytest.raises(LaunchRefused, match=r"largest part is QMX\.md and the workspace CLAUDE"):
         assert_argv_fits(options)
@@ -229,6 +236,7 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
             can_use_tool=refuse,
             mcp_servers={},
             gate=GATE,
+        budgets=Budgets(),
         )
     )
 

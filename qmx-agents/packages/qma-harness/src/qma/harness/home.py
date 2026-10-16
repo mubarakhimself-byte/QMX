@@ -44,6 +44,7 @@ from qma.boot import banned_fragment
 from qma.harness.launch import (
     ARGV_BUDGET,
     Background,
+    Budgets,
     ChatConfig,
     ChatKind,
     Child,
@@ -812,6 +813,7 @@ def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) ->
         launcher=launcher,
         can_use_tool=_no_tools,
         mcp_servers={},
+        budgets=Budgets(),
         gate=gate_rules(
             [],
             domain_write=DEFAULT_DOMAIN_WRITE,
