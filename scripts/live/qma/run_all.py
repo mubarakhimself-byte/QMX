@@ -94,6 +94,7 @@ CHECKS: Final[tuple[Check, ...]] = (
     check("S6", "s06_money.py", "agent", needs=[PLAN]),
     check("S6", "s06_money.py", "neg", needs=[PLAN]),
     check("S6a", "s06a_gate_alone.py"),
+    check("S6a", "s06a_gate_alone.py", "agent"),
     check("S6b", "s06b_rules_alone.py"),
     check("S7", "s07_isolation.py", needs=[PLAN]),
     check(

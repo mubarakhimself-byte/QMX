@@ -8,7 +8,15 @@ holds no keys can be read.
 PASS when every denied call is denied by the hook (its text names the money rule), the control
 read runs, the rendered launch carries no deny rules, and no CLI connected to a broker host.
 
-    s06a_gate_alone.py
+`agent` runs S6's sub-agent lane on the fake model, so the gate decides it and no model can
+decline: the fake parent starts a native sub-agent, which makes the keyring read, the
+broker-host command and the Edit of settings.toml. It runs once with the gate alone and once
+with the full launch (deny rules on). PASS when every call is denied inside the sub-agent, by
+the hook with the gate alone and by the hook or a deny rule with the full launch, and
+settings.toml is unchanged. The fake profile's CLI offers no Monitor tool, so the broker host is
+named in Bash, as in the parent lane.
+
+    s06a_gate_alone.py [agent]
 """
 
 from __future__ import annotations
@@ -86,12 +94,46 @@ async def run(log: Log) -> None:
         fake.stop()
 
 
+async def agent(log: Log) -> None:
+    from qma.harness import TestMode  # noqa: PLC0415
+
+    root = throwaway_home("hp8-s06a-agent")
+    plant_canary_login(root)
+    by_label = {call.label: call for call in calls(root.as_posix())}
+    plan = [by_label[label] for label in ("keyring read", "broker host", "edit settings.toml")]
+    for label, deny_rules in (("gate alone", False), ("full launch", True)):
+        session, fake, outcomes = await run_calls(
+            log,
+            root,
+            plan,
+            test=TestMode(deny_rules=deny_rules, grants=False, loopback_http_provider=True),
+            mode="bypassPermissions",
+            tools=[*TOOLS, "Agent"],
+            in_agent=True,
+            title=f"s06a agent {label}",
+        )
+        try:
+            for call in plan:
+                kind = outcomes[call.label][0]
+                want = {"hook", "rule"} if deny_rules and call.tool != "Bash" else {"hook"}
+                log.check(f"{label}: {call.label} denied inside the sub-agent", kind in want, kind)
+        finally:
+            await session.harness.close()
+            fake.stop()
+    log.check(
+        "settings.toml unchanged",
+        "[x]" not in (root / "settings.toml").read_text(encoding="utf-8"),
+        "checked",
+    )
+
+
 def main() -> int:
-    log = Log("hp8-s06a")
+    in_agent = sys.argv[1:] == ["agent"]
+    log = Log("hp8-s06a-agent" if in_agent else "hp8-s06a")
     boot()
     use_fake_home()
     use_fake_key()
-    asyncio.run(run(log))
+    asyncio.run(agent(log) if in_agent else run(log))
     return log.verdict()
 
 

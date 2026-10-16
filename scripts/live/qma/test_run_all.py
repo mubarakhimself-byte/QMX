@@ -78,7 +78,7 @@ def test_without_a_login_only_fake_model_checks_run() -> None:
     assert reasons["S8 rows"] == "needs the OpenRouter key"
     assert reasons["S20 settings"] == "needs a running qma.serve host, this PC's keyring"
     assert run == [
-        "S5", "S6a", "S6b", "S9", "S11 nested", "S11 background", "S11 model", "S11 tools",
+        "S5", "S6a", "S6a agent", "S6b", "S9", "S11 nested", "S11 background", "S11 model", "S11 tools",
         "S11 subagent", "S11 full", "S11 allowlist", "S11 unattended", "S12 bash", "S15 wire",
         "S15 restart", "S15 concurrent", "S15 question", "S21", "S21ab", "S21c", "S21e", "S22",
         "S23", "S24 key", "S28", "S29", "S29a", "S31 idle", "S31 busy", "S32", "S33", "S34",
@@ -95,7 +95,7 @@ def test_the_checks_run_in_design_section_5_order_and_each_script_exists() -> No
         "S31", "S32", "S33", "S34", "S35", "S35u", "S36", "S37", "S38", "S39", "S40", "S41",
     ]  # fmt: skip
     labels = [found.label for found in run_all.CHECKS]
-    assert len(labels) == len(set(labels)) == 74
+    assert len(labels) == len(set(labels)) == 75
     assert [
         found.script for found in run_all.CHECKS if not (RUN_ALL.parent / found.script).exists()
     ] == []
