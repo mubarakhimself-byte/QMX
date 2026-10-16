@@ -824,9 +824,10 @@ def _linux_store_names() -> list[str]:
     collection is locked; no secret is requested."""
     import secretstorage  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
 
-    connection = secretstorage.dbus_init()
+    store: Any = secretstorage
+    connection = store.dbus_init()
     try:
-        collection = secretstorage.get_default_collection(connection)
+        collection = store.get_default_collection(connection)
         return [
             str(item.get_attributes().get("service", "")) for item in collection.get_all_items()
         ]
@@ -991,7 +992,7 @@ class ExposureReport:
 
 def _kind(value: object) -> ExposureKind:
     if value in ("keyring_entry", "read_path", "write_path", "loopback"):
-        return cast("ExposureKind", value)
+        return value
     raise ValueError(value)
 
 

@@ -204,7 +204,7 @@ def test_an_image_from_the_user_goes_as_input_image() -> None:
     ("message", "reason"),
     [
         (
-            {"role": "user", "content": [{"type": "audio", "source": {}}]},
+            {"role": "user", "content": [{"type": "audio", "source": dict[str, str]()}]},
             "a audio block in a user message has no Responses mapping",
         ),
         (
@@ -255,7 +255,7 @@ HELLO_EVENTS: list[dict[str, Any]] = [
     },
 ]
 
-HELLO_SSE = [
+HELLO_SSE: list[dict[str, Any]] = [
     {
         "type": "message_start",
         "message": {
@@ -476,7 +476,7 @@ def test_map_error(status: int, error: dict[str, Any], mapped: tuple[int, str, s
 
 
 def test_count_tokens_is_a_local_estimate_of_four_characters_a_token() -> None:
-    request = {"model": "gpt-6.1-sol", "system": "abcd" * 10, "messages": []}
+    request: dict[str, Any] = {"model": "gpt-6.1-sol", "system": "abcd" * 10, "messages": []}
     assert estimate_tokens(request) == 21
 
 

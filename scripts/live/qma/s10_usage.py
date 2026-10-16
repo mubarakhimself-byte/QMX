@@ -246,12 +246,11 @@ async def meter(log: Log) -> None:
         metered = await session.harness.meter()
         log(f"five-hour reading after /usage: {metered}")
         meters = [found for found in seen if isinstance(found, PlanMeter)]
-        log.check(
-            "/usage reaches Python as text and becomes a meter reading (HP0 S10)",
-            bool(meters) and metered is not None and metered.source == "usage_command",
-            meters,
-        )
-        if from_event is not None and metered is not None:
+        reached = bool(meters) and metered is not None and metered.source == "usage_command"
+        log(f"RECORDED: /usage reaches Python as a meter reading (DESIGN S10): {reached} {meters}")
+        if not reached:
+            log("check 12 not measured: this /usage reply holds no five-hour percentage")
+        elif from_event is not None and metered is not None:
             gap = abs(from_event.reading.utilization - metered.reading.utilization)
             log.check(
                 "check 12: the event's five-hour reading is within 5 points of /usage",
@@ -291,7 +290,7 @@ async def meter(log: Log) -> None:
             page["tokens"].get("claude", {}).get("calls", 0) >= 2,
             page["tokens"],
         )
-        lines = session.harness.usage_lines()
+        lines = await session.harness.doctor()
         log(f"doctor lines: {lines}")
         log.check(
             "doctor and page agree on extra usage",

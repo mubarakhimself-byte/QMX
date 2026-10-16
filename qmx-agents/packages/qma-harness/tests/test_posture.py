@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import importlib
 import builtins
+import importlib
 import io
 import json
 import os
@@ -84,24 +84,25 @@ def test_money_posture_table(
 
 def test_an_unlisted_store_keeps_an_unprovable_entry_in_the_inventory() -> None:
     assert keyring_inventory(["QMX/Kimi"], None) == frozenset({"qmx/kimi", UNLISTED})
-    assert keyring_inventory(["qmx/kimi"], frozenset({"qmx/x"})) == frozenset(
-        {"qmx/kimi", "qmx/x"}
-    )
+    assert keyring_inventory(["qmx/kimi"], frozenset({"qmx/x"})) == frozenset({"qmx/kimi", "qmx/x"})
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Credential Manager is Windows only")
 def test_the_windows_listing_asks_only_for_qmx_entries(monkeypatch: pytest.MonkeyPatch) -> None:
-    import ctypes  # noqa: PLC0415
+    import ctypes
 
     filters: list[object] = []
 
     class Advapi:
-        def CredEnumerateW(self, wanted: object, *_: object) -> int:  # noqa: N802
+        def CredEnumerateW(self, wanted: object, *_: object) -> int:
             filters.append(wanted)
             ctypes.set_last_error(qma.harness.money.ERROR_NOT_FOUND)
             return 0
 
-    monkeypatch.setattr(ctypes, "WinDLL", lambda *_, **__: Advapi())
+    def win_dll(*_: object, **__: object) -> Advapi:
+        return Advapi()
+
+    monkeypatch.setattr(ctypes, "WinDLL", win_dll)
     assert qma.harness.money._windows_store_names() == []  # pyright: ignore[reportPrivateUsage]
     assert filters == ["qmx/*"]
 
@@ -163,7 +164,7 @@ class Refuses(BaseHTTPRequestHandler):
         self.send_response(401)
         self.end_headers()
 
-    def log_message(self, *_: object) -> None:
+    def log_message(self, format: str, *args: Any) -> None:
         return
 
 
@@ -366,9 +367,7 @@ def test_the_harness_names_unproven_entries_and_stores_one_probe(
     ) -> ExposureReport:
         probes.append(targets)
         assert env["CLAUDE_CONFIG_DIR"] == str(home.plan_dir)
-        found = tuple(
-            ExposureFinding(t, t.kind == "keyring_entry", "fake") for t in targets[:4]
-        )
+        found = tuple(ExposureFinding(t, t.kind == "keyring_entry", "fake") for t in targets[:4])
         return ExposureReport(datetime(2026, 10, 15, tzinfo=UTC), cli_version, found)
 
     monkeypatch.setattr(qma.harness.harness, "run_exposure_probe", fake_probe)
@@ -417,7 +416,7 @@ def test_s27_refuses_any_account_not_marked_demo_before_reading_a_credential(
     monkeypatch.setattr(sys, "path", [str(LIVE), *sys.path])
     sys.modules.pop("s27_broker_scope", None)
     s27 = importlib.import_module("s27_broker_scope")
-    from qmx_broker.models import BrokerSettings  # noqa: PLC0415
+    from qmx_broker.models import BrokerSettings
 
     def connection(name: str, environment: str, account: str) -> dict[str, Any]:
         return {

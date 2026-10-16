@@ -50,8 +50,13 @@ EXPECTED: dict[str, str] = {
     "TaskGet": "only in QMA",
     "TaskList": "only in QMA",
     "TaskUpdate": "only in QMA",
+    "WebFetch": "only in QMA",
 }
-NO_MODEL = "qmx-no-such-model"
+"""Measured with CLI 2.1.299. Vanilla's tool list follows the feature flags it fetches, which QMA
+turns off with nonessential traffic: WebFetch left vanilla's list between HP6 and HP17
+(2026-10-16), so a flag change moves this list without a QMA change."""
+NO_MODEL = "claude-qmx-no-such-model"
+"""A `claude-` id, so the plan's model parser (HP12) lets it through to the CLI."""
 
 
 def built_in(tools: list[str], denied: set[str]) -> set[str]:

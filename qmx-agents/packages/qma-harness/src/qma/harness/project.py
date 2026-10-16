@@ -546,7 +546,7 @@ def _read_limits(info: RateLimitInfo) -> Limits:
         raise _Unreadable(f"errorCode is {code!r}")
     window = info.rate_limit_type
     overage = info.overage_status
-    reason: object = info.overage_disabled_reason
+    reason = cast("object", info.overage_disabled_reason)
     if reason is not None and not isinstance(reason, str):
         raise _Unreadable(f"overageDisabledReason is {reason!r}")
     return Limits(

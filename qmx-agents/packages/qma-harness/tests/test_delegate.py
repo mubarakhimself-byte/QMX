@@ -10,6 +10,7 @@ import anyio
 import pytest
 import test_chat
 from claude_agent_sdk import Message
+from pydantic import JsonValue
 from test_chat import STOP_RULE_2, FakeClient, blocks, rate_limit, result, run, settle, turn_of
 from test_money import RULES
 from test_table import read_plan
@@ -17,9 +18,9 @@ from test_table import read_plan
 import qma.harness.chat
 from qma.harness import Harness, InjectedText, NewChat, OperatorText, QmxHome, SessionId
 from qma.harness.home import read_record
-from qma.harness.procs import AgentProcessCap
 from qma.harness.launch import Background, ChatKind, Child, Interactive
 from qma.harness.money import Deny, Pass, gate
+from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import ProfileName, parse_profiles
 from qma.harness.routes import control_service
 from qma.harness.tools import Effect, ToolDef
@@ -47,9 +48,10 @@ def defs(monkeypatch: pytest.MonkeyPatch) -> list[list[ToolDef]]:
     return held
 
 
-def settings(home: QmxHome, *, targets: list[str], **budgets: object) -> None:
+def settings(home: QmxHome, *, targets: list[str], **budgets: JsonValue) -> None:
     control = control_service(home)
-    control.settings_put("providers", {"kimi": KEY_ROW, "delegate_targets": targets})
+    providers = {"kimi": KEY_ROW, "delegate_targets": targets}
+    control.settings_put("providers", providers)  # pyright: ignore[reportArgumentType]
     control.settings_put("budgets", dict(budgets))
 
 
@@ -81,7 +83,7 @@ async def open_parent(harness: Harness, kind: ChatKind | None = None) -> Session
 async def call(found: list[ToolDef], profile: str, prompt: str = "help: count") -> dict[str, Any]:
     """Run the parent's delegate tool, releasing each helper's fake CLI as it launches."""
     made = len(FakeClient.made)
-    task = asyncio.create_task(delegate_of(found).call({"profile": profile, "prompt": prompt}))
+    task = asyncio.ensure_future(delegate_of(found).call({"profile": profile, "prompt": prompt}))
     while not task.done():
         for client in FakeClient.made[made:]:
             client.go.set()

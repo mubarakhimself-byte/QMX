@@ -107,7 +107,10 @@ async def run(log: Log) -> None:
             "calls", 0
         )
         log.check("the page counts each plan turn once", claude_calls == TURNS, claude_calls)
-        fake_sums = dict(after.get("fake", {}))
+        earlier = before.get("fake", {})
+        fake_sums = {
+            key: count - earlier.get(key, 0) for key, count in after.get("fake", {}).items()
+        }
         messages = [s for s in answered if s.path.partition("?")[0].endswith("/v1/messages")]
         served = {
             "input_tokens": sum(u.get("input_tokens", 0) for u in fake.served_usage),

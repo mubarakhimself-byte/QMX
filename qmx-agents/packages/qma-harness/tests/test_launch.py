@@ -236,7 +236,7 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
             can_use_tool=refuse,
             mcp_servers={},
             gate=GATE,
-        budgets=Budgets(),
+            budgets=Budgets(),
         )
     )
 

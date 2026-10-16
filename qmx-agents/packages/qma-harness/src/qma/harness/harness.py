@@ -24,7 +24,7 @@ from collections import Counter
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from qmx_broker.service import BrokerService
 from qmx_control.models import ControlError
@@ -134,6 +134,7 @@ from qma.harness.usage import (
 )
 
 if TYPE_CHECKING:
+    from qmx_control.models import Document
     from qmx_control.service import ControlService
 
     from qma.harness.project import Delta, PlanFact
@@ -587,7 +588,9 @@ class Harness:
         return parse_budgets(await asyncio.to_thread(self._deps.control.settings_get, "budgets"))
 
     async def _needs_you(self, chat: SessionId, reason: str, **extra: object) -> None:
-        block = SessionBlock(type="needs_you", content={"reason": reason, **extra})
+        block = SessionBlock(
+            type="needs_you", content=cast("Document", {"reason": reason, **extra})
+        )
         await asyncio.to_thread(self._deps.control.sessions_append, chat, block)
 
     async def usage(self) -> UsagePage:

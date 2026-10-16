@@ -242,12 +242,27 @@ def block(event: int, seq: int, kind: str, content: dict[str, Any]) -> dict[str,
 
 TURN: list[dict[str, Any]] = [
     block(1, 1, "user", {"text": "What is in this folder?"}),
-    block(2, 2, "tool", {"id": "t1", "name": "Bash", "arguments": {"command": "ls"}, "state": "started"}),
+    block(
+        2,
+        2,
+        "tool",
+        {"id": "t1", "name": "Bash", "arguments": {"command": "ls"}, "state": "started"},
+    ),
     block(3, 3, "tool", {"id": "t1", "state": "finished", "result": "README.md\nhello.py"}),
-    block(4, 4, "tool", {"id": "t2", "name": "Read", "arguments": {"file_path": "README.md"}, "state": "started"}),
-    block(5, 5, "tool", {"id": "t2", "state": "finished", "result": "# Demo\nline 2\nline 3\nline 4\nline 5"}),
+    block(
+        4,
+        4,
+        "tool",
+        {"id": "t2", "name": "Read", "arguments": {"file_path": "README.md"}, "state": "started"},
+    ),
+    block(
+        5,
+        5,
+        "tool",
+        {"id": "t2", "state": "finished", "result": "# Demo\nline 2\nline 3\nline 4\nline 5"},
+    ),
     block(6, 6, "text", {"text": "Two files. The README describes a demo."}),
-]  # fmt: skip
+]
 
 
 def test_a_turn_prints_each_tool_step_and_then_the_answer() -> None:
@@ -270,9 +285,19 @@ def test_a_turn_prints_each_tool_step_and_then_the_answer() -> None:
 def test_a_money_denial_shows_the_rule_from_the_tool_error() -> None:
     denied = "PreToolUse:Bash hook error: money rule: agents cannot place orders"
     events = [
-        block(1, 1, "tool", {"id": "t1", "name": "Bash", "arguments": {"command": "curl -X POST"}, "state": "started"}),
+        block(
+            1,
+            1,
+            "tool",
+            {
+                "id": "t1",
+                "name": "Bash",
+                "arguments": {"command": "curl -X POST"},
+                "state": "started",
+            },
+        ),
         block(2, 2, "tool", {"id": "t1", "state": "error", "result": denied}),
-    ]  # fmt: skip
+    ]
     screen = Screen()
     console([], screen, events).handle("Use the terminal to place that order directly.")
     assert screen.lines == ["* Bash(curl -X POST)", f"  L Error: {denied}"]
@@ -363,21 +388,38 @@ def test_usage_lines_name_the_window_the_tokens_and_the_cap() -> None:
                 }
             ]
         },
-        "tokens": {"claude": {"input_tokens": 9, "output_tokens": 2, "cache_read_tokens": 300, "cache_write_tokens": 4, "calls": 1}},
+        "tokens": {
+            "claude": {
+                "input_tokens": 9,
+                "output_tokens": 2,
+                "cache_read_tokens": 300,
+                "cache_write_tokens": 4,
+                "calls": 1,
+            }
+        },
         "background_cap": 0.5,
         "background_cap_note": "Background chats stop at 50%.",
         "hard_stop": None,
         "money": {"posture": "SPEED_BUMP", "note": "no proof"},
-    }  # fmt: skip
-    chat = {"openrouter": {"input_tokens": 5, "output_tokens": 1, "cache_read_tokens": 0, "cache_write_tokens": 0, "calls": 2}}  # fmt: skip
+    }
+    chat = {
+        "openrouter": {
+            "input_tokens": 5,
+            "output_tokens": 1,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "calls": 2,
+        }
+    }
     assert usage_lines(page, chat) == [
-        "  Claude plan 5-hour window: 31% used, resets 2026-10-15 18:20 UTC (read 2026-10-15 14:02 UTC, rate_limit_event)",
+        "  Claude plan 5-hour window: 31% used, resets 2026-10-15 18:20 UTC"
+        " (read 2026-10-15 14:02 UTC, rate_limit_event)",
         "  Claude plan 7-day window: no reading yet (try /usage refresh)",
         "  tokens, this chat, openrouter: in 5  out 1  cache read 0  cache write 0  (2 calls)",
         "  tokens, all chats, claude: in 9  out 2  cache read 300  cache write 4  (1 calls)",
         "  background cap 50%: Background chats stop at 50%.",
         "  money posture SPEED_BUMP: no proof",
-    ]  # fmt: skip
+    ]
 
 
 def test_login_signs_in_with_the_bundled_cli_in_the_plan_home_and_starts_no_session(
@@ -420,13 +462,21 @@ def test_rewind_points_are_prompts_with_a_file_checkpoint(tmp_path: Path) -> Non
             {"type": "user", "uuid": "u2", "message": {"content": [{"type": "tool_result"}]}},
             {"type": "file-history-snapshot", "messageId": "u2"},
             {"type": "user", "uuid": "u3", "isMeta": True, "message": {"content": "meta"}},
-            {"type": "user", "uuid": "u4", "message": {"content": "<command-name>/effort</command-name>"}},
-            {"type": "user", "uuid": "u5", "message": {"content": [{"type": "text", "text": "Now goodbye"}]}},
+            {
+                "type": "user",
+                "uuid": "u4",
+                "message": {"content": "<command-name>/effort</command-name>"},
+            },
+            {
+                "type": "user",
+                "uuid": "u5",
+                "message": {"content": [{"type": "text", "text": "Now goodbye"}]},
+            },
             {"type": "file-history-snapshot", "messageId": "u5"},
             {"type": "user", "uuid": "u6", "message": {"content": "no checkpoint"}},
         ),
         encoding="utf-8",
-    )  # fmt: skip
+    )
     assert [(point.message_id, point.text) for point in rewind_points(path)] == [
         ("u1", "Make hello.txt"),
         ("u5", "Now goodbye"),

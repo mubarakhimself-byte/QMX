@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -132,7 +132,7 @@ def a_pass(state: Path) -> ProbePassed:
 
 
 @asynccontextmanager
-async def rig(tmp_path: Path, openai: OpenAI | None = None) -> AsyncIterator[Rig]:
+async def rig(tmp_path: Path, openai: OpenAI | None = None) -> AsyncGenerator[Rig]:
     openai = openai or OpenAI()
     rows = Rows()
     session = SiwcSession(
@@ -349,8 +349,11 @@ def test_a_pass_for_another_translator_does_not_open_the_lane(tmp_path: Path) ->
     async def body() -> None:
         async with rig(tmp_path) as found:
             other = ProbePassed(
-                found.passed.at, "0000000000000000", "gpt-6.1-sol", _mint=probe._MINT
-            )  # pyright: ignore[reportPrivateUsage]
+                found.passed.at,
+                "0000000000000000",
+                "gpt-6.1-sol",
+                _mint=probe._MINT,  # pyright: ignore[reportPrivateUsage]
+            )
             with pytest.raises(GrantRefused):
                 await found.relay.open_gpt_lane(other, found.session)
             assert found.relay.gpt is None
@@ -362,7 +365,7 @@ home = test_chat.home
 
 
 def gpt_home(home: QmxHome, monkeypatch: pytest.MonkeyPatch, stored: SiwcSession | None) -> None:
-    control_service(home).settings_put("providers", {"gpt": GPT_ROW})
+    control_service(home).settings_put("providers", {"gpt": GPT_ROW})  # pyright: ignore[reportArgumentType]
     monkeypatch.setattr(qma.harness.harness.siwc, "load", lambda: stored)
 
 
