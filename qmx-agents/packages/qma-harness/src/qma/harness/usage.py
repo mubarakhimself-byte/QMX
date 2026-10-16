@@ -359,10 +359,11 @@ def plan_base(journal: Path) -> Totals:
     return base
 
 
-def token_sums(runs: Path) -> dict[str, dict[str, int]]:
-    """`model_call` rows summed per profile over every chat's run journal, with a row count."""
+def token_sums(runs: Path, chat: str = "*") -> dict[str, dict[str, int]]:
+    """`model_call` rows summed per profile over every chat's run journal, or one `chat`'s,
+    with a row count."""
     sums: dict[str, dict[str, int]] = {}
-    for journal in sorted(runs.glob("*/journal.jsonl")):
+    for journal in sorted(runs.glob(f"{chat}/journal.jsonl")):
         for line in journal.read_bytes().splitlines():
             if b'"model_call"' not in line:
                 continue
