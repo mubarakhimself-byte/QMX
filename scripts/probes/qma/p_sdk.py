@@ -20,6 +20,7 @@ from claude_agent_sdk import (
 )
 from common import (
     SCRATCH,
+    Lockdown,
     Log,
     bundled_cli,
     describe,
@@ -45,7 +46,7 @@ def subtypes(messages: list[Message]) -> list[str]:
 async def usage() -> None:
     log = Log("hp0-usage")
     with tap_raw(log):
-        messages = await run_turns(log, plan_options(), ["/usage"])
+        messages = await run_turns(log, plan_options(Lockdown()), ["/usage"])
     kinds = sorted({type(m).__name__ for m in messages})
     results = [str(m.result)[:400] for m in messages if isinstance(m, ResultMessage)]
     log(f"parsed message types: {kinds}")
@@ -66,7 +67,7 @@ async def effort() -> None:
         return {}
 
     options = plan_options(
-        model="sonnet", effort="low", hooks={"Stop": [HookMatcher(hooks=[on_stop])]}
+        Lockdown(), model="sonnet", effort="low", hooks={"Stop": [HookMatcher(hooks=[on_stop])]}
     )
     messages = await run_turns(log, options, ["say ok", "/effort high", "say ok"])
     replies = [str(m.result)[:200] for m in messages if isinstance(m, ResultMessage)]
@@ -92,13 +93,15 @@ async def timeout() -> None:
         await asyncio.sleep(HOOK_SLEEP_S)
         return {}
 
+    command = f"echo ran > '{marker.as_posix()}'"
     options = plan_options(
+        Lockdown(frozenset({command})),
         hooks={
             "PreToolUse": [HookMatcher(matcher="Bash", hooks=[sleeper], timeout=HOOK_TIMEOUT_S)]
         },
         max_turns=2,
     )
-    prompt = f"Run this exact Bash command once and reply done: echo ran > '{marker.as_posix()}'"
+    prompt = f"Run this exact Bash command once and reply done: {command}"
     messages = await run_turns(log, options, [prompt])
     ran = marker.exists()
     bash_calls = tool_uses(messages, "Bash")
@@ -113,9 +116,11 @@ async def timeout() -> None:
 
 async def verbatim() -> None:
     log = Log("hp0-timeout")
-    plain = await run_turns(log, plan_options(), ["say ok", "/compact"])
+    plain = await run_turns(log, plan_options(Lockdown()), ["say ok", "/compact"])
     log(f"control system subtypes without verbatim: {subtypes(plain)}")
-    guarded = await run_turns(log, plan_options(verbatim_prompts=True), ["say ok", "/compact"])
+    guarded = await run_turns(
+        log, plan_options(Lockdown(), verbatim_prompts=True), ["say ok", "/compact"]
+    )
     log(f"system subtypes with verbatim_prompts=True: {subtypes(guarded)}")
     control = "compact_boundary" in subtypes(plain)
     boundary = "compact_boundary" in subtypes(guarded)
