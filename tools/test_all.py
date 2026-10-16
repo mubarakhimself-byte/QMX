@@ -123,6 +123,14 @@ def main() -> int:
             ["tests"],
         )
     )
+    suites.append(
+        (
+            "qma-harness",
+            ROOT / "qmx-agents/packages/qma-harness",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
+    )
     top_level = sorted(qa.glob("test_*.py"))
     if top_level:
         paths = [str(path.relative_to(ROOT)) for path in top_level]

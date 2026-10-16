@@ -360,6 +360,7 @@ extraPaths = [
     "qmx-agents/packages/qma-core/src",
     "qmx-agents/packages/qma-wire/src",
     "qmx-agents/packages/qma-daemon/src",
+    "qmx-agents/packages/qma-harness/src",
     "packages/qmf-core/src",
     "packages/qmf-registry/src",
     "packages/qmf-data/src",

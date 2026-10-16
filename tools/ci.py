@@ -21,11 +21,12 @@ def main() -> int:
     broker = agents / "packages/qmx-broker"
     remote = agents / "packages/qmx-remote"
     ledger = agents / "packages/qmx-ledger"
+    harness = agents / "packages/qma-harness"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
         (agents, ["sync", "--frozen", "--all-packages", "--all-groups"]),
     ]
-    for workspace in (ROOT, agents, core, control, domain, apps, broker, remote, ledger):
+    for workspace in (ROOT, agents, core, control, domain, apps, broker, remote, ledger, harness):
         for task in ("fmt-check", "lint", "types"):
             commands.append((workspace, ["run", "--no-sync", "python", "-m", "poethepoet", task]))
     for task in ("money-path-scan", "secret-scan"):

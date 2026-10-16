@@ -6,6 +6,7 @@ requires-python = "==3.14.*"
 members = [
     "qma-core",
     "qma-daemon",
+    "qma-harness",
     "qma-wire",
     "qmx-agents",
     "qmx-apps",
@@ -443,7 +444,7 @@ wheels = [
 
 [[package]]
 name = "claude-agent-sdk"
-version = "0.2.163"
+version = "0.2.166"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -451,12 +452,13 @@ dependencies = [
     { name = "mcp" },
     { name = "sniffio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9b/74/635d38e2ef813a2d1ba4ff7f3de736c35ee3bce9ebf4a5b7e89f3293604f/claude_agent_sdk-0.2.163.tar.gz", hash = "sha256:269821ad5acff5967522ff15f444b0598840fd9bdc45c645de569a5478061a53", size = 365180, upload-time = "2026-09-30T19:46:37.125Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/77/c8/219ea04b1995f48e6723d3cd6ac35e1a97f09f3b406279f2367fc20828af/claude_agent_sdk-0.2.166.tar.gz", hash = "sha256:6dbd129cf8bdae065e5504f3619176aa23c2d864afffc14464df387c72edde30", size = 371577, upload-time = "2026-10-14T03:43:33.455Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c7/48/bd56b852692a99939384c25ae6bbcbd6e9017ce5becf28c1e00d8ce83c24/claude_agent_sdk-0.2.163-py3-none-macosx_11_0_arm64.whl", hash = "sha256:b025dcc3f9c52779bcd9e9c088b1a587d96afbffb8355b5d3053850796735ede", size = 93359293, upload-time = "2026-09-30T19:46:40.568Z" },
-    { url = "https://files.pythonhosted.org/packages/ba/c0/73f36a7435037ae06541be0fd6fdfe4f3270e6fd958a4523ee1c90e2737d/claude_agent_sdk-0.2.163-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:e10d48657f01cc53801cdd8ec3d0a6c8c680b82da083da42493f82feb99d04e6", size = 97793458, upload-time = "2026-09-30T19:46:44.773Z" },
-    { url = "https://files.pythonhosted.org/packages/13/c7/d8fbc84fa75b79f5a57af1595a79b0a392844fcb192aad09ef8c646b6c85/claude_agent_sdk-0.2.163-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:e3be00eeb9fc156a3308a2e8fb58390768fdcb2ff16683fac385b4d98e99233c", size = 102851414, upload-time = "2026-09-30T19:46:48.947Z" },
-    { url = "https://files.pythonhosted.org/packages/e7/ea/fc2a0a4e27c8ccfdbc77344298842adcbb6de03d4cdbae5793ff659b00e0/claude_agent_sdk-0.2.163-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:260cb955d237b7e1897f1dbf9ee5efbf815d8622d0c7459a05409c56432d8501", size = 103197060, upload-time = "2026-09-30T19:46:53.144Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/37/c15f09e30f44a05624c2b2f8e8d6ca3a7b7c4d00dd336b7869a6337d592c/claude_agent_sdk-0.2.166-py3-none-macosx_11_0_arm64.whl", hash = "sha256:35f2082ba76d851af76954e8a19c0bd9d5b81a49a3efc7864e2d9e6ff393e743", size = 103306982, upload-time = "2026-10-14T03:43:38.103Z" },
+    { url = "https://files.pythonhosted.org/packages/91/b5/5c93c4299def63a897b3e488ef6c2af893cc25479a040bdbf7212a746c60/claude_agent_sdk-0.2.166-py3-none-macosx_11_0_x86_64.whl", hash = "sha256:1c7697286fd6506911acafdbc1ae922b2c92db18a42855dc0c1f74733f3adefa", size = 108372375, upload-time = "2026-10-14T03:43:43.237Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/0d/b8fb131a4dcdf149b8384fac9258bcf6cf52df46d26ac1d321cd15f1d067/claude_agent_sdk-0.2.166-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:3ba783eaaf0beba4cbc7278391ad4d5e4d7ec5cbc81355fcfea1fa865c0cebb7", size = 112996671, upload-time = "2026-10-14T03:43:47.99Z" },
+    { url = "https://files.pythonhosted.org/packages/53/80/00a31b9d4160837fd0809d272d45c13643d567845ddb6db8e708809bce83/claude_agent_sdk-0.2.166-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:81d34634ef4fb4c0782fd7d5354de1b558b776e399a9be3aca771cc528c7ad2e", size = 113411756, upload-time = "2026-10-14T03:43:52.649Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/10/f0617291197d94a26963b36ce788277340018a1975f2f268872cc9a62585/claude_agent_sdk-0.2.166-py3-none-win_amd64.whl", hash = "sha256:d53ba0e8152c88b2e9eaf61d684b2ed8621e3785cdc9f4be5378a6d0f86304be", size = 116268642, upload-time = "2026-10-14T03:43:57.726Z" },
 ]
 
 [[package]]
@@ -2381,6 +2383,59 @@ requires-dist = [
 ]
 
 [[package]]
+name = "qma-harness"
+version = "0.1.0"
+source = { editable = "packages/qma-harness" }
+dependencies = [
+    { name = "claude-agent-sdk" },
+    { name = "httpx" },
+    { name = "keyring" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "qma-core" },
+    { name = "qmx-broker" },
+    { name = "qmx-control" },
+    { name = "qmx-ledger" },
+    { name = "qmx-tools" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "psutil" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "types-pywin32" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "claude-agent-sdk", specifier = "==0.2.166" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "keyring", specifier = "==25.7.0" },
+    { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
+    { name = "qma-core", editable = "packages/qma-core" },
+    { name = "qmx-broker", editable = "packages/qmx-broker" },
+    { name = "qmx-control", editable = "packages/qmx-control" },
+    { name = "qmx-ledger", editable = "packages/qmx-ledger" },
+    { name = "qmx-tools", editable = "packages/qmx-tools" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "psutil", specifier = ">=7,<9" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-cov", specifier = ">=7,<8" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "ruff", specifier = "==0.16.5" },
+    { name = "types-pywin32", specifier = "==312.0.0.20261006" },
+]
+
+[[package]]
 name = "qma-wire"
 version = "0.1.0"
 source = { editable = "packages/qma-wire" }
@@ -2940,7 +2995,6 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "beautifulsoup4" },
-    { name = "claude-agent-sdk" },
     { name = "markdownify" },
     { name = "openai-codex" },
     { name = "poethepoet" },
@@ -2964,7 +3018,6 @@ qma-runtime = [
 [package.metadata.requires-dev]
 dev = [
     { name = "beautifulsoup4", specifier = "==4.15.0" },
-    { name = "claude-agent-sdk", specifier = "==0.2.163" },
     { name = "markdownify", specifier = "==1.2.3" },
     { name = "openai-codex", specifier = "==0.160.0" },
     { name = "poethepoet", specifier = "==0.48.0" },
