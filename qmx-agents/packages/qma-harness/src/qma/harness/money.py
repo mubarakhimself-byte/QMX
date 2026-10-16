@@ -20,13 +20,21 @@ The deny-list itself is `qma.core.barriers.money_path`, reached through
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import posixpath
 import re
+import sys
+import urllib.error
+import urllib.request
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import StrEnum
+from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from urllib.parse import unquote, urlsplit
 
 from qma.core.barriers.descriptors import check_descriptor, name_money_act
@@ -745,4 +753,445 @@ def check_tool_surface(
 
 
 NON_BROKER_REFS: Final[frozenset[str]] = frozenset({"qmx/chatgpt", "qmx/control-token"})
-"""Fixed entries known not to be broker credentials."""
+"""Fixed entries known not to be broker credentials. Provider `credential_ref`s from
+settings.toml [providers] are added at run time."""
+
+
+# --- posture ---
+#
+# Names and reachability only. No function here reads, prints, logs or stores a secret value:
+# the inventory lists entry names, and the probe decides reachability from where an entry or a
+# file lives and from file access rights. Whatever would need a real read is "not measured".
+
+
+class MoneyPosture(StrEnum):
+    STRUCTURAL = "structural"
+    """Every broker credential QMX knows of has a stored S27 proof that it cannot trade."""
+    SPEED_BUMP = "speed_bump"
+    """Anything else, including anything unknown, unmeasured or unreachable."""
+
+
+UNLISTED: Final = "qmx/? (the keyring could not be listed)"
+"""Stands in the inventory for entries nobody could list. It never has a scope proof, so the
+posture stays SPEED_BUMP."""
+
+ERROR_NOT_FOUND: Final = 1168
+
+STORE_FILTER: Final = "qmx/*"
+"""`CredEnumerateW` copies each matching entry's blob into this process, so it lists QMX
+entries only, never every credential the user holds. keyring writes `<user>@qmx/<name>` only
+when two users share one service name, which QMX never does, so this filter misses none."""
+
+
+def _windows_store_names() -> list[str]:
+    """Target names of the current user's `qmx/*` Credential Manager entries, through
+    `CredEnumerateW`. Only `TargetName` is read from each entry; the blob is never touched."""
+    import ctypes  # noqa: PLC0415
+    from ctypes import wintypes  # noqa: PLC0415
+
+    class Credential(ctypes.Structure):
+        _fields_ = (
+            ("Flags", wintypes.DWORD),
+            ("Type", wintypes.DWORD),
+            ("TargetName", wintypes.LPWSTR),
+            ("Comment", wintypes.LPWSTR),
+            ("LastWritten", wintypes.FILETIME),
+            ("CredentialBlobSize", wintypes.DWORD),
+            ("CredentialBlob", ctypes.c_void_p),
+            ("Persist", wintypes.DWORD),
+            ("AttributeCount", wintypes.DWORD),
+            ("Attributes", ctypes.c_void_p),
+            ("TargetAlias", wintypes.LPWSTR),
+            ("UserName", wintypes.LPWSTR),
+        )
+
+    advapi = ctypes.WinDLL("advapi32", use_last_error=True)
+    count = wintypes.DWORD()
+    found = ctypes.POINTER(ctypes.POINTER(Credential))()
+    if not advapi.CredEnumerateW(STORE_FILTER, 0, ctypes.byref(count), ctypes.byref(found)):
+        error = ctypes.get_last_error()
+        if error == ERROR_NOT_FOUND:
+            return []
+        raise OSError(error, "CredEnumerateW failed")
+    try:
+        return [str(found[index].contents.TargetName) for index in range(count.value)]
+    finally:
+        advapi.CredFree(found)
+
+
+def _linux_store_names() -> list[str]:
+    """The `service` attribute of each Secret Service item. Attributes are readable while the
+    collection is locked; no secret is requested."""
+    import secretstorage  # noqa: PLC0415  # pyright: ignore[reportMissingImports]
+
+    connection = secretstorage.dbus_init()
+    try:
+        collection = secretstorage.get_default_collection(connection)
+        return [
+            str(item.get_attributes().get("service", "")) for item in collection.get_all_items()
+        ]
+    finally:
+        connection.close()
+
+
+def store_names(platform: str = sys.platform) -> frozenset[str] | None:
+    """Every `qmx/*` entry name in this user's OS keyring, casefolded, or None when the store
+    cannot be listed (macOS, where listing would prompt, or an error). keyring's Windows
+    backend may store `<user>@<service>`, so that prefix is dropped."""
+    try:
+        if platform == "win32":
+            raw = _windows_store_names()
+        elif platform.startswith("linux"):
+            raw = _linux_store_names()
+        else:
+            return None
+    except Exception:
+        return None
+    names = (name.rpartition("@")[2].casefold() for name in raw)
+    return frozenset(name for name in names if name.startswith("qmx/"))
+
+
+def keyring_inventory(
+    configured: Iterable[str], listed: frozenset[str] | None = None
+) -> frozenset[str]:
+    """Every `qmx/*` entry this PC holds, by name only, plus every configured name (settings.toml
+    references). `listed` is `store_names()`; None (macOS, or a store that could not be listed)
+    adds `UNLISTED`, so an entry nobody listed still keeps the posture SPEED_BUMP."""
+    names = {name.casefold() for name in configured}
+    return frozenset(names | (listed if listed is not None else {UNLISTED}))
+
+
+def money_posture(
+    inventory: frozenset[str], non_broker: frozenset[str], scope_proofs: Mapping[str, bool]
+) -> MoneyPosture:
+    """Pure, fails closed. STRUCTURAL only when each entry outside `non_broker` has
+    `scope_proofs[ref] is True`. Reachability plays no part."""
+    if unproven(inventory, non_broker, scope_proofs):
+        return MoneyPosture.SPEED_BUMP
+    return MoneyPosture.STRUCTURAL
+
+
+def unproven(
+    inventory: frozenset[str], non_broker: frozenset[str], scope_proofs: Mapping[str, bool]
+) -> tuple[str, ...]:
+    """The entries that count as broker credentials and lack a proof, sorted."""
+    known = {name.casefold() for name in non_broker}
+    return tuple(
+        sorted(
+            name
+            for name in inventory
+            if name.casefold() not in known and scope_proofs.get(name.casefold()) is not True
+        )
+    )
+
+
+SCOPE_PROOFS_DIR: Final = "scope-proofs"
+
+
+def load_scope_proofs(state_dir: Path) -> dict[str, bool]:
+    """`<state>/scope-proofs/*.json`, one per credential, written by the operator's S27 run:
+    `{"credential": "qmx/<name>", "refused_for_scope": bool, ...}`. A file that does not parse
+    proves nothing."""
+    proofs: dict[str, bool] = {}
+    for path in sorted((state_dir / SCOPE_PROOFS_DIR).glob("*.json")):
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            credential, refused = document["credential"], document["refused_for_scope"]
+        except OSError, ValueError, KeyError, TypeError:
+            continue
+        if isinstance(credential, str) and isinstance(refused, bool):
+            proofs[credential.casefold()] = proofs.get(credential.casefold(), True) and refused
+    return proofs
+
+
+def proof_path(state_dir: Path, credential: str) -> Path:
+    slug = re.sub(r"[^a-z0-9._-]+", "-", credential.casefold().removeprefix("qmx/"))
+    return state_dir / SCOPE_PROOFS_DIR / f"{slug}.json"
+
+
+def save_scope_proof(
+    state_dir: Path, credential: str, *, refused_for_scope: bool, **facts: str | None
+) -> Path:
+    """One S27 result per credential. `facts` are plain words and ids, never a secret."""
+    path = proof_path(state_dir, credential)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "credential": credential.casefold(),
+        "refused_for_scope": refused_for_scope,
+        "at": datetime.now(UTC).isoformat(),
+        **facts,
+    }
+    path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+    return path
+
+
+type ExposureKind = Literal["keyring_entry", "read_path", "write_path", "loopback"]
+
+
+@dataclass(frozen=True)
+class ExposureTarget:
+    kind: ExposureKind
+    value: str
+    """A `qmx/*` keyring name, a native path, or `127.0.0.1:<port>`."""
+
+
+@dataclass(frozen=True)
+class ExposureFinding:
+    target: ExposureTarget
+    reachable: bool | None
+    """None means not measured."""
+    detail: str
+    """Plain words for the usage page. Never a secret value."""
+
+
+@dataclass(frozen=True)
+class ExposureReport:
+    at: datetime
+    cli_version: str
+    findings: tuple[ExposureFinding, ...]
+
+    def readable(self) -> tuple[str, ...]:
+        """What agent Bash can read or reach, in the probe's order."""
+        return tuple(
+            finding.target.value
+            for finding in self.findings
+            if finding.reachable and finding.target.kind != "write_path"
+        )
+
+    def document(self) -> dict[str, Any]:
+        return {
+            "at": self.at.isoformat(),
+            "cli_version": self.cli_version,
+            "findings": [
+                {
+                    "kind": finding.target.kind,
+                    "target": finding.target.value,
+                    "reachable": finding.reachable,
+                    "detail": finding.detail,
+                }
+                for finding in self.findings
+            ],
+        }
+
+    @classmethod
+    def parse(cls, document: Mapping[str, Any]) -> ExposureReport:
+        return cls(
+            at=datetime.fromisoformat(document["at"]),
+            cli_version=str(document["cli_version"]),
+            findings=tuple(
+                ExposureFinding(
+                    ExposureTarget(_kind(row["kind"]), str(row["target"])),
+                    row["reachable"] if isinstance(row["reachable"], bool) else None,
+                    str(row["detail"]),
+                )
+                for row in document["findings"]
+            ),
+        )
+
+
+def _kind(value: object) -> ExposureKind:
+    if value in ("keyring_entry", "read_path", "write_path", "loopback"):
+        return cast("ExposureKind", value)
+    raise ValueError(value)
+
+
+def exposure_targets(
+    home_root: Path,
+    keyring_names: Iterable[str],
+    control_port: int | None,
+    secret_paths: Iterable[Path],
+    personal_home: Path,
+) -> tuple[ExposureTarget, ...]:
+    """Pure. Every inventoried `qmx/*` entry; the QMX home's settings.toml, control.db and
+    portfolio.db for read and the QMX home for write; each secret path (read rights only); his
+    `~/.claude` for read and write rights; the qmx-control port without a bearer."""
+    targets = [
+        ExposureTarget("keyring_entry", name) for name in sorted(keyring_names) if name != UNLISTED
+    ]
+    targets += [
+        ExposureTarget("read_path", str(home_root / name))
+        for name in ("settings.toml", "control.db", "portfolio.db")
+    ]
+    targets += [ExposureTarget("read_path", str(path)) for path in secret_paths]
+    targets += [
+        ExposureTarget("read_path", str(personal_home)),
+        ExposureTarget("write_path", str(home_root)),
+        ExposureTarget("write_path", str(personal_home)),
+    ]
+    if control_port is not None:
+        targets.append(ExposureTarget("loopback", f"127.0.0.1:{control_port}"))
+    return tuple(dict.fromkeys(targets))
+
+
+KEYRING_READABLE: Final = (
+    "agent Bash can read it: Windows lets any process of your user read Credential Manager "
+    "entries, and the gate only blocks commands that name it"
+)
+NOT_MEASURED_KEYRING: Final = (
+    "not measured: only reading the value would tell, and the probe never reads one"
+)
+
+
+def measure(
+    targets: Iterable[ExposureTarget],
+    *,
+    listed: frozenset[str] | None,
+    platform: str = sys.platform,
+) -> tuple[ExposureFinding, ...]:
+    """What a process with this environment can reach, decided without reading a secret.
+    Keyring: whether the entry is in the store this process lists, and on Windows that any
+    process of the user can read it; elsewhere not measured. Paths: `os.access` only, never
+    opened. Loopback: one request with no bearer."""
+    findings: list[ExposureFinding] = []
+    for target in targets:
+        match target.kind:
+            case "keyring_entry":
+                finding = _keyring_finding(target, listed, platform)
+            case "read_path" | "write_path":
+                finding = _path_finding(target)
+            case "loopback":
+                finding = _loopback_finding(target)
+        findings.append(finding)
+    return tuple(findings)
+
+
+def _keyring_finding(
+    target: ExposureTarget, listed: frozenset[str] | None, platform: str
+) -> ExposureFinding:
+    if listed is None:
+        return ExposureFinding(target, None, NOT_MEASURED_KEYRING)
+    if target.value.casefold() not in listed:
+        return ExposureFinding(target, False, "not in the credential store")
+    if platform == "win32":
+        return ExposureFinding(target, True, KEYRING_READABLE)
+    return ExposureFinding(target, None, NOT_MEASURED_KEYRING)
+
+
+def _path_finding(target: ExposureTarget) -> ExposureFinding:
+    write = target.kind == "write_path"
+    if not os.path.lexists(target.value):
+        return ExposureFinding(target, False, "absent")
+    if os.access(target.value, os.W_OK if write else os.R_OK):
+        verb = "write into" if write else "read"
+        return ExposureFinding(
+            target, True, f"agent Bash can {verb} it; the gate blocks only the file tools"
+        )
+    return ExposureFinding(target, False, "your OS user has no access right to it")
+
+
+def _loopback_finding(target: ExposureTarget) -> ExposureFinding:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(f"http://{target.value}/api/usage", timeout=3) as response:
+            status = response.status
+    except urllib.error.HTTPError as error:
+        status = error.code
+    except OSError as error:
+        return ExposureFinding(target, False, f"nothing answered ({type(error).__name__})")
+    if status in (401, 403):
+        return ExposureFinding(target, False, f"refused without a bearer ({status})")
+    return ExposureFinding(target, True, f"answered without a bearer ({status})")
+
+
+def guard_opens(targets: Iterable[ExposureTarget]) -> None:
+    """Installs an audit hook that fails any `open` of a target path or a login file in this
+    process. The probe child runs under it, so a change that opened a secret path would fail
+    instead of reading it."""
+    fold = str.casefold if sys.platform in ("win32", "darwin") else str
+    guarded = {
+        fold(os.path.abspath(target.value))
+        for target in targets
+        if target.kind in ("read_path", "write_path")
+    }
+
+    def hook(event: str, args: tuple[object, ...]) -> None:
+        if event != "open" or not isinstance(args[0], str | bytes | os.PathLike):
+            return
+        path = fold(os.path.abspath(os.fsdecode(cast("str", args[0]))))
+        if path in guarded or os.path.basename(path).casefold() == LOGIN_NAME:
+            raise PermissionError(f"the exposure probe never opens {path}")
+
+    sys.addaudithook(hook)
+
+
+def probe_child() -> None:
+    """The probe subprocess: targets as JSON on stdin, findings as JSON on stdout."""
+    rows = json.loads(sys.stdin.read())
+    targets = [ExposureTarget(_kind(row["kind"]), str(row["value"])) for row in rows]
+    guard_opens(targets)
+    findings = measure(targets, listed=store_names())
+    print(json.dumps([[f.target.kind, f.target.value, f.reachable, f.detail] for f in findings]))
+
+
+PROBE_TIMEOUT_S: Final = 30.0
+
+PROBE_BOOT: Final = "\n".join(
+    (
+        "import importlib.util, sys",
+        "spec = importlib.util.spec_from_file_location('qma_exposure_probe', sys.argv[1])",
+        "module = importlib.util.module_from_spec(spec)",
+        "sys.modules[spec.name] = module",
+        "spec.loader.exec_module(module)",
+        "module.probe_child()",
+    )
+)
+"""Loads this file alone, not the `qma.harness` package, whose imports take seconds."""
+
+
+async def run_exposure_probe(
+    env: Mapping[str, str], targets: tuple[ExposureTarget, ...], *, cli_version: str
+) -> ExposureReport:
+    """Informational, inside-out: what an agent's Bash could reach. Runs `python -I` as a
+    subprocess with exactly `env` under the agent's OS user. A probe that cannot run reports
+    every target as not measured."""
+    payload = json.dumps([{"kind": t.kind, "value": t.value} for t in targets]).encode()
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-I",
+        "-c",
+        PROBE_BOOT,
+        __file__,
+        env=dict(env),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        out, _ = await asyncio.wait_for(process.communicate(payload), PROBE_TIMEOUT_S)
+        rows = json.loads(out)
+        findings = tuple(
+            ExposureFinding(
+                ExposureTarget(_kind(kind), str(value)),
+                reachable if isinstance(reachable, bool) else None,
+                str(detail),
+            )
+            for kind, value, reachable, detail in rows
+        )
+        if [finding.target for finding in findings] != list(targets):
+            raise ValueError("the probe answered for other targets")
+    except (TimeoutError, ValueError, TypeError) as error:
+        if process.returncode is None:
+            process.kill()
+            await process.wait()
+        reason = f"not measured: the probe did not finish ({type(error).__name__})"
+        findings = tuple(ExposureFinding(target, None, reason) for target in targets)
+    return ExposureReport(datetime.now(UTC), cli_version, findings)
+
+
+EXPOSURE_FILE: Final = "exposure.json"
+
+
+def save_exposure(state_dir: Path, report: ExposureReport) -> None:
+    state_dir.mkdir(parents=True, exist_ok=True)
+    draft = state_dir / f"{EXPOSURE_FILE}.tmp"
+    draft.write_text(json.dumps(report.document()), encoding="utf-8")
+    draft.replace(state_dir / EXPOSURE_FILE)
+
+
+def load_exposure(state_dir: Path) -> ExposureReport | None:
+    try:
+        return ExposureReport.parse(
+            json.loads((state_dir / EXPOSURE_FILE).read_text(encoding="utf-8"))
+        )
+    except OSError, ValueError, KeyError, TypeError:
+        return None

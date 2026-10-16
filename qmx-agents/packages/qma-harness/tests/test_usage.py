@@ -12,6 +12,7 @@ from claude_agent_sdk._internal.message_parser import parse_message
 from qmx_ledger.journal import RunJournal
 
 from qma.harness.home import DoctorLine
+from qma.harness.money import MoneyPosture
 from qma.harness.project import (
     Limits,
     PlanMeter,
@@ -22,6 +23,7 @@ from qma.harness.project import (
 )
 from qma.harness.usage import (
     BackgroundCap,
+    PostureView,
     Totals,
     UsageLedger,
     plan_base,
@@ -492,7 +494,8 @@ def test_token_sums_add_model_call_rows_per_profile(tmp_path: Path) -> None:
 
 def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
     usage = reading_ledger(0.2)
-    document = usage_page(usage, BackgroundCap(0.5), {"claude": {"calls": 1}}).document()
+    money = PostureView(MoneyPosture.STRUCTURAL, (), None)
+    document = usage_page(usage, BackgroundCap(0.5), {"claude": {"calls": 1}}, money).document()
     assert document == {
         "windows": {
             "claude": [
@@ -532,6 +535,16 @@ def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
         "hard_stop": None,
         "extra_usage_on": None,
         "extra_usage_note": None,
+        "money": {
+            "posture": "STRUCTURAL",
+            "unproven": [],
+            "readable_from_agent_bash": [],
+            "note": (
+                "STRUCTURAL: every broker credential on this PC has a stored proof that the "
+                "broker refuses it an order."
+            ),
+            "exposure": None,
+        },
     }
 
 
