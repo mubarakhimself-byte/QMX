@@ -11,7 +11,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Generator, Mapping
 from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, NoReturn, cast
 from urllib.parse import urlsplit
 
 import keyring
@@ -53,6 +53,7 @@ type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
 HOST_SECTIONS: frozenset[SettingsSection] = frozenset({"claude", "environment"})
 """Sections only a host that registers a parser for them can write."""
+ENGINE = "an attached workflow engine"
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
 type WorkKind = Literal["runs", "jobs"]
 
@@ -677,7 +678,7 @@ class ControlService:
         return self._cancel("jobs", job_id)
 
     @staticmethod
-    def _unavailable(operation: str, packet: str = "P12-P14") -> Document:
+    def _unavailable(operation: str, packet: str = "P12-P14") -> NoReturn:
         raise ControlError(
             "not_implemented", f"{operation} is not available yet; requires {packet}.", 501
         )
@@ -918,7 +919,7 @@ class ControlService:
         return self._unavailable("workflows.get", "P10")
 
     def workflows_put(self, workflow_id: str, graph: Document) -> Document:
-        """Save a workflow graph."""
+        """Publish a workflow graph as a new version. Saving a draft is workflow_drafts_put."""
         return self._unavailable("workflows.put", "P10")
 
     def workflows_validate(self, graph: Document) -> Document:
@@ -926,5 +927,75 @@ class ControlService:
         return self._unavailable("workflows.validate", "P10")
 
     def workflows_run(self, workflow_id: str) -> Document:
-        """Run a compiled workflow."""
+        """Start a live run of a published workflow. A test run is workflow_tests_run."""
         return self._unavailable("workflows.run", "P10/P22")
+
+    def workflow_drafts_get(self, workflow_id: str) -> Document:
+        """Read a workflow's draft."""
+        return self._unavailable("workflow_drafts.get", ENGINE)
+
+    def workflow_drafts_put(self, workflow_id: str, graph: Document) -> Document:
+        """Save a workflow draft. Nothing is published."""
+        return self._unavailable("workflow_drafts.put", ENGINE)
+
+    def workflow_tests_run(
+        self, workflow_id: str, subgraph: list[str] | None = None, fake: bool = False
+    ) -> Document:
+        """Test-run a workflow's draft, whole or only the named nodes, on fake models if asked."""
+        return self._unavailable("workflow_tests.run", ENGINE)
+
+    def workflow_versions_list(self, workflow_id: str) -> list[Document]:
+        """List a workflow's published versions."""
+        return self._unavailable("workflow_versions.list", ENGINE)
+
+    def workflow_versions_archive(self, workflow_id: str, version: int) -> Document:
+        """Archive one published version of a workflow."""
+        return self._unavailable("workflow_versions.archive", ENGINE)
+
+    def workflow_runs_list(self, workflow_id: str | None = None) -> list[Document]:
+        """List workflow runs, newest first, optionally for one workflow."""
+        return self._unavailable("workflow_runs.list", ENGINE)
+
+    def workflow_runs_get(self, run_id: str) -> Document:
+        """Read one workflow run and its node states."""
+        return self._unavailable("workflow_runs.get", ENGINE)
+
+    def workflow_runs_explain(self, run_id: str) -> Document:
+        """Explain what a workflow run did and why it stopped."""
+        return self._unavailable("workflow_runs.explain", ENGINE)
+
+    def workflow_runs_cancel(self, run_id: str) -> Document:
+        """Cancel a workflow run."""
+        return self._unavailable("workflow_runs.cancel", ENGINE)
+
+    def workflow_runs_resume(self, run_id: str) -> Document:
+        """Resume a paused or failed workflow run."""
+        return self._unavailable("workflow_runs.resume", ENGINE)
+
+    def workflow_triggers_list(self, workflow_id: str | None = None) -> list[Document]:
+        """List workflow triggers, optionally for one workflow."""
+        return self._unavailable("workflow_triggers.list", ENGINE)
+
+    def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document:
+        """Create a trigger for a published workflow. It starts disabled."""
+        return self._unavailable("workflow_triggers.create", ENGINE)
+
+    def workflow_triggers_enable(self, trigger_id: str) -> Document:
+        """Enable a workflow trigger."""
+        return self._unavailable("workflow_triggers.enable", ENGINE)
+
+    def workflow_triggers_disable(self, trigger_id: str) -> Document:
+        """Disable a workflow trigger."""
+        return self._unavailable("workflow_triggers.disable", ENGINE)
+
+    def workflow_triggers_run_now(self, trigger_id: str) -> Document:
+        """Fire a workflow trigger once, now."""
+        return self._unavailable("workflow_triggers.run_now", ENGINE)
+
+    def workflow_inbox_list(self) -> list[Document]:
+        """List open workflow inbox items."""
+        return self._unavailable("workflow_inbox.list", ENGINE)
+
+    def apps_archive(self, app_id: str) -> Document:
+        """Archive a mini app."""
+        return self._unavailable("apps.archive", ENGINE)

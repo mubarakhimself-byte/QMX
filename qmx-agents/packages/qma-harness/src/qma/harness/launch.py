@@ -19,13 +19,14 @@ Everything not set here is the vanilla CLI default, which is the operator's floo
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import logging
 import math
 import os
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -40,7 +41,14 @@ from qma.harness.profiles import TIER_ENV, ProfileName
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpServerConfig
-    from claude_agent_sdk.types import CanUseTool, HookEvent
+    from claude_agent_sdk.types import (
+        CanUseTool,
+        HookCallback,
+        HookContext,
+        HookEvent,
+        HookInput,
+        HookJSONOutput,
+    )
 
     from qma.harness.home import QmxHome, SessionId
     from qma.harness.relay import RelayGrant
@@ -101,9 +109,41 @@ def unattended(kind: ChatKind) -> bool:
             return flag
 
 
+type ChatHook = Callable[[HookInput], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class ChatHooks:
+    """Observe-only SDK hook callbacks for one Background or Child chat, each given the SDK's
+    hook input. They run after the money gate and cannot allow, deny or change anything: a
+    callback's result is dropped, its exception is logged, and one still running after
+    `OBSERVER_TIMEOUT_S` is cancelled, so an observer never blocks a tool call."""
+
+    pre_tool_use: ChatHook | None = None
+    post_tool_use: ChatHook | None = None
+    pre_compact: ChatHook | None = None
+    stop: ChatHook | None = None
+    subagent_stop: ChatHook | None = None
+
+
+CHAT_HOOK_EVENTS: Final[Mapping[str, HookEvent]] = {
+    "pre_tool_use": "PreToolUse",
+    "post_tool_use": "PostToolUse",
+    "pre_compact": "PreCompact",
+    "stop": "Stop",
+    "subagent_stop": "SubagentStop",
+}
+
+OBSERVER_TIMEOUT_S: Final = 5.0
+"""Below `GATE_TIMEOUT_S`, so the observer is cancelled before its matcher's timeout could
+block the call."""
+
+
 @dataclass(frozen=True)
 class ChatConfig:
-    """Everything that decides how a chat's CLI process is launched. A change is a new config."""
+    """Everything that decides how a chat's CLI process is launched. A change is a new config.
+    `compact_at` and `hooks` live only in this process: the chat record on disk does not hold
+    them, so a chat read back from disk after a restart launches without them."""
 
     profile: ProfileName
     model: str
@@ -111,6 +151,8 @@ class ChatConfig:
     mode: PermissionMode
     workspace: Path
     kind: ChatKind
+    compact_at: float | None = None
+    hooks: ChatHooks | None = None
 
 
 @dataclass(frozen=True)
@@ -253,6 +295,51 @@ GATE_TIMEOUT_S: Final = 10.0
 """Explicit `HookMatcher.timeout` for the money gate. A PreToolUse SDK callback that exceeds
 its timeout blocks the tool call."""
 
+COMPACT_PCT_ENV: Final = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"
+"""The CLI's auto-compact trigger as a percentage (1-100) of its auto-compact window. Not
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, which is a window size in tokens from 100,000 up and cannot
+express a share; a key row's window quirk still applies underneath this percentage."""
+
+
+def chat_options_refusal(
+    kind: ChatKind, compact_at: float | None, hooks: ChatHooks | None
+) -> str | None:
+    """Why `compact_at` or `hooks` cannot go on a chat of this kind, or None."""
+    if isinstance(kind, Interactive) and (compact_at is not None or hooks is not None):
+        return (
+            "compact_at and hooks are for Background and Child chats only; an Interactive "
+            "chat compacts and runs hooks as Claude Code does"
+        )
+    if compact_at is not None and not 0.01 <= compact_at <= 1:
+        return f"compact_at is a share of the context window from 0.01 to 1, not {compact_at}"
+    return None
+
+
+def compact_env(compact_at: float | None) -> dict[str, str]:
+    return {} if compact_at is None else {COMPACT_PCT_ENV: str(round(compact_at * 100))}
+
+
+def _observer(hook: ChatHook) -> HookCallback:
+    async def callback(
+        hook_input: HookInput, tool_use_id: str | None, context: HookContext
+    ) -> HookJSONOutput:
+        del tool_use_id, context
+        try:
+            await asyncio.wait_for(hook(hook_input), OBSERVER_TIMEOUT_S)
+        except Exception:
+            log.exception("a chat hook failed; the chat goes on")
+        return {}
+
+    return callback
+
+
+def chat_hook_matchers(hooks: ChatHooks) -> dict[HookEvent, HookMatcher]:
+    return {
+        event: HookMatcher(matcher=None, hooks=[_observer(hook)], timeout=GATE_TIMEOUT_S)
+        for name, event in CHAT_HOOK_EVENTS.items()
+        if (hook := getattr(hooks, name)) is not None
+    }
+
 
 @dataclass(frozen=True)
 class PlanLaunch:
@@ -378,7 +465,9 @@ def build_options(
     """One chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
     `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The money
     gate runs as a PreToolUse callback on every tool, with an explicit timeout, and the deny
-    rules ride in `disallowed_tools`; `test` switches either off for a layer check."""
+    rules ride in `disallowed_tools`; `test` switches either off for a layer check. The chat's
+    own observe-only hooks are appended after the gate, and `compact_at` becomes the CLI's
+    auto-compact percentage for this chat alone."""
     bounded = not isinstance(config.kind, Interactive)
     gate_hook = test is None or test.gate_hook
     rules_on = test is None or test.deny_rules
@@ -391,6 +480,9 @@ def build_options(
         if gate_hook
         else {}
     )
+    if config.hooks is not None:
+        for event, matcher in chat_hook_matchers(config.hooks).items():
+            hooks.setdefault(event, []).append(matcher)
     return ClaudeAgentOptions(
         cli_path=launcher,
         tools={"type": "preset", "preset": "claude_code"},
@@ -403,7 +495,7 @@ def build_options(
         model=config.model,
         effort=config.effort,
         cwd=config.workspace,
-        env=dict(env),
+        env={**env, **compact_env(config.compact_at)},
         setting_sources=[],
         settings=settings_json,
         plugins=[{"type": "local", "path": str(home.plugin_dir)}],

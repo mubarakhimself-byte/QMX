@@ -75,6 +75,7 @@ from qma.harness.launch import (
     LAUNCHER,
     Budgets,
     ChatConfig,
+    ChatHooks,
     ChatKind,
     Child,
     ConfigChange,
@@ -86,6 +87,7 @@ from qma.harness.launch import (
     RelayedLaunch,
     TestMode,
     assert_scrubbed,
+    chat_options_refusal,
     launch_env,
     parse_budgets,
     unattended,
@@ -157,6 +159,16 @@ class NewChat:
     profile: str = PLAN
     kind: ChatKind = field(default_factory=Interactive)
     """Background and Child chats are verbatim and bounded (`launch.verbatim`)."""
+    compact_at: float | None = None
+    """Background and Child only: auto-compact at this share of the context window. None
+    keeps the CLI's default."""
+    hooks: ChatHooks | None = None
+    """Background and Child only: observe-only callbacks after the money gate."""
+
+    def __post_init__(self) -> None:
+        refusal = chat_options_refusal(self.kind, self.compact_at, self.hooks)
+        if refusal is not None:
+            raise LaunchRefused(refusal)
 
 
 class UnknownChat(ControlError):
@@ -211,6 +223,8 @@ class Harness:
         self._admit = asyncio.Lock()
         self._sending: Counter[SessionId] = Counter()
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
+        self._options: dict[SessionId, tuple[float | None, ChatHooks | None]] = {}
+        """Each chat's `compact_at` and `hooks` from `NewChat`, which its record does not hold."""
         self._reaper = asyncio.create_task(self._reap())
         self.control_port: int | None = None
         """The qmx-control port, set by the server, so the exposure probe can try it."""
@@ -296,7 +310,9 @@ class Harness:
         return cls(deps, watch)
 
     async def start_chat(self, spec: NewChat) -> SessionId:
-        """A qmx-control session, then a chat record with `started=False`. No process yet."""
+        """A qmx-control session, then a chat record with `started=False`. No process yet.
+        `compact_at` and `hooks` stay in this harness, because the record on disk does not hold
+        them, and join the chat's config when the chat is first used."""
         home, control = self._deps.home, self._deps.control
         workspace = spec.workspace
         if workspace is not None and not workspace.is_dir():
@@ -327,8 +343,12 @@ class Harness:
             mode=spec.mode,
             workspace=workspace.resolve(),
             kind=spec.kind,
+            compact_at=spec.compact_at,
+            hooks=spec.hooks,
         )
         write_record(home, ChatRecord(chat, config, started=False, turn="idle"))
+        if spec.compact_at is not None or spec.hooks is not None:
+            self._options[chat] = (spec.compact_at, spec.hooks)
         return chat
 
     async def send(self, chat: SessionId, prompt: Prompt) -> None:
@@ -758,6 +778,10 @@ class Harness:
             record = read_record(self._deps.home, chat)
             if record is None:
                 raise UnknownChat(chat)
+            if chat in self._options:
+                compact_at, hooks = self._options[chat]
+                config = replace(record.config, compact_at=compact_at, hooks=hooks)
+                record = replace(record, config=config)
             found = self._chats[chat] = Chat(record, self._deps)
         return found
 

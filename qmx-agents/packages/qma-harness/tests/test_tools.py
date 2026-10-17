@@ -66,6 +66,43 @@ def test_every_destructive_operation_is_manage() -> None:
     assert wrong == []
 
 
+def test_engine_rows_save_and_test_quietly_and_ask_once_to_publish_or_run_live() -> None:
+    assert {name: effect for name, effect in AGENT_OPERATIONS.items() if "workflow" in name} == {
+        "workflows_get": Effect.READ,
+        "workflows_put": Effect.MANAGE,
+        "workflows_validate": Effect.READ,
+        "workflows_run": Effect.MANAGE,
+        "workflow_drafts_get": Effect.READ,
+        "workflow_drafts_put": Effect.DOMAIN_WRITE,
+        "workflow_tests_run": Effect.DOMAIN_WRITE,
+        "workflow_versions_list": Effect.READ,
+        "workflow_versions_archive": Effect.MANAGE,
+        "workflow_runs_list": Effect.READ,
+        "workflow_runs_get": Effect.READ,
+        "workflow_runs_explain": Effect.READ,
+        "workflow_runs_cancel": Effect.MANAGE,
+        "workflow_runs_resume": Effect.MANAGE,
+        "workflow_triggers_list": Effect.READ,
+        "workflow_triggers_create": Effect.MANAGE,
+        "workflow_triggers_enable": Effect.MANAGE,
+        "workflow_triggers_disable": Effect.MANAGE,
+        "workflow_triggers_run_now": Effect.MANAGE,
+        "workflow_inbox_list": Effect.READ,
+    }
+    assert AGENT_OPERATIONS["apps_archive"] is Effect.MANAGE
+    policy = domain_write_policy({})
+    quiet_or_asking = {
+        name: asks(AGENT_OPERATIONS[name], policy)
+        for name in ("workflow_drafts_put", "workflow_tests_run", "workflows_put", "workflows_run")
+    }
+    assert quiet_or_asking == {
+        "workflow_drafts_put": False,
+        "workflow_tests_run": False,
+        "workflows_put": True,
+        "workflows_run": True,
+    }
+
+
 def test_every_domain_function_is_declared_or_left_out_by_name() -> None:
     names = {name for group in domain_functions(MagicMock()).values() for name in group}
     assert set(DOMAIN_EFFECTS) | set(DOMAIN_LEFT_OUT) == names
