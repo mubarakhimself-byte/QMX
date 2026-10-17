@@ -46,6 +46,7 @@ class Tests:
         inputs: JsonValue = None,
         subgraph: list[str] | None = None,
         fake: bool = False,
+        run_id: str | None = None,
     ) -> TestReport:
         """`fake` answers model nodes with the fake provider, for a run that spends nothing."""
         library = self.ctx.library
@@ -71,6 +72,7 @@ class Tests:
             subgraph=subgraph,
             caller=caller,
             fake=fake,
+            run_id=run_id,
         )
         principal = f"run:{outcome.run_id}"
         report: JsonObject = {

@@ -2,10 +2,11 @@
 artifact on the run's branch, and the run summary as a `workflow-run` object, linked `produced-by`
 and `run-of` (AD-15, LIBRARY-REQUESTS L13, L14).
 
-The journal is `<home>/runs/<run_id>/trace-<last seq>.jsonl`, written through
+The journal is `<home>/engine/runs/<run_id>/trace-<last seq>.jsonl`, written through
 `qmx_ledger.RunJournal` with the run's recorded clock, so exporting the same ledger twice writes
-nothing new. Each drive adds one `workflow-run` object (SOLUTION-DESIGN 3.1); all of a run's writes
-carry the principal `run:<run_id>`.
+nothing new. It stays out of `<home>/runs/`, whose journals `qmx_control` lists as its own runs.
+Each drive adds one `workflow-run` object (SOLUTION-DESIGN 3.1); all of a run's writes carry the
+principal `run:<run_id>`.
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ def export(
         events = reader.events(run_id)
         spans = reader.spans(run_id)
     summed = totals(events, spans)
-    path = home / "runs" / run_id / f"trace-{events[-1].seq}.jsonl"
+    path = home / "engine" / "runs" / run_id / f"trace-{events[-1].seq}.jsonl"
     if not path.exists():
         at = events[-1].at
         with RunJournal(path, run_id, clock=lambda: at) as journal:

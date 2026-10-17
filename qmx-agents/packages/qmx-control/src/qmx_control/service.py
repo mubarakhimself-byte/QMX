@@ -11,7 +11,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Generator, Mapping
 from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Literal, NoReturn, cast
+from typing import Literal, NoReturn, Protocol, cast
 from urllib.parse import urlsplit
 
 import keyring
@@ -916,88 +916,134 @@ class ControlService:
         """Read verified version and stage evidence from the app volume."""
         return self.app_runtime().road.evidence(app_id)
 
+    _workflow_engine: WorkflowEngine | None = None
+
+    def attach_workflow_engine(self, engine: WorkflowEngine | None) -> None:
+        """Serve the workflow doors from `engine`; None detaches it and they answer 501 again."""
+        self._workflow_engine = engine
+
+    def _engine(self, operation: str) -> WorkflowEngine:
+        engine = self._workflow_engine
+        if engine is None:
+            self._unavailable(operation, ENGINE)
+        return engine
+
     def workflows_get(self, workflow_id: str) -> Document:
         """Read a workflow definition."""
-        return self._unavailable("workflows.get", "P10")
+        return self._engine("workflows.get").workflows_get(workflow_id)
 
     def workflows_put(self, workflow_id: str, graph: Document) -> Document:
         """Publish a workflow graph as a new version. Saving a draft is workflow_drafts_put."""
-        return self._unavailable("workflows.put", "P10")
+        return self._engine("workflows.put").workflows_put(workflow_id, graph)
 
     def workflows_validate(self, graph: Document) -> Document:
         """Validate a workflow graph."""
-        return self._unavailable("workflows.validate", "P10")
+        return self._engine("workflows.validate").workflows_validate(graph)
 
     def workflows_run(self, workflow_id: str) -> Document:
         """Start a live run of a published workflow. A test run is workflow_tests_run."""
-        return self._unavailable("workflows.run", "P10/P22")
+        return self._engine("workflows.run").workflows_run(workflow_id)
 
     def workflow_drafts_get(self, workflow_id: str) -> Document:
         """Read a workflow's draft."""
-        return self._unavailable("workflow_drafts.get", ENGINE)
+        return self._engine("workflow_drafts.get").workflow_drafts_get(workflow_id)
 
     def workflow_drafts_put(self, workflow_id: str, graph: Document) -> Document:
         """Save a workflow draft. Nothing is published."""
-        return self._unavailable("workflow_drafts.put", ENGINE)
+        return self._engine("workflow_drafts.put").workflow_drafts_put(workflow_id, graph)
 
     def workflow_tests_run(
         self, workflow_id: str, subgraph: list[str] | None = None, fake: bool = False
     ) -> Document:
         """Test-run a workflow's draft, whole or only the named nodes, on fake models if asked."""
-        return self._unavailable("workflow_tests.run", ENGINE)
+        return self._engine("workflow_tests.run").workflow_tests_run(workflow_id, subgraph, fake)
 
     def workflow_versions_list(self, workflow_id: str) -> list[Document]:
         """List a workflow's published versions."""
-        return self._unavailable("workflow_versions.list", ENGINE)
+        return self._engine("workflow_versions.list").workflow_versions_list(workflow_id)
 
     def workflow_versions_archive(self, workflow_id: str, version: int) -> Document:
         """Archive one published version of a workflow."""
-        return self._unavailable("workflow_versions.archive", ENGINE)
+        return self._engine("workflow_versions.archive").workflow_versions_archive(
+            workflow_id, version
+        )
 
     def workflow_runs_list(self, workflow_id: str | None = None) -> list[Document]:
         """List workflow runs, newest first, optionally for one workflow."""
-        return self._unavailable("workflow_runs.list", ENGINE)
+        return self._engine("workflow_runs.list").workflow_runs_list(workflow_id)
 
     def workflow_runs_get(self, run_id: str) -> Document:
         """Read one workflow run and its node states."""
-        return self._unavailable("workflow_runs.get", ENGINE)
+        return self._engine("workflow_runs.get").workflow_runs_get(run_id)
 
     def workflow_runs_explain(self, run_id: str) -> Document:
         """Explain what a workflow run did and why it stopped."""
-        return self._unavailable("workflow_runs.explain", ENGINE)
+        return self._engine("workflow_runs.explain").workflow_runs_explain(run_id)
 
     def workflow_runs_cancel(self, run_id: str) -> Document:
         """Cancel a workflow run."""
-        return self._unavailable("workflow_runs.cancel", ENGINE)
+        return self._engine("workflow_runs.cancel").workflow_runs_cancel(run_id)
 
     def workflow_runs_resume(self, run_id: str) -> Document:
         """Resume a paused or failed workflow run."""
-        return self._unavailable("workflow_runs.resume", ENGINE)
+        return self._engine("workflow_runs.resume").workflow_runs_resume(run_id)
 
     def workflow_triggers_list(self, workflow_id: str | None = None) -> list[Document]:
         """List workflow triggers, optionally for one workflow."""
-        return self._unavailable("workflow_triggers.list", ENGINE)
+        return self._engine("workflow_triggers.list").workflow_triggers_list(workflow_id)
 
     def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document:
         """Create a trigger for a published workflow. It starts disabled."""
-        return self._unavailable("workflow_triggers.create", ENGINE)
+        return self._engine("workflow_triggers.create").workflow_triggers_create(
+            workflow_id, trigger
+        )
 
     def workflow_triggers_enable(self, trigger_id: str) -> Document:
         """Enable a workflow trigger."""
-        return self._unavailable("workflow_triggers.enable", ENGINE)
+        return self._engine("workflow_triggers.enable").workflow_triggers_enable(trigger_id)
 
     def workflow_triggers_disable(self, trigger_id: str) -> Document:
         """Disable a workflow trigger."""
-        return self._unavailable("workflow_triggers.disable", ENGINE)
+        return self._engine("workflow_triggers.disable").workflow_triggers_disable(trigger_id)
 
     def workflow_triggers_run_now(self, trigger_id: str) -> Document:
         """Fire a workflow trigger once, now."""
-        return self._unavailable("workflow_triggers.run_now", ENGINE)
+        return self._engine("workflow_triggers.run_now").workflow_triggers_run_now(trigger_id)
 
     def workflow_inbox_list(self) -> list[Document]:
         """List open workflow inbox items."""
-        return self._unavailable("workflow_inbox.list", ENGINE)
+        return self._engine("workflow_inbox.list").workflow_inbox_list()
 
     def apps_archive(self, app_id: str) -> Document:
         """Archive a mini app."""
         return self._unavailable("apps.archive", ENGINE)
+
+
+class WorkflowEngine(Protocol):
+    """What `attach_workflow_engine` takes: the workflow doors, named and typed as on
+    `ControlService`. The engine package implements it; this package never imports the engine.
+    Every MANAGE door here was already asked of the operator (or came over REST with his
+    bearer), so the engine may act on it as his."""
+
+    def workflows_get(self, workflow_id: str) -> Document: ...
+    def workflows_put(self, workflow_id: str, graph: Document) -> Document: ...
+    def workflows_validate(self, graph: Document) -> Document: ...
+    def workflows_run(self, workflow_id: str) -> Document: ...
+    def workflow_drafts_get(self, workflow_id: str) -> Document: ...
+    def workflow_drafts_put(self, workflow_id: str, graph: Document) -> Document: ...
+    def workflow_tests_run(
+        self, workflow_id: str, subgraph: list[str] | None, fake: bool
+    ) -> Document: ...
+    def workflow_versions_list(self, workflow_id: str) -> list[Document]: ...
+    def workflow_versions_archive(self, workflow_id: str, version: int) -> Document: ...
+    def workflow_runs_list(self, workflow_id: str | None) -> list[Document]: ...
+    def workflow_runs_get(self, run_id: str) -> Document: ...
+    def workflow_runs_explain(self, run_id: str) -> Document: ...
+    def workflow_runs_cancel(self, run_id: str) -> Document: ...
+    def workflow_runs_resume(self, run_id: str) -> Document: ...
+    def workflow_triggers_list(self, workflow_id: str | None) -> list[Document]: ...
+    def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document: ...
+    def workflow_triggers_enable(self, trigger_id: str) -> Document: ...
+    def workflow_triggers_disable(self, trigger_id: str) -> Document: ...
+    def workflow_triggers_run_now(self, trigger_id: str) -> Document: ...
+    def workflow_inbox_list(self) -> list[Document]: ...

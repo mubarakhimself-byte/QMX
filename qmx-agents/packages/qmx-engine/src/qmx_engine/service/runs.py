@@ -241,6 +241,7 @@ class Runs:
         inputs: JsonValue = None,
         subgraph: list[str] | None = None,
         follow_champion: bool = False,
+        run_id: str | None = None,
     ) -> RunView:
         """A live run of a published version. A draft never runs live; `tests.run` tests it."""
         version = self.pinned(object_id, follow_champion)
@@ -256,6 +257,7 @@ class Runs:
             inputs=inputs,
             subgraph=subgraph,
             caller=caller,
+            run_id=run_id,
         )
         return self.get(outcome.run_id)
 

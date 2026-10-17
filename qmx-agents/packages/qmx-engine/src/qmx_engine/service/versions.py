@@ -19,6 +19,13 @@ from qmx_engine.service.drafts import Drafts
 from qmx_engine.service.runs import Runs
 
 
+def operator_only(caller: Caller, act: Act) -> None:
+    """Publish and enable take the operator's yes (AD-22). A copilot reaches them only through a
+    MANAGE door, which asks him first and then calls as him."""
+    if caller.kind != "user":
+        raise Refused("operator_only", f"only the operator may {act}; a {caller.kind} may not")
+
+
 @dataclass(frozen=True, slots=True)
 class Version:
     object_id: str
@@ -36,6 +43,7 @@ class Versions:
         self.runs = runs
 
     def publish(self, item: str, semver: str, *, caller: Caller) -> str:
+        operator_only(caller, "publish")
         library = self.ctx.library
         require(self.drafts.state(item), "publish", f"draft {item}")
         draft = self.drafts.get(item)
@@ -71,6 +79,7 @@ class Versions:
         return [self.view(s) for s in self.ctx.library.objects(item, "workflow", MAIN)]
 
     def enable(self, object_id: str, *, caller: Caller) -> Version:
+        operator_only(caller, "enable")
         version = self.get(object_id)
         require(version.state, "enable", f"version {version.semver} of {version.item}")
         if not version.tested:
