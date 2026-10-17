@@ -1,9 +1,9 @@
 # QMX workflow engine core plan
 
-This program builds the QMX workflow engine core as the new package `qmx-engine`, on the harness's existing public API, with no harness edits. It follows `architecture/workflow-engine/` (33 ADs) and the rulings in `research/methodology/26-operator-rulings-and-alignment.md`.
+This program builds the QMX workflow engine core as the new package `qmx-engine`, on the harness's public API. The one harness edit is HG1, which grants H0, H15, H16 and H17 (ruling 89, granted by the operator on 2026-10-17). It follows `architecture/workflow-engine/` (33 ADs) and the rulings in `research/methodology/26-operator-rulings-and-alignment.md`.
 The operator gets one engine that runs script-only, mixed and agentic workflows, replays only failed or changed work, pauses at usage limits and resumes alone, and ships a pack of 31 templates as ship-ready working defaults, installed disabled (ruling 83).
-The rule it enforces is that every invariant a PR adds has a live check that ran green at that PR's head, and that `qma-harness` is byte-identical to the base.
-PR ids in order are EP0 and EP1 (probes), EP2 to EP14 (the engine stack), TP1 to TP4 (the template pack, stacked on EP14), and DP1 (the tick-data track, on its own branch).
+The rule it enforces is that every invariant a PR adds has a live check that ran green at that PR's head, and that, after HG1, `qma-harness` is byte-identical to HG1's verified head.
+PR ids in order are EP0 and EP1 (probes), HG1 (the granted harness PR, the root of the engine stack), EP2 to EP14 (the engine stack), and TP1 to TP4 (the template pack, stacked on EP14). Data is held (ruling 91), so no data PR runs.
 Every PR starts from the stack base branch `engine/base`, made from `origin/rebuild/base` at `ed704c924e5f50c79a13531f7d491c7dce254666`, which already holds the merged HP stack.
 
 ## How to read this
@@ -17,7 +17,7 @@ The plan makes five overrides to autopilot-stack. Each is named again where it a
 - Override 1 replaces step 1's owner. One `poteto-agent` builder on `opus` per PR, running on the operator's PC in its own worktree, not a Cursor cloud agent. `/deslop` is not installed, so the builder rereads its full diff instead. No Bugbot runs on this repo.
 - Override 2 replaces step 4's verdict. The operator's light rule of 2026-10-15 (memory `light-verification-per-pr`) applies. One build and one independent check per PR. The checker is a second `poteto-agent` on `opus` and runs 3 or 4 live checks that prove the PR's point. Only blockers and anything touching money, his logins or keys block. Low findings go to `lows.md` and never block. The same builder does the one fix round, resumed, not a fresh agent. The coordinator reviews the fix diff itself, with no second checker.
 - Override 3 is the lane count. `check-plan.mjs` demands ten lanes per PR. In this plan the ten lanes are a MENU, not a quota. Lanes 1 to 4 are the proving set the checker runs. Lanes 5 to 10 run only when the checker judges one of them the likeliest to break the PR's point. A lane box outside the run set is checked with a `ledger.tsv` row that says `menu, not run`. No coding session starts ten agents or ten lanes for one PR.
-- Override 4 is the perf block. No speed gate runs unless speed is the PR's point. EP4 (the ledger), EP12 (the scheduler tick) and DP1 (import throughput) carry real rules. Every other perf block records a number for the trail and fails nothing.
+- Override 4 is the perf block. No speed gate runs unless speed is the PR's point. EP4 (the ledger) and EP12 (the scheduler tick) carry real rules. Every other perf block records a number for the trail and fails nothing.
 - Override 5 is the rebase cadence. A PR's single fix round finishes before the next PR is built on top of it. The stack is rebased once per fix, not per round, and never onto a moving trunk during the run.
 
 Opus checking Opus is weaker than a review across model families. Every checker report says so in its first lines. Fable reviews only when the operator asks.
@@ -34,9 +34,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] Say go. About one minute.
   - [ ] Confirm that his OpenRouter key is still in the keyring under `qmx/openrouter`, from the HP program. The coordinator never reads it. Test runs on real models use it for the cheap OpenRouter rows (ruling 51, and the 2026-10-14 ruling that live provider tests use OpenRouter). The planner's estimate is about 400 small OpenRouter calls over the whole program, mostly Track T. One minute.
   - [ ] Type `/login` once in the ship home only if a lane reports that the plan login in `D:/QMX-worktrees/qma-ship/home/claude` expired. Two minutes, at most once.
-  - [ ] Confirm the data destinations on `D:`. `C:` has 7.3 GB free, so DP1 never writes there. The default is the backup copy at `D:/QMX-backup/legacy-deep-history/` and the imported store at `D:/QMX-data/market/`. He may name an external drive instead. One minute.
   - [ ] Keep the PC awake and plugged in, and do not start `qma.serve` on the ship home while the run is live. The coordinator also requests keep-awake through `mcp__ccd_host__request_keep_awake`.
-  - [ ] Optional, not blocking. Answer H0 when he has a minute (Appendix F). The default is the fallback, which needs no harness edit.
 - [ ] Read these from trunk at program start. Re-read them at every tick. Log each read in `decisions.tsv`.
   - [ ] `git show origin/main:CLAUDE.md` for the project rules on trunk, then Read `C:/Users/Mubarak/Desktop/QMX/CLAUDE.md`, whose QMA v2 section is not on `main` yet.
   - [ ] `git -C D:/QMX-worktrees/agent-system show plan/agent-system:tracker/qma-v2/ENGINE-PLAN.md`. The plan branch is local only.
@@ -46,7 +44,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Create the store `D:/QMX-worktrees/qma-ship/engine/` with `decisions.tsv`, `ledger.tsv`, `lows.md`, `evidence/`, `review/` and `homes/`. Write these standing orders into `decisions.tsv` as its first rows.
   - [ ] Builders and checkers are `poteto-agent` on `opus`. Never `bulk-worker`. Fable only when the operator asks. Every brief says "do not spawn sub-agents".
   - [ ] At most two builders at once, and at most three agents in all, plus the coordinator.
-  - [ ] No file under `qmx-agents/packages/qma-harness/` changes in any PR.
+  - [ ] No file under `qmx-agents/packages/qma-harness/` changes in any PR except HG1, granted by the operator on 2026-10-17 (ruling 89).
   - [ ] No step reads, prints or copies a plan token, a provider key or a ChatGPT token. Secrets are named by keyring reference only. No step spends on any Anthropic or OpenAI API. Plan-profile turns go through the CLI login in the ship home.
   - [ ] Money stays read-only. No PR touches a broker credential, `qmn/`, or a money act.
   - [ ] Every test gate and lane runs with every `ANTHROPIC_*` and `CLAUDE*` name and `NODE_USE_SYSTEM_CA` unset, because this shell sets them and they broke tests before.
@@ -60,26 +58,27 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] Spawn one builder per PR with the Agent tool, `subagent_type: "poteto-agent"`, `model: "opus"` and `run_in_background: true`. The brief names the PR id, its plan section, the parent branch and head, and points at `BRIEF-BUILDER.md`. Briefs point at files and never paste them. Every brief says "do not spawn sub-agents".
 - [ ] Spawn one checker per PR at its code-ready head, the same way, pointing at `BRIEF-CHECKER.md`.
 - [ ] Follow this dependency graph. Stacked work branches from the parent PR's branch at its verified head (Override 5).
-  - [ ] EP0, EP1, DP1 and EP2 are independent and first. All branch from `engine/base`. EP0 and EP1 both use the ship home's plan login, so their lanes take the lane lock one at a time. A sensible first pair is EP0 and DP1, then EP1 and EP2.
-  - [ ] EP3 after EP2. EP4 after EP3. EP5 after EP4. EP6 after EP5. EP7 after EP6. EP8 after EP7. EP9 after EP8.
-  - [ ] EP10 after EP9 and EP0, whose `FINDINGS.md` fixes the turn-end detector and the Background import.
+  - [ ] EP0, EP1 and HG1 are independent and first. All branch from `engine/base`. EP0, EP1 and HG1's lanes use the ship home's plan login, so they take the lane lock one at a time. A sensible first pair is EP0 and HG1, then EP1 and EP2.
+  - [ ] EP2 after HG1, on `engine/hg1`. EP3 after EP2. EP4 after EP3. EP5 after EP4. EP6 after EP5. EP7 after EP6. EP8 after EP7. EP9 after EP8.
+  - [ ] EP10 after EP9 and EP0, whose `FINDINGS.md` fixes the turn-end detector.
   - [ ] EP11 after EP10 and EP1 (27b N4). EP12 after EP11. EP13 after EP12. EP14 after EP13.
   - [ ] TP1 after EP14. TP2 after TP1. TP3 after TP2. TP4 after TP3.
   - [ ] EP1's findings gate EP11 and feed the later packets L3 and L6 in Appendix G.
 - [ ] Hold the file boundaries.
   - [ ] Track E and Track T PRs touch only `qmx-agents/packages/qmx-engine/**`, `scripts/live/engine/**`, `scripts/probes/engine/**`, and the files a PR's **Files** block names outside them.
+  - [ ] Only HG1 edits `qmx-agents/packages/qma-harness/**`, and only the files its **Files** block names.
   - [ ] Only EP2 edits `qmx-agents/pyproject.toml`, `qmx-agents/uv.lock`, `tools/ci.py` and `tools/test_all.py`. EP12 may edit `qmx-agents/uv.lock` again if it adds the cron library.
-  - [ ] Only EP9 and EP13 edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, and only the lines their **Build** blocks name.
-  - [ ] DP1 touches only `tools/data/**` and `tools/tests/test_legacy_ticks.py`, `tools/tests/test_tick_backup.py`.
-  - [ ] No PR touches `qmx-agents/packages/qma-harness/**`, `qmb/`, `qmn/`, `qml/`, `packages/` (QMF), or `apps/qmx-ui/`.
+  - [ ] Only HG1, EP9 and EP13 edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, and only HG1 edits `qmx_control/server.py`, each only in the lines its **Build** block names.
+  - [ ] No PR other than HG1 touches `qmx-agents/packages/qma-harness/**`. No PR touches `qmb/`, `qmn/`, `qml/`, `packages/` (QMF), or `apps/qmx-ui/`.
 - [ ] Hold the review gate. EP14 and TP4 change what the operator sees. They wait for his review in chat with screenshots and a video at the end of the run.
 
 ### PR mechanics, for every PR
 
 - [ ] Resolve the forge once. Run `command -v origin`. If it is missing, use `gh` and record that in `decisions.tsv`. Never require `gt`.
-- [ ] Branch `engine/<pr-id>` (Track E and Track T) or `data/dp1` from the parent branch at its verified head, in the worktree `D:/QMX-worktrees/eng-<pr-id>`. Open the PR ready, never draft, per **Opening a PR**, with `gh pr create --base <parent-branch> --head <branch> --repo MubarakHimself/QMX`. EP0, EP1, EP2 and DP1 target `engine/base`.
+- [ ] Branch `engine/<pr-id>` from the parent branch at its verified head, in the worktree `D:/QMX-worktrees/eng-<pr-id>`. Open the PR ready, never draft, per **Opening a PR**, with `gh pr create --base <parent-branch> --head <branch> --repo MubarakHimself/QMX`. EP0, EP1 and HG1 target `engine/base`.
+- [ ] The harness diff check is `git diff --quiet <harness base> HEAD -- qmx-agents/packages/qma-harness`. The harness base is `engine/base` for EP0, EP1 and HG1, and `engine/hg1` at HG1's verified head for every later PR. In a lane, "at base" for a harness suite run means that same harness base.
 - [ ] Unset every `ANTHROPIC_*` and `CLAUDE*` name and `NODE_USE_SYSTEM_CA`. Put `TMP`, `TEMP` and `UV_CACHE_DIR` on `D:`.
-- [ ] Run `uv run --no-sync python -m poethepoet fmt-check`, `lint` and `types` once in `qmx-agents/packages/qmx-engine` (and `qmx-control` when the PR edits it, the root workspace for DP1), and `uv run --no-sync python tools/secret_scan.py`, before the PR-facing push. Push with hooks on.
+- [ ] Run `uv run --no-sync python -m poethepoet fmt-check`, `lint` and `types` once in `qmx-agents/packages/qmx-engine` (`qma-harness` and `qmx-control` for HG1, and `qmx-control` when another PR edits it), and `uv run --no-sync python tools/secret_scan.py`, before the PR-facing push. Push with hooks on.
 - [ ] Reread the full diff before each commit in place of `/deslop`, which is not installed (Override 1). Run `/no-comments` before review.
 - [ ] No full `just ci` per PR. Run it once before EP14's check and once before TP4's check, under the CI lock `mkdir D:/QMX-worktrees/.ci-lock`.
 - [ ] Do not rebase onto `rebuild/base` or any moving trunk during the run (Override 5). Rebase a child only when its parent's fix round changed the parent's head.
@@ -90,7 +89,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 - [ ] At the code-ready head SHA, one checker runs one round per `BRIEF-CHECKER.md` (Override 2). It reads the diff and the PR body, runs the PR's unit tests with `-n 2`, the gates above, and lanes 1 to 4 of the PR's **Verify, live** block, plus at most one menu lane (Override 3). It writes `review/<pr-id>-check-<head8>.md` whose first line is CLEAN or NOT CLEAN.
 - [ ] Blockers, money, login and key findings go back to the same builder, resumed for one fix round. Low findings go to `lows.md` with the PR id and never block.
 - [ ] After the fix round, the coordinator reads the fix diff itself, reruns the failing lane, and records the verdict in `ledger.tsv` with head SHA, parent SHA and `git patch-id --stable`. No second checker runs.
-- [ ] Append the PR to its stack on a clean verdict, per autopilot-stack step 5 and step 6. The PR base is its parent branch. Only EP0, EP1, EP2 and DP1 target `engine/base`. No owner merges, arms auto-merge or closes. The operator lands the stacks bottom-up after the run, then merges `engine/base` into `rebuild/base` with his own click.
+- [ ] Append the PR to its stack on a clean verdict, per autopilot-stack step 5 and step 6. The PR base is its parent branch. Only EP0, EP1 and HG1 target `engine/base`. No owner merges, arms auto-merge or closes. The operator lands the stacks bottom-up after the run, then merges `engine/base` into `rebuild/base` with his own click.
 
 ### Boot recipe, for every live lane
 
@@ -116,7 +115,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 **Build.**
 
 - [ ] In `common.py`, open the harness in-process on a given home with `qma.boot` scrub first, the lane lock, a log helper, and a helper that reads a chat's `model_call` rows from `<home>/runs/<sid>/journal.jsonl`. Reuse `scripts/live/qma/common.py` by path where it already does the job.
-- [ ] In `p_background.py`, start a Background chat on the plan profile, with the model the `triage` role lists first for that profile in Appendix H, through `Harness.start_chat(NewChat(..., kind=Background()))`, with `Background` imported from `qma.harness.launch` because `qma.harness.__init__` does not export it (Appendix F, H0). Send one `InjectedText`. Record the reply and the chat record's `kind`.
+- [ ] In `p_background.py`, start a Background chat on the plan profile, with the model the `triage` role lists first for that profile in Appendix H, through `Harness.start_chat(NewChat(..., kind=Background()))`, with `Background` imported from `qma.harness.launch` because EP0 runs at `engine/base`, before HG1 exports it (Appendix F, H0). Send one `InjectedText`. Record the reply and the chat record's `kind`.
 - [ ] In `p_turn_end.py`, run five Background turns of three lengths and time three end detectors against the true end. The detectors are the chat record's `turn` field read from `QmxHome.chats_dir / f"{sid}.json"`, the last session block in `ControlService`, and the `model_call` row in the run journal. Record misses and the worst lag for each.
 - [ ] In `p_asks.py`, have a Background chat in `default` mode ask to write a file. Answer the `permission` block with `Harness.answer(AskId(...), Reject("unattended run"))`. Record the time to the answer, that the chat went on, and the `tool` blocks.
 - [ ] In `p_cache.py`, start two Background chats on one model whose prompts share a static prefix of about 3,000 tokens and differ only after it. Record `cache_read_input_tokens` of the second chat from its journal rows. Repeat on an OpenRouter row and record what the relay journals.
@@ -214,9 +213,66 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] Verdict recorded in `ledger.tsv` with the patch-id.
 - [ ] The root appends EP1 with base `engine/base`. The operator lands it after the run.
 
+## Grant the harness exports, per-chat compaction, per-chat hooks and tool rows (HG1)
+
+**Depends on.** None. It branches from `engine/base` and is the root of the Track E stack. The operator granted H0, H15, H16 and H17 on 2026-10-17 (ruling 89). This is the one PR in the program that edits the harness, so it lands before EP2, the first engine PR that leans on any of the four.
+
+**Files.**
+
+- [ ] Edit `qmx-agents/packages/qma-harness/src/qma/harness/__init__.py`, `harness.py`, `launch.py` and `tools.py`, only in the lines the **Build** block names.
+- [ ] Edit `qmx-agents/packages/qma-harness/tests/test_tools.py` and `tests/test_launch.py`, and create `tests/test_chat_options.py`.
+- [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/server.py` (`OPERATIONS` rows only) and `service.py` (501 stubs only), because `test_tools.py` requires every `AGENT_OPERATIONS` name to be an `OPERATIONS` name.
+- [ ] Create `scripts/live/qma/hg1_grants.py`, reusing `scripts/live/qma/common.py`.
+
+**Build.**
+
+- [ ] H0. Export `Background`, `Child` and `Interactive` from `qma.harness` and add them to `__all__`. No behaviour changes.
+- [ ] H15. Add a per-chat compaction option to `NewChat`, `compact_at: float | None = None`, accepted only for Background and Child chats and refused for Interactive ones. `launch.py` turns it into `CLAUDE_CODE_AUTO_COMPACT_WINDOW` for that one chat's CLI, on plan and key profiles alike. `None` keeps today's behaviour. Export the option's type if it has one.
+- [ ] H16. Add per-chat hooks to `NewChat`, `hooks: ChatHooks | None = None`, for Background and Child chats only. `ChatHooks` carries async callbacks for PreToolUse (observe only, it cannot allow or deny), PostToolUse, PreCompact, Stop and SubagentStop. `launch.py` appends them after the money gate, which stays first and unchanged. The global `[claude] hooks` setting is not touched. Export `ChatHooks`.
+- [ ] H17. Add the `AGENT_OPERATIONS` rows of SOLUTION-DESIGN 13 with its Effects. `workflow_drafts_put` and `workflow_tests_run` are DOMAIN_WRITE, so saving a draft and running a test never ask. `workflows_put` is re-scoped to publish and `workflows_run` to live runs, and both stay MANAGE, so publishing and a live run each ask once. The `workflow_triggers_create/enable/disable/run_now`, `workflow_runs_cancel/resume`, `workflow_versions_archive` and `apps_archive` rows are MANAGE. `workflow_drafts_get`, `workflow_versions_list`, `workflow_runs_get/list/explain`, `workflow_triggers_list` and `workflow_inbox_list` are READ. The Library and Lab rows of H17 wait for their own programs, because their functions do not exist yet.
+- [ ] Add the same names to `qmx_control.server.OPERATIONS` with the REST paths of SOLUTION-DESIGN 13, and give each a `ControlService` method that returns the existing 501 `not_implemented` until an engine is attached. EP13 fills them.
+- [ ] Update `test_tools.py`. The tool-table test pins every new row and its Effect, and a new case asserts `asks()` is False for `workflow_drafts_put` and `workflow_tests_run` under the default `domain_write = "allow"`, and True for `workflows_put` and `workflows_run`.
+
+**You see.**
+
+- [ ] `uv run --no-sync python -c "from qma.harness import Background, Child, Interactive, ChatHooks"` prints nothing, and the `qma-harness` suite passes with the new rows.
+
+**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] `test_chat_options.py` covers `compact_at` and `hooks` refused on an Interactive chat, the env value set for one Background chat and absent for its neighbour, and the money gate first in the hook list. `test_tools.py` pins the new rows and asks. Run `uv run --no-sync python -m pytest tests -q -n 2` in `qma-harness` and `qmx-control`.
+
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
+
+- [ ] Lane 1. Regression lane against trunk. Run the `qma-harness` and `qmx-control` suites with `-n 2` at `engine/base` and at head, and `git diff --stat engine/base HEAD -- qmx-agents/packages/qma-harness`. Save `hg1-regression.log`. Pass when head fails nothing that base passes, and the diff lists only the files this PR names.
+- [ ] Lane 2. H15. Run `hg1_grants.py compact` on the ship home under the lane lock. It starts one plan-profile Background chat with `compact_at` 0.40 and one without, and reads each launched CLI's env. Save `hg1-compact.log`. Pass when only the first chat's CLI holds `CLAUDE_CODE_AUTO_COMPACT_WINDOW` and both chats answer.
+- [ ] Lane 3. H16. Run `hg1_grants.py hooks`, a Background chat with `ChatHooks` that is asked to read one file and to try a money act by name. Save `hg1-hooks.log`. Pass when PostToolUse and Stop fire for the read, the money gate still denies the money act, and an Interactive chat started beside it fires no engine hook.
+- [ ] Lane 4. H17 and H0. Run `hg1_grants.py tools`, which imports `Background` and `Child` from `qma.harness`, starts `qma.serve` on a throwaway home, and calls `workflow_drafts_put`, `workflow_tests_run`, `workflows_put` and `workflows_run` through the copilot's tool surface. Save `hg1-tools.log`. Pass when the import works, the first two raise no ask and return 501, and the last two each raise exactly one ask.
+- [ ] Lane 5. Start an Interactive chat with `compact_at` set. Save `hg1-interactive.log`. Pass when it is refused with a named error and no CLI starts.
+- [ ] Lane 6. Start `qma.serve` on the ship home after the lanes. Save `hg1-serve.log`. Pass when it starts and `/api/doctor` shows no new failure.
+- [ ] Lane 7. Run `tools/secret_scan.py` and the money path scan. Save `hg1-scans.log`. Pass when both are clean.
+- [ ] Lane 8. Read the `__all__` diff. Save `hg1-exports.log`. Pass when it adds only `Background`, `Child`, `Interactive` and `ChatHooks`.
+- [ ] Lane 9. Call one new `OPERATIONS` route over REST without the bearer. Save `hg1-auth.log`. Pass when it returns 401.
+- [ ] Lane 10. List processes after the lanes. Save `hg1-processes.log`. Pass when no `claude` or `qma-cli-launcher` process from the lanes is left.
+
+**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Metric. Not gated (Override 4). Background chat start time in ms with and without `ChatHooks`.
+- [ ] Probe. Three starts each in lane 3.
+- [ ] Baseline. The start without hooks.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** None. HG1 is not review-gated. The operator granted its scope in ruling 89.
+
+**Merge.**
+
+- [ ] Checker's CLEAN verdict at the exact head SHA, or the coordinator's verdict after the one fix round.
+- [ ] Low findings logged in `lows.md`.
+- [ ] Verdict recorded in `ledger.tsv` with the patch-id.
+- [ ] The root appends HG1 with base `engine/base`, as the root of the Track E stack.
+
 ## Seat the qmx-engine package on the harness's public names (EP2)
 
-**Depends on.** None in code. It is the root of the Track E stack and branches from `engine/base`.
+**Depends on.** HG1. It branches from `engine/hg1` at HG1's verified head.
 
 **Files.**
 
@@ -231,7 +287,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] Write `pyproject.toml` in the shape of `qmx-ledger`'s, with dependencies `qma-harness`, `qmx-control`, `qmx-ledger`, `qma-core`, `pydantic==2.13.4` and `jsonschema` at the version already in `qmx-agents/uv.lock`, and dev tools at the workspace pins.
 - [ ] Write `settings.DEFAULTS`, the one home of every engine default. Each entry carries the comment "Claude's default, UI-editable". The values are in Appendix H.
 - [ ] Write `tests/test_import_rules.py` with `ast`, in the style of `qma-harness/tests/test_import_rules.py`.
-  - [ ] Any import of a `qma.harness.<submodule>` fails, with one named exception that AD-3 now records as H0's fallback. The module `qmx_engine.ports.harness_adapter` may import exactly `Background` and `Child` from `qma.harness.launch`, and the rule names that one module and that pair (E15).
+  - [ ] Any import of a `qma.harness.<submodule>` fails, with no exception (E15). HG1 exports `Background`, `Child` and `ChatHooks` from `qma.harness` (H0, H16), so `qmx_engine.ports.harness_adapter` imports them from there. AD-3's fallback, the one allow-listed import of `Background` and `Child` from `qma.harness.launch`, is kept only as safety. If HG1 is ever parked, the coordinator restores that one named exception in this test and logs it in `decisions.tsv`.
   - [ ] `qma.core` is allowed only as `qma.core.barriers.money_path`. `qma.daemon`, `qmx_agents`, `qma_wire`, `langchain*`, `langgraph*` and `claude_agent_sdk` are refused anywhere in `qmx_engine`.
   - [ ] `qmx_engine.core` and `qmx_engine.definition` import no `ports`, `nodes`, `workers`, `ledger`, `sqlite3`, `subprocess` or `httpx`, and call no `time.time`, `datetime.now`, `random.*` or `os.environ` (AD-1, AD-6).
   - [ ] `TestMode(` appears nowhere under `src/`.
@@ -248,7 +304,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
-- [ ] Lane 1. Regression lane against trunk. Run `git diff --quiet engine/base HEAD -- qmx-agents/packages/qma-harness` and the `qma-harness` suite at base and head. Save `ep2-regression.log`. Pass when the diff is empty and the pass counts match.
+- [ ] Lane 1. Regression lane against trunk. Run `git diff --quiet engine/hg1 HEAD -- qmx-agents/packages/qma-harness` and the `qma-harness` suite at `engine/hg1` and head. Save `ep2-regression.log`. Pass when the diff is empty and the pass counts match.
 - [ ] Lane 2. E15. Copy the package to a scratch folder, add `from qma.harness.chat import Chat` to `core/__init__.py`, and run the import rules there. Save `ep2-e15.log`. Pass when the test fails naming that file and the clean head passes.
 - [ ] Lane 3. Run `uv sync --frozen --all-packages --all-groups` in `qmx-agents` on a clean venv on `D:`. Save `ep2-sync.log`. Pass when it succeeds and `import qmx_engine` works.
 - [ ] Lane 4. Run fmt-check, lint and types in `qmx-agents/packages/qmx-engine`. Save `ep2-gates.log`. Pass when all three exit 0.
@@ -273,7 +329,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] Checker's CLEAN verdict at the exact head SHA, or the coordinator's verdict after the one fix round.
 - [ ] Low findings logged in `lows.md`.
 - [ ] Verdict recorded in `ledger.tsv` with the patch-id.
-- [ ] The root appends EP2 with base `engine/base`, as the root of the Track E stack.
+- [ ] The root appends EP2 on `engine/hg1`.
 
 ## Define, validate and lint the qmx.workflow/1 format (EP3)
 
@@ -684,9 +740,9 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 **Build.**
 
-- [ ] In `ports/harness_adapter.py`, wrap the public names only, plus the AD-3 pair `Background` and `Child`. `start_chat` uses `NewChat(title=<idempotency key>, profile, model, effort, workspace=workspaces/wf-<id>/, kind=Background())`. `send` always sends `InjectedText`. Turn end uses the detector `FINDINGS.md` chose. Every `permission` ask is answered `Reject("unattended run")` at once. `interrupt` and `usage` pass through. Appendix F lists how each harness behaviour is inherited.
+- [ ] In `ports/harness_adapter.py`, wrap the public names only, including `Background`, `Child` and `ChatHooks` from `qma.harness` (HG1). `start_chat` uses `NewChat(title=<idempotency key>, profile, model, effort, workspace=workspaces/wf-<id>/, kind=Background())`. `send` always sends `InjectedText`. Turn end uses the detector `FINDINGS.md` chose. Every `permission` ask is answered `Reject("unattended run")` at once. `interrupt` and `usage` pass through. Appendix F lists how each harness behaviour is inherited.
 - [ ] In `roles.py`, resolve a role from `[roles]` to an ordered list of `(profile, model, effort, context_window, test_only)`. Test mode prefers the cheap end and admits `test_only` rows. Live mode skips them. The defaults are in Appendix H.
-- [ ] In `admission.py`, count the engine's own live chats against `max_live_chats - limits.interactive_reserve`, read `Harness.usage()`, and map a `LaunchRefused` for a cap or a stop to `waiting(limit, resume_at)` with the reset time EP0 found. A chat that ends on the harness's per-chat `max_budget_usd` becomes `waiting(runaway)`, not a failure (27b S4). Nothing asks the operator (ruling 27).
+- [ ] In `admission.py`, count the engine's own live chats against `max_live_chats - limits.interactive_reserve`, read `Harness.usage()`, and map a `LaunchRefused` for a share or a stop to `waiting(limit, resume_at)` with the reset time EP0 found. There is no fixed background cap in engine code (ruling 90). The engine reads each account's `pool.accounts.<account>.background_share` from `SettingsPort`, Claude's default 0.5, and parks a node as `waiting(limit)` when that account's background use reaches its share. Until the pool packet (L2), the one plan account's share is the harness's `[budgets] background_cap`, read and never edited, and Settings edits it. The strategy, ceiling and cooldown settings of Appendix H are read here too, and with one account they change nothing yet. A chat that ends on the harness's per-chat `max_budget_usd` becomes `waiting(runaway)`, not a failure (27b S4). Nothing asks the operator (ruling 27).
 - [ ] In `nodes/llm.py`, run one turn on a tool-less brief in a Background chat. Validate the final text against the node's JSON schema with `jsonschema`. On failure, send one repair turn in the same chat, then fail `bad_output`. Read tokens, cache read and cache write from the chat's journal rows into the span.
 - [ ] In `nodes/fake_provider.py`, return pinned data, a recorded transcript or a schema-valid canned document, chosen by an explicit per-run switch. In `doctor.py`, make the ladder's doctor an `llm` call on the `doctor` role.
 
@@ -696,7 +752,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_roles.py` covers test mode admitting `test_only` rows and live mode skipping them. `test_admission.py` covers the reserve arithmetic and the mapping of a refusal to `waiting`. `test_llm.py` covers the repair turn with a fake port. `test_harness_port.py` checks that no prompt goes out as `OperatorText`. Run `uv run --no-sync python -m pytest tests -q -n 2`.
+- [ ] `test_roles.py` covers test mode admitting `test_only` rows and live mode skipping them. `test_admission.py` covers the reserve arithmetic, the mapping of a refusal to `waiting`, and a share read from settings at 0.5 and at 0.9 that parks at each value. `test_llm.py` covers the repair turn with a fake port. `test_harness_port.py` checks that no prompt goes out as `OperatorText`. Run `uv run --no-sync python -m pytest tests -q -n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
@@ -742,8 +798,9 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 - [ ] In `nodes/agent.py`, run a Background chat per chunk with the node's brief, its skills and its tool list stated in the prompt, the session id saved on `node_started` for resume, and the write zone named. Asks are rejected, so agent nodes read and answer but write nothing on the host until the sandbox packet (L6). The final answer is validated like an `llm` node's. The node's turn cap is the harness's global Background `max_turns` until H2. The engine enforces the node's run and idle timeouts through `Harness.interrupt`.
 - [ ] In `prompts.py`, lay out every model prompt for the cache. The static brief, schema and rules come first and are byte-stable across chunks. The chunk data comes last. Recalled text arrives only as a fenced block (AD-18).
-- [ ] Apply AD-34 (ruling 78) as far as the public names allow. Compaction targets `agent.compact_at` (0.40 of the window). Key-provider rows get it through `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in their Settings quirks. For plan rows, use AD-34's fallback until H15. The engine watches context from the turn usage it already reads. At the threshold it injects one instruction to `memory_note` the working state and summarise, then continues the same attempt in a fresh Background chat seeded with that summary, with the same memo key. Every compaction becomes a span event `compacted{trigger: threshold | auto | restart, at_fraction}`.
-- [ ] Record each tool call as a child span (`kind: tool`, name, duration, error) from the `tool` blocks the harness writes after each turn, until H16 gives PostToolUse. Interrupt the attempt when its tool calls pass `agent.max_tool_calls` and set the run `waiting(runaway)`.
+- [ ] Apply AD-34 (ruling 78) through HG1's real APIs. Every agent chat starts with `NewChat(compact_at=agent.compact_at)` (0.40 of the window, H15), on plan and key rows alike. Its `ChatHooks.pre_compact` callback writes the working state with `memory_note` before the CLI compacts (H16). Every compaction becomes a span event `compacted{trigger: threshold | auto | restart, at_fraction}`.
+  - [ ] Keep AD-34's fallback as safety only. When the harness refuses `compact_at`, or context passes `agent.compact_at` plus 0.05 with no `compacted` event, the engine injects one instruction to `memory_note` the working state and summarise, then continues the same attempt in a fresh Background chat seeded with that summary, with the same memo key, and writes an `info` digest line naming the fallback.
+- [ ] Record each tool call as a child span (`kind: tool`, name, duration, error) live from `ChatHooks.post_tool_use` (H16), and record Stop and SubagentStop from their hooks. The `tool` blocks the harness writes after each turn stay as safety only. The engine reconciles them at turn end and adds a span for any tool call no hook reported. Interrupt the attempt when its tool calls pass `agent.max_tool_calls` and set the run `waiting(runaway)`.
 - [ ] All chunks of one node in one run use one profile and model, so chunk 2 onward reads the cache. Per-account lease affinity arrives with the pool (L2).
 - [ ] Implement AD-9 drain and pause. A closed admission puts the node in `waiting(limit, resume_at)`. No new model node starts, scripts and rules continue, and the run emits `run_paused` when nothing runs. The runner's own timer wakes it at `resume_at` plus `limits.slack`. The scheduler takes this over in EP12. A `rate_limit` inside a running node marks the attempt `waiting`, not failed.
 - [ ] A worker death during an `agent` or `llm` attempt records `effect_state: unknown`. The engine retries that model call once with a new attempt and writes an `info` digest line with the idempotency key. No inbox item is raised (AD-8, ruling 77).
@@ -755,7 +812,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `test_prompts.py` checks that two chunks' prompts share a byte-identical prefix. `test_drain.py` checks that scripts continue and no model node starts while the run drains. `test_agent.py` checks the session id is recorded and reused on resume. Run `uv run --no-sync python -m pytest tests -q -n 2`.
+- [ ] `test_prompts.py` checks that two chunks' prompts share a byte-identical prefix. `test_drain.py` checks that scripts continue and no model node starts while the run drains. `test_agent.py` checks the session id is recorded and reused on resume, that every agent chat passes `compact_at` and `ChatHooks`, and, with a fake port that refuses `compact_at`, that the restart fallback runs. Run `uv run --no-sync python -m pytest tests -q -n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
@@ -768,7 +825,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] Lane 7. Give an agent node a 60 s run timeout and a task that runs longer. Save `ep11-timeout.log`. Pass when the engine interrupts it and records `timeout`.
 - [ ] Lane 8. Run a drain with one script node and one model node waiting. Save `ep11-drain.log`. Pass when the script finishes and the model node does not start.
 - [ ] Lane 9. Ask an agent node to write a file. Save `ep11-readonly.log`. Pass when the ask is rejected and no file appears in the workspace.
-- [ ] Lane 10. E31, the part the public names allow. Run one agent chunk on an OpenRouter row whose quirks set a small `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, with a long enough input to cross it. Save `ep11-compact.log`. Pass when the span shows a `compacted` event, a `memory_note` row written before it, and tool-call child spans. Then run one plan-profile chunk past `agent.compact_at`, and pass when the fallback restarts it in a fresh chat with `trigger: restart` and the same memo key.
+- [ ] Lane 10. E31 on HG1's APIs. Run one plan-profile agent chunk with a long enough input to cross `agent.compact_at`. Save `ep11-compact.log`. Pass when the span shows a `compacted` event with `trigger: auto`, a `memory_note` row written by the PreCompact hook before it, and tool-call child spans that arrived from PostToolUse before the turn ended.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -851,7 +908,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 **Files.**
 
-- [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, only `workflows_get`, `workflows_put`, `workflows_validate`, `workflows_run`, and a new `attach_workflow_engine`.
+- [ ] Edit `qmx-agents/packages/qmx-control/src/qmx_control/service.py`, only `workflows_get`, `workflows_put`, `workflows_validate`, `workflows_run`, the `workflow_*` stubs HG1 added, and a new `attach_workflow_engine`.
 - [ ] Create `qmx-agents/packages/qmx-control/tests/test_workflow_engine_door.py`.
 - [ ] Create `src/qmx_engine/host.py`, `src/qmx_engine/service/rest.py`, `src/qmx_engine/control_door.py`.
 - [ ] Create `tests/test_host.py`, `tests/test_rest.py`.
@@ -859,11 +916,11 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 **Build.**
 
-- [ ] In `qmx_control/service.py`, add a `WorkflowEngine` Protocol and `attach_workflow_engine(engine)`. The four `workflows_*` methods call the attached engine and keep their 501 when none is attached. Per SOLUTION-DESIGN 13, `workflows_put` is re-scoped to publish only and `workflows_run` to live runs only. Both stay MANAGE and ask him once. `workflows_get` and `workflows_validate` stay READ. `qmx-control` never imports `qmx_engine`. `runs_*`, `run_job` and `jobs_*` stay the remote-compute doors they are today (27b S16).
-- [ ] In `control_door.py`, implement that Protocol over `qmx_engine.service`. Engine runs live in `engine.sqlite` and the `/api/workflow-runs` routes, not in `runs.db`. The copilot's new `workflow_*` tools need H17.
-- [ ] Build H17's fallback from SOLUTION-DESIGN 13. The copilot saves a draft with the existing `library_save` (DOMAIN_WRITE) as a `workflow` object. The engine subscribes to `ControlService`'s `library` events, imports a changed `workflow` draft into `refs/drafts/<item>`, and starts a test run when its `meta.test_requested` nonce changed. Neither step asks him.
-- [ ] In `service/rest.py`, add a router for the REST paths of SOLUTION-DESIGN 13 that `OPERATIONS` lacks. They are `/api/workflows/{id}/draft`, `.../test`, `.../publish`, `.../versions` and `.../archive`, `/api/workflow-runs/*` with explain, cancel and resume, `/api/triggers/*`, `/api/inbox/*`, and `/api/engine/events` as SSE. It is never added to `qmx_control.server.OPERATIONS`, because the harness's `test_tools.py` checks that list against its own allow-list (H17).
-- [ ] In `host.py`, write the interim composition root (Appendix F, H0). It runs the `qma.boot` scrub first, opens `QmxHome`, a `ControlService`, `Harness.open`, the engine and its ticker task group, attaches the engine, and serves `create_app(control, local_token(), ui_origin, extra_routers=[engine_router])` with uvicorn. It refuses to start when the home's `control-process.json` records a live host. `python -m qmx_engine.host serve --home <home> --port <port>`.
+- [ ] In `qmx_control/service.py`, add a `WorkflowEngine` Protocol and `attach_workflow_engine(engine)`. The four `workflows_*` methods and HG1's `workflow_*` stubs call the attached engine and keep their 501 when none is attached. Per SOLUTION-DESIGN 13, `workflows_put` is re-scoped to publish only and `workflows_run` to live runs only. Both stay MANAGE and ask him once. `workflows_get` and `workflows_validate` stay READ. `qmx-control` never imports `qmx_engine`. `runs_*`, `run_job` and `jobs_*` stay the remote-compute doors they are today (27b S16).
+- [ ] In `control_door.py`, implement that Protocol over `qmx_engine.service`. Engine runs live in `engine.sqlite` and the `/api/workflow-runs` routes, not in `runs.db`. The copilot reaches the engine through HG1's `workflow_*` tool rows (H17). `workflow_drafts_put` and `workflow_tests_run` never ask him, and publish and a live run ask once.
+- [ ] Keep H17's fallback from SOLUTION-DESIGN 13 as safety only. A draft the copilot saves with the existing `library_save` (DOMAIN_WRITE) as a `workflow` object is still picked up. The engine subscribes to `ControlService`'s `library` events, imports a changed `workflow` draft into `refs/drafts/<item>`, and starts a test run when its `meta.test_requested` nonce changed. Neither step asks him.
+- [ ] In `service/rest.py`, add a router for the REST paths of SOLUTION-DESIGN 13 that `OPERATIONS` still lacks after HG1. They are the UI-only `/api/inbox/{id}/resolve` and `/api/engine/events` as SSE. The paths HG1 added to `OPERATIONS` reach the engine through `attach_workflow_engine`. The router is never added to `qmx_control.server.OPERATIONS`, because the harness's `test_tools.py` checks that list against its own tool table.
+- [ ] In `host.py`, write the interim composition root (Appendix F, AD-3). HG1 grants H0's exports, but H0 does not make `qma.serve` compose the engine, so the host stays until L1. It runs the `qma.boot` scrub first, opens `QmxHome`, a `ControlService`, `Harness.open`, the engine and its ticker task group, attaches the engine, and serves `create_app(control, local_token(), ui_origin, extra_routers=[engine_router])` with uvicorn. It refuses to start when the home's `control-process.json` records a live host. `python -m qmx_engine.host serve --home <home> --port <port>`.
 
 **You see.**
 
@@ -877,7 +934,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 
 - [ ] Lane 1. Regression lane against trunk. Run the harness diff check and the `qma-harness` suite at base and head, which includes `test_tools.py`. Save `ep13-regression.log`. Pass when the diff is empty and the pass counts match.
 - [ ] Lane 2. Start `qmx_engine.host` on a throwaway home and run `x13_doors.py rest`, which saves a draft, validates, tests, publishes and live-runs the `script-chain` fixture over REST. Save `ep13-rest.log`. Pass when each call returns the engine's document and the run finishes.
-- [ ] Lane 3. Run `x13_doors.py fallback`, which calls `library_save` with a `workflow` draft and a new `meta.test_requested`, then `workflows_validate` through the `/mcp` door. Save `ep13-fallback.log`. Pass when a test run starts on its own, no ask appears, and the tool returns the engine's result.
+- [ ] Lane 3. Run `x13_doors.py tools`, which calls `workflow_drafts_put` and `workflow_tests_run` through the `/mcp` door, then `workflows_put` to publish. Save `ep13-tools.log`. Pass when the draft saves and the test run starts with no ask, publish raises exactly one ask, and each tool returns the engine's result. Then run `x13_doors.py fallback`, which saves a `workflow` draft with `library_save` and a new `meta.test_requested`, and pass when a test run still starts on its own.
 - [ ] Lane 4. Start a run with a `wait` node and cancel it through `POST /api/workflow-runs/{id}/cancel`. Save `ep13-cancel.log`. Pass when the engine run ends `cancelled`, and `GET /api/runs` still lists only remote runs.
 - [ ] Lane 5. Start plain `qma.serve` on another throwaway home and call `PUT /api/workflows/x`. Save `ep13-501.log`. Pass when it still returns 501.
 - [ ] Lane 6. Call `GET /api/workflow-runs/{id}/explain`. Save `ep13-explain.log`. Pass when it matches the CLI's `explain` for the same run.
@@ -915,7 +972,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 **Build.**
 
 - [ ] Write `run_all.py`. It runs every `e*.py` and `x*.py` check in plan order and prints one PASS or FAIL table with the evidence path of each.
-- [ ] Write `ENGINE-NOTES.md` with the `run_all.py` table, the departures in Appendix F, each H-request and its fallback in use, and how to start the host.
+- [ ] Write `ENGINE-NOTES.md` with the `run_all.py` table, the departures in Appendix F, each H-request with HG1's API in use or the fallback in use, and how to start the host.
 - [ ] Run full `just ci` once under the CI lock and attach its summary.
 
 **You see.**
@@ -933,7 +990,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] Lane 3. Run `hello-chunks` in test mode on the host, then publish it, add a disabled cron trigger, and enable it. Save `ep14-hello.png`. Pass when enable succeeds only after the test report, and the screen shows the run card from `explain`.
 - [ ] Lane 4. Run `hello-chunks` live once through `run_now`, kill the host mid-run, restart, and resume. Save `ep14-resume.log`. Pass when finished chunks are not re-run and the run finishes.
 - [ ] Lane 5. Read `ENGINE-NOTES.md` against Appendix F. Save `ep14-notes.log`. Pass when every departure and H-request appears.
-- [ ] Lane 6. Hash `qmx-agents/packages/qma-harness/` at base and head. Save `ep14-harness-hash.log`. Pass when the hashes match.
+- [ ] Lane 6. Hash `qmx-agents/packages/qma-harness/` at `engine/hg1` and head. Save `ep14-harness-hash.log`. Pass when the hashes match.
 - [ ] Lane 7. Grep the engine source for any money verb and any broker import. Save `ep14-money.log`. Pass when none is found outside the lint's deny list reference.
 - [ ] Lane 8. Count plan-profile turns and OpenRouter calls the program used, from the journals. Save `ep14-usage.log`. Pass when both are recorded for Appendix E.
 - [ ] Lane 9. Run `tools/secret_scan.py` and the money path scan. Save `ep14-scans.log`. Pass when both are clean.
@@ -1183,71 +1240,12 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] Verdict recorded in `ledger.tsv` with the patch-id.
 - [ ] The root appends TP4 on `engine/tp3`. The operator lands Track T bottom-up after his review.
 
-## Make the legacy tick history safe and importable (DP1)
-
-**Depends on.** None. It branches from `engine/base` and runs beside Track E (ruling 81).
-
-**Files.**
-
-- [ ] Create `tools/data/legacy_ticks.py`, `tools/data/tick_backup.py` and `tools/data/data-targets.example.toml`.
-- [ ] Create `tools/tests/test_legacy_ticks.py` and `tools/tests/test_tick_backup.py`.
-
-**Build.**
-
-- [ ] In `tick_backup.py`, read targets from a TOML file passed with `--config`, default `<qmx_home>/data-targets.toml`. A `local` target is a folder path. A `contabo` target is an rclone remote name and path with `enabled = false`, and the script refuses any remote target in this PR. No SSH, no rclone call and no credential read happens anywhere. The operator's Settings UI takes this file over in a later packet (L16).
-  - [ ] `verify` walks `C:/Users/Mubarak/Documents/QMX/data/raw/external-deep-history/` read-only, checks each day's `_COMPLETE` marker, and hashes every `raw/*.bi5` against the `content_hashes` in its `_manifest.json`. It writes an inventory TSV and a mismatch list to `D:/QMX-data/legacy-import/`, and never repairs a source file.
-  - [ ] `copy` copies the bi5 files and the manifests (per-day Parquet only with `--include-legacy-parquet`) to the local target, verifies each copy's sha256 against the manifest, skips files already present with a matching hash, and writes `backup-manifest.json` with counts, bytes and the run time.
-  - [ ] A preflight refuses to start when the target's free space is under the bytes to copy plus 5 GB.
-- [ ] In `legacy_ticks.py`, write `LocalBi5Transport`, a `DukascopyTransport` whose `fetch_hour` reads `date=YYYY-MM-DD/raw/HHh_ticks.bi5` after checking its hash. A missing hour in a complete day returns empty bytes and is recorded.
-  - [ ] Import with `qmb.data.download.download(resources, adapter=DukascopyProviderAdapter(LocalBi5Transport(root), instruments=..., default_license=PERSONAL_USE_LICENSE))`, `world` replay, destination `D:/QMX-data/market/`, one bounded month per call, so the complete-corpus refusal (FM-5) never trips.
-  - [ ] Keep a progress TSV and skip months already admitted, so a stopped import resumes.
-  - [ ] Import one month first, measure its bytes, project the full size, and refuse the full run when the projection exceeds the destination's free space minus 5 GB.
-  - [ ] No file in `qmb/`, `qmn/` or `packages/` changes.
-- [ ] Run order on the operator's PC is `verify`, then `copy`, then the one-month import, then the full import as a background run with its progress file.
-
-**You see.**
-
-- [ ] `backup-manifest.json` reports 215,068 bi5 files copied and verified (or the exact count `verify` found), and the import progress TSV shows every month of EURUSD and USDJPY admitted.
-
-**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
-
-- [ ] `test_tick_backup.py` covers a hash mismatch reported and not fixed, an idempotent second copy, a refused remote target, and the space preflight, on a tmp tree. `test_legacy_ticks.py` covers the hour path mapping, a missing hour, and a decoded fixture bi5 through the transport. Run `uv run --no-sync python -m pytest tools/tests/test_legacy_ticks.py tools/tests/test_tick_backup.py -q` at the root.
-
-**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `opus` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
-
-- [ ] Lane 1. Regression lane against trunk. Run `qmb/tests/test_data_download.py`, `packages/qmf-data/tests/test_dukascopy.py` and `git diff --stat engine/base HEAD -- qmb qmn packages` at base and head. Save `dp1-regression.log`. Pass when the diff is empty and the pass counts match.
-- [ ] Lane 2. Run `tick_backup.py verify` on the whole legacy tree. Save `dp1-verify.log`. Pass when every bi5 file is hashed and the mismatch list is empty or names each mismatch.
-- [ ] Lane 3. Hash a sample of 200 source files and list the tree's mtimes before and after lanes 2, 4 and 5. Save `dp1-source-untouched.log`. Pass when nothing changed.
-- [ ] Lane 4. Run `tick_backup.py copy`, then run it again. Save `dp1-copy.log`. Pass when every copy verifies, and the second run copies 0 files.
-- [ ] Lane 5. Import one month of EURUSD. Save `dp1-month.log`. Pass when the admitted tick count equals the count decoded from that month's bi5 files, and a rerun admits 0 new.
-- [ ] Lane 6. Enable the `contabo` target in a scratch config and run `copy`. Save `dp1-remote-refused.log`. Pass when the script refuses, and `Get-Process` shows no `ssh` or `rclone` process.
-- [ ] Lane 7. Set a target whose free space is too small. Save `dp1-space.log`. Pass when preflight refuses before copying.
-- [ ] Lane 8. Read the imported month back through qmf-data's DuckDB views. Save `dp1-readback.log`. Pass when the first and last ticks match the bi5 decode.
-- [ ] Lane 9. Stop the full import mid-month and restart. Save `dp1-resume.log`. Pass when it resumes from the progress file and admits no duplicate.
-- [ ] Lane 10. Check free space on `C:` before and after. Save `dp1-c-drive.log`. Pass when `C:` free space did not drop by more than 100 MB.
-
-**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
-
-- [ ] Metric. Import throughput in bi5 hours per minute and copy throughput in MB/s. Speed is part of this PR's point, because the full import must finish in a sane time (Override 4).
-- [ ] Probe. The one-month import and a 1 GB slice of the copy, each run twice.
-- [ ] Baseline. Trunk has no importer. The absolute budget is the baseline.
-- [ ] Rule. Fail when the projected full import exceeds 24 hours, or the copy runs below 20 MB/s from `C:` to `D:`.
-
-**Review gate.** None. DP1 is not review-gated.
-
-**Merge.**
-
-- [ ] Checker's CLEAN verdict at the exact head SHA, or the coordinator's verdict after the one fix round.
-- [ ] Low findings logged in `lows.md`.
-- [ ] Verdict recorded in `ledger.tsv` with the patch-id.
-- [ ] The root appends DP1 with base `engine/base`, as Track D's one-PR stack.
-
 ## Close the program
 
 - [ ] Every box above is checked with its evidence, and every lane outside a run set has its `menu, not run` row.
 - [ ] Reply to the operator with the report autopilot-stack names. Give links to each stack's root and tip, a one-line verdict per PR, what was parked or excluded and why, the open H-requests, and the trail at `D:/QMX-worktrees/qma-ship/engine/decisions.tsv`.
 - [ ] Write `D:/QMX-worktrees/qma-ship/ENGINE-RESUME.md` with the stack state for his landing session.
-- [ ] List every `engine/*` and `data/*` branch and worktree for his go. Delete none without it.
+- [ ] List every `engine/*` branch and worktree for his go. Delete none without it.
 
 ## Appendix A. Prototype evidence
 
@@ -1255,23 +1253,20 @@ No prototype ran in this planning pass. EP0 and EP1 are the probes, and they run
 
 | Fact read from the code | Where | Shapes |
 |---|---|---|
-| `Background` is defined in `qma/harness/launch.py:66` and not exported by `qma/harness/__init__.py` | `qma-harness/src/qma/harness/__init__.py` | H0, EP2's one import exception, EP10 |
+| `Background` is defined in `qma/harness/launch.py:66` and not exported by `qma/harness/__init__.py` | `qma-harness/src/qma/harness/__init__.py` | H0, HG1's exports, EP2, EP10 |
 | `qma.serve` builds control, harness and app inside `routes._serve`. Only `serve()` is public | `routes.py:435-470` | H0, EP13's `qmx_engine.host` |
 | `Harness.live()` yields deltas only and never signals a turn end | `chat.py:889-897` | H1 fallback, EP0 `p_turn_end.py` |
 | The chat record JSON with its `turn` field lives at `QmxHome.chats_dir / f"{sid}.json"` | `home.py:628-637` | EP0 detector candidate |
-| The harness's `test_tools.py:55` requires every `OPERATIONS` name to be in its allow-list or left-out map | `qma-harness/tests/test_tools.py` | H17, EP13 router outside `OPERATIONS` |
+| The harness's `test_tools.py:55` requires every `OPERATIONS` name to be in its allow-list or left-out map | `qma-harness/tests/test_tools.py` | H17, HG1 adds rows to both tables together |
 | The 501 stubs are `workflows_get/put/validate/run` and run or job cancel without an owner. `library_*` work | `qmx_control/service.py:659,680,916-930` | EP13 |
 | `runs_*`, `run_job` and `jobs_*` already mean remote compute runs | `service.py:518-617` | EP13 keeps engine runs out of them (27b S16) |
-| The harness gives each Background chat `max_budget_usd` 5.0 and `background_cap` 0.5 | `launch.py:182-188`, `harness.py:353-361` | EP10 maps both to `waiting` (27b S4) |
-| Background chats are verbatim, so the engine cannot send `/compact` | `launch.py:87-90` | EP11 chunk sizing, H15 |
+| The harness gives each Background chat `max_budget_usd` 5.0 and `background_cap` 0.5 | `launch.py:182-188`, `harness.py:353-361` | EP10 maps both to `waiting` (27b S4), and reads `background_cap` as the plan account's share setting (ruling 90) |
+| Background chats are verbatim, so the engine cannot send `/compact` | `launch.py:87-90` | EP11 chunk sizing, H15 in HG1 |
 | Key-provider rows accept `quirks.env` including `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | `profiles.py:138-146, 297-325` | EP0 lane 7, EP11 |
 | Background and Child chats get `max_turns` and `max_budget_usd` from global `[budgets]` | `launch.py:176-188, 424-425` | H2 fallback |
 | Plan turns journal `model_call` rows with cache read and write under `runs/<sid>/journal.jsonl` | `chat.py:1196-1207`, `usage.py:345` | EP10 spans |
 | `UsagePage` carries per-window readings with `resets_at` | `usage.py:451-470` | EP10 admission |
 | No cron library is in either lockfile, and `jsonschema` and `tzdata` are | `qmx-agents/uv.lock`, `uv.lock` | EP3, EP12 |
-| `qmb.data.download.download` takes an injected adapter, and `DukascopyAdapter` takes an injected transport | `qmb/src/qmb/data/download.py:222`, `qmf/data/dukascopy.py:425-480` | DP1 |
-| Legacy day folders hold 24 hourly bi5 files and `_manifest.json` with sha256 per file | the legacy folder, read-only | DP1 verify |
-| `C:` has 7.3 GB free and `D:` 32 GB | `df -h`, 2026-10-16 | DP1 destinations |
 
 Unproven after the probes, by design. The agentOS half of E23 needs its own probe. The relay-routing half of E24 needs the harness pool packet (H10). Nothing runs on macOS or Linux in this program.
 
@@ -1279,13 +1274,11 @@ Unproven after the probes, by design. The agentOS half of E23 needs its own prob
 
 - **Autopilot-full.** The selection rule picks autopilot-stack for sequenced work the operator reviews before landing. The HP program used autopilot-full because the project rule let the coordinator merge into `rebuild/base`. This brief withholds merging, so stacks it is.
 - **Ten live lanes per PR.** The operator's light rule replaced them on 2026-10-15. They stay in the plan only as a menu, because `check-plan.mjs` requires them.
-- **Editing the harness to seat the engine.** AD-3 wants `qma.serve` to start the engine. That needs a harness edit, which ruling 24 and this brief forbid. The interim `qmx_engine.host` composes the same public calls, and H0 asks for the real seat.
-- **New `qmx` tools in `OPERATIONS`.** Adding rows breaks the harness's own `test_tools.py` until the harness's allow-list grows (H16). The engine's extra routes live in their own router.
+- **Seating the engine in `qma.serve` inside HG1.** AD-3 wants `qma.serve` to start the engine. Ruling 89 grants H0, H15, H16 and H17 and nothing more, and H0 is exports only. The interim `qmx_engine.host` composes the same public calls, and L1 is the real seat.
+- **New `qmx` tools in `OPERATIONS` from an engine PR.** Adding rows breaks the harness's own `test_tools.py` unless its tool table grows in the same change. HG1 adds both together, and the engine's two remaining routes live in their own router.
 - **A second process with its own harness on the operator's home.** `Harness.open` kills CLI trees of its home, and a second home needs a second plan login. One host per home, with a lane lock for checks.
 - **`human_gate` in this program.** Ruling 77 says almost nothing waits, and the only waits are irreversible external steps, which no in-scope node makes. The kind stays registered and unavailable.
 - **Agent nodes that write on the host.** AD-24 keeps model-written code off the host. Until the sandbox packet, asks are rejected, so agent nodes read and answer only.
-- **Writing the tick store under `~/.qmx/market`.** `C:` has 7.3 GB free.
-- **Re-ingesting from the legacy per-day Parquet.** It has no CT-10 identity (file 30 section 4c). The bi5 files are the provider's own bytes.
 - **Grouping templates by wave.** Waves are dropped (ruling 33). Templates are grouped by what they need.
 
 ## Appendix C. Risks
@@ -1297,10 +1290,8 @@ Unproven after the probes, by design. The agentOS half of E23 needs its own prob
 - **Plan usage (all PRs).** Builders draw far more of the plan than lanes do. At most two builders and three agents run at once.
 - **OpenRouter spend (EP10, EP11, Track T).** Small, and on his own key for tests (ruling 51). Appendix E estimates it.
 - **The B1 SQLite floor (EP4).** Python 3.14 here bundles a SQLite below 3.51.3. The ledger keeps one writer connection and checkpoints only from it.
-- **The architecture changed the night before (all PRs).** `27c-gap-fixes-applied.md` applied 27b's blockers. This plan matches 27c, including AD-34 and AD-35, the shared run status table, `refs/drafts`, H0 and H15 to H17 with their fallbacks, the tool Effects of SOLUTION-DESIGN 13, capacity from RAM, and E29 to E32. A conflict found later is a stop for the planner.
+- **The architecture changed the night before (all PRs).** `27c-gap-fixes-applied.md` applied 27b's blockers. This plan matches 27c, including AD-34 and AD-35, the shared run status table, `refs/drafts`, H0 and H15 to H17 (now granted and built in HG1, with their fallbacks kept as safety), the tool Effects of SOLUTION-DESIGN 13, capacity from RAM, and E29 to E32. A conflict found later is a stop for the planner.
 - **D1 deletion PRs may also edit `qmx-control` (EP9, EP13).** D1 has not run. If it lands first, the root rebases EP9 and EP13's two small edits.
-- **Disk space (DP1).** `D:` has 32 GB. The bi5 copy is about 4 GB and the import is projected first. The preflight refuses before running out.
-- **The full import may take hours (DP1).** It runs in the background with a progress file, and the perf rule names the budget.
 - **Opus reviews Opus (every PR).** A cross-family review is not run. Fable reviews only when he asks.
 - **No macOS or Linux test machine.** Out of scope for this program.
 
@@ -1309,9 +1300,8 @@ Unproven after the probes, by design. The agentOS half of E23 needs its own prob
 - The contract is `architecture/workflow-engine/`. Owners read `ARCHITECTURE-SPINE.md` for the ADs their PR names and `SOLUTION-DESIGN.md` for the sections their PR names. For the Library, only `architecture/library-and-data/ARCHITECTURE-SPINE.md` AD-15 and `ENGINE-REQUESTS-ANSWERED.md`.
 - Rulings live in `research/methodology/26-operator-rulings-and-alignment.md`. Section J and rulings 83 and 84 are the latest. Earlier files lose where they disagree.
 - Templates come from `archive/2026-10-16-methodology-drafts/19-centralized-design.md` section 7 and the cards in files 15, 16 and 17.
-- Data facts come from `research/methodology/30-data-and-devops.md` sections 1a, 3, 4c and 5d.
-- The harness is read-only. `ed704c92` holds it as merged from `qma/hp17`. Its sign-off is `qmx-agents/packages/qma-harness/docs/SIGNOFF.md`.
-- EP10 and EP13 get `C:/Users/Mubarak/.claude/skills/how/SKILL.md` before editing, because they meet the harness and `qmx-control`. No PR gets `/interrogate` (Override 2).
+- The harness is read-only except in HG1. `ed704c92` holds it as merged from `qma/hp17`. Its sign-off is `qmx-agents/packages/qma-harness/docs/SIGNOFF.md`.
+- HG1, EP10 and EP13 get `C:/Users/Mubarak/.claude/skills/how/SKILL.md` before editing, because they meet the harness and `qmx-control`. No PR gets `/interrogate` (Override 2).
 - The coordinator keeps its trail per `C:/Users/Mubarak/.claude/skills/show-me-your-work/SKILL.md` in `D:/QMX-worktrees/qma-ship/engine/decisions.tsv`. Each owner returns its own `decisions.tsv` uncommitted. The planner's trail is `tracker/qma-v2/trail/engine/decisions.tsv`.
 - Never read `tracker/qma-v2/archive/` as the plan.
 
@@ -1323,6 +1313,7 @@ Every number here is the planner's estimate, not a measurement. Effort is focuse
 |---|---|---|---|---|
 | EP0 | 3 | 40 | 10 | probe |
 | EP1 | 4 | 160 | 0 | probe |
+| HG1 | 3 | 5 | 0 | E |
 | EP2 | 2 | 0 | 0 | E |
 | EP3 | 4 | 0 | 0 | E |
 | EP4 | 3 | 0 | 0 | E |
@@ -1340,12 +1331,11 @@ Every number here is the planner's estimate, not a measurement. Effort is focuse
 | TP2 | 5 | 10 | 150 | T |
 | TP3 | 4 | 5 | 80 | T |
 | TP4 | 3 | 10 | 110 | T |
-| DP1 | 4 | 0 | 0 | D |
-| Total | 83 | 285 | 545 | |
+| Total | 82 | 290 | 545 | |
 
-- **Number of PRs.** Twenty. Two probes, thirteen in Track E, four in Track T and one in Track D.
-- **Wall time.** One Track E builder at a time, a checker beside it, and DP1 and the probes in parallel at the start. Roughly four to five working days. A guess.
-- **Model turns.** About 285 plan-profile turns, most of them EP1's E23 task runs, and about 545 OpenRouter calls, most of them template test runs. The one fix round per PR adds an estimated 20%. EP14 lane 8 and TP4 lane 8 replace these guesses with counts.
+- **Number of PRs.** Twenty. Two probes, HG1 and thirteen engine PRs in Track E, and four in Track T. DP1 was removed because data is held (ruling 91).
+- **Wall time.** One Track E builder at a time, a checker beside it, and the probes in parallel with HG1 at the start. Roughly four to five working days. A guess.
+- **Model turns.** About 290 plan-profile turns, most of them EP1's E23 task runs, and about 545 OpenRouter calls, most of them template test runs. The one fix round per PR adds an estimated 20%. EP14 lane 8 and TP4 lane 8 replace these guesses with counts.
 - **Full suite.** `just ci` runs twice, before EP14's check and before TP4's check.
 
 ## Appendix F. Departures, harness requests and how llm and agent nodes inherit the harness
@@ -1354,7 +1344,7 @@ Every number here is the planner's estimate, not a measurement. Effort is focuse
 
 | AD | Departure | Reason | Ends when |
 |---|---|---|---|
-| AD-3 | The engine runs under `qmx_engine.host`, not `qma.serve` | the composition root is inside the harness package. AD-3's H0 fallback covers the import only | H0, then L1 |
+| AD-3 | The engine runs under `qmx_engine.host`, not `qma.serve` | the composition root is inside the harness package. HG1 grants H0's exports, and H0 does not cover composing the engine in `qma.serve` | L1 |
 | AD-12 | No pool, so the ladder's account step is skipped and recorded | the pool is a later packet (L2) | L2 |
 | AD-25 | `cli_inside` and `host_harness` nodes are refused at dispatch | they need relay run passes | H11, then L4 |
 | AD-35 | The engine records each Background chat's home on `node_started` but does not write `session_homes` in `qmx_control` | AD-35 is new and outside this program's scope | L17 |
@@ -1362,37 +1352,37 @@ Every number here is the planner's estimate, not a measurement. Effort is focuse
 | AD-11 | Test mode marks `test_only` rows in the engine's `[roles]`, not in a pool | no pool yet | L2 |
 | AD-14 | The Library is a SQLite fake behind `LibraryPort` | the real Library ships later | L11 |
 
-**New harness requests.** These extend `architecture/workflow-engine/HARNESS-REQUESTS.md` H1 to H14. Each has a fallback that this program uses, so none blocks.
+**Granted harness requests.** These extend `architecture/workflow-engine/HARNESS-REQUESTS.md` H1 to H14. The operator granted all four on 2026-10-17 (ruling 89). HG1 builds them, the engine uses the real APIs, and each fallback stays only as safety.
 
-| Id | Request | Fallback in use |
+| Id | Request | Real API in use after HG1, and the fallback kept as safety |
 |---|---|---|
-| H0 | Export `Background` and `Child` (and `Interactive`) from `qma.harness.__init__`. This plan also needs `qma.serve` to compose the engine, which H0 as written does not cover | AD-3's fallback, the adapter `qmx_engine.ports.harness_adapter` allow-listed for exactly that pair, plus `qmx_engine.host` as the interim composition root |
-| H15 | A per-chat compaction threshold on `NewChat` for Background and Child chats | AD-34's fallback. Key rows carry `CLAUDE_CODE_AUTO_COMPACT_WINDOW` in Settings. Plan rows get the engine's threshold check, a `memory_note`, and a restart in a fresh chat seeded with the summary |
-| H16 | Per-chat SDK hook callbacks for Background chats (PreToolUse observe, PostToolUse, PreCompact, Stop, SubagentStop), after the money gate | AD-34's fallback. Tool spans come from `tool` session blocks, Stop from the turn end, and PreCompact from the engine's threshold check |
-| H17 | `AGENT_OPERATIONS` rows for the new `workflow_*` tools and `apps_archive` (SOLUTION-DESIGN 13), with draft save and test run as DOMAIN_WRITE | SOLUTION-DESIGN 13's fallback. Drafts are saved with `library_save`, the engine test-runs a draft whose `meta.test_requested` changed, and `workflows_put` and `workflows_run` are re-scoped to publish and live run |
+| H0 | Export `Background` and `Child` (and `Interactive`) from `qma.harness.__init__`. This plan also needs `qma.serve` to compose the engine, which H0 as written does not cover | The adapter imports the pair from `qma.harness`. Safety is AD-3's one allow-listed import from `qma.harness.launch`, restored only if HG1 is parked. `qmx_engine.host` stays as the interim composition root until L1 |
+| H15 | A per-chat compaction threshold on `NewChat` for Background and Child chats | `NewChat(compact_at=...)` on plan and key rows. Safety is AD-34's restart, a `memory_note` and a fresh chat seeded with the summary, used only when the option is refused or no `compacted` event arrives |
+| H16 | Per-chat SDK hook callbacks for Background chats (PreToolUse observe, PostToolUse, PreCompact, Stop, SubagentStop), after the money gate | `NewChat(hooks=ChatHooks(...))`. Tool spans arrive live from PostToolUse. Safety is the turn-end reconcile against the `tool` session blocks |
+| H17 | `AGENT_OPERATIONS` rows for the new `workflow_*` tools and `apps_archive` (SOLUTION-DESIGN 13), with draft save and test run as DOMAIN_WRITE | HG1's rows. Saving a draft and running a test never ask, and publishing and a live run each ask once. Safety is the `library_save` watcher that test-runs a draft whose `meta.test_requested` changed. The Library and Lab rows wait for their programs |
 
-Engine `OPEN-DECISIONS.md` call A asks him to grant all four. This plan does not depend on any grant. If he grants them, one small harness PR (HG1, outside this plan's file boundary and planned separately) lands before EP10, and EP10, EP11 and EP13 switch from the fallbacks at the boxes that name each H-request.
+Engine `OPEN-DECISIONS.md` call A is answered yes (ruling 89). HG1 lands before EP2, and EP2, EP10, EP11 and EP13 use the real APIs at the boxes that name each H-request.
 
 **How `llm` and `agent` nodes inherit the harness (ruling 78).**
 
 | Concern | What the harness does at `ed704c92` | What the engine does | Gap and packet |
 |---|---|---|---|
-| Context compaction | The CLI auto-compacts. Background chats are verbatim, so `/compact` never dispatches. `compact_boundary` becomes a `changed` block of kind `compacted` | fills chunks to `chunk.fill` (0.30), targets `agent.compact_at` (0.40) through key rows' quirks and, for plan rows, its own threshold check with a `memory_note` and a restart, and records each compaction as a span event | H15, H16 |
+| Context compaction | The CLI auto-compacts. Background chats are verbatim, so `/compact` never dispatches. `compact_boundary` becomes a `changed` block of kind `compacted` | fills chunks to `chunk.fill` (0.30), sets `compact_at` 0.40 per chat on every row (H15), writes a `memory_note` from the PreCompact hook (H16), keeps the restart as safety, and records each compaction as a span event | none after HG1 |
 | Prompt caching | The CLI caches. The relay keeps Moonshot's cache markers. Cache read and write tokens land in run journals and relay rows. A config change that `resets_cache` relaunches | puts the static brief first and the chunk last, byte-stable across chunks, never relaunches a chat mid-node, and records cache tokens per span | none |
-| Hooks | The money gate runs as a PreToolUse hook on every tool, with deny rules in `disallowed_tools` | inherits both unchanged and adds no hook | H16 |
+| Hooks | The money gate runs as a PreToolUse hook on every tool, with deny rules in `disallowed_tools` | inherits both unchanged and adds observe-only per-chat hooks after the money gate (H16) | none after HG1 |
 | Tool calls | Background chats get the Claude Code preset, the `qmx` MCP tools and vetted servers. Asks wait up to `unattended_ask_seconds` | rejects every ask at once, states the node's tool list in the brief, and records `tool` blocks on the span | H2 per-chat allow-list, H8 sandbox tools, L6 |
 | Structured output | none per chat | validates the final text against the node's schema with one repair turn in the same chat | H2 |
 | Turn cap | global `[budgets] max_turns` for Background chats | enforces run and idle timeouts and `agent.max_tool_calls` with `Harness.interrupt` | H2 |
 | Turn end | `live()` gives deltas only | the detector EP0 picks | H1 |
-| Limits | `LaunchRefused` on the plan stop or the background cap, and `UsagePage` readings | maps a refusal to `waiting(limit, resume_at)`, maps a chat that hit `max_budget_usd` to `waiting(runaway)`, and drains the run (AD-9) | H6 with the pool |
+| Limits | `LaunchRefused` on the plan stop or the global `[budgets] background_cap`, and `UsagePage` readings | reads each account's background share as a setting (no fixed cap, ruling 90), maps a refusal to `waiting(limit, resume_at)`, maps a chat that hit `max_budget_usd` to `waiting(runaway)`, and drains the run (AD-9) | H6 and per-account strategy with the pool (L2) |
 | Sub-agents | the Agent tool is on in Background chats with global caps | leaves them on and counts their tokens through the journal | H7, L7 |
 
 ## Appendix G. Later packets, in dependency order
 
 Out of scope for this program. Each is a later packet with its own plan.
 
-1. **L1 Seat the engine in `qma.serve`.** After H0. Deletes `qmx_engine.host` and the import exception.
-2. **L2 The account pool and the balancer.** The one harness extension (ruling 39), with H6 and H13. E8. Adds the ladder's account step.
+1. **L1 Seat the engine in `qma.serve`.** After HG1. Deletes `qmx_engine.host` and the safety import exception.
+2. **L2 The account pool and the balancer.** The one harness extension (ruling 39), with H6 and H13. E8. Adds the ladder's account step. Every pool account carries its own background share, strategy (fill-first, round-robin or least-used), ceiling and cooldown, editable in Settings, and the harness's global `background_cap` becomes per account. No hard global cap (ruling 90).
 3. **L3 Relay routing by model id and mixed providers.** H10, H14, and E24's relay half (rulings 62, 63). Needs L2.
 4. **L4 The key vault and run passes.** AD-28, H11, L11 and L12 of the Library requests. E25 and E26. Needs L2.
 5. **L5 Contabo `qmx-node`, the server engine instance.** AD-30. Contabo has 6 cores and 12 GB RAM (ruling 76). With `session_mb` 1,536 and an `overhead_mb` of 6,144 that counts the colocated services, it derives 4 sessions (27b B6). Provider setup from each provider's own skills or instructions (ruling 74). `event` and `webhook` triggers. Needs L4.
@@ -1406,7 +1396,7 @@ Out of scope for this program. Each is a later packet with its own plan.
 13. **L13 Self-improvement.** AD-26, ruling 79. E20. Needs L12.
 14. **L14 The Cua pack.** AD-33. E28. Needs L6 and L8.
 15. **L15 The remaining node kinds.** `human_gate` for irreversible external steps, `app_op`, `library`, and `claude_workflow` after H4. Needs L11.
-16. **L16 Data after DP1.** The server market-data store and `qmx-marketdata`, `dataset` cards, the enabled Contabo backup target, backup targets in Settings, `read_bars` pointed at the new store. Needs L5.
+16. **L16 Data.** `data: deeper study first, explained to the operator (ruling 91)`. Nothing on data ships until that study is done.
 17. **L17 Session homes (AD-35).** The `session_homes` table and its write-once route in `qmx_control`, and the engine writing the home of every Background chat it starts, backfilled from `node_started`.
 18. **L18 The UI.** Lab Graph mode, run cards, notifications (UI-side, ruling 77). Its notes go to `UI-HANDOFF.md`.
 19. **L19 Turn each template draft runnable** as its `needs` land, starting with the QMB door and the trading node read model.
@@ -1425,9 +1415,13 @@ Every value here is Claude's default, not the operator's. Each lives once in `qm
 | `limits.alert_after` | 6 h, for a `provider_failure` item when every account is closed | ruling 77 |
 | `chunk.size` | 10 items, when a chunk edge says `by: items` | ruling 78 |
 | `chunk.fill` | 0.3 of the model's window, when a chunk edge says `by: tokens` | ruling 78, 27b B1 |
-| `agent.compact_at` | 0.40 of the window, applied through key rows' quirks until H15 | ruling 78 |
+| `agent.compact_at` | 0.40 of the window, passed per chat as `NewChat(compact_at=...)` (H15, HG1) | ruling 78 |
 | `agent.max_tool_calls` | 200 per attempt | 27b B1 item 5 |
 | runaway guard per run when a template sets none | 400k tokens, 12 agents, 2 h wall time, no USD figure. A breach waits and never asks | rulings 27, 77, 27b S3 |
+| `pool.accounts.<account>.background_share` | 0.5 of that account's plan window, per account, not a cap. Claude's default, UI-editable. Until L2 the plan account's value is the harness's `[budgets] background_cap` | ruling 90 |
+| `pool.strategy` | `fill-first`. The others are `round-robin` and `least-used`. Claude's default, UI-editable, and it acts once L2 brings a second account | ruling 90 |
+| `pool.accounts.<account>.ceiling` | none, so the share alone applies. Claude's default, UI-editable | ruling 90 |
+| `pool.accounts.<account>.cooldown` | 300 s after a quota refusal. Claude's default, UI-editable | ruling 90 |
 | `[budgets] max_live_chats` on an engine host | 6. Claude's default, marked. It is a Settings value, not engine code. The harness default of 4 leaves the engine 2 chats | SOLUTION-DESIGN 7.4, his call |
 | `on_runaway` | `pause` | ruling 27, AD-16 |
 | `retry.max_tries` | 3, backoff 30, 120, 600 s | 17 |
@@ -1480,19 +1474,15 @@ The 31 templates of file 19 section 7. Runnable ones are tested on real models a
 
 ## Appendix J. Attention, for the operator
 
-Three calls are his, from engine `OPEN-DECISIONS.md`. The plan runs whichever way he answers, so none blocks the start.
+No call of his is open. He answered the three calls from engine `OPEN-DECISIONS.md` on 2026-10-17. He granted H0, H15, H16 and H17, built in HG1 (ruling 89). He ruled that there is no fixed background cap, only per-account settings (ruling 90). He held data, so DP1 is removed (ruling 91).
 
-1. **Harness grants H0, H15, H16 and H17.** The recommendation is yes. Without them the engine runs on the fallbacks of Appendix F, and an HG1 harness PR is planned separately if he says yes.
-2. **Does the 50% plan background cap apply to workflows?** The recommendation is plan accounts only. Until he answers, the engine maps a background-cap refusal to `waiting` and resumes on its own.
-3. **Accept study 30 for the first data packets.** The recommendation is yes. DP1 already follows study 30 sections 1a, 4c and 5d.
-
-Also for his attention.
+For his attention.
 
 - `[budgets] max_live_chats` = 6 on an engine host is Claude's default, marked in Appendix H. The harness default of 4 leaves the engine 2 chats on the PC. He sets it in Settings.
 - The base is `origin/rebuild/base` at `ed704c92`, which already holds the merged HP stack. `33-state-of-play.md` now says so.
-- The engine runs under the interim host `qmx_engine.host` until H0 and L1 put it inside `qma.serve`. Do not start `qma.serve` and the engine host on the same home.
+- The engine runs under the interim host `qmx_engine.host` until L1 puts it inside `qma.serve`. HG1's H0 grant exports names only and does not seat the engine. Do not start `qma.serve` and the engine host on the same home.
 - Agent nodes cannot write files until the sandbox packet (L6). Every ask is rejected. Templates fetch with scripts and use models to read and write text, so the nine runnable templates still work.
-- `C:` has 7.3 GB free. DP1 writes only to `D:`.
+- Each account's background share (0.5), the pool strategy (`fill-first`), ceilings (none) and cooldowns (300 s) are Claude's defaults, marked in Appendix H. He edits them in Settings. Strategy acts once the pool (L2) brings a second account.
 - Twenty-two templates ship as drafts, each naming what it waits for. Most wait for the trading node or the QMB door.
 - Every review in this program is Opus checking Opus. A cross-family review was not run, and Fable runs only when he asks.
 - The planner's own trail was not reviewed by another model family, because this planner could not start agents.
