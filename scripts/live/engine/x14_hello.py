@@ -8,18 +8,19 @@ None named runs both, in order, on one throwaway home. Each lane writes
 - `test` (lane 3): the example is saved as a draft. Publishing it is refused before a passing test
   run, so nothing can be enabled. A test run on the host finishes with three chunk spans; then the
   version publishes carrying the test report, a disabled cron trigger is added, and enabling it
-  succeeds. The run card from
-  `explain` is saved as `ep14-hello-card.txt`, and with `--window` it is shown in a console window
-  and grabbed as `ep14-hello.png`.
+  succeeds. With `--window` the run card from `explain` is shown in a console window and grabbed
+  as `ep14-hello.png`.
 - `resume` (lane 4): the trigger fires once through `run-now`, live. The host is killed once a
-  chunk has finished while the others are mid-turn, then restarted, and the run is resumed over
-  REST. It must finish without running a finished chunk again.
+  chunk has finished while the others are mid-turn, then restarted. A resume over REST is refused
+  while the fire drives the run, and the restarted scheduler resumes it. It must finish without
+  running a finished chunk again.
 
 The home's only provider row is OpenRouter's. Its `[roles]` puts the example's `scanner` role on
 the Kimi row and `[engine] roles.test_only` is empty, so live runs may use that key row too (the
-plan login is never touched). Spend: three Kimi chunk turns per run, at most $0.05 a run by the
-relay journals, counting cache reads as full input.
-`--window` sets this console's title, so the review video can record it.
+plan login is never touched). Its scheduler ticks every 2 s with a 10 s fire lease, so the
+restarted scheduler takes the killed fire over in seconds. Spend: three Kimi chunk turns per run,
+at most $0.05 a run by the relay journals, counting cache reads as full input. `--window` sets
+this console's title, so the review video can record it.
 """
 
 from __future__ import annotations
@@ -47,6 +48,9 @@ HOME: Final = ENGINE_STORE / "homes" / "ep14-hello"
 ITEM: Final = "hello-chunks"
 TITLE: Final = "EP14 hello-chunks"
 RUN_S: Final = 300.0
+LEASE_S: Final = 10
+"""The demo home's fire lease, so the restarted host's scheduler takes over the killed fire in
+seconds rather than the default five minutes."""
 SENT_S: Final = 4.0
 """How long an unfinished chunk's chat has had its task before the kill. Killed sooner, the CLI
 may not have written the task to the chat yet, and the resumed chat has nothing to finish
@@ -62,7 +66,8 @@ def demo_home() -> Path:
     control = control_service(QmxHome(HOME))
     control.settings_put("providers", {"openrouter": OPENROUTER_ROW})
     control.settings_put("roles", {"scanner": [KIMI_ROW]})
-    control.settings_put("engine", {"roles": {"test_only": []}})
+    scheduler = {"tick": 2, "lease_seconds": LEASE_S}
+    control.settings_put("engine", {"roles": {"test_only": []}, "scheduler": scheduler})
     return HOME
 
 
@@ -92,7 +97,7 @@ def card(document: dict[str, Any]) -> list[str]:
         lines.append(
             f"  {node['node_id']:<6} {node['state']:<8} {len(node['attempts'])} attempt(s)"
         )
-        for span in node["spans"]:
+        for span in sorted(node["spans"], key=lambda s: str(s.get("partition"))):
             chunk = f"chunk {span['partition']}" if span.get("partition") is not None else ""
             model = span.get("model") or ""
             lines.append(
@@ -117,7 +122,7 @@ def show(log: Log, lines: list[str], slug: str, png: str) -> None:
     viewer = (
         "import ctypes,os,sys,time;"
         f"ctypes.windll.kernel32.SetConsoleTitleW({title!r});"
-        "os.system('mode con: cols=130 lines=24');"
+        "os.system('mode con: cols=150 lines=28');"
         f"print(open({str(text)!r},encoding='utf-8').read(),flush=True);time.sleep(12)"
     )
     subprocess.Popen(["conhost.exe", sys.executable, "-c", viewer])  # noqa: S607
@@ -258,7 +263,9 @@ def resume(log: Log, window: bool) -> None:
     with host(log, HOME, "host-2") as (client, _, _):
         status = client.get(f"/api/workflow-runs/{run_id}").json().get("status")
         log(f"after the restart the run reads {status}")
-        reply(log, "resume", client.post(f"/api/workflow-runs/{run_id}/resume"))
+        asked = reply(log, "resume", client.post(f"/api/workflow-runs/{run_id}/resume"))
+        if (asked.get("error") or {}).get("code") == "resume_refused":
+            log("a trigger fire drives the run, so the scheduler resumes it once its lease lapses")
         ended = until(lambda: finished(client, run_id), RUN_S) or {}
         log(f"run {run_id} ended {ended.get('status')} {ended.get('reason') or ''}")
         document = client.get(f"/api/workflow-runs/{run_id}/explain").json()
@@ -296,6 +303,7 @@ def main() -> int:
     parser.add_argument("lanes", nargs="*", choices=list(LANES))
     args = parser.parse_args()
     if args.window:
+        os.system("mode con: cols=150 lines=40")  # noqa: S605, S607
         ctypes.windll.kernel32.SetConsoleTitleW(TITLE)
     prefix = os.environ.get("ENGINE_LOG_PREFIX", "")
     boot()
