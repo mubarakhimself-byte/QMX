@@ -56,7 +56,6 @@ PLAN_ORDER: Final = (
     "x10_llm schema",
     "x10_llm cache",
     "x10_llm ask",
-    "x10_llm doctor",
     "x10_llm perf",
     "x11_agent_chunks",
     "e05_pause",
@@ -68,6 +67,11 @@ PLAN_ORDER: Final = (
 )
 """Each entry is a check's file stem and the arguments it runs with. `x10_llm` takes one mode per
 process. A check file missing from this list still runs, after these, with no arguments."""
+LEFT_OUT: Final = {
+    "x10_llm doctor": "EP10 menu lane that never ran; on Kimi the prompt cannot force a bad "
+    "answer, so the doctor is never reached (BACKLOG)",
+}
+"""Lanes the table names as left out, with why, instead of running them."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
 
     report.write_text("", encoding="utf-8")
     say(f"run_all: {len(todo)} checks; guarding {args.guard} sha256 {guarded}")
+    for name, why in LEFT_OUT.items():
+        say(f"left out: {name}: {why}")
     results: list[Result] = []
     for index, check in enumerate(todo):
         say(f"{time.strftime('%H:%M:%S')} running {check.name}")
