@@ -14,6 +14,7 @@ from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
 
 from qmx_engine.core.commands import StartNode, UseMemo
+from qmx_engine.core.ladder import asks
 from qmx_engine.core.state import JsonObject, Ready, Slot, State
 from qmx_engine.definition.model import Node
 
@@ -70,6 +71,7 @@ def dispatch(state: State, ready: list[Ready]) -> list[StartNode | UseMemo]:
                 inputs=item.inputs,
                 now=state.now,
                 plan=item.plan,
+                ladder=asks(state, item.node, slot),
             )
         )
     return commands

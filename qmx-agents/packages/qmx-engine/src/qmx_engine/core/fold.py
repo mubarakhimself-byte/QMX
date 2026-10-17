@@ -5,9 +5,14 @@ Event data keys the fold reads (SOLUTION-DESIGN 3.2): `run_created.settings`, `r
 with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_finished` that carries
 `memo: true`, `outputs` on `node_finished`, `tokens` on an ending event, `code` and `message` on
 `node_failed`, `reason`, `resume_at` and `event` on `node_waiting`, `plan.join.merged` on a join's
-`node_scheduled`, and `step` on `ladder_step`. A
-`node_waiting` with no `attempt` is a hold the core asked for. `run_resumed` opens a new pass but
-keeps every slot waiting on a gate.
+`node_scheduled`, `run_created.runaway`, `tool_calls` on an ending event, `signature`,
+`retryable` and `effect_state` on `node_failed`, `step`, `resume_at` and the slot keys on
+`ladder_step`, `classification` and `hint` on `doctor_verdict`, and `on_runaway` on a run-level
+`log`. A `node_waiting` with no `attempt` is a hold the core asked for. `run_resumed` opens a new
+pass but keeps every slot waiting on a gate.
+
+A `retry` or `model` step, and a doctor verdict the node may be re-run on, put the slot back to
+pending: it starts again as a new attempt once its retry is due.
 """
 
 from __future__ import annotations
@@ -18,7 +23,16 @@ from typing import Final
 
 from pydantic import JsonValue
 
-from qmx_engine.core.state import EventView, Held, JsonObject, NodeRun, Slot, State
+from qmx_engine.core.state import (
+    EventView,
+    Failure,
+    Held,
+    JsonObject,
+    NodeRun,
+    Slot,
+    State,
+    Walk,
+)
 from qmx_engine.definition.model import Workflow
 
 IGNORED: Final = frozenset(
@@ -27,7 +41,6 @@ IGNORED: Final = frozenset(
         "log",
         "gate_opened",
         "gate_resolved",
-        "doctor_verdict",
         "run_paused",
         "compacted",
         "memory_written",
@@ -35,6 +48,8 @@ IGNORED: Final = frozenset(
 )
 """Kinds this core knows and that change nothing it decides yet."""
 ENDINGS: Final = frozenset({"node_finished", "node_failed", "node_waiting"})
+RERUN_VERDICTS: Final = frozenset({"transient", "bad_output"})
+"""Doctor classifications after which the node runs once more (SOLUTION-DESIGN 10.2)."""
 
 
 def _text(data: Mapping[str, JsonValue], name: str) -> str | None:
@@ -76,6 +91,8 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
     spent: dict[Slot, int] = {}
     received: list[tuple[str, int]] = []
     joins: dict[Slot, tuple[int, ...]] = {}
+    walks: dict[Slot, Walk] = {}
+    tool_calls = 0
     for event in events:
         data, kind, seq = event.data, event.kind, event.seq
         if not state.run_id:
@@ -88,9 +105,12 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
         current = nodes.get(slot)
         if kind in ENDINGS and "attempt" in data:
             spent[slot] = spent.get(slot, 0) + tokens(data)
+            tool_calls += _int(data.get("tool_calls")) or 0
         match kind:
             case "run_created":
-                state = replace(state, settings=_object(data, "settings"))
+                state = replace(
+                    state, settings=_object(data, "settings"), runaway=_object(data, "runaway")
+                )
             case "run_input":
                 state = replace(state, inputs=data.get("inputs"))
             case "clock_tick":
@@ -119,7 +139,17 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                     memos[current.memo_key] = outputs
             case "node_failed" if current is not None:
                 error = f"{_text(data, 'code')}: {_text(data, 'message')}"
-                nodes[slot] = replace(current, phase="failed", seq=seq, error=error)
+                failure = Failure(
+                    _text(data, "code") or "",
+                    _text(data, "signature") or "",
+                    data.get("retryable") is True,
+                    _text(data, "effect_state") or "before",
+                )
+                nodes[slot] = replace(
+                    current, phase="failed", seq=seq, error=error, failure=failure
+                )
+                walk = walks.get(slot, Walk())
+                walks[slot] = replace(walk, signatures=(*walk.signatures, failure.signature))
             case "node_waiting" if "attempt" not in data:
                 holds.setdefault(slot, Held(_text(data, "resume_at"), _text(data, "event"), seq))
             case "node_waiting" if current is not None:
@@ -130,9 +160,27 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                     reason=_text(data, "reason"),
                     resume_at=_text(data, "resume_at"),
                 )
+            case "ladder_step" if data.get("step") == "park":
+                state = replace(state, ended="parked")
+                walks.pop(slot, None)
             case "ladder_step":
-                if data.get("step") == "park":
-                    state = replace(state, ended="parked")
+                step = _text(data, "step") or ""
+                walk = walks.get(slot, Walk())
+                walks[slot] = replace(
+                    walk,
+                    steps=(*walk.steps, step),
+                    retry_at=_text(data, "resume_at") if step == "retry" else walk.retry_at,
+                )
+                if step in ("retry", "model"):
+                    nodes.pop(slot, None)
+            case "doctor_verdict":
+                verdict = _text(data, "classification")
+                walk = walks.get(slot, Walk())
+                walks[slot] = replace(walk, verdict=verdict, hint=_text(data, "hint"))
+                if verdict in RERUN_VERDICTS:
+                    nodes.pop(slot, None)
+            case "log" if data.get("on_runaway") == "degrade":
+                state = replace(state, degraded=True)
             case "run_finished":
                 state = replace(state, ended="passed")
             case "run_cancelled":
@@ -155,4 +203,6 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
         spent=spent,
         received=tuple(received),
         joins=joins,
+        walks=walks,
+        tool_calls=tool_calls,
     )

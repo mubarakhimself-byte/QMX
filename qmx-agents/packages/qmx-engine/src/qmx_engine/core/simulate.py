@@ -4,7 +4,8 @@ waits. Executors are injected as a `Step`; the real runner arrives in EP7.
 
 The driver writes the events the core asks for: `node_scheduled` (with the core's `plan`) for
 `StartNode`, a `node_waiting` with no attempt for `Hold`, a `node_finished` marked `memo: true` for
-`UseMemo`, `ladder_step` park for `Park`, `run_paused` for `Pause` and `run_finished` for `Finish`.
+`UseMemo`, `ladder_step` for `Climb` and `Park`, `run_paused` for `Pause` and `run_finished` for
+`Finish`. It has no doctor, so a doctor step is recorded as skipped.
 The `Step` writes the attempt's own events (`node_started` and its ending), as a worker does; a
 `Step` that returns only `node_started` leaves the attempt in flight until the test appends its
 ending. A hold's `resume_at` comes from the injected `Clock`, since the core does no clock
@@ -19,8 +20,20 @@ from dataclasses import dataclass
 from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
 
-from qmx_engine.core.commands import Command, Finish, Hold, Park, Pause, StartNode, UseMemo, Wait
+from qmx_engine.core.commands import (
+    Climb,
+    Command,
+    Degrade,
+    Finish,
+    Hold,
+    Park,
+    Pause,
+    StartNode,
+    UseMemo,
+    Wait,
+)
 from qmx_engine.core.fold import fold
+from qmx_engine.core.ladder import NO_DOCTOR, runaway_line, step_data
 from qmx_engine.core.partitions import RUN_SETTINGS
 from qmx_engine.core.ready import next_commands
 from qmx_engine.core.state import JsonObject, State
@@ -156,9 +169,22 @@ class Simulation:
                     },
                 )
                 return None
+            case Climb():
+                hold = Hold(command.node_id, command.iteration, command.partition, command.seconds)
+                at = self.clock(hold, self.now) if command.step == "retry" else None
+                data = step_data(command, at)
+                if command.step == "doctor":
+                    data |= {"skipped": True, "reason": NO_DOCTOR}
+                self.append("ladder_step", data)
+                return None
+            case Degrade():
+                self.append("log", runaway_line(command.detail, "degrade"))
+                return None
             case Park():
-                self.append("ladder_step", {"step": "park", "reason": command.reason})
+                self.append("ladder_step", step_data(command))
             case Pause():
+                if command.detail is not None:
+                    self.append("log", runaway_line(command.detail, "pause"))
                 self.append(
                     "run_paused", {"reason": command.reason, "resume_at": command.resume_at}
                 )

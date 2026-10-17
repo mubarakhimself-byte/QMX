@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 from typing import Final, cast
 
@@ -20,6 +21,7 @@ from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.events import EventKind, JsonObject
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import AsyncExecutor, Executor, Failed, NodeJob, NodeResult, Ok
+from qmx_engine.watchdog import STALLED, STALLED_MESSAGE
 from qmx_engine.workers import effects
 
 HEARTBEAT_SECONDS: Final = 10.0
@@ -43,7 +45,8 @@ class LocalWorker:
         self.slots = asyncio.Semaphore(concurrency)
         self.heartbeat_seconds = heartbeat_seconds
         self.running: dict[str, asyncio.Task[object]] = {}
-        self.cancelled: set[str] = set()
+        self.cancelled: dict[str, Failed] = {}
+        """Key to the failure a cancelled attempt ends with."""
 
     async def run(self, job: NodeJob, executor: AnyExecutor, emit: Emit) -> NodeResult:
         task = asyncio.current_task()
@@ -56,20 +59,25 @@ class LocalWorker:
             async with self.slots:
                 return await self.attempt(job, executor, emit)
         except asyncio.CancelledError:
-            if job.idempotency_key not in self.cancelled:
+            failure = self.cancelled.pop(job.idempotency_key, None)
+            if failure is None:
                 raise
-            self.cancelled.discard(job.idempotency_key)
-            message = "the attempt was cancelled before it started"
-            return Failed("cancelled", message, signature("cancelled", message), False)
+            return replace(failure, effect_state="before")
         finally:
             self.running.pop(job.idempotency_key, None)
 
-    def cancel(self, idempotency_key: str) -> bool:
-        """Stop the attempt with this key; False when it is not running here."""
+    def cancel(self, idempotency_key: str, *, stalled: bool = False) -> bool:
+        """Stop the attempt with this key; False when it is not running here. A stalled attempt
+        fails `stalled` and retryable, so the ladder takes it (SOLUTION-DESIGN 10.3)."""
         task = self.running.get(idempotency_key)
         if task is None:
             return False
-        self.cancelled.add(idempotency_key)
+        if stalled:
+            failure = Failed(STALLED, STALLED_MESSAGE, signature(STALLED, STALLED_MESSAGE), True)
+        else:
+            message = "the attempt was cancelled"
+            failure = Failed("cancelled", message, signature("cancelled", message), False)
+        self.cancelled[idempotency_key] = replace(failure, effect_state="unknown")
         task.cancel()
         return True
 
@@ -90,11 +98,10 @@ class LocalWorker:
             outcome = executor.run(job)
             result = await outcome if inspect.isawaitable(outcome) else outcome
         except asyncio.CancelledError:
-            if job.idempotency_key not in self.cancelled:
+            failure = self.cancelled.pop(job.idempotency_key, None)
+            if failure is None:
                 raise
-            self.cancelled.discard(job.idempotency_key)
-            message = "the attempt was cancelled"
-            result = Failed("cancelled", message, signature("cancelled", message), False, "unknown")
+            result = failure
         except Exception as error:
             message = f"the executor raised {type(error).__name__}"
             result = Failed("executor_error", message, signature("executor_error", message), False)

@@ -23,9 +23,10 @@ from typing import Final
 
 from pydantic import JsonValue, ValidationError
 
-from qmx_engine.core.commands import Command, Finish, Hold, Park, Pause, Wait
+from qmx_engine.core.commands import Command, Degrade, Finish, Hold, Park, Pause, Wait
 from qmx_engine.core.edges import MAPS, FanError, fan
 from qmx_engine.core.joins import Fired, JoinSpec, Unmet, close
+from qmx_engine.core.ladder import admit, climb, runaway
 from qmx_engine.core.loops import LoopError, LoopSpec, stop
 from qmx_engine.core.partitions import ChunkError
 from qmx_engine.core.replay import dispatch
@@ -207,6 +208,12 @@ class Planner:
     def offer(self, node: Node, slot: Slot, inputs: JsonObject, plan: JsonObject | None) -> None:
         if slot in self.state.nodes:
             return
+        walk = self.state.walks.get(slot)
+        if walk is not None and walk.retry_at is not None:
+            now = self.state.now
+            if now is None or now < walk.retry_at:
+                self.held.append((slot, walk.retry_at))
+                return
         if kind(node) == "wait":
             held = self.state.holds.get(slot)
             if held is None:
@@ -445,13 +452,9 @@ def tolerated(graph: Graph, slot: Slot) -> bool:
     return slot.partition is not None and bool(readers) and all(kind(n) == "join" for n in readers)
 
 
-def plan(state: State) -> Plan:
-    """A failed slot parks the run before anything else starts, unless only joins read it."""
+def plan(state: State, shape: Graph) -> Plan:
     try:
-        planner = Planner(state, graph(state.definition))
-        for slot, run in state.nodes.items():
-            if run.phase == "failed" and not tolerated(planner.graph, slot):
-                raise Stuck(f"{describe(slot)} failed: {run.error}")
+        planner = Planner(state, shape)
         for node in planner.graph.order:
             planner.visit(node)
         unsettled = [n.id for n in planner.graph.order if not planner.settled(n)]
@@ -484,12 +487,34 @@ def next_commands(state: State) -> list[Command]:
         return [] if state.ended == "parked" else [Park(state.unfoldable)]
     if state.ended is not None:
         return []
-    found = plan(state)
+    try:
+        shape = graph(state.definition)
+    except Stuck as stuck:
+        return [Park(str(stuck))]
+    failed = [
+        (slot, run)
+        for slot, run in state.nodes.items()
+        if run.phase == "failed" and not tolerated(shape, slot)
+    ]
+    if failed:
+        slot, run = min(failed, key=lambda found: found[1].seq)
+        reason = f"{describe(slot)} failed: {run.error}"
+        return climb(state, shape.by_id[slot.node_id], slot, run, reason)
+    found = plan(state, shape)
     if found.park is not None:
         return [Park(found.park)]
-    commands: list[Command] = [*found.holds, *dispatch(state, found.ready)]
-    if commands or any(run.phase in ("scheduled", "started") for run in state.nodes.values()):
+    wanted: list[Command] = [*found.holds, *dispatch(state, found.ready)]
+    commands, detail = admit(state, wanted)
+    paused: list[Command] = []
+    if detail is not None and len(commands) < len(wanted):
+        paused = runaway(state, detail, wanted)
+        if isinstance(paused[0], Degrade):
+            return paused
+    inflight = any(run.phase in ("scheduled", "started") for run in state.nodes.values())
+    if commands or inflight:
         return commands
+    if paused:
+        return paused
     waiting = {s: run for s, run in state.nodes.items() if run.phase == "waiting"}
     if waiting or found.held:
         times = [run.resume_at for run in waiting.values()] + [at for _, at in found.held]

@@ -58,6 +58,32 @@ class NodeRun:
     error: str | None = None
     reason: str | None = None
     resume_at: str | None = None
+    failure: Failure | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Failure:
+    """What a `node_failed` said, for the ladder."""
+
+    code: str
+    signature: str
+    retryable: bool
+    effect_state: str
+
+
+@dataclass(frozen=True, slots=True)
+class Walk:
+    """One slot's walk down the failure ladder (AD-16), from its first failure to its park. It
+    lasts over every pass, so a resume goes on from the rung it reached; a park ends it, so an
+    operator resume of a parked run walks again from the top."""
+
+    steps: tuple[str, ...] = ()
+    signatures: tuple[str, ...] = ()
+    """Each failure's signature, in order."""
+    retry_at: str | None = None
+    """The latest retry's `resume_at`: the slot may not start again before it."""
+    verdict: str | None = None
+    hint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +120,11 @@ class State:
     joins: Mapping[Slot, tuple[int, ...]] = field(default_factory=dict[Slot, tuple[int, ...]])
     """The partitions each join merged the first time it fired, over every pass, so a resume
     merges the same ones (AD-7) and a late arrival never gets in."""
+    walks: Mapping[Slot, Walk] = field(default_factory=dict[Slot, Walk])
+    runaway: Mapping[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+    """The runaway guard `run_created` recorded: limits, `deadline` and `on_runaway`."""
+    tool_calls: int = 0
+    degraded: bool = False
 
 
 @dataclass(frozen=True, slots=True)
