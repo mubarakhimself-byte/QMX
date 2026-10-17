@@ -1,0 +1,28 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "hello-chunks",
+  "name": "Hello chunks: fetch twelve words, sort them by chunk, check every answer",
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual", "cron"]}},
+    {"id": "fetch", "name": "Fetch words", "type": "script", "typeVersion": 1, "position": [220, 0],
+     "parameters": {"script": "scripts/fetch.py", "fixture_ref": "fixtures/words.json"},
+     "effect": "none"},
+    {"id": "sort", "name": "Animal or not", "type": "agent", "typeVersion": 1, "position": [440, 0],
+     "role": "scanner", "effect": "none",
+     "parameters": {"brief_ref": "prompts/brief.md", "output_schema_ref": "schemas/answers.json",
+                    "tools": [], "max_turns": 4}},
+    {"id": "all", "name": "Collect", "type": "join", "typeVersion": 1, "position": [660, 0],
+     "parameters": {}},
+    {"id": "check", "name": "Every word answered", "type": "grader", "typeVersion": 1,
+     "position": [880, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/check.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Fetch words", "port": "in", "map": "one"}]]},
+    "Fetch words": {"main": [[{"node": "Animal or not", "port": "in", "map": "chunk",
+                               "chunk": {"by": "items", "size": 4}}]]},
+    "Animal or not": {"main": [[{"node": "Collect", "port": "in", "map": "one"}]]},
+    "Collect": {"main": [[{"node": "Every word answered", "port": "in", "map": "one"}]]}
+  }
+}

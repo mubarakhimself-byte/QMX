@@ -184,7 +184,11 @@ def lock(log: Log, base: str) -> None:
     ]
     log(f"lines added {len(added)}, removed {len(removed)}")
     log.check("uv.lock removes nothing", removed == [], removed[:5])
-    log.check("uv.lock adds only the qmx-engine package", names == ["qmx-engine"], names)
+    log.check(
+        "uv.lock adds only qmx-engine and EP12's cron library",
+        names in (["qmx-engine"], ["cronsim", "qmx-engine"]),
+        names,
+    )
 
 
 def perf(log: Log) -> None:

@@ -2,11 +2,12 @@
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/e11_ladder.py`
-Writes `evidence/ep8/<ENGINE_LOG_PREFIX>ep8-e11.log`. One `llm` node on the `writer` role (two
-candidates, `claude/sonnet` then `gpt`) always fails retryably, each time with a different message;
-the doctor is a stub that answers `logic`. The `llm` executor is a planted in-process stub, since
-the real one lands in EP10, and the run starts from the parsed definition for the same reason. No
-model, no key, no ship home.
+Writes `evidence/ep8/<ENGINE_LOG_PREFIX>ep8-e11.log`. One `llm` node on the `writer` role always
+fails retryably, each time with a different message; the doctor is a stub that answers `logic`.
+In a test run the role's candidates are the test-only Kimi row, then `claude/sonnet` (since EP10
+the `gpt` row names no model and is never a candidate), so the model step moves to
+`claude/sonnet`. The `llm` executor is a planted in-process stub, since the real one lands in EP10,
+and the run starts from the parsed definition for the same reason. No model, no key, no ship home.
 """
 
 from __future__ import annotations
@@ -89,12 +90,12 @@ def main() -> int:
     )
     log.check(
         "the model step takes the role's next candidate",
-        ladder[3].get("candidate") == "gpt",
+        ladder[3].get("candidate") == "claude/sonnet",
         ladder[3],
     )
     log.check(
-        "the attempt after the model step asks for gpt",
-        [j.resolved_model for j in llm.jobs][-1] == {"candidate": "gpt"},
+        "the attempt after the model step asks for claude/sonnet",
+        (llm.jobs[-1].resolved_model or {}).get("candidate") == "claude/sonnet",
         llm.jobs[-1].resolved_model,
     )
     log.check("the doctor was asked once", doctor.asked == 1, doctor.asked)
