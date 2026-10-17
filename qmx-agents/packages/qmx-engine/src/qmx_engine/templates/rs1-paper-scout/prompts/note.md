@@ -8,6 +8,6 @@ Write one entry per kept paper, in the order given:
 - `replicable`: `yes` when it needs only FX, index futures or gold prices, `proxy` when a close stand-in would do, `no` otherwise, and `replicable_why` in one sentence.
 - `costs`: `known` when the paper states its trading costs, else `unknown`.
 - `flags`: the card's flags, copied.
-- `citations`: the card's claims that the citation check did not list as uncited, each as `claim` (the claim's text) and `quote` (copied unchanged). Leave out every uncited claim.
+- `citations`: the card's claims that the citation check did not list as uncited, each as `claim` (the claim's text), `quote` (copied unchanged) and `source_id` (the paper's id). Leave out every uncited claim; a quote not found word for word in the paper fails the note.
 
 Then `headline`: one line such as "3 new papers, 1 testable". Use only numbers that appear in the cards or abstracts; never round a figure into a different one.

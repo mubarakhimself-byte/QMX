@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -124,9 +125,21 @@ def test_a_quiet_calendar_day_makes_no_model_call(tmp_path: Path) -> None:
     ]
 
 
-def test_a_note_with_a_number_the_papers_never_gave_fails_the_test_run(tmp_path: Path) -> None:
-    note = json.loads(recorded(RS1, "note.json"))
+def plant_number(note: dict[str, Any]) -> None:
     note["papers"][0]["summary"] = "The rule earns a Sharpe ratio of 1.4 after costs."
+
+
+def plant_quote(note: dict[str, Any]) -> None:
+    invented = {"claim": "It never loses.", "quote": "the rule never loses money in any year"}
+    note["papers"][0]["citations"].append(invented | {"source_id": "2610.90001"})
+
+
+@pytest.mark.parametrize("plant", [plant_number, plant_quote], ids=["number", "quote"])
+def test_a_note_with_an_invented_number_or_quote_fails_the_test_run(
+    tmp_path: Path, plant: Callable[[dict[str, Any]], None]
+) -> None:
+    note = json.loads(recorded(RS1, "note.json"))
+    plant(note)
     with EngineService.open(tmp_path, harness=answers(json.dumps(note))) as svc:
         item = svc.drafts.put("rs1-paper-scout", Bundle.read(RS1), 0, caller=OPERATOR).item
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={"fixture": True}))

@@ -3,8 +3,9 @@ was made from. The output is the one input that matches `schemas/output.json`. E
 in its prose fields, the schema's `x-prose` keys, must appear in the evidence: the output's other
 fields and every other input. A number may be rounded, and single digits are counts, not checked.
 
-Prints the grader verdict. A pass names which input is the output (None when there was one input),
-for the deliver step; a failure names each problem."""
+An input that is an earlier grader's envelope counts as the inputs that grader checked. Prints the
+verdict. A pass names which input is the output, for the deliver step; a failure names each
+problem."""
 
 import json
 import re
@@ -19,7 +20,21 @@ NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
 schema = json.loads((Path(__file__).parents[1] / "schemas" / "output.json").read_text("utf-8"))
 validator = Draft202012Validator(schema)
 given = json.load(sys.stdin)["in"]
-inputs = given if isinstance(given, list) else [given]
+
+
+def flat(given):
+    """The inputs, with each grader's envelope opened, so a check before this one passes on what it
+    checked."""
+    found = []
+    for value in given if isinstance(given, list) else [given]:
+        if isinstance(value, dict) and set(value) == {"input", "verdict", "feedback"}:
+            found += flat(value["input"])
+        else:
+            found.append(value)
+    return found
+
+
+inputs = flat(given)
 
 
 def numbers(value):
@@ -66,7 +81,5 @@ if unresolved:
     feedback = {"problems": [f"numbers not found in the evidence: {', '.join(unresolved)}"]}
     print(json.dumps({"verdict": "fail", "feedback": feedback}))
 else:
-    at = outputs[0] if isinstance(given, list) else None
-    print(
-        json.dumps({"verdict": "pass", "feedback": {"numbers_checked": len(checked), "output": at}})
-    )
+    feedback = {"numbers_checked": len(checked), "output": outputs[0]}
+    print(json.dumps({"verdict": "pass", "feedback": feedback}))

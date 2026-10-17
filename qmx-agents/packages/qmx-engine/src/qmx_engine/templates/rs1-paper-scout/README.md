@@ -11,7 +11,8 @@ Built from card R1 in `research/methodology/15-templates-researcher.md`. Every s
 5. `Read each paper` (role `reader`) runs one reader per paper with the question battery of the shared `paper-read` block.
 6. `Citations check` (the shared `research-harness` grader) marks every claim whose quote is not in the paper.
 7. `Write the note` (role `writer`) writes one entry per paper: testable yes or no, replicable yes, proxy or no, costs known or unknown, the flags, and only the cited claims.
-8. `Render and grade` (the shared `render-and-grade` block) checks the note against `schemas/output.json` and checks that every number in it appears in the cards or abstracts. A failed check stops the run as failed. `Deliver` hands on the note as the run's result.
+8. `Check the note's quotes` runs the same citation grader over the note: every quote must appear in the paper it names, or the run stops as failed.
+9. `Render and grade` (the shared `render-and-grade` block) checks the note against `schemas/output.json` and checks that every number in it appears in the cards or abstracts. A failed check stops the run as failed. `Deliver` hands on the note as the run's result.
 
 ## Test runs
 

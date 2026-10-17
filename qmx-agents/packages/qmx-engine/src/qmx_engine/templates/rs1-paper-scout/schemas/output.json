@@ -27,8 +27,12 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["claim", "quote"],
-              "properties": {"claim": {"type": "string"}, "quote": {"type": "string"}}
+              "required": ["claim", "quote", "source_id"],
+              "properties": {
+                "claim": {"type": "string"},
+                "quote": {"type": "string"},
+                "source_id": {"type": "string"}
+              }
             }
           }
         }
