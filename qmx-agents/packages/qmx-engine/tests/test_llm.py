@@ -14,7 +14,10 @@ from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.nodes.base import Failed, NodeJob, Ok
 from qmx_engine.nodes.llm import BAD_OUTPUT, Llm
 from qmx_engine.ports.harness_adapter import PlanUse, Turn
+from qmx_engine.ports.library import Bundle
 from qmx_engine.runner import Engine, Outcome
+from qmx_engine.service.api import EngineService
+from qmx_engine.service.context import OPERATOR
 from qmx_engine.settings import DEFAULTS
 
 ONE_LLM = Path(__file__).resolve().parent / "fixtures" / "workflows" / "one-llm"
@@ -155,7 +158,12 @@ def test_the_fake_switch_answers_from_the_schema_and_calls_no_model(tmp_path: Pa
     port = FakePort()
 
     outcome, span = run(tmp_path, port, fake=True)
+    with EngineService.open(tmp_path / "svc") as svc:
+        item = svc.drafts.put(None, Bundle.read(ONE_LLM), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, fake=True))
+        state = svc.drafts.state(item)
 
+    assert (report.status, state) == ("passed", "validated")
     assert outcome.status == "passed"
     assert outcome.outputs == {"capital": {"main": {"country": "", "capital": ""}}}
     assert (span.profile, port.chats, port.sent) == ("fake", [], [])
