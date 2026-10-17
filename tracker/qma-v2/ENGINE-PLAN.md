@@ -43,7 +43,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] Read `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/autopilot-stack.md`, `shipping.md` and `opening-a-pr.md`, then `C:/Users/Mubarak/.claude/skills/no-comments/SKILL.md` and `show-me-your-work/SKILL.md`. These live in the local install, not in the repo.
 - [ ] Create the store `D:/QMX-worktrees/qma-ship/engine/` with `decisions.tsv`, `ledger.tsv`, `lows.md`, `evidence/`, `review/` and `homes/`. Write these standing orders into `decisions.tsv` as its first rows.
   - [ ] Builders and checkers are `poteto-agent` on `opus`. Never `bulk-worker`. Fable only when the operator asks. Every brief says "do not spawn sub-agents".
-  - [ ] At most two agents at once in all, usually one builder and one checker, plus the coordinator (operator, 2026-10-17: the efficient 2026-10-15 run).
+  - [ ] At most two agents at once in all, usually one builder and one checker, plus the coordinator (operator, 2026-10-17, matching the efficient 2026-10-15 run).
   - [ ] No file under `qmx-agents/packages/qma-harness/` changes in any PR except HG1, granted by the operator on 2026-10-17 (ruling 89).
   - [ ] No step reads, prints or copies a plan token, a provider key or a ChatGPT token. Secrets are named by keyring reference only. No step spends on any Anthropic or OpenAI API. Plan-profile turns go through the CLI login in the ship home.
   - [ ] Money stays read-only. No PR touches a broker credential, `qmn/`, or a money act.
@@ -1287,7 +1287,7 @@ Unproven after the probes, by design. The agentOS half of E23 needs its own prob
 - **Two harnesses on one home kill each other's chats (all lanes with models).** The lane lock serializes every lane that opens a harness on the ship home.
 - **Agent nodes are read-only until the sandbox packet (EP11, Track T).** Templates are written so models read inputs that scripts fetched. Templates that need agents to write code are drafts with `needs: sandbox`.
 - **No pool, so no account rotation (EP8, EP10).** The ladder's account step is recorded as skipped. One plan account and the OpenRouter row carry all tests.
-- **Plan usage (all PRs).** Builders draw far more of the plan than lanes do. At most two builders and three agents run at once.
+- **Plan usage (all PRs).** Builders draw far more of the plan than lanes do. At most two agents run at once in all.
 - **OpenRouter spend (EP10, EP11, Track T).** Small, and on his own key for tests (ruling 51). Appendix E estimates it.
 - **The B1 SQLite floor (EP4).** Python 3.14 here bundles a SQLite below 3.51.3. The ledger keeps one writer connection and checkpoints only from it.
 - **The architecture changed the night before (all PRs).** `27c-gap-fixes-applied.md` applied 27b's blockers. This plan matches 27c, including AD-34 and AD-35, the shared run status table, `refs/drafts`, H0 and H15 to H17 (now granted and built in HG1, with their fallbacks kept as safety), the tool Effects of SOLUTION-DESIGN 13, capacity from RAM, and E29 to E32. A conflict found later is a stop for the planner.
