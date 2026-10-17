@@ -4,7 +4,8 @@ one starts.
 The memo key is `(run_id, node_id, iteration, partition_id, sha256(inputs),
 sha256(node_definition))`, the same fingerprint `qmx_engine.ledger.memo.MemoKey` stores. A node
 reruns only when its own inputs or its own definition changed, so an edited node invalidates its
-memo and a downstream node reruns only if the edit changed what reached it.
+memo and a downstream node reruns only if the edit changed what reached it. Each fan-out partition
+and each loop iteration is its own slot with its own memo, so a failed chunk reruns alone.
 """
 
 from __future__ import annotations
@@ -13,12 +14,8 @@ from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
 
 from qmx_engine.core.commands import StartNode, UseMemo
-from qmx_engine.core.state import JsonObject, Ready, State
+from qmx_engine.core.state import JsonObject, Ready, Slot, State
 from qmx_engine.definition.model import Node
-
-ITERATION = 0
-PARTITION: int | None = None
-"""Every node runs once per pass on a `one` edge; loops and fan-out arrive in EP6."""
 
 
 def node_definition(node: Node) -> JsonObject:
@@ -41,29 +38,38 @@ def memo_key(
     )
 
 
+def idempotency_key(run_id: str, slot: Slot, attempt: int) -> str:
+    """`run:node:iteration:attempt` (SOLUTION-DESIGN 3.4), with the partition before the attempt
+    when the node fanned out, so two chunks never share a key."""
+    node_id, iteration, partition = slot
+    where = f"{iteration}" if partition is None else f"{iteration}:{partition}"
+    return f"{run_id}:{node_id}:{where}:{attempt}"
+
+
 def dispatch(state: State, ready: list[Ready]) -> list[StartNode | UseMemo]:
     commands: list[StartNode | UseMemo] = []
     for item in ready:
-        node_id = item.node.id
+        slot = Slot(item.node.id, item.iteration, item.partition)
         definition = node_definition(item.node)
-        key = memo_key(state.run_id, node_id, ITERATION, PARTITION, item.inputs, definition)
+        key = memo_key(state.run_id, *slot, item.inputs, definition)
         saved = state.memos.get(key)
         if saved is not None:
-            commands.append(UseMemo(node_id, ITERATION, PARTITION, key, saved))
+            commands.append(UseMemo(*slot, key, saved))
             continue
-        attempt = state.attempts.get(node_id, 0) + 1
+        attempt = state.attempts.get(slot, 0) + 1
         commands.append(
             StartNode(
                 run_id=state.run_id,
-                node_id=node_id,
-                iteration=ITERATION,
-                partition=PARTITION,
+                node_id=slot.node_id,
+                iteration=slot.iteration,
+                partition=slot.partition,
                 attempt=attempt,
                 memo_key=key,
-                idempotency_key=f"{state.run_id}:{node_id}:{ITERATION}:{attempt}",
+                idempotency_key=idempotency_key(state.run_id, slot, attempt),
                 node_definition=definition,
                 inputs=item.inputs,
                 now=state.now,
+                plan=item.plan,
             )
         )
     return commands
