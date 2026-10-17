@@ -52,6 +52,8 @@ class Ok:
     artifacts: tuple[str, ...] = ()
     verdict: str | None = None
     """A grader's `pass` or `fail`, which the span records."""
+    span: JsonObject = field(default_factory=dict[str, JsonValue])
+    """More ending data for the span, such as a model call's `tokens`."""
 
     @property
     def output_hash(self) -> str:
@@ -65,6 +67,7 @@ class Failed:
     signature: str
     retryable: bool
     effect_state: EffectState = "before"
+    span: JsonObject = field(default_factory=dict[str, JsonValue])
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +75,7 @@ class Waiting:
     reason: str
     resume_at: str | None = None
     event: str | None = None
+    span: JsonObject = field(default_factory=dict[str, JsonValue])
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,12 +107,13 @@ def ending(result: NodeResult) -> list[tuple[str, JsonObject]]:
                 finished["artifacts"] = list(result.artifacts)
             if result.verdict is not None:
                 finished["verdict"] = result.verdict
-            return [("node_finished", finished)]
+            return [("node_finished", result.span | finished)]
         case Failed():
             return [
                 (
                     "node_failed",
-                    {
+                    result.span
+                    | {
                         "code": result.code,
                         "message": result.message,
                         "signature": result.signature,
@@ -119,7 +124,7 @@ def ending(result: NodeResult) -> list[tuple[str, JsonObject]]:
             ]
         case Waiting():
             data: JsonObject = {"reason": result.reason, "resume_at": result.resume_at}
-            return [("node_waiting", data | {"event": result.event})]
+            return [("node_waiting", result.span | data | {"event": result.event})]
         case Gate():
             return [
                 ("gate_opened", {"ask": result.ask, "options": list(result.options)}),

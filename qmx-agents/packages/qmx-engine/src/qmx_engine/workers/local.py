@@ -26,6 +26,8 @@ from qmx_engine.workers import effects
 
 HEARTBEAT_SECONDS: Final = 10.0
 UNSLOTTED: Final = frozenset({"subworkflow"})
+RESOLVED: Final = ("role", "profile", "model", "effort", "candidate", "test_only", "unresolved")
+"""What `node_started` records of the candidate the runner resolved, so the span names it."""
 
 type Emit = Callable[[EventKind, JsonObject], None]
 type AnyExecutor = Executor | AsyncExecutor
@@ -83,9 +85,11 @@ class LocalWorker:
 
     async def attempt(self, job: NodeJob, executor: AnyExecutor, emit: Emit) -> NodeResult:
         effect = effects.effect_of(job.node_definition)
+        resolved = job.resolved_model or {}
         emit(
             "node_started",
             attempt_keys(job)
+            | {key: resolved[key] for key in RESOLVED if key in resolved}
             | {"idempotency_key": job.idempotency_key, "effect": effect, "placement": "pc"},
         )
         zone = Path(job.workspace) if job.workspace is not None else None

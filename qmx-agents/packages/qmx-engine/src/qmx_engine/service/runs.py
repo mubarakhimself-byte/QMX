@@ -135,6 +135,7 @@ async def run_bundle(
     inputs: JsonValue,
     subgraph: list[str] | None,
     caller: Caller,
+    fake: bool = False,
 ) -> tuple[Outcome, Stored]:
     run_id = new_run_id(ctx.clock.now())
     if subgraph is not None:
@@ -145,7 +146,9 @@ async def run_bundle(
         codes = " ".join(sorted({p.code for p in found}))
         raise Refused("not_runnable", f"the workflow does not run: {codes}")
     try:
-        outcome = await ctx.engine.start(root, found[1], mode=mode, inputs=inputs, run_id=run_id)
+        outcome = await ctx.engine.start(
+            root, found[1], mode=mode, inputs=inputs, run_id=run_id, fake=fake
+        )
     except EngineRefused as refused:
         raise Refused("engine_refused", str(refused)) from refused
     await ctx.engine.settle()

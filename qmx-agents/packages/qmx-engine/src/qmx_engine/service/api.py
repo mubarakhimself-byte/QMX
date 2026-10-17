@@ -14,7 +14,9 @@ from pathlib import Path
 
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.store import Ledger, Reader, ledger_path
+from qmx_engine.nodes.doctor import LlmDoctor
 from qmx_engine.ports.clock import Clock, WallClock
+from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.library import JsonObject, LibraryPort
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
@@ -52,9 +54,11 @@ class EngineService:
         clock: Clock | None = None,
         executors: Mapping[str, AnyExecutor] | None = None,
         doctor: Doctor | None = None,
+        harness: HarnessPort | None = None,
     ) -> Generator[EngineService]:
         """The service on one QMX home: it holds the ledger writer while it is open. The Library
-        is the fake (ruling 91) unless one is given."""
+        is the fake (ruling 91) unless one is given. With a `harness`, model nodes run and the
+        ladder's doctor is an `llm` call unless another `doctor` is given."""
         clock = clock or WallClock()
         settings = settings or StaticSettings()
         with ExitStack() as stack:
@@ -70,7 +74,9 @@ class EngineService:
                 executors=executors,
                 doctor=doctor,
                 inbox=inbox,
+                harness=harness,
             )
+            engine.doctor = engine.doctor or LlmDoctor.of(engine)
             ctx = Context(home, library, inbox, settings, clock, engine)
             yield cls(ctx, MemoryStub(library))
 
