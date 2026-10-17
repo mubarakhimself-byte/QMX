@@ -19,6 +19,7 @@ import contextlib
 import functools
 import logging
 import os
+import shutil
 import webbrowser
 from collections import Counter
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -68,6 +69,7 @@ from qma.harness.home import (
     ensure_homes,
     list_records,
     read_record,
+    record_path,
     session_id,
     write_record,
 )
@@ -143,6 +145,8 @@ if TYPE_CHECKING:
 
 UNKNOWN_OUTCOME = "the last turn ended with an unknown outcome; send a message to continue"
 METER_WAIT_S = 60.0
+METER_MODEL = "haiku"
+METER_PROMPT = "Reply with the single word OK."
 REAP_TICK_S = 60.0
 
 log = logging.getLogger(__name__)
@@ -219,7 +223,7 @@ class Harness:
         self._chats = watch.chats
         """The one table of chats, Cold and Live. Only the harness writes it."""
         self._ledger = watch.ledger
-        self._meter: SessionId | None = None
+        self._metering = asyncio.Lock()
         self._admit = asyncio.Lock()
         self._sending: Counter[SessionId] = Counter()
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
@@ -665,18 +669,37 @@ class Harness:
         return report
 
     async def meter(self) -> ReadingView | None:
-        """Read `/usage` in a plan chat kept for it, then close that chat. The reply costs no
-        model call, and its five-hour reading lands in the ledger."""
-        if self._meter is None:
-            self._meter = await self.start_chat(NewChat(title="Plan usage meter", model="haiku"))
-        chat = self._chat(self._meter)
-        await self.send(self._meter, OperatorText("/usage"))
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + METER_WAIT_S
-        while chat.record.turn == "running" and loop.time() < deadline:
-            await asyncio.sleep(0.2)
-        await chat.close()
-        return self._ledger.reading("five_hour")
+        """The live five-hour reading. With none in the ledger, one haiku plan turn with no
+        tools writes it, because the turn's rate-limit event carries the reading and `/usage`
+        no longer does (CLI 2.1.299). Its chat record and workspace are removed after the turn,
+        so the chat list does not keep it. While a plan window is used up or plan use is stopped, no turn runs and
+        this raises `LaunchRefused`."""
+        async with self._metering:
+            held = self._ledger.reading("five_hour")
+            if held is not None:
+                return held
+            stop = self._ledger.hard_stop() or (
+                "a plan window is used up" if self._ledger.rejected() else None
+            )
+            if stop is not None:
+                raise LaunchRefused(f"the plan meter will not run: {stop}")
+            sid = await self.start_chat(NewChat(title="Plan usage meter", model=METER_MODEL))
+            chat = self._chat(sid)
+            chat.record = replace(chat.record, config=replace(chat.record.config, tools=False))
+            try:
+                await self.send(sid, OperatorText(METER_PROMPT))
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + METER_WAIT_S
+                while chat.record.turn == "running" and loop.time() < deadline:
+                    await asyncio.sleep(0.2)
+            finally:
+                await chat.close()
+                del self._chats[sid]
+                record_path(self._deps.home, sid).unlink(missing_ok=True)
+                await asyncio.to_thread(
+                    shutil.rmtree, self._deps.home.workspaces_dir / sid, ignore_errors=True
+                )
+            return self._ledger.reading("five_hour")
 
     async def quote(self, chat: SessionId, change: ConfigChange) -> Quote:
         """Every change goes through a quote. The new model goes through

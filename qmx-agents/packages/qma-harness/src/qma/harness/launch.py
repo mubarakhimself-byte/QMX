@@ -142,8 +142,8 @@ block the call."""
 @dataclass(frozen=True)
 class ChatConfig:
     """Everything that decides how a chat's CLI process is launched. A change is a new config.
-    `compact_at` and `hooks` live only in this process: the chat record on disk does not hold
-    them, so a chat read back from disk after a restart launches without them."""
+    `compact_at`, `hooks` and `tools` live only in this process: the chat record on disk does
+    not hold them, so a chat read back from disk after a restart launches without them."""
 
     profile: ProfileName
     model: str
@@ -153,6 +153,8 @@ class ChatConfig:
     kind: ChatKind
     compact_at: float | None = None
     hooks: ChatHooks | None = None
+    tools: bool = True
+    """False launches with no built-in tool and no MCP server, for the plan meter's turn."""
 
 
 @dataclass(frozen=True)
@@ -485,7 +487,7 @@ def build_options(
             hooks.setdefault(event, []).append(matcher)
     return ClaudeAgentOptions(
         cli_path=launcher,
-        tools={"type": "preset", "preset": "claude_code"},
+        tools={"type": "preset", "preset": "claude_code"} if config.tools else [],
         system_prompt={
             "type": "preset",
             "preset": "claude_code",

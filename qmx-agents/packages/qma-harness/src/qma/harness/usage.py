@@ -264,8 +264,8 @@ class BackgroundCap:
         five_hour = ledger.reading("five_hour")
         if five_hour is None:
             return (
-                "there is no reading of the plan's five-hour window yet; read it with "
-                "POST /api/usage/meter or run an Interactive plan turn"
+                "there is no reading of the plan's five-hour window yet; POST /api/usage/meter "
+                "reads it with one haiku plan turn"
             )
         used, cap = five_hour.reading.utilization, self.fraction
         if used >= cap:

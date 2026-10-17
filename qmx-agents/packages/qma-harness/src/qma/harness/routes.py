@@ -27,7 +27,8 @@ Routes:
     GET  /api/usage                              the usage page: plan windows, readings, token
                                                  sums per profile, cap, overage stop, money
                                                  posture and the stored exposure report
-    POST /api/usage/meter                        read `/usage` in a plan chat, then the page
+    POST /api/usage/meter                        one haiku plan turn when no five-hour reading
+                                                 is live, then the page
     POST /api/gpt/login                 {sign_in} -> GptStatus; the stored ChatGPT sign-in,
                                                  or OpenAI's page when `sign_in`, then the GPT
                                                  probe unless a pass is stored, then the lane
