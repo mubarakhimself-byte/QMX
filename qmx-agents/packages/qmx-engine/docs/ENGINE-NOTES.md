@@ -18,13 +18,61 @@ A check passes when it exits 0. Lane logs carry the prefix `run-all-` (after any
 `ENGINE_LOG_PREFIX`), so a rerun never overwrites another PR's evidence. The ship home's
 `settings.toml` is hashed before the run and after every check. A check that changes it fails and
 stops the run. Checks that need a plan turn (`e09_roles`, `x11_agent_chunks`) take the lane lock
-themselves. Pass `--only "<name>"` to rerun one row.
+themselves. Pass `--only "<name>"` to rerun one row. Lane hosts start through `lane_host.py` with
+a bearer made for each throwaway home, never the operator's control token.
+
+One lane is left out and the table says why: `x10_llm doctor`, an EP10 menu lane that never ran.
+On Kimi its "always answer NOPE" prompt loses to the engine's schema instructions, so the doctor is
+never reached. It needs a deterministic bad answer (BACKLOG).
+
+Four older checks had gone stale against later planned PRs, not against a regression, and EP14
+updated their expectations. `ep2_lanes` lock lane allows EP12's `cronsim` in `uv.lock`.
+`e02_replay` (and `e03_chunks`, which reuses it) expects the `Park` that names its slot since EP6.
+`e11_ladder` expects the model step to move to `claude/sonnet`, because since EP10 a test run tries
+the test-only Kimi row first and the `gpt` row names no model. `x09_explain` lets later PRs add
+`qmx-control` tests as long as the failures stay the same. `x12_scheduler` now keeps
+`ENGINE_LOG_PREFIX` across its lanes, so a rerun cannot overwrite another PR's logs.
 
 The table at EP14's head (builder's run, 2026-10-17):
 
-RUN_ALL_TABLE
+| Check | Verdict | Seconds | Console log |
+|---|---|---:|---|
+| `ep2_lanes` | PASS | 418 | `evidence/ep14/owner-run-all-ep2_lanes.log` |
+| `x03_validate` | PASS | 158 | `evidence/ep14/owner-run-all-x03_validate.log` |
+| `x04_ledger` | PASS | 31 | `evidence/ep14/owner-run-all-x04_ledger.log` |
+| `e01_determinism` | PASS | 2 | `evidence/ep14/owner-run-all-e01_determinism.log` |
+| `e02_replay` | PASS | 11 | `evidence/ep14/owner-run-all-e02_replay.log` |
+| `e03_chunks` | PASS | 5 | `evidence/ep14/owner-run-all-e03_chunks.log` |
+| `x06_joins_loops` | PASS | 1 | `evidence/ep14/owner-run-all-x06_joins_loops.log` |
+| `x07_nodes` | PASS | 70 | `evidence/ep14/owner-run-all-x07_nodes.log` |
+| `e14_script_env` | PASS | 11 | `evidence/ep14/owner-run-all-e14_script_env.log` |
+| `e04_unknown_outcome` | PASS | 22 | `evidence/ep14/owner-run-all-e04_unknown_outcome.log` |
+| `x08_watchdog` | PASS | 14 | `evidence/ep14/owner-run-all-x08_watchdog.log` |
+| `e11_ladder` | PASS | 5 | `evidence/ep14/owner-run-all-e11_ladder.log` |
+| `e12_inbox` | PASS | 12 | `evidence/ep14/owner-run-all-e12_inbox.log` |
+| `x09_explain` | PASS | 147 | `evidence/ep14/owner-run-all-x09_explain.log` |
+| `e07_lifecycle` | PASS | 11 | `evidence/ep14/owner-run-all-e07_lifecycle.log` |
+| `e10_library` | PASS | 7 | `evidence/ep14/owner-run-all-e10_library.log` |
+| `e21_real_tests` | PASS | 15 | `evidence/ep14/owner-run-all-e21_real_tests.log` |
+| `e09_roles` | PASS | 18 | `evidence/ep14/owner-run-all-e09_roles.log` |
+| `x10_llm schema` | PASS | 20 | `evidence/ep14/owner-run-all-x10_llm-schema.log` |
+| `x10_llm cache` | PASS | 20 | `evidence/ep14/owner-run-all-x10_llm-cache.log` |
+| `x10_llm ask` | PASS | 25 | `evidence/ep14/owner-run-all-x10_llm-ask.log` |
+| `x10_llm perf` | PASS | 25 | `evidence/ep14/owner-run-all-x10_llm-perf.log` |
+| `x11_agent_chunks` | PASS | 16 | `evidence/ep14/owner-run-all-x11_agent_chunks.log` |
+| `e05_pause` | PASS | 26 | `evidence/ep14/owner-run-all-e05_pause.log` |
+| `e04b_agent_unknown` | PASS | 19 | `evidence/ep14/owner-run-all-e04b_agent_unknown.log` |
+| `e06_catchup` | PASS | 23 | `evidence/ep14/owner-run-all-e06_catchup.log` |
+| `x12_scheduler` | PASS | 99 | `evidence/ep14/owner-run-all-x12_scheduler.log` |
+| `x13_doors` | PASS | 380 | `evidence/ep14/owner-run-all-x13_doors.log` |
+| `x14_hello` | PASS | 82 | `evidence/ep14/owner-run-all-x14_hello.log` |
 
-Spend of that run: SPEND_LINE
+29 PASS, 0 FAIL in 1693 s (28 minutes, under the 90-minute rule). The ship home's `settings.toml`
+sha256 was `0fa344b9...` before and after.
+
+Spend of that run: about $0.25 of OpenRouter Kimi calls by the relay journals' upper bound (cache reads counted as
+full input), and about six plan turns (`e09_roles` one haiku turn, `x11_agent_chunks` three
+sonnet chunk turns, and up to one meter turn each).
 
 ## Departures from the architecture
 
@@ -94,7 +142,11 @@ four, a join collects the chunks, and a deterministic grader checks every word g
 `scanner` is a cheap role. A test run takes the test-only OpenRouter Kimi row first, so it spends
 about three Kimi turns. On a home with the plan login, a live run takes `claude/haiku`. The EP14
 lanes (`scripts/live/engine/x14_hello.py`) run it on a throwaway home with only the OpenRouter row
-and `scanner` set to Kimi for live runs too, so they never touch the plan.
+and `scanner` set to Kimi for live runs too, so they never touch the plan. Lane 4 fires the cron
+trigger with `run-now`, kills the host once chunk 0 has finished, and restarts it. A resume over
+REST is refused while a trigger fire drives the run (EP13), so the restarted scheduler takes the
+fire over when its lease lapses (10 s on the demo home, 300 s by default) and only chunks 1 and 2
+run again.
 
 ## Known gaps found at EP14
 
