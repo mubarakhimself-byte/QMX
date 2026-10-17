@@ -42,6 +42,10 @@ Never read `tracker/qma-v2/archive/` as the plan.
 14. **Delete nothing without his go.** That covers branches and worktrees.
 15. **Out of scope.** The account pool, relay routing, the key vault, the Hub, remote placements, sandbox tiers, sub-agent caps, the RLM kernel, agent-made tools, the Cua pack, the real Library, memory, self-improvement and the UI are later packets in Appendix G. Data is held (ruling 91). Ship nothing on data until a deeper data study is done and explained to him. QMB, QML, QMF and the trading node have their own sessions.
 
+## Tests: few and behavioural (operator, 2026-10-17)
+
+Each PR adds only the tests that prove its point: behaviour at the module's public interface, typically a handful per PR and rarely more than about 20. No test per private function, no snapshot or getter tests, no mirror-the-implementation tests, no coverage chasing. The live lanes carry the proof. Tell the builder and the checker this in every brief; the checker flags test bloat as a low finding.
+
 ## Start
 
 Arm the program as the plan's first section says. First confirm that the local branch `engine/base` points at `ed704c924e5f50c79a13531f7d491c7dce254666`, which is `origin/rebuild/base` with the HP stack already merged. Do not push it yet. Then state the protocol and the plan to the operator in plain words, list what only he can do, and stop. On his go, push `engine/base` and start.
