@@ -25,7 +25,7 @@ from pydantic import JsonValue, ValidationError
 
 from qmx_engine.core.commands import Command, Finish, Hold, Park, Pause, Wait
 from qmx_engine.core.edges import MAPS, FanError, fan
-from qmx_engine.core.joins import Fired, JoinSpec, close
+from qmx_engine.core.joins import Fired, JoinSpec, Unmet, close
 from qmx_engine.core.loops import LoopError, LoopSpec, stop
 from qmx_engine.core.partitions import ChunkError
 from qmx_engine.core.replay import dispatch
@@ -325,9 +325,15 @@ class Planner:
         failed = [s.partition or 0 for s in runs if self.phase(s) == "failed"]
         held = self.state.holds.get(slot)
         timed_out = held is not None and due(held, self.state.now, self.state.received)
-        closing = close(
-            spec, list(ids), [s.partition or 0 for s in finished], failed, timed_out=timed_out
-        )
+        fired = self.state.joins.get(slot)
+        if fired is not None:
+            if any(p not in ids or self.phase(ids[p]) != "finished" for p in fired):
+                return
+            closing: Fired | Unmet | None = Fired(fired, tuple(p for p in ids if p not in fired))
+        else:
+            closing = close(
+                spec, list(ids), [s.partition or 0 for s in finished], failed, timed_out=timed_out
+            )
         if isinstance(closing, Fired):
             merged = [self.outputs(ids[p]) for p in closing.merged]
             values: list[JsonValue] = [found[edge.port] for found in merged if edge.port in found]

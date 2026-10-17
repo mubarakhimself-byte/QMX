@@ -91,6 +91,9 @@ class State:
     """Each `event_received` name with its seq."""
     spent: Mapping[Slot, int] = field(default_factory=dict[Slot, int])
     """Tokens the slot's attempts reported on their ending events, over every pass."""
+    joins: Mapping[Slot, tuple[int, ...]] = field(default_factory=dict[Slot, tuple[int, ...]])
+    """The partitions each join merged the first time it fired, over every pass, so a resume
+    merges the same ones (AD-7) and a late arrival never gets in."""
 
 
 @dataclass(frozen=True, slots=True)

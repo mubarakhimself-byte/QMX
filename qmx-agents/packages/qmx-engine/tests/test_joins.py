@@ -3,7 +3,7 @@ a watermark ends a join that can no longer fire."""
 
 from __future__ import annotations
 
-from flows import NOW, Planted, Script, edge, finish, node, of, simulation, workflow
+from flows import LATER, NOW, Planted, Script, edge, finish, node, of, simulation, workflow
 from pydantic import JsonValue
 
 from qmx_engine.core.commands import Finish, Park
@@ -94,3 +94,18 @@ def test_a_timeout_watermark_ends_an_unmet_join_once_its_hold_comes_due() -> Non
     assert sim.tick("2026-10-17T09:01:00+00:00") == Park(
         "join gather join_timeout: quorum join has 2 of 3 needed partitions at its timeout"
     )
+
+
+def test_a_resume_keeps_the_partitions_a_fired_join_merged() -> None:
+    script = Script(failing={("after", 0, None)}, slow={("work", 0), ("work", 3)})
+    sim, first = run(script, mode="quorum", n=3)
+    assert first == Park("node after failed: boom: planted failure")
+    finish(sim, "work", 3, {"main": "d"})  # the late two report in after the park
+    finish(sim, "work", 0, {"main": "a"})
+    script.slow.clear()
+    mark = len(sim.events)
+
+    ended = sim.resume(LATER)
+
+    assert of(sim.events[mark:], "node_started", "gather") == []
+    assert ended == Finish({"after": {"main": ["b", "c", "e"]}})

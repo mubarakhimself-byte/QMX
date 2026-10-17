@@ -7,6 +7,7 @@ partition has settled, `failed-aggregation` as soon as failures leave too few pa
 it, and `timeout` also once its `timeout_seconds` hold comes due. A join that stops waiting
 unmet fails. A join fires with the partitions it counted, merged in partition order; every other
 partition is late: named on the join's `node_scheduled` plan and never merged when it arrives.
+A join that fired keeps that decision on every later pass (`State.joins`).
 """
 
 from __future__ import annotations

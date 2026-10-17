@@ -27,7 +27,8 @@ class LoopError(ValueError):
 class LoopSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    max_iterations: int | None = Field(default=None, ge=0)
+    max_iterations: int = Field(ge=1)
+    """Always given, so every loop ends (the lint refuses a loop without it)."""
     budget: int | None = Field(default=None, gt=0)
     predicate: str | None = None
     no_progress_rounds: int | None = Field(default=None, gt=0)
@@ -37,8 +38,6 @@ class LoopSpec(BaseModel):
     def _stops(self) -> Self:
         if (self.no_progress_rounds is None) != (self.metric is None):
             raise ValueError("no_progress_rounds and metric are given together")
-        if (self.max_iterations, self.budget, self.predicate, self.metric) == (None,) * 4:
-            raise ValueError("a loop needs at least one stop")
         return self
 
 
@@ -61,7 +60,7 @@ def flat_rounds(metrics: Sequence[float]) -> int:
 
 def stop(spec: LoopSpec, k: int, values: Sequence[JsonValue], spent: int) -> str | None:
     """`values` holds what the body handed back after each of the k iterations so far."""
-    if spec.max_iterations is not None and k >= spec.max_iterations:
+    if k >= spec.max_iterations:
         return "max_iterations"
     if spec.budget is not None and spent >= spec.budget:
         return "budget"

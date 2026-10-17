@@ -4,7 +4,8 @@ Event data keys the fold reads (SOLUTION-DESIGN 3.2): `run_created.settings`, `r
 `clock_tick.now`, `event_received.event`, the slot keys `node_id`, `iteration` and `partition`
 with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_finished` that carries
 `memo: true`, `outputs` on `node_finished`, `tokens` on an ending event, `code` and `message` on
-`node_failed`, `reason`, `resume_at` and `event` on `node_waiting`, and `step` on `ladder_step`. A
+`node_failed`, `reason`, `resume_at` and `event` on `node_waiting`, `plan.join.merged` on a join's
+`node_scheduled`, and `step` on `ladder_step`. A
 `node_waiting` with no `attempt` is a hold the core asked for.
 """
 
@@ -67,6 +68,7 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
     holds: dict[Slot, Held] = {}
     spent: dict[Slot, int] = {}
     received: list[tuple[str, int]] = []
+    joins: dict[Slot, tuple[int, ...]] = {}
     for event in events:
         data, kind, seq = event.data, event.kind, event.seq
         if not state.run_id:
@@ -95,6 +97,9 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                 attempt = _int(data.get("attempt")) or 0
                 attempts[slot] = max(attempts.get(slot, 0), attempt)
                 nodes[slot] = NodeRun("scheduled", attempt, _text(data, "memo_key") or "", seq)
+                merged = _object(_object(data, "plan"), "join").get("merged")
+                if isinstance(merged, list) and slot not in joins:
+                    joins[slot] = tuple(n for p in merged if (n := _int(p)) is not None)
             case "node_started" if current is not None:
                 nodes[slot] = replace(current, phase="started", seq=seq)
             case "node_finished":
@@ -142,4 +147,5 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
         holds=holds,
         spent=spent,
         received=tuple(received),
+        joins=joins,
     )

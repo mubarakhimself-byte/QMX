@@ -2,7 +2,8 @@
 
 No node writes Settings or creates a trigger, no parameter names a money act (PROMPT-ENGINE
 rule 6, AD-8), no token-shaped literal appears anywhere, a list never fans into a model node by
-`broadcast`, an agent names its `max_turns`, and a `human_gate` sits only in front of an
+`broadcast`, an agent names its `max_turns`, a loop names its `max_iterations` (so every loop
+ends), and a `human_gate` sits only in front of an
 `irreversible_external` effect. A missing runaway guard is not an error: it takes the defaults,
 and no USD figure is ever asked for (ruling 27).
 """
@@ -87,6 +88,14 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
             if not isinstance(turns, int) or isinstance(turns, bool) or turns < 1:
                 yield Problem(
                     "agent_max_turns_missing", f"nodes[{i}].parameters", "an agent needs max_turns"
+                )
+        if kind.name == "loop":
+            cap = node.parameters.get("max_iterations")
+            if not isinstance(cap, int) or isinstance(cap, bool) or cap < 1:
+                yield Problem(
+                    "loop_max_iterations_missing",
+                    f"nodes[{i}].parameters",
+                    "a loop needs max_iterations",
                 )
         if kind.name == "human_gate":
             after = [

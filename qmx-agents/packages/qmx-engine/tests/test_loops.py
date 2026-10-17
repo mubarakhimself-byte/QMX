@@ -77,7 +77,9 @@ def test_predicate_stops_on_the_last_value_handed_back() -> None:
 
 
 def test_no_progress_rounds_stops_after_the_second_flat_round() -> None:
-    plans, ended, _ = run(scored(1.0, 2.0, 2.0, 2.0, 3.0), no_progress_rounds=2, metric="score")
+    plans, ended, _ = run(
+        scored(1.0, 2.0, 2.0, 2.0, 3.0), max_iterations=20, no_progress_rounds=2, metric="score"
+    )
 
     assert plans[-1] == {"loop": {"iteration": 4, "stop": "no_progress_rounds"}}
     assert ended == Finish({"after": {"main": {"n": 4, "score": 2.0}}})
