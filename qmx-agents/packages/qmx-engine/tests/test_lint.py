@@ -63,6 +63,31 @@ def test_a_money_act_is_refused_in_any_spelling_or_nesting(tmp_path: Path, spell
     assert problems(folder) == [("money_act", "nodes[1].parameters.tools[1]")]
 
 
+@pytest.mark.parametrize(
+    ("parameters", "path"),
+    [
+        ({"place_order": True}, "nodes[1].parameters.place_order"),
+        (
+            {"tools": {"Read": {"allow": True}, "mcp__broker__place_order": {"allow": True}}},
+            "nodes[1].parameters.tools.mcp__broker__place_order",
+        ),
+    ],
+)
+def test_a_money_act_named_by_a_key_is_refused(
+    tmp_path: Path, parameters: dict[str, object], path: str
+) -> None:
+    assert problems(with_parameters(tmp_path, parameters)) == [("money_act", path)]
+
+
+def test_settings_writes_and_trigger_creation_named_by_a_key_are_refused(tmp_path: Path) -> None:
+    folder = with_parameters(tmp_path, {"calls": {"settings.write": 1, "create_trigger": 1}})
+
+    assert problems(folder) == [
+        ("settings_write", "nodes[1].parameters.calls.settings.write"),
+        ("trigger_creation", "nodes[1].parameters.calls.create_trigger"),
+    ]
+
+
 def test_words_that_only_look_like_an_act_or_a_key_pass(tmp_path: Path) -> None:
     folder = with_parameters(
         tmp_path,

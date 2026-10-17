@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import JsonValue
 
-from qmx_engine.definition.folder import load
+from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.overlay import OverlayError, resolve
 from qmx_engine.definition.validate import validate
 
@@ -70,3 +70,20 @@ def test_a_patch_that_misses_the_parent_names_itself() -> None:
             ),
             parent(),
         )
+
+
+def test_an_unresolved_variant_neither_validates_nor_hashes(tmp_path: Path) -> None:
+    folder = Path(shutil.copytree(PARENT, tmp_path / "fx"))
+    document = parent() | variant(
+        {"op": "add", "path": "/nodes/2/parameters/action", "value": "place_order"}
+    )
+    (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")
+
+    assert [(p.code, p.path) for p in validate(load(folder))] == [("extends_unresolved", "extends")]
+    with pytest.raises(ValueError, match="unresolved variant"):
+        content_hash(load(folder))
+    resolved = resolve(document, parent())
+    (folder / "definition.json").write_text(json.dumps(resolved.snapshot), encoding="utf-8")
+    assert [(p.code, p.path) for p in validate(load(folder))] == [
+        ("money_act", "nodes[2].parameters.action")
+    ]

@@ -169,3 +169,34 @@ def test_the_shipped_json_schema_is_the_model_and_accepts_the_fixture() -> None:
 
     assert shipped == json_schema()
     jsonschema.validate(document, shipped)
+
+
+def test_no_output_echoes_a_key_pasted_into_a_ref_a_role_or_a_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    key = "sk-proj-" + "Zq9" * 12
+    folder = copy("bad-agent-no-max-turns", tmp_path)
+    document = json.loads((folder / "definition.json").read_text(encoding="utf-8"))
+    document["nodes"][1] |= {
+        "role": key,
+        "runs_on": key,
+        "parameters": {"max_turns": 4, "api_key_ref": key},
+    }
+    document["connections"][key] = {"main": [[{"node": key, "port": key, "map": "one"}]]}
+    (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")
+
+    assert main(["validate", str(folder)]) == 1
+    out = capsys.readouterr().out
+    assert key not in out
+    assert [line.split(" ", 1)[0] for line in out.splitlines()] == [
+        "ref_missing",
+        "edge_unknown_node",
+        "role_unknown",
+        "placement_unknown",
+        "secret_literal",
+        "secret_literal",
+        "secret_literal",
+        "secret_literal",
+        "secret_literal",
+        "secret_literal",
+    ]

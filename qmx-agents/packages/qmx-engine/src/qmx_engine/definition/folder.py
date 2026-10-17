@@ -77,9 +77,9 @@ def load(root: Path) -> WorkflowFolder:
     for path, ref in refs_in(document):
         target = (base / ref).resolve()
         if PurePosixPath(ref).is_absolute() or not target.is_relative_to(base):
-            problems.append(Problem("ref_escapes_folder", path, f"{ref!r} leaves the folder"))
+            problems.append(Problem("ref_escapes_folder", path, "the ref leaves the folder"))
         elif not target.is_file():
-            problems.append(Problem("ref_missing", path, f"{ref!r} is not a file in the folder"))
+            problems.append(Problem("ref_missing", path, "the ref names no file in the folder"))
         else:
             refs[ref] = target.read_bytes()
     return WorkflowFolder(root, document, refs, problems)
@@ -87,8 +87,11 @@ def load(root: Path) -> WorkflowFolder:
 
 def content_hash(folder: WorkflowFolder) -> str:
     """`sha256:<hex>` over the hashed fields, node positions left out, plus every ref file's
-    bytes. `meta` and `position` are layout and authorship, so moving a node changes nothing."""
+    bytes. `meta` and `position` are layout and authorship, so moving a node changes nothing.
+    A variant's patches are not hashed: only its resolved snapshot has a hash (AD-11)."""
     document, refs = folder.document or {}, folder.refs
+    if document.get("extends") is not None:
+        raise ValueError("an unresolved variant has no content hash; resolve it first")
     nodes = document.get("nodes")
     hashed: dict[str, JsonValue] = {name: document.get(name) for name in HASHED_FIELDS}
     if isinstance(nodes, list):

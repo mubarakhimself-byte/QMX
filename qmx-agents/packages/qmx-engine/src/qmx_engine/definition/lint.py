@@ -110,8 +110,12 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
             yield Problem(
                 "chunk_required",
                 edge.path,
-                f"a list into {kind.name} node {edge.target.node!r} uses map: chunk, not broadcast",
+                f"a list into a {kind.name} node uses map: chunk, not broadcast",
             )
+
+
+def redact(text: str) -> str:
+    return TOKEN_SHAPES.sub("[redacted]", text)
 
 
 def effect(registry: Registry, type_name: str, declared: str | None) -> str | None:
@@ -120,11 +124,15 @@ def effect(registry: Registry, type_name: str, declared: str | None) -> str | No
 
 
 def strings(value: JsonValue, path: str) -> Iterator[tuple[str, str]]:
+    """Every string in the value, keys included, so `{"place_order": true}` and a tool map keyed
+    by MCP name are read like a list of names."""
     if isinstance(value, str):
         yield path, value
     elif isinstance(value, dict):
         for key, item in value.items():
-            yield from strings(item, f"{path}.{key}" if path else key)
+            here = f"{path}.{key}" if path else key
+            yield here, key
+            yield from strings(item, here)
     elif isinstance(value, list):
         for index, item in enumerate(value):
             yield from strings(item, f"{path}[{index}]")

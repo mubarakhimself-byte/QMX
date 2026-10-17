@@ -13,7 +13,7 @@ from typing import Final
 from pydantic import ValidationError
 
 from qmx_engine.definition.folder import Problem, WorkflowFolder
-from qmx_engine.definition.lint import lint
+from qmx_engine.definition.lint import lint, redact
 from qmx_engine.definition.model import Node, Workflow, edges
 from qmx_engine.definition.registry import LOOP_BACK_PORT, NOTE, REGISTRY, Kind, Registry, RoleRule
 from qmx_engine.settings import DEFAULTS
@@ -36,28 +36,45 @@ def validate(
     publish: bool = False,
 ) -> list[Problem]:
     """`roles` are the names in the Settings `[roles]` document; `publish` adds step 5's
-    refusals of note and unconnected nodes."""
+    refusals of note and unconnected nodes. No message quotes a document value, and a path
+    (which can hold a node name or a key) has any token shape redacted."""
+    return [
+        Problem(code, redact(path), redact(message))
+        for code, path, message in problems(folder, roles, placements, registry, publish=publish)
+    ]
+
+
+def problems(
+    folder: WorkflowFolder,
+    roles: Collection[str],
+    placements: Collection[str],
+    registry: Registry,
+    *,
+    publish: bool,
+) -> Iterator[Problem]:
+    yield from folder.problems
     if folder.document is None:
-        return list(folder.problems)
+        return
     try:
         workflow = Workflow.model_validate(folder.document)
     except ValidationError as error:
-        return [
-            *folder.problems,
-            *(Problem("schema_invalid", where(e["loc"]), e["msg"]) for e in error.errors()),
-        ]
-    return [
-        *folder.problems,
-        *graph(workflow, registry, publish=publish),
-        *names(workflow, registry, roles, placements),
-        *lint(workflow, registry),
-    ]
+        yield from (Problem("schema_invalid", where(e["loc"]), e["msg"]) for e in error.errors())
+        return
+    if workflow.extends is not None:
+        yield Problem(
+            "extends_unresolved",
+            "extends",
+            "resolve the variant over its parent first; only a full snapshot validates",
+        )
+    yield from graph(workflow, registry, publish=publish)
+    yield from names(workflow, registry, roles, placements)
+    yield from lint(workflow, registry)
 
 
 def runnable(workflow: Workflow, registry: Registry = REGISTRY) -> list[Problem]:
     """What a run refuses that a draft may hold: a kind whose executor is not built yet."""
     return [
-        Problem("kind_not_available", f"nodes[{i}].type", f"{node.type!r} cannot run yet")
+        Problem("kind_not_available", f"nodes[{i}].type", "this node kind cannot run yet")
         for i, node in enumerate(workflow.nodes)
         if (kind := registry.kind(node.type)) is not None and not node.disabled
         if kind is not NOTE and not kind.available
@@ -81,17 +98,17 @@ def graph(workflow: Workflow, registry: Registry, *, publish: bool) -> Iterator[
     for i, node in enumerate(workflow.nodes):
         kind = registry.kind(node.type)
         if kind is None:
-            yield Problem("kind_unknown", f"nodes[{i}].type", f"no node kind {node.type!r}")
+            yield Problem("kind_unknown", f"nodes[{i}].type", "no node kind has this type")
         elif node.type_version not in kind.versions:
             yield Problem(
                 "type_version_unknown",
                 f"nodes[{i}].typeVersion",
-                f"{node.type!r} has no typeVersion {node.type_version}",
+                f"this kind has no typeVersion {node.type_version}",
             )
         if node.name in by_name:
-            yield Problem("node_name_duplicate", f"nodes[{i}].name", f"{node.name!r} repeats")
+            yield Problem("node_name_duplicate", f"nodes[{i}].name", "another node has this name")
         if node.id in seen_ids:
-            yield Problem("node_id_duplicate", f"nodes[{i}].id", f"{node.id!r} repeats")
+            yield Problem("node_id_duplicate", f"nodes[{i}].id", "another node has this id")
         by_name.setdefault(node.name, (i, node, kind))
         seen_ids.add(node.id)
 
@@ -108,20 +125,18 @@ def graph(workflow: Workflow, registry: Registry, *, publish: bool) -> Iterator[
     for edge in edges(workflow):
         source, target = by_name.get(edge.source), by_name.get(edge.target.node)
         if source is None or target is None:
-            missing = edge.source if source is None else edge.target.node
-            yield Problem("edge_unknown_node", edge.path, f"no node named {missing!r}")
+            end = "source" if source is None else "target"
+            yield Problem("edge_unknown_node", edge.path, f"the edge's {end} names no node")
             continue
         (_, source_node, source_kind), (_, _, target_kind) = source, target
         wired |= {edge.source, edge.target.node}
         if source_kind is not None and edge.port not in outputs(source_kind, source_node):
-            yield Problem(
-                "edge_unknown_port", edge.path, f"{edge.source!r} has no output {edge.port!r}"
-            )
+            yield Problem("edge_unknown_port", edge.path, "the source kind has no such output port")
         if target_kind is not None and edge.target.port not in target_kind.inputs:
             yield Problem(
                 "edge_unknown_port",
                 edge.path,
-                f"{edge.target.node!r} has no input {edge.target.port!r}",
+                "the target kind has no such input port",
             )
         if edge.target.map == "cartesian" and not edge.target.explicit:
             yield Problem(
@@ -135,7 +150,7 @@ def graph(workflow: Workflow, registry: Registry, *, publish: bool) -> Iterator[
         if not (loop_back and edge.target.port == LOOP_BACK_PORT):
             forward[edge.source].append(edge.target.node)
 
-    yield from cycles(forward)
+    yield from cycles(forward, {name: i for name, (i, _, _) in by_name.items()})
 
     reached: set[str] = set()
     frontier = list(triggers)
@@ -149,17 +164,17 @@ def graph(workflow: Workflow, registry: Registry, *, publish: bool) -> Iterator[
             continue
         if kind is NOTE:
             if publish:
-                yield Problem("note_at_publish", f"nodes[{i}]", f"note {name!r} must be disabled")
+                yield Problem(
+                    "note_at_publish", f"nodes[{i}]", "a note must be disabled to publish"
+                )
         elif name not in wired:
             if publish:
-                yield Problem("unconnected_at_publish", f"nodes[{i}]", f"{name!r} has no edges")
+                yield Problem("unconnected_at_publish", f"nodes[{i}]", "the node has no edges")
         else:
-            yield Problem(
-                "node_unreachable", f"nodes[{i}]", f"no path from the trigger to {name!r}"
-            )
+            yield Problem("node_unreachable", f"nodes[{i}]", "no path from the trigger reaches it")
 
 
-def cycles(forward: dict[str, list[str]]) -> Iterator[Problem]:
+def cycles(forward: dict[str, list[str]], index: dict[str, int]) -> Iterator[Problem]:
     """One problem per edge that closes a cycle, found by depth-first search."""
     done: set[str] = set()
     for start in list(forward):
@@ -174,7 +189,11 @@ def cycles(forward: dict[str, list[str]]) -> Iterator[Problem]:
                 done.add(on_path.pop())
             elif child in on_path:
                 loop = [*on_path[on_path.index(child) :], child]
-                yield Problem("cycle", f"connections.{on_path[-1]}", " -> ".join(loop))
+                yield Problem(
+                    "cycle",
+                    f"nodes[{index[on_path[-1]]}]",
+                    " -> ".join(f"nodes[{index[name]}]" for name in loop),
+                )
             elif child not in done:
                 on_path.append(child)
                 stack.append(iter(forward[child]))
@@ -196,11 +215,11 @@ def names(
         elif not needs_role and node.role is not None:
             yield Problem("role_forbidden", f"nodes[{i}].role", f"a {kind.name} node takes no role")
         elif node.role is not None and node.role not in roles:
-            yield Problem("role_unknown", f"nodes[{i}].role", f"no role {node.role!r} in [roles]")
+            yield Problem("role_unknown", f"nodes[{i}].role", "the role is not in [roles]")
         for placement in [node.runs_on] if isinstance(node.runs_on, str) else node.runs_on:
             if placement not in placements:
                 yield Problem(
-                    "placement_unknown", f"nodes[{i}].runs_on", f"no placement {placement!r}"
+                    "placement_unknown", f"nodes[{i}].runs_on", "the placement is not registered"
                 )
         for name, ref in node.credentials.items():
             if not ref.startswith("qmx/"):
