@@ -1,0 +1,1 @@
+{"name": "svc", "port": 9000, "db": {"host": "localhost", "pool": 20, "ssl": true}, "tags": ["c"]}
