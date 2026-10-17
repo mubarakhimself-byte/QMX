@@ -672,8 +672,8 @@ class Harness:
         """The live five-hour reading. With none in the ledger, one haiku plan turn with no
         tools writes it, because the turn's rate-limit event carries the reading and `/usage`
         no longer does (CLI 2.1.299). Its chat record and workspace are removed after the turn,
-        so the chat list does not keep it. While a plan window is used up or plan use is stopped, no turn runs and
-        this raises `LaunchRefused`."""
+        so the chat list does not keep it. While a plan window is used up or plan use is
+        stopped, no turn runs and this raises `LaunchRefused`."""
         async with self._metering:
             held = self._ledger.reading("five_hour")
             if held is not None:
