@@ -7,13 +7,15 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from fake_port import TOKENS, FakePort
+
 from qmx_engine.admission import Admission
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.nodes.base import Failed, NodeJob, Ok
 from qmx_engine.nodes.llm import BAD_OUTPUT, Llm
-from qmx_engine.ports.harness_adapter import PlanUse, Turn
+from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle
 from qmx_engine.runner import Engine, Outcome
 from qmx_engine.service.api import EngineService
@@ -21,40 +23,7 @@ from qmx_engine.service.context import OPERATOR
 from qmx_engine.settings import DEFAULTS
 
 ONE_LLM = Path(__file__).resolve().parent / "fixtures" / "workflows" / "one-llm"
-TOKENS = {"in": 10, "out": 5, "cache_read": 100, "cache_write": 0}
 GOOD = '{"country": "France", "capital": "Paris"}'
-
-
-class FakePort:
-    def __init__(self, *answers: Turn | str) -> None:
-        self.answers = list(answers)
-        self.chats: list[dict[str, object]] = []
-        self.sent: list[tuple[str, str]] = []
-
-    def profiles(self) -> frozenset[str]:
-        return frozenset({"claude", "openrouter"})
-
-    def max_live_chats(self) -> int:
-        return 4
-
-    async def plan_use(self) -> PlanUse:
-        return PlanUse(0.1, "2026-10-17T12:00:00+00:00", None, None)
-
-    async def start_chat(
-        self, *, title: str, profile: str, model: str, effort: str | None, workspace: Path
-    ) -> str:
-        self.chats.append({"title": title, "profile": profile, "model": model})
-        return f"chat-{len(self.chats)}"
-
-    async def send(self, chat: str, text: str) -> None:
-        self.sent.append((chat, text))
-
-    async def wait_turn(self, chat: str, *, timeout: float) -> Turn:
-        found = self.answers.pop(0)
-        return found if isinstance(found, Turn) else Turn(found, dict(TOKENS))
-
-    async def interrupt(self, chat: str) -> None:
-        pass
 
 
 def job() -> NodeJob:

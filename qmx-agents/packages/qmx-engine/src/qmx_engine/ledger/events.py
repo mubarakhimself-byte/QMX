@@ -36,6 +36,7 @@ type EventKind = Literal[
     "run_cancelled",
     "compacted",
     "memory_written",
+    "tool_called",
 ]
 
 KINDS: Final[frozenset[str]] = frozenset(get_args(EventKind.__value__))
