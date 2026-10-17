@@ -170,3 +170,9 @@ On 10-13 he reversed CLIProxy-for-Claude for this reason. Using someone else's C
 86. **Shipping prep follows `WORKFLOW-SHIP-PREP.md`'s skills and its "mistakes not to repeat", adapted rather than run verbatim:** our design came from the files plus the BMad architecture, not from transcripts.
 87. **No more Fable.** Every agent from now on is Opus 5.5.
 88. **Gaps go back into the architectures first.** If the rubric walk, the Wayfinder rewrite or the planner finds missing gaps, apply them to the architectures (with Opus), then centralize the architecture once more, then continue the plan. Take time and ground slowly; the morning prompt is the deliverable.
+
+## K. Morning answers (2026-10-17)
+
+89. **Harness grants H0, H15, H16 and H17: YES.** Add the harness PR (HG1) to the stack. The engine uses the real exports, compaction control, per-chat hooks and tool-table rows; the fallbacks stay only as safety.
+90. **No fixed cap, configuration is key.** The 50% background cap is a DEFAULT, not a limit. Every account in the pool carries its own configurable share and strategy, CLIProxyAPI style: fill-first, round-robin, least-used, per-account ceilings, cooldowns. With a large plan or several accounts, a fixed 50% would be far too limiting. Defaults are editable in Settings, like agentic IDEs and Claude Code do. Never a hard global cap.
+91. **Data is held.** Ship nothing on data for now (DP1 removed). A deeper data study comes first, explained to him, because data is the area where he gave the least context.
