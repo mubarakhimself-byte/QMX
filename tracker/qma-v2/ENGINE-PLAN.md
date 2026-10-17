@@ -517,7 +517,7 @@ Lanes run on the operator's PC, not on cloud VMs. No `control-cli` or `control-u
 - [ ] In `edges.py`, implement the maps `one`, `zip`, `broadcast`, `keyed-join` and `cartesian` (explicit only).
 - [ ] In `partitions.py`, fan out by chunk (ruling 78, 27b B1). A `chunk` edge splits the item list. With `by: items`, each chunk holds `size` items, falling back to `chunk.size`. With `by: tokens`, a chunk fills to `fill` times the resolved model's context window, falling back to `chunk.fill`, so a 1M-token model takes about 300k tokens of items. One partition is one chunk, with its own memo. Partition ids are stable for the same item list.
 - [ ] In `joins.py`, implement `all`, `any` and `quorum(n)`, with expected cardinality from the partition count, watermarks `all-expected`, `timeout` and `failed-aggregation`, and late arrivals recorded but not merged.
-- [ ] In `loops.py`, iterate an induced body subgraph with typed stops `max_iterations`, `budget`, `predicate` and `no_progress_rounds`. Iteration state lives in the ledger.
+- [ ] In `loops.py`, iterate an induced body subgraph with typed stops `max_iterations`, `budget`, `predicate` and `no_progress_rounds`. Iteration state lives in the ledger. Loop ports are settled here: inputs `in` and `next` (the loop-back, the one allowed cycle), outputs `body` and `done`; `rule` keeps `true` and `false`.
 - [ ] In `waits.py`, `wait` parks until a recorded `clock_tick` reaches `resume_at`, or until an `event_received` with the named event.
 
 **You see.**

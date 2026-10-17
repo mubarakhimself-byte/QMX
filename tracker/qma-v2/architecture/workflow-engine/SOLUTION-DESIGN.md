@@ -234,7 +234,7 @@ Only nodes whose memo is missing or invalid run. A `broadcast` or `chunk` fan-ou
 
 ### 3.5 Loops, joins, subworkflows
 
-- `loop`: the body is an induced subgraph; each iteration mints node attempts with `iteration = k`; the stop condition is typed (`max_iterations`, `tokens` (a share of the runaway allowance), `predicate` over the last iteration's outputs, `no_progress_rounds` over a named metric); iteration state lives in the ledger, never in a node result (DEC-0312 iteration law ratified).
+- `loop`: ports `in` (the first value) and `next` (each later value, handed back by the body; an edge into `next` is the one cycle a definition may hold), and `body` (the value while iterating) and `done` (the value once a stop fires) (settled in EP6). The body is the induced subgraph its `body` port reaches; each iteration mints node attempts with `iteration = k`; the stop condition is typed (`max_iterations`, `budget` (tokens the body's attempts reported, a share of the runaway allowance), `predicate` over the last value handed back, `no_progress_rounds` over a named metric); iteration state lives in the ledger, never in a node result (DEC-0312 iteration law ratified).
 - `join`: expected cardinality comes from the fan-out partition count; `all` waits for every partition, `any` fires on the first and marks the rest `late`, `quorum(n)` fires at n; watermark `all-expected | timeout | failed-aggregation`; late arrivals are recorded, not merged.
 - `subworkflow`: one nested run with its own `run_id`, `parent_run_id`, `call_depth` (ceiling in Settings); the parent node waits or continues; the callee's `caller_policy` is checked at validation and at dispatch; merging two live runs is refused (DEC-0455 ratified).
 
