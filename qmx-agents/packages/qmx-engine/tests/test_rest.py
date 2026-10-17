@@ -23,6 +23,7 @@ from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.inbox import Category, Raise
 from qmx_engine.ports.library import Bundle
 from qmx_engine.service.rest import engine_router
+from qmx_engine.triggers.rows import put_wake
 
 KEY = "rest-check"
 BEARER = {"Authorization": f"Bearer {KEY}"}
@@ -218,3 +219,68 @@ def test_a_trigger_starts_disabled_and_enabling_it_enables_its_version(tmp_path:
     assert enabled["enabled"] is True
     assert [v["state"] for v in versions] == ["enabled"]
     assert [r["object_id"] for r in live] == [version["object_id"]]
+
+
+def test_resume_is_refused_while_a_trigger_fire_drives_the_run(tmp_path: Path) -> None:
+    slow = chain("slow")
+    slow["files"]["scripts/numbers.py"] = "import time\ntime.sleep(4)\nprint('[1, 2]')\n"
+    with served(tmp_path) as (rest, _):
+        rest.put("/api/workflows/slow/draft", json=slow, headers=BEARER)
+        rest.post("/api/workflows/slow/test", headers=BEARER)
+        rest.put("/api/workflows/slow", json={}, headers=BEARER)
+        made = rest.post(
+            "/api/triggers", params={"workflow_id": "slow"}, json={"kind": "manual"}, headers=BEARER
+        ).json()
+        rest.post(f"/api/triggers/{made['id']}/enable", headers=BEARER)
+        rest.post(f"/api/triggers/{made['id']}/run-now", headers=BEARER)
+        deadline, live = time.monotonic() + 20, []
+        while not live and time.monotonic() < deadline:
+            time.sleep(0.1)
+            found = rest.get("/api/workflow-runs", headers=BEARER).json()
+            live = [r for r in found if r["mode"] == "live"]
+        refused = rest.post(f"/api/workflow-runs/{live[0]['run_id']}/resume", headers=BEARER)
+        deadline, ended = time.monotonic() + 30, ""
+        while ended != "passed" and time.monotonic() < deadline:
+            time.sleep(0.2)
+            got = rest.get(f"/api/workflow-runs/{live[0]['run_id']}", headers=BEARER)
+            ended = got.json()["status"]
+    with Reader.open(tmp_path) as reader:
+        events = reader.events(live[0]["run_id"])
+    started = [e.data["attempt"] for e in events if e.kind == "node_started"]
+
+    assert (refused.status_code, refused.json()["error"]["code"]) == (409, "resume_refused")
+    assert (ended, started) == ("passed", [1, 1, 1, 1])
+
+
+def test_a_door_resume_takes_the_wake_so_the_scheduler_cannot_drive_the_run_too(
+    tmp_path: Path,
+) -> None:
+    with served(tmp_path) as (rest, door):
+        rest.put("/api/workflows/hold/draft", json=waiting("hold"), headers=BEARER)
+        run = rest.post("/api/workflows/hold/test", headers=BEARER).json()["run"]
+        wake = put_wake(run["run_id"], "2026-10-17T09:00:00+00:00")
+        asyncio.run_coroutine_threadsafe(write(door, wake), door.loop).result()
+        resumed = rest.post(f"/api/workflow-runs/{run['run_id']}/resume", headers=BEARER)
+    with Reader.open(tmp_path) as reader:
+        wakes = reader.connection.execute("SELECT run_id FROM wakes").fetchall()
+        kinds = [e.kind for e in reader.events(run["run_id"])]
+
+    assert resumed.status_code == 200
+    assert (wakes, kinds.count("run_resumed")) == ([], 1)
+
+
+async def write(door: EngineDoor, operation: Any) -> None:
+    door.svc.ctx.engine.ledger.write(operation)
+
+
+def test_a_token_shaped_key_never_comes_back(tmp_path: Path) -> None:
+    key = "ghp_" + "Ab1" * 12
+    planted = chain("keyed")
+    planted["definition"]["meta"] = {key: "note"}
+    with served(tmp_path) as (rest, _):
+        saved = rest.put("/api/workflows/keyed/draft", json=planted, headers=BEARER)
+        read = rest.get("/api/workflows/keyed/draft", headers=BEARER)
+        got = rest.get("/api/workflows/keyed", headers=BEARER)
+
+    assert [key in r.text for r in (saved, read, got)] == [False, False, False]
+    assert read.json()["definition"]["meta"] == {"[redacted]": "note"}

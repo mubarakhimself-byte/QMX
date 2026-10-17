@@ -52,9 +52,10 @@ from qmx_engine.service.runs import status_of, summarize_again
 from qmx_engine.trace_export import export
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.catchup import CatchUp
-from qmx_engine.triggers.cron import Cron, Interval
+from qmx_engine.triggers.claims import settle_run
+from qmx_engine.triggers.cron import Cron, Interval, stamp
 from qmx_engine.triggers.preflight import configured_refs, shipped_skills
-from qmx_engine.triggers.ticker import Scheduler
+from qmx_engine.triggers.ticker import ENDING, Scheduler
 
 AGENT: Final = Caller("agent", "qmx-control")
 LIBRARY: Final = Caller("agent", "library")
@@ -101,7 +102,8 @@ def plain(value: object) -> JsonValue:
         case datetime():
             return value.isoformat()
         case Mapping():
-            return {str(k): plain(v) for k, v in cast(Mapping[object, object], value).items()}
+            items = cast(Mapping[object, object], value).items()
+            return {redact(str(k)): plain(v) for k, v in items}
         case list() | tuple() | set() | frozenset():
             return [plain(v) for v in cast(list[object], value)]
         case _:
@@ -139,6 +141,37 @@ def set_enabled(trigger_id: str, enabled: bool) -> Operation[None]:
         txn.connection.execute(
             "UPDATE triggers SET enabled = ? WHERE id = ?", (int(enabled), trigger_id)
         )
+
+    return operation
+
+
+def take_over(run_id: str, now: str) -> Operation[str | None]:
+    """Hand the run to a door resume, or say why the scheduler still holds it: a fire or a wake
+    under a live lease. A run the scheduler no longer holds (its claimant died) loses its wake,
+    and its fire waits for the door's resume to settle it, so no tick drives it beside the door."""
+
+    def operation(txn: Transaction) -> str | None:
+        db = txn.connection
+        fire = db.execute(
+            "SELECT lease_until FROM fires WHERE run_id = ? AND status IN ('claimed', 'running')"
+            " AND lease_until > ?",
+            (run_id, now),
+        ).fetchone()
+        if fire is not None:
+            return f"a trigger fire is driving run {run_id}"
+        wake = db.execute(
+            "SELECT 1 FROM wakes WHERE run_id = ? AND claimed_by IS NOT NULL AND lease_until > ?",
+            (run_id, now),
+        ).fetchone()
+        if wake is not None:
+            return f"the scheduler is waking run {run_id}"
+        db.execute("DELETE FROM wakes WHERE run_id = ?", (run_id,))
+        db.execute(
+            "UPDATE fires SET status = 'waiting', lease_until = NULL"
+            " WHERE run_id = ? AND status IN ('claimed', 'running')",
+            (run_id,),
+        )
+        return None
 
     return operation
 
@@ -498,19 +531,26 @@ class EngineDoor:
 
     def workflow_runs_resume(self, run_id: str) -> Document:
         async def resume() -> object:
-            if run_id in self.live:
+            if run_id in self.live or run_id in self.scheduler.waking:
                 raise Refused("resume_refused", f"run {run_id} is still going")
             status = self.svc.runs.get(run_id).status
             if status in ENDED:
                 raise Refused("resume_refused", f"run {run_id} already ended {status}")
+            now = stamp(self.svc.ctx.clock.now())
+            held = self.svc.ctx.engine.ledger.write(take_over(run_id, now))
+            if held is not None:
+                raise Refused("resume_refused", held)
             await self._launch(run_id, self._resumed(run_id))
             return self._run(run_id)
 
         return cast(Document, plain(self._call(resume)))
 
     async def _resumed(self, run_id: str) -> None:
-        outcome = await self.svc.ctx.engine.resume(run_id)
-        summarize_again(self.svc.ctx, outcome)
+        ctx = self.svc.ctx
+        outcome = await ctx.engine.resume(run_id)
+        summarize_again(ctx, outcome)
+        outputs = outcome.outputs if outcome.status == "passed" else None
+        ctx.engine.ledger.write(settle_run(run_id, ENDING[outcome.status], ctx.at(), outputs))
 
     def workflow_triggers_list(self, workflow_id: str | None) -> list[Document]:
         def listed() -> list[Any]:

@@ -22,8 +22,9 @@ Lanes are `regression rest tools fallback cancel menu perf`; none named runs all
   second host on one home is refused by pid; a run's events stream in `seq` order; no bearer, 401.
 - `perf`: start to a healthy `/api/health`, three starts of `qma.serve` first, then the host.
 
-No model, no key, no ship home. Hosts run on throwaway homes with the operator's local control
-token from the OS vault, which `qma.serve` uses the same way; it is never printed.
+No model, no key, no ship home. Hosts run on throwaway homes through `lane_host.py`, with a
+bearer made for each home and kept in its `lane-bearer` file; the operator's control token in the
+OS vault is never read.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ import asyncio
 import contextlib
 import json
 import os
+import secrets
 import socket
 import statistics
 import subprocess
@@ -47,11 +49,13 @@ import psutil
 from common import LIVE_QMA, Log, boot, live, throwaway_home
 from ep2_lanes import AGENTS, ENGINE, clean_env
 from ep2_lanes import regression as harness_regression
+from lane_host import BEARER_FILE
 from qmx_engine.ledger.store import Reader
 
 PR: Final = "ep13"
 BASE: Final = "e34277ee77469e5058e66833dd0628782eed1e2a"
 BASE_TREE: Final = Path("D:/QMX-worktrees/eng-hg2")
+LANE_HOST: Final = Path(__file__).with_name("lane_host.py")
 CHAIN: Final = ENGINE / "tests" / "fixtures" / "workflows" / "script-chain"
 START_S: Final = 90.0
 
@@ -85,10 +89,12 @@ def free_port() -> int:
         return int(probe.getsockname()[1])
 
 
-def bearer() -> dict[str, str]:
-    from qmx_control.server import local_token  # noqa: PLC0415
-
-    return {"Authorization": f"Bearer {local_token()}"}
+def bearer(home: Path) -> dict[str, str]:
+    """The home's own lane bearer, made on first use."""
+    path = home / BEARER_FILE
+    if not path.exists():
+        path.write_text(secrets.token_urlsafe(32), encoding="utf-8")
+    return {"Authorization": f"Bearer {path.read_text(encoding='utf-8')}"}
 
 
 def healthy(port: int, headers: dict[str, str]) -> int | None:
@@ -115,11 +121,12 @@ def started(
 ) -> Iterator[tuple[httpx.Client, subprocess.Popen[bytes], float]]:
     """A host process on `home`, its client, and the seconds it took to answer `/api/health`."""
     port = free_port()
-    command = [sys.executable, "-m", *module, "serve", "--home", str(home), "--port", str(port)]
+    command = [sys.executable, str(LANE_HOST), *module, "serve", "--home", str(home)]
+    command += ["--port", str(port)]
     output = (log.path.parent / f"{log.path.stem}-{slug}.out").open("wb")
     began = time.perf_counter()
     process = subprocess.Popen(command, cwd=AGENTS, env=clean_env(), stdout=output, stderr=output)
-    headers = bearer()
+    headers = bearer(home)
     while healthy(port, headers) is None:
         if process.poll() is not None or time.perf_counter() - began > START_S:
             output.close()
@@ -361,7 +368,16 @@ def menu(log: Log) -> None:
             over_rest.get("status"),
         )
         second = subprocess.run(
-            [sys.executable, "-m", "qmx_engine.host", "serve", "--home", str(home), "--port", "1"],
+            [
+                sys.executable,
+                str(LANE_HOST),
+                "qmx_engine.host",
+                "serve",
+                "--home",
+                str(home),
+                "--port",
+                "1",
+            ],
             cwd=AGENTS,
             env=clean_env(),
             capture_output=True,
