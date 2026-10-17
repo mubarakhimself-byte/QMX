@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,66 @@ def test_a_failed_write_fails_only_its_caller_and_echoes_no_value(tmp_path: Path
 
     assert str(caught.value) == "ledger write failed: SQLITE_ERROR"
     assert after.seq == 2
+
+
+def test_a_disk_full_batch_leaves_no_gap_and_no_stored_failure(tmp_path: Path) -> None:
+    def cap_pages(extra: int) -> Callable[[Transaction], None]:
+        def operation(txn: Transaction) -> None:
+            (pages,) = txn.connection.execute("PRAGMA page_count").fetchone()
+            txn.connection.execute(f"PRAGMA max_page_count = {pages + extra}")
+
+        return operation
+
+    confirmed: dict[str, int] = {}
+    failed: list[str] = []
+    mutex = threading.Lock()
+    with Ledger.open(tmp_path) as ledger:
+        ledger.append("run", "log", {"id": "first"}, at=AT)
+        ledger.write(cap_pages(40))
+        barrier = threading.Barrier(16)
+
+        def burst(thread: int) -> None:
+            barrier.wait()
+            for i in range(40):
+                name, size = f"{thread}-{i}", 30_000 if (thread, i) == (0, 3) else 200
+                try:
+                    event = ledger.append("run", "log", {"id": name, "p": "x" * size}, at=AT)
+                except LedgerWriteError:
+                    with mutex:
+                        failed.append(name)
+                    continue
+                with mutex:
+                    confirmed[name] = event.seq
+
+        threads = [threading.Thread(target=burst, args=(t,)) for t in range(16)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        ledger.write(cap_pages(100_000))
+        after = ledger.append("run", "log", {"id": "after"}, at=AT)
+
+    with Reader.open(tmp_path) as reader:
+        stored = reader.events("run")
+    assert failed
+    assert [e.seq for e in stored] == list(range(1, len(stored) + 1))
+    by_id = {e.data["id"]: e.seq for e in stored}
+    assert {name: by_id[name] for name in confirmed} == confirmed
+    assert set(by_id) == {"first", "after", *confirmed}
+    assert after.seq == len(stored)
+
+
+def test_an_operation_that_writes_through_the_ledger_is_refused(tmp_path: Path) -> None:
+    with Ledger.open(tmp_path) as ledger:
+
+        def nested(txn: Transaction) -> None:
+            ledger.append("run", "log", {"nested": True}, at=AT)
+
+        with pytest.raises(LedgerWriteError, match=r"^a ledger operation cannot write"):
+            ledger.write(nested)
+        later = ledger.append("run", "log", {"i": 1}, at=AT)
+
+    assert later.seq == 1
 
 
 def test_refused_events_name_the_rule_and_not_the_value(tmp_path: Path) -> None:

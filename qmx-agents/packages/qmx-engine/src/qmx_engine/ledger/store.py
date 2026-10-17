@@ -104,7 +104,8 @@ class _WriterLock:
 
 class Transaction:
     """What a write operation sees on the writer thread: the connection, inside an open
-    transaction, and the next `seq` of a run counting writes not yet committed."""
+    transaction, and the next `seq` of a run counting writes not yet committed. An operation
+    never runs BEGIN, COMMIT, ROLLBACK or RELEASE: the writer owns the transaction."""
 
     def __init__(self, connection: sqlite3.Connection, committed: dict[str, int]) -> None:
         self.connection = connection
@@ -183,7 +184,11 @@ class Ledger:
         self.close()
 
     def write[T](self, operation: Operation[T]) -> T:
-        """Run `operation` on the writer thread and return its result once committed."""
+        """Run `operation` on the writer thread and return its result once committed. An
+        operation does all its work through its `Transaction` and never calls `write` or `append`
+        itself: the writer thread would wait on its own queue forever, so that is refused."""
+        if threading.current_thread() is self._thread:
+            raise LedgerWriteError("a ledger operation cannot write through the ledger again")
         future: Future[object] = Future()
         with self._close_mutex:
             if self._closed:
@@ -263,6 +268,7 @@ class Ledger:
                 self._commit(connection, batch)
             except Exception as error:
                 failure = _write_error(error) if isinstance(error, sqlite3.Error) else error
+                self._seqs.clear()
                 for unresolved in batch:
                     if not unresolved.future.done():
                         unresolved.future.set_exception(failure)
@@ -280,35 +286,49 @@ class Ledger:
                 item.future.set_exception(_write_error(error))
             return
         done: list[tuple[_Item, object]] = []
-        for item in batch:
+        for index, item in enumerate(batch):
             try:
                 connection.execute("SAVEPOINT operation")
                 result = item.operation(txn)
                 connection.execute("RELEASE operation")
             except Exception as error:
                 txn.drop_operation()
+                failure = _write_error(error) if isinstance(error, sqlite3.Error) else error
+                # SQLITE_FULL, IOERR and NOMEM roll back the whole transaction, not only the
+                # savepoint; running on would autocommit later operations outside it.
                 try:
+                    if not connection.in_transaction:
+                        raise failure
                     connection.execute("ROLLBACK TO operation")
                     connection.execute("RELEASE operation")
-                except sqlite3.Error:
-                    pass
-                item.future.set_exception(
-                    _write_error(error) if isinstance(error, sqlite3.Error) else error
-                )
+                except Exception:
+                    self._abandon(connection, [i for i, _ in done] + batch[index:], failure)
+                    return
+                item.future.set_exception(failure)
                 continue
             txn.keep_operation()
             done.append((item, result))
         try:
             connection.execute("COMMIT")
         except sqlite3.Error as error:
-            if connection.in_transaction:
-                connection.execute("ROLLBACK")
-            for item, _ in done:
-                item.future.set_exception(_write_error(error))
+            self._abandon(connection, [i for i, _ in done], _write_error(error))
             return
         txn.keep_batch()
         for item, result in done:
             item.future.set_result(result)
+
+    def _abandon(
+        self, connection: sqlite3.Connection, items: list[_Item], failure: BaseException
+    ) -> None:
+        """Roll the batch back, fail every caller still waiting, and forget the cached seqs so
+        the next append reads `max(seq)` from the file."""
+        try:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+        finally:
+            self._seqs.clear()
+            for item in items:
+                item.future.set_exception(failure)
 
 
 @dataclass(frozen=True, slots=True)
