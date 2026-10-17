@@ -14,6 +14,9 @@ from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.validate import checked, validate
 from qmx_engine.ledger.store import Ledger, Reader, ledger_path
 from qmx_engine.runner import Engine, Outcome, Refused, new_run_id
+from qmx_engine.service.api import explain_run
+from qmx_engine.service.context import Refused as ServiceRefused
+from qmx_engine.service.explain import text
 
 EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2, "interrupted": 3}
 
@@ -45,6 +48,10 @@ def parser() -> argparse.ArgumentParser:
     resume = commands.add_parser("resume", help="pick a run up again from the ledger")
     resume.add_argument("run_id")
     resume.add_argument("--home", type=Path, required=True)
+    why = commands.add_parser("explain", help="print what a run did, node by node, and why")
+    why.add_argument("run_id")
+    why.add_argument("--home", type=Path, required=True)
+    why.add_argument("--json", action="store_true", help="print the explain document as JSON")
     return cli
 
 
@@ -100,8 +107,24 @@ def ledger_stats(home: Path) -> int:
     return 0
 
 
+def explain(args: argparse.Namespace) -> int:
+    try:
+        document = explain_run(args.home, args.run_id)
+    except ServiceRefused as refused:
+        print(f"refused: {refused}")
+        return 1
+    if args.json:
+        print(json.dumps(document, indent=2))
+    else:
+        for line in text(document):
+            print(line)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command == "explain":
+        return explain(args)
     if args.command == "ledger":
         return ledger_stats(args.home)
     if args.command == "run":

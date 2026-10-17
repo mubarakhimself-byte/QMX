@@ -22,6 +22,7 @@ from qmx_engine.nodes.join import Join
 from qmx_engine.nodes.loop import Loop
 from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait, resume_at
+from qmx_engine.ports.library import Bundle
 from qmx_engine.runner import Engine, Outcome
 from qmx_engine.settings import DEFAULTS
 
@@ -180,3 +181,12 @@ def events_of(home: Path, run_id: str) -> list[Event]:
 
 def kinds(events: list[Event], node_id: str) -> list[str]:
     return [e.kind for e in events if e.data.get("node_id") == node_id]
+
+
+CHAIN = Path(__file__).resolve().parent / "fixtures" / "workflows" / "script-chain"
+CHAIN_TOTAL = {"total": {"main": {"total": 20}}}
+
+
+def edited(bundle: Bundle, script: str, text: str) -> Bundle:
+    """The bundle with one script's text replaced: a real edit, so a new content hash."""
+    return Bundle(bundle.definition, {**bundle.files, script: dedent(text).encode()})

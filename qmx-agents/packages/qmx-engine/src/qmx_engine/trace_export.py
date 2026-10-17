@@ -1,0 +1,89 @@
+"""At the end of each drive of a run: the span tree as a journal, that journal as a `trace`
+artifact on the run's branch, and the run summary as a `workflow-run` object, linked `produced-by`
+and `run-of` (AD-15, LIBRARY-REQUESTS L13, L14).
+
+The journal is `<home>/runs/<run_id>/trace-<last seq>.jsonl`, written through
+`qmx_ledger.RunJournal` with the run's recorded clock, so exporting the same ledger twice writes
+nothing new. Each drive adds one `workflow-run` object (SOLUTION-DESIGN 3.1); all of a run's writes
+carry the principal `run:<run_id>`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from pathlib import Path
+
+from pydantic import JsonValue
+from qmx_ledger.journal import RunJournal
+
+from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.spans import Span
+from qmx_engine.ledger.store import Reader
+from qmx_engine.ports.library import JsonObject, LibraryPort, Mode, RunStatus, RunSummary, Stored
+
+PLACEMENT: JsonObject = {"name": "pc", "kind": "local"}
+
+
+def totals(events: list[Event], spans: list[Span]) -> JsonObject:
+    tokens: dict[str, int] = {}
+    for span in spans:
+        for name, count in span.tokens.items():
+            tokens[name] = tokens.get(name, 0) + count
+    costs = [span.cost_estimate_usd for span in spans if span.cost_estimate_usd is not None]
+    return {
+        "attempts": len(spans),
+        "events": len(events),
+        "tokens": dict[str, JsonValue](tokens),
+        "cost_estimate_usd": sum(costs) if costs else None,
+    }
+
+
+def export(
+    home: Path,
+    run_id: str,
+    library: LibraryPort,
+    *,
+    workflow_item: str,
+    object_id: str,
+    mode: Mode,
+    status: RunStatus,
+    reason: str | None,
+    started_by: str,
+) -> Stored:
+    with Reader.open(home) as reader:
+        events = reader.events(run_id)
+        spans = reader.spans(run_id)
+    summed = totals(events, spans)
+    path = home / "runs" / run_id / f"trace-{events[-1].seq}.jsonl"
+    if not path.exists():
+        at = events[-1].at
+        with RunJournal(path, run_id, clock=lambda: at) as journal:
+            for span in spans:
+                journal.append("span", asdict(span))
+            journal.append("summary", {"status": status, "reason": reason, "totals": summed})
+    principal = f"run:{run_id}"
+    trace = library.put_artifact(
+        path.read_bytes(),
+        "trace",
+        {"format": "jsonl", "spans": len(spans), "journal": path.name},
+        run_id=run_id,
+        principal=principal,
+    )
+    summary = library.put_run_summary(
+        RunSummary(
+            run_id=run_id,
+            workflow_item=workflow_item,
+            object_id=object_id,
+            mode=mode,
+            status=status,
+            reason=reason,
+            totals=summed,
+            placement=PLACEMENT,
+            trace_artifact_hash=trace.blob,
+            started_by=started_by,
+        ),
+        principal=principal,
+    )
+    library.link(trace.object_id, "produced-by", summary.object_id, principal=principal)
+    library.link(summary.object_id, "run-of", object_id, principal=principal)
+    return summary
