@@ -1,0 +1,148 @@
+"""The template pack's catalogue: the 31 templates and their needs, as ENGINE-PLAN Appendix I
+lists them.
+
+Each row names its plain name (ruling 35), the cards in research files 15, 16 or 17 it was built
+from, what it waits for, and its folder once a PR has built it. A row with no folder is "not yet
+built". A row with `needs` gets a definition naming the same `meta.needs` and installs as a
+validated draft; any other built row is tested on real models and published disabled.
+`test_cost` is what the row's test run cost when its PR measured it on the cheapest test
+candidates.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final, Literal
+
+from pydantic import JsonValue
+
+from qmx_engine.definition.model import Need
+from qmx_engine.triggers.cron import Cron
+
+type CardFile = Literal["15", "16", "17"]
+
+PACK: Final = Path(__file__).resolve().parent
+SHARED: Final = PACK / "_shared"
+
+
+@dataclass(frozen=True, slots=True)
+class Card:
+    file: CardFile
+    """`15-templates-researcher.md`, `16-templates-trader-risk.md` or `17-templates-dev-pm-lab.md`
+    under `tracker/qma-v2/research/methodology/`."""
+    card: str
+    """The card's id in that file's headings, such as `R1` (file 16 reuses `R1` for a risk card)."""
+
+
+@dataclass(frozen=True, slots=True)
+class Template:
+    id: str
+    name: str
+    cards: tuple[Card, ...]
+    pr: str
+    needs: tuple[Need, ...] = ()
+    folder: str | None = None
+    """The workflow folder under the pack, which is also the workflow's id."""
+    triggers: tuple[Cron, ...] = ()
+    """The card's schedule. Install adds each one disabled; the manual kind is in the definition."""
+    test_inputs: JsonValue = None
+    test_cost: str | None = None
+
+
+def card(file: CardFile, *ids: str) -> tuple[Card, ...]:
+    return tuple(Card(file, found) for found in ids)
+
+
+NODE: Final[tuple[Need, ...]] = ("trading-node",)
+QMB: Final[tuple[Need, ...]] = ("qmb-door",)
+
+CATALOG: Final[tuple[Template, ...]] = (
+    Template(
+        "RS1",
+        "Paper scout to research note",
+        card("15", "R1"),
+        "TP1",
+        folder="rs1-paper-scout",
+        triggers=(Cron("0 */6 * * *", "UTC"),),
+        test_inputs={"fixture": True},
+        test_cost="TP1 lane 2: 5 Kimi spans; 47k in, 8k out, 86k cache read; 233 s",
+    ),
+    Template(
+        "T3",
+        "News and macro calendar watch",
+        card("16", "T3"),
+        "TP1",
+        folder="t3-news-calendar-watch",
+        triggers=(Cron("5 0 * * *", "UTC"),),
+        test_inputs={"fixture": "surprise"},
+        test_cost="TP1 lane 3: quiet day 0 tokens, 1 s; surprise day 1 Kimi span, 6k in, 1k out",
+    ),
+    Template("RS0", "Idea grill to term sheet", card("15", "R0"), "TP2"),
+    Template("RS2", "Source to component card", card("15", "R2", "R5"), "TP2"),
+    Template("RS4", "Literature review on a topic", card("15", "R4"), "TP2"),
+    Template("A", "Fill the Library, funnel stages 1 to 7", card("15", "R5"), "TP2"),
+    Template("RV", "Weekly review", card("15", "R9") + card("17", "D10"), "TP2"),
+    Template("DB", "Desk brief", card("16", "T1", "T2", "T10"), "TP3"),
+    Template("T4", "Research desk overnight", card("16", "T4"), "TP3"),
+    Template("DM", "Demo monitor and execution quality", card("16", "T5", "T9"), "TP3", NODE),
+    Template("T7", "Trade journal review in R", card("16", "T7"), "TP3", NODE),
+    Template("GW", "Guard watchdogs", card("16", "R1", "R6"), "TP3", NODE),
+    Template("RK2", "Correlation and exposure drift", card("16", "R2"), "TP3", NODE),
+    Template("DC", "Decay and limit report", card("16", "R3") + card("17", "P3"), "TP3", NODE),
+    Template("RK5", "Stress tests", card("16", "R5"), "TP3", NODE),
+    Template("RK8", "Incident post-mortem", card("16", "R8"), "TP3", NODE),
+    Template(
+        "P1",
+        "Portfolio combination study",
+        card("17", "P1"),
+        "TP3",
+        ("trading-node", "risk-session"),
+    ),
+    Template("P2", "Daily book report", card("17", "P2"), "TP3", ("broker-read-token",)),
+    Template(
+        "PP",
+        "Proposal pack he signs",
+        card("16", "T6") + card("17", "P4"),
+        "TP3",
+        ("trading-node", "risk-session"),
+    ),
+    Template("B", "Build and prove, funnel stages 8 to 12", card("17", "D2", "D3"), "TP4", QMB),
+    Template("RS3", "Source to a Lab test", card("15", "R3") + card("16", "T8"), "TP4", QMB),
+    Template("RS6", "Hypotheses from dead ends", card("15", "R6"), "TP4", ("real-library",)),
+    Template("RS8", "Big-data question", card("15", "R8"), "TP4", ("rlm",)),
+    Template("L1", "Idea to first result", card("17", "L1"), "TP4", QMB),
+    Template("L4", "Overnight Lab loop", card("17", "L4"), "TP4", QMB),
+    Template("BC", "Build a component or indicator", card("17", "D1", "D5"), "TP4", ("sandbox",)),
+    Template("D3", "Iterate against QMB with overfit guards", card("17", "D3"), "TP4", QMB),
+    Template("D4", "Variant generation and comparison", card("17", "D4"), "TP4", QMB),
+    Template(
+        "D6", "ML training run with a holdout", card("17", "D6"), "TP4", ("qmb-door", "sandbox")
+    ),
+    Template("MA", "Mini app lifecycle", card("17", "D7", "D8"), "TP4", ("sandbox", "app-op")),
+    Template("D9", "Mini-app-to-mini-app pipeline", card("17", "D9"), "TP4", ("app-op",)),
+)
+
+SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
+    "preflight/scripts/new_ids.py": ("rs1-paper-scout/scripts/new_ids.py",),
+    "paper-read/prompts/read.md": ("rs1-paper-scout/prompts/read.md",),
+    "paper-read/schemas/cards.json": ("rs1-paper-scout/schemas/cards.json",),
+    "research-harness/scripts/citation_check.py": ("rs1-paper-scout/scripts/citation_check.py",),
+    "render-and-grade/scripts/render_and_grade.py": (
+        "rs1-paper-scout/scripts/render_and_grade.py",
+        "t3-news-calendar-watch/scripts/render_and_grade.py",
+    ),
+    "render-and-grade/scripts/stop.py": (
+        "rs1-paper-scout/scripts/stop.py",
+        "t3-news-calendar-watch/scripts/stop.py",
+    ),
+}
+"""Each shared block file, under `_shared/`, to its copies in the templates. A run holds only its
+own folder's files, so a template carries a byte-identical copy of each block file it uses."""
+
+
+def find(template_id: str) -> Template:
+    for template in CATALOG:
+        if template.id == template_id:
+            return template
+    raise KeyError(template_id)

@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["answer", "claims", "gaps"],
+  "properties": {
+    "answer": {"type": "string"},
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "quote", "source_id"],
+        "properties": {
+          "text": {"type": "string"},
+          "quote": {"type": "string"},
+          "source_id": {"type": "string"}
+        }
+      }
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -14,6 +14,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
+from qmx_engine.definition.validate import needs_line
 from qmx_engine.ports.library import JsonObject, RunStatus
 from qmx_engine.service.context import Caller, Context, Refused
 from qmx_engine.service.drafts import Drafts
@@ -56,6 +57,10 @@ class Tests:
             codes = " ".join(sorted({p.code for p in problems}))
             raise Refused("invalid", f"draft {item} does not validate: {codes}")
         bundle, variant_of = self.drafts.resolved(draft.bundle)
+        if bundle.needs():
+            raise Refused(
+                "needs_unmet", f"draft {item} cannot be tested; {needs_line(bundle.needs())}"
+            )
         if variant_of is not None:
             fields: JsonObject = {"caller_kind": caller.kind, "variant_of": variant_of}
             draft = library.put_draft(

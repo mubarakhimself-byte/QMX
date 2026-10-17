@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source_id", "finding", "claims"],
+        "properties": {
+          "source_id": {"type": "string"},
+          "finding": {"type": "string"},
+          "claims": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["text", "quote", "source_id"],
+              "properties": {
+                "text": {"type": "string"},
+                "quote": {"type": "string"},
+                "source_id": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

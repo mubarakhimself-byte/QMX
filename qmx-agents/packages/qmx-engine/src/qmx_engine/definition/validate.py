@@ -7,7 +7,7 @@ editor can mark them all at once. An empty list means the folder is in the `vali
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Collection, Iterator
+from collections.abc import Collection, Iterator, Sequence
 from pathlib import Path
 from typing import Final
 
@@ -73,13 +73,21 @@ def problems(
 
 
 def runnable(workflow: Workflow, registry: Registry = REGISTRY) -> list[Problem]:
-    """What a run refuses that a draft may hold: a kind whose executor is not built yet."""
-    return [
+    """What a run refuses that a draft may hold: a kind whose executor is not built yet, and a
+    need (`meta.needs`) that nothing meets yet."""
+    found = [
         Problem("kind_not_available", f"nodes[{i}].type", "this node kind cannot run yet")
         for i, node in enumerate(workflow.nodes)
         if (kind := registry.kind(node.type)) is not None and not node.disabled
         if kind is not NOTE and not kind.available
     ]
+    if workflow.meta.needs:
+        found.append(Problem("needs_unmet", "meta.needs", needs_line(workflow.meta.needs)))
+    return found
+
+
+def needs_line(needs: Sequence[str]) -> str:
+    return f"needs: {', '.join(needs)}"
 
 
 def checked(root: Path) -> tuple[WorkflowFolder, Workflow] | list[Problem]:

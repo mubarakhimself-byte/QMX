@@ -125,6 +125,12 @@ class Bundle:
             return None
         return content_hash(self.folder())
 
+    def needs(self) -> list[str]:
+        """`meta.needs`: the pieces of QMX this workflow waits for."""
+        meta = self.definition.get("meta")
+        found = meta.get("needs") if isinstance(meta, dict) else None
+        return [str(need) for need in found] if isinstance(found, list) else []
+
 
 @dataclass(frozen=True, slots=True)
 class Stored:

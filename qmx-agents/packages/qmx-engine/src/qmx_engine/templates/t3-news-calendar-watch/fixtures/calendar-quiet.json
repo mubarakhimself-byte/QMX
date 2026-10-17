@@ -1,0 +1,18 @@
+{
+  "note": "A synthetic calendar day for the template's test runs, with every actual close to its forecast.",
+  "date": "2026-10-16",
+  "events": [
+    {"id": "EUR-0900-CPI Flash Estimate y/y", "title": "CPI Flash Estimate y/y", "currency": "EUR",
+     "time_utc": "09:00", "impact": "high", "forecast": "2.1%", "previous": "2.2%", "actual": "2.1%",
+     "typical_surprise": 0.1, "source": "https://ec.europa.eu/eurostat"},
+    {"id": "GBP-0930-Retail Sales m/m", "title": "Retail Sales m/m", "currency": "GBP",
+     "time_utc": "09:30", "impact": "medium", "forecast": "0.3%", "previous": "-0.2%", "actual": "0.4%",
+     "typical_surprise": 0.4, "source": "https://www.ons.gov.uk"},
+    {"id": "USD-1230-Core Retail Sales m/m", "title": "Core Retail Sales m/m", "currency": "USD",
+     "time_utc": "12:30", "impact": "high", "forecast": "0.4%", "previous": "0.3%", "actual": "0.5%",
+     "typical_surprise": 0.3, "source": "https://www.census.gov/retail"},
+    {"id": "JPY-2350-Trade Balance", "title": "Trade Balance", "currency": "JPY",
+     "time_utc": "23:50", "impact": "low", "forecast": "-0.42T", "previous": "-0.51T", "actual": "-0.45T",
+     "typical_surprise": 0.2, "source": "https://www.customs.go.jp/english"}
+  ]
+}

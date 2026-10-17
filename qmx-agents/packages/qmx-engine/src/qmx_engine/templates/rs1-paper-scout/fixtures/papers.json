@@ -1,0 +1,53 @@
+{
+  "note": "Synthetic papers written for the template's test runs. They are not real arXiv records.",
+  "papers": [
+    {
+      "id": "2610.90001",
+      "title": "Overnight drift in major currency pairs",
+      "abstract": "We document that EURUSD and USDJPY earn most of their daily return between the New York close and the London open. Using hourly quotes from 2012 to 2023, a long-overnight rule earns an annualised Sharpe ratio of 0.8 after a cost of 0.4 pips per side. On a held-out sample from 2021 to 2023 the Sharpe ratio falls to 0.5. We tried 12 entry and exit times.",
+      "authors": ["A. Fixture", "B. Example"],
+      "published": "2026-10-15",
+      "url": "http://arxiv.org/abs/2610.90001v1"
+    },
+    {
+      "id": "2610.90002",
+      "title": "Claims reserving with gradient boosting for motor insurance",
+      "abstract": "We fit gradient-boosted trees to motor insurance claim triangles from four European insurers and reduce reserve error by 11% against the chain-ladder method.",
+      "authors": ["C. Fixture"],
+      "published": "2026-10-15",
+      "url": "http://arxiv.org/abs/2610.90002v1"
+    },
+    {
+      "id": "2610.90003",
+      "title": "Volatility breakouts in gold futures around US data releases",
+      "abstract": "Gold futures move most in the 15 minutes after US inflation releases. A breakout rule that enters when the first five-minute bar exceeds 1.5 times its 20-day average range earns a Sharpe ratio of 2.6 on daily returns from 2015 to 2024, before costs. The paper does not test the rule outside this period.",
+      "authors": ["D. Fixture", "E. Example"],
+      "published": "2026-10-16",
+      "url": "http://arxiv.org/abs/2610.90003v1"
+    },
+    {
+      "id": "2610.90004",
+      "title": "A survey of sustainable investing indices",
+      "abstract": "We review 140 papers on ESG index construction and summarise how providers weight environmental scores.",
+      "authors": ["F. Fixture"],
+      "published": "2026-10-16",
+      "url": "http://arxiv.org/abs/2610.90004v1"
+    },
+    {
+      "id": "2610.90005",
+      "title": "Regime filters cut drawdowns in trend following on index futures",
+      "abstract": "A two-state volatility regime filter applied to a 50-day trend rule on S&P 500 and Euro Stoxx 50 futures cuts maximum drawdown from 31% to 18% over 2000 to 2024. Costs of one tick per trade are included. Out of sample, from 2019 to 2024, the filtered rule keeps a Sharpe ratio of 0.7 against 0.6 unfiltered. Code is at https://example.org/regime-trend.",
+      "authors": ["G. Fixture"],
+      "published": "2026-10-16",
+      "url": "http://arxiv.org/abs/2610.90005v1"
+    },
+    {
+      "id": "2610.90006",
+      "title": "Existence of equilibrium prices with ambiguity-averse agents",
+      "abstract": "We prove that an equilibrium exists in a continuous-time economy with ambiguity-averse agents and give conditions for its uniqueness.",
+      "authors": ["H. Fixture"],
+      "published": "2026-10-16",
+      "url": "http://arxiv.org/abs/2610.90006v1"
+    }
+  ]
+}

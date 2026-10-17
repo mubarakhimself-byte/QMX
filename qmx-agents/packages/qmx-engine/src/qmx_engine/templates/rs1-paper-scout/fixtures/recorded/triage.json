@@ -1,0 +1,12 @@
+{
+  "keep": [
+    {"id": "2610.90001", "why": "An overnight-hold rule on EURUSD and USDJPY can be tested on hourly quotes."},
+    {"id": "2610.90005", "why": "A volatility regime filter on a trend rule can be tested on index futures."},
+    {"id": "2610.90003", "why": "A breakout rule on gold futures after US inflation data can be tested on five-minute bars."}
+  ],
+  "dropped": [
+    {"id": "2610.90002", "reason": "insurance, not a traded market"},
+    {"id": "2610.90004", "reason": "survey, no test"},
+    {"id": "2610.90006", "reason": "pure theory, no data"}
+  ]
+}
