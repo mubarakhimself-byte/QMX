@@ -60,7 +60,7 @@ def test_a_second_writer_process_is_refused_with_the_holders_pid(tmp_path: Path)
 
 def test_reopening_after_close_continues_seq_and_applies_no_migration(tmp_path: Path) -> None:
     with Ledger.open(tmp_path) as first:
-        assert first.applied == [1]
+        assert first.applied == [1, 2]
         first.append("run", "run_created", {"mode": "live"}, at=AT)
         first.append("run", "clock_tick", {"now": AT}, at=AT)
 
@@ -75,7 +75,7 @@ def test_reopening_after_close_continues_seq_and_applies_no_migration(tmp_path: 
             (2, "clock_tick", {"now": AT}),
             (3, "run_input", {"topic": "papers"}),
         ]
-        assert reader.stats().schema_version == 1
+        assert reader.stats().schema_version == 2
 
 
 def test_a_failed_write_fails_only_its_caller_and_echoes_no_value(tmp_path: Path) -> None:

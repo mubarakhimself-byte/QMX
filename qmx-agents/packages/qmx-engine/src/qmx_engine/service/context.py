@@ -11,14 +11,16 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from qmx_engine.definition.validate import NOT_ROLES
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.inbox import InboxPort
 from qmx_engine.ports.library import LibraryPort
 from qmx_engine.ports.settings import SettingsPort
-from qmx_engine.runner import Engine
+
+if TYPE_CHECKING:
+    from qmx_engine.runner import Engine
 
 type CallerKind = Literal["user", "agent", "workflow"]
 type State = Literal["draft", "validated", "tested", "published", "enabled", "disabled", "archived"]

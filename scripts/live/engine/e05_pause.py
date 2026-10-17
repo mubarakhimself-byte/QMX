@@ -1,13 +1,16 @@
-"""EP11 lane 3 (E5): a used-up plan window pauses the run, which resumes alone after the reset.
+"""EP11 lane 3 (E5), EP12 lane 1: a used-up plan window pauses the run, and the scheduler's
+ticker resumes it alone after the reset.
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/e05_pause.py`
-Writes `evidence/ep11/<ENGINE_LOG_PREFIX>ep11-e05.log`. No plan turn and no provider spend: a
-throwaway home, the fake model on a key row. A rejected five-hour reading that resets in
-`RESET_IN_S` seconds is fed to the harness's plan watch as a CLI `rate_limit_event`, the way EP0's
-`p_limits` does. The workflow runs an `llm` node on `claude/haiku` beside a slow script, and a
-second `llm` node after the script. At the reset the lane feeds a fresh 10% reading, which is what
-the CLI reports once a window opens again.
+Writes `evidence/ep11/<ENGINE_LOG_PREFIX>ep11-e05.log`, or the log `main` is given. No plan
+turn and no provider spend: a throwaway home, the fake model on a key row. A rejected five-hour
+reading that resets in `RESET_IN_S` seconds is fed to the harness's plan watch as a CLI
+`rate_limit_event`, the way EP0's `p_limits` does. The workflow runs an `llm` node on
+`claude/haiku` beside a slow script, and a second `llm` node after the script. At the reset the
+lane feeds a fresh 10% reading, which is what the CLI reports once a window opens again. Since
+EP12 the run returns `waiting` at the pause and the ticker (`Scheduler.serve`, ticking every
+second) wakes it.
 
 The engine's admission reads the real `Harness.usage()`. Only the chat itself is routed: the plan
 profile has no login on a throwaway home, so `Routed` starts each chat on the fake key row, and the
@@ -23,12 +26,17 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from agent_lanes import PR, edge, node, run, workflow
+from agent_lanes import PR, edge, node, read, workflow
 from common import Log, boot, live, opened, throwaway_home
 from qma.harness import ChatHooks
-
-from qmx_engine.ports.harness_adapter import HarnessAdapter
-from qmx_engine.settings import DEFAULTS
+from qmx_engine.definition.validate import checked
+from qmx_engine.ledger.store import Reader
+from qmx_engine.ports.harness_adapter import HarnessAdapter, HarnessPort
+from qmx_engine.ports.settings import StaticSettings
+from qmx_engine.runner import Outcome
+from qmx_engine.service.api import EngineService
+from qmx_engine.settings import DEFAULTS, Setting
+from qmx_engine.triggers.ticker import Scheduler
 
 RESET_IN_S = 15
 SLACK_S = 2
@@ -76,15 +84,47 @@ class Routed(HarnessAdapter):
         )
 
 
-async def main() -> int:
+async def woken(
+    engine_home: Path, root: Path, port: HarnessPort, settings: dict[str, Setting]
+) -> tuple[Outcome, int]:
+    """Start the run, then serve the ticker until the run finishes; the start's outcome and how
+    many wakes the ticker made."""
+    found = checked(root)
+    if isinstance(found, list):
+        raise SystemExit(f"BLOCKED: {root} does not validate: {found}")
+    with EngineService.open(engine_home, settings=StaticSettings(settings), harness=port) as svc:
+        first = await svc.ctx.engine.start(root, found[1], mode="live", inputs=None)
+        ticker = Scheduler(svc.ctx)
+        stop = asyncio.Event()
+        wakes = 0
+
+        async def watch() -> None:
+            nonlocal wakes
+            deadline = time.monotonic() + RESET_IN_S + 60
+            while time.monotonic() < deadline:
+                with Reader.open(engine_home) as reader:
+                    events = reader.events(first.run_id)
+                wakes = sum(
+                    1 for e in events if e.kind == "run_resumed" and e.data["reason"] == "limit"
+                )
+                if events[-1].kind == "run_finished":
+                    break
+                await asyncio.sleep(0.5)
+            stop.set()
+
+        await asyncio.gather(ticker.serve(stop), watch())
+    return first, wakes
+
+
+async def main(log: Log | None = None, pr: str = PR) -> int:
     from fake_model import FakeModel, Turn, text  # noqa: PLC0415
     from qma.harness import TestMode  # noqa: PLC0415
 
-    log = Log(PR, "ep11-e05")
+    log = log or Log(PR, "ep11-e05")
     boot()
     live.use_fake_key()
     fake = FakeModel([Turn([text(ANSWER)]) for _ in range(8)]).start()
-    home = throwaway_home(PR, "e05")
+    home = throwaway_home(pr, "e05")
     live.put_providers(home, {"fake": live.fake_row(fake.url)})
     root = workflow(
         "pause",
@@ -99,7 +139,7 @@ async def main() -> int:
     )
     resets = int(time.time()) + RESET_IN_S
     expected = (datetime.fromtimestamp(resets, UTC) + timedelta(seconds=SLACK_S)).isoformat()
-    settings = {**DEFAULTS, "limits.slack": SLACK_S}
+    settings: dict[str, Setting] = {**DEFAULTS, "limits.slack": SLACK_S, "scheduler.tick": 1}
     try:
         async with opened(home, test=TestMode(loopback_http_provider=True)) as h:
             h.harness._deps.on_plan_limits(
@@ -113,9 +153,7 @@ async def main() -> int:
                     }
                 )
             )
-            log(
-                f"fed a rejected five-hour reading; reset {datetime.fromtimestamp(resets, UTC)}"
-            )
+            log(f"fed a rejected five-hour reading; reset {datetime.fromtimestamp(resets, UTC)}")
 
             async def reset() -> None:
                 await asyncio.sleep(max(resets - time.time(), 0) + 0.5)
@@ -133,10 +171,10 @@ async def main() -> int:
 
             feeder = asyncio.create_task(reset())
             started = time.monotonic()
-            outcome, events, spans = await run(
-                throwaway_home(PR, "e05-engine"), root, Routed(h.harness), settings, mode="live"
-            )
+            engine_home = throwaway_home(pr, "e05-engine")
+            first, wakes = await woken(engine_home, root, Routed(h.harness), settings)
             took = time.monotonic() - started
+            events, spans = read(engine_home, first.run_id)
             await feeder
             needs = [
                 b["content"]
@@ -162,7 +200,11 @@ async def main() -> int:
                 f"span {span.node_id} attempt {span.attempt} {span.status} "
                 f"{span.profile}/{span.model}"
             )
-    log(f"run {outcome.run_id}: {outcome.status} after {took:.1f} s; needs_you blocks: {needs}")
+    finished = events[-1].data.get("status") if events[-1].kind == "run_finished" else None
+    log(
+        f"run {first.run_id}: start returned {first.status}, ticker wakes {wakes}, finished "
+        f"{finished} after {took:.1f} s; needs_you blocks: {needs}"
+    )
     index = {e.seq: e for e in events}
     kinds = [(e.seq, e.kind, e.data.get("node_id")) for e in index.values()]
     waited = [e.data for e in events if e.kind == "node_waiting"]
@@ -185,9 +227,10 @@ async def main() -> int:
         {"slow": slow_done, "paused": paused, "resumed": resumed, "after": after_start},
     )
     log.check(
-        "the run resumed alone after the reset and passed",
-        outcome.status == "passed" and took >= RESET_IN_S,
-        {"status": outcome.status, "seconds": round(took, 1)},
+        "the start returned waiting and the ticker resumed the run alone after the reset; it "
+        "passed",
+        first.status == "waiting" and wakes >= 1 and finished == "passed" and took >= RESET_IN_S,
+        {"start": first.status, "wakes": wakes, "finished": finished, "seconds": round(took, 1)},
     )
     return log.verdict()
 
