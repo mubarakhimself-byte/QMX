@@ -1,6 +1,7 @@
 """Drain and pause (AD-9): a model node held at a usage limit drains the run. Scripts go on, no new
-model node starts, the run pauses once nothing runs, and its own timer resumes it after the reset
-with nobody asked. A refusal no reset lifts is not a limit wait."""
+model node starts, the run pauses once nothing runs, and it resumes itself after the reset with
+nobody asked, at once when the drain outlasted the reset. A refusal no reset lifts is not a
+limit wait."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fake_port import CARD, OPEN, FakePort, agent, agent_files, drive, events_of
 from flows import edge, folder, node
 
@@ -19,12 +21,19 @@ from qmx_engine.settings import DEFAULTS
 
 SLOW = """
 import json, time
-time.sleep(0.5)
+time.sleep({seconds})
 print(json.dumps("scripted"))
 """
 
 
-def test_a_limit_drains_the_run_then_its_timer_resumes_it_after_the_reset(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("reset_in", "script_seconds"),
+    [(2, 0.5), (1, 4)],
+    ids=["reset-after-the-drain", "drain-outlasts-the-reset"],
+)
+def test_a_limit_drains_the_run_then_it_resumes_alone_after_the_reset(
+    tmp_path: Path, reset_in: float, script_seconds: float
+) -> None:
     root = agent_files(
         folder(
             tmp_path / "wf",
@@ -35,10 +44,10 @@ def test_a_limit_drains_the_run_then_its_timer_resumes_it_after_the_reset(tmp_pa
                 agent("after"),
             ],
             {"start": {"main": [edge("first"), edge("slow")]}, "slow": {"main": [edge("after")]}},
-            {"slow": SLOW},
+            {"slow": SLOW.format(seconds=script_seconds)},
         )
     )
-    reset = (datetime.now(UTC) + timedelta(seconds=2)).isoformat()
+    reset = (datetime.now(UTC) + timedelta(seconds=reset_in)).isoformat()
     port = FakePort(CARD, CARD, uses=[PlanUse(1.0, reset, reset, None), OPEN])
 
     outcome = asyncio.run(

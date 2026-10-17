@@ -348,6 +348,8 @@ class Run:
         self.inflight: dict[asyncio.Task[None], StartNode] = {}
         self.seen: dict[str, datetime] = {}
         """Idempotency key of an attempt to when it last wrote an event, for the watchdog."""
+        self.woke: str | None = None
+        """The reset the run last woke itself at."""
         self.zone = workspace(engine.home, workflow.id) / "runs" / run_id
         self.executors = self.build_executors()
 
@@ -541,14 +543,17 @@ class Run:
             if wake is None:
                 return outcome
             await self.engine.until(wake)
+            self.woke = wake
             self.append("run_resumed", {"reason": "limit"})
 
     def wake(self, ended: Finish | Park | Pause | Wait | None) -> str | None:
-        """When a limit pause's reset is still ahead, the instant the run wakes itself."""
+        """The instant a limit pause wakes the run; at once when a drain outlasted the reset. A
+        pause that names the reset the run already woke at, now past, does not wake it again, so
+        a stale reset cannot spin the run."""
         if not isinstance(ended, Pause) or ended.reason != "limit" or ended.resume_at is None:
             return None
         ahead = datetime.fromisoformat(ended.resume_at) > self.engine.wall()
-        return ended.resume_at if ahead else None
+        return ended.resume_at if ahead or ended.resume_at != self.woke else None
 
     def watch(self) -> None:
         """Cancel every attempt the watchdog finds stalled; each then fails `stalled`."""
