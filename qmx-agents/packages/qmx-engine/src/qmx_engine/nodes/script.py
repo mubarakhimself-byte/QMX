@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -43,17 +44,36 @@ IDEMPOTENCY_ENV: Final = "QMX_IDEMPOTENCY_KEY"
 MESSAGE_LIMIT: Final = 300
 
 
+def canonical(path: str) -> str:
+    return os.path.normcase(os.path.normpath(path.strip())).rstrip("\\/")
+
+
+def points_under(value: str, banned: str) -> bool:
+    """True when one `os.pathsep` entry of `value` is `banned` or sits under it, or when the whole
+    value, with its separators collapsed, holds it (a path inside an option, say)."""
+    for entry in value.split(os.pathsep):
+        if entry.strip():
+            path = canonical(entry)
+            if path == banned or path.startswith(banned + os.sep):
+                return True
+    collapsed = os.path.normcase(re.sub(r"[\\/]+", lambda _: os.sep, value))
+    return banned in collapsed
+
+
 def script_env(
     environ: Mapping[str, str], banned_values: Collection[str], key: str | None = None
 ) -> dict[str, str]:
     """The allow-listed names from `environ`, minus any name with a banned fragment and any value
-    that holds one of `banned_values` (the plan login's folder), plus the idempotency key."""
+    that points at or under one of `banned_values` (the plan login's folder), plus the
+    idempotency key. Paths are compared in one spelling, so a forward-slash or doubled-separator
+    form of a banned path is caught too."""
+    banned = [canonical(path) for path in banned_values if path.strip()]
     env: dict[str, str] = {}
     for name, value in environ.items():
         upper = name.upper()
         if upper not in KEEP_NAMES or any(f in upper for f in BANNED_FRAGMENTS):
             continue
-        if any(banned and banned.lower() in value.lower() for banned in banned_values):
+        if any(points_under(value, path) for path in banned):
             continue
         env[name] = value
     if key is not None:

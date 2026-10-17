@@ -7,6 +7,7 @@ import pytest
 from flows import edge, events_of, folder, kinds, node, run_folder
 from pydantic import JsonValue
 
+from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.runner import Engine
@@ -74,26 +75,47 @@ def test_a_retry_starts_from_the_zone_as_it_was_before_the_failed_attempt(tmp_pa
     assert kinds(events, "seed").count("node_started") == 1
 
 
-def test_an_external_step_of_unknown_outcome_waits_for_an_answer_and_never_retries(
-    tmp_path: Path,
-) -> None:
-    home = tmp_path / "home"
-    marks = tmp_path / "marks.txt"
+def posting(tmp_path: Path, effect: str, timeout: int | None = None) -> tuple[Path, Workflow]:
     post = node("post", "script", script="scripts/post.py")
-    post["effect"] = "irreversible_external"
+    post["effect"] = effect
+    if timeout is not None:
+        post["timeout"] = {"run_seconds": timeout}
     root = folder(
         tmp_path / "wf",
         [START, post],
         {"start": {"main": [edge("post")]}},
-        {"post": POST.replace("MARKS", str(marks))},
+        {"post": POST.replace("MARKS", str(tmp_path / "marks.txt"))},
     )
     found = checked(root)
     assert not isinstance(found, list)
+    return root, found[1]
+
+
+def assert_gated(tmp_path: Path, run_id: str) -> None:
+    """Two resumes later the step still ran once and waits on one gate showing attempt 1's key."""
+    home = tmp_path / "home"
+    statuses = (resume(home, run_id), resume(home, run_id))
+    events = events_of(home, run_id)
+    gates = [
+        (e.data["category"], e.data["idempotency_key"]) for e in events if e.kind == "gate_opened"
+    ]
+    assert statuses == ("waiting", "waiting")
+    assert kinds(events, "post").count("node_started") == 1
+    assert gates == [("irreversible_external", f"{run_id}:post:0:1")]
+    assert (tmp_path / "marks.txt").read_text() == "sent\n"
+
+
+@pytest.mark.parametrize("effect", ["irreversible_external", "irreversible", "compensable"])
+def test_a_step_of_unknown_outcome_after_a_crash_waits_on_its_gate_over_two_resumes(
+    tmp_path: Path, effect: str
+) -> None:
+    home, marks = tmp_path / "home", tmp_path / "marks.txt"
+    root, workflow = posting(tmp_path, effect)
 
     async def die_mid_attempt() -> str:
         with Ledger.open(home) as ledger:
             engine = Engine(home, ledger, settings=DEFAULTS)
-            run = asyncio.create_task(engine.start(root, found[1], mode="test", inputs=None))
+            run = asyncio.create_task(engine.start(root, workflow, mode="test", inputs=None))
             while not marks.exists():
                 await asyncio.sleep(0.05)
             for task in asyncio.all_tasks() - {asyncio.current_task()}:
@@ -102,27 +124,46 @@ def test_an_external_step_of_unknown_outcome_waits_for_an_answer_and_never_retri
         with Reader.open(home) as reader:
             return reader.connection.execute("SELECT run_id FROM events LIMIT 1").fetchone()[0]
 
-    run_id = asyncio.run(die_mid_attempt())
-    status = resume(home, run_id)
+    assert_gated(tmp_path, asyncio.run(die_mid_attempt()))
 
-    events = events_of(home, run_id)
-    gates = [e.data for e in events if e.kind == "gate_opened"]
-    assert status == "waiting"
-    assert kinds(events, "post").count("node_started") == 1
-    assert [(g["category"], g["idempotency_key"]) for g in gates] == [
-        ("irreversible_external", f"{run_id}:post:0:1")
-    ]
-    assert marks.read_text() == "sent\n"
+
+def test_an_external_step_past_its_timeout_waits_on_its_gate(tmp_path: Path) -> None:
+    root, _ = posting(tmp_path, "irreversible_external", timeout=1)
+
+    outcome, _ = run_folder(root, tmp_path / "home")
+
+    assert outcome.status == "waiting"
+    assert_gated(tmp_path, outcome.run_id)
+
+
+def test_a_cancelled_external_step_waits_on_its_gate(tmp_path: Path) -> None:
+    home, marks = tmp_path / "home", tmp_path / "marks.txt"
+    root, workflow = posting(tmp_path, "irreversible_external")
+
+    async def cancel_mid_attempt() -> str:
+        with Ledger.open(home) as ledger:
+            engine = Engine(home, ledger, settings=DEFAULTS)
+            run = asyncio.create_task(engine.start(root, workflow, mode="test", inputs=None))
+            while not marks.exists():
+                await asyncio.sleep(0.05)
+            engine.worker.cancel(next(iter(engine.worker.running)))
+            return (await run).status
+
+    assert asyncio.run(cancel_mid_attempt()) == "waiting"
+    with Reader.open(home) as reader:
+        run_id = reader.connection.execute("SELECT run_id FROM events LIMIT 1").fetchone()[0]
+    assert_gated(tmp_path, run_id)
 
 
 @pytest.mark.parametrize(
     ("definition", "earlier", "decision"),
     [
         ({"type": "script", "effect": "irreversible_external"}, 0, "inbox"),
+        ({"type": "script", "effect": "irreversible"}, 0, "inbox"),
+        ({"type": "script", "effect": "compensable"}, 0, "inbox"),
         ({"type": "llm"}, 0, "retry"),
-        ({"type": "llm"}, 1, "park"),
+        ({"type": "llm"}, 1, "inbox"),
         ({"type": "script"}, 0, "retry"),
-        ({"type": "script", "effect": "irreversible"}, 0, "park"),
     ],
 )
 def test_after_an_unknown_outcome(

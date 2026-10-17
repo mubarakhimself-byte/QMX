@@ -7,9 +7,9 @@ A write another attempt made while this one ran cannot be told apart from this o
 undone with it.
 
 An `irreversible` attempt receives its idempotency key. After an `unknown` outcome (the engine
-died mid-attempt), `after_unknown` says what happens next: an `irreversible_external` step never
-retries and waits for an answer, a model call retries once, a step that touched nothing outside
-the zone reruns, and anything else parks.
+died mid-attempt, a timeout or a cancel), `after_unknown` says what happens next: a step that
+touched nothing outside the zone reruns, a model call retries once, and any other step never
+retries: it waits on a gate that shows its key until someone answers it.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from qmx_engine.nodes.base import NodeJob
 SNAPSHOTS: Final = ".snap"
 IRREVERSIBLE: Final = frozenset({"irreversible", "irreversible_external"})
 
-type AfterUnknown = Literal["retry", "inbox", "park"]
+type AfterUnknown = Literal["retry", "inbox"]
 
 
 def effect_of(definition: dict[str, JsonValue]) -> Effect:
@@ -52,13 +52,11 @@ def idempotency_key(job: NodeJob) -> str | None:
 def after_unknown(definition: dict[str, JsonValue], earlier_unknowns: int) -> AfterUnknown:
     """`earlier_unknowns` counts this slot's attempts that already ended `unknown`."""
     effect = effect_of(definition)
-    if effect == "irreversible_external":
-        return "inbox"
-    if model_bearing(definition):
-        return "retry" if earlier_unknowns == 0 else "park"
     if effect in ("none", "reversible"):
         return "retry"
-    return "park"
+    if model_bearing(definition) and earlier_unknowns == 0:
+        return "retry"
+    return "inbox"
 
 
 def _files(zone: Path) -> dict[str, str]:

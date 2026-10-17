@@ -38,6 +38,8 @@ def main() -> int:
         "OPENAI_API_KEY": CANARY,
         "QMX_PROVIDER_REF": "qmx/openrouter",
         "HOME": plan,
+        "TMPDIR": plan.replace("\\", "/"),
+        "TEMP": plan.replace("\\", "\\\\") + "\\\\tmp",
     }
     log(f"planted in the engine's environment: {sorted(planted)}")
     code, lines = cli(log, "run", str(root), "--home", str(home), **planted)

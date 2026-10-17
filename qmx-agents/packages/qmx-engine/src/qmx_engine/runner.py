@@ -43,7 +43,7 @@ from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, Reader, ledger_path
-from qmx_engine.nodes.base import NodeJob, ending
+from qmx_engine.nodes.base import Failed, NodeJob, ending
 from qmx_engine.nodes.grader import Grader
 from qmx_engine.nodes.join import Join
 from qmx_engine.nodes.loop import Loop
@@ -55,7 +55,7 @@ from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
 from qmx_engine.nodes.wait import resume_at
 from qmx_engine.settings import DEFAULTS
-from qmx_engine.workers.effects import after_unknown, model_bearing
+from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
 from qmx_engine.workers.local import AnyExecutor, LocalWorker
 
 TICK: Final = timedelta(seconds=1)
@@ -345,7 +345,11 @@ class Run:
         kind = REGISTRY.kind(str(job.node_definition.get("type")))
         executor = self.executors[kind.name if kind is not None else ""]
         result = await self.engine.worker.run(job, executor, self.append)
-        keys = slot_keys(Slot(job.node_id, job.iteration, job.partition), job.attempt)
+        slot = Slot(job.node_id, job.iteration, job.partition)
+        if isinstance(result, Failed) and result.effect_state == "unknown":
+            self.unknown(slot, job.attempt, result.code, result.message)
+            return
+        keys = slot_keys(slot, job.attempt)
         for name, data in ending(result):
             self.append(cast(EventKind, name), keys | data)
 
@@ -389,27 +393,28 @@ class Run:
                 return Outcome(self.run_id, status, f"the run already ended {state.ended}")
 
     def recover(self) -> None:
-        """Fold what a dead engine left in flight, then open a new pass when every such attempt may
-        run again or wait. An operator resume of a parked or waiting run opens one too."""
+        """Fold what a dead engine left in flight, then open a new pass. A slot whose step may have
+        reached the outside world waits on its gate, and the fold keeps it waiting over the pass."""
         state = self.state()
         if state.ended in ("passed", "stopped"):
             return
-        verdicts = [
-            self.interrupted(slot, run.attempt, started=run.phase == "started")
-            for slot, run in state.nodes.items()
-            if run.phase in ("scheduled", "started")
-        ]
-        if "park" in verdicts:
-            return
-        reason = "interrupted" if verdicts else "operator"
-        self.append("run_resumed", {"reason": reason})
+        interrupted = False
+        for slot, run in state.nodes.items():
+            if run.phase == "scheduled":
+                message = "the engine stopped before the attempt started"
+                failed = failure("interrupted", message, True, "before")
+                self.append("node_failed", slot_keys(slot, run.attempt) | failed)
+            elif run.phase == "started":
+                message = "the engine stopped mid-attempt; the outcome is unknown"
+                self.unknown(slot, run.attempt, "interrupted", message)
+            else:
+                continue
+            interrupted = True
+        self.append("run_resumed", {"reason": "interrupted" if interrupted else "operator"})
 
-    def interrupted(self, slot: Slot, attempt: int, *, started: bool) -> str:
-        keys = slot_keys(slot, attempt)
-        if not started:
-            message = "the engine stopped before the attempt started"
-            self.append("node_failed", keys | failure("interrupted", message, True, "before"))
-            return "retry"
+    def unknown(self, slot: Slot, attempt: int, code: str, message: str) -> AfterUnknown:
+        """Record an attempt whose outcome is unknown: a crash, a timeout or a cancel. A step that
+        may rerun ends failed; any other waits on a gate that shows its idempotency key."""
         node = next(n for n in self.definition.nodes if n.id == slot.node_id)
         definition = node_definition(node)
         earlier = sum(
@@ -421,39 +426,41 @@ class Run:
             == (slot.node_id, slot.iteration, slot.partition)
         )
         verdict = after_unknown(definition, earlier)
-        message = "the engine stopped mid-attempt; the outcome is unknown"
-        if verdict == "inbox":
-            key = idempotency_key(self.run_id, slot, attempt)
+        if verdict == "retry":
             self.append(
-                "gate_opened",
-                slot_keys(
-                    slot,
-                    attempt,
-                    category="irreversible_external",
-                    idempotency_key=key,
-                    ask=f"{node.name} may have reached the outside world. Retry with key {key}?",
-                    options=["retry (may duplicate)", "stop"],
-                ),
+                "node_failed", slot_keys(slot, attempt) | failure(code, message, True, "unknown")
             )
-            self.append(
-                "node_waiting",
-                slot_keys(
-                    slot,
-                    attempt,
-                    reason="gate",
-                    resume_at=None,
-                    effect_state="unknown",
-                    idempotency_key=key,
-                    signature=signature("interrupted", message),
-                ),
-            )
-            return "inbox"
+            if model_bearing(definition):
+                line = f"{node.name}: a model call of unknown outcome is retried once"
+                self.append("log", slot_keys(slot, attempt, level="info", digest=True, line=line))
+            return verdict
+        key = idempotency_key(self.run_id, slot, attempt)
         self.append(
-            "node_failed", keys | failure("interrupted", message, verdict == "retry", "unknown")
+            "gate_opened",
+            slot_keys(
+                slot,
+                attempt,
+                category="irreversible_external",
+                effect=effect_of(definition),
+                idempotency_key=key,
+                ask=f"{node.name} may have reached the outside world ({code}). "
+                f"Retry with key {key}?",
+                options=["retry (may duplicate)", "stop"],
+            ),
         )
-        if verdict == "retry" and model_bearing(definition):
-            line = f"{node.name}: a model call of unknown outcome is retried once"
-            self.append("log", keys | {"level": "info", "digest": True, "line": line})
+        self.append(
+            "node_waiting",
+            slot_keys(
+                slot,
+                attempt,
+                reason="gate",
+                resume_at=None,
+                code=code,
+                effect_state="unknown",
+                idempotency_key=key,
+                signature=signature(code, message),
+            ),
+        )
         return verdict
 
 

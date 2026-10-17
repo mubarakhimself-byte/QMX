@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 from typing import cast
@@ -8,7 +9,7 @@ import pytest
 import qma.boot
 from flows import edge, folder, node, run_folder
 
-from qmx_engine.nodes.script import BANNED_FRAGMENTS
+from qmx_engine.nodes.script import BANNED_FRAGMENTS, script_env
 
 START = node("start", "trigger")
 
@@ -20,6 +21,22 @@ PRINT_ENV = """
 
 def test_the_banned_fragments_are_qma_boots() -> None:
     assert BANNED_FRAGMENTS == qma.boot.BANNED_FRAGMENTS
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path spellings")
+def test_the_plan_path_is_dropped_in_every_spelling() -> None:
+    plan = "D:\\QMX\\home\\claude"
+    environ = {
+        "HOME": "D:/QMX/home/claude",
+        "TEMP": "D:\\\\QMX\\\\home\\\\claude\\\\tmp",
+        "TMP": "d:\\qmx\\HOME\\claude\\",
+        "PATH": "C:\\Windows;D:/QMX/home/claude/bin",
+        "USERPROFILE": "D:\\QMX\\home",
+        "LANG": "en_GB",
+    }
+
+    assert script_env(environ, [plan]) == {"USERPROFILE": "D:\\QMX\\home", "LANG": "en_GB"}
+    assert script_env({"HOME": plan}, ["D:/QMX/home/claude"]) == {}
 
 
 def test_a_script_sees_no_key_no_claude_name_and_no_plan_path(
