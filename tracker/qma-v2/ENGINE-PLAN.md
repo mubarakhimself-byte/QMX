@@ -43,7 +43,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
   - [ ] Read `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/autopilot-stack.md`, `shipping.md` and `opening-a-pr.md`, then `C:/Users/Mubarak/.claude/skills/no-comments/SKILL.md` and `show-me-your-work/SKILL.md`. These live in the local install, not in the repo.
 - [ ] Create the store `D:/QMX-worktrees/qma-ship/engine/` with `decisions.tsv`, `ledger.tsv`, `lows.md`, `evidence/`, `review/` and `homes/`. Write these standing orders into `decisions.tsv` as its first rows.
   - [ ] Builders and checkers are `poteto-agent` on `opus`. Never `bulk-worker`. Fable only when the operator asks. Every brief says "do not spawn sub-agents".
-  - [ ] At most two builders at once, and at most three agents in all, plus the coordinator.
+  - [ ] At most two agents at once in all, usually one builder and one checker, plus the coordinator (operator, 2026-10-17: the efficient 2026-10-15 run).
   - [ ] No file under `qmx-agents/packages/qma-harness/` changes in any PR except HG1, granted by the operator on 2026-10-17 (ruling 89).
   - [ ] No step reads, prints or copies a plan token, a provider key or a ChatGPT token. Secrets are named by keyring reference only. No step spends on any Anthropic or OpenAI API. Plan-profile turns go through the CLI login in the ship home.
   - [ ] Money stays read-only. No PR touches a broker credential, `qmn/`, or a money act.
