@@ -137,6 +137,14 @@ def _pending(db: sqlite3.Connection, lease: Lease, home: HomeEngine) -> list[Cla
 def _stale(
     db: sqlite3.Connection, lease: Lease, home: HomeEngine, busy: Collection[str]
 ) -> list[Claimed]:
+    """Take over fires whose claimant died. A fire whose run left a wake paused before the
+    death: the wake owns that run, so the fire only waits on it and is never resumed here."""
+    db.execute(
+        "UPDATE fires SET status = 'waiting', lease_until = NULL"
+        " WHERE status IN ('claimed', 'running') AND lease_until <= ?"
+        " AND run_id IN (SELECT run_id FROM wakes)",
+        (lease.at,),
+    )
     rows = db.execute(
         f"SELECT {JOINED}, f.id"  # noqa: S608
         " FROM fires f JOIN triggers t ON t.id = f.trigger_id"

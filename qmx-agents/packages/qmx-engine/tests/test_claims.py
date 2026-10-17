@@ -1,5 +1,6 @@
 """At most one fire per occurrence: two claimants on one occurrence get one fire between them,
-and a fire whose claimant stopped renewing its lease is taken over only once the lease ran out."""
+a fire whose claimant stopped renewing its lease is taken over only once the lease ran out, and a
+run that paused before its engine died is resumed once, by its wake."""
 
 from __future__ import annotations
 
@@ -7,12 +8,20 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from fake_port import CARD, OPEN, FakePort, agent, agent_files, events_of
+from flows import edge, folder, node
 from scheduled import Clock, enabled, fires_of
 
+from qmx_engine.definition.validate import checked
+from qmx_engine.ledger.store import Transaction
+from qmx_engine.ports.harness_adapter import PlanUse
+from qmx_engine.ports.settings import StaticSettings
+from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
+from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.claims import Lease, claim_due
-from qmx_engine.triggers.cron import Interval
+from qmx_engine.triggers.cron import Interval, stamp
 from qmx_engine.triggers.ticker import Scheduler
 
 T0 = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
@@ -69,3 +78,63 @@ def test_a_stale_lease_is_taken_over_only_after_it_runs_out(tmp_path: Path) -> N
         late = claim("b", 301)
 
     assert (taken, early, late) == ([("claimed", "a")], [], [("claimed", "b")])
+
+
+def test_a_run_paused_before_its_engine_died_is_resumed_once_by_its_wake(tmp_path: Path) -> None:
+    root = agent_files(
+        folder(
+            tmp_path / "wf",
+            [node("start", "trigger"), agent("first"), agent("after")],
+            {"start": {"main": [edge("first")]}, "first": {"main": [edge("after")]}},
+            {},
+        )
+    )
+    reset = (datetime.now(UTC) + timedelta(seconds=0.5)).isoformat()
+    port = FakePort(CARD, CARD, CARD, CARD, uses=[PlanUse(1.0, reset, reset, None), OPEN])
+    found = checked(root)
+    assert not isinstance(found, list), found
+    home = tmp_path / "home"
+    settings = StaticSettings({**DEFAULTS, "limits.slack": 0})
+
+    async def go() -> tuple[str, int, int]:
+        with EngineService.open(home, settings=settings, harness=port) as svc:
+            paused = await svc.ctx.engine.start(root, found[1], mode="live", inputs=None)
+            ledger = svc.ctx.engine.ledger
+            ledger.write(
+                rows.insert(
+                    rows.Trigger(
+                        id="trigger-x",
+                        workflow_item="wf",
+                        pinned_object="obj",
+                        spec=rows.Manual(),
+                        created_by="operator",
+                        created_at=stamp(T0),
+                    )
+                )
+            )
+            past = stamp(datetime.now(UTC) - timedelta(seconds=10))
+
+            def died_mid_fire(txn: Transaction) -> None:
+                txn.connection.execute(
+                    "INSERT INTO fires (id, trigger_id, occurrence_at, status, claimed_by,"
+                    " claimed_at, lease_until, run_id, merged)"
+                    " VALUES ('fire-x', 'trigger-x', ?, 'running', 'dead', ?, ?, ?, 0)",
+                    (past, past, past, paused.run_id),
+                )
+
+            ledger.write(died_mid_fire)
+            await asyncio.sleep(1.0)
+            ticker = Scheduler(svc.ctx, claimant="b")
+            tick = await ticker.tick()
+            await ticker.settle()
+            return paused.run_id, len(tick.claimed), len(tick.woken)
+
+    run_id, claimed, woken = asyncio.run(go())
+    events = events_of(home, run_id)
+    (fire,) = fires_of(home, "trigger-x")
+
+    assert (claimed, woken) == (0, 1)
+    assert [e.data["reason"] for e in events if e.kind == "run_resumed"] == ["limit"]
+    assert [e.kind for e in events].count("run_finished") == 1
+    assert [chat for chat, _ in port.sent] == ["chat-1", "chat-2"]
+    assert fire.status == "ok"
