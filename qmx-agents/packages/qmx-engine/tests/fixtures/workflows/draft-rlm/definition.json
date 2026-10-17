@@ -1,0 +1,46 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "draft-rlm",
+  "name": "draft-rlm",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "r",
+      "name": "Crunch",
+      "type": "rlm",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Crunch",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [],
+    "expect_run": [
+      "kind_not_available"
+    ]
+  }
+}

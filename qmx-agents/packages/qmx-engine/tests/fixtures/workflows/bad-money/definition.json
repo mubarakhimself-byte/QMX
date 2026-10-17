@@ -1,0 +1,50 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-money",
+  "name": "bad-money",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "l",
+      "name": "Decide",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "role": "triage",
+      "parameters": {
+        "prompt": "Pick one.",
+        "action": "place_order"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "money_act"
+    ]
+  }
+}

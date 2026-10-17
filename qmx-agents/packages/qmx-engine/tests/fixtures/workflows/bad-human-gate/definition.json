@@ -1,0 +1,75 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-human-gate",
+  "name": "bad-human-gate",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "h",
+      "name": "Ask first",
+      "type": "human_gate",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "options": [
+          "yes",
+          "no"
+        ]
+      }
+    },
+    {
+      "id": "w",
+      "name": "Save",
+      "type": "library",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "op": "write"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Ask first",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Ask first": {
+      "yes": [
+        [
+          {
+            "node": "Save",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "human_gate_misplaced"
+    ]
+  }
+}

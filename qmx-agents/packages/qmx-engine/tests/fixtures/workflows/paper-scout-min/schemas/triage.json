@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "paper_id": {
+      "type": "string"
+    },
+    "score": {
+      "type": "number"
+    }
+  }
+}

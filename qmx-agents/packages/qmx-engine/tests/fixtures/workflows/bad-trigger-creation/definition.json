@@ -1,0 +1,48 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-trigger-creation",
+  "name": "bad-trigger-creation",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "o",
+      "name": "Schedule more",
+      "type": "app_op",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "op": "workflow_triggers_create"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Schedule more",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "trigger_creation"
+    ]
+  }
+}
