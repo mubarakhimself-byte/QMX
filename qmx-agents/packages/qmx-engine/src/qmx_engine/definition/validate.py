@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Collection, Iterator
+from pathlib import Path
 from typing import Final
 
 from pydantic import ValidationError
 
-from qmx_engine.definition.folder import Problem, WorkflowFolder
+from qmx_engine.definition.folder import Problem, WorkflowFolder, load
 from qmx_engine.definition.lint import lint, redact
 from qmx_engine.definition.model import Node, Workflow, edges
 from qmx_engine.definition.registry import LOOP_BACK_PORT, NOTE, REGISTRY, Kind, Registry, RoleRule
@@ -79,6 +80,16 @@ def runnable(workflow: Workflow, registry: Registry = REGISTRY) -> list[Problem]
         if (kind := registry.kind(node.type)) is not None and not node.disabled
         if kind is not NOTE and not kind.available
     ]
+
+
+def checked(root: Path) -> tuple[WorkflowFolder, Workflow] | list[Problem]:
+    """A folder that validates and that a run accepts, or every problem in it."""
+    folder = load(root)
+    found = validate(folder)
+    if found:
+        return found
+    workflow = Workflow.model_validate(folder.document)
+    return runnable(workflow) or (folder, workflow)
 
 
 def where(loc: tuple[int | str, ...]) -> str:

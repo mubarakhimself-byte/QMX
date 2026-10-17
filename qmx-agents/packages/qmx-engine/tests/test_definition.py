@@ -116,9 +116,7 @@ def test_an_unavailable_kind_validates_in_a_draft_and_a_run_refuses_it() -> None
     folder = load(FIXTURES / "draft-rlm")
 
     assert validate(folder) == []
-    # No executor exists before EP6, so at EP3 the trigger cannot run either.
     assert [(p.code, p.path) for p in runnable(Workflow.model_validate(folder.document))] == [
-        ("kind_not_available", "nodes[0].type"),
         ("kind_not_available", "nodes[1].type"),
     ]
     rlm = REGISTRY.kind("rlm")

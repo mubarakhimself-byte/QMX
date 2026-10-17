@@ -49,9 +49,9 @@ BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
     {
         kind.name: kind
         for kind in (
-            Kind("trigger", (), MAIN, "none"),
-            Kind("script", IN, MAIN, "reversible"),
-            Kind("rule", IN, ("true", "false"), "none"),
+            Kind("trigger", (), MAIN, "none", available=True),
+            Kind("script", IN, MAIN, "reversible", available=True),
+            Kind("rule", IN, ("true", "false"), "none", available=True),
             Kind("loop", ("in", LOOP_BACK_PORT), ("body", "done"), "none", available=True),
             Kind("join", IN, MAIN, "none", available=True),
             Kind("wait", IN, MAIN, "none", available=True),
@@ -59,9 +59,9 @@ BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
             Kind("llm", IN, MAIN, "irreversible", RoleRule.REQUIRED, model_bearing=True),
             Kind("agent", IN, MAIN, "irreversible", RoleRule.REQUIRED, model_bearing=True),
             Kind("rlm", IN, MAIN, "irreversible"),
-            Kind("subworkflow", IN, MAIN, "irreversible"),
-            Kind("grader", IN, ("pass", "fail"), "none", RoleRule.LLM_MODE),
-            Kind("monitor", IN, ("changed", "silent"), "none"),
+            Kind("subworkflow", IN, MAIN, "irreversible", available=True),
+            Kind("grader", IN, ("pass", "fail"), "none", RoleRule.LLM_MODE, available=True),
+            Kind("monitor", IN, ("changed", "silent"), "none", available=True),
             Kind("app_op", IN, MAIN, "irreversible"),
             Kind("library", IN, MAIN, "compensable"),
             Kind("claude_workflow", IN, MAIN, "irreversible"),

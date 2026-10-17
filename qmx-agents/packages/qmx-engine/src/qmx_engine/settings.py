@@ -49,6 +49,8 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "retry.backoff": (30, 120, 600),  # Claude's default, UI-editable
         "timeout.agent.run": 1_800,  # Claude's default, UI-editable
         "timeout.agent.idle": 300,  # Claude's default, UI-editable
+        "timeout.script.run": 600,  # Claude's default, UI-editable
+        "subworkflow.max_depth": 3,  # Claude's default, UI-editable
         "inline_limit_bytes": 65_536,  # Claude's default, UI-editable
         "placement.pc.concurrency": 3,  # Claude's default, UI-editable
         "context_window": 200_000,  # Claude's default, UI-editable
