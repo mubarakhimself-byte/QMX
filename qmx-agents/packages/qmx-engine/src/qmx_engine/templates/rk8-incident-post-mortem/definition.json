@@ -1,0 +1,81 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rk8-incident-post-mortem",
+  "name": "Incident post-mortem",
+  "inputs": {
+    "type": "object",
+    "properties": {"incident_id": {"type": "string", "description": "the closed incident"}}
+  },
+  "outputs": {
+    "type": "object",
+    "description": "timeline, impact in R and dollars, cited account, causes, challenges, actions"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 150000, "agents": 2, "tool_calls": 20, "wall_seconds": 1800,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "On a closed incident", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "incident", "name": "Incident and timeline", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 120}, "parameters": {"script": "scripts/incident.py"}},
+    {"id": "impact", "name": "Impact in R and dollars", "type": "script", "typeVersion": 1,
+     "position": [440, 120], "effect": "none", "parameters": {"script": "scripts/impact.py"}},
+    {"id": "draft", "name": "Draft the post-mortem", "type": "agent", "typeVersion": 1,
+     "position": [660, 0], "role": "synthesiser", "effect": "none", "retry": {"max_tries": 2},
+     "parameters": {"brief_ref": "prompts/draft.md", "output_schema_ref": "schemas/draft.json",
+                    "tools": [], "max_turns": 6}},
+    {"id": "citations", "name": "Every statement cited", "type": "grader", "typeVersion": 1,
+     "position": [880, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}},
+    {"id": "challenge", "name": "Challenge the draft", "type": "llm", "typeVersion": 1,
+     "position": [1100, -120], "role": "reviewer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/challenge.md", "schema_ref": "schemas/challenge.json"}},
+    {"id": "assemble", "name": "Post-mortem", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "On a closed incident": {"main": [[{"node": "Incident and timeline", "port": "in",
+                                        "map": "one"}]]},
+    "Incident and timeline": {"main": [[{"node": "Impact in R and dollars", "port": "in",
+                                         "map": "one"},
+                                        {"node": "Draft the post-mortem", "port": "in",
+                                         "map": "one"},
+                                        {"node": "Every statement cited", "port": "in",
+                                         "map": "one"},
+                                        {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Impact in R and dollars": {"main": [[{"node": "Draft the post-mortem", "port": "in",
+                                           "map": "one"},
+                                          {"node": "Post-mortem", "port": "in", "map": "one"},
+                                          {"node": "Render and grade", "port": "in",
+                                           "map": "one"}]]},
+    "Draft the post-mortem": {"main": [[{"node": "Every statement cited", "port": "in",
+                                         "map": "one"}]]},
+    "Every statement cited": {
+      "pass": [[{"node": "Challenge the draft", "port": "in", "map": "one"},
+                {"node": "Post-mortem", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    },
+    "Challenge the draft": {"main": [[{"node": "Post-mortem", "port": "in", "map": "one"}]]},
+    "Post-mortem": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "RK8", "needs": ["trading-node"]}
+}

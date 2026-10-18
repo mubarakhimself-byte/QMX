@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["at", "units", "flagged", "explanations", "cards"],
+  "x-prose": ["explanations", "cards"],
+  "properties": {
+    "units": {
+      "type": "array",
+      "items": {"type": "object", "required": ["unit", "level", "failed"],
+                "properties": {"level": {"enum": ["red", "amber", "green", "could not check"]}}}
+    },
+    "explanations": {"type": "array"},
+    "cards": {
+      "type": "array",
+      "items": {"type": "object", "required": ["unit", "options", "default"],
+                "properties": {"default": {"const": "keep watching"}}}
+    }
+  }
+}

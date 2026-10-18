@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["cards"],
+  "properties": {
+    "cards": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["unit", "recommendation", "default", "if_silent", "door", "blast_radius"],
+        "properties": {
+          "unit": {"type": "string"},
+          "recommendation": {"type": "string"},
+          "default": {"type": "string"},
+          "if_silent": {"type": "string"},
+          "door": {"enum": ["one-way", "two-way"]},
+          "blast_radius": {"type": "string"}
+        }
+      }
+    }
+  }
+}

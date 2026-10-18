@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["lines", "summary"],
+  "properties": {
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["section", "text", "claim_ids", "label"],
+        "properties": {
+          "section": {"enum": ["HIGH", "MEDIUM", "CALENDAR", "POSITIONING", "CROSS-ASSET"]},
+          "text": {"type": "string", "minLength": 1},
+          "claim_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "label": {"enum": ["retrieved", "inferred"]}
+        }
+      }
+    },
+    "summary": {"type": "string", "minLength": 1}
+  }
+}

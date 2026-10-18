@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "required": ["headline", "summary", "decisions", "watch_today"],
+  "properties": {
+    "headline": {"type": "string", "minLength": 1, "maxLength": 160},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "decisions": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["title", "recommendation", "default", "if_silent", "run_id"],
+        "properties": {
+          "title": {"type": "string"},
+          "recommendation": {"type": "string"},
+          "default": {"type": "string"},
+          "if_silent": {"type": "string"},
+          "run_id": {"type": "string"}
+        }
+      }
+    },
+    "watch_today": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["text", "link"],
+        "properties": {
+          "text": {"type": "string", "minLength": 1},
+          "link": {"type": "string", "pattern": "^https?://"}
+        }
+      }
+    }
+  }
+}

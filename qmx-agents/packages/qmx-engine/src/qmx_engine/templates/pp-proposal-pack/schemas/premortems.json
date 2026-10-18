@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["premortems"],
+  "properties": {
+    "premortems": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unit", "story"],
+        "properties": {"unit": {"type": "string"}, "story": {"type": "string"}}
+      }
+    }
+  }
+}

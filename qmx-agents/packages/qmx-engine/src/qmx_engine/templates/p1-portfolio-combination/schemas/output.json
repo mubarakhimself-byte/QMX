@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["headline", "findings", "book", "pairs", "candidates", "dropped"],
+  "x-prose": ["headline", "findings"],
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate", "methods"],
+        "properties": {
+          "methods": {
+            "type": "array",
+            "items": {"type": "object", "required": ["method", "label", "marginal_band", "verdict"],
+                      "properties": {"label": {"const": "study only"}}}
+          }
+        }
+      }
+    }
+  }
+}

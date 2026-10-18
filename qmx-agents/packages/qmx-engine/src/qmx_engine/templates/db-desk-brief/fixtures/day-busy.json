@@ -1,0 +1,29 @@
+{
+  "note": "A synthetic morning for the template's test runs. The calendar rows, desk lines, paper and inbox item are made up; each link is the publisher's front page.",
+  "date": "2026-10-15",
+  "edition": "morning",
+  "events": [
+    {"title": "CPI Flash Estimate y/y", "currency": "EUR", "time_utc": "09:00", "impact": "high",
+     "forecast": "2.1%", "previous": "2.2%", "source": "https://ec.europa.eu/eurostat"},
+    {"title": "Core Retail Sales m/m", "currency": "USD", "time_utc": "12:30", "impact": "medium",
+     "forecast": "0.3%", "previous": "0.2%", "source": "https://www.census.gov/retail/index.html"},
+    {"title": "Tertiary Industry Activity m/m", "currency": "JPY", "time_utc": "04:30", "impact": "low",
+     "forecast": "0.1%", "previous": "-0.2%", "source": "https://www.meti.go.jp/english/"}
+  ],
+  "desk": [
+    {"section": "HIGH", "text": "EURUSD leans higher on a softer Fed path and an ECB that sees no case for another cut this year.",
+     "links": ["https://www.ecb.europa.eu/press/html/index.en.html"], "run_id": "fixture-t4"},
+    {"section": "HIGH", "text": "USDJPY leans lower: the BoJ keeps a hike in play and intervention talk firmed the yen.",
+     "links": ["https://www.boj.or.jp/en/"], "run_id": "fixture-t4"}
+  ],
+  "alerts": [
+    "09:00 UTC EUR CPI Flash Estimate y/y (high impact): no new entries 08:30-09:30 UTC on EURUSD. Source: https://ec.europa.eu/eurostat"
+  ],
+  "research": [
+    {"title": "Overnight drift in major currency pairs", "link": "https://arxiv.org/", "run_id": "fixture-rs1"}
+  ],
+  "decisions": [
+    {"title": "RS4 run parked: the searcher failed twice", "cause": "provider timeout on the searcher chunk",
+     "run_id": "fixture-rs4", "category": "provider_failure"}
+  ]
+}

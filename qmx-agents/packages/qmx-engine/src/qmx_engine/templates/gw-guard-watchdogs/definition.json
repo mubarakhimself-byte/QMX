@@ -1,0 +1,54 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "gw-guard-watchdogs",
+  "name": "Guard watchdogs",
+  "outputs": {
+    "type": "object",
+    "description": "the kill-line gauge, the tighten-only verdict per unit, and the alert lines"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 1000, "agents": 1, "tool_calls": 1, "wall_seconds": 120,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Every 5 minutes", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "guard", "name": "Read account and guard", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [10, 30], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 30}, "parameters": {"script": "scripts/guard.py"}},
+    {"id": "cushion", "name": "Kill-line distance", "type": "script", "typeVersion": 1,
+     "position": [440, -80], "effect": "none", "parameters": {"script": "scripts/cushion.py"}},
+    {"id": "profiles", "name": "Tighten-only check", "type": "script", "typeVersion": 1,
+     "position": [440, 80], "effect": "none",
+     "parameters": {"script": "scripts/profile_check.py"}},
+    {"id": "alerts", "name": "Gauge and alerts", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/alerts.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [880, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1100, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Every 5 minutes": {"main": [[{"node": "Read account and guard", "port": "in", "map": "one"}]]},
+    "Read account and guard": {"main": [[{"node": "Kill-line distance", "port": "in", "map": "one"},
+                                         {"node": "Tighten-only check", "port": "in", "map": "one"},
+                                         {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Kill-line distance": {"main": [[{"node": "Gauge and alerts", "port": "in", "map": "one"}]]},
+    "Tighten-only check": {"main": [[{"node": "Gauge and alerts", "port": "in", "map": "one"}]]},
+    "Gauge and alerts": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "GW", "needs": ["trading-node"]}
+}

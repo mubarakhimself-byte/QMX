@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["date", "equity_usd", "units", "exposure_by_instrument_usd", "exposure_by_currency_usd",
+               "drawdown_usd", "loss_budget_used_pct", "kill_line_cushion_usd", "paper_units",
+               "guard"],
+  "x-prose": [],
+  "properties": {
+    "units": {"type": "array", "items": {"type": "object", "required": ["unit", "pnl_usd", "pnl_r"]}},
+    "paper_units": {"type": "array",
+                    "items": {"type": "object", "required": ["unit", "band"],
+                              "properties": {"band": {"enum": ["inside", "outside"]}}}},
+    "guard": {"type": "string"}
+  }
+}

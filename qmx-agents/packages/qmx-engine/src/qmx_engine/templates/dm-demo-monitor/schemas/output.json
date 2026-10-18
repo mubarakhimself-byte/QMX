@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["at", "units", "causes"],
+  "x-prose": ["causes"],
+  "properties": {
+    "units": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unit", "n", "expectancy_r", "win_rate", "drawdown_r", "cum_r", "band",
+                     "faults", "cost_ratio", "cost_level", "bench_proposal"]
+      }
+    },
+    "causes": {"type": "array"}
+  }
+}

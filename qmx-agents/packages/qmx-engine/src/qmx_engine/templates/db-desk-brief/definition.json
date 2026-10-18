@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "db-desk-brief",
+  "name": "Desk brief",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "fixture": {"enum": ["busy", "quiet"], "description": "replay a synthetic day"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the desk brief card: headline, summary, tiles, decisions and watch lines"
+  },
+  "settings": {
+    "timezone": "Europe/London",
+    "runaway": {"tokens": 40000, "agents": 1, "tool_calls": 10, "wall_seconds": 900,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Morning, pre-session and end of day", "type": "trigger",
+     "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "gather", "name": "Gather the day", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 120},
+     "parameters": {"script": "scripts/gather.py", "busy_fixture_ref": "fixtures/day-busy.json",
+                    "quiet_fixture_ref": "fixtures/day-quiet.json"}},
+    {"id": "quiet_day", "name": "Quiet day?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.quiet"}},
+    {"id": "quiet", "name": "Quiet-day card", "type": "script", "typeVersion": 1,
+     "position": [660, 120], "effect": "none", "parameters": {"script": "scripts/quiet.py"}},
+    {"id": "rank", "name": "Rank the items", "type": "script", "typeVersion": 1,
+     "position": [660, -120], "effect": "none", "parameters": {"script": "scripts/rank.py"}},
+    {"id": "write", "name": "Write the brief", "type": "llm", "typeVersion": 1,
+     "position": [880, -120], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/brief.json",
+                    "recording_ref": "fixtures/recorded/brief.json"}},
+    {"id": "links", "name": "Every link and decision traced", "type": "grader", "typeVersion": 1,
+     "position": [1100, -120], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/links_check.py"}},
+    {"id": "assemble", "name": "Brief card", "type": "script", "typeVersion": 1,
+     "position": [1320, -120], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Morning, pre-session and end of day": {"main": [[{"node": "Gather the day", "port": "in",
+                                                       "map": "one"}]]},
+    "Gather the day": {"main": [[{"node": "Quiet day?", "port": "in", "map": "one"},
+                                 {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Quiet day?": {"true": [[{"node": "Quiet-day card", "port": "in", "map": "one"}]],
+                   "false": [[{"node": "Rank the items", "port": "in", "map": "one"}]]},
+    "Rank the items": {"main": [[{"node": "Write the brief", "port": "in", "map": "one"},
+                                 {"node": "Every link and decision traced", "port": "in",
+                                  "map": "one"}]]},
+    "Write the brief": {"main": [[{"node": "Every link and decision traced", "port": "in",
+                                   "map": "one"}]]},
+    "Every link and decision traced": {
+      "pass": [[{"node": "Brief card", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    },
+    "Brief card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Quiet-day card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "DB"}
+}

@@ -1,0 +1,61 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rk2-correlation-drift",
+  "name": "Correlation and exposure drift",
+  "outputs": {
+    "type": "object",
+    "description": "open risk in R per currency, correlations against baseline, effective bets"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 30000, "agents": 1, "tool_calls": 5, "wall_seconds": 600,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Hourly", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "book", "name": "Read the book", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 120}, "parameters": {"script": "scripts/book.py"}},
+    {"id": "exposure", "name": "Exposure, correlation and drift rules", "type": "script",
+     "typeVersion": 1, "position": [440, 0], "effect": "none",
+     "parameters": {"script": "scripts/exposure.py"}},
+    {"id": "tripped", "name": "A rule tripped?", "type": "rule", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"expr": "items.trips != []"}},
+    {"id": "drivers", "name": "What drives it", "type": "llm", "typeVersion": 1,
+     "position": [880, -120], "role": "synthesiser", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/drivers.md", "schema_ref": "schemas/drivers.json"}},
+    {"id": "assemble", "name": "Drift card", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1540, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Hourly": {"main": [[{"node": "Read the book", "port": "in", "map": "one"}]]},
+    "Read the book": {"main": [[{"node": "Exposure, correlation and drift rules", "port": "in",
+                                 "map": "one"},
+                                {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Exposure, correlation and drift rules": {
+      "main": [[{"node": "A rule tripped?", "port": "in", "map": "one"},
+                {"node": "Drift card", "port": "in", "map": "one"}]]
+    },
+    "A rule tripped?": {"true": [[{"node": "What drives it", "port": "in", "map": "one"}]]},
+    "What drives it": {"main": [[{"node": "Drift card", "port": "in", "map": "one"}]]},
+    "Drift card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "RK2", "needs": ["trading-node"]}
+}
