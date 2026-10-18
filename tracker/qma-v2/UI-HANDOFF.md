@@ -1,5 +1,9 @@
 # UI handoff: everything the UI session needs (running list)
 
+> **The UI is a design, not code (operator, 2026-10-16 and 2026-10-18).** The UI has been designed and drafted, not engineered; its code will change a lot. The intent lives in the design: what each screen shows, the click-throughs with demo data, the storyboard. Read the UI as a design (run it, look at it, click through it), never take requirements from its component code or types alone.
+>
+> **The demo design is not final either.** Many backend capabilities were added after it was drawn. The UI session should propose redesigns where a better representation exists, and should leave some capabilities without a screen of their own when a status update, badge or line in an existing view is enough. Not everything in this list needs its own surface.
+
 Started 2026-10-16 by the lead session, at the operator's request (ruling 47). It is kept up to date as each design lands; last brought current on 2026-10-18 against rulings 1-118, the rerun (39 with its review and fix-check applied) the unlock pass (`research/methodology/43-whole-app-unlocked.md`, §14 below) and the studies-folded pass (`research/methodology/47-studies-folded.md`, §15 below). **Read this before wiring anything.** `UI-NOTES.md` still holds the harness event details. This file adds everything since then.
 
 Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. Sources for each item are in brackets. A bracketed `10 §…` source is `archive/2026-10-18-methodology-studies/10-ui-depth.md`; `27b` sources are in the same folder.
