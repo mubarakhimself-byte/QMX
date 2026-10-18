@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["variants"],
+  "properties": {
+    "variants": {
+      "type": "array",
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["label", "name", "change", "overrides"],
+        "properties": {
+          "label": {"enum": ["instrument", "timeframe", "params", "spiced", "structural",
+                             "model-made"]},
+          "name": {"type": "string"},
+          "change": {"type": "string"},
+          "overrides": {"type": "object"}
+        }
+      }
+    }
+  }
+}

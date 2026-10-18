@@ -1,0 +1,5 @@
+{
+  "type": "object",
+  "required": ["summary"],
+  "properties": {"summary": {"type": "string"}}
+}

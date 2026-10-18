@@ -2,7 +2,7 @@
 
 These notes are for the operator reviewing the engine and for the next engineer who owns it. They
 record what the engine's checks showed at EP14, where the build departs from the architecture, which
-harness requests are in use, and how to start the engine.
+harness requests are in use, how to start the engine, and the state of the template pack at TP4.
 
 ## Every engine check, rerun
 
@@ -158,3 +158,44 @@ run again.
   until H2 lands. The money gate still blocks every money act and shell access to QMX state.
 - `python -m qmx_engine explain` text lists attempts but not spans; chunk partitions show in
   `--json` and over REST.
+
+## The template pack at TP4
+
+TP1 to TP4 built the 31 templates of ruling 83. `docs/TEMPLATES.md` lists them with their status,
+test cost, triggers and needs, and says how the operator edits one with the copilot. Nine run today
+(RS1, T3, RS0, RS2, RS4, A, RV, DB, T4). The other 22 are full definitions from their cards that
+validate for publish; each names what it waits for in `meta.needs`, and its test run and its enable
+are refused with that need. Each draft's gates, checks and verdicts are real scripts, and one script
+per missing door writes the need and exits.
+
+How the pack is checked:
+
+- `tests/test_templates.py` holds every folder to the rules: it validates, its needs match its
+  catalogue row, its shared block copies are byte-identical, it names no money act and holds no
+  credential, each runnable template's test run delivers what its card promises, a planted number
+  in its output fails the run, and `templates install` publishes 9 disabled, saves 22 drafts, and
+  changes nothing the second time.
+- `scripts/live/engine/t_templates.py` holds the lanes. `all` test-runs the 9 runnable templates
+  on real models and prints the pack's wall time, model spans and tokens. `install` installs the
+  pack on real models. `install-recorded`, `all-recorded` and `variant-recorded` run the same paths
+  on the recorded answers with no provider. `drafts-tp4`, `readmes-tp4`, `doc` and `money-pack`
+  need no model.
+
+Real-model test cost so far, from the single test runs of TP1 and TP2 (TP2's before its fix
+round, so the catalogue keeps them unrecorded): RS1 233 s, T3 1 s quiet and 56 s on a surprise day,
+RS0 116 s, RS2 77 s, RS4 295 s, A 239 s and RV 46 s, about 18 minutes for 7 templates. DB and T4
+were built under the spend freeze and have no real-model run yet. On the recorded answers the 9
+templates make 35 model calls and the whole pack's test runs take 20 s.
+
+Where the drafts depart from their cards, and why:
+
+- `human_gate` is unavailable and may sit only before an irreversible effect, so every human point
+  (a pick, a signature, an install, an approval) ends as a card in the run's result.
+- The `rlm` and `app_op` node kinds are unavailable, so RS8, MA and D9 reach the kernel and the
+  host's app operations through door scripts that wait for their need.
+- A fan-out inside a loop body is not run by the core, so D3 builds a generation's children with
+  one builder rather than one per child.
+- The cards' roles that are not Settings roles map to the nearest one: grill and generator to
+  `planner`, diagnoser to `synthesiser`, miner to `writer`, validator to `reviewer`.
+- The shared `overfit-gates` block (`_shared/overfit-gates/scripts/deflated_sharpe.py`) is copied
+  into B, L4, D3 and D4, like every other shared block.

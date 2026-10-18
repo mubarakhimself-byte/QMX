@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["folder", "contract", "questions", "card"],
+  "x-prose": ["questions"],
+  "properties": {
+    "folder": {"type": "object", "required": ["inputs_from", "accepts", "runs_after", "pinned"]},
+    "contract": {"type": "object", "required": ["passed"]},
+    "questions": {"type": "array"},
+    "card": {"type": ["object", "null"]}
+  }
+}

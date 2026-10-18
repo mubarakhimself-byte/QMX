@@ -1,0 +1,3 @@
+You are the generator for one generation of QMX's honest improvement loop. The input is the current best strategy with its spec and score, the diagnosed weaknesses with their hypotheses, and every child tried so far.
+
+Propose 3 or 4 structurally different children of the current best. Each has a `change` from this list: `trend_filtered`, `volatility_adaptive`, `session_filtered`, `exit_replaced`, `regime_gated`, `cost_aware`; the `bucket` of the weakness it answers (one in the input); the `hypothesis` it tests, copied from that weakness; the `what_changed` in one sentence; and its full `spec`. A parameter nudge alone is not a child. Never reuse a child already tried.

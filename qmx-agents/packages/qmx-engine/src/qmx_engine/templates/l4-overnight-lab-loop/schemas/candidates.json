@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["candidates"],
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "required": ["spec", "hypothesis"],
+        "properties": {
+          "spec": {
+            "type": "object",
+            "required": ["signal_class", "filters", "exit", "timeframe", "market", "params"]
+          },
+          "hypothesis": {"type": "string"}
+        }
+      }
+    }
+  }
+}

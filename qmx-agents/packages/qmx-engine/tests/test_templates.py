@@ -139,7 +139,7 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_31_templates_each_with_a_source_card() -> None:
+def test_the_catalogue_lists_31_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
     assert len(ids) == 31
@@ -150,14 +150,11 @@ def test_the_catalogue_lists_31_templates_each_with_a_source_card() -> None:
         "RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4",
     ]  # fmt: skip
     assert find("P1").needs == ("trading-node", "risk-session")
-    assert [t.folder for t in CATALOG if t.folder] == [
-        "rs1-paper-scout", "t3-news-calendar-watch", "rs0-idea-grill",
-        "rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library",
-        "rv-weekly-review", "db-desk-brief", "t4-research-desk-overnight", "dm-demo-monitor",
-        "t7-trade-journal-review", "gw-guard-watchdogs", "rk2-correlation-drift",
-        "dc-decay-and-limit-report", "rk5-stress-tests", "rk8-incident-post-mortem",
-        "p1-portfolio-combination", "p2-daily-book-report", "pp-proposal-pack",
-    ]  # fmt: skip
+    assert all(t.folder for t in CATALOG)
+    assert sorted(str(t.folder) for t in CATALOG) == sorted(
+        f.name for f in FOLDERS if f.parent == PACK
+    )
+    assert sum(1 for t in CATALOG if t.needs) == 22
 
 
 def test_each_built_folder_names_the_needs_its_catalogue_row_names() -> None:
@@ -401,7 +398,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_nine_disabled_saves_ten_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_nine_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -414,17 +411,21 @@ def test_install_publishes_nine_disabled_saves_ten_drafts_and_a_second_install_c
         triggers = rows.triggers(reader.connection)
 
     built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4"]
-    drafts = ["DM", "T7", "GW", "RK2", "DC", "RK5", "RK8", "P1", "P2", "PP"]
+    drafts = [
+        "DM", "T7", "GW", "RK2", "DC", "RK5", "RK8", "P1", "P2", "PP", "B", "RS3", "RS6", "RS8",
+        "L1", "L4", "BC", "D3", "D4", "D6", "MA", "D9",
+    ]  # fmt: skip
     assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built] + [
         (t, "saved draft") for t in drafts
     ]
-    assert [i.action for i in second] == ["unchanged"] * 19
+    assert [i.action for i in second] == ["unchanged"] * 31
     assert library_after == seen
     assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 9
     assert status["GW"] == ("validated draft, needs: trading-node", None)
     assert status["P2"] == ("validated draft, needs: broker-read-token", None)
     assert status["PP"] == ("validated draft, needs: trading-node, risk-session", None)
-    assert sum(s == ("not yet built", None) for s in status.values()) == 12
+    assert status["D6"] == ("validated draft, needs: qmb-door, sandbox", None)
+    assert status["RS8"] == ("validated draft, needs: rlm", None)
     assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),

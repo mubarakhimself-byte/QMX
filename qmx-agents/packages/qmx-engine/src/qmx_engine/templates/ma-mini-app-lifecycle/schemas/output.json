@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["path", "card", "review", "extras"],
+  "x-prose": ["review", "extras"],
+  "properties": {
+    "path": {"enum": ["install", "deprecate", "archive"]},
+    "card": {"type": "object"},
+    "review": {"type": "string"},
+    "extras": {"type": "array"}
+  }
+}

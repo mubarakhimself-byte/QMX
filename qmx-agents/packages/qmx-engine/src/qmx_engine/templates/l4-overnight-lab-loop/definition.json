@@ -1,0 +1,65 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "l4-overnight-lab-loop",
+  "name": "Overnight Lab loop",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "family",
+      "search_space"
+    ],
+    "properties": {
+      "family": {
+        "type": "string",
+        "description": "the strategy family searched tonight"
+      },
+      "search_space": {
+        "type": "object",
+        "description": "classes, ranges, fitness, markets"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the morning card: survivors, the plateau map, the trial count, dead ends, two decisions"},
+  "settings": {"timezone": "Europe/London", "runaway": {"tokens": 300000, "agents": 1, "tool_calls": 40, "wall_seconds": 28800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "Nightly at 23:00", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "setup", "name": "Load and check the search space", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/setup.py"}, "effect": "none"},
+    {"id": "family", "name": "Family ledger and gate thresholds", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/family.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "night", "name": "Each revolution", "type": "loop", "typeVersion": 1, "position": [660, 0], "parameters": {"max_iterations": 6, "no_progress_rounds": 2, "metric": "best_validated", "predicate": "items.stop"}},
+    {"id": "generate", "name": "Propose candidates", "type": "llm", "typeVersion": 1, "position": [880, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/generate.md", "schema_ref": "schemas/candidates.json"}, "effect": "none"},
+    {"id": "dedupe", "name": "Dedupe by spec hash", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/dedupe.py"}, "effect": "none"},
+    {"id": "trials", "name": "Compile, backtest and validate", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/trials.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "record", "name": "Record trials and detect a plateau", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/record.py"}, "effect": "none"},
+    {"id": "plateau", "name": "Plateau?", "type": "rule", "typeVersion": 1, "position": [1760, 0], "parameters": {"expr": "items.plateau"}, "effect": "none"},
+    {"id": "move", "name": "Change the search space", "type": "llm", "typeVersion": 1, "position": [1980, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/move.md", "schema_ref": "schemas/move.json"}, "effect": "none"},
+    {"id": "apply", "name": "Apply the move", "type": "script", "typeVersion": 1, "position": [2200, 0], "parameters": {"script": "scripts/apply_move.py"}, "effect": "none"},
+    {"id": "holdout", "name": "Holdout once for the top 3", "type": "script", "typeVersion": 1, "position": [2420, 0], "parameters": {"script": "scripts/holdout.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "dsr", "name": "Deflated Sharpe over the family", "type": "script", "typeVersion": 1, "position": [2640, 0], "parameters": {"script": "scripts/deflated_sharpe.py"}, "effect": "none"},
+    {"id": "rank", "name": "Rank and keep dead ends", "type": "script", "typeVersion": 1, "position": [2860, 0], "parameters": {"script": "scripts/rank.py"}, "effect": "none"},
+    {"id": "write", "name": "Write the morning card", "type": "llm", "typeVersion": 1, "position": [3080, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the morning card", "type": "script", "typeVersion": 1, "position": [3300, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [3520, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [3740, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [3960, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "Nightly at 23:00": {"main": [[{"node": "Load and check the search space", "port": "in", "map": "one"}]]},
+    "Load and check the search space": {"main": [[{"node": "Family ledger and gate thresholds", "port": "in", "map": "one"}]]},
+    "Family ledger and gate thresholds": {"main": [[{"node": "Each revolution", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Each revolution": {"body": [[{"node": "Propose candidates", "port": "in", "map": "one"}, {"node": "Dedupe by spec hash", "port": "in", "map": "one"}, {"node": "Record trials and detect a plateau", "port": "in", "map": "one"}]], "done": [[{"node": "Holdout once for the top 3", "port": "in", "map": "one"}, {"node": "Rank and keep dead ends", "port": "in", "map": "one"}]]},
+    "Propose candidates": {"main": [[{"node": "Dedupe by spec hash", "port": "in", "map": "one"}]]},
+    "Dedupe by spec hash": {"main": [[{"node": "Compile, backtest and validate", "port": "in", "map": "one"}, {"node": "Record trials and detect a plateau", "port": "in", "map": "one"}]]},
+    "Compile, backtest and validate": {"main": [[{"node": "Record trials and detect a plateau", "port": "in", "map": "one"}]]},
+    "Record trials and detect a plateau": {"main": [[{"node": "Plateau?", "port": "in", "map": "one"}]]},
+    "Plateau?": {"true": [[{"node": "Change the search space", "port": "in", "map": "one"}, {"node": "Apply the move", "port": "in", "map": "one"}]], "false": [[{"node": "Each revolution", "port": "next", "map": "one"}]]},
+    "Change the search space": {"main": [[{"node": "Apply the move", "port": "in", "map": "one"}]]},
+    "Apply the move": {"main": [[{"node": "Each revolution", "port": "next", "map": "one"}]]},
+    "Holdout once for the top 3": {"main": [[{"node": "Deflated Sharpe over the family", "port": "in", "map": "one"}, {"node": "Rank and keep dead ends", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Deflated Sharpe over the family": {"main": [[{"node": "Rank and keep dead ends", "port": "in", "map": "one"}]]},
+    "Rank and keep dead ends": {"main": [[{"node": "Write the morning card", "port": "in", "map": "one"}, {"node": "Assemble the morning card", "port": "in", "map": "one"}]]},
+    "Write the morning card": {"main": [[{"node": "Assemble the morning card", "port": "in", "map": "one"}]]},
+    "Assemble the morning card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "L4", "needs": ["qmb-door"]}
+}

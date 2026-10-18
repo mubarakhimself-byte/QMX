@@ -2,9 +2,9 @@
 lists them.
 
 Each row names its plain name (ruling 35), the cards in research files 15, 16 or 17 it was built
-from, what it waits for, and its folder once a PR has built it. A row with no folder is "not yet
-built". A row with `needs` gets a definition naming the same `meta.needs` and installs as a
-validated draft; any other built row is tested on real models and published disabled.
+from, what it waits for, and its folder. Since TP4 every row has one. A row with `needs` gets a
+definition naming the same `meta.needs` and installs as a validated draft; any other row is tested
+on real models and published disabled.
 `test_cost` is what the row's test run cost when its PR measured it on the cheapest test
 candidates.
 """
@@ -45,7 +45,8 @@ class Template:
     folder: str | None = None
     """The workflow folder under the pack, which is also the workflow's id."""
     triggers: tuple[Cron, ...] = ()
-    """The card's schedule. Install adds each one disabled; the manual kind is in the definition."""
+    """The card's schedule. Install adds each one disabled once the template is published; the
+    manual kind is in the definition."""
     test_inputs: JsonValue = None
     test_cost: str | None = None
 
@@ -209,43 +210,102 @@ CATALOG: Final[tuple[Template, ...]] = (
         ("trading-node", "risk-session"),
         folder="pp-proposal-pack",
     ),
-    Template("B", "Build and prove, funnel stages 8 to 12", card("17", "D2", "D3"), "TP4", QMB),
-    Template("RS3", "Source to a Lab test", card("15", "R3") + card("16", "T8"), "TP4", QMB),
-    Template("RS6", "Hypotheses from dead ends", card("15", "R6"), "TP4", ("real-library",)),
-    Template("RS8", "Big-data question", card("15", "R8"), "TP4", ("rlm",)),
-    Template("L1", "Idea to first result", card("17", "L1"), "TP4", QMB),
-    Template("L4", "Overnight Lab loop", card("17", "L4"), "TP4", QMB),
-    Template("BC", "Build a component or indicator", card("17", "D1", "D5"), "TP4", ("sandbox",)),
-    Template("D3", "Iterate against QMB with overfit guards", card("17", "D3"), "TP4", QMB),
-    Template("D4", "Variant generation and comparison", card("17", "D4"), "TP4", QMB),
     Template(
-        "D6", "ML training run with a holdout", card("17", "D6"), "TP4", ("qmb-door", "sandbox")
+        "B",
+        "Build and prove, funnel stages 8 to 12",
+        card("17", "D2", "D3"),
+        "TP4",
+        QMB,
+        folder="b-build-and-prove",
     ),
-    Template("MA", "Mini app lifecycle", card("17", "D7", "D8"), "TP4", ("sandbox", "app-op")),
-    Template("D9", "Mini-app-to-mini-app pipeline", card("17", "D9"), "TP4", ("app-op",)),
+    Template(
+        "RS3",
+        "Source to a Lab test",
+        card("15", "R3") + card("16", "T8"),
+        "TP4",
+        QMB,
+        folder="rs3-source-to-lab-test",
+    ),
+    Template(
+        "RS6",
+        "Hypotheses from dead ends",
+        card("15", "R6"),
+        "TP4",
+        ("real-library",),
+        folder="rs6-hypotheses-from-dead-ends",
+        triggers=(Cron("0 5 * * 1", "UTC"),),
+    ),
+    Template(
+        "RS8",
+        "Big-data question",
+        card("15", "R8"),
+        "TP4",
+        ("rlm",),
+        folder="rs8-big-data-question",
+    ),
+    Template(
+        "L1", "Idea to first result", card("17", "L1"), "TP4", QMB, folder="l1-idea-to-first-result"
+    ),
+    Template(
+        "L4",
+        "Overnight Lab loop",
+        card("17", "L4"),
+        "TP4",
+        QMB,
+        folder="l4-overnight-lab-loop",
+        triggers=(Cron("0 23 * * *", "Europe/London"),),
+    ),
+    Template(
+        "BC",
+        "Build a component or indicator",
+        card("17", "D1", "D5"),
+        "TP4",
+        ("sandbox",),
+        folder="bc-build-a-component",
+    ),
+    Template(
+        "D3",
+        "Iterate against QMB with overfit guards",
+        card("17", "D3"),
+        "TP4",
+        QMB,
+        folder="d3-iterate-against-qmb",
+    ),
+    Template(
+        "D4",
+        "Variant generation and comparison",
+        card("17", "D4"),
+        "TP4",
+        QMB,
+        folder="d4-variant-comparison",
+    ),
+    Template(
+        "D6",
+        "ML training run with a holdout",
+        card("17", "D6"),
+        "TP4",
+        ("qmb-door", "sandbox"),
+        folder="d6-ml-training-run",
+    ),
+    Template(
+        "MA",
+        "Mini app lifecycle",
+        card("17", "D7", "D8"),
+        "TP4",
+        ("sandbox", "app-op"),
+        folder="ma-mini-app-lifecycle",
+    ),
+    Template(
+        "D9",
+        "Mini-app-to-mini-app pipeline",
+        card("17", "D9"),
+        "TP4",
+        ("app-op",),
+        folder="d9-mini-app-pipeline",
+    ),
 )
 
-ALL_BUILT: Final = (
-    "rs1-paper-scout",
-    "t3-news-calendar-watch",
-    "rs0-idea-grill",
-    "rs2-source-to-component-card",
-    "rs4-literature-review",
-    "a-fill-the-library",
-    "rv-weekly-review",
-    "db-desk-brief",
-    "t4-research-desk-overnight",
-    "dm-demo-monitor",
-    "t7-trade-journal-review",
-    "gw-guard-watchdogs",
-    "rk2-correlation-drift",
-    "dc-decay-and-limit-report",
-    "rk5-stress-tests",
-    "rk8-incident-post-mortem",
-    "p1-portfolio-combination",
-    "p2-daily-book-report",
-    "pp-proposal-pack",
-)
+ALL_BUILT: Final = tuple(str(t.folder) for t in CATALOG)
 CALIBRATED: Final = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
 
 SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
@@ -260,6 +320,7 @@ SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
         "a-fill-the-library/scripts/citation_check.py",
         "t4-research-desk-overnight/scripts/citation_check.py",
         "rk8-incident-post-mortem/scripts/citation_check.py",
+        "rs3-source-to-lab-test/scripts/citation_check.py",
     ),
     "render-and-grade/scripts/render_and_grade.py": tuple(
         f"{t}/scripts/render_and_grade.py" for t in ALL_BUILT
@@ -267,6 +328,15 @@ SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
     "render-and-grade/scripts/stop.py": tuple(f"{t}/scripts/stop.py" for t in ALL_BUILT),
     "render-and-grade/scripts/deliver.py": tuple(
         f"{t}/scripts/deliver.py" for t in ALL_BUILT if t != "a-fill-the-library"
+    ),
+    "overfit-gates/scripts/deflated_sharpe.py": tuple(
+        f"{t}/scripts/deflated_sharpe.py"
+        for t in (
+            "b-build-and-prove",
+            "l4-overnight-lab-loop",
+            "d3-iterate-against-qmb",
+            "d4-variant-comparison",
+        )
     ),
     "understand-extract/scripts/sections.py": (
         "rs2-source-to-component-card/scripts/sections.py",

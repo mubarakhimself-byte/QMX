@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["parent", "verdict", "survivor", "validated", "holdout", "deflated_sharpe",
+               "generations", "tree", "trials", "summary"],
+  "x-prose": ["summary"],
+  "properties": {
+    "parent": {"type": ["string", "null"]},
+    "verdict": {"type": "string"},
+    "survivor": {"type": ["string", "null"]},
+    "validated": {"type": "number"},
+    "holdout": {"type": ["number", "null"]},
+    "deflated_sharpe": {"type": "object"},
+    "generations": {"type": "integer", "maximum": 3},
+    "tree": {"type": "array"},
+    "trials": {"type": "integer"},
+    "summary": {"type": "string"}
+  }
+}

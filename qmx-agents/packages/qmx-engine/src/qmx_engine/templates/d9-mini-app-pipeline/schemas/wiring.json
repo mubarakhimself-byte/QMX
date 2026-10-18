@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "required": ["producer", "emits", "consumer", "accepts", "wait", "show_in", "questions"],
+  "properties": {
+    "producer": {"type": "string"},
+    "emits": {"type": "string"},
+    "consumer": {"type": "string"},
+    "accepts": {"type": "string"},
+    "wait": {"type": "boolean"},
+    "show_in": {"type": ["string", "null"]},
+    "questions": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {"type": "object", "required": ["question", "recommended"]}
+    }
+  }
+}

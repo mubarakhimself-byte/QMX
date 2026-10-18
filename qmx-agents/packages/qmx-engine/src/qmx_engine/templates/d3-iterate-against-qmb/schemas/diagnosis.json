@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["weaknesses"],
+  "properties": {
+    "weaknesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bucket", "hypothesis", "evidence"],
+        "properties": {
+          "bucket": {"enum": ["costs", "one_regime", "one_session", "drawdown_clustering",
+                              "too_few_trades", "exit_too_loose", "exit_too_tight"]},
+          "hypothesis": {"type": "string"},
+          "evidence": {"type": "string"}
+        }
+      }
+    }
+  }
+}

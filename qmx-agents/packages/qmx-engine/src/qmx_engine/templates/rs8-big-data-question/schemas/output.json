@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": ["question", "cost_card", "findings", "not_reproduced", "evidence_complete",
+               "cost_usd", "summary"],
+  "x-prose": ["summary", "findings", "not_reproduced"],
+  "properties": {
+    "question": {"type": "string"},
+    "cost_card": {"type": ["object", "null"]},
+    "findings": {"type": "array"},
+    "not_reproduced": {"type": "array"},
+    "evidence_complete": {"type": "boolean"},
+    "cost_usd": {"type": ["number", "null"]},
+    "summary": {"type": "string"}
+  }
+}

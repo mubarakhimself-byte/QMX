@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "required": ["folder_ref", "version", "tests", "could_not_build"],
+  "properties": {
+    "folder_ref": {"type": ["string", "null"]},
+    "version": {"type": "integer"},
+    "tests": {"type": "array", "items": {"type": "object", "required": ["name", "passed"]}},
+    "could_not_build": {"type": ["string", "null"]}
+  }
+}

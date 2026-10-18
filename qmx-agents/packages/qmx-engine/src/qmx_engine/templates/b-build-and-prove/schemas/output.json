@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["stage_reached", "verdict", "spec", "memo_key", "gates", "card", "dead_end",
+               "summary"],
+  "x-prose": ["summary"],
+  "properties": {
+    "stage_reached": {"enum": [9, 10, 12]},
+    "verdict": {"type": "string"},
+    "spec": {"type": "object", "required": ["strategy", "code_hash", "costs", "windows"]},
+    "memo_key": {"type": "string"},
+    "gates": {"type": "array"},
+    "card": {"type": ["object", "null"]},
+    "dead_end": {"type": ["object", "null"]},
+    "summary": {"type": "string"}
+  }
+}

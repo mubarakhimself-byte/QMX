@@ -1,0 +1,44 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bc-build-a-component",
+  "name": "Build a component or indicator",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "card"
+    ],
+    "properties": {
+      "card": {
+        "type": "object",
+        "description": "a component or indicator card (R2, D5 spec)"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the component page: test chips, the no-future verdict, the review, publish or draft"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 400000, "agents": 1, "tool_calls": 120, "wall_seconds": 5400, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "card", "name": "Check the card and scaffold", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/card_check.py"}, "effect": "none"},
+    {"id": "ready", "name": "Card complete?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
+    {"id": "build", "name": "Write the tests, then the code", "type": "agent", "typeVersion": 1, "position": [660, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": [], "max_turns": 30}, "effect": "none"},
+    {"id": "checks", "name": "Run the checks in the sandbox", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/checks.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "verdict", "name": "No-future, warm-up and test-first verdict", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/verdict.py"}, "effect": "none"},
+    {"id": "review", "name": "Review the code against the card", "type": "llm", "typeVersion": 1, "position": [1320, 0], "role": "reviewer", "parameters": {"prompt_ref": "prompts/review.md", "schema_ref": "schemas/review.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Publish or keep as a draft", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1760, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2200, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Check the card and scaffold", "port": "in", "map": "one"}]]},
+    "Check the card and scaffold": {"main": [[{"node": "Card complete?", "port": "in", "map": "one"}, {"node": "Publish or keep as a draft", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Card complete?": {"true": [[{"node": "Write the tests, then the code", "port": "in", "map": "one"}, {"node": "Review the code against the card", "port": "in", "map": "one"}]]},
+    "Write the tests, then the code": {"main": [[{"node": "Run the checks in the sandbox", "port": "in", "map": "one"}, {"node": "Review the code against the card", "port": "in", "map": "one"}, {"node": "Publish or keep as a draft", "port": "in", "map": "one"}]]},
+    "Run the checks in the sandbox": {"main": [[{"node": "No-future, warm-up and test-first verdict", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "No-future, warm-up and test-first verdict": {"main": [[{"node": "Review the code against the card", "port": "in", "map": "one"}, {"node": "Publish or keep as a draft", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Review the code against the card": {"main": [[{"node": "Publish or keep as a draft", "port": "in", "map": "one"}]]},
+    "Publish or keep as a draft": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "BC", "needs": ["sandbox"]}
+}

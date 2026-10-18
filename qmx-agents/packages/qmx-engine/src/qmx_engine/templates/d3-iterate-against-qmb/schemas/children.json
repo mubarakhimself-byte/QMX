@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": ["children"],
+  "properties": {
+    "children": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["change", "bucket", "hypothesis", "what_changed", "spec"],
+        "properties": {
+          "change": {"enum": ["trend_filtered", "volatility_adaptive", "session_filtered",
+                              "exit_replaced", "regime_gated", "cost_aware"]},
+          "bucket": {"type": "string"},
+          "hypothesis": {"type": "string"},
+          "what_changed": {"type": "string"},
+          "spec": {"type": "object"}
+        }
+      }
+    }
+  }
+}

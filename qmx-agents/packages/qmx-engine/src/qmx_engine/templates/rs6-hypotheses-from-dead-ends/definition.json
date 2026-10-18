@@ -1,0 +1,32 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rs6-hypotheses-from-dead-ends",
+  "name": "Hypotheses from dead ends",
+  "outputs": {"type": "object", "description": "a short list of up to five hypothesis cards, each with the dead ends behind it"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 150000, "agents": 10, "tool_calls": 10, "wall_seconds": 3600, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "Weekly", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "library", "name": "Load dead ends from the Library", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/library.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "cluster", "name": "Cluster the new dead ends", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/cluster.py"}, "effect": "none"},
+    {"id": "wake", "name": "Five or more new dead ends?", "type": "rule", "typeVersion": 1, "position": [660, 0], "parameters": {"expr": "items != []"}, "effect": "none"},
+    {"id": "propose", "name": "Propose per cluster", "type": "llm", "typeVersion": 1, "position": [880, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/propose.md", "schema_ref": "schemas/hypotheses.json"}, "effect": "none"},
+    {"id": "all", "name": "All hypotheses", "type": "join", "typeVersion": 1, "position": [1100, 0], "parameters": {}},
+    {"id": "check", "name": "Dedupe and gate", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/check.py"}, "effect": "none"},
+    {"id": "assemble", "name": "Rank and short list", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1760, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2200, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "Weekly": {"main": [[{"node": "Load dead ends from the Library", "port": "in", "map": "one"}]]},
+    "Load dead ends from the Library": {"main": [[{"node": "Cluster the new dead ends", "port": "in", "map": "one"}, {"node": "Dedupe and gate", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Cluster the new dead ends": {"main": [[{"node": "Five or more new dead ends?", "port": "in", "map": "one"}, {"node": "Dedupe and gate", "port": "in", "map": "one"}, {"node": "Rank and short list", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Five or more new dead ends?": {"true": [[{"node": "Propose per cluster", "port": "in", "map": "chunk", "chunk": {"by": "items", "size": 1}}]]},
+    "Propose per cluster": {"main": [[{"node": "All hypotheses", "port": "in", "map": "one"}]]},
+    "All hypotheses": {"main": [[{"node": "Dedupe and gate", "port": "in", "map": "one"}]]},
+    "Dedupe and gate": {"main": [[{"node": "Rank and short list", "port": "in", "map": "one"}]]},
+    "Rank and short list": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "RS6", "needs": ["real-library"]}
+}

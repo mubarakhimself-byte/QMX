@@ -1,0 +1,44 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "d9-mini-app-pipeline",
+  "name": "Mini-app-to-mini-app pipeline",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "request"
+    ],
+    "properties": {
+      "request": {
+        "type": "string",
+        "description": "when app X publishes, feed it to app Y ..."
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the pipeline folder, its contract test report and the enable card"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 80000, "agents": 1, "tool_calls": 10, "wall_seconds": 1800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "plan", "name": "Plan the wiring", "type": "llm", "typeVersion": 1, "position": [220, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/plan.md", "schema_ref": "schemas/wiring.json"}, "effect": "none"},
+    {"id": "apps", "name": "Both apps and their schemas", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/apps.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "compat", "name": "Schema compatibility", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/compat.py"}, "effect": "none"},
+    {"id": "match", "name": "Schemas compatible?", "type": "rule", "typeVersion": 1, "position": [880, 0], "parameters": {"expr": "items.compatible"}, "effect": "none"},
+    {"id": "transform", "name": "Write the transform", "type": "llm", "typeVersion": 1, "position": [1100, 0], "role": "builder", "parameters": {"prompt_ref": "prompts/transform.md", "schema_ref": "schemas/transform.json"}, "effect": "none"},
+    {"id": "contract", "name": "Contract test on recorded fixtures", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/contract.py"}, "effect": "none"},
+    {"id": "pipeline", "name": "Pipeline folder and enable card", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/pipeline.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1760, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2200, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Plan the wiring", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Plan the wiring": {"main": [[{"node": "Both apps and their schemas", "port": "in", "map": "one"}, {"node": "Pipeline folder and enable card", "port": "in", "map": "one"}]]},
+    "Both apps and their schemas": {"main": [[{"node": "Schema compatibility", "port": "in", "map": "one"}, {"node": "Contract test on recorded fixtures", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Schema compatibility": {"main": [[{"node": "Schemas compatible?", "port": "in", "map": "one"}, {"node": "Contract test on recorded fixtures", "port": "in", "map": "one"}]]},
+    "Schemas compatible?": {"false": [[{"node": "Write the transform", "port": "in", "map": "one"}]]},
+    "Write the transform": {"main": [[{"node": "Contract test on recorded fixtures", "port": "in", "map": "one"}]]},
+    "Contract test on recorded fixtures": {"main": [[{"node": "Pipeline folder and enable card", "port": "in", "map": "one"}]]},
+    "Pipeline folder and enable card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "D9", "needs": ["app-op"]}
+}

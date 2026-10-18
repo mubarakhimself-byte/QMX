@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["card", "questions", "dead_end_warning", "missing", "facts", "results", "iteration",
+               "summary"],
+  "x-prose": ["card", "questions", "dead_end_warning", "summary"],
+  "properties": {
+    "card": {"type": "object"},
+    "questions": {"type": "array", "maxItems": 5},
+    "dead_end_warning": {"type": "string"},
+    "missing": {"type": "array"},
+    "facts": {"type": "object"},
+    "results": {"type": "array"},
+    "iteration": {"type": "string"},
+    "summary": {"type": "string"}
+  }
+}

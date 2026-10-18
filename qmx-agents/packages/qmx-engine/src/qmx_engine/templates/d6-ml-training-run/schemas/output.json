@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "required": ["scope", "questions", "checks", "verdict", "result", "summary"],
+  "x-prose": ["scope", "questions", "summary"],
+  "properties": {
+    "scope": {"type": "object"},
+    "questions": {"type": "array"},
+    "checks": {"type": "object"},
+    "verdict": {"type": "string"},
+    "result": {"type": ["object", "null"]},
+    "summary": {"type": "string"}
+  }
+}

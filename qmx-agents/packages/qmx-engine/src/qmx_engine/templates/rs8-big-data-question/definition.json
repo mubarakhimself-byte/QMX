@@ -1,0 +1,53 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rs8-big-data-question",
+  "name": "Big-data question",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "question",
+      "handles"
+    ],
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "where does strategy X break across ..."
+      },
+      "handles": {
+        "type": "array",
+        "description": "read-only data handles with rows and bytes"
+      },
+      "ask_above_usd": {
+        "type": "number",
+        "description": "his ask-above number"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the reproduced findings with their evidence pack, or the cost card above his number"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 400000, "agents": 1, "tool_calls": 200, "wall_seconds": 10800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "estimate", "name": "Estimate sub-calls and cost", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/estimate.py"}, "effect": "none"},
+    {"id": "within", "name": "Within his ask-above number?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.within"}, "effect": "none"},
+    {"id": "kernel", "name": "Root model in the research kernel", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/kernel.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "reproduce", "name": "Reproduce from the snapshot", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/reproduce.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "findings", "name": "Keep reproduced findings", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/findings.py"}, "effect": "none"},
+    {"id": "write", "name": "Write the explainer", "type": "llm", "typeVersion": 1, "position": [1320, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the explainer", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1760, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2200, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Estimate sub-calls and cost", "port": "in", "map": "one"}]]},
+    "Estimate sub-calls and cost": {"main": [[{"node": "Within his ask-above number?", "port": "in", "map": "one"}, {"node": "Assemble the explainer", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Within his ask-above number?": {"true": [[{"node": "Root model in the research kernel", "port": "in", "map": "one"}]]},
+    "Root model in the research kernel": {"main": [[{"node": "Reproduce from the snapshot", "port": "in", "map": "one"}, {"node": "Keep reproduced findings", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Reproduce from the snapshot": {"main": [[{"node": "Keep reproduced findings", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Keep reproduced findings": {"main": [[{"node": "Write the explainer", "port": "in", "map": "one"}, {"node": "Assemble the explainer", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Write the explainer": {"main": [[{"node": "Assemble the explainer", "port": "in", "map": "one"}]]},
+    "Assemble the explainer": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "RS8", "needs": ["rlm"]}
+}

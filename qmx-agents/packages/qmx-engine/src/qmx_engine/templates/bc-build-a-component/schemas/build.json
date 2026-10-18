@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["code_ref", "test_refs", "graph_ref", "steps", "fragment"],
+  "properties": {
+    "code_ref": {"type": ["string", "null"]},
+    "test_refs": {"type": "array", "items": {"type": "string"}},
+    "graph_ref": {"type": ["string", "null"]},
+    "steps": {"type": "array", "items": {"type": "string"}},
+    "fragment": {"type": ["string", "null"]}
+  }
+}

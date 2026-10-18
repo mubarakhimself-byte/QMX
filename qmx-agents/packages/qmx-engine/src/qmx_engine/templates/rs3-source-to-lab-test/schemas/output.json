@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["source_hash", "verdict", "rows", "decay_ratio", "assumptions", "dropped",
+               "pick_card", "summary"],
+  "x-prose": ["summary"],
+  "properties": {
+    "source_hash": {"type": "string"},
+    "verdict": {"type": "string"},
+    "rows": {"type": "array"},
+    "decay_ratio": {"type": ["number", "null"]},
+    "assumptions": {"type": "array"},
+    "dropped": {"type": "array"},
+    "pick_card": {"type": ["object", "null"]},
+    "summary": {"type": "string"}
+  }
+}

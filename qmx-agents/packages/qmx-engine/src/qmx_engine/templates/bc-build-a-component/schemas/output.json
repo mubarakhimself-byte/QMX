@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["name", "kind", "formula_hash", "label", "state", "problems", "checks", "failing",
+               "tests", "bars_per_second", "review", "invented_values"],
+  "x-prose": ["review", "invented_values", "failing"],
+  "properties": {
+    "name": {"type": "string"},
+    "kind": {"enum": ["signal", "filter", "exit", "sizing", "regime", "indicator"]},
+    "formula_hash": {"type": "string"},
+    "label": {"type": ["string", "null"]},
+    "state": {"enum": ["card incomplete", "fragment", "draft", "ready to publish a version"]},
+    "problems": {"type": "array"},
+    "checks": {"type": "object"},
+    "failing": {"type": "array"},
+    "tests": {"type": "array"},
+    "bars_per_second": {"type": ["number", "null"]},
+    "review": {"type": "string"},
+    "invented_values": {"type": "array"}
+  }
+}

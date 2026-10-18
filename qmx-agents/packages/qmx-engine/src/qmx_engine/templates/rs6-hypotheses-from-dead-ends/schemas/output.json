@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["silent", "new_dead_ends", "clusters", "short_list", "scores", "dropped", "notes",
+               "pick_card"],
+  "x-prose": ["short_list", "dropped", "notes"],
+  "properties": {
+    "silent": {"type": "boolean"},
+    "new_dead_ends": {"type": "integer"},
+    "clusters": {"type": "integer"},
+    "short_list": {"type": "array", "maxItems": 5},
+    "scores": {"type": "array"},
+    "dropped": {"type": "array"},
+    "notes": {"type": "array"},
+    "pick_card": {"type": ["object", "null"]}
+  }
+}
