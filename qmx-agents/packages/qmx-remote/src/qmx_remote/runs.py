@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import keyring
 from pydantic import Field, JsonValue
-from qmx_agents.guards.journal import RunJournal
+from qmx_ledger.journal import RunJournal
 
 from qmx_remote.models import (
     Document,

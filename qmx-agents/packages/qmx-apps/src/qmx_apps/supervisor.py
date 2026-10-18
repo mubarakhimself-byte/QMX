@@ -26,7 +26,7 @@ import psutil
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from pydantic import JsonValue
-from qmx_agents.guards.money_path import check_descriptor
+from qma.core.barriers.descriptors import check_descriptor
 
 from qmx_apps.artifacts import Artifacts
 from qmx_apps.errors import AppError, Document

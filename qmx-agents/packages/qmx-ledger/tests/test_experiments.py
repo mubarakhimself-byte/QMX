@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from qmx_agents.guards.experiments import EvidenceRejected, ExperimentLedger
+from qmx_ledger.experiments import EvidenceRejected, ExperimentLedger
 
 
 def test_reopen_retains_identity_refs_and_exact_bytes(tmp_path: Path) -> None:

@@ -12,8 +12,7 @@ from langchain_core.tools import BaseTool, tool
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from qmx_control.models import Document
 from qmx_control.service import ControlService, SessionInput
-
-from qmx_agents.guards import RunJournal
+from qmx_ledger.journal import RunJournal
 
 if TYPE_CHECKING:
     from qmx_agents.spec import BuildContext

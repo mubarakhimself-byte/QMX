@@ -26,6 +26,8 @@ from typing import Any
 from common import (
     PROBE_VENV,
     SCRATCH,
+    SHIM_EXE,
+    Lockdown,
     Log,
     bundled_cli,
     describe,
@@ -39,7 +41,6 @@ from common import (
 )
 
 STARTS = SCRATCH / "shim-starts"
-SHIM_EXE = PROBE_VENV / "Scripts" / "qma-cli-launcher.exe"
 PACKAGE = SCRATCH / "shim-pkg"
 NO_INPUT_SWITCH = "HP0_SHIM_NO_INPUT"
 PARENT_JOB = "Local\\qma-hp0-parent-job"
@@ -300,6 +301,7 @@ async def version(log: Log) -> None:
     from claude_agent_sdk import ClaudeSDKClient  # noqa: PLC0415
 
     options = plan_options(
+        Lockdown(),
         cli_path=str(SHIM_EXE),
         env=home_env() | THROWAWAY | {"QMA_CLI_PATH": str(bundled_cli()), "QMA_CHAT_ID": "hp0"},
     )
@@ -409,7 +411,7 @@ async def turn(log: Log) -> None:
 
     require_plan_login(log, bundled_cli())
     options = plan_options(
-        cli_path=str(SHIM_EXE), env=home_env() | {"QMA_CLI_PATH": str(bundled_cli())}
+        Lockdown(), cli_path=str(SHIM_EXE), env=home_env() | {"QMA_CLI_PATH": str(bundled_cli())}
     )
     ok = False
     clear_starts()

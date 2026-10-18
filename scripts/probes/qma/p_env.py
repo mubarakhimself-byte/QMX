@@ -14,6 +14,7 @@ import sys
 
 from claude_agent_sdk import Message, RateLimitEvent
 from common import (
+    Lockdown,
     Log,
     bundled_cli,
     is_ok,
@@ -28,7 +29,8 @@ from common import (
 )
 
 FAKE_KEY = "sk-ant-api03-hp0-probe-fake-key-not-a-credential"
-BASH_PROMPT = "Run this exact Bash command and reply with its output only: env | cut -d= -f1 | sort"
+ENV_COMMAND = "env | cut -d= -f1 | sort"
+BASH_PROMPT = f"Run this exact Bash command and reply with its output only: {ENV_COMMAND}"
 PLANTED = {
     "ANTHROPIC_API_KEY": FAKE_KEY,
     "ANTHROPIC_BASE_URL": "http://127.0.0.1:9",
@@ -54,7 +56,7 @@ async def main() -> int:
     removed = scrub_process_env(os.environ)
     log(f"run 1 planted names: {sorted(PLANTED)}")
     log(f"run 1 removed names: {removed}")
-    run1 = await run_turns(log, plan_options(), [BASH_PROMPT])
+    run1 = await run_turns(log, plan_options(Lockdown(frozenset({ENV_COMMAND}))), [BASH_PROMPT])
     listing = {line.strip() for text in tool_results(run1) for line in text.splitlines()}
     bash_calls, ok1 = tool_uses(run1, "Bash"), is_ok(run1)
     leaked, verdict = s19_scrub_verdict(PLANTED, removed, bash_calls, ok1, listing)
@@ -68,7 +70,7 @@ async def main() -> int:
     os.environ.update(original | {"ANTHROPIC_API_KEY": FAKE_KEY})
     removed = scrub_process_env(os.environ)
     log(f"run 2 removed names: {removed}")
-    run2 = await run_turns(log, plan_options(), ["say ok"])
+    run2 = await run_turns(log, plan_options(Lockdown()), ["say ok"])
     plan2, ok2 = saw_rate_limit(run2), is_ok(run2)
     log.row(
         "S19 fake key in parent env, scrubbed",
@@ -80,7 +82,7 @@ async def main() -> int:
         os.environ.clear()
         os.environ.update(reduced_env(original) | {"ANTHROPIC_API_KEY": FAKE_KEY})
         log("control: fake key left in the env the SDK merges")
-        run3 = await run_turns(log, plan_options(), ["say ok"])
+        run3 = await run_turns(log, plan_options(Lockdown()), ["say ok"])
         plan3, ok3 = saw_rate_limit(run3), is_ok(run3)
         log.row(
             "S19 control, fake key not scrubbed",

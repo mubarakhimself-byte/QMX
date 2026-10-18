@@ -12,7 +12,8 @@ dependencies = [
     "pywin32==312; sys_platform == 'win32'",
     "duckdb==1.5.5",
     "cachetools==7.2.1",
-    "qmx-agents",
+    "qma-core",
+    "qmx-ledger",
 ]
 
 [build-system]
@@ -20,7 +21,8 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-qmx-agents = { workspace = true }
+qma-core = { workspace = true }
+qmx-ledger = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -32,7 +34,6 @@ dev = [
     "poethepoet==0.48.0",
     "types-pywin32==312.0.0.20261006",
     "types-jsonschema",
-    "qmx-agents",
     "types-cachetools>=7.0.0.20260713",
     "beautifulsoup4==4.15.0",
     "markdownify==1.2.3",

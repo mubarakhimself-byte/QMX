@@ -26,12 +26,12 @@ import aiosqlite
 from deepagents.backends import FilesystemBackend
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from qmx_agents.guards.journal import RunJournal
 from qmx_agents.router import ModelRouter, RouterConfig, RunContext
 from qmx_agents.spec import BuildContext, build_agent, load_spec
 from qmx_agents.workflows import Bindings, WorkflowSpec, compile
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
+from qmx_ledger.journal import RunJournal
 
 from qmx_remote.code import checkout, publish
 from qmx_remote.models import Document, Manifest, RemoteError, Target

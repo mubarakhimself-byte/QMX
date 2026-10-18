@@ -417,7 +417,7 @@ def test_claude_native_auth_metadata_prevents_api_routing(
     def run(command: list[str], **_kwargs: Any) -> Any:
         commands.append(command)
         if command[-1] == "--version":
-            return SimpleNamespace(stdout="2.1.286 (Claude Code)", returncode=0)
+            return SimpleNamespace(stdout="2.1.299 (Claude Code)", returncode=0)
         assert command[-2:] == ["auth", "status"]
         return SimpleNamespace(
             returncode=0,

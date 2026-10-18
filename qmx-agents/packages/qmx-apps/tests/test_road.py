@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from qmx_agents.guards.journal import RunJournal, encoded, fingerprint
+from qmx_ledger.journal import RunJournal, encoded, fingerprint
 
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition

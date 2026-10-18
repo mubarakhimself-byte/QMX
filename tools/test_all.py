@@ -115,6 +115,22 @@ def main() -> int:
             ["tests"],
         )
     )
+    suites.append(
+        (
+            "qmx-ledger",
+            ROOT / "qmx-agents/packages/qmx-ledger",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
+    )
+    suites.append(
+        (
+            "qma-harness",
+            ROOT / "qmx-agents/packages/qma-harness",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
+    )
     top_level = sorted(qa.glob("test_*.py"))
     if top_level:
         paths = [str(path.relative_to(ROOT)) for path in top_level]

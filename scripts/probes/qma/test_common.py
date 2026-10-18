@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import common
 import p_login
-from common import Log, reduced_env, require_plan_login, scrub_process_env
+from common import Log, Provider, provider_env, reduced_env, require_plan_login, scrub_process_env
 from plants import snapshot
 
 PARENT = {
@@ -15,10 +15,12 @@ PARENT = {
     "SystemRoot": "C:/Windows",
     "CLAUDE_CODE_GIT_BASH_PATH": "D:/Git/bin/bash.exe",
     "CLAUDE_CONFIG_DIR": "D:/ship/claude",
+    "APPDATA": "C:/Users/operator/AppData/Roaming",
     "HTTPS_PROXY": "http://127.0.0.1:9",
     "ANTHROPIC_API_KEY": "sk-ant-fake",
     "NODE_EXTRA_CA_CERTS": "D:/ca.pem",
     "CLAUDE_CODE_USE_BEDROCK": "1",
+    "CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-fake-not-a-credential",
 }
 
 
@@ -28,13 +30,57 @@ def test_reduced_env_keeps_git_bash_and_drops_routing_names() -> None:
         "SystemRoot": "C:/Windows",
         "CLAUDE_CODE_GIT_BASH_PATH": "D:/Git/bin/bash.exe",
         "CLAUDE_CONFIG_DIR": "D:/ship/claude",
+        "APPDATA": "C:/Users/operator/AppData/Roaming",
     }
+
+
+def test_provider_env_sends_the_base_url_with_its_own_token_and_pins_every_tier(
+    tmp_path: Path,
+) -> None:
+    provider = Provider(
+        "openrouter",
+        "https://openrouter.ai/api",
+        "moonshotai/kimi-k3",
+        {"ENABLE_TOOL_SEARCH": "true"},
+    )
+    with patch.object(common, "FAKE_HOME", tmp_path / "home"):
+        env = provider_env(PARENT, provider, "fake-provider-key", tmp_path / "claude")
+    assert env == {
+        "Path": "C:/Windows",
+        "SystemRoot": "C:/Windows",
+        "CLAUDE_CODE_GIT_BASH_PATH": "D:/Git/bin/bash.exe",
+        "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"),
+        "HOME": str(tmp_path / "home"),
+        "USERPROFILE": str(tmp_path / "home"),
+        "APPDATA": str(tmp_path / "home" / "AppData" / "Roaming"),
+        "LOCALAPPDATA": str(tmp_path / "home" / "AppData" / "Local"),
+        "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+        "ANTHROPIC_AUTH_TOKEN": "fake-provider-key",
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "moonshotai/kimi-k3",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "moonshotai/kimi-k3",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "moonshotai/kimi-k3",
+        "ANTHROPIC_DEFAULT_FABLE_MODEL": "moonshotai/kimi-k3",
+        "ENABLE_TOOL_SEARCH": "true",
+    }
+
+
+def test_log_cuts_a_registered_key_out_of_every_later_line(tmp_path: Path) -> None:
+    log = Log("redact", tmp_path)
+    log("before sk-or-fake-123")
+    log.redact("sk-or-fake-123")
+    log.row("B1 openrouter", "401 invalid key sk-or-fake-123", "FAIL")
+    assert log.path.read_text(encoding="utf-8").splitlines()[1:] == [
+        "before sk-or-fake-123",
+        "FINDING	B1 openrouter	401 invalid key <redacted key>	FAIL",
+    ]
 
 
 def test_scrub_removes_names_in_place_and_is_idempotent() -> None:
     environ = dict(PARENT)
     assert scrub_process_env(environ) == (
         "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
         "CLAUDE_CODE_USE_BEDROCK",
         "HTTPS_PROXY",
         "NODE_EXTRA_CA_CERTS",
