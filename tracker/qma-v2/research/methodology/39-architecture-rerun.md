@@ -46,10 +46,10 @@ Ruling 92: a main agent on a subscription (Claude plan or Codex) with sub-agents
 - **Function.** B and D alone leave the stock Task tool, plugin agents and the Claude Code Workflow helpers Claude-only whenever the main is on the plan, which is his daily copilot. That fails ruling 92 for the copilot, and his stance is that "the SDK limit is a problem to solve, not a wall" (C-63). A alone gives no full helper chats, no Claude helper under a Kimi main and no external CLIs. Together they cover every row of the table in SOLUTION-DESIGN §26.1.
 - **Plan allowance and billing.** 37d §6.5: a third-party app **holding** a Claude OAuth token gets extra-usage billing, not the Max allowance. In A no QMX code holds the token: the unmodified CLI holds its own `/login`, sends its own bearer, and the router forwards the bytes unchanged. Anthropic documents this pattern: with a base URL set and no gateway credential, "a saved claude.ai login remains the active credential, so its usage limits and billing apply", and a gateway that passes the traffic on "must forward the OAuth capability in anthropic-beta" [retrieved in 38 §2.1 from code.claude.com llm-gateway]. So the plan allowance applies and the settled rule "plan traffic passes through the unmodified CLI untouched" holds.
 - **Terms.** The developer bar targets apps that offer Claude login to other users, route requests on behalf of users, or store and intermediate tokens; cloaking and pooling are what it targets [retrieved 38 §2.1-2.2]. A serves one person, his own unmodified CLI, one account at a time, no storing, no rewriting, no cloaking, and never swaps a token between accounts. The literal word "intermediate" is the remaining exposure; ruling 38 says risks are aligned and not to re-raise them, ruling 98 hands the call to me, and a per-account kill switch keeps it his to turn off.
-- **Failure.** The router already lives inside `qma.serve` [retrieved `relay.py`: binds 127.0.0.1, in-process]. A router crash is a harness crash, which the desktop host restarts (AD-48); A adds no new single point of failure. If the boot canary fails, the plan lane stays off and plan chats launch as built.
+- **Failure.** (Corrected by 41 H1: the plan lane does make the copilot depend on the router; the router gets its own loop and a health check that turns the lane off, AD-38.) The router already lives inside `qma.serve` [retrieved `relay.py`: binds 127.0.0.1, in-process]. A router crash is a harness crash, which the desktop host restarts (AD-48); A adds no new single point of failure. If the boot canary fails, the plan lane stays off and plan chats launch as built.
 - **Security.** The plan lane is same-host loopback only; plan bytes never cross the tailnet; a central router has no plan lane; every non-plan lane runs the built egress stop as a canary, so a Claude token that leaks into a third-party request fails closed with a `black` item. No header value is logged.
 - **Blast radius.** Only provider contracts change (launch env, relay lanes, profiles, pool); chats, permissions, the money gate and the launcher's other behaviour stay as built (C-60). §7 lists what it touches.
-- **Cost of building.** A is about one relay mode on code that exists (grants, egress stop, quirks, journal); B is a rebuild of the `delegate` call path on existing Child chats; D needs only the registry. All three share the pool and the registry, so building them together costs less than building any two separately and retrofitting the third.
+- **Cost of building.** (Corrected by 41 H6, see "Review applied" R.4: A is a router rewrite with per-request routing, not one relay mode, and it is built only if probes P0, P1, P4 and P2 pass.) A is about one relay mode on code that exists (grants, egress stop, quirks, journal); B is a rebuild of the `delegate` call path on existing Child chats; D needs only the registry. All three share the pool and the registry, so building them together costs less than building any two separately and retrofitting the third.
 
 ### 2.4 The rules that make A safe
 
@@ -371,9 +371,9 @@ LATER-PACKET, mapped to packets (SOLUTION-DESIGN §25 and §26.15): B-20 nested 
 
 | Decision | Code it touches (engine/base) | Templates | UI | Other ADs |
 | --- | --- | --- | --- | --- |
-| AD-38 router lanes | `qma/harness/relay.py` (new plan lane, chat lane, registry resolve), `launch.py` (plan launch env), `profiles.py`, `harness.py` (grants for plan launches), `money.py` untouched | none directly; every agent node can now name third-party sub-agents | live dock, model picker, per-account switch | AD-12, AD-13, AD-28, AD-29, AD-39, AD-41, AD-15 |
+| AD-38 router lanes | `qma/harness/relay.py` (new plan lane, chat lane, registry resolve), `launch.py` (plan launch env), `profiles.py`, `harness.py` (grants for plan launches), `money.py` untouched | none directly; every agent node can now name third-party sub-agents | live dock, model picker, per-account switch | AD-12, AD-13, AD-28, AD-29, AD-39, AD-41, AD-15 **Superseded by "Review applied" R.4 (41 H6: this row was far too narrow).** |
 | AD-39 model registry | `profiles.py` refactor to data, `roles.py` (capability checks), `core/partitions.py` (window from the registry, not `context_window`), `nodes/agent.py` (compaction point) | role ladders regenerate | provider and model pages | AD-13, AD-34, AD-42 |
-| AD-40 no caps | `launch.py:221-261, 518-519` (`Budgets`, `parse_budgets`), `harness.py:362-385` (`BackgroundCap`, `needs_you`), `qmx_engine/settings.py`, `admission.py`, `core/ladder.py` (runaway code), `nodes/agent.py:193-255` (tool-call cap), `watchdog.py` (loop signature) | all 31 set their own `runaway` block today [36 S10]; the blocks are removed or read as `limits` once | Settings budget rows, run cards | AD-9, AD-16, AD-28 (pass), AD-34, Lab AD-12, AD-13 |
+| AD-40 no caps | `launch.py:221-261, 518-519` (`Budgets`, `parse_budgets`), `harness.py:362-385` (`BackgroundCap`, `needs_you`), `qmx_engine/settings.py`, `admission.py`, `core/ladder.py` (runaway code), `nodes/agent.py:193-255` (tool-call cap), `watchdog.py` (loop signature) | all 31 set their own `runaway` block today [36 S10]; the blocks are removed or read as `limits` once | Settings budget rows, run cards | AD-9, AD-16, AD-28 (pass), AD-34, Lab AD-12, AD-13 **Superseded by "Review applied" R.4 (41 H6: this row was far too narrow).** |
 | AD-12 pool | new `pool.py`; `admission.py` (share default gone); `settings.py` (strategy) | none | Accounts page | AD-9, AD-38, AD-28 |
 | AD-41 `delegate` v2 | `tools.py:388` `delegate_def`, `harness.py:425` `_delegate` (rebuild), `control.db` completions table | engine agents with `via: delegate` | live dock | AD-4, AD-15, AD-49 |
 | AD-42 multimodal | harness turn routes, composer, new roles | template A visual pass | composer chips | AD-13, AD-39, AD-41 |
@@ -426,7 +426,7 @@ SOLUTION-DESIGN §26.13 walks fifteen scenarios (helpers on Kimi and Qwen under 
 
 ---
 
-## 10. Open operator calls (only these)
+## 10. Open operator calls (only these; superseded by "Review applied" R.7 below)
 
 1. **D. Grant HG3, narrowed** (H2 first). Recommend yes. Framed in engine OPEN-DECISIONS D.
 2. **E. Edited and model-written scripts never run bare on the PC** (Docker started by QMX, then Contabo, then wait). Recommend yes. OPEN-DECISIONS E.
@@ -448,3 +448,150 @@ Named dependencies, not calls today: the methodology, the system prompts, the pe
 - `PLAIN-WORDS.md` for Lab and Library and the explainer page for him were not rewritten (owner: planning lead, with the explainer format he asked for).
 - 26 (ruling 105 and wording gaps), 33, MAP, BACKLOG, UI-NOTES and the 38 banner were left to the planning lead (DOC-CHANGES rows 36 and 38).
 - No probe ran: P1, P2, P3, P5, P7, P-PK, P-FK and E33 are build-time gates.
+
+---
+
+## Review applied (41 + 40 gaps)
+
+Written by the architect (Opus 5.5), headless, BMad architecture skill in amend mode, no sub-agents, nothing committed. Inputs: `41-rerun-review.md` (4 critical, 8 high, 13 medium, 9 low), `40-retriage.md` §5 (12 gaps), the three architectures and their companions, rulings 1-104 of `26` (latest wins), code on `origin/engine/base` = `132169c7` read with `git show` and `git grep`. Ids are stable; two new ADs at the end of the engine spine (AD-50, AD-51). `lint_spine.py`: 0 findings on all three spines after the pass.
+
+**Files changed (all under `tracker/qma-v2/`):** engine `ARCHITECTURE-SPINE.md` (AD-3, 4, 7, 8, 9, 10, 12, 13, 15, 16, 18, 19, 24, 25, 28, 29, 33, 34, 38, 39, 40, 41, 42, 44, 45, 47, 48, 49 amended; AD-50, AD-51 new; three Conventions rows; two capability-map rows; one Deferred row), `SOLUTION-DESIGN.md` (§2.2, §2.4, §3.4, §7.3, §10.3, §17, §19 row, §24 manifest, §26.1, §26.3, §26.4, §26.7, §26.12, §26.13 S1/S6/S13/S14, §26.14, §26.15; new §26.16), `HARNESS-REQUESTS.md` (H7 note, H10, H12, H26, H27, H28, H36; new HG4 rows H38 and H3), `OPEN-DECISIONS.md` (G widened; the older D/E/F marked superseded), `DOC-CHANGES.md` (rows 40, 41), `PLAIN-WORDS.md`, `.memlog.md`; Library `ARCHITECTURE-SPINE.md` AD-20 and `.memlog.md`; Lab `LLD.md` (paper day trigger), `OPEN-DECISIONS.md` (OPEN-5 note), `.memlog.md`; `UI-HANDOFF.md` (§1 item 6, §11 row 4, §12 rows 1, 2, 5, 10, 12; rows 21-22 added); this file (§7 rows for AD-38 and AD-40 marked superseded, this section).
+
+### R.1 How the four criticals were resolved
+
+**C1 (plan-main requests reach third parties in first-party shape).** New **AD-50**: the router normalises every key, chat and GPT lane request for the *target model row*, whatever the main's profile: tool search and `defer_loading` expanded, betas and their body fields dropped per `accepts_betas`, `metadata.user_id` and `x-claude-code-*` headers dropped (except `forward_headers`), unparseable history blocks rewritten, `max_tokens` clamped, a usage-limit 429 answered `x-should-retry: false` (or a mapped non-retryable status if the CLI ignores it), a slow prefill kept alive with a synthesised `message_start` and pings (the GPT lane's existing pattern, `relay.py` `PING_S`), mid-stream errors classified. Env quirks become launch defaults only. A native sub-agent under a main of another provider may resolve only to a model whose window is at least the CLI's assumed window; smaller ones go through `delegate` v2. Probe **P4** is restored as a build gate, run with a plan-main process. Until P4 passes for the GPT lane, a GPT helper under a plan main is `delegate` v2 only.
+- *Blast radius:* `QH/relay.py` (normaliser, keep-alive, classifier hook), `QH/profiles.py` (`HOST_QUIRKS` and `Quirks` become model-row data; `GPT_QUIRKS` stays a launch default), `qma/gpt/translate.py` (normaliser first), the chat-lane translator (H12), the bundled profiles; tests `test_relay`, `test_profiles`, `test_translate`, new normaliser fixtures per provider; live lanes `hp11_lanes.py`, P3, P4; UI none beyond capability chips (§12 row 3).
+- *Failure scenarios:* a provider adds a field the normaliser does not know → its 400 is classed `model_entitlement` or `content`, the sub-agent fails, the parent continues, and the row goes `delegate_only` until a rule is added; the CLI ignores `x-should-retry` → P4 shows it and the mapped status is used; the keep-alive confuses the CLI → P4 and E43 catch it and the row's keep-alive turns off, with `first_token_timeout` left as the only bound.
+
+**C2 (`delegate` `cli` targets outside every boundary).** **AD-41** amended: a `cli` target runs only in a container under the same boundary as every container tier: hash-pinned binary in a `qmx-worker` variant, mounts only the child's worktree or attempt overlay, no host home, keyring, `~/.codex` or other own login, model traffic through the nearest router with a run pass (pool, journal and classifier see it; a CLI whose wire the router cannot front is not a target), egress through `qmx-egress` with the gate's broker-host list denied, `contabo` under `runsc` by default; no container means the spawn fails; in a copilot chat the first spawn of each binary version asks. That is the same structural money boundary every container tier has (no broker credential reachable, no money tool, broker hosts denied); the PreToolUse gate does not exist inside any container, for `cli` or otherwise.
+- *Blast radius:* H26's `cli` path in `QH/harness.py` and the new `delegate.py`; `docker/qmx-worker` (a CLI variant image); `qmx-egress` rules; router front doors per CLI wire; tests for H26; live check E52; UI §12 row 22.
+- *Failure scenarios:* Docker down on the PC and Contabo unreachable → the spawn fails with "needs Docker or Contabo", the parent continues; a CLI that only speaks a wire the router does not front (for example Codex CLI over Responses with its own ChatGPT login) → not a target until the router has that front door; nothing falls back to the host.
+
+**C3 ("demo" was not proven).** **AD-33** rewritten with a five-layer proof, each checked by QMX code: (1) a QMX portable MT5 install that has never held a live or prop login, with his own terminals denied by process image path and the image path checked before every click and keystroke; cTrader only on a Windows desktop placement with a demo-only cTrader ID (cTrader shows one ID's live and demo accounts together, so his own install cannot be isolated); (2) the allowed demo accounts are a locked Settings list he writes; (3) a QMX-shipped read-only MQL5 script (cBot for cTrader) proves `ACCOUNT_TRADE_MODE` demo and a listed login and server before the toggle, before attaching and every 60 s, so a prop-firm demo server is refused; (4) every EA or cBot installed through the driver calls a demo guard first in `OnInit` and before every trade call, lint-checked at compile; (5) algo trading off and EAs detached at attempt end unless `keep_running`, and a start-up re-check. **Said plainly:** no design closes the case where he himself logs a QMX demo install into a live or prop account while an agent-written EA with a subverted guard sits there; the layers make that need his own live login inside an install titled "QMX DEMO" plus a subverted guard. Without a Windows desktop placement, cTrader click-through is unavailable; MT5 works on the PC.
+- *Blast radius:* `packs/cua` (manifest schema: `install_path`, account ref, `keep_running`), the Cua driver (image-path checks, the read-only script and cBot, MetaEditor compile with the guard lint), Settings (locked `trading.demo_accounts`), AD-36's scan over the shipped MQL5 and C# sources; E46 rewritten; UI §12 row 12; no template.
+- *Failure scenarios:* the read-only script cannot run (terminal blocks scripts) → no proof, no toggle, one `black` item; he logs the demo install into live mid-attempt → caught within 60 s, input stops, algo trading off; a prompt-injected agent writes an EA that calls a trade function before the guard → the compile lint refuses it; a subtler bypass the lint misses is the named residual above, harmless while the install stays demo.
+
+**C4 (no mechanism for native third-party sub-agents in the copilot).** New HG4 row **H38**: `NewChat.agents` for Interactive, Background and Child chats, generated from the registry (one definition per role or enabled model, tools inherited, never widened), because the `Agent` tool's `model` argument takes Claude aliases only [remembered] and `setting_sources=[]` loads no user agents. Probe **P1** is rewritten to test exactly this under a real `/login` (haiku main, tests via the plan login). **If P1 fails, the plan lane is not built at all**: plan bytes would go through a QMX process for nothing. Plan launches then stay as built and ruling 92's copilot case runs on `delegate` v2 helper chats on Kimi, Qwen and the rest, which need no plan lane; H38 is withdrawn. AD-29's evidence label is corrected (E24 was an API-key launch with a fake key).
+- *Blast radius:* `QH/launch.py` (`NewChat.agents` into the SDK options), a registry-to-definitions generator, `QH/home.py` untouched; tests `test_launch`, `test_chat`; P1; UI §12 rows 1-2 (the native kind may never ship).
+- *Failure scenarios:* P1 passes on haiku but a later CLI update starts refusing non-Claude ids under OAuth → the boot canary (P1's echo form) fails, the plan lane stays off, `delegate` v2 carries S1; a model he enables mid-chat → joins at the next turn by resuming the same session id.
+
+### R.2 Probes that gate the build (exact pass and fail in SOLUTION-DESIGN §26.14)
+
+| Probe | Gates | Pass | Fail → fallback |
+| --- | --- | --- | --- |
+| P0 parity | the plan lane | a haiku plan turn with one `qmx` MCP call through a pass-through router matches the same turn with no base URL (betas, tool shapes, `system`, `metadata`), or matches after a launch env value restores the difference | no plan lane; plan launches as built |
+| P1 definitions under OAuth | the plan lane and H38 | under his real `/login`, a launch-time `AgentDefinition(model="kimi/k3")` sub-agent spawns, its request reaches the router with the agent id, its result returns, the main stays on the plan path, no `sk-ant-`, `metadata.user_id` or grant header at the Kimi echo; every path the CLI uses is recorded | no plan lane, H38 withdrawn; S1 on `delegate` v2 |
+| P4 normaliser under a plan main | each provider's `plan_main_native` | per provider a three-turn tool loop with thinking is 2xx; at egress none of `defer_loading`, the tool-search tool, `context_management`, unlisted betas, `metadata.user_id`, unlisted `x-claude-code-*`; a forced usage 429 is retried 0 times; CLI's assumed window recorded | that provider `delegate_only` for plan mains |
+| P2 live billing | the plan lane | three real turns: five-hour window moves, overage does not, Kimi row has the agent id, no 401, cache read on turn 3 | no plan lane |
+| P3 (ten turns) | the chat lane and bundled profiles | ten-turn tool loop with thinking per provider under a key main | that provider's row off the chat lane |
+| P5, P7, P-PK, P-FK, P-BR, E33 | `delegate` v2, pool, pack sets, review fork, `logged_in` snapshots, `host_confined` | as listed in §26.14 and §18 | as listed there |
+
+### R.3 Finding → outcome
+
+| Finding | Outcome | Where |
+| --- | --- | --- |
+| 41 C1 | applied | engine AD-50 (new), AD-38, AD-39, AD-29; SD §26.1, §26.14 P4; HR H10, H27 |
+| 41 C2 | applied | engine AD-41; SD §26.4, E52; HR H26; UI §12 row 22 |
+| 41 C3 | applied (residual stated plainly) | engine AD-33, AD-44; SD §24 manifest, §26.7, S14, E46, §17; UI §12 row 12; PLAIN-WORDS |
+| 41 C4 | applied | HR H38 (new), H7 note; engine AD-38, AD-29, AD-4; SD §26.1 table, S1, P1; OPEN-DECISIONS G |
+| 41 H1 | applied | engine AD-38, AD-48; SD §26.1 failure paths, §17, E49; HR H27 |
+| 41 H2 | applied | engine AD-12; SD §7.3, §26.1, S6; UI §12 row 5 |
+| 41 H3 | applied | engine AD-38, AD-29; SD §26.1 pseudocode; HR H27 |
+| 41 H4 | applied | engine AD-40, AD-4, AD-25; SD §2.2, §2.4, §17, §26.3; Lab LLD paper trigger; DOC-CHANGES 41 |
+| 41 H5 | applied | engine AD-16, AD-47; SD §10.3, §17, E41; UI §11 row 4, §12 row 21 |
+| 41 H6 | applied | R.4 below; SD §26.15; 39 §7 rows marked superseded |
+| 41 H7 | applied (fact exchange chosen over one owner host for keys, so the PC still works when Contabo is down) | engine AD-12, AD-28; SD §7.3, §26.16, E53; UI §12 row 5 |
+| 41 H8 | applied | engine AD-44; SD E45, P-BR; UI §12 row 10 |
+| 41 M1 | applied | engine AD-38; SD §26.1; P1 records paths |
+| 41 M2 | applied | engine AD-38; HR H27 and the "not requested" note |
+| 41 M3 | applied | HR H28 (b); engine AD-40 (5); SD §26.3, E43 |
+| 41 M4 | applied | engine AD-50 (8), AD-16; SD §17, E43 |
+| 41 M5 | applied | engine AD-10 |
+| 41 M6 | applied | engine AD-13; SD S13; UI §12 row 5 |
+| 41 M7 | applied | engine AD-38, AD-40; SD §26.1, §26.3; HR H28 (c); P2 checks overage |
+| 41 M8 | applied | engine AD-28, AD-40 (4); SD §17, §19, E25, §26.3 |
+| 41 M9 | applied | HR H12; SD P3 |
+| 41 M10 | applied | engine AD-42, AD-50 (4); SD §26.1 |
+| 41 M11 | applied | engine AD-28 |
+| 41 M12 | applied | Library AD-20; engine AD-49; SD §26.12 |
+| 41 M13 | applied | HR H3 into HG4; engine AD-19, AD-42, Deferred row; OPEN-DECISIONS G |
+| 41 L1 | logged, fixed | UI §1 item 6 |
+| 41 L2 | logged, fixed | UI §11 row 4 |
+| 41 L3 | logged, fixed | Lab OPEN-DECISIONS OPEN-5 |
+| 41 L4 | logged, fixed | engine OPEN-DECISIONS: older D/E/F marked superseded |
+| 41 L5 | logged, not fixed (code item) | R.6 |
+| 41 L6 | logged, fixed | engine AD-29 citation |
+| 41 L7 | logged, fixed | engine AD-15, HR H36 labels; P1 records the headers |
+| 41 L8 | logged, fixed | R.4 (AD-13 code rows) |
+| 41 L9 | logged, fixed | SD E41 (stuck detection only; E43 is the no-caps proof) |
+| 40 §5.1 held chunks stall (L-60, B-55) | applied | engine AD-9 (gate moves to dispatch; held work is not started), AD-16 (recorded waits skipped); SD §10.3, E41 |
+| 40 §5.2 one write zone per run (B-29) | applied | engine AD-51 (new), AD-8, AD-18, AD-24; SD §3.4, §26.16, E50 |
+| 40 §5.3 number evidence (B-84, L-81, L-87) | applied | engine AD-45; SD §26.16, E51 |
+| 40 §5.4 memo truth (B-19, L-35) | applied | engine AD-7 |
+| 40 §5.5 model node declaring irreversible (B-57) | applied | engine AD-8; SD §3.4 |
+| 40 §5.6 past `reset_at` (L-63) | applied | engine AD-12; SD §7.3 |
+| 40 §5.7 his `limits` timing (L-45, L-48) | applied | engine AD-16 |
+| 40 §5.8 snapshot retention (L-43) | applied | engine AD-49, AD-51 |
+| 40 §5.9 single instance (L-64, L-70) | applied | engine AD-3 |
+| 40 §5.10 resume without the task (B-69) | applied | engine AD-34 |
+| 40 §5.11 token estimate (B-21) | applied | engine AD-34, AD-39; SD §17 |
+| 40 §5.12 template `runaway` blocks | applied: removed | engine AD-40 (with 41 H4) |
+
+**Counts:** 41: 4 critical and 8 high applied; 13 medium applied, 0 rejected; 9 low logged below, 8 fixed in the docs, 1 left as a code item. 40 §5: 12 of 12 resolved.
+
+**Found in this pass (not in 41 or 40), fixed:** the plan launch itself behaves differently behind a base URL (tool search is off by default there, `QH/profiles.py`), so P0 parity was added; `pool.soft_cap_per_account` 2, the `host_harness` 1-hour default, the sidecar "hard run timeout" and AD-25's `timeout` resource were QMX caps left in SD §17 and AD-25 (removed); `db-desk-brief/scripts/gather.py:135` and `rv-weekly-review/scripts/week.py:30-31` derive the QMX home from the cwd (already forbidden by AD-24; AD-51 changes the cwd depth, DOC-CHANGES 41).
+
+### R.4 Blast radius, replacing 39 §7's rows for AD-38 and AD-40 (41 H6, L8)
+
+| Decision | Code (engine/base `132169c7`) | Tests and live checks | Templates | UI |
+| --- | --- | --- | --- | --- |
+| AD-38 router and plan lane, AD-50 normaliser, H38 | `QH/relay.py` (own thread and loop, fixed port, grant read first, plan path for any method and path with raw headers, per-request routing replacing `RelayGrant.profile` at `relay.py:162-170`, normaliser, keep-alive, classifier, misuse alarm), `QH/launch.py` (plan launch env, `NewChat.agents`), `QH/profiles.py` (model rows, quirks as data), `QH/home.py` (one plan home today, `home.py:5-8`; relayed `projects/` links), `QH/harness.py` (grants for plan launches), `qma/gpt/translate.py`, the desktop host's health check; docstrings `relay.py:25-26`, `profiles.py:6-8`, `money.py:1-2`, `PlanLaunch` | `test_relay`, `test_profiles`, `test_launch`, `test_chat.py:1021-1032`, a new test that a plan grant never reaches `_token_bearer`; `hp11_lanes.py`; P0, P1, P2, P3, P4, E49 | none directly | §12 rows 1-3, 5, 20 |
+| AD-40 caps removal with AD-16 stuck detector | harness `QH/launch.py:221-261, 518-519`, `QH/harness.py:362-433` (`BackgroundCap`, `needs_you`, `ChatTableFull`), `QH/usage.py:250-280` (`BackgroundCap`, `cap_note`; `hard_stop` kept), the usage page `QH/harness.py:624`, `qma/console.py`; engine `settings.py`, `admission.py`, `core/ladder.py`, `runner.py:161-180, 481, 525, 696`, `core/commands.py`, `core/fold.py`, `core/ready.py`, `core/simulate.py`, `core/state.py`, `definition/model.py:73-89`, `definition/lint.py:200-206`, the v1 JSON schema (`:376-528`), `nodes/base.py`, `nodes/llm.py:122-123`, `nodes/agent.py:122-133` (warm gate to dispatch) and `:193-255`, `ports/inbox.py`, `ports/settings.py`, `roles.py:95-110` (degrade); AD-13 order: `roles.py:86` sorts plan first and `settings.py:72` has `roles.live_order ("plan", "key")` (L8) | `test_ladder`, `test_agent`, `test_lint`, `test_settings`, `test_definition`, `test_watchdog`, `planted.py`, a workflow fixture, `test_change`, `test_console`, `test_delegate`, `test_launch`, `test_table`, `test_usage`, `test_admission`; `x08_watchdog.py`, `s10_usage.py`, `hp11_lanes.py`, `p_limits.py`; E41, E43 | all 31: `runaway` (34 definition files), `timeout.run_seconds` (28), `max_turns` (4 in three `_shared` folders, 20 in `pp-proposal-pack`); `rv-weekly-review/scripts/lint_edits.py:11`; every content hash changes, E48 re-tags | §12 rows 6, 21; Settings budget rows |
+| AD-51 overlays | `workers/effects.py` (the `.snap` snapshot goes), `workers/local.py`, `workers/confine`, the sandbox tool server, script env | `test_effects`, E50 | scripts that read earlier files from the cwd (`db`, `rv`) | none |
+| AD-12 two hosts, 401 rules | `pool.py` (new), the tailnet fact channel, `admission.py` | P7, E53 | none | §12 row 5 |
+| AD-33 demo proof | `packs/cua`, the Cua driver, Settings locked key | E46 | none | §12 row 12 |
+| AD-41 `cli` | `delegate.py` (new), `docker/qmx-worker` CLI variant, `qmx-egress` | P5, E52 | none | §12 row 22 |
+| AD-45 evidence | the shared `render_and_grade` block, `nodes/grader` | E51 | every template using `render_and_grade` | none |
+
+Packets are resized in SOLUTION-DESIGN §26.15: the caps removal is **not** hygiene-size and ships with the stuck detector in one PR; the router packet is **not** "one relay mode" and starts with the probe gate.
+
+### R.5 Failure scenarios added by this pass (beyond §8 and SD §26.13)
+
+| Case | Behaviour |
+| --- | --- |
+| P1 fails at build time | the plan lane is never built; plan chats launch as today; every "have Kimi review this" goes through `delegate` v2; the Settings switch is not shown |
+| The router's loop stalls during a long engine fold | the router has its own loop, so plan streams continue; if the router itself stalls, the 5 s health check turns the plan lane off and plan chats resume without a base URL |
+| An expired plan token at 3 a.m. | the CLI refreshes; nothing is benched; workflows keep the account |
+| Kimi key 1 cools on the PC while Contabo is mid-chunk | Contabo applies the cooldown at the next fact sync and moves its next chunk to key 2 |
+| A 600k-token chunk on a slow third-party prefill | the router keeps the CLI's stream open; the attempt counts as in progress; the row's `first_token_timeout` bounds it; no resend unless that fires |
+| An agent "fixing" a test makes a new edit and gets the same failure each turn | `stalled(no_convergence)` after `loop.no_convergence` of `loop.window` turns, summary turn, next model or doctor |
+| Two chunks of one script node write one file | the second commit is `zone_conflict` and reruns on the new state; nothing is silently overwritten |
+| A `cli` helper asked for on the PC with Docker off and Contabo down | spawn fails with "needs Docker or Contabo"; the parent continues |
+| A prop-firm challenge account added to a manifest | refused: not on his locked demo list, even though the terminal reports demo |
+
+### R.6 Lows list (39's lows; fixed where cheap)
+
+- **L1** UI §1 item 6 said "Compact now" has no backend: fixed (H15 built in HG1).
+- **L2** UI §11 row 4 showed a goal turn budget: fixed ("checks so far").
+- **L3** Lab OPEN-5 named the runaway guard: fixed.
+- **L4** engine OPEN-DECISIONS held two D/E/F sets: the older set is marked superseded.
+- **L5** `max_live_chats` defaults disagree (harness `Budgets` 4 at `QH/launch.py:226`, engine `DEFAULTS` 6 at `QE/settings.py:47`, SD "6"): **not fixed in the docs**; the design already says the value is derived from RAM on each host (AD-30), so the caps packet replaces both literals with the derived value. Owner: the caps-removal packet.
+- **L6** AD-29 cited a log not in the tree: fixed (`scripts/probes/engine/FINDINGS.md:40`, an API-key launch).
+- **L7** hint headers unlabelled: fixed ([remembered]; P1 records them).
+- **L8** AD-13's order is not in code (`roles.py:86`, `settings.py:72`): fixed in R.4's file list.
+- **L9** E41 and E43 overlapped: fixed (E41 stuck detection only).
+
+### R.7 Open operator calls after this pass (only these; settled items never appear)
+
+1. **D. Grant HG3, narrowed** (H2 first). Unchanged. Recommend yes.
+2. **E. Edited and model-written scripts never run bare on the PC.** Unchanged. Recommend yes.
+3. **F. A money scan that fails closed with no allow-list.** Unchanged. Recommend yes.
+4. **G. Grant the HG4 rows outside the pool exception**, now also **H38** (sub-agent definitions on `NewChat.agents`, the only route for native third-party sub-agents in his copilot) and **H3** (`Harness.complete` on key and GPT lanes). Recommend yes. If both H26 and H38 were refused, ruling 92's copilot case still works on today's blocking `delegate`, one helper at a time.
+5. **The fifth quant lens.** Unchanged; nothing is built on it.
+6. **Which burst provider to pay for, and when** (money), which now also covers **whether to pay for a Windows desktop placement** (a VM or a spare machine) so cTrader demo click-through exists; MT5 demo needs none.
+
+Not calls, but steps only he can do, needed before the gated pieces: run the build-gate probes under his own `/login` (haiku, per the settled test rule); create a demo-only cTrader ID if he wants cTrader demo work; write his demo account list in Settings; tick the sites a `logged_in` browser profile may carry.
+
+### R.8 Reviewer gate for this pass
+
+Run inline (no sub-agents allowed): `lint_spine.py` 0 findings on `workflow-engine`, `library-and-data` and `lab-and-pods`; a consistency sweep for stale wording (request-rate alarm, runaway reads, window-read demo checks, plan 401 benching, `.snap` restores, "one relay mode", `soft_cap`) across the spines, SOLUTION-DESIGN, HARNESS-REQUESTS and UI-HANDOFF, with every hit rewritten. Not done here: the HLD and LLD companions of Lab and Library beyond the lines named, and an explainer page for him (owner: planning lead, as in §11).

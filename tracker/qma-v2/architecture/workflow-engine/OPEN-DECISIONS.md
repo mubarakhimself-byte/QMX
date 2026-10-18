@@ -10,7 +10,7 @@ E. **Edited and model-written scripts never run bare on the PC** (AD-24): only s
 
 F. **A money scan that fails closed with no allow-list** (AD-36), with 36's conditions applied: the verb predicate `name_money_act_called` shared with the harness gate in `qma-core`; prose matched only in prompts, node notes, parameter values and proposal actions (comments, docstrings and READMEs get the secret check only); the whole template pack passing E36 before it ships. A false positive is fixed by rewording. **Recommend: yes.** If no: a reviewed allow-list of phrases, one more thing a model could try to widen.
 
-G. **Grant the HG4 rows outside the pool exception** (HARNESS-REQUESTS HG4: H26 `delegate` v2, H30 attachments, H31 permission floor and rules, H32 per-session pack sets, H34 session loops, H35 browser and HUD tools for the copilot, H37 background review fork). Rulings 92 and 102 ask for what they deliver; ruling 24 still asks for his yes on harness behaviour. H28 (budgets unset) follows his no-caps rule and the pool-exception rows (H10, H12, H14, H27, H29, H33, H36) follow rulings 39, 92, 95, 98 and 99. **Recommend: yes to all.** Each row has a fallback with no harness edit.
+G. **Grant the HG4 rows outside the pool exception** (HARNESS-REQUESTS HG4: H26 `delegate` v2, H30 attachments, H31 permission floor and rules, H32 per-session pack sets, H34 session loops, H35 browser and HUD tools for the copilot, H37 background review fork; added after 41: **H38** registry-generated sub-agent definitions on `NewChat.agents`, the only way a plan-main copilot's native sub-agents can name Kimi or Qwen (C4), and **H3** `Harness.complete` on key and GPT lanes for mini-app `llm_complete` and native video (M13)). Rulings 92 and 102 ask for what they deliver; ruling 24 still asks for his yes on harness behaviour. If both H26 and H38 were refused, ruling 92's copilot case would still work on today's blocking `delegate`, one helper at a time. H28 (budgets unset) follows his no-caps rule and the pool-exception rows (H10, H12, H14, H27, H29, H33, H36) follow rulings 39, 92, 95, 98 and 99. **Recommend: yes to all.** Each row has a fallback with no harness edit.
 
 1. **Which burst provider to pay for, and when** (money; nothing is paid for yet, ruling 69). Recommend: decide only when Contabo's four sessions overflow too often; the onboarding flow adds any provider without code (AD-30).
 
@@ -19,7 +19,9 @@ Closed by the rerun (architect's calls under ruling 98 and the operator's brief;
 
 Refreshed 2026-10-16 night against rulings 73-88 (27c gap fixes). The three calls at the top are his; everything below them is either still open with a recommendation, or closed with the ruling that closed it.
 
-## After the first build run (2026-10-18)
+## After the first build run (2026-10-18) — superseded
+
+**Superseded by the section above (41 L4).** D, E and F below are the older framings; the rerun's D, E and F at the top replace them word for word (in particular, the old E's "waits with 'Docker is off'" is gone: QMX starts Docker, then spills to Contabo, and waits only when neither works). Kept for the record only.
 
 The calls A, B and C below are closed: A by ruling 89 (H0, H15, H16, H17 granted and built as HG1), B by ruling 90 (every account carries its own configurable background share; 50 % is only a default), C by ruling 91 (data is held until a deeper data study). The amendment after the run (`methodology/35`) adds these:
 

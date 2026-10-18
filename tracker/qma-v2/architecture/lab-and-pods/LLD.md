@@ -447,7 +447,7 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 | `pod.fan_paths` / `pod.fan_horizon_days` | 1,000 / 90 |
 | `pod.noise_quantile` | 0.9 |
 | `paper.min_days` / `paper.extend_days` | 7 / 7 (seven daily runs, then seven more) |
-| `paper.day_trigger` | daily cron at the market's session open, market zone (24-hour markets: the session boundary, 00:00 UTC for crypto); runaway `wall_seconds` one session + 30 min |
+| `paper.day_trigger` | daily cron at the market's session open, market zone (24-hour markets: the session boundary, 00:00 UTC for crypto); the paper day ends at the session close by its own rule; no wall-time cap (engine AD-40, removed after 41 H4) |
 | `paper.band_quantiles` | p5–p95 of the pod's own test |
 | `identity_rule` | D4 label set, `profile → branches-from` |
 
