@@ -22,7 +22,7 @@ import os
 import shutil
 import sys
 import time
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -36,6 +36,8 @@ EVIDENCE: Final = STORE / "evidence" / "prb-h"
 HOMES: Final = STORE / "homes"
 SHIP_SETTINGS: Final = Path("D:/QMX-worktrees/qma-ship/home/settings.toml")
 FIXTURES: Final = Path(__file__).resolve().parent / "fixtures"
+LIVE_QMA: Final = Path(__file__).resolve().parents[2] / "live" / "qma"
+"""Where `fake_model.py` lives, for the probes that read what the CLI puts on the wire."""
 LOG_PREFIX: Final = os.environ.get("PRB_H_LOG_PREFIX", "owner-")
 """Read at import, before `scrub_process_env` removes the name."""
 PLAN_MODEL: Final = "haiku"
@@ -49,6 +51,7 @@ __all__ = [
     "EVIDENCE",
     "FIXTURES",
     "HOMES",
+    "LIVE_QMA",
     "PLAN_CONFIG_DIR",
     "PLAN_MODEL",
     "Case",
@@ -57,6 +60,7 @@ __all__ = [
     "argv_tap",
     "argv_value",
     "fresh",
+    "home_env",
     "lane_lock",
     "plan_env",
     "quoted_length",
@@ -243,6 +247,91 @@ def argv_tap() -> Iterator[list[list[str]]]:
         yield seen
     finally:
         SubprocessCLITransport._build_command = original  # pyright: ignore[reportPrivateUsage]
+
+
+ToolHandler = Callable[[dict[str, Any]], Awaitable[str]]
+
+
+def answers(text: str) -> ToolHandler:
+    async def handler(_: dict[str, Any]) -> str:
+        return text
+
+    return handler
+
+
+class QmxServer:
+    """One in-process MCP server, as the harness's `qmx` server is, whose tool list the probe
+    changes mid-session by editing `tools`. It counts `tools/list` requests, records each call,
+    and keeps the session it was listed on so it can send `tools/list_changed` from outside a
+    request, as the harness would."""
+
+    def __init__(self, tools: dict[str, ToolHandler], name: str = "qmx") -> None:
+        from mcp.server import Server  # noqa: PLC0415
+        from mcp.server.lowlevel.server import NotificationOptions  # noqa: PLC0415
+
+        self.name = name
+        self.tools = dict(tools)
+        self.list_calls = 0
+        self.listed: list[list[str]] = []
+        self.calls: list[str] = []
+        self.session: Any = None
+
+        server: Any = Server(
+            name, version="1.0.0", on_list_tools=self._list, on_call_tool=self._call
+        )
+        plain = server.create_initialization_options
+
+        def advertise_list_changed(*_: Any, **__: Any) -> Any:
+            return plain(NotificationOptions(tools_changed=True))
+
+        server.create_initialization_options = advertise_list_changed
+        self.server = server
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {"type": "sdk", "name": self.name, "instance": self.server}
+
+    def wire(self, tool: str) -> str:
+        return f"mcp__{self.name}__{tool}"
+
+    async def _list(self, ctx: Any, _params: Any) -> Any:
+        from mcp.types import ListToolsResult, Tool  # noqa: PLC0415
+
+        self.list_calls += 1
+        self.session = getattr(ctx, "session", None)
+        self.listed.append(sorted(self.tools))
+        return ListToolsResult(
+            tools=[
+                Tool(
+                    name=tool,
+                    description=f"Probe tool {tool}. Takes no arguments.",
+                    input_schema={"type": "object", "properties": {}},
+                )
+                for tool in self.tools
+            ]
+        )
+
+    async def _call(self, _ctx: Any, params: Any) -> Any:
+        from mcp.types import CallToolResult, TextContent  # noqa: PLC0415
+
+        self.calls.append(str(params.name))
+        handler = self.tools.get(str(params.name))
+        if handler is None:
+            return CallToolResult(
+                content=[TextContent(type="text", text=f"no tool {params.name}")], is_error=True
+            )
+        text = await handler(dict(params.arguments or {}))
+        return CallToolResult(content=[TextContent(type="text", text=text)], is_error=False)
+
+    async def send_list_changed(self) -> str:
+        """Send `notifications/tools/list_changed` on the session the CLI listed on."""
+        if self.session is None:
+            return "no session captured"
+        try:
+            await self.session.send_tool_list_changed()
+        except Exception as error:  # noqa: BLE001
+            return f"raised {type(error).__name__}: {error}"
+        return "sent"
 
 
 def argv_value(argv: Iterable[str], flag: str) -> str | None:
