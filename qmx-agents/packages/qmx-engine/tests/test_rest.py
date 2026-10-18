@@ -199,7 +199,7 @@ def test_disabling_the_last_enabled_trigger_disables_its_version(tmp_path: Path)
             ).json()["id"]
             for _ in range(2)
         ]
-        states = []
+        states: list[str] = []
         for path in (
             f"{ids[0]}/enable",
             f"{ids[1]}/enable",

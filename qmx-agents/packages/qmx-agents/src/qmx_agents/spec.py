@@ -284,8 +284,8 @@ async def _build(
             broker = ctx.broker
             if broker is None:
                 home = cast(Path, ctx.qmx_home)
-                control = ctx.control or ControlService(home)
-                broker = BrokerService(home, brokers=lambda: control.settings_get("brokers"))
+                owner = ctx.control or ControlService(home)
+                broker = BrokerService(home, brokers=lambda: owner.settings_get("brokers"))
             ctx.broker = broker
             async with MCPAdapter(create_broker_server(broker)) as adapter:
                 broker_tools = await adapter.list_tools()

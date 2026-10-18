@@ -21,7 +21,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import IO, Final, Literal
@@ -66,7 +66,7 @@ def _lock(handle: IO[bytes]) -> None:
 
 
 @contextmanager
-def single_instance(home: Path) -> Iterator[None]:
+def single_instance(home: Path) -> Generator[None]:
     """Hold the home's lock and its record for as long as the block runs. Raises `HostRunning`
     while another process holds it."""
     handle = (home / LOCK).open("a+b")
