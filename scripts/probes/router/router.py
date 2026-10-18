@@ -31,14 +31,14 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from http.client import HTTPConnection, HTTPSConnection
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import urlsplit
 
 sys.path.append(str(Path(__file__).resolve().parents[2] / "live" / "qma"))
-from fake_model import FakeModel, Turn, text
+from fake_model import FakeModel, Turn, text, tool_use
 
 ANTHROPIC_URL: Final = "https://api.anthropic.com"
 ANTHROPIC_HOST: Final = "api.anthropic.com"
@@ -46,7 +46,9 @@ GRANT_HEADER: Final = "x-qmx-grant"
 CREDENTIAL_HEADERS: Final = frozenset({"authorization", "x-api-key"})
 SECRET_HEADERS: Final = CREDENTIAL_HEADERS | {"cookie", "proxy-authorization", GRANT_HEADER}
 WITHHELD: Final = "<withheld>"
-REPLY_FRAMING: Final = frozenset({"transfer-encoding", "content-length", "connection", "keep-alive"})
+REPLY_FRAMING: Final = frozenset(
+    {"transfer-encoding", "content-length", "connection", "keep-alive"}
+)
 UPSTREAM_TIMEOUT_S: Final = 600.0
 
 _VAULT_KEY: Final = secrets.token_bytes(32)
@@ -83,6 +85,7 @@ class Exchange:
     first_byte_at: float = 0.0
     first_byte_out_at: float = 0.0
     done_at: float = 0.0
+    error: str = ""
 
     @property
     def json(self) -> dict[str, Any]:
@@ -128,6 +131,7 @@ def public(exchange: Exchange, *, keep_body: bool = False) -> dict[str, Any]:
         "path": exchange.path,
         "model": exchange.model,
         "status": exchange.status,
+        "error": exchange.error,
         "headers": public_headers(exchange.headers),
         "body_sha256": hashlib.sha256(exchange.body).hexdigest(),
         "body_bytes": len(exchange.body),
@@ -226,27 +230,42 @@ class _Relay(BaseHTTPRequestHandler):
         exchange.lane = upstream.name if upstream else "refused"
         self.recorder.add(exchange)
         if upstream is None:
-            error = {"type": "error", "error": {"type": "invalid_request_error",
-                     "message": f"probe router: no route for model {exchange.model!r}"}}  # fmt: skip
-            data = json.dumps(error).encode()
             exchange.status = 400
-            self.send_response_only(400)
-            self.send_header("content-type", "application/json")
-            self.send_header("content-length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            self.refuse(400, f"probe router: no route for model {exchange.model!r}")
             exchange.done_at = time.perf_counter()
             return
-        self.forward(exchange, upstream, framed)
+        try:
+            self.forward(exchange, upstream, framed)
+        except (OSError, HTTPException) as exc:
+            exchange.error = type(exc).__name__
+            if exchange.status:
+                self.close_connection = True
+                return
+            exchange.status = 502
+            self.refuse(502, f"probe router: upstream {upstream.name} failed: {exchange.error}")
+        exchange.done_at = exchange.done_at or time.perf_counter()
+
+    def refuse(self, status: int, message: str) -> None:
+        data = json.dumps(
+            {"type": "error", "error": {"type": "api_error", "message": message}}
+        ).encode()
+        self.send_response_only(status)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        self.wfile.flush()
 
     def forward(self, exchange: Exchange, upstream: Upstream, framed: bytes) -> None:
         target = urlsplit(upstream.url)
         host = target.hostname or ""
         if target.scheme == "https":
             conn: HTTPConnection = HTTPSConnection(
-                host, target.port or 443, timeout=UPSTREAM_TIMEOUT_S,
+                host,
+                target.port or 443,
+                timeout=UPSTREAM_TIMEOUT_S,
                 context=ssl.create_default_context(),
-            )  # fmt: skip
+            )
         else:
             conn = HTTPConnection(host, target.port or 80, timeout=UPSTREAM_TIMEOUT_S)
         started = time.perf_counter()
@@ -302,7 +321,9 @@ class Router:
 
     def __init__(self, route: Route) -> None:
         self.recorder = Recorder()
-        handler = type("Handler", (_Relay,), {"recorder": self.recorder, "route": staticmethod(route)})
+        handler = type(
+            "Handler", (_Relay,), {"recorder": self.recorder, "route": staticmethod(route)}
+        )
         self.server = _Server(("127.0.0.1", 0), handler)
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -332,7 +353,7 @@ class _Intercept(_Relay):
         inner = self.tls.wrap_socket(self.connection, server_side=True)
         self.connection = inner
         self.rfile = inner.makefile("rb")
-        self.wfile = socketserver._SocketWriter(inner)  # type: ignore[attr-defined]  # noqa: SLF001
+        self.wfile = socketserver._SocketWriter(inner)  # type: ignore[attr-defined]
         self.lane_override = Upstream("anthropic", ANTHROPIC_URL)
         self.close_connection = False
         while not self.close_connection:
@@ -385,14 +406,22 @@ class InterceptProxy:
         self.server.server_close()
 
 
+HANDBACK_TOOL: Final = "SubagentHandback"
+"""CLI 2.1.299 ends a sub-agent's run only when it calls this tool with its report."""
+
+
 class Echo(FakeModel):
-    """A third-party upstream that answers every request with `reply`."""
+    """A third-party upstream that answers every request with `reply`. When the CLI offers
+    `SubagentHandback`, it delivers `reply` through that tool, as a sub-agent must."""
 
     def __init__(self, reply: str) -> None:
         super().__init__([])
         self.reply = reply
 
     def next_turn(self, scripted: bool, request: dict[str, Any] | None = None) -> Turn:
+        offered = {t.get("name") for t in (request or {}).get("tools", []) if isinstance(t, dict)}
+        if HANDBACK_TOOL in offered:
+            return Turn([tool_use(HANDBACK_TOOL, {"message": self.reply})])
         return Turn([text(self.reply)])
 
     def upstream(self, name: str) -> Upstream:
