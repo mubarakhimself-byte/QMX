@@ -27,6 +27,7 @@ from qmx_engine.service.api import explain_run
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.explain import text
 from qmx_engine.settings import DEFAULTS, Setting
+from qmx_engine.triggers import rows
 
 EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2, "interrupted": 3}
 
@@ -61,6 +62,12 @@ def parser() -> argparse.ArgumentParser:
     resume = commands.add_parser("resume", help="pick a run up again from the ledger")
     resume.add_argument("run_id")
     resume.add_argument("--home", type=Path, required=True)
+    triggers = commands.add_parser("triggers", help="read the trigger rows")
+    trigger_commands = triggers.add_subparsers(dest="triggers_command", required=True)
+    listed = trigger_commands.add_parser(
+        "list", help="print each trigger's kind, next_fire_at and last_status"
+    )
+    listed.add_argument("--home", type=Path, required=True)
     why = commands.add_parser("explain", help="print what a run did, node by node, and why")
     why.add_argument("run_id")
     why.add_argument("--home", type=Path, required=True)
@@ -155,6 +162,21 @@ def ledger_stats(home: Path) -> int:
     return 0
 
 
+def list_triggers(home: Path) -> int:
+    path = ledger_path(home)
+    if not path.exists():
+        print(f"no ledger at {path}")
+        return 1
+    with Reader(path) as reader:
+        found = rows.triggers(reader.connection)
+    for trigger in found:
+        print(
+            f"{trigger.id} {trigger.kind} {trigger.workflow_item}"
+            f" next_fire_at={trigger.next_fire_at} last_status={trigger.last_status}"
+        )
+    return 0
+
+
 def explain(args: argparse.Namespace) -> int:
     try:
         document = explain_run(args.home, args.run_id)
@@ -175,6 +197,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return explain(args)
     if args.command == "ledger":
         return ledger_stats(args.home)
+    if args.command == "triggers":
+        return list_triggers(args.home)
     if args.command == "run":
         return asyncio.run(start(args))
     if args.command == "resume":

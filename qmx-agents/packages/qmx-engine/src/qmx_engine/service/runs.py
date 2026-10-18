@@ -136,8 +136,9 @@ async def run_bundle(
     subgraph: list[str] | None,
     caller: Caller,
     fake: bool = False,
+    run_id: str | None = None,
 ) -> tuple[Outcome, Stored]:
-    run_id = new_run_id(ctx.clock.now())
+    run_id = run_id or new_run_id(ctx.clock.now())
     if subgraph is not None:
         bundle = induced(bundle, subgraph)
     root = bundle.write(ctx.home / "engine" / "runs" / run_id / "workflow")
@@ -152,20 +153,42 @@ async def run_bundle(
     except EngineRefused as refused:
         raise Refused("engine_refused", str(refused)) from refused
     await ctx.engine.settle()
+    return outcome, summarize(ctx, outcome, item, object_id, mode, caller.principal)
+
+
+def summarize(
+    ctx: Context, outcome: Outcome, item: str, object_id: str, mode: Mode, started_by: str
+) -> Stored:
     with Reader.open(ctx.home) as reader:
-        state = status_of(reader.events(run_id))
-    summary = export(
+        state = status_of(reader.events(outcome.run_id))
+    return export(
         ctx.home,
-        run_id,
+        outcome.run_id,
         ctx.library,
         workflow_item=item,
         object_id=object_id,
         mode=mode,
         status=outcome.status,
         reason=state.reason,
-        started_by=caller.principal,
+        started_by=started_by,
     )
-    return outcome, summary
+
+
+def summarize_again(ctx: Context, outcome: Outcome) -> Stored | None:
+    """A new summary for a run that was resumed, from its last one; None when it has none."""
+    found = ctx.library.objects(outcome.run_id, "workflow-run")
+    if not found:
+        return None
+    last = found[-1].fields
+    mode: Mode = "live" if last.get("mode") == "live" else "test"
+    return summarize(
+        ctx,
+        outcome,
+        str(last.get("workflow_item")),
+        str(last.get("object_id")),
+        mode,
+        str(last.get("started_by")),
+    )
 
 
 @dataclass(frozen=True, slots=True)

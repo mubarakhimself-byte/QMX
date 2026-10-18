@@ -323,9 +323,9 @@ def migrate(log: Log) -> None:
                 ).fetchall()
             )
             version = reader.stats().schema_version
-        log.check(f"open {attempt}: schema_version is 1", version == 1, version)
+        log.check(f"open {attempt}: schema_version is 2", version == 2, version)
         log.check(
-            f"open {attempt}: steps applied", applied == ([1] if attempt == 1 else []), applied
+            f"open {attempt}: steps applied", applied == ([1, 2] if attempt == 1 else []), applied
         )
     log.check("the second run changed no table or index", schemas[0] == schemas[1], len(schemas[1]))
 
@@ -399,7 +399,7 @@ def stats(log: Log) -> None:
         "stats prints the schema version, the SQLite version and the event count",
         done.returncode == 0
         and done.stdout.splitlines()
-        == ["schema_version 1", f"sqlite_version {sqlite3.sqlite_version}", "events 3"],
+        == ["schema_version 2", f"sqlite_version {sqlite3.sqlite_version}", "events 3"],
         done.returncode,
     )
 

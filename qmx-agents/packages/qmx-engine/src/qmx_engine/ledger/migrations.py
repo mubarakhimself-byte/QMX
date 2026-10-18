@@ -27,6 +27,29 @@ STEPS: Final[tuple[tuple[str, ...], ...]] = (
         " record TEXT NOT NULL)",
         "CREATE INDEX spans_by_trace ON spans (trace_id, started_at)",
     ),
+    (
+        "CREATE TABLE triggers ("
+        " id TEXT PRIMARY KEY, workflow_item TEXT NOT NULL, pinned_object TEXT NOT NULL,"
+        " follow_champion INTEGER NOT NULL,"
+        " home_engine TEXT NOT NULL CHECK (home_engine IN ('pc', 'contabo')),"
+        " kind TEXT NOT NULL CHECK (kind IN ('cron', 'interval', 'manual', 'after')),"
+        " spec TEXT NOT NULL, enabled INTEGER NOT NULL, precheck_ref TEXT,"
+        " role_pins TEXT NOT NULL, effort_pin TEXT, delivery TEXT NOT NULL,"
+        " continuity INTEGER NOT NULL, catch_up TEXT NOT NULL, max_concurrent INTEGER NOT NULL,"
+        " source TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL,"
+        " next_fire_at TEXT, last_status TEXT, failure_streak INTEGER NOT NULL,"
+        " quota_hold_until TEXT, incident_id TEXT, last_outputs TEXT)",
+        "CREATE INDEX triggers_due ON triggers (home_engine, enabled, next_fire_at)",
+        "CREATE TABLE fires ("
+        " id TEXT PRIMARY KEY, trigger_id TEXT NOT NULL, occurrence_at TEXT NOT NULL,"
+        " claimed_by TEXT, claimed_at TEXT, lease_until TEXT, status TEXT NOT NULL, detail TEXT,"
+        " run_id TEXT, merged_into TEXT, merged INTEGER NOT NULL, payload TEXT, digest TEXT,"
+        " ended_at TEXT, UNIQUE (trigger_id, occurrence_at))",
+        "CREATE INDEX fires_by_status ON fires (status, trigger_id)",
+        "CREATE TABLE wakes ("
+        " run_id TEXT PRIMARY KEY, resume_at TEXT NOT NULL, claimed_by TEXT, lease_until TEXT)",
+        "CREATE INDEX wakes_due ON wakes (resume_at)",
+    ),
 )
 
 

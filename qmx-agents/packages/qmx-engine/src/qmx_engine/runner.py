@@ -22,9 +22,9 @@ engine that died, since only one engine process can hold the writer: its outcome
 `agent` attempt after such a death picks up its slot's last chat.
 
 A model node that waits on a usage limit drains the run (AD-9): no new model attempt starts while
-any slot waits on a limit, and other nodes go on. Once nothing runs, the run writes `run_paused`
-and its own timer wakes it at the earliest `resume_at`, which already holds `limits.slack`, with
-`run_resumed`. The scheduler takes the wake over in EP12.
+any slot waits on a limit, and other nodes go on. Once nothing runs, the run leaves a wake at the
+earliest `resume_at`, which already holds `limits.slack`, writes `run_paused` and returns
+`waiting`. The scheduler's ticker resumes it at that instant with `run_resumed` (`triggers`).
 """
 
 from __future__ import annotations
@@ -88,6 +88,7 @@ from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import order, resolve
 from qmx_engine.settings import DEFAULTS
+from qmx_engine.triggers.rows import put_wake
 from qmx_engine.watchdog import Open, ledger_fault, stalled
 from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
 from qmx_engine.workers.local import AnyExecutor, LocalWorker
@@ -253,10 +254,6 @@ class Engine:
             self._memory = MemoryStub(LibraryFake.open(self.home))
         return self._memory
 
-    async def until(self, instant: str) -> None:
-        delay = (datetime.fromisoformat(instant) - self.wall()).total_seconds()
-        await asyncio.sleep(max(delay, 0.0))
-
     def banned_values(self) -> tuple[str, ...]:
         """Where the plan login lives; no script's environment may point there."""
         found = [str(self.home.resolve() / "claude"), os.environ.get("CLAUDE_CONFIG_DIR", "")]
@@ -286,7 +283,11 @@ class Engine:
         run.create(inputs, parent_run_id)
         return await run.drive()
 
-    async def resume(self, run_id: str) -> Outcome:
+    async def resume(
+        self, run_id: str, *, reason: str = "operator", woke: str | None = None
+    ) -> Outcome:
+        """`reason` is what `run_resumed` records when nothing was left in flight: `limit` when
+        the ticker wakes a paused run at the reset `woke`."""
         with Reader.open(self.home) as reader:
             events = reader.events(run_id)
         if not events or events[0].kind != "run_created":
@@ -309,7 +310,8 @@ class Engine:
             fake=created.get("fake") is True,
         )
         run.events = events
-        run.recover()
+        run.woke = woke
+        run.recover(reason)
         return await run.drive()
 
     def spawn(self, outcome: Awaitable[Outcome]) -> None:
@@ -349,7 +351,7 @@ class Run:
         self.seen: dict[str, datetime] = {}
         """Idempotency key of an attempt to when it last wrote an event, for the watchdog."""
         self.woke: str | None = None
-        """The reset the run last woke itself at."""
+        """The reset the ticker last woke this run at."""
         self.zone = workspace(engine.home, workflow.id) / "runs" / run_id
         self.executors = self.build_executors()
 
@@ -538,22 +540,16 @@ class Run:
                     del self.inflight[task]
                     task.result()
                 continue
-            outcome = self.end(ended, state)
-            wake = self.wake(ended)
-            if wake is None:
-                return outcome
-            await self.engine.until(wake)
-            self.woke = wake
-            self.append("run_resumed", {"reason": "limit"})
+            return self.end(ended, state)
 
-    def wake(self, ended: Finish | Park | Pause | Wait | None) -> str | None:
-        """The instant a limit pause wakes the run; at once when a drain outlasted the reset. A
-        pause that names the reset the run already woke at, now past, does not wake it again, so
-        a stale reset cannot spin the run."""
-        if not isinstance(ended, Pause) or ended.reason != "limit" or ended.resume_at is None:
-            return None
-        ahead = datetime.fromisoformat(ended.resume_at) > self.engine.wall()
-        return ended.resume_at if ahead or ended.resume_at != self.woke else None
+    def wakes(self, paused: Pause) -> bool:
+        """Whether a limit pause leaves a wake: always, unless it names the reset the run was
+        just woken at and that reset is past, so a stale reset cannot spin the run."""
+        if paused.reason != "limit" or paused.resume_at is None:
+            return False
+        reset = datetime.fromisoformat(paused.resume_at)
+        woke = datetime.fromisoformat(self.woke) if self.woke is not None else None
+        return reset > self.engine.wall() or reset != woke
 
     def watch(self) -> None:
         """Cancel every attempt the watchdog finds stalled; each then fails `stalled`."""
@@ -698,6 +694,8 @@ class Run:
             case Pause():
                 if command.detail is not None:
                     self.append("log", runaway_line(command.detail, "pause"))
+                if self.wakes(command):
+                    self.engine.ledger.write(put_wake(self.run_id, str(command.resume_at)))
                 paused: JsonObject = {"reason": command.reason, "resume_at": command.resume_at}
                 self.append("run_paused", paused)
                 return Outcome(self.run_id, "waiting", command.reason)
@@ -707,7 +705,7 @@ class Run:
                 status: Status = "passed" if state.ended == "passed" else "failed"
                 return Outcome(self.run_id, status, f"the run already ended {state.ended}")
 
-    def recover(self) -> None:
+    def recover(self, reason: str = "operator") -> None:
         """Fold what a dead engine left in flight, then open a new pass. A slot whose step may have
         reached the outside world waits on its gate, and the fold keeps it waiting over the pass."""
         state = self.state()
@@ -725,7 +723,7 @@ class Run:
             else:
                 continue
             interrupted = True
-        self.append("run_resumed", {"reason": "interrupted" if interrupted else "operator"})
+        self.append("run_resumed", {"reason": "interrupted" if interrupted else reason})
 
     def unknown(self, slot: Slot, attempt: int, code: str, message: str) -> AfterUnknown:
         """Record an attempt whose outcome is unknown: a crash, a timeout or a cancel. A step that
