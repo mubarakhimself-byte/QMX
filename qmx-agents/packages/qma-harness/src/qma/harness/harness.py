@@ -19,6 +19,7 @@ import contextlib
 import functools
 import logging
 import os
+import shutil
 import webbrowser
 from collections import Counter
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -68,6 +69,7 @@ from qma.harness.home import (
     ensure_homes,
     list_records,
     read_record,
+    record_path,
     session_id,
     write_record,
 )
@@ -75,6 +77,7 @@ from qma.harness.launch import (
     LAUNCHER,
     Budgets,
     ChatConfig,
+    ChatHooks,
     ChatKind,
     Child,
     ConfigChange,
@@ -86,6 +89,7 @@ from qma.harness.launch import (
     RelayedLaunch,
     TestMode,
     assert_scrubbed,
+    chat_options_refusal,
     launch_env,
     parse_budgets,
     unattended,
@@ -141,6 +145,8 @@ if TYPE_CHECKING:
 
 UNKNOWN_OUTCOME = "the last turn ended with an unknown outcome; send a message to continue"
 METER_WAIT_S = 60.0
+METER_MODEL = "haiku"
+METER_PROMPT = "Reply with the single word OK."
 REAP_TICK_S = 60.0
 
 log = logging.getLogger(__name__)
@@ -157,6 +163,16 @@ class NewChat:
     profile: str = PLAN
     kind: ChatKind = field(default_factory=Interactive)
     """Background and Child chats are verbatim and bounded (`launch.verbatim`)."""
+    compact_at: float | None = None
+    """Background and Child only: auto-compact at this share of the context window. None
+    keeps the CLI's default."""
+    hooks: ChatHooks | None = None
+    """Background and Child only: observe-only callbacks after the money gate."""
+
+    def __post_init__(self) -> None:
+        refusal = chat_options_refusal(self.kind, self.compact_at, self.hooks)
+        if refusal is not None:
+            raise LaunchRefused(refusal)
 
 
 class UnknownChat(ControlError):
@@ -207,10 +223,12 @@ class Harness:
         self._chats = watch.chats
         """The one table of chats, Cold and Live. Only the harness writes it."""
         self._ledger = watch.ledger
-        self._meter: SessionId | None = None
+        self._metering = asyncio.Lock()
         self._admit = asyncio.Lock()
         self._sending: Counter[SessionId] = Counter()
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
+        self._options: dict[SessionId, tuple[float | None, ChatHooks | None]] = {}
+        """Each chat's `compact_at` and `hooks` from `NewChat`, which its record does not hold."""
         self._reaper = asyncio.create_task(self._reap())
         self.control_port: int | None = None
         """The qmx-control port, set by the server, so the exposure probe can try it."""
@@ -296,7 +314,9 @@ class Harness:
         return cls(deps, watch)
 
     async def start_chat(self, spec: NewChat) -> SessionId:
-        """A qmx-control session, then a chat record with `started=False`. No process yet."""
+        """A qmx-control session, then a chat record with `started=False`. No process yet.
+        `compact_at` and `hooks` stay in this harness, because the record on disk does not hold
+        them, and join the chat's config when the chat is first used."""
         home, control = self._deps.home, self._deps.control
         workspace = spec.workspace
         if workspace is not None and not workspace.is_dir():
@@ -327,8 +347,12 @@ class Harness:
             mode=spec.mode,
             workspace=workspace.resolve(),
             kind=spec.kind,
+            compact_at=spec.compact_at,
+            hooks=spec.hooks,
         )
         write_record(home, ChatRecord(chat, config, started=False, turn="idle"))
+        if spec.compact_at is not None or spec.hooks is not None:
+            self._options[chat] = (spec.compact_at, spec.hooks)
         return chat
 
     async def send(self, chat: SessionId, prompt: Prompt) -> None:
@@ -645,18 +669,37 @@ class Harness:
         return report
 
     async def meter(self) -> ReadingView | None:
-        """Read `/usage` in a plan chat kept for it, then close that chat. The reply costs no
-        model call, and its five-hour reading lands in the ledger."""
-        if self._meter is None:
-            self._meter = await self.start_chat(NewChat(title="Plan usage meter", model="haiku"))
-        chat = self._chat(self._meter)
-        await self.send(self._meter, OperatorText("/usage"))
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + METER_WAIT_S
-        while chat.record.turn == "running" and loop.time() < deadline:
-            await asyncio.sleep(0.2)
-        await chat.close()
-        return self._ledger.reading("five_hour")
+        """The live five-hour reading. With none in the ledger, one haiku plan turn with no
+        tools writes it, because the turn's rate-limit event carries the reading and `/usage`
+        no longer does (CLI 2.1.299). Its chat record and workspace are removed after the turn,
+        so the chat list does not keep it. While a plan window is used up or plan use is
+        stopped, no turn runs and this raises `LaunchRefused`."""
+        async with self._metering:
+            held = self._ledger.reading("five_hour")
+            if held is not None:
+                return held
+            stop = self._ledger.hard_stop() or (
+                "a plan window is used up" if self._ledger.rejected() else None
+            )
+            if stop is not None:
+                raise LaunchRefused(f"the plan meter will not run: {stop}")
+            sid = await self.start_chat(NewChat(title="Plan usage meter", model=METER_MODEL))
+            chat = self._chat(sid)
+            chat.record = replace(chat.record, config=replace(chat.record.config, tools=False))
+            try:
+                await self.send(sid, OperatorText(METER_PROMPT))
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + METER_WAIT_S
+                while chat.record.turn == "running" and loop.time() < deadline:
+                    await asyncio.sleep(0.2)
+            finally:
+                await chat.close()
+                del self._chats[sid]
+                record_path(self._deps.home, sid).unlink(missing_ok=True)
+                await asyncio.to_thread(
+                    shutil.rmtree, self._deps.home.workspaces_dir / sid, ignore_errors=True
+                )
+            return self._ledger.reading("five_hour")
 
     async def quote(self, chat: SessionId, change: ConfigChange) -> Quote:
         """Every change goes through a quote. The new model goes through
@@ -758,6 +801,10 @@ class Harness:
             record = read_record(self._deps.home, chat)
             if record is None:
                 raise UnknownChat(chat)
+            if chat in self._options:
+                compact_at, hooks = self._options[chat]
+                config = replace(record.config, compact_at=compact_at, hooks=hooks)
+                record = replace(record, config=config)
             found = self._chats[chat] = Chat(record, self._deps)
         return found
 

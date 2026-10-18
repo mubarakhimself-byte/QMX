@@ -20,7 +20,15 @@ from qma.harness.chat import (
 )
 from qma.harness.harness import ChatTableFull, Harness, NewChat, UnknownChat
 from qma.harness.home import QmxHome, SessionId
-from qma.harness.launch import ConfigChange, LaunchRefused, TestMode
+from qma.harness.launch import (
+    Background,
+    ChatHooks,
+    Child,
+    ConfigChange,
+    Interactive,
+    LaunchRefused,
+    TestMode,
+)
 from qma.harness.routes import serve
 
 __all__ = [
@@ -30,10 +38,14 @@ __all__ = [
     "AnswerStatus",
     "Answers",
     "AskId",
+    "Background",
+    "ChatHooks",
     "ChatTableFull",
+    "Child",
     "ConfigChange",
     "Harness",
     "InjectedText",
+    "Interactive",
     "LaunchRefused",
     "NewChat",
     "OperatorText",
