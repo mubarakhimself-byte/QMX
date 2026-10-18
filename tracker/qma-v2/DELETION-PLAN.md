@@ -1,5 +1,7 @@
 # QMA v2 old-code deletion plan
 
+> **Rewrite before use (banner added 2026-10-18).** D1-D4 are still owed, but the premises below are stale: one Max 5x plan and a 50 % pause (rulings 26, 90, 106: no QMX caps of any kind), and "branch after HP17 from `rebuild/base`" (the base is now `engine/base` `132169c7` plus HP2 once he merges it into `rebuild/base`). `HARNESS-PLAN.md` moved to `archive/2026-10-18-harness-program/`. State: `research/methodology/33-state-of-play.md`.
+
 This program deletes the old agent code that the one-engine harness in `HARNESS-PLAN.md` replaced. The operator gets a smaller repo with no LangChain, and the next engineer gets one agent runtime to read.
 It follows "build beside, switch, then delete". It starts only after HP17 merges and the operator signs off in the temporary console.
 The rule it enforces is that nothing is deleted while a live caller still imports it, and every deletion proves that with a caller scan.

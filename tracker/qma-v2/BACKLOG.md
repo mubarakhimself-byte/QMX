@@ -1,5 +1,7 @@
 # QMA v2 backlog (everything outside the harness build)
 
+> **Rows reversed since (banner added 2026-10-18).** The 10-13 evening ruling row ("Exactly ONE Claude Max account… default cap 50%"), B35's "respect the 50% background cap", S3, and the Rejected rows on CLIProxy and on two or more Claude accounts are superseded by rulings 26, 90, 99 and 106: several accounts across providers through an in-house pool, no QMX caps of any kind, no CLIProxyAPI or opencodex. Each row is marked in place. Status of every B item: `research/methodology/33-state-of-play.md` and `26` §C.
+
 This is the operator's backlog (he confirmed on 2026-10-13 04:28 that there is no other one). It replaces `tracker/agent-system/backlog.md`, which is archived.
 
 **Rewritten 2026-10-13 evening** from his own messages in the 2026-10-12/13 planning session (full texts from the raw transcript, not the cut-off digest), the three audits in `reviews/2026-10-13-*.md`, and his evening rulings.
@@ -20,7 +22,7 @@ How to read it:
 | 10-13 04:14 (Q3) | Effort works like `/effort` in Claude Code or Codex, out of the box. | In harness scope |
 | 10-13 04:14 (Q4) | One vanilla copilot. Sessions have a home (Lab project, Portfolio, general). Mini apps become plugins, not copilots. | B30, B23 |
 | 10-13 04:22 | Harness first. Organogram, methodology, workflows and graphs come later. Ship through an orchestrator session, not the factory. | B21, B30, B33 |
-| 10-13 evening | Exactly ONE Claude Max account. Background agents use only spare 5-hour Claude usage, default cap 50%, editable. Permission modes and hooks copied from the Claude Agent SDK, rebuilt on the OpenAI side. Computer use through what the SDKs provide (OpenAI strongest); OpenCUA dropped. Providers: Claude subscription, OpenRouter key, Meta Muse, any OpenAI- or Anthropic-compatible provider. UI wiring is a later session. Deletion follows integration → staging → main (main only by his click); QMA v2 lands in `rebuild/base` for now. | B12, B17, B6, Rejected table |
+| 10-13 evening | **[Superseded 2026-10-18 for accounts and the cap: rulings 26, 90, 106 — several accounts, no QMX caps.]** Exactly ONE Claude Max account. Background agents use only spare 5-hour Claude usage, default cap 50%, editable. Permission modes and hooks copied from the Claude Agent SDK, rebuilt on the OpenAI side. Computer use through what the SDKs provide (OpenAI strongest); OpenCUA dropped. Providers: Claude subscription, OpenRouter key, Meta Muse, any OpenAI- or Anthropic-compatible provider. UI wiring is a later session. Deletion follows integration → staging → main (main only by his click); QMA v2 lands in `rebuild/base` for now. | B12, B17, B6, Rejected table |
 
 ---
 
@@ -64,7 +66,7 @@ How to read it:
 | B10 | **WF1/WF2 rework** | Strategy-from-anything workflows. They change with the risk-and-sizing work in his other session. He handles it. | "WF1 and WF2 are going to change a lot" (09:07) | He says go | No |
 | B13 | **Research harness and templates** | Redesign the Lab's built-in research harness (the old one combined open research and Delphi; it may have been overkill) and ship ready-made templates, OpenAI-cookbook style. Catalogue in research 22. | "might have been overkill" (08:54); "a research template is very specific" (17:20) | With B33 | No |
 | B34 | **Scheduled jobs (cron), Hermes-style** | Jobs that run later on their own, locally or on a server. Scheduling asks first or needs an allow rule (Q1). | "for cron jobs, look at the Hermes agent" (10:02); "sessions that run on cron jobs that should be there by design" (15:40) | With B33 | No |
-| B35 | **A Claude orchestrator that picks models** | Beyond router basics: a Claude model drives long work and picks the best model per task from usage left and strengths (for example GPT for thorough research). Defaults configurable. Must respect the 50% background cap. | "it can choose the best model for the best task" (15:40); "prefer using GPT because it's thorough" (10:34) | After router basics ship, with B33 | No |
+| B35 | **A Claude orchestrator that picks models** | Beyond router basics: a Claude model drives long work and picks the best model per task from usage left and strengths (for example GPT for thorough research). Defaults configurable. ~~Must respect the 50% background cap.~~ (Superseded: no QMX caps, ruling 106; the role table and router cover the rest, engine AD-13, AD-38.) | "it can choose the best model for the best task" (15:40); "prefer using GPT because it's thorough" (10:34) | After router basics ship, with B33 | No |
 | B36 | **Two agents editing the same thing** | When two agents edit the same files and both versions matter: use git branches and variants, and show the comparison in the UI. | "my idea was git is the best option here" (15:22) | With B33 and B42 | No |
 
 ## E. Computer use, browser and brokers
@@ -142,8 +144,8 @@ Recorded so nobody revives them.
 | Run other providers' models inside Claude Code, one profile or one Claude Code session per provider | "it was a thought, okay? I wasn't proposing it as the actual design" (15:16); "spawn up a code session for each of these" (15:16, called stupid at ~1 GB per session) |
 | Coding-plan subscriptions inside their own CLIs (Kimi Code, GLM, MiniMax, Muse Code) | "KPI keys only to be honest, just design based off the SDK" (15:22). Muse Code plans work only in Meta's CLI (H1 fact 19), so Muse runs on a key |
 | Paying Anthropic or OpenAI API, including the $100 Max credit | "I don't want to pay for API ever" (17:11) |
-| CLIProxy and disguising traffic as Claude Code | The router "was to replace the CLI proxy" (16:22) |
-| Two or more Claude Max accounts in QMX | Evening ruling 10-13: exactly one. Overrides "two accounts of claude" (09:20) |
+| CLIProxy and disguising traffic as Claude Code | The router "was to replace the CLI proxy" (16:22). Re-opened by ruling 26 (balancer logic), closed again by ruling 99: no CLIProxyAPI or opencodex, not even a hybrid; the pool is in-house |
+| ~~Two or more Claude Max accounts in QMX~~ **[No longer rejected: ruling 26 allows several accounts]** | Evening ruling 10-13: exactly one. Overrides "two accounts of claude" (09:20) |
 | OpenCUA for computer use | Evening ruling 10-13 |
 | Codex as an engine | "Codex bloody hell is very heavy" (15:16). Its source is studied, not used (10-13 04:22) |
 | Epic-factory or queue lanes for QMA v2 | "So we don't need a factory" (10-13 04:22) |
@@ -169,6 +171,6 @@ Recorded so nobody revives them.
 |---|---|---|
 | S1 | Look at Meta Muse's computer-use guide (`dev.meta.ai/docs/computer-use.md`, unread) as a key-based route for B17 | Muse is on a key he accepts paying for; OpenAI's ComputerTool needs an OpenAI API key he refuses |
 | S2 | Measure RAM per Claude session in the first live Claude packet | The ~1 GiB figure is a documented starting point, never measured on his PC; session caps depend on it |
-| S3 | Pause, don't fail, background work when the 50% cap is hit, and resume after the window resets | Days-long Claude runs on Max 5x will hit windows; nothing yet survives a lock-out |
+| S3 | **[Superseded: no QMX cap exists, ruling 106; a provider's own limit cools that account and the work moves or waits, engine AD-12, AD-40.]** Pause, don't fail, background work when the 50% cap is hit, and resume after the window resets | Days-long Claude runs on Max 5x will hit windows; nothing yet survives a lock-out |
 | S4 | Settle the computer-use paid route (B17) as one question with options, before any computer-use design | The evening ruling and H1's facts point in different directions |
 | S5 | Reword spins 4, 5 and 11 before he reviews B20 | They assume rented-only compute, which he never said |

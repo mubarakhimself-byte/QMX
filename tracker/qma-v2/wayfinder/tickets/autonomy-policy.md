@@ -3,7 +3,7 @@ title: Autonomy policy (spec; the asks are decisions 1, 2, 5)
 type: task
 mode: AFK
 status: closed
-blocked_by: [decision-1-lab-self-scheduling, decision-2-strats-promotion-notify, decision-5-checks-bind-agents-only]
+blocked_by: [decision-5-checks-bind-agents-only]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Blocked on superseded decisions 1 and 2; Strats (ruling 28) and inside-the-cap wording (ruling 27) are stale."
@@ -44,3 +44,7 @@ Triggers and scheduler, capability packs, Lab agent tools, trader-agent methodol
 ## Resolution
 
 Resolved. Ruling 57 and engine AD-22: nothing in a run waits for him except an irreversible external effect; Lab AD-13 is the Lab's ask table; Library AD-18 lands outputs under a standing rule. The leftover is 'Engine OPEN-5: what counts as an irreversible external effect'. (Map rewrite 2026-10-16.)
+
+## Note (2026-10-18)
+
+`blocked_by` lost `decision-1-lab-self-scheduling`, `decision-2-strats-promotion-notify` when those superseded tickets moved to `../../archive/2026-10-18-wayfinder-superseded/`. This ticket was already closed.

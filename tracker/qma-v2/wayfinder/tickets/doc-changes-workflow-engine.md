@@ -15,3 +15,7 @@ Apply `architecture/workflow-engine/DOC-CHANGES.md` rows 1-23 as new superseding
 ## Sources
 
 `architecture/workflow-engine/`DOC-CHANGES.md; `documentation-factory` skill.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Engine `DOC-CHANGES.md` now runs to row 41 (rows 33-41 from the rerun, its review and its fix-check).

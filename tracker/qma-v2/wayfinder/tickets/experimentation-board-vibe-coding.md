@@ -3,7 +3,7 @@ title: Experimentation Board as vibe coding
 type: prototype
 mode: HITL
 status: closed
-blocked_by: [decision-6-board-on-backend, decision-5-checks-bind-agents-only, workflow-engine-contract]
+blocked_by: [decision-5-checks-bind-agents-only, workflow-engine-contract]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Run scope was kept, not deleted (study 24); the Board is the Lab node editor saved in the session (ruling 31); blocked on superseded decision 6."
@@ -37,3 +37,7 @@ Lab overnight loop; feeds the build plan.
 ## Resolution
 
 Resolved. Ruling 31, engine AD-11 (saved draft; selected-subgraph test runs kept) and Lab AD-2 (one draft; Graph and Code are projections). (Map rewrite 2026-10-16.)
+
+## Note (2026-10-18)
+
+`blocked_by` lost `decision-6-board-on-backend` when those superseded tickets moved to `../../archive/2026-10-18-wayfinder-superseded/`. This ticket was already closed.

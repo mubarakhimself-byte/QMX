@@ -1,5 +1,7 @@
 # Prompt: the QMA v2 old-code deletion session
 
+> **Rewrite before use (banner added 2026-10-18).** It loads poteto-mode autopilot by default (ruling 101: no poteto-mode or skills by default for the planning lead; the coding prompt must say which it uses) and assumes the 50 % pause (ruling 106: no QMX caps). `HARNESS-PLAN.md` moved to `archive/2026-10-18-harness-program/`. See `DELETION-PLAN.md`'s banner.
+
 Run this only after HP17 of `HARNESS-PLAN.md` has merged into `rebuild/base`, the operator has signed off in the temporary console, and he says go. He pastes the short prompt from chat into a fresh Claude Code session opened in `C:\Users\Mubarak\Desktop\QMX`.
 
 ## Who you are

@@ -38,3 +38,7 @@ Methodology umbrella; gives the UI session the renderer brief.
 ## Sources
 
 `11-references.md` §4, output proposal; `10-ui-depth.md` §4; clipping "Post by @karpathy on X"; `02-pocock-pstack.md` HTML-REPORT, ketchup; corrections 10, J.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Engine AD-45 gives the contract: transcript directives, `::preview` explainers whose buttons talk back, one registry (UI-HANDOFF §12 row 13). The screen-by-screen methodology is still owed with him (B26-B29).

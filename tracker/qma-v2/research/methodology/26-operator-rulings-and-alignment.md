@@ -1,4 +1,4 @@
-# 26 — Operator rulings of 2026-10-16 and alignment with the backlog
+# 26 — Operator rulings (2026-10-16 to 2026-10-18) and alignment with the backlog
 
 Written by the lead session from the live conversation. **This file outranks 01-25.** Where an earlier file (including 19 and 21) disagrees, this file wins. These are his words, paraphrased tightly. Quotes are marked.
 
@@ -181,14 +181,34 @@ On 10-13 he reversed CLIProxy-for-Claude for this reason. Using someone else's C
 
 92. **Mixed providers must work for the copilot too.** The main agent can be on a subscription (Claude or Codex) while its sub-agents run on APIs: several sub-agents, each possibly on a different API (Kimi, Qwen and so on). Thinking mode, tool calling, sub-agents and the DevOps layer (logging, observability, monitoring) must hold for the copilot AND for workflows.
 93. **Borrow heavily from Hermes Agent's developer guide**, especially extensibility: adding tools, adding providers, platform adapters, plugins and built-in plugins (including how mini apps are created and monitored by the copilot), skill system and curator, tool search, LSP, document extraction. Also prompt assembly, agent loop internals, micro-compaction, caching, gateway multiplexing, session storage, state DB recovery, cron (script-only), browser CDP supervisor, egress proxy, gateway monitoring and the guides' best practices. Voice mode stays a later nice-to-have. Honcho is good but he doesn't use it.
+   - *Clarified 10-18 (alignment C, M-13):* from his own words that day, programmatic integration is out as a product surface ("I don't think we need it") and streaming TTS is out. Telegram (later, ruling 34), SOUL.md (the `persona` item) and the built-in plugin groups (automation, media, web) are in.
 94. **Rerun the workflow once more:** context collection (Hermes) → append to the architecture → triage → review/fix-check → plan → prompt. Opus only; take time. Workflows and the quant parts stay QMX's own.
 95. **Clean split by family, by design:** a Claude request goes through Claude (the plan), a GPT request through the GPT lane, and everything else (Kimi, Qwen, GLM, DeepSeek, OpenCode, Ollama Cloud) through the third-party pool. The open question is only how the pool is provided.
 96. **Candidate pool: opencodex** (https://github.com/lidge-jun/opencodex), which he has used inside Claude Code and finds safer, or CLIProxyAPI, used **verbatim**, since both have configurable load balancers built in. The risk: losing QMX logic already coded. Weigh a hybrid.
 97. **Order of work:** research and alignment first, then architecture, then code. Hermes ideas are compiled later in the rerun; pick up mental models where the architecture already covers a topic.
 98. **The split router (option A vs B/D) is decided inside the architecture pass.** The architect looks at every angle (BMad architect persona, "Winston"); he does not pick between options himself.
+   - *Clarified 10-18 (alignment C, M-13):* he named BMad **party mode** with the architect persona, not the BMad architecture skill. The intent is the same: the architect weighs every angle and decides. The rerun (39) used the architecture skill in amend mode and decided A + B + D.
 99. **No opencodex or CLIProxyAPI, not even as a hybrid.** The load balancer and pool stay entirely in-house; third-party tools bring update and maintenance problems. Learn how Hermes lets sub-agents use different models and build that.
+   - *Clarified 10-18 (alignment C, M-13; 39 §2.6):* two premises in his words were not so. No pool was ever built, so no QMX code gets deleted. Hermes pins the sub-agent model globally, and its Anthropic OAuth path bills extra usage, not the Max allowance, so Hermes does not run a plan main with Kimi sub-agents. "Hermes as a provider over RPC" is closed: Hermes serves an agent, not a model, and fits only as a `cli` delegate target.
 100. **Coding-plan accounts are NOT restricted to interactive use.** Models are multimodal: video and audio inputs must be supported by default. Leave room to add providers (MiniMax and others).
 101. **Planning-lead work uses no poteto-mode and no skills by default.** The lead holds the workflow in this session. One agent does a FULL pass over the whole Hermes docs menu: getting started, using Hermes, features, messaging (light), integrations, guides and tutorials, developer guide (especially), and reference.
+   - *Clarified 10-18 (alignment C, M-13):* "no poteto-mode and no skills" covers this lead and its successor. In the same answer he said he would start a fresh session (ruling 104), so "in this session" means whichever session holds the planning lead.
 102. **Hermes is borrowed without limits.** Map every useful Hermes idea, with no top-N cap. Many targets don't exist in QMX yet, and some existing code may need a refactor or rebuild. Prefer Hermes solutions that solve several QMX problems at once. Include user journeys, the browser (one of the best), the HUD mode and the desktop app. Permissions, approval modes, user rules, approval timeouts, cron, state, DM pairing, Docker, skills and the skill curator (handled like templates) are all in scope.
+   - *Clarified 10-18 (alignment C, M-13):* also in scope from his list that day: symlinked shared helpers (shared tools), git worktrees for agents and workflows, and the desktop app rather than the terminal UI ("we don't need" the TUI). No limit on how much each research agent reads ("1 million context window… Don't limit").
 103. **State, 2026-10-18:** the whole engine stack (EP0-EP14, HG1, HG2, TP1-TP4) is MERGED into `engine/base` (origin, `132169c7`). It is not yet merged into `rebuild/base`.
 104. **Work moves to a fresh planning-lead session** after this one. It orients from files, and uses this session's transcript only to check details. Disk contents need sorting into useful and stale.
+
+## M. 2026-10-18 (new lead session)
+
+Recorded by the planning lead from the settled facts the operator gave the new lead session, checked against the 10-18 transcript (alignment C, chat-only items 1-3; `AUDIT-2026-10-18.md`). Several close gaps the audit and alignment C found. Where an earlier ruling disagrees, these win.
+
+105. **Tests run on haiku through the plan login.** OpenRouter is used only to prove that other providers work, never as the default test model. This replaces "OpenRouter is for tests only" (26) and "OpenRouter is OK for tests" (51).
+106. **No QMX-internal usage or spend caps of any kind.** The $5 per Background chat and fixed shares (the 0.5 background share) are bugs, not settings. The providers' own limits are the only limits. Configuration per account (strategy, priority, which models it serves) lives in the UI. This finishes rulings 27 and 90; 90's "50 % as a default" is superseded.
+107. **He will use the Chinese models more than Claude.** Defaults are key-first: third-party key providers come before GPT and the plan, and nothing in QMX limits them.
+108. **MT5 and cTrader click-through is allowed on demo accounts only, with the money gate first.** Agents may set up strategies there; live accounts are never touched.
+109. **The harness stays; the provider contracts change.** Routing work lands in the router, profiles and pool, not in the harness core.
+110. **The Claude SDK limit is to be solved, not assumed.** "If it is a limit, there should be a solution." A design may not stop at "the SDK can't".
+111. **Data stays held** (ruling 91 stands). His intent behind it: server storage and agent deployment that work out of the box.
+112. **The fifth quant lens is unresolved.** Four lenses are confirmed: researcher, trader, developer and portfolio manager. Nothing is built on the fifth.
+113. **Every research idea is validated in full, with no top-N**, including where each one lands in the UI.
+114. **Deep context alignment comes before architecture.** The order is alignment, then architecture, then code (ruling 97, made firmer).

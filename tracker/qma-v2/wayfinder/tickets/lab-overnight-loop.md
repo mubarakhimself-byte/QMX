@@ -3,7 +3,7 @@ title: Lab overnight loop
 type: grilling
 mode: HITL
 status: closed
-blocked_by: [loop-spec, strategy-pipeline-gates, lab-agent-tools, strategy-funnel-template, feasibility-probes, night-planner]
+blocked_by: [loop-spec, strategy-pipeline-gates, lab-agent-tools, strategy-funnel-template, feasibility-probes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Becomes a configuration of the one engine, not template one (ruling 22); the per-night usage budget and night-planner block are stale (rulings 26-27)."
@@ -37,3 +37,7 @@ Feeds first templates and the build plan.
 ## Resolution
 
 Resolved. Lab AD-4: every Lab procedure is a template on the one engine. Enabling Lab schedules is 'Lab OPEN-5'. (Map rewrite 2026-10-16.)
+
+## Note (2026-10-18)
+
+`blocked_by` lost `night-planner` when those superseded tickets moved to `../../archive/2026-10-18-wayfinder-superseded/`. This ticket was already closed.

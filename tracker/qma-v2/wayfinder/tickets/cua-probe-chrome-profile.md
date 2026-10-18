@@ -23,3 +23,7 @@ Browser and computer-use plan and journeys.
 ## Sources
 
 `31-cua.md` recommendation (b); engine AD-33; ruling 20.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Engine AD-44 now designs the `logged_in` profile as a snapshot of his real profile that carries only the sites he ticks (41 H8); probe P-BR gates it. This probe's question is folded into P-BR's pass line.

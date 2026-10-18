@@ -1,8 +1,8 @@
 # UI handoff: everything the UI session needs (running list)
 
-Started 2026-10-16 by the lead session, at the operator's request (ruling 47). It is kept up to date as each design lands. **Read this before wiring anything.** `UI-NOTES.md` still holds the harness event details. This file adds everything since then.
+Started 2026-10-16 by the lead session, at the operator's request (ruling 47). It is kept up to date as each design lands; last brought current on 2026-10-18 evening against rulings 1-114 and the rerun (39 with its review and fix-check applied). **Read this before wiring anything.** `UI-NOTES.md` still holds the harness event details. This file adds everything since then.
 
-Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. Sources for each item are in brackets.
+Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. Sources for each item are in brackets. A bracketed `10 §…` source is `archive/2026-10-18-methodology-studies/10-ui-depth.md`; `27b` sources are in the same folder.
 
 ## 0. Ground rules for the UI session
 
@@ -36,10 +36,10 @@ Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. So
 - **A Workflows screen** is needed. Today workflows have no screen of their own [23 §3]. It needs a list, versions, enable/disable, triggers, and runs.
 - **One draft, two views:** the Lab editor's Graph mode and Code mode are projections of ONE draft. The saved Board is a draft. Free-form note nodes and unconnected nodes are allowed in a draft [engine AD-11].
 - **Lifecycle states to show:** draft → validated → tested → published (version) → enabled ⇄ disabled → archived. A draft can only run in test mode. Selected-subgraph runs ("run just this part") are allowed [engine AD-11]. Drafts never sit on `main`; see §9 for the draft vs published badge.
-- **Test runs use real models** through existing providers (ruling 51). Show each test report and its cost. Saving a draft and running a test never ask him; publishing and enabling ask once.
-- **Run timeline:** one trace per run and one span per step (status, cost, time, account, model). Steps that waited at a usage limit show `waiting (resume_at)` [engine §observability].
+- **Test runs use real models**: haiku through his plan login by default; OpenRouter only to prove another provider works (ruling 105). Show each test report and its cost. Saving a draft and running a test never ask him; publishing and enabling ask once.
+- **Run timeline:** one trace per run and one span per step (status, cost, time, account, model). Steps that waited at a provider's own usage limit show `waiting (resume_at)` [engine §observability].
 - **Inbox items:** one per problem, with buttons: retry, stronger model, skip step, open trace, stop, resume. Long-pause alert after 6 h (editable) [engine §failure ladder]. Only provider failures and harness-level errors reach the inbox; everything else is a digest line (§9 row 9).
-- **Account pool settings:** list accounts per provider (any number of Claude, GPT and key accounts), each with priority, "my copilot account" (workflows use it last), and optional values he sets himself (strategy, share, ceiling, concurrency, cooldown), all empty by default. The default strategy for workflows is least-used, never fill-first. OpenRouter is marked "provider proof only" [engine AD-12, rerun].
+- **Account pool settings:** see §12 row 5 (the Accounts page). Any number of Claude, GPT and key accounts, configured per account in the UI; QMX imposes no share, ceiling or budget of its own (ruling 106). He may set an optional per-account share or ceiling himself on the Accounts page (ruling 90); it is off by default and never set by QMX. The default strategy for workflows is least-used, never fill-first. OpenRouter is marked "provider proof only" [engine AD-12, rerun].
 - **Defaults are all UI-editable.** The list is in `SOLUTION-DESIGN.md` §17.
 - **Copilot builder:** the copilot asks numbered questions with suggested answers, then draws the draft on the canvas.
 - **Templates:** a template is a copyable workflow. A variant is an overlay with a "variant of" link (ruling 48).
@@ -116,7 +116,7 @@ Fifteen rows the UI session needs that earlier sections missed [27b §5]. Each n
 12. **QMB machine** as a placement with its own queue depth [engine AD-31].
 13. **Lab paper** as a daily schedule: Day n of m, pause = disable the daily trigger [Lab AD-12].
 14. **Library home indicator:** off. The UI never shows which store answered, but shows `primary_moving` during a cut-over [library LLD §7].
-15. **No QMX limits (rewritten 2026-10-18 rerun):** Settings shows `max_budget_usd`, `background_cap` and `max_turns` as "unset (no QMX limit)" with a way for him to set his own; there is no runaway guard and no per-workflow token, agent, tool-call or wall-time ceiling. `max_live_chats` shows as machine capacity (derived from RAM), not a limit. A workflow may carry a `limits` block only if he writes one; the run card then shows "paused at your limit, resume". Stuck and loop stops show as `stalled` with the reason. No spend ask and no QMX limit bar exist anywhere [engine AD-9, AD-16, AD-40; SD §26.3].
+15. **No QMX limits (rewritten 2026-10-18, ruling 106):** Settings has no QMX-imposed budget, cap, share, turn, token, tool-call or wall-time setting, and no runaway guard. The only exceptions are ones he chooses himself, off by default: an optional per-account share or ceiling (row 5), and a per-workflow `limits` block he writes (engine AD-40). The $5 per Background chat and the 0.5 background share are bugs being removed, not settings to show. `max_live_chats` shows as machine capacity (derived from RAM), not a limit: extra work queues or spills, it is never refused. The only limits shown are the providers' own, as readings. Stuck and loop stops show as `stalled` with the reason. No spend ask and no QMX limit bar exist anywhere [engine AD-9, AD-16, AD-40; SD §26.3].
 
 ## 10. Operations patterns from Hermes (added 2026-10-18, study 37c)
 
@@ -145,7 +145,7 @@ Patterns from Hermes Agent's TUI, desktop app and dashboard that make many runs 
 Sources in `research/methodology/37d-hermes-full-pass.md`. Rows marked *(new backend)* need a proposal from 37d.
 
 1. **Widgets inside chat messages.** The model writes a directive paragraph such as `::chart{id="run-123"}`; a registered component renders it inline; an unknown directive shows as plain text; a crash shows an error chip, never a dead message [37d H-83] *(new backend: a directive registry the copilot is told about through a skill)*.
-2. **Live previews that talk back.** `::preview{file="…"}` renders an HTML explainer in a sandboxed frame with QMX theme tokens. A button inside can send a short hidden prompt back to the copilot (capped length, one per second, typed result). This is the home for animated explainers (ruling 7) [37d H-84].
+2. **Live previews that talk back.** `::preview{file="…"}` renders an HTML explainer in a sandboxed frame with QMX theme tokens. A button inside can send a short hidden prompt back to the copilot (short text, at most one per second, typed result; an injection guard, not a usage limit). This is the home for animated explainers (ruling 7) [37d H-84].
 3. **HUD mode.** A floating, always-on-top chat bar over any app; where it sits is context ("what is this?" means the window below). Read only over broker windows [37d §4.12] *(new backend: `read_window_below` tool)*.
 4. **Loop, goal and heartbeat cards** above the composer: "Loop active · 2 runs · next 00:04:12", goal "3 checks so far" (no turn budget exists, engine AD-47; fixed after 41 L2), heartbeat interval; a goal paused as `blocked` or `stalled (no convergence)` shows why; pause, resume, stop [37d H-67 to H-69] *(new backend)*.
 5. **Processes block in the live dock** under sub-agents: command, elapsed, last output line; flips to exit status, leaves after about 60 s [37d H-07].
@@ -180,7 +180,7 @@ Backend decisions from the rerun that change or add screens. Engine AD numbers i
 2. **Per-account switch "native helpers on other providers"** on each Claude account in Settings (the plan lane): shown only if the plan lane ships (it does not if probe P1 fails); on once its checks pass; off means helpers on other providers run only as full helper chats; it can flip off by itself when the router stops answering or overage use appears, with one line saying why. One plain line explains it; it is not an approval [AD-38].
 3. **Model picker** lists models from the registry with capability chips (tools, vision, audio, video, thinking, window, cache) and the effort sent; a model that lacks something the chat needs is shown greyed with the reason [AD-39, AD-13].
 4. **Add a provider:** a profile row (or the copilot's onboarding flow) plus "Test"; MiniMax, Qwen, OpenCode, Ollama Cloud and the rest are rows, not features [AD-39, AD-30].
-5. **Accounts page:** any number of Claude, GPT and key accounts; priority; "my copilot account" (workflows use it last); optional values he sets (strategy, share, ceiling, concurrency, cooldown), empty by default; per account the provider's own usage reading, cooldown with its reset time, and "sign in again" when benched (a benched plan account never moves his copilot by itself; the chat waits for his sign-in); with one Claude account, the share of its window that test runs and builder tests used, as a reading; each GPT account shows its owner machine; a key used on two machines shows both [AD-12; 41 H2, H7, M6].
+5. **Accounts page (per-account provider configuration, CLIProxyAPI-like in capability, built in-house, ruling 99):** any number of Claude, GPT and key accounts across providers; per account: enabled or not, priority, "my copilot account" (workflows use it last), routing strategy (least-used by default, round-robin, fill-first, reset-window, random), which models and roles it serves, plan lane switch (row 2), an optional share or ceiling he sets himself (off by default; ruling 90), the provider's own usage reading, cooldown with its reset time, and "sign in again" when benched (a benched plan account never moves his copilot by itself; the chat waits for his sign-in); with one Claude account, the share of its window that test runs and builder tests used, as a reading; each GPT account shows its owner machine; a key used on two machines shows both [AD-12; 41 H2, H7, M6].
 6. **No QMX limits anywhere.** No limit bar, no runaway guard, no spend ask. Run cards show estimates and the providers' own readings. A stop by the stuck detector reads `stalled` (no progress) or `stalled (loop)` with the agent's last summary [AD-16, AD-40].
 7. **Failure cards name the error class** (rate limit, plan quota, billing, sign-in, model not allowed, context too long, provider down) with actions that fit: wait for reset (time shown), switch account, next model [AD-40].
 8. **Attach anything:** images, PDFs, audio, video, files and `@file`, `@folder`, `@url`; chips show "transcribing", "analysing video", "reading" before the turn sends; the attachments land in the Library [AD-42].
@@ -198,3 +198,25 @@ Backend decisions from the rerun that change or add screens. Engine AD numbers i
 20. **One Logs and Analytics view** for the copilot and workflows together: filter by component (router, harness, engine, scheduler, apps), level, day and model; tokens, cache hits, cost estimate per day and model; every copilot sub-agent appears as its own row [AD-15].
 21. **Stuck stops say which kind** (review 41): `stalled` (no progress), `stalled (loop)` and `stalled (no convergence)` with the agent's last summary; a slow model shows "waiting on model, first token" and is never called stuck [AD-16].
 22. **Helpers that run outside CLIs** (`delegate` target `cli`: at first only CLIs that take an Anthropic base URL, such as OpenCode; Codex CLI waits for a later router front door, 42 N17) show "runs in a container" and fail with "needs Docker or Contabo" when neither is available; the first use of each CLI version asks him [AD-41; 41 C2].
+23. **Router and pool usage view** (one page, with the Logs and Analytics view of row 20): per account and per provider the provider's own readings (plan 5-hour and 7-day windows as percent with reset times, key providers in USD or tokens as the provider reports them), which lane each request took (plan, GPT, key, chat), live leases per account and machine, cooldowns with reset times and the error class that caused them, and which helper or workflow used what. Readings only: no QMX bar, share or ceiling is drawn on them. OpenRouter rows say "provider proof only" [AD-12, AD-15, AD-38; H36 journal fields].
+24. **Defaults read key-first** (ruling 107): model pickers, role lists and "Add a provider" put Kimi, Qwen, GLM, DeepSeek, MiniMax and the other key providers first, then GPT, then the Claude plan; nothing in the UI suggests Claude as the default [AD-13].
+
+## 13. Rerun UI landings: where each one lives (re-centralized 2026-10-18 evening)
+
+A checklist so the UI session finds every UI landing of the rerun (39, with 41 and 42 applied) in one place. Sources: 37c's UI block is §10, 37d's UI block is §11 with its seven journeys, the rerun is §12.
+
+| Landing | Row |
+|---|---|
+| Widgets inside chat messages | §11 row 1; §12 row 13 |
+| Live previews whose buttons send prompts back to the copilot | §11 row 2; §12 row 13 |
+| HUD mode (floating chat bar, read-only over any window) | §11 row 3; §12 row 11 |
+| Agent desktops and browsers with Take over / Hand back | §11 row 11; §12 row 10 |
+| Shared browser he can watch live (ruling 20), logged-in profile by snapshot | §12 row 10; §7 |
+| Per-account provider configuration, CLIProxyAPI-like in capability | §12 rows 2, 4, 5; §9 row 3 |
+| Router and pool usage view | §12 row 23 |
+| One monitoring view for copilot and workflows | §12 row 20; §10 row 16 |
+| MT5 and cTrader demo proof indicators ("account proven: demo, on your list", 60-second check, "algo trading off, EA detached", cTrader "needs a Windows desktop machine") | §12 row 12 |
+| Helpers on other models in the live dock, steer and stop | §10 row 1; §11 rows 5-6; §12 row 1 |
+| Desktop app chrome (startup card, safe mode, pop-outs, Quick Entry, keep awake) | §11 rows 14, 16, 24; §12 row 16 |
+| Multimodal attach (images, PDFs, audio, video) | §11 row 23; §12 row 8 |
+| No caps anywhere | §9 row 15; §12 row 6 |

@@ -1,5 +1,7 @@
 # UI notes for the future UI-wiring session
 
+> **Read `UI-HANDOFF.md` first (banner added 2026-10-18).** It is the current UI list and wins where this file differs. In particular the usage page has no cap: §6's "One Claude Max account only… default cap 50%" is superseded (rulings 26, 90, 106; UI-HANDOFF §9 row 15, §12 rows 5, 6 and 23).
+
 Everything about the UI that came up while planning QMA v2 (2026-10-12/13). The UI wiring is a **later, separate session** (operator ruling, 2026-10-13 evening). This file is its starting brief. It is not a design.
 
 Source pointers:
@@ -58,7 +60,7 @@ Source pointers:
 
 - Modelled on T3 Code's usage view; he showed a screenshot. (op 10:02: "how much I've used token-wise, who am I using?")
 - Top: plan windows as bars with reset times. Claude shows **percent of the 5-hour and 7-day windows**; key providers show USD. (R32 §C4; HIW §10)
-- **One Claude Max account only.** Background agents may use only spare 5-hour usage, **default cap 50%, editable** in Settings; show the cap on the bar. (evening ruling)
+- ~~**One Claude Max account only.** Background agents may use only spare 5-hour usage, **default cap 50%, editable** in Settings; show the cap on the bar. (evening ruling)~~ **Superseded (rulings 26, 90, 106):** any number of accounts; no QMX cap; the bars are the providers' own readings only (UI-HANDOFF §12 row 23).
 - Below: tokens and cost over time by kind; filters by engine, model, account, agent, workflow and where it ran; per-model table with cache hit rate; cache savings; top runs by cost; a price table editor with "Map to". (R32 §C4)
 - Banner: "estimates, not your bill". Claude usage figures are labelled estimates. (R32 §C4; 10-13 04:25 decision)
 - Data notes: Claude rate-limit events arrive only on status change, so cache the last one per window (H1 fact 10). OpenRouter usage and limits come from `GET /api/v1/key` (H1 fact 20).

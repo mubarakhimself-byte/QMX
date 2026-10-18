@@ -3,7 +3,7 @@ title: Back up the orphaned 10 GB tick history now
 type: task
 mode: HITL
 status: open
-blocked_by: []
+blocked_by: [data-deeper-study]
 claimed_by: ""
 created: 2026-10-16
 ---
@@ -19,3 +19,7 @@ He confirms the bucket target; the agent runs rclone with a checksum verify and 
 ## Sources
 
 Study 30 section 0 items 2, 5 and question 3; `33-state-of-play.md` section 3 item 9; ruling 81.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Data is held (rulings 91, 111): nothing ships on data until the deeper data study is explained to him. `ENGINE-PLAN.md`'s data track was removed and the file is archived. This ticket now waits on "Data deeper study, explained to him".

@@ -1179,7 +1179,7 @@ Playwright and Stagehand stay for headless, logged-out research and cheap replay
 
 ## 25. Later packets found by the first build run (sketches; rules in the spine)
 
-Planned work, not hardening: each closes a LATER-PACKET row of `methodology/34`. DOC-CHANGES row 27 lists them for ENGINE-PLAN Appendix G. Order is the triage's: security first.
+Planned work, not hardening: each closes a LATER-PACKET row of `methodology/34`. DOC-CHANGES row 27 lists them for ENGINE-PLAN Appendix G (now `archive/2026-10-18-engine-program/ENGINE-PLAN.md`; the live program is `HARDENING-PLAN.md`). Order is the triage's: security first.
 
 | Packet | Closes | Sketch |
 | --- | --- | --- |

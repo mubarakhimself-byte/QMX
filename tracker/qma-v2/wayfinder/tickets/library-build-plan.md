@@ -19,3 +19,7 @@ Contabo setup (Hub, vault, qmx-node).
 ## Sources
 
 `architecture/library-and-data/`MIGRATION.md, LLD.md; ruling 73 (coding can start), 81 (data first); `ENGINE-PLAN.md`.
+
+## Update (2026-10-18 evening, re-centralize)
+
+`ENGINE-PLAN.md` moved to `../../archive/2026-10-18-engine-program/`; its data track (DP1) was removed by ruling 91. The Library packet is LIB in `../../research/methodology/40-retriage.md` §3.1 row 17; the Hub design comes first. Write the Library packet plan as part of the next program.

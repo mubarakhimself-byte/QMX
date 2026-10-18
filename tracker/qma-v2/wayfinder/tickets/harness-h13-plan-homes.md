@@ -2,10 +2,11 @@
 title: Harness H13: per-machine plan homes and qmx node login
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [engine-open-3-plan-logins]
 claimed_by: ""
 created: 2026-10-16
+closed: 2026-10-18
 owner: harness owner
 ---
 
@@ -20,3 +21,7 @@ Grant under ruling 39 if Engine OPEN-3 is yes.
 ## Sources
 
 `architecture/workflow-engine/HARNESS-REQUESTS.md` row H13; ruling 24 (harness untouched), ruling 39 (pool exception).
+
+## Resolution (2026-10-18 evening, re-centralize)
+
+Designed (engine AD-28) and part of the pool extension, so no separate grant; engine OPEN-3 closed yes. Built with the pool in the ROUTER packet.

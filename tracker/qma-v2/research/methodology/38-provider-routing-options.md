@@ -1,5 +1,7 @@
 # 38. Provider routing: plan main agent, API sub-agents, and who runs the third-party pool
 
+> **Stale in parts (banner added 2026-10-18 evening).** Superseded by rulings 99 and 100 and by the rerun (`39-architecture-rerun.md`, engine AD-38 to AD-50): no opencodex or CLIProxyAPI, not even as a hybrid or optional upstream, so §0 item 4's "Hybrid F′: yes" and §5's opencodex upstream are out; coding-plan rows are not restricted to interactive use (ruling 100), so every `use: interactive` recommendation (§1, §5, §6, §8 item 3) is out. The provider facts (wire formats, quirks, terms, prior art) are still current input.
+
 Date: 2026-10-18. Research and design options only. Nothing here is decided.
 
 **How this was read.** Every web page was opened in the built-in browser, one tab, page by page, with no sign-in. Where a page hid text behind a tab, the tab was clicked. Two search steps used Firecrawl search excerpts (Kimi rate-limit page location, claude-code-router routing page); both are marked "(excerpt)". LiteLLM was not re-read today; its facts come from study `one-engine/02b` (read 2026-10-14) and are marked "(02b)". Local code was read with `git show` and `git grep` on `engine/tp3` and `engine/hg2` in `C:\Users\Mubarak\Desktop\QMX`.

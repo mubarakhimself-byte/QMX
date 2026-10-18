@@ -1,5 +1,5 @@
 ---
-title: Build prerequisites: HP merge, D1-D4, B1
+title: Build prerequisites: rebuild/base merge, D1-D4, B1
 type: task
 mode: HITL
 status: open
@@ -30,3 +30,7 @@ Harness extensions, the thin engine, wave 0 UI wiring.
 ## Sources
 
 `20-review-b` findings 1 and 10; `21` B1; `DELETION-PLAN.md`; memory `agent-system-map`.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Current (replaces the 10-16 rewrite above): the engine stack is merged into `engine/base` (`132169c7`, ruling 103). `rebuild/base` (`4345eafa`) holds HP2 and two test fixes that `engine/base` lacks. **His click:** merge `engine/base` into `rebuild/base` before any harness packet (CAP-H, HG3, ROUTER). D1-D4 have not run, and `DELETION-PLAN.md` must be rewritten first (stale premises; banner at its top). The B1 SQLite one-writer fix is not in. The red `just ci` line is P0 hygiene.

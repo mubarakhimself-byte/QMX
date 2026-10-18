@@ -19,3 +19,7 @@ Harness H8.
 ## Sources
 
 Engine SOLUTION-DESIGN section 18 row E23; engine AD-25.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Test models: haiku through his plan login, not "real cheap models" (ruling 105). Still a build-time gate for H8 (engine AD-25).

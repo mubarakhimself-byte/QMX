@@ -3,7 +3,7 @@ title: QMX Browser, broker and leases (C6)
 type: task
 mode: AFK
 status: closed
-blocked_by: [decision-4-browser-first-step, feasibility-probes]
+blocked_by: [feasibility-probes]
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Ruling 30 wants the plan and user journeys explained first; wave 3 wording is stale (ruling 33)."
@@ -45,3 +45,7 @@ Wave 3 templates (RS4 at B3), the funnel's capture stage, trader-agent trials la
 ## Resolution
 
 Superseded. Engine AD-33 (Cua as an optional pack with a bounded manifest) replaces C6. Ruling 30's plan and journeys are owed in 'Browser and computer-use plan and journeys'. (Map rewrite 2026-10-16.)
+
+## Note (2026-10-18)
+
+`blocked_by` lost `decision-4-browser-first-step` when those superseded tickets moved to `../../archive/2026-10-18-wayfinder-superseded/`. This ticket was already closed.

@@ -3,7 +3,7 @@ title: Data decisions from study 30
 type: grilling
 mode: HITL
 status: open
-blocked_by: []
+blocked_by: [data-deeper-study]
 claimed_by: ""
 created: 2026-10-16
 ---
@@ -19,3 +19,7 @@ Accept study 30's recommendation on each; the build lives in `ENGINE-PLAN.md`'s 
 ## Sources
 
 `30-data-and-devops.md` section 6; rulings 42, 56, 58, 81; `ENGINE-PLAN.md` data track.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Data is held (rulings 91, 111): nothing ships on data until the deeper data study is explained to him. `ENGINE-PLAN.md`'s data track was removed and the file is archived. This ticket now waits on "Data deeper study, explained to him".

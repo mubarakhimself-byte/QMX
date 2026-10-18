@@ -5,7 +5,7 @@ This is the workflow the 2026-10-14 planning session used to turn the QMA v2 one
 ## Standing rules for the whole run
 
 - Run under `/poteto-mode`. Invoke every skill with the Skill tool. Do not read a SKILL.md and imitate it.
-- Use Opus for every agent. Use Sonnet only for a tiny task. Use Fable only when the operator asks. Never use `bulk-worker`. Run at most three agents at once, all in the background. Every brief says "do not spawn sub-agents".
+- Use Opus for every agent. Use Sonnet only for a tiny task. No Fable (ruling 87; corrected 2026-10-18). Never use `bulk-worker`. Run at most three agents at once, all in the background. Every brief says "do not spawn sub-agents".
 - Each agent writes its result to a file in the repo. The final message of an agent is a short report, not the content.
 - Each brief names its exact source files and excludes `tracker/qma-v2/archive/`. Old files must not poison agents.
 - Read primary sources in the built-in browser. Each agent opens its own tab and passes its `tabId`. If the browser fails, use Firecrawl `firecrawl_scrape` with markdown, which returns the full page. Do not use summary fetchers.

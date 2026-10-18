@@ -3,7 +3,7 @@ title: Model tiers and reviewer settings (assumption A5; spec)
 type: task
 mode: AFK
 status: closed
-blocked_by: [decision-3-spend-number]
+blocked_by: []
 claimed_by: ""
 created: 2026-10-16
 rubric: "PARTLY-STALE. Blocked on superseded decision 3 (ruling 27); add accounts and the load balancer (ruling 26)."
@@ -37,3 +37,7 @@ First templates, research harness design, evals harness, system-prompt design, m
 ## Resolution
 
 Resolved. Engine AD-13 (roles map to models in Settings, ruling 15) and AD-12 (account pool and load balancer). (Map rewrite 2026-10-16.)
+
+## Note (2026-10-18)
+
+`blocked_by` lost `decision-3-spend-number` when those superseded tickets moved to `../../archive/2026-10-18-wayfinder-superseded/`. This ticket was already closed.

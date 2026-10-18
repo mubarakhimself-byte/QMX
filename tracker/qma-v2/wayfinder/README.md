@@ -39,4 +39,4 @@ owner: harness owner    # optional; who answers it when not the operator
 ---
 ```
 
-Build PRs are not tickets. They live in `../ENGINE-PLAN.md`; tickets link to it.
+Build PRs are not tickets. The first program (`ENGINE-PLAN.md`) is archived in `../archive/2026-10-18-engine-program/`; the next program is planned from `../research/methodology/40-retriage.md` section 3.

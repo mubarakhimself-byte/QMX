@@ -23,3 +23,7 @@ Browser and computer-use plan and journeys.
 ## Sources
 
 `31-cua.md` recommendation (a); engine AD-33.
+
+## Update (2026-10-18 evening, re-centralize)
+
+Ruling 108: MT5 and cTrader click-through is allowed on demo accounts only, money gate first. Engine AD-33 now holds a five-layer demo proof and live check E46. cTrader needs a Windows desktop placement (his parked burst and paid-machine call); MT5 runs on the PC. This probe checks the exposure on his PC before any of it is built.
