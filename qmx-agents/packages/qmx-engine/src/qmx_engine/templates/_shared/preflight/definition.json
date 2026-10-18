@@ -1,0 +1,21 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "preflight",
+  "name": "Preflight: wake the rest only when the source has something new, at zero tokens",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "look", "name": "Anything new?", "type": "monitor", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"source": "scripts/source.py", "wake_when": "changed",
+                    "fixture_ref": "fixtures/items.json"}},
+    {"id": "new", "name": "Only the new ids", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/new_ids.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Anything new?", "port": "in", "map": "one"}]]},
+    "Anything new?": {"changed": [[{"node": "Only the new ids", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

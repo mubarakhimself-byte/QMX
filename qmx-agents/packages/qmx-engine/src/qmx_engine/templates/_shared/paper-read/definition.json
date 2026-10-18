@@ -1,0 +1,30 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "paper-read",
+  "name": "Paper read: one batched question battery per chunk of papers",
+  "settings": {
+    "on_error": "park",
+    "caller_policy": "workflows_only",
+    "runaway": {"agents": 6, "tool_calls": 60, "wall_seconds": 3600, "on_runaway": "pause"}
+  },
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "papers", "name": "Papers", "type": "script", "typeVersion": 1, "position": [220, 0],
+     "effect": "none",
+     "parameters": {"script": "scripts/papers.py", "fixture_ref": "fixtures/papers.json"}},
+    {"id": "read", "name": "Read each chunk of papers", "type": "agent", "typeVersion": 1,
+     "position": [440, 0], "role": "reader", "effect": "none",
+     "parameters": {"brief_ref": "prompts/read.md", "output_schema_ref": "schemas/cards.json",
+                    "tools": [], "max_turns": 4}},
+    {"id": "cards", "name": "All cards", "type": "join", "typeVersion": 1, "position": [660, 0],
+     "parameters": {}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Papers", "port": "in", "map": "one"}]]},
+    "Papers": {"main": [[{"node": "Read each chunk of papers", "port": "in", "map": "chunk",
+                          "chunk": {"by": "items", "size": 2}}]]},
+    "Read each chunk of papers": {"main": [[{"node": "All cards", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

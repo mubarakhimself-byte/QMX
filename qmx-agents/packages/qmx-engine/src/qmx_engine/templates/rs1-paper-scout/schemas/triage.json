@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": ["keep", "dropped"],
+  "properties": {
+    "keep": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "why"],
+        "properties": {"id": {"type": "string"}, "why": {"type": "string"}}
+      }
+    },
+    "dropped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "reason"],
+        "properties": {"id": {"type": "string"}, "reason": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "headline": "3 new papers, 2 testable",
+  "papers": [
+    {
+      "paper_id": "2610.90001",
+      "title": "Overnight drift in major currency pairs",
+      "summary": "EURUSD and USDJPY earn most of their daily return overnight. A long-overnight rule earns a Sharpe ratio of 0.8 after costs from 2012 to 2023, falling to 0.5 on the held-out years.",
+      "testable": "yes",
+      "testable_why": "The rule needs only hourly FX quotes and fixed entry and exit times.",
+      "replicable": "yes",
+      "replicable_why": "It needs only EURUSD and USDJPY prices.",
+      "costs": "known",
+      "flags": [],
+      "citations": [
+        {
+          "claim": "A long-overnight rule earns a Sharpe ratio of 0.8 after costs.",
+          "quote": "a long-overnight rule earns an annualised Sharpe ratio of 0.8 after a cost of 0.4 pips per side",
+          "source_id": "2610.90001"
+        }
+      ]
+    },
+    {
+      "paper_id": "2610.90005",
+      "title": "Regime filters cut drawdowns in trend following on index futures",
+      "summary": "A volatility regime filter on a 50-day trend rule cuts maximum drawdown from 31% to 18%, and keeps a Sharpe ratio of 0.7 out of sample.",
+      "testable": "yes",
+      "testable_why": "Both the trend rule and the filter run on daily futures prices.",
+      "replicable": "proxy",
+      "replicable_why": "Index CFD prices stand in for the futures.",
+      "costs": "known",
+      "flags": [],
+      "citations": [
+        {
+          "claim": "The filter cuts maximum drawdown from 31% to 18%.",
+          "quote": "cuts maximum drawdown from 31% to 18% over 2000 to 2024",
+          "source_id": "2610.90005"
+        }
+      ]
+    },
+    {
+      "paper_id": "2610.90003",
+      "title": "Volatility breakouts in gold futures around US data releases",
+      "summary": "A breakout rule after US inflation releases reports a Sharpe ratio of 2.6 before costs, with no out-of-sample test.",
+      "testable": "no",
+      "testable_why": "A Sharpe ratio of 2.6 on daily data with no costs and no held-out test points to lookahead.",
+      "replicable": "yes",
+      "replicable_why": "It needs only gold prices and the release calendar.",
+      "costs": "unknown",
+      "flags": [
+        "costs unknown",
+        "no out-of-sample test",
+        "Sharpe above 2 on daily data: assume lookahead until shown otherwise"
+      ],
+      "citations": [
+        {
+          "claim": "The breakout rule earns a Sharpe ratio of 2.6 before costs.",
+          "quote": "earns a Sharpe ratio of 2.6 on daily returns from 2015 to 2024, before costs",
+          "source_id": "2610.90003"
+        }
+      ]
+    }
+  ]
+}

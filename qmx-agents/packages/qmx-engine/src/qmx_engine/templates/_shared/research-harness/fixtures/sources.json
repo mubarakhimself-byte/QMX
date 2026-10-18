@@ -1,0 +1,21 @@
+{
+  "note": "Synthetic sources written for this block's test runs. They are not real publications.",
+  "question": "Does a trend filter help intraday FX mean reversion?",
+  "sources": [
+    {
+      "id": "fixture-s1",
+      "title": "Mean reversion in five-minute EURUSD bars",
+      "text": "Fading two-standard-deviation moves on five-minute EURUSD bars earned 0.6 pips per trade before costs from 2015 to 2022. With a 0.5 pip round-trip cost the edge is close to zero."
+    },
+    {
+      "id": "fixture-s2",
+      "title": "Trend filters for short-horizon reversal",
+      "text": "Skipping reversal entries when the four-hour trend is strong removed 40% of trades and raised the average trade to 1.1 pips across six currency pairs."
+    },
+    {
+      "id": "fixture-s3",
+      "title": "A practitioner note on session effects",
+      "text": "Reversal signals behave differently in the Asian session, where ranges are narrow and spreads widen around the Tokyo fix."
+    }
+  ]
+}

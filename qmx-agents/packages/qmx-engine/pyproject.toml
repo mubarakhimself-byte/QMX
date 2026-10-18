@@ -48,6 +48,8 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests"]
+# A template's scripts are workflow content an operator edits, run as `python -I` subprocesses.
+exclude = ["src/qmx_engine/templates/**/scripts"]
 # qma-harness ships no py.typed; reading its source gives the engine its real types.
 extraPaths = ["src", "../qma-harness/src"]
 typeCheckingMode = "strict"

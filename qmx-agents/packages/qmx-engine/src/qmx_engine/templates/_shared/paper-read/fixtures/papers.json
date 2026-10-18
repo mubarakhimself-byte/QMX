@@ -1,0 +1,15 @@
+{
+  "note": "Synthetic papers written for this block's test runs. They are not real arXiv records.",
+  "papers": [
+    {
+      "id": "fixture-p1",
+      "title": "Overnight drift in major currency pairs",
+      "abstract": "We document that EURUSD and USDJPY earn most of their daily return between the New York close and the London open. Using hourly quotes from 2012 to 2023, a long-overnight rule earns an annualised Sharpe ratio of 0.8 after a cost of 0.4 pips per side. The effect is weaker after 2020."
+    },
+    {
+      "id": "fixture-p2",
+      "title": "A volatility regime switch for index futures",
+      "abstract": "A two-state hidden Markov model fitted to daily S&P 500 futures returns from 2000 to 2015 separates calm and stressed regimes. Cutting exposure in the stressed state halves the maximum drawdown. We do not report results outside the fitting period."
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "required": ["headline", "papers"],
+  "x-prose": ["headline", "papers"],
+  "properties": {
+    "headline": {"type": "string", "minLength": 1},
+    "papers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "paper_id", "title", "summary", "testable", "testable_why", "replicable",
+          "replicable_why", "costs", "flags", "citations"
+        ],
+        "properties": {
+          "paper_id": {"type": "string"},
+          "title": {"type": "string"},
+          "summary": {"type": "string", "minLength": 1},
+          "testable": {"enum": ["yes", "no"]},
+          "testable_why": {"type": "string"},
+          "replicable": {"enum": ["yes", "proxy", "no"]},
+          "replicable_why": {"type": "string"},
+          "costs": {"enum": ["known", "unknown"]},
+          "flags": {"type": "array", "items": {"type": "string"}},
+          "citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["claim", "quote", "source_id"],
+              "properties": {
+                "claim": {"type": "string"},
+                "quote": {"type": "string"},
+                "source_id": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "research-harness",
+  "name": "Research harness: searchers by chunk, a synthesiser, then a citation grader",
+  "settings": {
+    "on_error": "park",
+    "caller_policy": "workflows_only",
+    "runaway": {"agents": 8, "tool_calls": 100, "wall_seconds": 3600, "on_runaway": "pause"}
+  },
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "sources", "name": "Sources", "type": "script", "typeVersion": 1, "position": [220, 0],
+     "effect": "none",
+     "parameters": {"script": "scripts/sources.py", "fixture_ref": "fixtures/sources.json"}},
+    {"id": "search", "name": "Search each chunk of sources", "type": "agent", "typeVersion": 1,
+     "position": [440, 0], "role": "searcher", "effect": "none",
+     "parameters": {"brief_ref": "prompts/search.md", "output_schema_ref": "schemas/findings.json",
+                    "tools": [], "max_turns": 4}},
+    {"id": "findings", "name": "All findings", "type": "join", "typeVersion": 1,
+     "position": [660, 0], "parameters": {}},
+    {"id": "synthesise", "name": "Synthesise", "type": "llm", "typeVersion": 1,
+     "position": [880, 0], "role": "synthesiser", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/synthesise.md", "schema_ref": "schemas/synthesis.json"}},
+    {"id": "cite", "name": "Citations check", "type": "grader", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Sources", "port": "in", "map": "one"}]]},
+    "Sources": {"main": [[{"node": "Search each chunk of sources", "port": "in", "map": "chunk",
+                           "chunk": {"by": "items", "size": 2}},
+                          {"node": "Citations check", "port": "in", "map": "one"}]]},
+    "Search each chunk of sources": {"main": [[{"node": "All findings", "port": "in",
+                                                "map": "one"}]]},
+    "All findings": {"main": [[{"node": "Synthesise", "port": "in", "map": "one"}]]},
+    "Synthesise": {"main": [[{"node": "Citations check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

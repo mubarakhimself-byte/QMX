@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "required": ["cards"],
+  "properties": {
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "paper_id", "claim", "mechanism", "data_and_source", "sample_period", "universe",
+          "costs_assumed", "out_of_sample", "variants_tried", "code_link", "claims", "flags"
+        ],
+        "properties": {
+          "paper_id": {"type": "string"},
+          "claim": {"type": "string"},
+          "mechanism": {"type": "string"},
+          "data_and_source": {"type": "string"},
+          "sample_period": {"type": "string"},
+          "universe": {"type": "string"},
+          "costs_assumed": {"type": "string"},
+          "out_of_sample": {"type": "string"},
+          "variants_tried": {"type": "string"},
+          "code_link": {"type": "string"},
+          "claims": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "required": ["text", "quote", "source_id"],
+              "properties": {
+                "text": {"type": "string"},
+                "quote": {"type": "string"},
+                "source_id": {"type": "string"}
+              }
+            }
+          },
+          "flags": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

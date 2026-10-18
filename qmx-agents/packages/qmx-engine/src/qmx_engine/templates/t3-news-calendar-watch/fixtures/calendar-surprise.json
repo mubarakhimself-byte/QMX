@@ -1,0 +1,15 @@
+{
+  "note": "A synthetic calendar day for the template's test runs, with one release far from its forecast.",
+  "date": "2026-10-16",
+  "events": [
+    {"id": "EUR-0900-CPI Flash Estimate y/y", "title": "CPI Flash Estimate y/y", "currency": "EUR",
+     "time_utc": "09:00", "impact": "high", "forecast": "2.1%", "previous": "2.2%", "actual": "2.1%",
+     "typical_surprise": 0.1, "source": "https://ec.europa.eu/eurostat"},
+    {"id": "USD-1230-Non-Farm Employment Change", "title": "Non-Farm Employment Change",
+     "currency": "USD", "time_utc": "12:30", "impact": "high", "forecast": "180K", "previous": "142K",
+     "actual": "275K", "typical_surprise": 50, "source": "https://www.bls.gov/ces"},
+    {"id": "JPY-2350-Trade Balance", "title": "Trade Balance", "currency": "JPY",
+     "time_utc": "23:50", "impact": "low", "forecast": "-0.42T", "previous": "-0.51T", "actual": "-0.45T",
+     "typical_surprise": 0.2, "source": "https://www.customs.go.jp/english"}
+  ]
+}

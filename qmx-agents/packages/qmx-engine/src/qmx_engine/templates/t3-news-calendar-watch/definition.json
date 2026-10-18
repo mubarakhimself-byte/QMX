@@ -1,0 +1,67 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "t3-news-calendar-watch",
+  "name": "News and macro calendar watch",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "fixture": {"enum": ["quiet", "surprise"], "description": "replay a fixture day"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the graded calendar strip with blackouts, alerts and any surprise notes"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 60000, "agents": 1, "tool_calls": 10, "wall_seconds": 1800,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Daily at 00:05 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "calendar", "name": "Calendar changed?", "type": "monitor", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 120},
+     "parameters": {"source": "scripts/calendar.py", "wake_when": "changed",
+                    "quiet_fixture_ref": "fixtures/calendar-quiet.json",
+                    "surprise_fixture_ref": "fixtures/calendar-surprise.json"}},
+    {"id": "strip", "name": "Calendar strip", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/strip.py"}},
+    {"id": "surprise", "name": "Any surprise?", "type": "rule", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"expr": "items.surprise_count > 0"}},
+    {"id": "note", "name": "Surprise note", "type": "llm", "typeVersion": 1,
+     "position": [880, -120], "role": "scanner", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/note.md", "schema_ref": "schemas/notes.json",
+                    "recording_ref": "fixtures/recorded/notes.json"}},
+    {"id": "assemble", "name": "Add the notes", "type": "script", "typeVersion": 1,
+     "position": [1100, -120], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1540, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Daily at 00:05 UTC": {"main": [[{"node": "Calendar changed?", "port": "in", "map": "one"}]]},
+    "Calendar changed?": {"changed": [[{"node": "Calendar strip", "port": "in", "map": "one"}]]},
+    "Calendar strip": {"main": [[{"node": "Any surprise?", "port": "in", "map": "one"}]]},
+    "Any surprise?": {"true": [[{"node": "Surprise note", "port": "in", "map": "one"},
+                                {"node": "Add the notes", "port": "in", "map": "one"}]],
+                      "false": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Surprise note": {"main": [[{"node": "Add the notes", "port": "in", "map": "one"}]]},
+    "Add the notes": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "T3"}
+}

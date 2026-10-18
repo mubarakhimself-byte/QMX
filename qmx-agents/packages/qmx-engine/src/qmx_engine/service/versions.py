@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from qmx_engine.definition.validate import validate
+from qmx_engine.definition.validate import needs_line, validate
 from qmx_engine.ports.library import MAIN, Stored, drafts_ref
 from qmx_engine.service.context import Act, Caller, Context, Refused, State, require
 from qmx_engine.service.drafts import Drafts
@@ -82,6 +82,9 @@ class Versions:
         operator_only(caller, "enable")
         version = self.get(object_id)
         require(version.state, "enable", f"version {version.semver} of {version.item}")
+        needs = self.ctx.library.get_object(object_id).needs()
+        if needs:
+            raise Refused("needs_unmet", f"{version.item} cannot be enabled; {needs_line(needs)}")
         if not version.tested:
             raise Refused(
                 "not_tested",

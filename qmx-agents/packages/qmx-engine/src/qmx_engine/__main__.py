@@ -23,10 +23,11 @@ from qmx_engine.nodes.doctor import LlmDoctor
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.runner import Engine, Outcome, Refused, new_run_id
-from qmx_engine.service.api import explain_run
+from qmx_engine.service.api import EngineService, explain_run
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.explain import text
 from qmx_engine.settings import DEFAULTS, Setting
+from qmx_engine.templates.install import install, listing
 from qmx_engine.triggers import rows
 
 EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2, "interrupted": 3}
@@ -72,6 +73,14 @@ def parser() -> argparse.ArgumentParser:
     why.add_argument("run_id")
     why.add_argument("--home", type=Path, required=True)
     why.add_argument("--json", action="store_true", help="print the explain document as JSON")
+    pack = commands.add_parser("templates", help="list or install the template pack")
+    pack_commands = pack.add_subparsers(dest="templates_command", required=True)
+    shown = pack_commands.add_parser("list", help="print each template's status in the home")
+    shown.add_argument("--home", type=Path, required=True)
+    put = pack_commands.add_parser(
+        "install", help="install the pack disabled: test and publish runnable ones, draft the rest"
+    )
+    put.add_argument("--home", type=Path, required=True)
     return cli
 
 
@@ -191,8 +200,38 @@ def explain(args: argparse.Namespace) -> int:
     return 0
 
 
+def list_templates(home: Path) -> int:
+    with EngineService.open(home) as svc:
+        found = listing(svc)
+    for row in found:
+        version = f" {row.version}" if row.version else ""
+        print(f"{row.template.id:<4} {row.template.name:<42} {row.status}{version}")
+    print(f"{len(found)} templates")
+    return 0
+
+
+async def install_templates(home: Path) -> int:
+    """Test runs need models, so the harness opens on the home, as `run` does."""
+    control = ControlService(home)
+    harness = await Harness.open(QmxHome(home), control=control)
+    try:
+        with EngineService.open(
+            home, settings=ControlSettings(control), harness=HarnessAdapter(harness)
+        ) as svc:
+            done = await install(svc)
+    finally:
+        await harness.close()
+    for found in done:
+        print(f"{found.template.id:<4} {found.template.folder} {found.action}: {found.detail}")
+    return 0 if all(f.action in ("published", "saved draft", "unchanged") for f in done) else 1
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command == "templates":
+        if args.templates_command == "list":
+            return list_templates(args.home)
+        return asyncio.run(install_templates(args.home))
     if args.command == "explain":
         return explain(args)
     if args.command == "ledger":

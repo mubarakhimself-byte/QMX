@@ -109,6 +109,28 @@ class Extends(Strict):
     patches: list[Patch] = Field(default_factory=list[Patch])
 
 
+type Need = Literal[
+    "trading-node",
+    "risk-session",
+    "broker-read-token",
+    "qmb-door",
+    "real-library",
+    "rlm",
+    "sandbox",
+    "app-op",
+]
+"""A piece of QMX a template waits for (ENGINE-PLAN Appendix I). A workflow that names one
+validates and stays a draft: its test run and its enable are refused with the need named."""
+
+
+class Meta(BaseModel):
+    """Layout and authorship, outside the content hash. Any other key is kept as written."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+
+    needs: list[Need] = Field(default_factory=list[Need])
+
+
 class Workflow(Strict):
     schema_: Literal["qmx.workflow/1"] = Field(alias="schema")
     id: str = Field(pattern=r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -120,7 +142,7 @@ class Workflow(Strict):
     nodes: list[Node]
     connections: Connections = Field(default_factory=dict[str, dict[str, list[list[Target]]]])
     pin_data: dict[str, dict[str, list[JsonValue]]] | None = Field(default=None, alias="pinData")
-    meta: JsonObject = Field(default_factory=dict[str, JsonValue])
+    meta: Meta = Field(default_factory=Meta)
 
 
 def json_schema() -> dict[str, JsonValue]:
