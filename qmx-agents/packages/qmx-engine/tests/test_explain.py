@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from flows import CHAIN, edge, folder, node, run_folder
+from planted import Planted, fails, flow
 
 from qmx_engine.ports.library import JsonObject
 from qmx_engine.service.api import explain_run
@@ -81,3 +82,28 @@ def test_a_waiting_run_says_what_it_waits_for(tmp_path: Path) -> None:
         "waiting",
         "retry",
     )
+
+
+def test_a_provider_error_echoing_a_key_reads_redacted_in_explain_and_the_inbox(
+    tmp_path: Path,
+) -> None:
+    planted = "sk-or-" + "v1-" + "d4" * 32
+    run = flow(
+        tmp_path,
+        [node("start", "trigger"), node("call", "script", script="scripts/call.py")],
+        {"start": {"main": [edge("call")]}},
+        executors={
+            "script": Planted(
+                fails(f"upstream 401 for key_{planted}", code="auth", retryable=False)
+            )
+        },
+    )
+
+    outcome = run.start()
+    document = explain_run(run.home, outcome.run_id)
+    [item] = run.items()
+
+    [attempt] = nodes_of(document)["call"]["attempts"]
+    assert attempt["message"] == "upstream 401 for key_[redacted]"
+    assert planted not in str(document)
+    assert item.cause == "upstream 401 for key_[redacted]"

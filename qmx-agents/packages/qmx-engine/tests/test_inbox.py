@@ -107,3 +107,24 @@ def test_an_external_step_of_unknown_outcome_raises_one_blocking_item(tmp_path: 
         True,
     )
     assert outcome.status == "waiting"
+
+
+def test_an_item_is_stored_redacted(tmp_path: Path) -> None:
+    planted = "sk-or-" + "v1-" + "c3" * 32
+    echoed = Raise(
+        "run-1",
+        "sig-key",
+        Category.PROVIDER_FAILURE,
+        f"call failed for key_{planted}",
+        f"upstream 401: {planted}",
+        tried=(f"retry with {planted}",),
+    )
+    with InboxTable.open(tmp_path) as inbox:
+        found = inbox.get(inbox.raise_item(echoed, at="2026-10-17T09:00:00+00:00"))
+
+    assert found is not None
+    assert (found.title, found.cause, found.tried) == (
+        "call failed for key_[redacted]",
+        "upstream 401: [redacted]",
+        ("retry with [redacted]",),
+    )
