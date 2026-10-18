@@ -1,0 +1,77 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-unreachable",
+  "name": "bad-unreachable",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "c",
+      "name": "C",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "B": {
+      "main": [
+        [
+          {
+            "node": "C",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "node_unreachable",
+      "node_unreachable"
+    ]
+  }
+}

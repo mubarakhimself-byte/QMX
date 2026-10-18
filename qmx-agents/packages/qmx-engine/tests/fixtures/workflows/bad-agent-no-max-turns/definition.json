@@ -1,0 +1,51 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-agent-no-max-turns",
+  "name": "bad-agent-no-max-turns",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "g",
+      "name": "Read",
+      "type": "agent",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "role": "reader",
+      "parameters": {
+        "tools": [
+          "Read"
+        ]
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "agent_max_turns_missing"
+    ]
+  }
+}

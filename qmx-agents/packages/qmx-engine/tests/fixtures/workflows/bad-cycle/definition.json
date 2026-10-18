@@ -1,0 +1,77 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-cycle",
+  "name": "bad-cycle",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "A": {
+      "main": [
+        [
+          {
+            "node": "B",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "B": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "cycle"
+    ]
+  }
+}

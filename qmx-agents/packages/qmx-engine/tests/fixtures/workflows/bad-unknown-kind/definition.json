@@ -1,0 +1,45 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-unknown-kind",
+  "name": "bad-unknown-kind",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "teleport",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "kind_unknown"
+    ]
+  }
+}

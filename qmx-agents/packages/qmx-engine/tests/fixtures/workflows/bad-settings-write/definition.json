@@ -1,0 +1,48 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-settings-write",
+  "name": "bad-settings-write",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "o",
+      "name": "Tune",
+      "type": "app_op",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "op": "settings.write"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Tune",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "settings_write"
+    ]
+  }
+}

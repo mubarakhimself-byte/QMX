@@ -1,0 +1,48 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-ref-escape",
+  "name": "bad-ref-escape",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "script": "../paper-scout-min/scripts/feed_ids.py"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "ref_escapes_folder"
+    ]
+  }
+}

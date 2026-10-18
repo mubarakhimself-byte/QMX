@@ -1,0 +1,66 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-cartesian-not-explicit",
+  "name": "bad-cartesian-not-explicit",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "b",
+      "name": "B",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "A": {
+      "main": [
+        [
+          {
+            "node": "B",
+            "port": "in",
+            "map": "cartesian"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "cartesian_not_explicit"
+    ]
+  }
+}

@@ -1,0 +1,280 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "paper-scout-min",
+  "name": "Paper scout: new q-fin papers to a research note",
+  "extends": null,
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "topics": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "properties": {
+      "note": {
+        "type": "string"
+      }
+    }
+  },
+  "settings": {
+    "timezone": "Europe/London",
+    "runaway": {
+      "tokens": 400000,
+      "agents": 12,
+      "tool_calls": 600,
+      "wall_seconds": 7200,
+      "on_runaway": "pause"
+    },
+    "on_error": "park",
+    "error_workflow": null,
+    "caller_policy": "any",
+    "inline_limit_bytes": 65536,
+    "memory": {
+      "scopes": [
+        "run",
+        "workflow"
+      ]
+    },
+    "claude_workflow_enabled": false
+  },
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Every 6 hours",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "kinds": [
+          "cron",
+          "manual"
+        ]
+      }
+    },
+    {
+      "id": "n2",
+      "name": "New paper ids?",
+      "type": "monitor",
+      "typeVersion": 1,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "source": "scripts/feed_ids.py",
+        "wake_when": "changed"
+      },
+      "effect": "none",
+      "role": null
+    },
+    {
+      "id": "n3",
+      "name": "Triage titles",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        440,
+        0
+      ],
+      "role": "triage",
+      "effect": "irreversible",
+      "parameters": {
+        "prompt_ref": "prompts/triage.md",
+        "schema_ref": "schemas/triage.json",
+        "max_items": 8
+      },
+      "retry": {
+        "max_tries": 3,
+        "backoff_seconds": [
+          30,
+          120,
+          600
+        ],
+        "retry_on": [
+          "transient",
+          "schema"
+        ]
+      },
+      "timeout": {
+        "run_seconds": 600,
+        "idle_seconds": 120
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Read each paper",
+      "type": "agent",
+      "typeVersion": 1,
+      "position": [
+        660,
+        0
+      ],
+      "role": "reader",
+      "effect": "irreversible",
+      "parameters": {
+        "skills": [
+          "paper-question-battery"
+        ],
+        "tools": [
+          "Read",
+          "WebFetch"
+        ],
+        "max_turns": 12,
+        "output_schema_ref": "schemas/paper_card.json",
+        "browser_level": "none"
+      },
+      "runs_on": "pc"
+    },
+    {
+      "id": "n5",
+      "name": "Citations check",
+      "type": "grader",
+      "typeVersion": 1,
+      "position": [
+        880,
+        0
+      ],
+      "parameters": {
+        "mode": "deterministic",
+        "script": "scripts/citation_check.py"
+      },
+      "effect": "none"
+    },
+    {
+      "id": "n6",
+      "name": "Testable enough?",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "expr": "items.score >= 0.7"
+      },
+      "effect": "none"
+    },
+    {
+      "id": "n7",
+      "name": "Save note",
+      "type": "library",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        0
+      ],
+      "parameters": {
+        "op": "write",
+        "kind": "artifact",
+        "artifact_type": "research_note"
+      },
+      "effect": "compensable"
+    }
+  ],
+  "connections": {
+    "Every 6 hours": {
+      "main": [
+        [
+          {
+            "node": "New paper ids?",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "New paper ids?": {
+      "changed": [
+        [
+          {
+            "node": "Triage titles",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Triage titles": {
+      "main": [
+        [
+          {
+            "node": "Read each paper",
+            "port": "in",
+            "map": "chunk",
+            "chunk": {
+              "by": "tokens",
+              "fill": 0.3
+            }
+          }
+        ]
+      ]
+    },
+    "Read each paper": {
+      "main": [
+        [
+          {
+            "node": "Citations check",
+            "port": "in",
+            "map": "keyed-join",
+            "key": "paper_id"
+          }
+        ]
+      ]
+    },
+    "Citations check": {
+      "pass": [
+        [
+          {
+            "node": "Testable enough?",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ],
+      "fail": [
+        [
+          {
+            "node": "Save note",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Testable enough?": {
+      "true": [
+        [
+          {
+            "node": "Save note",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "New paper ids?": {
+      "changed": [
+        {
+          "ids": [
+            "2610.01234",
+            "2610.01999"
+          ]
+        }
+      ]
+    }
+  },
+  "meta": {
+    "created_by": "copilot"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-broadcast",
+  "name": "bad-broadcast",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "l",
+      "name": "List papers",
+      "type": "llm",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "role": "triage"
+    },
+    {
+      "id": "g",
+      "name": "Read papers",
+      "type": "agent",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "role": "reader",
+      "parameters": {
+        "max_turns": 6
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "List papers",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "List papers": {
+      "main": [
+        [
+          {
+            "node": "Read papers",
+            "port": "in",
+            "map": "broadcast"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "chunk_required"
+    ]
+  }
+}

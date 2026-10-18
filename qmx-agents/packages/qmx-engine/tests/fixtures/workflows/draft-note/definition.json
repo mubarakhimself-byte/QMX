@@ -1,0 +1,70 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "draft-note",
+  "name": "draft-note",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "n",
+      "name": "Idea",
+      "type": "note",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "text": "try a second source"
+      }
+    },
+    {
+      "id": "b",
+      "name": "Loose",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [],
+    "expect_publish": [
+      "note_at_publish",
+      "unconnected_at_publish"
+    ]
+  }
+}

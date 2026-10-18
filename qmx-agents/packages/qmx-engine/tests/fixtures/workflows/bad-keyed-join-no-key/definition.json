@@ -1,0 +1,66 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-keyed-join-no-key",
+  "name": "bad-keyed-join-no-key",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "a",
+      "name": "A",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "j",
+      "name": "Join",
+      "type": "join",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "A",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "A": {
+      "main": [
+        [
+          {
+            "node": "Join",
+            "port": "in",
+            "map": "keyed-join"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "keyed_join_without_key"
+    ]
+  }
+}
