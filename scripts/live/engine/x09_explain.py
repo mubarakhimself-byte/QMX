@@ -7,8 +7,9 @@ Lanes are `regression explain perf`; none named runs all. Each writes
 `evidence/ep9/<ENGINE_LOG_PREFIX>ep9-<lane>.log`, and the script exits 1 if any lane failed.
 
 - `regression` (lane 1): the harness is byte-identical to its base, and the `qmx-control` suite
-  has the same pass counts and the same failures (the known rclone one only) on the trunk (EP8's
-  head, checked out detached in `--trunk-tree`, made and synced when missing) and at head.
+  has the same failures (the known rclone one only) on the trunk (EP8's head, checked out detached
+  in `--trunk-tree`, made and synced when missing) and at head, and at head passes at least the
+  trunk's count (later PRs add `qmx-control` tests).
 - `explain` (lane 4): `python -m qmx_engine run` parks a run whose real script fails its own
   check, then `python -m qmx_engine explain` names the node, every ladder step and the park reason.
 - `perf`: one timed `explain` of a 200-node run (an in-process stub runs the script nodes, so the
@@ -72,8 +73,8 @@ def regression(log: Log, base: str, trunk: str, tree: Path) -> None:
         (at_trunk, sorted(failed_trunk)),
     )
     log.check(
-        "qmx-control pass counts and failures match at head",
-        at_head == at_trunk and failed_head == failed_trunk,
+        "qmx-control passes at least the trunk's tests at head, with the same failures",
+        at_head.get("passed", 0) >= at_trunk.get("passed", 0) and failed_head == failed_trunk,
         (at_head, sorted(failed_head)),
     )
 

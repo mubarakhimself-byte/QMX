@@ -388,8 +388,10 @@ def main() -> int:
     args = cli.parse_args()
     if args.lanes == ["ticker"]:
         return ticker_child(args.home, args.claimant, args.seconds)
+    prefix = os.environ.get("ENGINE_LOG_PREFIX", "")
     failed = False
     for lane in args.lanes or list(LANES):
+        os.environ["ENGINE_LOG_PREFIX"] = prefix  # e05_pause's boot scrub drops it
         log = Log(PR, f"ep12-{lane}")
         log(f"pid {os.getpid()}")
         LANES[lane](log, args)

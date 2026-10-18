@@ -140,7 +140,7 @@ def e02(log: Log) -> None:
     log(f"first pass started: {' '.join(ids(sim.events, 'node_started'))}; ended {first}")
     log.check(
         "the first pass parks on node 3",
-        first == Park("node n3 failed: boom: planted failure"),
+        first == Park("node n3 failed: boom: planted failure", "n3", 0, None, 1),
         first,
     )
     mark = len(sim.events)
