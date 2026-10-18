@@ -1,6 +1,6 @@
 # Rerun: research → architecture → plan (after the first engine build run)
 
-This is for a fresh **planning-lead** session. The previous lead's context was at 87%. You lead. You never write product code. You run Opus agents, at most 3 at once, all in the background. Every brief says "do not spawn sub-agents". Fable is not used (ruling 87).
+The planning lead runs this in the ongoing session (ruling 101): no poteto-mode, no skills by default. The lead You never write product code. You run Opus agents, at most 3 at once, all in the background. Every brief says "do not spawn sub-agents". Fable is not used (ruling 87).
 
 ## Binding inputs (read first)
 
@@ -80,7 +80,7 @@ Everything is under `D:\QMX-worktrees\agent-system\tracker\qma-v2\`.
    - hygiene (including the red one-line CI test and the haiku test default);
    - then the later packets (memory, Library, gate folding, and so on).
 
-   Use poteto-mode's multi-phase-plan playbook. `check-plan.mjs` must report 0. Use autopilot-stack and light verification, with at most two agents at once. Keep tests few and behavioural. Probes come first. Name every override. Mark every default.
+   `check-plan.mjs` must report 0. Use autopilot-stack and light verification, with at most two agents at once. Keep tests few and behavioural. Probes come first. Name every override. Mark every default.
 9. **Write the coding prompt.** Use the technical-writing and unslop skills. Run a decision trail (`decisions.tsv`). Ask him only his real calls, through AskUserQuestion, with your recommendation first. Commit on `plan/agent-system`, create the base branch locally, and end with an "Attention" list and a short paste prompt for a fresh coordinator session.
 
 ## Rules for you
