@@ -3,7 +3,8 @@ draft's content hash, on the run's own branch.
 
 A variant is first saved as its resolved snapshot, a new draft revision that remembers its parent,
 so what is tested is what will publish. A full test that passes links the draft `tested-by` the
-run; a selected-subgraph test writes its report but tests only that part, so it marks nothing.
+run; a selected-subgraph test writes its report but tests only that part, so it marks nothing, and
+so does a run on the fake provider, which proves nothing about a real model (ruling 51).
 """
 
 from __future__ import annotations
@@ -44,7 +45,9 @@ class Tests:
         caller: Caller,
         inputs: JsonValue = None,
         subgraph: list[str] | None = None,
+        fake: bool = False,
     ) -> TestReport:
+        """`fake` answers model nodes with the fake provider, for a run that spends nothing."""
         library = self.ctx.library
         draft = self.drafts.get(item)
         problems = self.drafts.problems(draft.bundle)
@@ -67,6 +70,7 @@ class Tests:
             inputs=inputs,
             subgraph=subgraph,
             caller=caller,
+            fake=fake,
         )
         principal = f"run:{outcome.run_id}"
         report: JsonObject = {
@@ -77,9 +81,10 @@ class Tests:
             "reason": summary.fields.get("reason"),
             "subgraph": list[JsonValue](subgraph) if subgraph is not None else None,
             "caller_kind": caller.kind,
+            "fake": fake,
         }
         stored = library.put_test_report(content_hash, report, principal=principal)
-        if outcome.status == "passed" and subgraph is None:
+        if outcome.status == "passed" and subgraph is None and not fake:
             library.link(draft.object_id, "tested-by", summary.object_id, principal=principal)
         return self.read(stored.object_id, content_hash)
 

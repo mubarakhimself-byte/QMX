@@ -6,17 +6,27 @@ import argparse
 import asyncio
 import json
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
+from qma.harness import Harness, QmxHome
+from qmx_control.service import ControlService
+
 from qmx_engine.definition.folder import content_hash, load
+from qmx_engine.definition.model import Workflow
+from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked, validate
+from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Ledger, Reader, ledger_path
+from qmx_engine.nodes.doctor import LlmDoctor
+from qmx_engine.ports.harness_adapter import HarnessAdapter
+from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.runner import Engine, Outcome, Refused, new_run_id
 from qmx_engine.service.api import explain_run
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.explain import text
+from qmx_engine.settings import DEFAULTS, Setting
 
 EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2, "interrupted": 3}
 
@@ -45,6 +55,9 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--home", type=Path, help="the QMX home; a fresh temporary one when left out")
     run.add_argument("--inputs", default="null", help="the run's inputs as JSON")
     run.add_argument("--run-id")
+    run.add_argument(
+        "--fake", action="store_true", help="answer model nodes with the fake provider; no spend"
+    )
     resume = commands.add_parser("resume", help="pick a run up again from the ledger")
     resume.add_argument("run_id")
     resume.add_argument("--home", type=Path, required=True)
@@ -72,13 +85,48 @@ async def start(args: argparse.Namespace) -> int:
     home: Path = args.home or Path(tempfile.mkdtemp(prefix="qmx-engine-"))
     run_id = args.run_id or new_run_id(datetime.now(UTC))
     print(f"run {run_id} home {home}", flush=True)
-    with Ledger.open(home) as ledger:
-        engine = Engine(home, ledger)
-        outcome = await engine.start(
-            args.folder, found[1], mode=args.mode, inputs=json.loads(args.inputs), run_id=run_id
-        )
-        await engine.settle()
+    harness: Harness | None = None
+    settings: Mapping[str, Setting] = DEFAULTS
+    if not args.fake and model_bearing(found[1]):
+        control = ControlService(home)
+        harness = await Harness.open(QmxHome(home), control=control)
+        settings = ControlSettings(control).values()
+    try:
+        with Ledger.open(home) as ledger:
+            port = HarnessAdapter(harness) if harness is not None else None
+            engine = Engine(home, ledger, settings=settings, harness=port)
+            engine.doctor = LlmDoctor.of(engine)
+            outcome = await engine.start(
+                args.folder,
+                found[1],
+                mode=args.mode,
+                inputs=json.loads(args.inputs),
+                run_id=run_id,
+                fake=args.fake,
+            )
+            await engine.settle()
+    finally:
+        if harness is not None:
+            await harness.close()
+    for span in spans(home, run_id):
+        if span.profile is not None:
+            print(
+                f"span {span.node_id} attempt {span.attempt} {span.status}: "
+                f"{span.role} on {span.profile}/{span.model} tokens {span.tokens}"
+            )
     return report(outcome)
+
+
+def model_bearing(workflow: Workflow) -> bool:
+    return any(
+        (kind := REGISTRY.kind(node.type)) is not None and kind.model_bearing
+        for node in workflow.nodes
+    )
+
+
+def spans(home: Path, run_id: str) -> list[Span]:
+    with Reader.open(home) as reader:
+        return reader.spans(run_id)
 
 
 async def resume(args: argparse.Namespace) -> int:

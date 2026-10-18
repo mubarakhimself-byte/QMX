@@ -3,7 +3,9 @@
 
 `[engine]` holds any `settings.DEFAULTS` key, as a dotted key or as nested tables
 (`[engine.retry] backoff = [...]` is `retry.backoff`); a key the engine does not know is ignored.
-`[roles]` maps a role name to its candidate list, so the operator may add a role.
+`[roles]` maps a role name to its candidate list, so the operator may add a role. Until the
+account pool (L2), the plan account's background share is the harness's `[budgets]
+background_cap`, read here and never written.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from typing import Protocol, cast
 from pydantic import JsonValue
 from qmx_control.service import ControlService
 
+from qmx_engine.roles import PLAN
 from qmx_engine.settings import DEFAULTS, Setting
 
 
@@ -39,6 +42,9 @@ class ControlSettings:
         for key, value in flatten(engine, ""):
             if key in DEFAULTS and (found := setting(value)) is not None:
                 merged[key] = found
+        cap = setting(self.control.settings_get("budgets").get("background_cap"))
+        if isinstance(cap, int | float):
+            merged[f"pool.accounts.{PLAN}.background_share"] = cap
         roles = self.control.settings_get("roles")
         for role, value in roles.items():
             if (found := setting(value)) is not None:

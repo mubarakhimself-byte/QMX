@@ -49,9 +49,10 @@ def test_the_ladder_walks_retry_account_model_doctor_then_parks(tmp_path: Path) 
     assert (ladder[2]["reason"], ladder[2]["skipped"], ladder[3]["candidate"]) == (
         "skipped: no pool",
         True,
-        "gpt",
+        "claude/sonnet",
     )
-    assert [job.resolved_model for job in llm.jobs] == [None, None, None, {"candidate": "gpt"}]
+    picked = [(job.resolved_model or {}).get("candidate") for job in llm.jobs]
+    assert picked == [None, None, None, "claude/sonnet"]
     assert of_kind(events, "doctor_verdict")[0]["classification"] == "logic"
     assert (outcome.status, outcome.reason) == (
         "failed",

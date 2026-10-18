@@ -96,7 +96,7 @@ def test_degrade_goes_on_once_on_the_cheapest_candidates_then_pauses(tmp_path: P
 
     events = run.events(outcome.run_id)
     assert sorted(job.node_id for job in agent.jobs) == ["a", "b", "c"]
-    assert [job.resolved_model for job in agent.jobs] == [{"degrade": True}] * 3
+    assert [(job.resolved_model or {}).get("degrade") for job in agent.jobs] == [True] * 3
     assert [line["on_runaway"] for line in of_kind(events, "log")] == ["degrade", "pause"]
     assert outcome.status == "waiting"
 

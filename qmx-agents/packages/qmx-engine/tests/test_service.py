@@ -95,4 +95,4 @@ def test_only_the_operator_resolves_an_inbox_item_and_memory_notes_land_in_run_s
 
     assert (resolved.resolved_by, resolved.resolution) == ("operator", "stop")
     assert (row.kind, row.ref, row.fields["scope"]) == ("memory-row", "refs/runs/r1", "run")
-    assert (palette["script"], palette["llm"], palette["note"]) == (True, False, False)
+    assert (palette["script"], palette["llm"], palette["note"]) == (True, True, False)

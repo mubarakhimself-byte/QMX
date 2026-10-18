@@ -35,6 +35,7 @@ from typing import Final, Literal, Protocol, cast
 from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
 
+from qmx_engine.admission import Admission
 from qmx_engine.core.commands import (
     Climb,
     Degrade,
@@ -61,8 +62,11 @@ from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.base import Failed, NodeJob, ending
+from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
+from qmx_engine.nodes.fake_provider import FakeProvider
 from qmx_engine.nodes.grader import Grader
 from qmx_engine.nodes.join import Join
+from qmx_engine.nodes.llm import Llm, Unavailable
 from qmx_engine.nodes.loop import Loop
 from qmx_engine.nodes.monitor import Monitor
 from qmx_engine.nodes.rule import Rule
@@ -71,7 +75,9 @@ from qmx_engine.nodes.subworkflow import Subworkflow
 from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
 from qmx_engine.nodes.wait import resume_at
+from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import InboxPort, raised_by
+from qmx_engine.roles import order, resolve
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.watchdog import Open, ledger_fault, stalled
 from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
@@ -108,6 +114,7 @@ class Consult:
     slot: Slot
     attempt: int
     events: tuple[Event, ...]
+    mode: Mode = "test"
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,17 +130,21 @@ class Doctor(Protocol):
     async def classify(self, consult: Consult) -> Verdict: ...
 
 
-def recorded_settings(settings: Mapping[str, object], workflow: Workflow) -> JsonObject:
-    """The settings a run records for its core: chunk sizing, retry defaults, and the candidate
-    lists of the roles its nodes use."""
-    roles = sorted({f"roles.{node.role}" for node in workflow.nodes if node.role is not None})
+def recorded_settings(
+    settings: Mapping[str, object], workflow: Workflow, mode: Mode = "test"
+) -> JsonObject:
+    """The settings a run records for its core: chunk sizing, retry defaults, and the candidates
+    of the roles its nodes use, in the order a run in `mode` tries them, so the ladder's model rung
+    walks the list dispatch resolves from."""
     found: JsonObject = {}
-    for key in (*RUN_SETTINGS, *LADDER_SETTINGS, *roles):
+    for key in (*RUN_SETTINGS, *LADDER_SETTINGS):
         value = settings.get(key)
         if isinstance(value, tuple):
             found[key] = [v for v in cast(tuple[object, ...], value) if isinstance(v, int | str)]
         elif isinstance(value, int | float | str):
             found[key] = value
+    for role in sorted({node.role for node in workflow.nodes if node.role is not None}):
+        found[f"roles.{role}"] = [c.name for c in order(settings, role, mode)]
     return found
 
 
@@ -195,9 +206,10 @@ class Engine:
         doctor: Doctor | None = None,
         inbox: InboxPort | None = None,
         watch_every: float | None = None,
+        harness: HarnessPort | None = None,
     ) -> None:
         """`executors` replace the built-in executor of a kind. Without a `doctor`, the ladder's
-        doctor step is recorded as skipped."""
+        doctor step is recorded as skipped. Without a `harness`, model nodes fail `unavailable`."""
         self.home = home
         self.ledger = ledger
         self.settings = settings
@@ -208,6 +220,8 @@ class Engine:
         self.wall = wall
         self.executors = executors or {}
         self.doctor = doctor
+        self.harness = harness
+        self.admission = Admission(harness, settings) if harness is not None else None
         self._inbox = inbox
         tick = settings.get("scheduler.tick")
         self.watch_every = watch_every or (float(tick) if isinstance(tick, int | float) else 60.0)
@@ -236,7 +250,9 @@ class Engine:
         run_id: str | None = None,
         parent_run_id: str | None = None,
         call_depth: int = 0,
+        fake: bool = False,
     ) -> Outcome:
+        """`fake` is the per-run switch that answers model nodes with the fake provider."""
         if not self.claiming:
             raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
@@ -244,7 +260,7 @@ class Engine:
             with Reader.open(self.home) as reader:
                 if reader.events(run_id):
                     raise Refused(f"run {run_id} already exists")
-        run = Run(self, root, workflow, run_id, mode=mode, call_depth=call_depth)
+        run = Run(self, root, workflow, run_id, mode=mode, call_depth=call_depth, fake=fake)
         run.create(inputs, parent_run_id)
         return await run.drive()
 
@@ -268,6 +284,7 @@ class Engine:
             run_id,
             mode=mode,
             call_depth=depth if isinstance(depth, int) else 0,
+            fake=created.get("fake") is True,
         )
         run.events = events
         run.recover()
@@ -294,8 +311,10 @@ class Run:
         *,
         mode: Mode,
         call_depth: int,
+        fake: bool = False,
     ) -> None:
         self.engine = engine
+        self.fake = fake
         self.root = root.resolve()
         self.definition = workflow
         self.run_id = run_id
@@ -331,6 +350,7 @@ class Run:
                 run_id=run_id,
                 parent_run_id=self.run_id,
                 call_depth=self.call_depth + 1,
+                fake=self.fake,
             )
 
         built: dict[str, AnyExecutor] = {
@@ -349,8 +369,37 @@ class Run:
                 launch=launch,
                 spawn=self.engine.spawn,
             ),
+            "llm": self.llm_executor(),
         }
         return built | dict(self.engine.executors)
+
+    def llm_executor(self) -> AnyExecutor:
+        engine = self.engine
+        if self.fake:
+            return FakeProvider(self.root)
+        if engine.harness is None or engine.admission is None:
+            return Unavailable()
+        return Llm(
+            self.root,
+            engine.harness,
+            engine.admission,
+            workspace(engine.home, self.definition.id),
+        )
+
+    def resolved(self, node: Node, ladder: JsonObject | None) -> JsonObject | None:
+        """The candidate a model attempt runs on, chosen at dispatch from the role's list (AD-13),
+        with what the ladder asks; None for a node that names no role."""
+        if node.role is None:
+            return ladder
+        asks: JsonObject = dict(ladder or {})
+        if self.fake:
+            return asks | {"role": node.role, "profile": FAKE_PROFILE, "model": FAKE_PROFILE}
+        harness = self.engine.harness
+        profiles = harness.profiles() if harness is not None else frozenset[str]()
+        found = resolve(order(self.engine.settings, node.role, self.mode), profiles, ladder)
+        if isinstance(found, str):
+            return asks | {"role": node.role, "unresolved": found}
+        return asks | found.started(node.role) | {"context_window": found.context_window}
 
     def write(self, kind: EventKind, data: JsonObject) -> None:
         tried = self.tried(slot_of(data)) if kind in NOTICED else ()
@@ -386,7 +435,8 @@ class Run:
             "run_created",
             {
                 "mode": self.mode,
-                "settings": recorded_settings(self.engine.settings, self.definition),
+                "fake": self.fake,
+                "settings": recorded_settings(self.engine.settings, self.definition, self.mode),
                 "runaway": runaway_guard(self.engine.settings, self.definition, self.ticked),
                 "workflow_id": self.definition.id,
                 "folder": str(self.root),
@@ -492,7 +542,9 @@ class Run:
             return
         node = self.node(command.node_id)
         events = tuple(e for e in self.events if "node_id" in e.data and slot_of(e.data) == slot)
-        consult = Consult(self.run_id, node_definition(node), slot, command.attempt, events)
+        consult = Consult(
+            self.run_id, node_definition(node), slot, command.attempt, events, self.mode
+        )
         try:
             verdict = await doctor.classify(consult)
         except Exception:  # a broken doctor must not stop the run
@@ -516,6 +568,8 @@ class Run:
         timeouts: JsonObject | None = None
         if node.timeout is not None and node.timeout.run_seconds is not None:
             timeouts = {"run_seconds": node.timeout.run_seconds}
+        pins = self.definition.pin_data or {}
+        pinned = pins.get(node.name) if self.mode == "test" else None
         job = NodeJob(
             run_id=command.run_id,
             node_id=command.node_id,
@@ -530,7 +584,8 @@ class Run:
             mode=self.mode,
             workspace=str(self.zone),
             timeouts=timeouts,
-            resolved_model=command.ladder,
+            resolved_model=self.resolved(node, command.ladder),
+            pinned_outputs=pinned_outputs(pinned) if pinned is not None else None,
         )
         task = asyncio.create_task(self.attempt(job))
         self.inflight[task] = command
@@ -658,6 +713,12 @@ class Run:
             ),
         )
         return verdict
+
+
+def pinned_outputs(pinned: Mapping[str, list[JsonValue]]) -> JsonObject:
+    """A node's `pinData` as outputs by port: one pinned item is the port's value, more are a
+    list."""
+    return {port: items[0] if len(items) == 1 else list(items) for port, items in pinned.items()}
 
 
 def failure(code: str, message: str, retryable: bool, effect_state: str) -> JsonObject:
