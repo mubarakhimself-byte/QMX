@@ -466,6 +466,7 @@ def test_a_background_chat_keeps_its_limits_across_a_relaunch(
 ) -> None:
     key_rows(home, monkeypatch)
     monkeypatch.setattr(qma.harness.chat, "plan_auth_method", no_plan_login)
+    control_service(home).settings_put("budgets", {"max_turns": 50, "max_budget_usd": 5.0})
 
     async def body(harness: Harness) -> None:
         chat = await harness.start_chat(

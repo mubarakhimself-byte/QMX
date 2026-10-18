@@ -22,7 +22,6 @@ from qma.harness.project import (
     project,
 )
 from qma.harness.usage import (
-    BackgroundCap,
     PostureView,
     Totals,
     UsageLedger,
@@ -343,35 +342,6 @@ def reading_ledger(utilization: float) -> UsageLedger:
     return usage
 
 
-NO_READING = (
-    "there is no reading of the plan's five-hour window yet; POST /api/usage/meter "
-    "reads it with one haiku plan turn"
-)
-
-
-def test_the_background_cap_refuses_at_and_above_its_fraction() -> None:
-    cap = BackgroundCap(0.5)
-    assert cap.refusal(reading_ledger(0.49)) is None
-    assert cap.refusal(reading_ledger(0.5)) == (
-        "the five-hour window is 50% used, at or over the 50% cap"
-    )
-    assert cap.refusal(reading_ledger(0.51)) == (
-        "the five-hour window is 51% used, at or over the 50% cap"
-    )
-
-
-def test_the_background_cap_fails_closed_with_no_reading() -> None:
-    assert BackgroundCap(0.5).refusal(ledger()[0]) == NO_READING
-
-
-def test_the_background_cap_refuses_while_a_plan_window_is_rejected() -> None:
-    usage, _ = ledger()
-    usage.record(
-        event(status="rejected", rateLimitType="seven_day", overageStatus="rejected"), at(1)
-    )
-    assert BackgroundCap(0.5).refusal(usage) == "a plan window is used up"
-
-
 def test_a_saved_reading_survives_a_restart(tmp_path: Path) -> None:
     path = tmp_path / "plan-usage.json"
     first = UsageLedger(Clock(), path)
@@ -384,7 +354,6 @@ def test_a_saved_reading_survives_a_restart(tmp_path: Path) -> None:
         at(1),
     )
     again = UsageLedger(Clock(), path)
-    assert BackgroundCap(0.5).refusal(again) is None
     held = again.reading("five_hour")
     assert held is not None
     assert held.reading.utilization == 0.2
@@ -510,7 +479,7 @@ def test_token_sums_add_model_call_rows_per_profile(tmp_path: Path) -> None:
 def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
     usage = reading_ledger(0.2)
     money = PostureView(MoneyPosture.STRUCTURAL, (), None)
-    document = usage_page(usage, BackgroundCap(0.5), {"claude": {"calls": 1}}, money).document()
+    document = usage_page(usage, {"claude": {"calls": 1}}, money).document()
     assert document == {
         "windows": {
             "claude": [
@@ -541,12 +510,6 @@ def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
             ]
         },
         "tokens": {"claude": {"calls": 1}},
-        "background_cap": 0.5,
-        "background_cap_note": (
-            "Background chats stop at 50% of the plan's five-hour window, and until the window "
-            "has been read once. The cap acts on the last reading of the plan's use, not a live "
-            "value: the CLI reports it only when a turn runs or /usage is read."
-        ),
         "hard_stop": None,
         "extra_usage_on": None,
         "extra_usage_note": None,

@@ -32,6 +32,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
+import psutil
 from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
@@ -220,26 +221,43 @@ def resets_cache(old: ChatConfig, new: ChatConfig) -> bool:
 @dataclass(frozen=True)
 class Budgets:
     """settings.toml [budgets], read at each send so an edit in the UI applies to the next one.
-    `max_turns` and `max_budget_usd` bound Background and Child chats only; an Interactive
-    chat runs unbounded, as Claude Code does."""
+    QMX sets no usage limit of its own (ruling 106): `background_cap`, `max_turns` and
+    `max_budget_usd` stay unset unless the operator writes them, and then bound Background and
+    Child chats only. `max_live_chats` is machine capacity, not usage: `live_chat_slots`
+    derives it from RAM, and a value written here may only lower it (AD-30)."""
 
-    max_live_chats: int = 4
+    max_live_chats: int | None = None
+    session_mb: int = 1536
+    overhead_mb: int = 4096
     idle_reap_seconds: float = 900.0
     unattended_ask_seconds: float = 300.0
-    background_cap: float = 0.5
-    """A share of the plan's five-hour window, above 0 and at most 1."""
-    max_turns: int = 50
-    max_budget_usd: float = 5.0
+    background_cap: float | None = None
+    """The operator's own share of the plan's five-hour window, above 0 and at most 1."""
+    max_turns: int | None = None
+    max_budget_usd: float | None = None
+
+
+def live_chat_slots(budgets: Budgets, ram_mb: int) -> int:
+    """`floor((ram_mb - overhead_mb) / session_mb)`, at least 1, lowered by a written
+    `max_live_chats`."""
+    derived = max(1, (ram_mb - budgets.overhead_mb) // budgets.session_mb)
+    return derived if budgets.max_live_chats is None else min(derived, budgets.max_live_chats)
+
+
+def machine_ram_mb() -> int:
+    return psutil.virtual_memory().total // 2**20
 
 
 def parse_budgets(raw: Mapping[str, object]) -> Budgets:
-    """Each value that is missing or out of range falls back to its default, with a warning
-    for one that was set."""
+    """Each value that is missing falls back to its default; one that is set and out of range
+    falls back with a warning."""
     default = Budgets()
 
     def number(name: str, *, whole: bool = False, at_most: float = math.inf) -> Any:
         fallback = getattr(default, name)
-        value = raw.get(name, fallback)
+        value = raw.get(name)
+        if value is None:
+            return fallback
         fits = (
             isinstance(value, int | float)
             and not isinstance(value, bool)
@@ -254,6 +272,8 @@ def parse_budgets(raw: Mapping[str, object]) -> Budgets:
 
     return Budgets(
         max_live_chats=number("max_live_chats", whole=True),
+        session_mb=number("session_mb", whole=True),
+        overhead_mb=number("overhead_mb", whole=True),
         idle_reap_seconds=number("idle_reap_seconds"),
         unattended_ask_seconds=number("unattended_ask_seconds"),
         background_cap=number("background_cap", at_most=1),

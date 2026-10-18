@@ -354,10 +354,6 @@ def usage_lines(page: dict[str, Any], chat: dict[str, Any] | None = None) -> lis
                 lines.append(
                     "    counted by QMA's translator; ChatGPT Settings > Usage has the plan's meter"
                 )
-    lines.append(
-        f"  background cap {percent(page.get('background_cap'))}: "
-        f"{page.get('background_cap_note', '')}"
-    )
     if page.get("hard_stop"):
         lines.append(f"  ! plan use stopped: {page['hard_stop']}")
     money = cast("dict[str, Any]", page.get("money") or {})

@@ -6,10 +6,11 @@ first. A key-provider chat's CLI reaches its provider only through the relay on 
 `open` kills any tree a crash left behind before anything resumes. No chat CLI starts at open;
 chats connect on their first `send`.
 
-At most `[budgets] max_live_chats` CLIs run. A send to a Cold chat at the cap closes the least
-recently used idle chat, or refuses with `ChatTableFull`; nothing queues. A reaper closes chats
-idle past `idle_reap_seconds`. A chat mid-turn or with a background task running is never idle,
-and a closed chat resumes its session on the next send.
+At most `live_chat_slots` CLIs run, a number derived from the machine's RAM. A send to a Cold
+chat at capacity closes the least recently used idle chat. With none idle, a Background or
+Child send waits for a slot and an Interactive one refuses with `ChatTableFull`. A reaper closes
+chats idle past `idle_reap_seconds`. A chat mid-turn or with a background task running is never
+idle, and a closed chat resumes its session on the next send.
 """
 
 from __future__ import annotations
@@ -91,6 +92,8 @@ from qma.harness.launch import (
     assert_scrubbed,
     chat_options_refusal,
     launch_env,
+    live_chat_slots,
+    machine_ram_mb,
     parse_budgets,
     unattended,
 )
@@ -126,7 +129,6 @@ from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
 from qma.harness.tools import DelegateRefused, keyring_refs, secret_files
 from qma.harness.usage import (
-    BackgroundCap,
     PostureView,
     ReadingView,
     UsageLedger,
@@ -148,6 +150,9 @@ METER_WAIT_S = 60.0
 METER_MODEL = "haiku"
 METER_PROMPT = "Reply with the single word OK."
 REAP_TICK_S = 60.0
+SLOT_POLL_S = 0.1
+"""How often a send waiting for a slot looks again. A slot frees when a turn ends or a CLI
+exits, which the chat does not signal to the harness."""
 
 log = logging.getLogger(__name__)
 
@@ -183,15 +188,13 @@ class UnknownChat(ControlError):
 
 
 class ChatTableFull(RuntimeError):
-    """`max_live_chats` CLIs are live and none is idle, so no chat can connect. Nothing is
-    queued: the caller gets this at once and the chat shows a `needs_you` block naming the busy
-    chats. The operator closes or interrupts one, or raises the cap."""
+    """Every slot holds a busy chat, so an Interactive chat cannot connect. The operator gets
+    this at once, with a `needs_you` block naming the busy chats, rather than a silent wait."""
 
     def __init__(self, cap: int, busy: tuple[SessionId, ...]) -> None:
         self.busy = busy
         super().__init__(
-            f"all {cap} live chats are busy ({', '.join(busy)}); interrupt or close one, "
-            "or raise [budgets] max_live_chats"
+            f"all {cap} live chats are busy ({', '.join(busy)}); interrupt or close one"
         )
 
 
@@ -227,6 +230,9 @@ class Harness:
         self._admit = asyncio.Lock()
         self._sending: Counter[SessionId] = Counter()
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
+        self._lenders: dict[SessionId, SessionId] = {}
+        """Each `delegate` child and the parent blocked on it, whose slot the child uses."""
+        self._ram_mb = machine_ram_mb()
         self._options: dict[SessionId, tuple[float | None, ChatHooks | None]] = {}
         """Each chat's `compact_at` and `hooks` from `NewChat`, which its record does not hold."""
         self._reaper = asyncio.create_task(self._reap())
@@ -358,10 +364,9 @@ class Harness:
     async def send(self, chat: SessionId, prompt: Prompt) -> None:
         """Hand a prompt to the chat. Returns once it is sent; results stream as blocks.
         `InjectedText` into an Interactive chat raises `UntrustedPrompt`. A plan chat refuses
-        while the overage stop holds, and an unattended plan chat refuses at the background
-        cap; each refusal also shows the chat a `needs_you` block. A Cold chat needs a slot
-        first: at `max_live_chats` the least recently used idle chat closes, and with none idle
-        the send raises `ChatTableFull`."""
+        while the overage stop holds, with a `needs_you` block. An unattended plan chat refuses
+        at a `background_cap` only when the operator wrote one. A Cold chat needs a slot first
+        (`_take_slot`)."""
         found = self._chat(chat)
         kind = found.record.config.kind
         if not admits(kind, prompt):
@@ -374,16 +379,16 @@ class Harness:
             if stop is not None:
                 await self._needs_you(chat, f"plan use is stopped: {stop}")
                 raise LaunchRefused(f"plan use is stopped: {stop}")
-            refusal = (
-                BackgroundCap(budgets.background_cap).refusal(self._ledger)
-                if unattended(kind)
-                else None
-            )
-            if refusal is not None:
-                reason = f"the background cap holds this chat: {refusal}"
-                await self._needs_you(chat, reason)
-                raise LaunchRefused(reason)
-        await self._take_slot(chat, budgets.max_live_chats)
+            share, five_hour = budgets.background_cap, self._ledger.reading("five_hour")
+            if share is not None and five_hour is not None and unattended(kind):
+                used = five_hour.reading.utilization
+                if used >= share:
+                    raise LaunchRefused(
+                        f"the five-hour window is {used:.0%} used, at or over your "
+                        f"[budgets] background_cap of {share:.0%}"
+                    )
+        slots = live_chat_slots(budgets, self._ram_mb)
+        await self._take_slot(chat, slots, wait=not isinstance(kind, Interactive))
         try:
             await found.send(prompt)
         finally:
@@ -394,42 +399,51 @@ class Harness:
         if not self._sending[chat]:
             del self._sending[chat]
 
-    async def _take_slot(self, chat: SessionId, cap: int) -> None:
+    async def _take_slot(self, chat: SessionId, cap: int, *, wait: bool) -> None:
         """Hold a slot for `chat` while a send to it runs, closing the least recently used
-        idle chat when the table is full. A chat being sent to is never evicted. Admission is
-        one critical section, so two sends never both take the last slot."""
-        async with self._admit:
-            while True:
-                live = [found for found in self._chats.values() if found.is_live]
-                held = {found.session_id for found in live} | self._sending.keys()
-                if chat in held or len(held) < cap:
-                    self._sending[chat] += 1
-                    return
-                idle = sorted(
-                    (
-                        found
-                        for found in live
-                        if found.idle_seconds > 0 and found.session_id not in self._sending
-                    ),
-                    key=lambda found: found.idle_seconds,
-                    reverse=True,
-                )
-                if not idle:
-                    full = ChatTableFull(cap, tuple(sorted(held)))
-                    await self._needs_you(chat, str(full), busy=sorted(held))
-                    raise full
-                for found in idle:
-                    if await found.close_if_idle(0):
+        idle chat when the table is full. A chat being sent to is never evicted. With no chat
+        idle, `wait` waits until a slot frees; otherwise this raises `ChatTableFull`. A
+        `delegate` child uses the slot of the parent blocked on it (42 N5), so a parent never
+        waits on a child that waits on the parent's slot. Admission is one critical section,
+        so two sends never both take the last slot."""
+        while True:
+            async with self._admit:
+                while True:
+                    live = [found for found in self._chats.values() if found.is_live]
+                    held = {found.session_id for found in live} | self._sending.keys()
+                    lent = {child for child, parent in self._lenders.items() if parent in held}
+                    if chat in held or chat in lent or len(held - lent) < cap:
+                        self._sending[chat] += 1
+                        return
+                    idle = sorted(
+                        (
+                            found
+                            for found in live
+                            if found.idle_seconds > 0 and found.session_id not in self._sending
+                        ),
+                        key=lambda found: found.idle_seconds,
+                        reverse=True,
+                    )
+                    if not idle:
                         break
+                    for found in idle:
+                        if await found.close_if_idle(0):
+                            break
+                if not wait:
+                    busy = sorted(held - lent)
+                    full = ChatTableFull(cap, tuple(busy))
+                    await self._needs_you(chat, str(full), busy=busy)
+                    raise full
+            await asyncio.sleep(SLOT_POLL_S)
 
     async def _delegate(self, parent: SessionId, profile: str, prompt: str) -> str:
         """Backs `mcp__qmx__delegate`. Refuses a profile outside `Profiles.delegate_targets`.
         Starts a Child chat (a qmx-control child session with `parent_id`, verbatim, `unattended`
-        copied from the parent, its own relay grant, the [budgets] turn and spend limits) on the
-        parent's model tier, workspace and mode. Sends the prompt as `InjectedText`, because a
-        model wrote it, and returns the turn's final text. A full table, the overage stop or
-        the background cap refuses at once through `send`; nothing waits on a slot that only the
-        parent could free. The child closes, and its grant is revoked, however this ends."""
+        copied from the parent, its own relay grant, any [budgets] turn and spend limits the
+        operator wrote) on the parent's model tier, workspace and mode. Sends the prompt as
+        `InjectedText`, because a model wrote it, and returns the turn's final text. The parent
+        is blocked on this tool call, so the child uses the parent's slot. The overage stop
+        refuses through `send`. The child closes, and its grant is revoked, however this ends."""
         profiles = await asyncio.to_thread(self._deps.relay.profiles)
         refusal = profiles.delegate_refusal(profile)
         if refusal is not None:
@@ -451,14 +465,16 @@ class Harness:
             raise DelegateRefused(f"the helper did not start: {refused}") from None
         found = self._chat(child)
         end = found.next_end()
+        self._lenders[child] = parent
         try:
             await self.send(child, InjectedText(prompt))
             ended = await end
-        except (LaunchRefused, ChatTableFull) as refused:
+        except LaunchRefused as refused:
             raise DelegateRefused(f"the helper did not start: {refused}") from None
         finally:
             end.cancel()
             await found.close()
+            del self._lenders[child]
         if ended is None:
             raise DelegateRefused("the helper's process ended before it answered")
         text = ended.result or ""
@@ -618,10 +634,9 @@ class Harness:
         await asyncio.to_thread(self._deps.control.sessions_append, chat, block)
 
     async def usage(self) -> UsagePage:
-        budgets = await self._budgets()
         tokens = await asyncio.to_thread(token_sums, self._deps.home.root / "runs")
         money = await asyncio.to_thread(posture_view, self._deps.home, self._deps.control)
-        return usage_page(self._ledger, BackgroundCap(budgets.background_cap), tokens, money)
+        return usage_page(self._ledger, tokens, money)
 
     async def doctor(self, *, probe: bool = False) -> list[DoctorLine]:
         """The overage and extra-usage lines, the money posture and the stored exposure report,
@@ -747,7 +762,9 @@ class Harness:
         and connects first, as a send does. Raises `RewindRefused` mid-turn or for an id with
         no checkpoint."""
         found = self._chat(chat)
-        await self._take_slot(chat, (await self._budgets()).max_live_chats)
+        await self._take_slot(
+            chat, live_chat_slots(await self._budgets(), self._ram_mb), wait=False
+        )
         try:
             await found.rewind(message_id)
         finally:

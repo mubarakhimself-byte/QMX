@@ -201,7 +201,7 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
     assert (resumed.hooks, resumed.disallowed_tools) == (None, [])
     seen = (resumed.session_id, resumed.resume, resumed.verbatim_prompts, resumed.effort)
     assert seen == (None, CHAT, True, "high")
-    assert (resumed.max_turns, resumed.max_budget_usd) == (50, 5.0)
+    assert (resumed.max_turns, resumed.max_budget_usd) == (None, None)
 
 
 def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
