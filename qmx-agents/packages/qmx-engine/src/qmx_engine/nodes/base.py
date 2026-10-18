@@ -50,6 +50,8 @@ class Ok:
     outputs: JsonObject
     """Outputs by port. A port left out carries nothing downstream."""
     artifacts: tuple[str, ...] = ()
+    verdict: str | None = None
+    """A grader's `pass` or `fail`, which the span records."""
 
     @property
     def output_hash(self) -> str:
@@ -85,13 +87,23 @@ class Executor(Protocol):
     def run(self, job: NodeJob) -> NodeResult: ...
 
 
+class AsyncExecutor(Protocol):
+    """An executor that waits on a process or another run. Only the runner's worker awaits it;
+    `step` runs plain `Executor`s."""
+
+    async def run(self, job: NodeJob) -> NodeResult: ...
+
+
 def ending(result: NodeResult) -> list[tuple[str, JsonObject]]:
     """The ledger events that record a result, without the attempt keys."""
     match result:
         case Ok():
-            return [
-                ("node_finished", {"outputs": result.outputs, "output_hash": result.output_hash})
-            ]
+            finished: JsonObject = {"outputs": result.outputs, "output_hash": result.output_hash}
+            if result.artifacts:
+                finished["artifacts"] = list(result.artifacts)
+            if result.verdict is not None:
+                finished["verdict"] = result.verdict
+            return [("node_finished", finished)]
         case Failed():
             return [
                 (

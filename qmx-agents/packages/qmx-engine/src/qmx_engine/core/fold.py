@@ -6,7 +6,8 @@ with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_fin
 `memo: true`, `outputs` on `node_finished`, `tokens` on an ending event, `code` and `message` on
 `node_failed`, `reason`, `resume_at` and `event` on `node_waiting`, `plan.join.merged` on a join's
 `node_scheduled`, and `step` on `ladder_step`. A
-`node_waiting` with no `attempt` is a hold the core asked for.
+`node_waiting` with no `attempt` is a hold the core asked for. `run_resumed` opens a new pass but
+keeps every slot waiting on a gate.
 """
 
 from __future__ import annotations
@@ -60,6 +61,12 @@ def tokens(data: Mapping[str, JsonValue]) -> int:
     return sum(count for value in _object(data, "tokens").values() if (count := _int(value)))
 
 
+def gated(run: NodeRun) -> bool:
+    """A slot waiting on an answer: a resume never reruns it, only the answer does, so a step
+    that may already have reached the outside world is never repeated by a resume (AD-8)."""
+    return run.phase == "waiting" and run.reason == "gate"
+
+
 def fold(definition: Workflow, events: Iterable[EventView]) -> State:
     state = State(definition, "", None, None, {}, {}, {})
     nodes: dict[Slot, NodeRun] = {}
@@ -91,7 +98,7 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
             case "event_received":
                 received.append((_text(data, "event") or "", seq))
             case "run_resumed":
-                nodes = {}
+                nodes = {s: run for s, run in nodes.items() if gated(run)}
                 state = replace(state, ended=None)
             case "node_scheduled":
                 attempt = _int(data.get("attempt")) or 0

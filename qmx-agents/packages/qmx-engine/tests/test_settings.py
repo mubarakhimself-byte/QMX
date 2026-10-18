@@ -43,6 +43,8 @@ def test_every_appendix_h_default_has_its_literal_value() -> None:
         "retry.backoff": (30, 120, 600),
         "timeout.agent.run": 1_800,
         "timeout.agent.idle": 300,
+        "timeout.script.run": 600,
+        "subworkflow.max_depth": 3,
         "inline_limit_bytes": 65_536,
         "placement.pc.concurrency": 3,
         "context_window": 200_000,

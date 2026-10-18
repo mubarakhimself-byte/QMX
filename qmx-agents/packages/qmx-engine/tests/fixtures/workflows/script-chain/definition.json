@@ -1,0 +1,16 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "script-chain",
+  "name": "Script chain: list the numbers, double them, add them up",
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "parameters": {"kinds": ["manual"]}},
+    {"id": "numbers", "name": "Numbers", "type": "script", "typeVersion": 1, "parameters": {"script": "scripts/numbers.py"}},
+    {"id": "double", "name": "Double", "type": "script", "typeVersion": 1, "parameters": {"script": "scripts/double.py"}},
+    {"id": "total", "name": "Total", "type": "script", "typeVersion": 1, "parameters": {"script": "scripts/total.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Numbers", "port": "in", "map": "one"}]]},
+    "Numbers": {"main": [[{"node": "Double", "port": "in", "map": "one"}]]},
+    "Double": {"main": [[{"node": "Total", "port": "in", "map": "one"}]]}
+  }
+}
