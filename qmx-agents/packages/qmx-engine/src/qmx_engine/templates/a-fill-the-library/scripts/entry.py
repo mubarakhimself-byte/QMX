@@ -1,8 +1,8 @@
 """Funnel stage 7, the Library entry, before its check: every inventory row with its capture,
-triage and status; every card with a Library id, its audit verdict and its calibration; a source
-row per captured item; and the audit's open questions as recorded assumptions. Rejected cards and
-skipped items are kept with their reasons. Ids are letters only (`STRAT-`, `CMP-`, `KB-`, `HINT-`,
-`SRC-`), so they never read as numbers in the check after this one.
+triage buckets and status; each triage reason; every card with a Library id, its audit verdict
+and its calibration; a source row per captured item; and the audit's open questions as recorded
+assumptions. Rejected cards and skipped items are kept with their reasons. Ids are letters only
+(`STRAT-`, `CMP-`, `KB-`, `HINT-`, `SRC-`), so they never read as numbers in the check after this.
 
 An audit verdict given per rule (`card-1:entry`) counts for its card, and one rejected rule rejects
 the card. Inputs are told apart by shape; when nothing reached the extractor, only rows arrive."""
@@ -86,7 +86,6 @@ for row in rows:
             "provenance": row["provenance"],
             "capture": row["capture"],
             "buckets": verdict["buckets"] if verdict else [],
-            "reason": verdict["reason"] if verdict else "",
             "status": status,
         }
     )
@@ -110,6 +109,10 @@ print(
         {
             "summary": summary,
             "inventory": inventory,
+            "triage": [
+                {"item_id": v["item_id"], "buckets": v["buckets"], "reason": v["reason"]}
+                for v in triaged
+            ],
             "cards": cards,
             "sources": sources,
             "coverage": kept.get("coverage", {}),

@@ -7,8 +7,9 @@
     }
   },
   "type": "object",
-  "x-prose": ["formula", "data_frequency", "warm_up", "claimed_effect", "parameters",
-              "ablation_plan"],
+  "x-prose": ["piece", "name", "formula", "data_frequency", "warm_up", "claimed_effect",
+              "inputs", "parameters", "failure_cases", "ablation_plan", "assumptions",
+              "calibration"],
   "required": ["piece", "name", "formula", "data_frequency", "warm_up", "claimed_effect", "inputs",
                "parameters", "failure_cases", "ablation_plan", "assumptions", "holes", "changes",
                "calibration"],

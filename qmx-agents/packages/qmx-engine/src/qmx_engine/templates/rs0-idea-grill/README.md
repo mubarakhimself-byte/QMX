@@ -7,7 +7,7 @@ Built from card R0 in `research/methodology/15-templates-researcher.md`. It turn
 1. `Idea and what is known` takes the idea and the known dead ends from the run input, so known facts are shown and never asked.
 2. `Grill` (role `planner`) asks at most five numbered questions, each with a recommended answer.
 3. `Draft the term sheet` (role `writer`) adopts every recommended answer, records each one under `assumptions`, and warns on top when a known dead end shares the mechanism.
-4. `Render and grade` (the shared `render-and-grade` block) checks the term sheet against `schemas/output.json`, which demands a mechanism and a kill criterion, and checks that every number in the mechanism, entry, exit, kill criteria and "what would fake this" lines comes from the idea or a recorded assumption. A failed check stops the run as failed.
+4. `Render and grade` (the shared `render-and-grade` block) checks the term sheet against `schemas/output.json`, which demands a mechanism and a kill criterion, and checks that every number in the dead-end warning, mechanism, universe, timeframe, data, entry, exit, kill criteria, capacity guess and "what would fake this" lines comes from the idea or a recorded assumption. A failed check stops the run as failed.
 
 ## Test runs
 

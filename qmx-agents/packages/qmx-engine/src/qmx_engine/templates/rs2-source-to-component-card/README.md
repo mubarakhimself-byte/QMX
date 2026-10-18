@@ -9,7 +9,7 @@ Built from card R2 with R5 (understand and extract) and R7 (calibrate) in `resea
 3. `Extract the component` (role `extractor`) writes the card: formula, data frequency, warm-up, claimed effect, inputs, parameters with the paper's defaults, stated failure cases, and an ablation plan (host kinds, and the test host with versus without).
 4. `Keep the holes` makes any field, parameter or failure case that rests on no cited claim read `unresolved`, and lists the holes and what it changed.
 5. `Items to calibrate` and the shared `calibrate` block give the claimed effect and the formula a confidence: basis labels from the quote check, two `reader` samples and one `reviewer` sample, then the agreement rule.
-6. `Render and grade` checks the card against `schemas/output.json` and checks every number in its formula, frequency, warm-up, claimed effect, parameters and ablation plan against the paper. A failed check stops the run as failed.
+6. `Render and grade` checks the card against `schemas/output.json` and checks every number in every model-written field, including the failure cases, assumptions and calibration lines, against the paper's sections. The card is what it grades, never its evidence. A failed check stops the run as failed.
 
 ## Test runs
 

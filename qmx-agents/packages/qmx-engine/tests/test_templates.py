@@ -54,8 +54,11 @@ def votes(chunk: str) -> str:
     return json.dumps({"votes": [{"id": item["id"], "answer": "holds"} for item in items]})
 
 
-def answers(note: str | None = None, synthesis: str | None = None) -> FakePort:
-    """A port that answers every model turn from the recorded files, by the prompt's first words."""
+def answers(
+    note: str | None = None, synthesis: str | None = None, planted: dict[str, str] | None = None
+) -> FakePort:
+    """A port that answers every model turn from the recorded files, by the prompt's first words.
+    `planted` replaces the answer to a prompt that starts with its key."""
     whole = {
         "You triage new quant-finance papers": recorded(RS1, "triage.json"),
         "You write the research note": note or recorded(RS1, "note.json"),
@@ -73,7 +76,7 @@ def answers(note: str | None = None, synthesis: str | None = None) -> FakePort:
         "You are the auditor": recorded(A, "audit.json"),
         "You are the analyst of QMX's weekly": recorded(RV, "clusters.json"),
         "You propose edits for QMX's": recorded(RV, "edits.json"),
-    }
+    } | (planted or {})
     chunked: dict[str, Callable[[str], str]] = {
         "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
         "You are the section reader": lambda c: mine(
@@ -184,6 +187,36 @@ def test_rs4_fails_when_the_synthesis_invents_a_quote(tmp_path: Path) -> None:
     report, review = try_template(tmp_path, RS4, {"fixture": True}, port)
 
     assert (report.status, review) == ("failed", None)
+
+
+def plant(folder: Path, name: str, path: list[str | int], text: str) -> str:
+    """The recorded answer with `text` appended to the string at `path`."""
+    doc = json.loads(recorded(folder, name))
+    node = doc
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] += text
+    return json.dumps(doc)
+
+
+@pytest.mark.parametrize(
+    ("folder", "inputs", "prompt", "planted"),
+    [
+        (RS0, {"fixture": True}, "You write the term sheet",
+         plant(RS0, "term_sheet.json", ["capacity_guess"], " About 75 million USD a day.")),
+        (RS2, {"fixture": True}, "You turn one piece of a paper",
+         plant(RS2, "component.json", ["claimed_effect", "value"], ", and to 1.45 net")),
+        (A, {"fixture": "one-video"}, "You are the extractor for a quant research library",
+         plant(A, "cards.json", ["cards", 0, "summary"], " Wins 73% of trades.")),
+    ],
+    ids=["rs0-capacity", "rs2-claimed-effect", "a-card-summary"],
+)  # fmt: skip
+def test_an_output_with_a_number_its_sources_never_gave_fails_the_test_run(
+    tmp_path: Path, folder: Path, inputs: Any, prompt: str, planted: str
+) -> None:
+    report, delivered = try_template(tmp_path, folder, inputs, answers(planted={prompt: planted}))
+
+    assert (report.status, delivered) == ("failed", None)
 
 
 def produced_files(home: Path, run_id: str) -> list[str]:

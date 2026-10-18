@@ -1,6 +1,7 @@
 {
   "type": "object",
-  "x-prose": ["mechanism", "entry", "exit", "kill_criteria", "what_would_fake_this"],
+  "x-prose": ["dead_end_warning", "mechanism", "universe", "timeframe", "data_needed", "entry",
+              "exit", "kill_criteria", "capacity_guess", "what_would_fake_this"],
   "required": ["idea", "dead_end_warning", "mechanism", "universe", "timeframe", "data_needed",
                "entry", "exit", "kill_criteria", "capacity_guess", "what_would_fake_this",
                "assumptions"],

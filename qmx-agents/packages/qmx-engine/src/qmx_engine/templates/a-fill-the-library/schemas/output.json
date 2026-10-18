@@ -1,7 +1,8 @@
 {
   "type": "object",
-  "x-prose": ["cards"],
-  "required": ["summary", "inventory", "cards", "sources", "coverage", "gaps", "assumptions"],
+  "x-prose": ["cards", "triage", "gaps", "assumptions"],
+  "required": ["summary", "inventory", "triage", "cards", "sources", "coverage", "gaps",
+               "assumptions"],
   "properties": {
     "summary": {"type": "string"},
     "inventory": {
@@ -9,8 +10,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "kind", "locator", "provenance", "capture", "buckets", "reason",
-                     "status"],
+        "required": ["id", "kind", "locator", "provenance", "capture", "buckets", "status"],
         "properties": {
           "id": {"type": "string"},
           "kind": {"enum": ["video", "note", "paper", "tradingview", "link"]},
@@ -18,8 +18,19 @@
           "provenance": {"type": "array", "items": {"type": "string"}},
           "capture": {"type": "string"},
           "buckets": {"type": "array", "items": {"type": "string"}},
-          "reason": {"type": "string"},
           "status": {"type": "string"}
+        }
+      }
+    },
+    "triage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item_id", "buckets", "reason"],
+        "properties": {
+          "item_id": {"type": "string"},
+          "buckets": {"type": "array", "items": {"type": "string"}},
+          "reason": {"type": "string"}
         }
       }
     },
