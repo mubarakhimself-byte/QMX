@@ -442,7 +442,7 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 | `lab.cheap_run_seconds` (L2 stale-upstream prompt) | 120 |
 | `lab.overfit_gap` | 0.05 of loss |
 | `lab.luck_warning_runs` | 200 |
-| `lab.trial_caps` | L4 200/night, D3 3 generations × 4 children, D4 12 variants, D6 6 configs |
+| `lab.trial_caps` | L4 200/night, D3 3 generations × 4 children, D4 12 variants, D6 6 configs (a multiple-testing bound of the research method, GAP-0048/0049, counted in the family ledger for deflated statistics; not a usage or spend limit, engine AD-40; he edits it) |
 | `lab.robustness_ladder` | costs ×2 ≥ 50 % kept; trade shuffle 1,000 p95 DD ≥ −15 %; candle noise positive in 90 %; significance p < 0.05; walk-forward 7 of 9 clusters |
 | `pod.fan_paths` / `pod.fan_horizon_days` | 1,000 / 90 |
 | `pod.noise_quantile` | 0.9 |

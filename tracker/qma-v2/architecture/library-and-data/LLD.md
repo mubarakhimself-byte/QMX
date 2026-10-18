@@ -280,7 +280,7 @@ Steps 4–5 run under the writer's lock (one process, one `RLock`, `BEGIN IMMEDI
 | GET | `/v1/healthz` | none (loopback and tailnet only) or pairing | hub self-check: store writable, replication lag, bucket push age, disk free |
 | POST | `/v1/refs/adopt` | operator (pairing + explicit flag) | the FM-16 recovery; never called by a run pass |
 
-Run pass: compact JWS signed with the pairing key (Ed25519), claims as in AD-12 (engine AD-28's pass), `exp` = attempt timeout, at most 1 h, renewed by the sidecar heartbeat. The hub verifies by signature and pulls the signed revocation list each sync, so `runs_stop` or a stolen-pass alarm cuts access within one sync.
+Run pass: compact JWS signed with the pairing key (Ed25519), claims as in AD-12 (engine AD-28's pass), `exp` = the attempt's end, each token at most 1 h and renewed by the sidecar heartbeat (a credential expiry, never a work limit). The hub verifies by signature and pulls the signed revocation list each sync, so `runs_stop` or a stolen-pass alarm cuts access within one sync.
 
 ## 10. Backups and drills (concrete)
 

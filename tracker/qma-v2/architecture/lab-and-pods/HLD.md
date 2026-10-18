@@ -16,7 +16,7 @@ Companion to `ARCHITECTURE-SPINE.md` (the invariants). This file carries the sha
 | --- | --- | --- |
 | A. A Lab runner of its own | a Jupyter-style executor plus a job table beside the engine | rejected: ruling 22 and engine AD-3 allow one engine; the Lab would re-invent memo, replay and pause **[inferred]** |
 | B. A thin UI over the `qmb` CLI | screens call `qmb` and read its JSONL | rejected: no editor, no drafts, no slots, no pods, no copilot tools; QMB is a library, not the Lab **[retrieved qmb.md B-1]** |
-| C. Document kinds + a node pack + templates over the engine and the Library (**chosen**) | every step is an engine node, every procedure a template, every artifact a Library object; the Lab owns projections, the pod simulator and four ports | gives the editor, run-this-part, freshness, placement, pause at caps and lineage for free **[inferred]** |
+| C. Document kinds + a node pack + templates over the engine and the Library (**chosen**) | every step is an engine node, every procedure a template, every artifact a Library object; the Lab owns projections, the pod simulator and four ports | gives the editor, run-this-part, freshness, placement, pause at provider limits and lineage for free **[inferred]** |
 
 ### 2b. The editor's truth
 

@@ -595,3 +595,122 @@ Not calls, but steps only he can do, needed before the gated pieces: run the bui
 ### R.8 Reviewer gate for this pass
 
 Run inline (no sub-agents allowed): `lint_spine.py` 0 findings on `workflow-engine`, `library-and-data` and `lab-and-pods`; a consistency sweep for stale wording (request-rate alarm, runaway reads, window-read demo checks, plan 401 benching, `.snap` restores, "one relay mode", `soft_cap`) across the spines, SOLUTION-DESIGN, HARNESS-REQUESTS and UI-HANDOFF, with every hit rewritten. Not done here: the HLD and LLD companions of Lab and Library beyond the lines named, and an explainer page for him (owner: planning lead, as in §11).
+
+
+---
+
+## Fix-check applied (42)
+
+Written by the architect (Opus 5.5), headless, BMad architecture skill in amend mode, no sub-agents, nothing committed. This is the one fix round for `42-fix-check.md`. Inputs: `42` (2 critical, 6 high, 9 medium, 4 low; 5 partials of 41 and 2 of 40 §5), `40-retriage.md`, `41-rerun-review.md`, `26` rulings 1-104, code on `origin/engine/base` = `132169c7` read with `git show` (`QE/settings.py:20-22, 71-72`, `QE/roles.py:85-86`, `QE/ledger/signature.py`, `QH/relay.py:37-38, 139-143, 725-731`, `QH/harness.py:425-432`, `QH/usage.py` `overage_rule`). AD ids are stable; no AD was added. `lint_spine.py`: 0 findings on `workflow-engine`, `library-and-data` and `lab-and-pods` after the pass.
+
+**Files changed (all under `tracker/qma-v2/`):** engine `ARCHITECTURE-SPINE.md` (sources; AD-4, 12, 13, 16, 18, 28, 33, 36, 38, 40, 41, 45, 49, 50, 51 amended; one Deferred row), `SOLUTION-DESIGN.md` (§2.1 example, §2.3, §3.4, §5.4, §7.3, §8.1a, §9, §10.3, §11.1, §15, §16, §17, §19, §21, §24 manifest, §26.1, §26.4, §26.13 S1, §26.14 P0, P1, P1k, P4, P2 and E41, E43, E46, E50-E53, §26.15, §26.16), `HARNESS-REQUESTS.md` (H2 superseded, H7, H27, H28, H38), `OPEN-DECISIONS.md` (G note, closed B note), `DOC-CHANGES.md` (rows 10, 28, 35), `PLAIN-WORDS.md`, `.memlog.md`; Lab `PLAIN-WORDS.md`, `HLD.md`, `LLD.md` (trial caps labelled), `.memlog.md`; Library `LLD.md` (token `exp`), `.memlog.md`; `UI-HANDOFF.md` §12 rows 1 and 22; `40-retriage.md` §3.1 row 0 (P0 owns the role-default rows); this section.
+
+### F.1 Finding → outcome
+
+| Finding | Outcome | Where |
+| --- | --- | --- |
+| **N1** caps survive in six places (critical) | applied: every live hit rewritten (list in F.2); H2's first row marked superseded; H28 has no fallback (a refused H28 would keep caps) and ships with CAP-H | SD §5.4, §15, §16, §17, §19, §21, §24; PLAIN-WORDS; HR H2, H7, H28; DOC-CHANGES 10, 28; Lab PLAIN-WORDS, HLD; Library LLD |
+| **N2** default order and Fable not fixed in SD §9 or any packet (critical) | applied: §9 examples in `key → gpt → plan` order with Kimi, DeepSeek, GLM, Qwen and MiniMax first-class in every tier, strong included; AD-13 says so; code owner **P0 pre-land hygiene** (40 §3.1 row 0: no Fable, Chinese rows first, `live_order` `key, gpt, plan`, haiku-first test order, `roles.py:85-86`, with tests); the router packet later generates the lists | engine AD-13; SD §9, §26.15; DOC-CHANGES 35; 40 §3.1 |
+| **N3** synthesised `message_start` breaks late errors (high) | applied: no synthesis by default, so a late 429, 400 or 529 keeps its status and headers; `keepalive: true` is a per-row opt-in allowed only after E43's late-error cases pass; the upstream `message_start` is swallowed, family-tested and its usage carried into the first `message_delta`; GPT-lane citation corrected | engine AD-50 (8), AD-40 (6); SD §17, §26.1, P4, E43 |
+| **N4** masked digests erase progress (high) | applied: a narrow stuck digest (uuids, timestamps, durations, temp paths masked; counts, test ids, rows and paths kept); no-convergence needs the same failing set and a count that does not fall, over error results (`is_error` or a non-zero exit); `ledger.signature` only for whole-attempt failures | engine AD-16; SD §10.3, §17, E41 |
+| **N5** H28 (b) can deadlock (high) | applied: a child of a parent blocked on it borrows the parent's slot; a parent blocked on its own child does not count against capacity; a test with `max_live_chats = 1` | engine AD-40 (5); HR H28; SD §26.4, E43 |
+| **N6** same-path commits end last-writer-wins (high) | applied: only declared outputs commit; undeclared overlay files die; validation refuses concurrent writers of one declared path unless partition-templated or a merge; staged commit with roll-forward on resume; `zone_conflict` is a definition bug (non-retryable, doctor) | engine AD-51; SD §3.4, §26.16, E50 |
+| **N7** P1 failure withdraws H38 for everyone; no lane filtering (high) | applied: P1 gates plan mains only; Kimi- and GPT-main chats get H38 through the new probe **P1k** and keep it whatever P1 shows, so ruling 92 holds for them on either outcome; the generator filters by lane state and `plan_main_native`; the flip-off relaunch regenerates the set | engine AD-38, AD-4; HR H38; SD §26.1 table, S1, P1, P1k; OPEN-DECISIONS G; PLAIN-WORDS; UI §12 row 1 |
+| **N8** copilot-owned helpers trip the misuse alarm (high) | applied: every pass names an owner (an engine attempt or a `delegate` handle); the alarm checks the owner is open; streams and background calls begun before the end are not misuse | engine AD-28, AD-41; SD §15, §17, §19, E52 |
+| N9 probe order contradicts itself (medium) | applied: P0, P1 → build dark → P4, P2 → turn on | engine AD-38; HR H27; SD §26.14, §26.15 |
+| N10 pass and fail lines not exact (medium) | applied: P0 compares every header and body field with a named exclusion list; P1 tests CLI behaviour only and its egress checks moved to P4; P2 reads the `anthropic-ratelimit-unified-*` headers [remembered] and "unchanged after 20 turns" is a fail; P4 measures the assumed window at the auto-compact point | SD §26.14 |
+| N11 H7 cross-host gaps (medium; closes 41 H7) | applied: a host pass to the GPT owner's router, accepted only from owned hosts and only for that account; concurrency by the peer's live leases, the whole limit when the peer is idle or silent | engine AD-12; SD §7.3, §26.16, E53 |
+| N12 evidence includes model-written code (medium; closes 40 §5.3) | applied: output of code the attempt's own model wrote is never evidence; E51 adds a printed-number case | engine AD-45; SD §26.16, E51 |
+| N13 probing loop (medium; closes 40 §5.6) | applied: a 429 with no or a past reset on a probing request is a generic 429, never straight back to `probing` | engine AD-12; SD §7.3, E53 |
+| N14 AD-33 layer 4 bypass (medium) | applied: MetaEditor on the image-path deny list for agent input, only the driver compiles; guard include and every `.ex5` hash-checked at attach; a nonce in the account script's output; EA sources are Library artifacts read by id, exempt from the money-verb scan only because they run nowhere but inside a proven demo terminal | engine AD-33, AD-36; SD E46 |
+| N15 router supervision unspecified (medium; closes 41 H1) | applied: `qma.serve` restarts the router thread on its pinned port and re-runs the canary; the plan lane comes back after three healthy checks plus a canary; the port is pinned in `<home>/router.port` | engine AD-38; HR H27; SD §17, §26.1 |
+| N16 `API_TIMEOUT_MS` against 1M prompts (medium) | applied: every launch sets it above the largest row timeout plus 60 s (at least 780 s with the defaults); P4 records whether it is a total or an idle bound; E43 adds a 900 s case | engine AD-50; SD §17, P4, E43 |
+| N17 `cli` front doors undesigned (medium) | applied: day-one targets are CLIs that take an Anthropic base URL from env; other wires Deferred (owner: the `delegate` v2 packet); E52 records which CLIs qualify | engine AD-41, Deferred; SD §26.4, E52; UI §12 row 22 |
+| N18 billing watch overlaps `hard_stop` (low) | applied: `hard_stop` stops; the watch keys on an `overage_status` change and adds lane-off plus the cause | engine AD-38 |
+| N19 tool-search claim measured through OpenRouter only (low) | applied: claim narrowed; direct rows keep `tool_search: false` until P3 and P4 | engine AD-50 (1) |
+| N20 a parked run's zone is deleted (low) | applied: kept until its inbox item closes | engine AD-49 |
+| N21 per-model definitions break the cache (low) | applied: per-role definitions by default, per-model only for models he pins | engine AD-38; HR H38 |
+| 41 H1 partial | closed by N15 | as N15 |
+| 41 H4 partial | closed by N1 | as N1 |
+| 41 H7 partial | closed by N11 | as N11 |
+| 41 M3 partial | closed by N5 | as N5 |
+| 41 M8 partial | closed by N1 (SD §15 and §19 rate-cap wording) and N8 (pass owner) | as N1, N8 |
+| 40 §5.3 partial | closed by N12 | as N12 |
+| 40 §5.6 partial | closed by N13 | as N13 |
+| 41 L5 (`max_live_chats` 4 vs 6) | unchanged: code item for the caps packet (R.6) | none |
+
+**Counts:** 2 critical, 6 high, 9 medium and 4 low applied; 5 partials of 41 and 2 of 40 §5 closed. Two notes go to the lows list (F.3).
+
+### F.2 Cap sweep (every hit, with its outcome)
+
+Terms searched: `cap`, `caps`, `capped`, `budget`, `allowance`, `max_turns`, `timeout`, `runaway`, `ceiling`, `pause(s|d) itself`, `share 0.5`, `$5`, plus `runs away`, `cheaper model`, `pass rate`, `attempt timeout` and `hard run`. Scope: every `.md` under `architecture/` (reviews excluded), `UI-HANDOFF.md` and this file. 186 lines carried a hit before the pass: 46 changed, 140 kept. Line numbers are those before the pass.
+
+**Changed (a live cap removed, or the line rewritten for another 42 finding while it already said "no cap"):**
+
+| Hit | Outcome |
+| --- | --- |
+| SD:64 §2.1 example `"timeout": {"run_seconds": 600, …}` | run timeout removed from the example |
+| SD:118 `loop` stop "token allowance" | now "a token `budget` only when he wrote one" |
+| SD:364 §5.4 "hard run timeout" | now an idle timeout with no progress; no run timeout |
+| SD:585, 668, 670, 676 memory "caps" and snapshot "cap" | renamed size bounds (context hygiene, not usage) |
+| SD:882 §15 "caps 3-5 per node" | parallelism is the CLI's own default, a setting |
+| SD:891 §15 "pass rate cap", "token allowance" | misuse alarm on facts; damage bounded by `model_scope`, TTL and branch |
+| SD:893 §15 `host_harness` "attempt timeout" | no new thread event past `timeout.idle` |
+| SD:906, 912 §16 "pauses at caps", "Pause at cap" | "provider limits" |
+| SD:924 §16 sub-agents "capped", "3-5 per node" | a parallelism setting |
+| SD:928 §16 theft bounded by "token allowance" | model scope, TTL and branch |
+| SD:952 §16 "Runaway defaults" | marked superseded |
+| SD:970, 971, 983 §17 stuck row, first-token row, memory caps | narrow stuck digest; no synthesis by default plus an `API_TIMEOUT_MS` row; memory size bounds |
+| SD:1034, 1041 §19 "TTL = attempt timeout", "pass rate caps" | TTL until the owner ends (a renewed credential expiry); misuse alarm on facts |
+| SD:1086 §21, SD:1111 §24 "attempt timeout" | idle stuck detection; manifest expiry = the attempt's end |
+| SD:1169 E41, SD:1234 §26.1 pseudocode, SD:1459 E43, SD:1474 §26.15 | rewritten for N3, N4, N5, N9 and N16 (they already said "no caps") |
+| PLAIN-WORDS:9 "token allowance" (twice) | the pass is bounded by step, machine and models; a stolen pass is cancelled on misuse |
+| PLAIN-WORDS:21 "runs away … pauses itself or switches to cheaper models" | "nothing stops on how much it uses; a stuck or looping job stops and tells you" |
+| HR:11 H2 "per-node turn cap", "global cap" | row marked superseded by HG3 H2 |
+| HR:17 H7 "caps", "capped per node", "no per-node cap" | parallelism wording |
+| HR:69 H28 fallback (very large values; the copilot keeps today's defaults) | no fallback: H28 ships with CAP-H |
+| OPEN-DECISIONS:13 G | note added for N7 (the line already said no caps) |
+| DOC-CHANGES:16 row 10 "per-account ledger and cap" | "no QMX cap" |
+| DOC-CHANGES:34 row 28 runaway 2M / 16 / 1,000 / 4 h | marked superseded by rows 35 and 41 |
+| DOC-CHANGES:41 row 35 | P0 ownership added (the line already removed the caps) |
+| Spine AD-4 (92), AD-12 (140), AD-16 (164), AD-18 (176), AD-33 (272), AD-40 (314), AD-41 (320), AD-50 (374) | AD-18 "caps" renamed size bounds; the others rewritten for N3-N17 and already stated "no cap" |
+| Lab PLAIN-WORDS:27 "runs away pauses itself or switches to cheaper models" | a stuck or looping run stops and tells him |
+| Lab HLD:19 "pause at caps" | "pause at provider limits" |
+| Library LLD:283 run token `exp` = "attempt timeout" | the attempt's end, a renewed credential expiry |
+
+**Kept, because none is a QMX usage or spend limit:**
+
+| Kind | Hits (file:line) |
+| --- | --- |
+| States that no cap exists, or records its removal | Lab spine 22, 58, 157, 163; Lab LLD 245, 450; Lab OPEN-DECISIONS 16; spine 121, 122, 139, 160, 163, 278, 310, 312, 313, 355, 356, 398, 560, 588, 595; SD 3, 109, 123, 141, 491, 530, 532, 633, 864, 969, 975, 988, 999, 1005, 1189, 1286, 1290, 1292, 1294-1298, 1302, 1307, 1430; HR 31, 39, 51, 56, 82; OPEN-DECISIONS 17; PLAIN-WORDS 11; DOC-CHANGES 47; UI-HANDOFF 119, 150, 184 |
+| Historical text in a section marked superseded or closed, or another vendor's word | OPEN-DECISIONS 38 (closed B; its header now notes that AD-40 superseded ruling 90's default share); DOC-CHANGES 44 ("Max allowance" is Anthropic's plan allowance) |
+| Stuck and no-progress detection (no usage number) | spine 373 (AD-50 Prevents); SD 647, 1006 (Cua `idle_timeout`); the same words in spine 92 and 164 stay inside the rewritten AD-4 and AD-16 (`timeout.idle`, `timeout.in_tool`, `first_token_timeout`) |
+| His own values, unset by default | spine 140 (inside the rewritten AD-12), SD 478, UI-HANDOFF 42, 183 (strategy, share, ceiling he sets); SD 239, 1304; SD 532 ("if he sets any of these himself") |
+| Definition logic he writes, not usage | SD 121, 866 (`approval_gate` timeout he sets), 240, 243 (join watermark), 241 (`call_depth`, structure); spine 98 |
+| Attended or UI timeouts that fail closed and stop no work | spine 332, SD 1001, 1348, HR 72 (attended ask timeout, off by default); UI-HANDOFF 141 (phone buttons, later) |
+| Machine capacity or OS limits (work queues or spills; never a usage number) | spine 214, 362 (Docker health wait), 224, SD 349, 396 (`--cap-drop`, a Linux capability), spine 254, 479, 514, 543, SD 895, 1063, 1074, 1080, 1136, 1154 (RAM budget, container count, `max_live_chats`), SD 363, 877, 990 (container pids, memory, disk and sync-back size), SD 403 (cancel kills the job), HR 43 (Windows command-line length) |
+| Retry and failure-ladder counts | spine 164 ("capped by the node's `retry`", unchanged inside the rewritten AD-16) |
+| Content and context hygiene | spine 326 (per-embed byte budget), SD 565, 566, 579, 580 (`MemoryPort` result size), SD 617 (cost estimate, "never a cap"), Library ENGINE-REQUESTS-ANSWERED 30, Library spine 390 (performance targets) |
+| Security bounds | spine 338, SD 1464, UI-HANDOFF 148 (CDP frame cap; preview talk-back of 500 characters, one per second, an injection guard) |
+| Model capability fields and diagram ids | spine 308, SD 1264, 1278 (`budget: honoured, ignored` is a provider's thinking-budget support); SD 1334-1336 (`CAP` is a diagram node id) |
+| Trading and risk domain words | Lab spine 145, 199, 302; Lab HLD 167, 172; Lab LLD 27, 174, 175, 192, 231; Lab PLAIN-WORDS 21, 29; Lab UI-TO-BACKEND-MAP 87, 91, 137 (the pod `caps` slot, liquidity cap, rule ceiling) |
+| Research-method bounds | Lab spine 208, 305, 310; Lab LLD 328, 445, 476 (trial caps and the family cap: a multiple-testing count for deflated statistics, GAP-0048/0049, set by him; LLD 445 now says so) |
+| Settings section names | SD 593 (the `[budgets]` table, read for `max_live_chats`) |
+
+This file's own hits (§1 item 2, §3, §4, §5, §6, §7, R.3 to R.8) describe the removal or quote history; none is a live rule.
+
+### F.3 Lows list additions (39's lows, R.6 continued)
+
+- **L10** P1k is a new build-time probe (H38 under key and GPT mains); it joins P0 to P4 in the router packet's probe gate. Owner: the router packet.
+- **L11** Whether the CLI's `API_TIMEOUT_MS` bounds the whole request or the idle gap is unverified [remembered]; P4 records it, and the launch value stays above the largest row timeout either way. Owner: the router packet.
+
+### F.4 Open operator calls after this pass (only these; settled items never appear)
+
+1. **D. Grant HG3, narrowed** (H2 first). Unchanged. Recommend yes.
+2. **E. Edited and model-written scripts never run bare on the PC.** Unchanged. Recommend yes.
+3. **F. A money scan that fails closed with no allow-list.** Unchanged. Recommend yes.
+4. **G. Grant the HG4 rows outside the pool exception** (H26, H30, H31, H32, H34, H35, H37, H38, H3). Same scope; H38 now ships for Kimi- and GPT-main chats on P1k alone. Recommend yes.
+5. **The fifth quant lens.** Unchanged; nothing is built on it.
+6. **Which burst provider to pay for, and when** (money), including whether to pay for a Windows desktop placement for cTrader demo work. Unchanged.
+
+No new operator call came out of this pass: every 42 finding was a design repair inside settled rulings.

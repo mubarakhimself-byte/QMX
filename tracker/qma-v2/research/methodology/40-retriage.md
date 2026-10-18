@@ -268,7 +268,7 @@ Each packet is one builder at a time unless "parallel" is written. Order follows
 
 | # | Packet | Rows | Design gate before build | Must land first |
 | --- | --- | --- | --- | --- |
-| 0 | **P0 pre-land hygiene** (hours) | B-75, B-95, B-98, B-44 | none | — |
+| 0 | **P0 pre-land hygiene** (hours) | B-75, B-95, B-98, B-44; with B-95/B-98 the role-default rows of engine DOC-CHANGES 35 (added by 42 N2): no Fable in any default list, Chinese rows first in every tier including strong, `roles.live_order` `key, gpt, plan`, test mode on `claude/haiku` through the plan login first, `QE/roles.py:85-86` sort to match, with tests for each | none | — |
 | 1a | **CAP-E caps removal, engine, plus stuck detector** | AL-2, AL-3 (default), B-16, B-33, B-36, B-38, B-49, B-55, L-21, L-45, L-46, L-48, L-61, L-66, and L-60 once decided | settle L-60 (§5 item 1); choose "remove" or "read as `limits`" for the 31 template `runaway` blocks | P0 (`settings.py`) |
 | 1b | **CAP-H caps removal, harness (H28)** — parallel with 1a | AL-1, B-7, B-9 | none (settled rule; G lists H28 as following it) | P0 only for CI; AL-20 merge base advised |
 | 2 | **SEC-1 scan, redaction, publish guards** | B-89, B-13, L-24, B-17, B-39, L-58, L-51, L-52, AL-15 (t7, dm, ma) | decision F; `name_money_act_called` in `qma-core` | CAP-E (`definition/lint.py`, templates) |
