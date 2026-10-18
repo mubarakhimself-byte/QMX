@@ -1,5 +1,14 @@
 # Open decisions (what is still his; the design proceeds on the recommendation)
 
+## After the studies-folded pass (2026-10-18, `research/methodology/47-studies-folded.md`)
+
+The pass decided every design change in studies 44, 45 and 46 without him, and recorded his choice of Hindsight as ruling 119. Two questions about words stay his (study 45); the design proceeds without them and nothing waits:
+
+- **W1. Does "strategy" stay a word you use?** The risk session owns "unit", the Library shows bots, and `strategy` today is the stored mirror of a strategy family. Recommend: keep it only as the name of a family of bots in the Library; say "bot" for the thing that trades.
+- **W2. Is one folder shape with two names fine?** A mini app (something you use: screens, actions, its own saved state) and an agent (a persona with its own instructions, skills and routines) are built the same way. Recommend: yes, keep both names.
+
+Two more words have defaults he may change at any time (study 46): the shelf of hypotheses is called "Ideas"; "forget" hides a memory from every recall and keeps an archived copy he can restore (only a pasted secret is truly removed).
+
 ## After the unlock pass (2026-10-18, ruling 118)
 
 Ruling 118 unlocked the whole app, the harness included. So the two harness rounds that waited for his yes (D and G below) are no longer his calls: they are ordinary design changes, decided in `research/methodology/43-whole-app-unlocked.md` and listed in `HARNESS-REQUESTS.md` (now a plain change list). The only call still his:

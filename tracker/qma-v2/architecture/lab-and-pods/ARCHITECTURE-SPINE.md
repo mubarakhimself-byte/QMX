@@ -8,7 +8,7 @@ scope: 'The backend behind the Lab (Strategies bench: Build, Test, Train, Compar
 status: final
 created: '2026-10-16'
 updated: '2026-10-18'
-binds: [ruling-118, ruling-6, ruling-12, ruling-14, ruling-22, ruling-23, ruling-24, ruling-25, ruling-27, ruling-28, ruling-29, ruling-31, ruling-46, ruling-52, ruling-53, ruling-68, ruling-80, engine-AD-2, engine-AD-3, engine-AD-4, engine-AD-5, engine-AD-7, engine-AD-11, engine-AD-13, engine-AD-14, engine-AD-20, engine-AD-21, engine-AD-52, engine-AD-54, engine-AD-55, library-AD-3, library-AD-4, library-AD-7, library-AD-9, library-AD-17]
+binds: [ruling-118, ruling-6, ruling-12, ruling-14, ruling-22, ruling-23, ruling-24, ruling-25, ruling-27, ruling-28, ruling-29, ruling-31, ruling-46, ruling-52, ruling-53, ruling-68, ruling-80, engine-AD-2, engine-AD-3, engine-AD-4, engine-AD-5, engine-AD-7, engine-AD-11, engine-AD-13, engine-AD-14, engine-AD-20, engine-AD-21, engine-AD-52, engine-AD-54, engine-AD-55, library-AD-3, library-AD-4, library-AD-7, library-AD-9, library-AD-17, library-AD-22, library-AD-23, engine-AD-61, engine-AD-62, engine-AD-64]
 sources:
   - 'D:/QMX-worktrees/agent-system/tracker/qma-v2/research/methodology/26-operator-rulings-and-alignment.md (binding)'
   - 'research/methodology/23-ui-clickthrough.md and 23-ui-shots/ (ground truth), 10-ui-depth.md (corrected by 23)'
@@ -21,6 +21,7 @@ sources:
   - 'research/methodology/27b-final-rubric-walk.md section 6 and wayfinder/REWRITE-NOTES.md (gap fixes per ruling 88, 2026-10-16 night; recorded in 27c-gap-fixes-applied.md): AD-2, AD-3, AD-5, AD-8, AD-9, AD-11, AD-12, AD-13 amended in place; AD ids stable'
   - 'unlock pass 2026-10-18 (ruling 118, methodology/43-whole-app-unlocked.md): engine AD-52 to AD-60; inherited rows updated (guard, packs as plugins, one host); AD-14 amended in place; the Agents-panel Deferred row closed'
   - 'rerun pass 2026-10-18 evening (methodology/39-architecture-rerun.md): engine AD-16 and AD-40 (no usage caps), engine AD-19 and AD-35 (pack load path), alignment A M-7, M-13, M-17 and B mismatch 8; AD-12, AD-13, AD-14 amended in place, AD-18 appended'
+  - 'studies-folded pass 2026-10-18 (methodology/47-studies-folded.md; studies 44, 45 and 46): AD-2, AD-4, AD-6, AD-8, AD-9, AD-16 and AD-18 amended in place; seed residue fixed (45 DC-13)'
 companions: [HLD.md, LLD.md, UI-TO-BACKEND-MAP.md, PLAIN-WORDS.md, OPEN-DECISIONS.md, DOC-CHANGES.md]
 ---
 
@@ -34,14 +35,14 @@ Labels on claims: **[retrieved]** read today from a cited file, screenshot or br
 
 | Layer | Namespace | Owns |
 | --- | --- | --- |
-| Documents | `qmx_lab.documents` | document-kind registry (`workflow`, `bot-logic`, `pod-block`, `board`), projections, round-trip check, importers (model file, repo, notebook, Python file) |
+| Documents | `qmx_lab.documents` | document-kind registry (`workflow`, `bot-logic`, `pod-block`; a board is a `workflow` draft in board view), projections, round-trip check, importers (model file, repo, notebook, Python file) |
 | Node pack | `qmx_lab.nodes` | `lab.*`, `qmb.*`, `ml.*`, `pod.*`, `paper.*`, `data.*` node types registered with the engine registry |
 | Templates | `qmx_lab.templates` | procedure templates (backtest, sweep, walk-forward, Monte Carlo, optimise, significance, training, pod test, stress, paper) and the L1-L4 / D1-D10 templates as `qmx.workflow/1` documents |
 | Pods | `qmx_lab.pods` | pod model, block catalogue, the one pod simulator (size trail, replay, stress, fan, head-to-head, mix, paper step) |
 | Families | `qmx_lab.families` | family ledger reads over Library edges: trial count, deflated Sharpe, holdout registry, luck warning, identity rule table |
 | Ports | `qmx_lab.ports` | `QmbPort`, `KernelPort`, `ComputePort`, `PodCompilerPort`, `NodePort`; the engine's `LibraryPort` and `qmx_engine.service` are consumed, never re-defined |
 | Service | `qmx_lab.service` | the one Lab API the UI, the copilot pack and the hub call |
-| Copilot pack | `plugins/qmx-lab/` | MCP tools over the service, skills per template, the Lab prompt layer |
+| Copilot pack | the `qmx-lab` pack (a Library item materialised as a plugin view, engine AD-55) | the `lab` and `pods` toolsets over the service (engine AD-61), skills per template, the Lab prompt layer |
 
 ## Inherited Invariants
 
@@ -54,9 +55,10 @@ Labels on claims: **[retrieved]** read today from a cited file, screenshot or br
 | engine AD-11 lifecycle and test gate; selected-subgraph runs | workflow-engine | drafts run only in test mode; publish freezes a version; schedules need a passing test report |
 | engine AD-13 roles, not models | workflow-engine | a Lab template names roles (`builder`, `validator`, `grill`, `generator`, `diagnoser`, `writer`, `explainer`); never a model id |
 | engine AD-14 Library contract; AD-20 placement preflight; AD-21 three surfaces, one API | workflow-engine | the Lab writes only through `LibraryPort`; placement states `available / configured / authorized / reachable / healthy`; Graph and Code are projections of one draft |
-| library AD-3 closed kind roster; AD-4 closed relations; AD-7 ref ownership and explicit merge; AD-9 fourteen verbs plus `adopt`, with Effects; AD-17 previews are schema data | library-and-data | the Lab adds no kind and no relation outside the roster; his drafts are on `refs/drafts/<item>` and agents edit on `refs/agents/<session>/<item>`; `main` is published-only; governed and lifecycle kinds merge into `main` under MANAGE (publishing asks once, ruling 80) |
+| library AD-3 kinds with a class (record, definition, governed); AD-4 closed relations; AD-7 ref ownership and explicit merge; AD-9 fourteen verbs plus `adopt`, with Effects; AD-17 previews are schema data | library-and-data | the Lab adds no kind and no relation outside the roster; his drafts are on `refs/drafts/<item>` and agents edit on `refs/agents/<session>/<item>`; `main` is published-only; governed-class and definition-class kinds merge into `main` under MANAGE (publishing asks once, ruling 80) |
 | harness `Effect` table and the guard (engine AD-54, which replaced the money gate in the unlock pass, ruling 118) | QMA v2 harness | every Lab tool carries READ / DOMAIN_WRITE / MANAGE; `PROPOSE_MONEY` is never a Lab effect; the Lab's tool rows are `AGENT_OPERATIONS` entries added like any other change (no grant step since ruling 118) |
 | engine AD-55 packs are plugins; AD-52 one host | workflow-engine | the `qmx-lab` pack is a Claude plugin materialised from its published Library object; its tools are one in-process MCP server switched per session; the Lab service runs inside `qmx_host` |
+| engine AD-61 one operation catalog; AD-62 the Surface; AD-64 ask or leave; library AD-22 marks; library AD-23 hypotheses (studies-folded pass) | workflow-engine, library-and-data | every Lab tool and Lab node type is one catalog row `lab.<op>` or `pods.<op>`; Lab sessions see the `lab` and `pods` toolsets their pack set brings; mini apps call `lab.*` operations; family and result reads show marks; hypotheses take results from the evidence door only |
 | engine AD-16 and AD-40, ruling 27 and the 2026-10-18 no-caps rule; engine AD-31, ruling 68 one QMB machine; engine AD-25 finite runs | workflow-engine | no USD ask and no usage ceiling anywhere in the Lab, only the providers' limits and the engine's stuck detector; backtests go to the `qmb` placement; a paper soak is a chain of finite daily runs |
 | QMB B-1..B-15 and DEC-0270 lanes; CT-47 occupancy | docs | one `qmb` run invocation per execution environment; QMB owns intra-run parallelism, its ledger and CT-32 |
 | ADR-0024 AD-11 (Book/BMS default, dummy forbidden), AD-15 (placement preflight) | docs | the pod adapter emits a complete Book + BMS or a complete PolicyPair, never a sentinel |
@@ -96,7 +98,7 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 - **Binds:** documents, service, surfaces
 - **Prevents:** Graph and Code drifting apart (the click-through's finding), a subject with two drafts, a code edit that silently loses graph layout
-- **Rule:** the editor's subject is one Library item with one draft (the operator's draft on `refs/drafts/<item>`, or an agent's on `refs/agents/<session>/<item>`); `main` holds published versions only (library AD-7), and Save publishes the draft as the next version on `main`. Each document kind declares its authoritative form: `workflow` = the `qmx.workflow/1` JSON (engine AD-2; Code is the cell-script projection `# %% step:<node_id>` per node); `bot-logic` = the Python logic plus its declaration (QML QL-2; Graph is derived from declared steps and legs); `pod-block` = `form | graph | code | model` by block kind; `board` = the cell script (ruling 31, "simply code"; Graph is the cell DAG). A graph edit and a code edit are both patches applied through `service.drafts.patch(kind, patch)`; the registry's `to_graph` and `to_code` must round-trip, and a draft that fails the round-trip check carries a validation finding and cannot publish.
+- **Rule:** the editor's subject is one Library item with one draft (the operator's draft on `refs/drafts/<item>`, or an agent's on `refs/agents/<session>/<item>`); `main` holds published versions only (library AD-7), and Save publishes the draft as the next version on `main`. Each document kind declares its authoritative form: `workflow` = the `qmx.workflow/1` JSON (engine AD-2; Code is the cell-script projection `# %% step:<node_id>` per node); `bot-logic` = the Python logic plus its declaration (QML QL-2; Graph is derived from declared steps and legs); `pod-block` = `form | graph | code | model` by block kind; a **board** is not a kind: it is a `workflow` draft shown with `meta.view: board`, whose notes are `note` nodes and whose cells are `lab.cell` nodes, its Code projection the cell script (ruling 31, "simply code"; Graph is the cell DAG), and it grows into a workflow by deleting notes and publishing, the same item with a new version (45 DC-9). A graph edit and a code edit are both patches applied through `service.drafts.patch(kind, patch)`; the registry's `to_graph` and `to_code` must round-trip, and a draft that fails the round-trip check carries a validation finding and cannot publish.
 
 ### AD-3 — The Lab node pack is closed and built only from engine kinds
 
@@ -108,7 +110,7 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 - **Binds:** templates, service, surfaces, families
 - **Prevents:** a run the engine cannot resume, explain or bill; a Runs row with no Library object; a "run" button that bypasses validation
-- **Rule:** Backtest, Sweep, Walk-forward, Monte Carlo, Optimise, Significance, Training, Pod test, Stress, Paper are `qmx.workflow/1` templates in `qmx_lab.templates`; the header Run button calls `tests.run` on a draft or `runs.start` on a version with the template's inputs. The Runs table, Equity, Robustness, Compare, Sweep grid and Log read `workflow-run`, `backtest-result` and `test-report` objects plus `events.stream`; roles `confirmation | trial | replicate | aborted` are copied from QMB's ledger line, never assigned by the Lab. "Run just this part" is `tests.run(draft, subgraph=selected)`; fresh / stale / reran badges are the engine memo's verdict per node.
+- **Rule:** Backtest, Sweep, Walk-forward, Monte Carlo, Optimise, Significance, Training, Pod test, Stress, Paper are `qmx.workflow/1` templates in `qmx_lab.templates`; the header Run button calls `tests.run` on a draft or `runs.start` on a version with the template's inputs. The Runs table, Equity, Robustness, Compare, Sweep grid and Log read `workflow-run`, `backtest-result` and `test-report` objects plus `events.stream`; roles `confirmation | trial | replicate | aborted` are copied from QMB's ledger line, never assigned by the Lab. "Run just this part" is `tests.run(draft, subgraph=selected)`; fresh / stale / reran badges are the engine memo's verdict per node. *Studies folded (47):* **draftness belongs to the procedure, not the subject** (45 DC-8, A3): running a published procedure template (backtest, sweep, walk-forward and the rest) on a draft subject is a **live** run (`runs.start`) with the subject's exact object id as its input, so its `setup`, `workflow-run` and `backtest-result` records land on `main` citing that object (library AD-18); only an edited procedure, his own pipeline or a board runs in `test` mode (`tests.run`) and keeps its records on the run's ref. Results of v7 stay attached to v7 when he edits it into v8, and the family ledger counts every trial.
 
 ### AD-5 — The QMB door: compile a setup, run through the qmb node pack, cite evidence by fp1
 
@@ -120,7 +122,7 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 - **Binds:** families, nodes.qmb, nodes.ml, templates
 - **Prevents:** a winner that forgot its dead siblings, a holdout opened twice, a luck warning computed from a guess
-- **Rule:** every subject version, variant, child, sweep cell and training config is a trial in its family; the family is the connected component over `variant-of | branches-from | derived-from` edges from the family root; `families.ledger(family)` folds trial count, deflated Sharpe over all trials (dead ones included) and the holdout registry (`window`, `created`, `touched` count); the scenario builder's luck warning and the robustness ladder read this fold. The family ledger is never a stored counter.
+- **Rule:** every subject version, variant, child, sweep cell and training config is a trial in its family; the family is the connected component over `variant-of | branches-from | derived-from` edges from the family root; `families.ledger(family)` folds trial count, deflated Sharpe over all trials (dead ones included) and the holdout registry (`window`, `created`, `touched` count); the scenario builder's luck warning and the robustness ladder read this fold. The family ledger is never a stored counter. *Studies folded (47):* family, result and hypothesis reads apply the Library's marks (library AD-22: a result built on a quarantined or superseded input shows it, with the path) and hypothesis status (library AD-23); a holdout touch is the `touched` edge; every result carries a **comparability key** `(procedure object id, dataset card ids, cost model, engine version)`, so a compare across different procedures, data releases or cost models is labelled, and a rerun of an old result names the model drift when the resolved model differs (engine AD-15; 46 X-21).
 
 ### AD-7 — Models are objects; a slot is a port of the document that owns the decision
 
@@ -132,13 +134,13 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 - **Binds:** ports.ComputePort, nodes, service, surfaces
 - **Prevents:** a placement sticker, a vendor name in a document, sealed data on a cloud box, an estimate computed in the browser
-- **Rule:** the machine picker, the scenario builder's "Run on", the training's machine and every `runs_on` resolve through `ComputePort.list()` and `ComputePort.preflight(name)` (engine AD-20 states) and are placed by `ComputePort.place(ComputeRequirement)`; a document names a placement name from the engine registry (`pc`, `contabo`, `qmb`, provider rows), never a vendor or host. The time and cost estimate is `ComputePort.estimate(template, inputs, placement)`; it is shown, never gated on. A **controlled host** is the `pc` or the `qmb` placement, and both produce evidence. A run placed anywhere else is tagged `exploration_only: true` and its results can never be cited as evidence (QMB B-9); the UI's "rerun winners for evidence" is `runs.start` with `placement = qmb`. Sealed data never leaves a controlled host: other placements receive split-governed exports without the sealed segment, and `ml.evaluate` on the sealed test and `qmb.holdout_touch` always run on `qmb` or `pc`.
+- **Rule:** the machine picker, the scenario builder's "Run on", the training's machine and every `runs_on` resolve through `ComputePort.list()` and `ComputePort.preflight(name)` (engine AD-20 states) and are placed by `ComputePort.place(ComputeRequirement)`; a document names a placement name from the engine registry (`pc`, `contabo`, `qmb`, provider rows), never a vendor or host. The time and cost estimate is `ComputePort.estimate(template, inputs, placement)`; it is shown, never gated on. A **controlled host** is the `pc` or the `qmb` placement, and both produce evidence. A run placed anywhere else is tagged `exploration_only: true` and its results can never be cited as evidence (QMB B-9); the UI's "rerun winners for evidence" is `runs.start` with `placement = qmb`. Sealed data never leaves a controlled host: other placements receive split-governed exports without the sealed segment, and `ml.evaluate` on the sealed test and `qmb.holdout_touch` always run on `qmb` or `pc`. *Studies folded (47):* **the door decides evidence** (45 DC-8, legacy DEC-0270): only `qmb.*` nodes on a controlled host produce evidence; a notebook cell's output and any number a model wrote are `exploration`, never cited, and "rerun for evidence" offers `qmb.run` on `qmb`. **Projection versus rerun** (legacy DEC-0273): a filtered or re-sliced view of an existing result is a labelled projection saved as a view of that result; a change of size, Book or data needs a rerun.
 
 ### AD-9 — Notebooks and cells run on `KernelPort`; the adapter is the environment study's choice `[ADOPTED]` (ruling 53)
 
-- **Binds:** ports.KernelPort, nodes.lab.cell, documents.board
+- **Binds:** ports.KernelPort, nodes.lab.cell, documents (board view)
 - **Prevents:** the Lab choosing the sandbox, a cell that runs outside the run ledger, a kernel that outlives its run
-- **Rule:** `KernelPort = { start(env_ref, mounts) -> Kernel, exec(kernel, cell) -> stream[stdout, display, result, error], snapshot(kernel) -> blob, restore(kernel, blob), interrupt(kernel), stop(kernel) }`. A cell is a `lab.cell` node; a board is a draft whose cells are nodes; running one cell is a selected-subgraph test run; a kernel lives inside one run and dies with it; snapshots are run artifacts. The day-one adapter runs the kernel as an ordinary local Python process on the PC, inside the run's Job object so it dies with its run (engine AD-24); the engine's `sandbox_python` kernel in the `qmx-worker` container or on a remote placement (engine AD-25) is his option per board or workflow, and the same kernel code serves the engine's `rlm` node either way, so the Lab has no second kernel. (Retired 2026-10-18 (rulings 115-117): "a cell an agent wrote never runs bare on the PC" and the saved-hash rule for host cells.)
+- **Rule:** `KernelPort = { start(env_ref, mounts) -> Kernel, exec(kernel, cell) -> stream[stdout, display, result, error], snapshot(kernel) -> blob, restore(kernel, blob), interrupt(kernel), stop(kernel) }`. A cell is a `lab.cell` node; a board is a draft whose cells are nodes; running one cell is a selected-subgraph test run; a kernel lives inside one run and dies with it; snapshots are run artifacts. The day-one adapter runs the kernel as an ordinary local Python process on the PC, inside the run's Job object so it dies with its run (engine AD-24); the engine's `sandbox_python` kernel in the `qmx-worker` container or on a remote placement (engine AD-25) is his option per board or workflow, and the same kernel code serves the engine's `rlm` node either way, so the Lab has no second kernel. (Retired 2026-10-18 (rulings 115-117): "a cell an agent wrote never runs bare on the PC" and the saved-hash rule for host cells.) *Studies folded (47):* a cell **graduates** into a `script` node (46 X-25): its inputs are the variables it reads from earlier cells, found by a static read of the cell plus a diff of the kernel namespace before and after, and confirmed by him or the copilot; its outputs are declared; probe P-CELL graduates five of his real notebooks before the packet ships.
 
 ### AD-10 — A pod is a versioned stack of pure blocks; one simulator serves every pod screen
 
@@ -180,7 +182,7 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 - **Binds:** families, documents, templates D4
 - **Prevents:** the variant-vs-new-strategy rule baked into prompts; a profile change minting a new strategy
-- **Rule:** `settings.lab.identity_rule` maps a change label from the closed set `instrument | timeframe | params | spiced | structural | model-made | profile` to a lineage outcome `variant-of (same item) | branches-from (new version) | new item (derived-from)`; the default row set is research 17's D4 mapping with `profile -> branches-from`; the risk session replaces rows without a code change.
+- **Rule:** `settings.lab.identity_rule` maps a change label from the closed set `instrument | timeframe | params | spiced | structural | model-made | profile` to a lineage outcome `variant-of (same item) | branches-from (new version) | new item (derived-from)`; the default row set is research 17's D4 mapping with `profile -> branches-from`; the risk session replaces rows without a code change. *Studies folded (47):* a publish check proposes a `variant-of` edge for a near-duplicate subject (the same logic hash, or an overlapping parameter space with the same structure), so an agent that saves a variant as a new bot cannot shrink the family count; the trial counts at once and the edge waits for his confirmation (46 X-19).
 
 ### AD-17 — Labelers come from the Lab, reach the node as candidates, and are promoted by the operator
 
@@ -192,7 +194,7 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 - **Binds:** documents.board, Lab copilot pack, templates L1 and RS0, Library memory rows, surfaces
 - **Prevents:** a vibe-trading session that needs many rounds to reach what he meant, the same rejected idea proposed again, a question he must answer before anything runs
-- **Rule:** a board session (the `board` kind, AD-2) works in rounds the copilot drives and the service records: (1) a **"what I understood" card** restating his rough idea as a structured draft (instrument, timeframe, edge, entries, exits, risk notes) before any build; (2) **numbered questions, each with a recommended answer** he can accept in one click, asked together, never one at a time; nothing waits on them: the round runs on the recommended answers and his later answer re-runs only the affected part (selected-subgraph test runs, engine AD-11); (3) **side-by-side options** (two or three variants of the same draft with their first results) when an answer would fork the design; (4) an **iteration counter** on the board, so a round that changes nothing is visible; (5) **rejected ideas** become `memory-row` objects tagged `dead_end` with the reason, read before the next proposal (engine AD-18, AD-27), so the board never offers them again. The L1 template ("Get a first backtest result from an idea") is the board's run path; its pause for his answer is replaced by (2), so it needs no `human_gate`.
+- **Rule:** a board session (a workflow draft in board view, AD-2) works in rounds the copilot drives and the service records: (1) a **"what I understood" card** restating his rough idea as a structured draft (instrument, timeframe, edge, entries, exits, risk notes) before any build; (2) **numbered questions, each with a recommended answer** he can accept in one click, asked together, never one at a time; nothing waits on them: the round runs on the recommended answers and his later answer re-runs only the affected part (selected-subgraph test runs, engine AD-11); (3) **side-by-side options** (two or three variants of the same draft with their first results) when an answer would fork the design; (4) an **iteration counter** on the board, so a round that changes nothing is visible; (5) **rejected ideas** become `memory-row` objects tagged `dead_end` with the reason, read before the next proposal (engine AD-18, AD-27), so the board never offers them again. The L1 template ("Get a first backtest result from an idea") is the board's run path; its pause for his answer is replaced by (2), so it needs no `human_gate`. *Studies folded (47):* the board's framed ideas become `hypothesis` items (library AD-23), its rejected ideas link to the hypothesis they killed, and the board shows each hypothesis's computed status.
 
 ## Consistency Conventions
 
@@ -202,9 +204,9 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 | Identity | subjects and pods are Library items (UUIDv7) with versions by object `fp1`; a scenario is a `setup` object keyed by its own `fp1`; a run is the engine `run_id`; a QMB run is cited by its ledger-line and CT-32 `fp1`; a family root is the first item version with no `variant-of`/`branches-from` parent |
 | Data & formats | JSON on every door; measures are raw named numbers with unit kinds (QMB AD-40 vocabulary), never a composite score; money USD; percentages as ratios in the API, formatted in the UI; timestamps RFC 3339 UTC |
 | Documents | `qmx.workflow/1` per engine; the Code projection uses `# %% step:<node_id> <name>` cell markers; bot logic is a folder (`logic.py`, `declaration.json`, `tests/`) stored as blobs of one `bot` object |
-| Drafts and refs | the operator edits `refs/drafts/<item>` and Save publishes it to `main` (published-only); every agent edits `refs/agents/<session>/<item>`; a run edits `refs/runs/<run_id>`; merges follow library AD-7; an agent merging a governed kind (`bot`, `unit`, `book`, `bms`) or a lifecycle kind (`pod`, `workflow`) into `main` is MANAGE (publishing asks once); `pod-block` stays DOMAIN_WRITE |
+| Drafts and refs | the operator edits `refs/drafts/<item>` and Save publishes it to `main` (published-only); every agent edits `refs/agents/<session>/<item>`; a run edits `refs/runs/<run_id>`; merges follow library AD-7; an agent merging a governed-class or definition-class kind (library AD-3; `pod-block` included) into `main` is MANAGE (publishing asks once) |
 | Reads | every Lab list and fold (Runs, Sweep grid, family ledger, pod results, paper) reads `main` ∪ `refs/drafts/*` ∪ `refs/runs/*` ∪ the caller's own `refs/agents/<session>/*`, so a run's results are visible before any merge; the engine memo is the only Lab-level cache, and QMB's own reproducibility (B-10) is not a second cache |
-| Effects | READ for every list/get/estimate/explain; DOMAIN_WRITE for drafts, runs in test mode, scenario and preset saves, pod drafts, choosing a placement; MANAGE for publish, enable, merge of governed or lifecycle kinds, paper start, promotion card, labeler promote, adding a compute provider; never an ask about spend (ruling 27) |
+| Effects | READ for every list/get/estimate/explain; DOMAIN_WRITE for drafts, runs in test mode, scenario and preset saves, pod drafts, choosing a placement; MANAGE for publish, enable, merge of governed-class or definition-class kinds, paper start, promotion card, labeler promote, adding a compute provider; never an ask about spend (ruling 27) |
 | Errors | typed refusals `{code, message, retryable}`; QMB refusals pass through verbatim (AR-58); the Lab adds `round_trip_failed`, `slot_unknown`, `block_not_pure`, `unsupported_block`, `holdout_already_touched`, `placement_not_healthy`, `family_cap_reached` |
 | Events | engine bus names `lab.run.finished`, `lab.gate.verdict`, `lab.plateau`, `pod.intervention`, `paper.decision`, `paper.check` with `run_id` and the Library object ids |
 | Settings | `settings.toml [lab]`: `cheap_run_seconds`, `identity_rule`, gates per procedure, trial caps, `paper.min_days`, `paper.band_quantiles`, `paper.day_trigger` (no spend threshold exists); every value UI-editable, every default once in `qmx_lab.settings.DEFAULTS` |
@@ -227,7 +229,7 @@ All pins are ratified from the parent spines and `QMX-worktrees/ui-review-repair
 
 ```mermaid
 flowchart TB
-  subgraph PROC["qma.serve process"]
+  subgraph PROC["qmx_host process (engine AD-52)"]
     CTRL[qmx_control routes + tools]
     LAB[qmx_lab: service · documents · templates · pods · families · nodes · ports]
     ENG[qmx_engine]
@@ -240,7 +242,7 @@ flowchart TB
   LAB --> LIB[(Library)]
   LAB -. engine app_op qmb_backtest .-> QMBA[QMB machine: the qmb placement]
   LAB -. PC dev fallback .-> QMBC[qmb.doors.api in-process]
-  LAB --> KER[kernel: engine sandbox_python in qmx-worker]
+  LAB --> KER[kernel: local Python process in the run's Job object; sandbox_python in a container by his choice]
   LAB -. NodePort .-> QMN[trading node doors]
 ```
 
@@ -265,17 +267,18 @@ erDiagram
 
 ```text
 qmx-agents/packages/qmx-lab/src/qmx_lab/
-  documents/     # kind registry: workflow, bot-logic, pod-block, board; projections; round-trip; importers
+  documents/     # kind registry: workflow (board view included), bot-logic, pod-block; projections; round-trip; importers
   nodes/         # lab.*, qmb.*, ml.*, pod.*, paper.*, data.* executors (engine node types)
   templates/     # procedure templates + L1-L4, D1-D10 as qmx.workflow/1 folders
   pods/          # model, block catalogue, simulator (trail, replay, stress, fan, h2h, mix, paper step)
   families/      # ledger fold, holdout registry, identity rule, luck warning
   ports/         # QmbPort, KernelPort, ComputePort, PodCompilerPort, NodePort (+ fakes)
-  adapters/      # qmb_app_op (default), qmb_api (PC dev fallback), kernel_sandbox (default), kernel_host (his saved cells),
+  adapters/      # qmb_app_op (default), qmb_api (PC dev fallback), kernel_local (default, AD-9), kernel_sandbox (his choice),
                  #   compute_engine, pod_book_bms, node_doors
   service/       # drafts, subjects, runs, scenarios, training, slots, pods, paper, panels, explain
   settings.py    # DEFAULTS
-plugins/qmx-lab/ # .claude-plugin/plugin.json, skills/<template>/SKILL.md, skills/lab-layer/SKILL.md, agents/; tools served in-process (engine AD-55)
+packs/qmx-lab/   # the pack's source: app.toml ([operations] rows), skills/<template>/SKILL.md, skills/lab-layer/SKILL.md, agents/;
+                 #   published as a Library item, materialised as a plugin view; tools served in-process (engine AD-55, AD-61)
 ```
 
 ## Capability → Architecture Map

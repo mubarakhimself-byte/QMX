@@ -107,6 +107,18 @@ Code truth for every "today" below: `origin/engine/base` = `132169c7`, read with
 - `PROPOSE_MONEY` (`propose_order`) always asks.
 - The relay's token canary on every non-plan lane and the one redaction function.
 
+## K. Studies folded (2026-10-18, `research/methodology/47-studies-folded.md`)
+
+| Id | Change | Why | Replaces | Check |
+| --- | --- | --- | --- | --- |
+| H46 | `qma.harness.surface`: one function builds a chat's toolsets, built-ins, sub-agent definitions, skills filter, system text by slot, hooks and quirks, plus a surface digest stored on the chat record (engine AD-62) | three places decide part of a chat today (`chat.py` `_tools`, `launch.py` `instructions` and `build_options`, `nodes/agent.py` `rules()`), so nothing can say what a model saw (B-51, B-70) | `rules()` writing tool lists as text | E60; the snapshot test per chat kind and node kind |
+| H47 | One in-process server per toolset (`qmx-<toolset>`, `pack-<name>`, `app-<id>`), registered on every chat and toggled per session; the guard refuses a tool outside the chat's surface (engine AD-61) | 82 tools load on every chat today, on every lane without tool search | the one `qmx` server per chat with every row | E60; probe P-TG |
+| H48 | `NewChat.skills` (the SDK's per-chat skills filter) and the `library-skills` plugin view (engine AD-55) | Library skills outside packs, conditional activation, usage counts from `Skill` spans | the QMX skill-reading rows study 44 proposed | P-PL extended: a filtered skill is hidden and refused by the Skill tool |
+| H49 | `Harness.set_attached(sid, refs)` and the `attached` field on the chat record (engine AD-63) | context references travel with the session | the `selected_refs` idea and the dropped `session_homes` table | E62 |
+| H50 | `Harness.fork(sid)` on `fork_session` (engine AD-35) | parallel what-ifs from one session | — | probe P-FK |
+| H51 | Home kind `agent` (engine AD-35) | a session with a named agent item | — | a session born on an agent item lists with its badge |
+| H52 | The copilot retain worker reads a session's recorded blocks at turn end, idle, compaction and close (engine AD-18) | copilot chats reach memory with no Hindsight plugin, hook or MCP server | Hindsight's own Claude Code route | E65 |
+
 ## Probes named above
 
 | Probe | Gates | Pass |
@@ -117,3 +129,4 @@ Code truth for every "today" below: `origin/engine/base` = `132169c7`, read with
 | P-SET | H21 | the launcher passes `settings` as a file path on Windows; the command line shrinks by the settings' size; a hook in that file fires |
 | P-FK | H37 | unchanged (SOLUTION-DESIGN §26.14) |
 | P0, P1, P1k, P2, P3, P4 | H27, H38, H12 | unchanged (SOLUTION-DESIGN §26.14) |
+| P-NM, P-SYS | H47, H46 | SOLUTION-DESIGN §28.8 |

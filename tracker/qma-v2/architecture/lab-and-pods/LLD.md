@@ -341,7 +341,7 @@ Auth: the existing `qmx-control` bearer; agent calls arrive through the MCP tool
 
 Plus reads the pack needs that the composer does not list: `runs.list/get/explain`, `subjects.list`, `pods.get`, `paper.get`, `families.ledger`, `compute.list` (all READ). Rows are added to `qma.harness.tools.AGENT_OPERATIONS` **[retrieved]** as `lab_*` and `pod_*` names. Table rows are still a harness change no ruling grants, so they are part of engine HARNESS-REQUESTS H17 and need his grant (ruling 24); until then the Lab is driven from the UI, and the copilot reaches Lab drafts and test runs through the engine's H17 fallback (`library_save` of a draft plus the test-on-save watcher).
 
-Plugin layout: `plugins/qmx-lab/.claude-plugin/plugin.json`, `.mcp.json` (the control door), `skills/<template>/SKILL.md` for `l1-idea-to-first-result`, `l2-run-this-part`, `l3-promote`, `l4-overnight-loop`, `d1-component-build`, `d2-spec-compile`, `d3-iterate-against-qmb`, `d4-variants`, `d5-indicator`, `d6-training`, `d10-code-health`, `pod-design`, `pod-test`, `pod-paper`; `prompts/lab-layer.md` (the Lab's system-prompt layer: it knows the open subject, layout and runs because the UI sends `context {subject, layout, ticked_runs, machine}` with each message).
+Pack layout (a Library item materialised as a plugin view, engine AD-55; no `.mcp.json`: its tools are the in-process `pack-qmx-lab` server, engine AD-61): `.claude-plugin/plugin.json`, `skills/<template>/SKILL.md` for `l1-idea-to-first-result`, `l2-run-this-part`, `l3-promote`, `l4-overnight-loop`, `d1-component-build`, `d2-spec-compile`, `d3-iterate-against-qmb`, `d4-variants`, `d5-indicator`, `d6-training`, `d10-code-health`, `pod-design`, `pod-test`, `pod-paper`; `prompts/lab-layer.md` (the Lab's system-prompt layer: it knows the open subject, layout and runs because the UI sends `context {subject, layout, ticked_runs, machine}` with each message).
 
 ---
 
@@ -482,7 +482,7 @@ The Lab copilot calls `drafts.patch` on `refs/agents/<session>/<item>`; the oper
 | Seam | Adapters | Test strategy |
 | --- | --- | --- |
 | `QmbPort` | engine `app_op qmb_backtest` on the `qmb` placement (default); in-process `qmb.doors.api` (PC dev fallback); fixture adapter (recorded CT-32) | door parity: both real adapters give byte-identical `RunOutcome` for one setup (QMB B-1 parity test reused) |
-| `KernelPort` | the engine's `sandbox_python` kernel in `qmx-worker` (day one); `python -I` host subprocess only for cells he saved himself, or when Docker is off; in-memory fake | the same cell suite across adapters; snapshot/restore round trip; a model-written cell refuses the host adapter |
+| `KernelPort` | a local Python process inside the run's Job object (day one, spine AD-9 as amended 2026-10-18); the engine's `sandbox_python` kernel in a container or on a remote placement when he picks one; in-memory fake | the same cell suite across adapters; snapshot/restore round trip |
 | `ComputePort` | the engine's `WorkerPort`/`GatewayPort` over `qmx_remote` providers; local-only fake | preflight states asserted per provider |
 | `PodCompilerPort` | `pod_book_bms`; `pod_policy_pair` (later); identity fake | every catalogue block is either placed or named unsupported; the compiled Book/BMS passes QMB's dummy check |
 | `NodePort` | node doors over the three thin doors (TN-17); fake with canned seats and MIS snapshot | the Lab test suite never needs a node |

@@ -1610,3 +1610,121 @@ Moves in: `qma/harness/relay.py`, `qma/gpt/*`, `qma/harness/profiles.py`, the pl
 | E58 | AD-58 | a run with 40 rule nodes and 12 agent chunks: no rule waits on a slot; scripts run at `cpu_slots` at once; chats never exceed the slot table minus the reserve, and his Interactive chat starts while they run |
 | E59 | AD-59 | each deletion PR's caller scan prints only the deletion set; `just ci` passes with the three `qma-*` packages and LangChain gone; the QMB host starts `qmx_host` |
 | P-PERM, P-PL, P-TG, P-SET | AD-60, AD-55, AD-35, AD-53 | exact pass and fail lines in `HARNESS-REQUESTS.md` "Probes named above" |
+
+## 28. The studies-folded pass (2026-10-18, studies 44, 45, 46; ruling 119): catalog, Surface, references, two channels, heartbeat, Hindsight [spine AD-61 to AD-66; AD-4, AD-5, AD-7, AD-10, AD-11, AD-18, AD-19, AD-27, AD-35 amended; Library AD-22 to AD-24]
+
+The decisions and their reasons are in `research/methodology/47-studies-folded.md`. This section sketches the interfaces only.
+
+### 28.1 The operation catalog [AD-61]
+
+```text
+qmx_control.catalog
+  OperationSpec(id, version, toolset, binds, approval, reversibility, state, agent, description,
+                input_schema, examples, result, available, defer, callers, owner)
+  rows() -> [OperationSpec]                        # core rows + every enabled pack's app.toml [operations]
+  rest_routes(app)                                 # REST doors derive from rows (replaces server.py OPERATIONS)
+  node_types(registry)                             # engine <pack>.<op> types on base kind app_op or script
+  check(row) -> [finding]                          # wire name ^[a-zA-Z0-9_-]+$, mcp__<server>__<name> <= 64,
+                                                   # strict schema, description lint, declared == served
+qma.harness.tools
+  servers(toolsets) -> {name: McpSdkServerConfig}  # one in-process server per toolset: qmx-<toolset>,
+                                                   # pack-<name>, app-<id>; registered on every chat
+  wrap(row)                                        # Grants for asking rows, result envelope and spill
+```
+
+Core toolsets: `library`, `workflows`, `data`, `backtest`, `research`, `node`, `broker_read`, `apps_admin`, `memory`, `context`, `delegate`, `settings_read`, `ops`. Packs add `lab`, `pods`, `browser`, `cua`, `app:<id>`; `mcp:<server>` and `run:<run_id>` are dynamic. Presets (data in Settings): hub = every enabled toolset; Lab = `library, workflows, data, backtest, research, lab, pods, memory, context, delegate`; Portfolio = `library, node, broker_read, pods, memory, context`; engine role `intake` = `library, research, data, memory, context`.
+
+### 28.2 The Surface [AD-62]
+
+```text
+qma.harness.surface
+  build(kind, home, packs, declaration, model_caps, parent: Surface | None) -> Surface
+  Surface(toolsets, builtins, agents, skills, slots, hooks, env, digest)
+  slots: preset | rules | persona | methodology | pack_layers | skills_index | memory_snapshot
+  render_state(subject, layout, ticked_runs, notes) -> str          # the <qmx_state> user-message block
+```
+
+Slot budgets (Claude's defaults, Settings, context hygiene): rules 2,000 characters, persona 4,000, methodology 8,000, pack layers 600 per pack, skills index 120 per skill, memory snapshot as AD-18's bounds. Over budget: the slot keeps its head and a pointer to the full text as a skill or a Library reference.
+
+### 28.3 Context references [AD-63]
+
+```text
+Harness.set_attached(sid, [AttachedRef])
+AttachedRef(ref, item_id, pin: version | follow, version_id?, artifact_id?, status: ready | pending | archived | not_cached)
+context toolset: context_add(ref) -> AttachedRef · context_list() · context_refresh(ref) · context_drop(ref) · context_read(ref, range?)
+```
+
+Resolver per kind: `pod`, `unit`, `bot`, `library`, `session`, `memory` read the Library or memory; `run` and `app` read landed outputs; `file`, `folder`, `url`, `youtube` go through AD-42's layer (a playlist or a site starts the intake template and reads `pending`).
+
+### 28.4 Two channels and app homes [AD-64]
+
+```text
+app.toml
+  [operations.<op>]  input_schema, output_schema, approval, reversibility, state = "none" | "instance", returns = "value" | "artifact" | "run"
+  [provides.<name>]  schema, stale_after?
+  [feeds.<name>]     schema
+  [profiles]         schema                       # optional; each profile is an app-profile record
+  [suggested_trigger] cron | interval            # created as an engine trigger at his enable
+  [isolation]        memory_mb?, cpu_percent?     # unset by default; machine isolation only
+trigger kind event: {match: {kind, output, producer}, coalesce: each | latest, cursor}
+instance: {app_id, home: pc | contabo | <provider row>, lease, profiles: [profile_id]}
+```
+
+### 28.5 The host heartbeat [AD-65]
+
+```text
+Heartbeat(host | run_id, at, cpu_seconds, rss_mb, machine_minutes, capacity_in_use{cpu, chat, container, gpu},
+          claims[intent_key], qmx_version, kinds_digest, autonomy_paused, blob_cache?{count, bytes, digest}, free_disk_mb?)
+runs.fetch_home(run_id) -> local test-mode replay fork
+App incident classes: grant | workflow | view | dependency | host
+```
+
+### 28.6 Memory [AD-18, ruling 119]
+
+```text
+qmx_memory.RecallEngine
+  retain(rows: [memory-row ids + text], tags) -> op_id
+  recall(query, tags, budget_tokens, types?, now?, regime?) -> [Hit(row_id, text, score, refs)]
+  snapshot(standing_questions, tags) -> text + row_ids
+  reflect(question, tags) -> answer + cited row_ids          # Hindsight only
+  delete(row_ids)                                             # forget
+  rebuild(scope | all) -> op_id
+adapters: Hindsight (default; banks qmx-operator, qmx-copilot, qmx-workflows) · FTS5 over the same rows
+retain worker: session digest at turn end, idle, compaction, close -> memory-row on the session's agent ref -> retain
+memory-row identity + valid_from, valid_to?; annotations + regime[]
+```
+
+### 28.7 Library verbs added [Library AD-6, AD-9, AD-22 to AD-24]
+
+```text
+marks(object_id) -> {worst: none | superseded | corrected | quarantined, path: [object_id]}
+mark(item_id, quarantined | clear, reason)                   # operator only
+status(hypothesis_id) -> {status: supported | refuted | open | mixed, by_regime, trials, evidence: [object_id]}
+claim(intent_key, run_id, ttl) -> granted | held_by(run_id, expires)    release(intent_key, run_id)
+get | search | walk (..., as_of?)
+purge(blob_id, reason)                                        # operator only, secrets only
+```
+
+### 28.8 Live checks and probes added by this pass
+
+| Id | Proves | Check |
+| --- | --- | --- |
+| E60 | AD-61, AD-62 | a Kimi-main intake agent node declaring `toolsets: [library, research, data, memory]` sees only those servers' tools plus its built-ins; a call to a `workflows` tool is refused by the guard; the span carries the surface digest; the snapshot test diffs when a description changes |
+| E61 | AD-61 | `qmx app check` refuses a pack whose tool name makes `mcp__app-<id>__<tool>` longer than 64 characters, and a pack whose served tools differ from its `[operations]` rows |
+| E62 | AD-63 | in a Lab session he attaches pod v7 (pinned), the macro app's latest `bias` (follow), a folder and a video; he reopens the session in the hub: the same four references are listed, the video reads `pending` until its transcript lands, and the pod reads "newer version exists" after v8 is saved |
+| E63 | AD-64 | the macro app lands `bias` on the PC; an event trigger on Contabo fires once within one tick after replication; two re-deliveries of the same object fire nothing; `coalesce: latest` drops a superseded queued fire |
+| E64 | AD-65, AD-10 | "pause everything": no fire is claimed on either host within one tick, running attempts finish their node, new nodes read `waiting(paused)`; clearing it gives one catch-up per trigger; a host whose kinds digest lacks a kind gets `node needs update` |
+| E65 | AD-18 | a Lab session notes a finding about pod P; a new hub session's `memory_recall` with `item:P` returns it; with Hindsight stopped the FTS5 adapter returns it; `forget` removes it from recall and `rebuild` does not bring it back |
+| E66 | Library AD-22, AD-23 | marking dataset r12 quarantined shows "built on quarantined input" with its path on every result built on it, refuses the trigger that pins it, and turns a hypothesis supported only by those results to `open`; clearing the mark restores all of it |
+| E67 | AD-27, Library AD-24 | two runs on two hosts start the same build within one second: one builds, the other waits and links; killing the first lets the second take the claim after one `ttl` |
+| P-NM | AD-61 | the pinned CLI with an in-process tool whose full name is 64, 65 and 80 characters and one with a dot: record which load and which the API refuses |
+| P-SYS | AD-62 | the pinned CLI takes the append text from a file (`--append-system-prompt-file` through `extra_args`) on Windows with a 60,000-character methodology: the launch passes, the text reaches the model, the cache reads it on the second turn; **fail:** slots keep within the command-line check and spill to skills |
+| P-NEST | AD-5 | the built validator accepts a loop whose body calls a subworkflow that holds its own loop; **fail:** add that one exception to the validator |
+| P-MEM | AD-18 | on his material: Hindsight (embedded on the PC, then on Contabo) against the FTS5 adapter on "already built", a dead end, a Lab-to-hub follow-up and "what did we decide about pod X"; RAM on each host; retain cost and latency per session digest with a Kimi or DeepSeek extractor through the router; deleting a row by id removes the observations built from it; a time window filters recall |
+| P-EV | AD-64, Library AD-24 | the time from a PC commit to a Contabo event-trigger fire through the Hub, and a claim round trip; sets `scheduler.tick` for event triggers |
+| P-APP | AD-64 | an app server started on Contabo from a Library bundle by hash; a volume lease handed from the PC to Contabo with a snapshot and restore |
+| P-LAT | Library AD-19 | the Library screens over the tailnet with the server primary and the PC as cache stay responsive; gates the default flip |
+| P-SRCH | Library AD-8 | a labelled question set over his real items: grounder precision and coverage together, the truncation constants, ranking under fan-out noise |
+| P-TAINT | Library AD-22 | `marks()` on a synthetic 100,000-item edge table in SQLite stays interactive for an item with a deep ancestry |
+| P-OPS | AD-65 | heartbeat volume with 20 agents on the 12 GB server |
+| P-CELL | Lab AD-9 | five of his real notebooks graduate cells into script nodes with their read variables captured |
