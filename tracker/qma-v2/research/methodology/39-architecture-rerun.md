@@ -714,3 +714,66 @@ This file's own hits (§1 item 2, §3, §4, §5, §6, §7, R.3 to R.8) describe 
 6. **Which burst provider to pay for, and when** (money), including whether to pay for a Windows desktop placement for cTrader demo work. Unchanged.
 
 No new operator call came out of this pass: every 42 finding was a design repair inside settled rulings.
+
+## Retirement pass (rulings 115-117)
+
+2026-10-18, BMad architecture skill in amend mode, headless, no sub-agents. Input: rulings 115-117 (`26` section M). Scope: retire the money-safety machinery and the forced isolation, and nothing else. Every retired AD keeps its id and carries "Retired 2026-10-18 (rulings 115-117)". Merged code on `origin/engine/base` (`132169c7`) was read first; nothing built is removed. `lint_spine.py` reports 0 findings on all three spines after the pass.
+
+### RP.1 What was retired
+
+- **The money text scan (engine AD-36).** The fail-closed scan of every name, note, prompt, script and file; the shared predicate `name_money_act_called`; prose matching; the broker-host literal check; the forbidden-import list and its runtime refusals; the fail-closed broker credential deny set. Agents hold no broker credential and no money tool, so the scan guarded a road that does not exist.
+- **Forced script isolation (AD-24, AD-25, Lab AD-9).** Provenance tiers and the shipped-file manifest check, the Windows AppContainer, the separate script runtime and its audit hook, "scripts never bare on the PC", Docker-first start-up, the spill of edited scripts to Contabo, and the forced removal of an engine agent chat's built-in tools. Scripts and agents now run locally as ordinary processes, as Claude Code does; a container or a remote placement is his choice per workflow.
+- **`cli` helpers forced into containers (AD-41, HARNESS-REQUESTS H26).** A `cli` helper runs as a local process owned by its handle by default; a container or a remote placement is his option.
+- **The five-layer MT5 and cTrader demo proof (AD-33, SOLUTION-DESIGN §26.7, S14, E46).** Replaced by: agents use his dedicated demo accounts; live accounts are never in agent scope; agents never sign in to his broker or provider accounts.
+- **The run-pass misuse alarm (AD-28, AD-40 item 4, the AD-17 "stolen or misused pass" inbox class).** It existed only for theft fear; removing it breaks nothing, because a pass still expires with its owner and can be revoked.
+- **Money-gate extensions beyond the harness.** None remain in the design; the harness money gate itself is untouched.
+- **Live checks E33, E34, E35 in its security form, and E36**, and the E34 and E36 rows of E48.
+
+### RP.2 What was kept, and why (one line each)
+
+- The harness and its money gate, as built: existing harness behaviour, ruling 116.
+- The built definition lint's money-act rule on node types and parameters (`definition/lint.py`): it is merged and works; it is not extended and is not a boundary.
+- Token-shaped literals refused in definitions (AD-23, built) and the one redaction seam (AD-37): keys are never printed into logs, the inbox or the ledger.
+- Keys in Windows Credential Manager, the vault copy on Contabo, relay-only provider keys (AD-28): ruling 116 keeps keys in the OS keyring, and remote runs need served credentials (ruling 117).
+- A node names only a declared `qmx/tool/<name>` key (AD-24 run context): scripts need a way to receive tool keys, and this one is simple.
+- Zones outside the home and per-attempt overlays (AD-24, AD-51): they stop two attempts overwriting each other's files and stray paths landing in a store.
+- The Job object, the orphan sweep and the junction refusal (AD-24): they stop orphaned processes racing a rerun.
+- The script environment allow-list and run context (AD-24, built): it keeps provider keys and the plan login path out of a script's environment, and tells test from live.
+- Run passes with scope, TTL, placement binding, owner naming and revocation (AD-28): remote runs need access control (ruling 117).
+- `runner_outside`, `cli_inside`, `host_harness` and the `qmx-worker` image (AD-25): they are how remote and rented placements run agents.
+- H2 narrowed to correctness (a node gets exactly the tools it declares; an `llm` node none): it fixes B-51 and B-70, a real bug.
+- The destructive-shell floor and his own rules (AD-43, H31), and the locked money and risk Settings keys: Claude Code-like permissions and his standing rule, not scan machinery.
+- The first-spawn ask for a new `cli` binary version (AD-41): the same as Claude Code asking before a new command.
+
+### RP.3 Remote workflows: end-to-end coverage
+
+Nothing the pass removed sits on the remote path except the misuse alarm. Placements (AD-30), workers by `NodeJob` (AD-20), the harness outside the box (AD-25), credentials once everywhere with the central relay and run passes (AD-28), mixed providers (AD-29, AD-38), memoised replay (AD-7), the ladder (AD-16) and spans, logs and run cards (AD-15, AD-20, AD-32, AD-48) are unchanged.
+
+| Scenario | What happens | ADs |
+| --- | --- | --- |
+| A machine goes offline (the PC sleeps, a worker or rented VM drops) | Schedules live on Contabo, so they keep firing. A placement that fails preflight reads `unreachable`, and nodes spill to the next healthy `runs_on` placement. A worker that stops heartbeating has its attempt folded `unknown` and retried by effect class. If the Hub or vault is down, relays keep cached keys, issued passes stay valid until expiry, and the sidecar buffers Library writes. If the central relay is down, `central` placements wait `placement` and resume on their own. | AD-3, AD-8, AD-20, AD-28, AD-30 |
+| A provider limit hits mid-run | The attempt goes `waiting(resume_at)`, keeps no partial output, and the run drains; the pool rotates to another account of the role; the classifier maps the error once; a fallback model re-plans the unstarted chunks; the ticker wakes the run with no human action. | AD-9, AD-12, AD-34, AD-40 (6) |
+| A crash, then resume on another machine | Finished nodes are memoised and never rerun; the next attempt of an interrupted node runs on the next healthy placement under the same memo key; an agent attempt whose chat never got its task is re-sent in full; the start-up sweep folds orphaned containers; the session reopens from any surface. Limit, as designed: the run's owner (the engine instance whose ledger holds it) does not move; if the owner's machine is down, its runs resume from its ledger when it is back. | AD-3, AD-7, AD-24, AD-34, AD-35 |
+| Mixed providers on a remote worker | The worker holds no key; its model calls go with a run pass to its relay (local, or the central one on Contabo), which resolves each request by model id, leases per provider and injects the key; `model_scope` lists every provider the node may use; plan and GPT work stay on machines he owns. | AD-12, AD-28, AD-29, AD-38 |
+
+### RP.4 Effect on HARDENING-PLAN.md packets (the planning lead edits that file; it is not edited here)
+
+| Packet | Effect | What changes |
+| --- | --- | --- |
+| SEC1B (money scan) | **Drop** | AD-36 is retired; the built lint stays as it is; no template is reworded for a scan. |
+| SEC2B (AppContainer and container tiers) | **Drop** | No forced tiers. The optional container runner belongs with the remote-placement work already in Appendix G, not a new packet. Template A's `capture.py` runs locally, so `yt-dlp` is a local dependency its doctor line names. |
+| SEC1A (redaction, credential refs) | **Shrink** | Keep redaction (E37), the `qmx/tool/<name>` rule and the published-on-`main` rule; drop "fail closed on the broker set" and the broker fixtures (lane 3 uses any non-tool ref instead). |
+| HG3 (harness round) | **Shrink** | H2 is correctness only; E35's seven-tool proof under his allow rows becomes one lane: an `llm` chat and a `tools: []` node have no tools, also after resume. Still waits for call D. |
+| TPL1 (templates) | **Shrink** | E48 drops its E34 and E36 rows; templates pass a haiku test run. |
+| DLG (`delegate` v2) | **Keep** | The `cli` target no longer waits on call E; whether it moves back from Appendix G into DLG as a local process is the planning lead's choice. |
+| SEC2A (overlays, lifetime, run context) | **Keep** | Every box prevents a real bug; drop only the preamble's reference to call E and SEC2B. |
+| HYG0, PRB, CAPE, CAPH, BUG1-3, L1, RTR1-7, HRME, HRMH, TPL2 | **Keep** | Untouched by the retirement. |
+| Appendices | **Edit** | Appendix G's MT5 row loses the five-layer proof; Appendix I loses calls E and F and reframes D; Appendix C loses the E33 risk; Appendices E and F lose SEC1B and SEC2B. The program falls from 25 PRs to 23, and from seven BLOCKED-ON PRs to five (HG3, RTR6, RTR7, DLG, HRMH). |
+
+### RP.5 Open calls after this pass (only these)
+
+1. **D. A small harness tidy-up round**: each step gets the tools it declares, finished helper chats close, compaction and hooks survive a restart, a typing marker, a who-acted label, five bug fixes. Recommend yes.
+2. **G. The harness changes for helpers on other providers (ruling 92)** and the rest of the rerun's harness rows, worded plainly in OPEN-DECISIONS G. Recommend yes.
+3. **Which rented provider to pay for, and when** (money). Unchanged.
+
+Closed: old E answered no; old F retired. The fifth quant lens stays unresolved by him, and nothing is built on it.
