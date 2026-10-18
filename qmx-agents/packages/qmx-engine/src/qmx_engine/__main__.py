@@ -8,6 +8,7 @@ from pathlib import Path
 
 from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.validate import validate
+from qmx_engine.ledger.store import Reader, ledger_path
 
 
 def parser() -> argparse.ArgumentParser:
@@ -22,11 +23,32 @@ def parser() -> argparse.ArgumentParser:
     check.add_argument(
         "--publish", action="store_true", help="also refuse note and unconnected nodes"
     )
+    ledger = commands.add_parser("ledger", help="read the run ledger")
+    ledger_commands = ledger.add_subparsers(dest="ledger_command", required=True)
+    stats = ledger_commands.add_parser(
+        "stats", help="print the schema version, the SQLite version and the event count"
+    )
+    stats.add_argument("--home", type=Path, required=True)
     return cli
+
+
+def ledger_stats(home: Path) -> int:
+    path = ledger_path(home)
+    if not path.exists():
+        print(f"no ledger at {path}")
+        return 1
+    with Reader(path) as reader:
+        stats = reader.stats()
+    print(f"schema_version {stats.schema_version}")
+    print(f"sqlite_version {stats.sqlite_version}")
+    print(f"events {stats.events}")
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command == "ledger":
+        return ledger_stats(args.home)
     folder = load(args.folder)
     problems = validate(folder, publish=args.publish)
     for problem in problems:
