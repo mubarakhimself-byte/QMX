@@ -1,0 +1,39 @@
+{
+  "size": {
+    "chars": 60000,
+    "codeword": "SIZE-F6B574BA",
+    "launched": true,
+    "reply1": "SIZE-F6B574BA",
+    "turn1": {
+      "cache_read": 0,
+      "cache_write": 22185,
+      "input": 2,
+      "model_turns": 1
+    },
+    "turn2": {
+      "cache_read": 21837,
+      "cache_write": 397,
+      "input": 2,
+      "model_turns": 1
+    }
+  },
+  "resume": {
+    "snapshot_false": {
+      "old": "OLD-C7B359",
+      "new": "NEW-0D98AC",
+      "reply": "NEW-0D98AC",
+      "session": "d2a8df5c-d9f6-4796-a614-c1918f357787",
+      "resumed_session": "d2a8df5c-d9f6-4796-a614-c1918f357787",
+      "model_turns": 2
+    },
+    "snapshot_omitted": {
+      "old": "OLD-090538",
+      "new": "NEW-C0EF1B",
+      "reply": "OLD-090538",
+      "session": "c38d21d1-fc41-47a0-a9ef-ada432c8a185",
+      "resumed_session": "c38d21d1-fc41-47a0-a9ef-ada432c8a185",
+      "model_turns": 2
+    }
+  },
+  "plan_turns": 6
+}

@@ -22,8 +22,10 @@ declared. Chat B also declares Bash. One haiku turn per step:
 - B2 declared Bash writing into the store: refused by the guard before any other layer.
 
 PASS when the guard saw every call first and each step behaves as above. The fake model then
-records, at no plan cost, which Bash calls the CLI runs without asking `can_use_tool`. Fail: AGW is not
-built, agent steps stay read-only as built, and the coordinator tells the operator.
+records, at no plan cost, which Bash calls the CLI runs without asking `can_use_tool`.
+
+Fail: AGW is not built, agent steps stay read-only as built, and the coordinator tells the
+operator.
 
     <venv>/Scripts/python.exe p_perm.py
 """
@@ -128,7 +130,7 @@ def guard(chat: Chat) -> Any:
                 call.guard = GUARD_SAFETY
             else:
                 return {}
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             reason = f"guard failed closed: {error}"
         else:
             reason = call.guard
@@ -227,7 +229,9 @@ async def drive(say: Log, chat: Chat, steps: dict[str, str]) -> dict[str, Any]:
             "PostToolUse": [HookMatcher(matcher=None, hooks=[ran(chat)])],
         },
     )
-    say(f"[{chat.name}] overlay {chat.overlay}, allow rule {rule}, declared {sorted(chat.declared)}")
+    say(
+        f"[{chat.name}] overlay {chat.overlay}, allow rule {rule}, declared {sorted(chat.declared)}"
+    )
     results: dict[str, Any] = {}
     worker = asyncio.create_task(inbox_stand_in(inbox))
     try:
@@ -247,7 +251,11 @@ async def drive(say: Log, chat: Chat, steps: dict[str, str]) -> dict[str, Any]:
     finally:
         worker.cancel()
     for tid, call in chat.calls.items():
-        cli = "passed with no ask (allow rule or read-only)" if call.asked_at is None and call.ran else "-"
+        cli = (
+            "passed with no ask (allow rule or read-only)"
+            if call.asked_at is None and call.ran
+            else "-"
+        )
         say(
             f"[{chat.name}] call {tid} {call.tool}: guard={call.guard} cli_rules={cli} "
             f"can_use_tool={'saw it' if call.asked_at is not None else 'not reached'} "
@@ -258,7 +266,9 @@ async def drive(say: Log, chat: Chat, steps: dict[str, str]) -> dict[str, Any]:
         "calls": {tid: vars(call) for tid, call in chat.calls.items()},
         "server_calls": server.calls,
         "committed": commit(chat),
-        "files": sorted(p.relative_to(chat.root).as_posix() for p in chat.root.rglob("*") if p.is_file()),
+        "files": sorted(
+            p.relative_to(chat.root).as_posix() for p in chat.root.rglob("*") if p.is_file()
+        ),
         "allow_rule": rule,
     }
 
@@ -294,7 +304,10 @@ def verdict(observation: dict[str, Any]) -> Verdict:
         Case("the guard saw every call first", bool(every) and first, {"calls": len(every)}),
         Case(
             "A1 a write under the overlay passes by the allow rule without reaching can_use_tool",
-            bool(a1) and a1["asked_at"] is None and a1["ran"] and "attempt-1/result.txt" in a["files"],
+            bool(a1)
+            and a1["asked_at"] is None
+            and a1["ran"]
+            and "attempt-1/result.txt" in a["files"],
             a1,
         ),
         Case(
@@ -317,7 +330,7 @@ def verdict(observation: dict[str, Any]) -> Verdict:
             a4,
         ),
         Case(
-            "A5 the declared irreversible tool waits on the deferral and runs when it resolves allow",
+            "A5 the declared irreversible tool waits on the deferral, then runs on allow",
             a5.get("policy") == "defer->allow"
             and (a5.get("waited") or 0) >= DEFER_S
             and a5.get("ran") is True
@@ -325,7 +338,7 @@ def verdict(observation: dict[str, Any]) -> Verdict:
             a5,
         ),
         Case(
-            "B1 a declared Bash writing outside the overlay runs, is not committed and is no output",
+            "B1 a declared Bash writing outside the overlay runs, uncommitted and not an output",
             bool(b1)
             and b1["guard"] == "pass"
             and b1["ran"]
@@ -360,6 +373,7 @@ async def run(say: Log) -> dict[str, Any]:
     root_a, root_b = fresh("perm-a-run"), fresh("perm-b-run")
     cmd_a, cmd_b = commands(root_a), commands(root_b)
     exact = "Use the Bash tool to run exactly this command, character for character: "
+    write = "Use the Write tool to create "
     chat_a = Chat(
         "a",
         root_a,
@@ -379,8 +393,8 @@ async def run(say: Log) -> dict[str, Any]:
         say,
         chat_a,
         {
-            "A1": f"Use the Write tool to create {chat_a.overlay.as_posix()}/result.txt with the content ok.{tail}",
-            "A2": f"Use the Write tool to create {root_a.as_posix()}/outside-write.txt with the content x.{tail}",
+            "A1": f"{write}{chat_a.overlay.as_posix()}/result.txt with the content ok.{tail}",
+            "A2": f"{write}{root_a.as_posix()}/outside-write.txt with the content x.{tail}",
             "A3": f"{exact}{cmd_a['A3']}{tail}",
             "A3W": f"{exact}{cmd_a['A3W']}{tail}",
             "A4": f"Call the tool mcp__qmx__peek once with no arguments.{tail}",
@@ -406,8 +420,11 @@ async def bash_mechanism(say: Log) -> list[dict[str, Any]]:
     """Which Bash calls the CLI runs without asking `can_use_tool`, with and without the overlay's
     Edit allow rule. The fake model makes each call, so no plan turn is spent and the call is
     exactly the one named."""
-    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient  # noqa: PLC0415
-    from claude_agent_sdk import PermissionResultDeny  # noqa: PLC0415
+    from claude_agent_sdk import (  # noqa: PLC0415
+        ClaudeAgentOptions,
+        ClaudeSDKClient,
+        PermissionResultDeny,
+    )
     from fake_model import FAKE_KEY, MODEL, FakeModel, Turn, text, tool_use  # noqa: PLC0415
 
     found: list[dict[str, Any]] = []
@@ -420,7 +437,9 @@ async def bash_mechanism(say: Log) -> list[dict[str, Any]]:
         fake.start()
         asked: list[str] = []
 
-        async def refuse(tool: str, _input: dict[str, Any], _ctx: Any, seen: list[str] = asked) -> Any:
+        async def refuse(
+            tool: str, _input: dict[str, Any], _ctx: Any, seen: list[str] = asked
+        ) -> Any:
             seen.append(tool)
             return PermissionResultDeny(message="policy deny")
 

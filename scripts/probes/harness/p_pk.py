@@ -58,7 +58,11 @@ def mcp_state(workspace: Path) -> dict[str, Any]:
     """The MCP keys of the workspace's entry in the plan config's `.claude.json`, and whether
     the workspace holds MCP files. No other key of that file is read."""
     config = PLAN_CONFIG_DIR / ".claude.json"
-    projects = json.loads(config.read_text(encoding="utf-8")).get("projects", {}) if config.exists() else {}
+    projects = (
+        json.loads(config.read_text(encoding="utf-8")).get("projects", {})
+        if config.exists()
+        else {}
+    )
     wanted = {str(workspace).replace("\\", "/").lower(), str(workspace).lower()}
     entry = next(
         (value for key, value in projects.items() if key.replace("\\", "/").lower() in wanted), {}
@@ -130,7 +134,7 @@ async def one_path(say: Log, path: str) -> dict[str, Any]:
             try:
                 await client.reconnect_mcp_server("qmx")
                 row["signal"] = "reconnected"
-            except Exception as error:  # noqa: BLE001
+            except Exception as error:
                 row["signal"] = f"raised {type(error).__name__}: {error}"
         else:
             row["signal"] = "none"
@@ -171,8 +175,7 @@ def holds(row: dict[str, Any]) -> dict[str, bool]:
         "removed tool is gone": "mcp__qmx__alpha" not in after["offered"]
         and "mcp__qmx__beta" in after["offered"],
         "nothing written to the workspace's MCP state": row["state_before"] == row["state_after"],
-        "a second chat on the workspace sees its own list": row["second_chat_tools"]
-        == ["gamma"],
+        "a second chat on the workspace sees its own list": row["second_chat_tools"] == ["gamma"],
         "a resumed chat sees its own list": row["resumed_chat_tools"] == ["delta"],
     }
 
@@ -182,7 +185,13 @@ def verdict(observation: dict[str, Any]) -> Verdict:
     cases = []
     for path in ("a_list_changed", "b_reconnect"):
         checks = holds(paths[path])
-        cases.append(Case(f"path {path}", all(checks.values()), checks | {"cache_read_after": paths[path]["after"]["cache_read"]}))
+        cases.append(
+            Case(
+                f"path {path}",
+                all(checks.values()),
+                checks | {"cache_read_after": paths[path]["after"]["cache_read"]},
+            )
+        )
     either = Case("(a) or (b) holds", any(c.ok for c in cases), [c.name for c in cases if c.ok])
     control = paths.get("control_no_signal")
     recorded = Case(
@@ -190,7 +199,11 @@ def verdict(observation: dict[str, Any]) -> Verdict:
         control is not None,
         holds(control) if control else None,
     )
-    return Verdict("P-PK", (either, recorded, *[Case(f"record: {c.name}", True, c.seen) for c in cases]), FALLBACK)
+    return Verdict(
+        "P-PK",
+        (either, recorded, *[Case(f"record: {c.name}", True, c.seen) for c in cases]),
+        FALLBACK,
+    )
 
 
 async def run(say: Log) -> dict[str, Any]:

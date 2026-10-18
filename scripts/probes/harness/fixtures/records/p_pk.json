@@ -1,0 +1,137 @@
+{
+  "paths": {
+    "a_list_changed": {
+      "path": "a_list_changed",
+      "signal": "sent",
+      "relists_after_signal": 0,
+      "status_after_change": [
+        "alpha"
+      ],
+      "session": "f4b892f1-3040-4087-a192-5b17a702ad43",
+      "before": {
+        "offered": [
+          "mcp__qmx__alpha"
+        ],
+        "reply": "ALPHA-RAN"
+      },
+      "after": {
+        "offered": [
+          "mcp__qmx__alpha"
+        ],
+        "reply": "NO-TOOL",
+        "cache_read": 1246,
+        "cache_write": 0
+      },
+      "server_calls": [
+        "alpha"
+      ],
+      "list_calls": 1,
+      "model_turns": 3,
+      "second_chat_tools": [
+        "gamma"
+      ],
+      "resumed_chat_tools": [
+        "delta"
+      ],
+      "state_before": {
+        "entry_mcp_keys": {},
+        "mcp_json": false,
+        "dot_claude": false
+      },
+      "state_after": {
+        "entry_mcp_keys": {},
+        "mcp_json": false,
+        "dot_claude": false
+      }
+    },
+    "b_reconnect": {
+      "path": "b_reconnect",
+      "signal": "raised Exception: SDK servers should be handled in print.ts",
+      "relists_after_signal": 0,
+      "status_after_change": [
+        "alpha"
+      ],
+      "session": "b9e1ef70-724a-45b4-b531-44905c2b4790",
+      "before": {
+        "offered": [
+          "mcp__qmx__alpha"
+        ],
+        "reply": "ALPHA-RAN"
+      },
+      "after": {
+        "offered": [
+          "mcp__qmx__alpha"
+        ],
+        "reply": "NO-TOOL",
+        "cache_read": 1246,
+        "cache_write": 0
+      },
+      "server_calls": [
+        "alpha"
+      ],
+      "list_calls": 1,
+      "model_turns": 3,
+      "second_chat_tools": [
+        "gamma"
+      ],
+      "resumed_chat_tools": [
+        "delta"
+      ],
+      "state_before": {
+        "entry_mcp_keys": {},
+        "mcp_json": false,
+        "dot_claude": false
+      },
+      "state_after": {
+        "entry_mcp_keys": {},
+        "mcp_json": false,
+        "dot_claude": false
+      }
+    },
+    "control_no_signal": {
+      "path": "control_no_signal",
+      "signal": "none",
+      "relists_after_signal": 0,
+      "status_after_change": [
+        "alpha"
+      ],
+      "session": "d783c2bb-4e44-4a4c-87a4-fa9078f0dc17",
+      "before": {
+        "offered": [
+          "mcp__qmx__alpha"
+        ],
+        "reply": "ALPHA-RAN"
+      },
+      "after": {
+        "offered": [
+          "mcp__qmx__alpha"
+        ],
+        "reply": "NO-TOOL",
+        "cache_read": 1246,
+        "cache_write": 0
+      },
+      "server_calls": [
+        "alpha"
+      ],
+      "list_calls": 1,
+      "model_turns": 3,
+      "second_chat_tools": [
+        "gamma"
+      ],
+      "resumed_chat_tools": [
+        "delta"
+      ],
+      "state_before": {
+        "entry_mcp_keys": {},
+        "mcp_json": false,
+        "dot_claude": false
+      },
+      "state_after": {
+        "entry_mcp_keys": {},
+        "mcp_json": false,
+        "dot_claude": false
+      }
+    }
+  },
+  "plan_turns": 9
+}

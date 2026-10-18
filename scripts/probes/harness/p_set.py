@@ -80,7 +80,9 @@ DENY_RULES: Final = [
 
 
 def skill_names() -> list[str]:
-    return [f"pack-{n % 12:02d}-research:skill-{n:03d}-weekly-review-steps" for n in range(SKILL_COUNT)]
+    return [
+        f"pack-{n % 12:02d}-research:skill-{n:03d}-weekly-review-steps" for n in range(SKILL_COUNT)
+    ]
 
 
 def settings_body(marker: Path) -> dict[str, Any]:
@@ -238,7 +240,9 @@ async def layout(say: Log, *, eds: bool | None) -> dict[str, Any]:
         "folder_in_system": "folder-marker-ws" in system,
         "folder_in_first_user_message": "folder-marker-ws" in first,
         "append_in_system": "APPEND-MARK" in system,
-        "append_after_folder_in_system": system.find("APPEND-MARK") > system.find("folder-marker-ws") >= 0,
+        "append_after_folder_in_system": system.find("APPEND-MARK")
+        > system.find("folder-marker-ws")
+        >= 0,
     }
     say(f"[layout {label}] {found}")
     return found
@@ -289,12 +293,19 @@ async def run(say: Log) -> dict[str, Any]:
         async with ClaudeSDKClient(skills_opts) as client:
             info = await client.get_server_info()
             started_ok = info is not None
-    except Exception as failure:  # noqa: BLE001
+    except Exception as failure:
         error = f"{type(failure).__name__}: {failure}"
-    observation["skills"] = {"count": SKILL_COUNT, "length": length, "started": started_ok, "error": error}
+    observation["skills"] = {
+        "count": SKILL_COUNT,
+        "length": length,
+        "started": started_ok,
+        "error": error,
+    }
     say(f"[skills] {observation['skills']}")
     observation["plan_turns"] = sum(
-        chat["model_turns"] for pair in observation["cache"].values() for chat in (pair["a"], pair["b"])
+        chat["model_turns"]
+        for pair in observation["cache"].values()
+        for chat in (pair["a"], pair["b"])
     )
     return observation
 

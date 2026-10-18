@@ -55,7 +55,9 @@ async def statuses(client: Any) -> dict[str, str]:
     return {str(s.get("name")): str(s.get("status")) for s in status.get("mcpServers", [])}
 
 
-async def settle(client: Any, names: set[str], seconds: float = SETTLE_S) -> tuple[dict[str, str], float]:
+async def settle(
+    client: Any, names: set[str], seconds: float = SETTLE_S
+) -> tuple[dict[str, str], float]:
     """Poll until no named server is `pending`, or `seconds` pass. Returns the last statuses and
     the time taken."""
     started = time.perf_counter()
@@ -142,7 +144,10 @@ async def run(say: Log) -> dict[str, Any]:
         found["second_chat"], _ = await settle(client, {"qmx", "pack_x"})
     async with ClaudeSDKClient(options("tg", workspace, pair(), resume=session)) as client:
         found["resumed"], _ = await settle(client, {"qmx", "pack_x"})
-    many = {f"tg{n:02d}": QmxServer({"ping": answers(f"R{n}")}, name=f"tg{n:02d}") for n in range(SERVERS_AT_LAUNCH)}
+    many = {
+        f"tg{n:02d}": QmxServer({"ping": answers(f"R{n}")}, name=f"tg{n:02d}")
+        for n in range(SERVERS_AT_LAUNCH)
+    }
     started = time.perf_counter()
     async with ClaudeSDKClient(options("tg-forty", fresh("tg-forty-ws"), many)) as client:
         connected_at = time.perf_counter() - started
@@ -180,7 +185,7 @@ def verdict(observation: dict[str, Any]) -> Verdict:
             off,
         ),
         Case(
-            "a switch-off in one chat does not disable the server in a second chat on the workspace",
+            "a switch-off in one chat leaves the server on in a second chat on the workspace",
             observation["second_chat"].get("pack_x") == "connected",
             observation["second_chat"],
         ),

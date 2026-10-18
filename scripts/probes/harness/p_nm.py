@@ -41,8 +41,7 @@ sys.path.append(str(LIVE_QMA))
 
 PREFIX: Final = "mcp__qmx__"
 FALLBACK: Final = (
-    "no fallback: the result sets the length CAT's wire-name check enforces "
-    "(AD-61 says at most 64)"
+    "no fallback: the result sets the length CAT's wire-name check enforces (AD-61 says at most 64)"
 )
 
 
@@ -83,7 +82,11 @@ def verdict(observation: dict[str, Any]) -> Verdict:
 def longest_that_works(observation: dict[str, Any]) -> int:
     rows: dict[str, dict[str, Any]] = observation["names"]
     return max(
-        (len(PREFIX + NAMES[key]) for key, row in rows.items() if row["loaded"] and row["answered"]),
+        (
+            len(PREFIX + NAMES[key])
+            for key, row in rows.items()
+            if row["loaded"] and row["answered"]
+        ),
         default=0,
     )
 
@@ -138,7 +141,7 @@ async def one(say: Log, key: str) -> dict[str, Any]:
                 "the text it returned.",
                 say,
             )
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:
         row |= {"loaded": False, "answered": False, "refused": f"{type(error).__name__}: {error}"}
         say(f"[{key}] launch failed: {row['refused']}")
         return row

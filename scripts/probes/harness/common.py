@@ -156,6 +156,7 @@ class TurnSeen:
     tool_uses: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     tool_results: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     init: dict[str, Any] = field(default_factory=dict[str, Any])
+    system: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
     usage: dict[str, Any] = field(default_factory=dict[str, Any])
     subtype: str = ""
     session_id: str = ""
@@ -198,19 +199,27 @@ async def turn(client: Any, prompt: str, say: Callable[[str], None]) -> TurnSeen
         async for message in client.receive_response():
             if isinstance(message, SystemMessage) and message.subtype == "init":
                 seen.init = dict(message.data)
+            elif isinstance(message, SystemMessage):
+                seen.system.append({"subtype": message.subtype, "data": json.dumps(message.data)})
             elif isinstance(message, AssistantMessage):
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         seen.texts.append(block.text)
                     elif isinstance(block, ToolUseBlock):
-                        seen.tool_uses.append({"id": block.id, "name": block.name, "input": block.input})
+                        seen.tool_uses.append(
+                            {"id": block.id, "name": block.name, "input": block.input}
+                        )
                         say(f"  tool_use {block.name} {json.dumps(block.input)[:300]}")
             elif isinstance(message, UserMessage) and isinstance(message.content, list):
                 for block in message.content:
                     if isinstance(block, ToolResultBlock):
                         body = _result_text(block.content)
                         seen.tool_results.append(
-                            {"id": block.tool_use_id, "is_error": bool(block.is_error), "text": body}
+                            {
+                                "id": block.tool_use_id,
+                                "is_error": bool(block.is_error),
+                                "text": body,
+                            }
                         )
                         say(f"  tool_result error={bool(block.is_error)} {body[:300]!r}")
             elif isinstance(message, ResultMessage):
@@ -329,7 +338,7 @@ class QmxServer:
             return "no session captured"
         try:
             await self.session.send_tool_list_changed()
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             return f"raised {type(error).__name__}: {error}"
         return "sent"
 
