@@ -1,8 +1,20 @@
 # Open decisions (what is still his; the design proceeds on the recommendation)
 
-## After the retirement pass (2026-10-18, rulings 115-117)
+## After the unlock pass (2026-10-18, ruling 118)
 
-These are the calls still his. Everything else below is closed or kept for the record.
+Ruling 118 unlocked the whole app, the harness included. So the two harness rounds that waited for his yes (D and G below) are no longer his calls: they are ordinary design changes, decided in `research/methodology/43-whole-app-unlocked.md` and listed in `HARNESS-REQUESTS.md` (now a plain change list). The only call still his:
+
+1. **Which rented provider to pay for, and when** (money; nothing is paid for yet, ruling 69). Recommend: decide only when your Contabo server's four agent slots overflow too often; adding a provider needs no code (AD-30).
+
+Not a call, and nothing waits on it: the fifth quant lens (ruling 112) is still yours to name; nothing is built on it.
+
+Closed by the unlock pass:
+- *D, the small harness tidy-up round:* done as plain changes (HARNESS-REQUESTS sections B and I).
+- *G, the harness changes for helpers on other providers and the rest of the rerun's harness rows:* done as plain changes (sections D, E, G). The native-helpers part under a Claude-plan main still waits on probe P1, because that rests on what the Claude Code program does, not on a permission.
+
+## After the retirement pass (2026-10-18, rulings 115-117) — superseded by the section above
+
+These were the calls still his before ruling 118. D and G are closed above; 1 is unchanged.
 
 D. **Approve a small harness tidy-up round** (it used to be called HG3). After the retirement pass it holds only items that fix bugs or tidy up; nothing in it is a safety fence any more:
    1. Each workflow step gets exactly the tools it says it needs, and a one-shot AI step gets none. Today a resumed step can still use tools it was told not to use.

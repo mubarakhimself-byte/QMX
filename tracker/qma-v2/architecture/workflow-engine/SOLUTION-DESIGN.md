@@ -570,6 +570,8 @@ Reads `[engine]`, `[roles]`, `[scheduler]`, `[limits]`, `[budgets]` through `Con
 
 ### 8.4 `HarnessPort` (adapter over the public names only)
 
+> **Superseded by §27.2 (unlock pass, ruling 118).** The port is rebuilt on `Harness.run_turn`, named permission policies and hook sinks; the polling, the ask rejection by poll and the compaction-restart fallback described below are deleted. Kept for the record.
+
 `start_chat(NewChat)`, `send(sid, InjectedText)`, `wait_turn(sid)` (see HARNESS-REQUESTS H1; until then: poll `GET /api/chats/{sid}` for `turn: idle` and read the last `text` block from `ControlService` sessions), `live(sid)`, `answer(ask, Reject|Answers)`, `interrupt(sid)`, `usage()`, `quote/apply`. The adapter marks every prompt `InjectedText` (verbatim, never a slash command), sets `NewChat.workspace = workspaces/wf-<id>/` and tells the agent its write zone `runs/<run_id>/`. Permission asks from an `agent` chat reach the engine as `permission` blocks; the adapter answers `Reject("unattended run")` at once for every ask except a tool the registry marks `irreversible_external`, for which it raises an inbox item and forwards the inbox's answer; if the harness's `unattended_ask_seconds` passes first the ask expires and the attempt continues without that tool (recorded on the span). Nothing else in a run ever waits for the operator (ruling 57). In `runner_outside` mode the adapter also passes the node's sandbox tool server as the chat's extra MCP server and disables `Bash`, `Write`, `Edit` and `NotebookEdit` (HARNESS-REQUESTS H2, H8). For context discipline (AD-34) it sets the per-chat compaction threshold and hooks (H15, H16) or, until they are granted, watches context from turn usage, restarts the attempt in a fresh chat at `agent.compact_at`, and reads tool calls from the session's `tool` blocks. It writes the session's home (AD-35) right after `start_chat`.
 
 ---
@@ -729,7 +731,7 @@ The hp17 signatures of `workflows_put` and `workflows_run` have no publish flag 
 
 **Amended 2026-10-18 (AD-11, AD-22; B-5, B-44, B-45, B-65, L-53).** Publish, enable and live start are `user` acts: the service refuses them for `agent` and `workflow` callers, and the copilot's `workflows_put`, `workflow_triggers_enable` and `workflows_run` rows return a card whose button calls REST as `user`. qmx-control cannot yet tell a REST call from a tool call (B-65), so until HG3 request H24 lands these three acts are served only by the engine host's own REST routes, which no `qmx` tool row dispatches to, behind the UI bearer. Draft saves and test runs still ask once in default mode today (B-5); HG3 request H20 makes `DOMAIN_WRITE` rows really never ask.
 
-**Until H17 is granted (no harness edit):** the builder saves a draft with the existing `library_save` (DOMAIN_WRITE) as a `workflow` object on the chat's own agent ref; the engine's Library watcher (Library AD-5) sees the new draft object, refuses any object that is not of kind `workflow`, runs `validate` first and, when its `meta.test_requested` nonce changed and validation passed, starts a test run on it; the copilot reads the result with `workflows_get`, `workflows_validate`, `library_get` and `library_search` (READ). Publish stays `workflows_put` and a live run stays `workflows_run`, which ask once, as they should. Enabling a schedule and archiving an app are done by him in the UI over REST. Nothing in that path asks him for a draft save or a test run.
+**Superseded (unlock pass): H17 was granted and built in HG1, and the watcher below is deleted (engine AD-22).** *Was:* **Until H17 is granted (no harness edit):** the builder saves a draft with the existing `library_save` (DOMAIN_WRITE) as a `workflow` object on the chat's own agent ref; the engine's Library watcher (Library AD-5) sees the new draft object, refuses any object that is not of kind `workflow`, runs `validate` first and, when its `meta.test_requested` nonce changed and validation passed, starts a test run on it; the copilot reads the result with `workflows_get`, `workflows_validate`, `library_get` and `library_search` (READ). Publish stays `workflows_put` and a live run stays `workflows_run`, which ask once, as they should. Enabling a schedule and archiving an app are done by him in the UI over REST. Nothing in that path asks him for a draft save or a test run.
 
 The Lab Graph mode binds the editor's node palette to the AD-5 registry (`service.registry()`), ports by name (every v1 port carries data, AD-4), and "Run" to `tests.run` on a draft or `runs.start` on a version. Chat previews are `service.runs.explain` and `drafts.get` rendered as cards. The hub copilot calls the same tools from any session home.
 
@@ -1427,7 +1429,7 @@ A child with `worktree: true` editing a **real git repository** gets `git worktr
 | P3 | AD-39 per provider as a sub-agent | Kimi K3, K2.7 Code, GLM, DeepSeek, Qwen, Ollama Cloud, OpenCode Go (chat lane): a **ten-turn** tool loop with thinking on, under a key main; the chat lane's thinking and `reasoning_content` round trip and translator-owned signatures hold (41 M9); record quirks into the bundled profiles and the normaliser fields |
 | P5 | AD-41 delegate v2 | a plan copilot starts three helpers (Kimi, DeepSeek, Qwen) and keeps working; handles return at once, results arrive between turns, a restart mid-run delivers each completion exactly once |
 | P7 | AD-12 pool | two Kimi keys, 429 with `retry-after: 30` on key 1: key 1 cools 30 s, affinity moves the next request to key 2, switch-back after the cooldown, classifier `rate_limit` |
-| P-PK | AD-35 packs mid-session | add a mini app's pack to a running chat; the chat lists the new tools without a restart (`tools/list_changed`), else at the next turn on the same session id |
+| P-PK (superseded by P-TG, §27.8) | AD-35 packs mid-session | add a mini app's pack to a running chat; the chat lists the new tools without a restart (`tools/list_changed`), else at the next turn on the same session id |
 | P-FK | AD-26 copilot background review | the SDK forks a Background copy of a finished session and writes only drafts |
 | E42 | AD-22 builder | the copilot builds, validates and test-runs a three-node workflow from a one-line request with no harness ask; the draft lands on its agent ref |
 | E43 | AD-40 no caps | a two-chunk 600k-token run on a 1M model and a six-hour run both end `passed` with no pause; a fake upstream with a 400 s prefill and another with a 900 s prefill on a 1M prompt are not resent (the launch's `API_TIMEOUT_MS` sits above the row timeout, 41 M4, 42 N16); on a `keepalive` row a late 429 after 15 s and a late prompt-too-long are retried 0 times, not resent and leave context accounting correct (42 N3); a Background parent that delegates under `max_live_chats = 1` finishes (42 N5); `[budgets]` unset reaches the SDK as no budget and no turn cap; no `needs_you` appears; a Background send past chat capacity waits for a slot (H28 b) |
@@ -1468,3 +1470,143 @@ failed / cancelled / unknown → delete the overlay (the reversible undo); work/
 **Number evidence (AD-45).** The grader builds an evidence set per run from pinned inputs, fetched and read artifacts, and the results of declared scripts no model in the run wrote, recorded as spans; output of model-written code (`sandbox_python`, `sandbox_bash` running model-written code, `agent-tool`) is excluded (42 N12); it removes timestamps, dates, run ids, hashes and version strings from both sides; a number passes when it is in the set or produced by a declared deterministic `script` or `rule` node from it; `llm` and `agent` outputs and the run's own prompt are never in the set; `estimate` fields render labelled.
 
 **Two owned hosts, one set of accounts (AD-12).** The pools exchange `(account, model, state, until, reading, observed_at)` over the tailnet on every change; newest provider fact wins; a key's provider concurrency is shared by live leases (the provider's limit minus the peer's live leases, the whole limit when the peer is idle or silent); each GPT account has one owner machine, and others forward to the owner's router with a host pass it accepts only from owned hosts (42 N11); a second machine sign-in of an owned GPT account id is refused.
+
+## 27. The unlock pass (2026-10-18, ruling 118): one host, a turn API, the guard, packs as plugins, the router package, one run system [spine AD-52 to AD-60]
+
+Ruling 118 unlocked the whole app. This section gives the interface sketches the new ADs fix; the reasoning, the inventory of what the old locks shaped and the blast radius are in `research/methodology/43-whole-app-unlocked.md`. Where this section and an earlier one disagree, this one wins.
+
+### 27.1 `qmx_host` [AD-52]
+
+```text
+python -m qmx_host serve --home <home> --port <port> [--role pc | node] [--ui-origin <origin>]
+  1. read the keep list, scrub os.environ           (qma.boot, unchanged order)
+  2. take <home>/engine.lock (exclusive, OS-released) (AD-3)
+  3. settings = ControlService(home).settings        (the one typed reader, injected everywhere)
+  4. library  = Library writer for this store        (Library AD-5, AD-19)
+  5. router   = qmx_router.start(settings)            (own thread + loop, pinned port, boot canary)
+  6. harness  = Harness.open(home, control, router)
+             harness.register_policy("engine", EnginePolicy(inbox))
+             harness.register_sink("engine", EngineSink(ledger))
+  7. engine   = Engine(home, harness, router, library, settings)   (ledger writer, scheduler, workers)
+  8. apps     = Supervisor(home)                      (one process per app; no scheduler)
+  9. app      = create_app(control, bearer, routes=[chat, engine, control, apps])
+             the door sets the principal: UI bearer -> user; in-process qmx tool -> agent:<sid>;
+             run pass -> workflow:<run_id>
+ 10. serve; on stop: engine drain, harness close, router stop
+```
+
+`qma.serve`, `python -m qmx_control serve` and `qmx_engine.host` forward to this for one release, then go. `qmx-node` is `--role node`: no UI origin, the central router, the Hub client, the schedules whose `home_engine` is `contabo`.
+
+### 27.2 The harness turn API and the rebuilt `HarnessPort` [AD-53, AD-60]
+
+```python
+@dataclass(frozen=True)
+class NewChat:
+    title: str
+    model: str
+    effort: Effort | None = None
+    mode: PermissionMode = "default"
+    workspace: Path | None = None
+    profile: str = PLAN
+    kind: ChatKind = Interactive()
+    home: Home | None = None                  # AD-35; a Child copies its parent's
+    packs: frozenset[str] = CORE_PACKS        # AD-55
+    tools: list[str] | None = None            # H2; [] = none
+    agents: Mapping[str, AgentDef] | None = None   # H38, registry-generated
+    mcp_servers: Mapping[str, McpServerConfig] | None = None  # H8
+    append_system_prompt: str | None = None   # H21
+    compact_at: float | None = None           # H15
+    hook_sink: str | None = None              # H19: a name registered on the Harness
+    permissions: str | None = None            # H39: a policy name registered on the Harness
+    policy_args: JsonObject | None = None     # e.g. {"overlay": ..., "tools": [...], "irreversible": [...]}
+    claude_hooks: Mapping[str, object] | None = None  # H41, checked by HOOK_KEYS
+    # every field is persisted on the chat record; a reloaded chat launches as it was born
+
+class Harness:
+    async def start_chat(self, spec: NewChat) -> SessionId: ...
+    async def run_turn(self, sid: SessionId, prompt: Prompt) -> TurnHandle: ...
+    async def interrupt(self, sid: SessionId) -> None: ...
+    async def close_chat(self, sid: SessionId) -> None: ...          # H18, deletes nothing
+    async def set_packs(self, sid: SessionId, packs: frozenset[str]) -> None: ...  # toggles servers
+    def register_policy(self, name: str, policy: PermissionPolicy) -> None: ...
+    def register_sink(self, name: str, sink: HookSink) -> None: ...
+
+class TurnHandle:
+    def events(self) -> AsyncIterator[TurnEvent]: ...   # queued, started, block, tool, compacted,
+                                                        # waiting_on_model, ended
+    async def result(self) -> TurnResult: ...           # status ok|failed|interrupted|unknown, text,
+                                                        # usage, tools, compactions, context, reason
+
+class PermissionPolicy(Protocol):
+    async def decide(self, chat: ChatRecord, tool: str, tool_input: JsonObject) -> Allow | Deny | Defer: ...
+```
+
+Order on a tool call: guard (deny wins) → the CLI's own rules (generated: Effect rows, his lists, the policy's allow rules such as `Edit(<overlay>/**)`, `Write(<overlay>/**)`) → `can_use_tool` → the operator (Interactive) or the named policy (Background, Child). The engine's `HarnessPort` keeps today's `Turn` record so the nodes change little; its `wait_turn` becomes `await handle.result()`, and it reads tool spans from the sink live and reconciles them at turn end. Deleted from `ports/harness_adapter.py`: `_turn` (the chat-file read), `_blocks` and `_last_event` (the session-event paging), the 50 ms loop, the poll-and-reject of asks. Deleted from `nodes/agent.py`: the context-watch restart at `compact_at + 0.05`, the "every request to write … is rejected" rule text, the `max_tool_calls` interrupt (AD-40). Kept: the warm-first gate (moved to dispatch, AD-9), the B-69 re-seed when a resumed chat never got its task, the JSON validation with one repair turn.
+
+### 27.3 The guard [AD-54]
+
+`money.py` (1,198 lines on `origin/engine/base`) is replaced by `guard.py`. Kept from it, reorganised: path normalisation and the Windows forms (`normalize_path`, `canonical`, `odd_form`, drive-relative words), shell-word scanning for protected paths and keyring names, login and secret paths, the QMX-home write rule, the personal-home rule, the unattended external-MCP rule, the `delegate`-from-sub-agent rule, the fail-closed wrapper, the deny-rule rendering (shrunk to login and secret paths). New in it: the destructive floor and his two lists (H31, AD-43). Deleted: `name_money_act` and `description_money_act` checks, `broker_hosts`, `proposal_tools` special casing inside the gate (the `PROPOSE_MONEY` Effect still asks through the Effect table), `MoneyPosture`, `money_posture`, `keyring_inventory`, scope proofs, the exposure probe and report, `check_tool_surface`'s vocabulary. The UI's Rules page shows the floor read-only and his lists editable; the doctor drops the exposure probe line.
+
+### 27.4 Packs as plugins [AD-55, AD-35]
+
+```text
+<home>/plugins/<object_id>/            materialised from a published pack object; read-only
+  .claude-plugin/plugin.json
+  skills/<name>/SKILL.md ...
+  agents/<name>.md
+  commands/<name>.md
+  (never hooks/, never .mcp.json)
+launch: plugins = [core (install tree), *materialised(enabled packs)]
+        mcp_servers = {"qmx": ..., "app-<id>": in-process server for each enabled pack, ...}
+        servers outside the session's pack set start switched off; set_packs toggles them
+```
+
+`qmx app check` (the publish gate, AD-19) adds: the materialised view parses as a plugin, its `!` lines are listed, it carries no `hooks/` or `.mcp.json`, and its tool server lists exactly the tools `app.toml` declares.
+
+### 27.5 `qmx_router` [AD-56]
+
+```python
+class Router:
+    def grant(self, launch: LaunchSpec) -> Grant: ...                      # URL + per-launch secret
+    async def complete(self, target: str, messages: list[Msg], *, schema: JsonSchema | None = None,
+                       session: str | None = None) -> Completion: ...      # key and GPT lanes only
+    def mint_pass(self, owner: PassOwner, scope: PassScope, ttl_s: int) -> str: ...
+    def verify_pass(self, token: str) -> PassClaims: ...
+    def readings(self) -> list[Reading]: ...
+```
+
+Moves in: `qma/harness/relay.py`, `qma/gpt/*`, `qma/harness/profiles.py`, the plan readings of `usage.py`, `qmx_engine.vault` (designed). The four lanes, the normaliser and the probe gates are §26.1 and §26.14 unchanged.
+
+### 27.6 One run system [AD-57]
+
+| Today on `origin/engine/base` | After |
+| --- | --- |
+| `runs_*`, `run_job`, `job_*`, `jobs_*` control operations and tool rows; `work` table kinds `runs`, `jobs` | deleted; a placed job is a one-node workflow run with `runs_on` and `resources` |
+| `qmx_remote.worker` (LangGraph loop), `runs.py`, `store.py` | deleted; `providers.py` and `models.py` stay as `ComputeProvider` adapters; `sidecar.py` added (Library AD-13) |
+| `qmx_control.runs.RunIndex` lists `<home>/runs/*/journal.jsonl` as runs (B-67) | lists nothing that is not an engine run |
+| qmx_apps scheduled `run()` files with an interval, and a run budget | an `interval` or `cron` trigger on an `app_op` workflow in the app's pack; the run budget and CPU-percentage breaker retire; crash, heartbeat and memory protections stay |
+
+### 27.7 Capacity classes [AD-58]
+
+| Kind | Takes |
+| --- | --- |
+| `trigger`, `rule`, `loop`, `join`, `wait`, `subworkflow`, deterministic `grader`, `library` read | nothing |
+| `script`, `monitor`, local `rlm` | one CPU slot (`cpu_slots`, default logical cores − 1) |
+| `agent`, plan-row `llm`, `grader` in `llm` mode on a plan row | one chat slot from the harness slot table |
+| key or GPT `llm` (`router.complete`) | the provider's own concurrency through the pool |
+| any attempt in a container | also one container slot (`container_slots`, 3 on the PC) |
+| `app_op` | the app's own queue |
+
+`admission.engine_cap` and the single `LocalWorker` semaphore are deleted.
+
+### 27.8 Live checks and probes added by this pass
+
+| Id | Proves | Check |
+| --- | --- | --- |
+| E54 | AD-52 | on one home, a copilot chat runs a turn while a workflow run with an agent node runs; kill the process mid-turn, restart: the chat shows its turn as unknown, the run resumes from its ledger; a second `qmx_host` on the same home refuses with one line |
+| E55 | AD-53, AD-60 | an agent node writes three files in its overlay and declares one; only the declared one commits; a write outside the overlay is denied with the policy's reason and the attempt goes on; kill the host mid-attempt: the resumed chat keeps `compact_at`, its tool spans still arrive, and its policy still applies |
+| E56 | AD-54 | the guard refuses: a keyring reader, a read of a plan login, a write into `control.db`, a recursive delete outside the zone, a UNC path, a secret in a `curl` body, a bidi character; it allows: a WebFetch of a broker's public documentation page (refused by the old gate's broker-host rule), a write in `workspaces/`; his never-list refuses a command his always-list cannot lift; `propose_order` still asks |
+| E57 | AD-57 | a GPU job written as a one-node workflow runs on a burst placement and lands as a `workflow-run`; the removed control routes return 404; an app's interval schedule fires as an engine trigger |
+| E58 | AD-58 | a run with 40 rule nodes and 12 agent chunks: no rule waits on a slot; scripts run at `cpu_slots` at once; chats never exceed the slot table minus the reserve, and his Interactive chat starts while they run |
+| E59 | AD-59 | each deletion PR's caller scan prints only the deletion set; `just ci` passes with the three `qma-*` packages and LangChain gone; the QMB host starts `qmx_host` |
+| P-PERM, P-PL, P-TG, P-SET | AD-60, AD-55, AD-35, AD-53 | exact pass and fail lines in `HARNESS-REQUESTS.md` "Probes named above" |

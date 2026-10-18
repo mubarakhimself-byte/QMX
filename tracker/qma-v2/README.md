@@ -4,7 +4,7 @@ This folder holds the plan for QMA v2: the agent harness (built), the workflow e
 
 ## Read first
 
-1. `research/methodology/26-operator-rulings-and-alignment.md`: the operator's rulings 1-114. The latest ruling wins and outranks every other file.
+1. `research/methodology/26-operator-rulings-and-alignment.md`: the operator's rulings 1-118. The latest ruling wins and outranks every other file. Ruling 118 (2026-10-18) unlocked the whole app; `research/methodology/43-whole-app-unlocked.md` records what that changed.
 2. `research/methodology/33-state-of-play.md`: what is merged, what is designed and not built, his parked calls, and the full file index.
 3. `HANDOFF-2026-10-18.md`: how the planning lead works and the rerun steps (1-7 done; 8 plan the next program and 9 his calls and the coding prompt are next).
 
@@ -12,7 +12,8 @@ This folder holds the plan for QMA v2: the agent harness (built), the workflow e
 
 | Path | What it is |
 |---|---|
-| `research/methodology/39-architecture-rerun.md` | The current design record, with "Review applied" (41) and "Fix-check applied" (42) at its end |
+| `research/methodology/39-architecture-rerun.md` | The design record of the rerun, with "Review applied" (41), "Fix-check applied" (42) and the "Retirement pass" at its end |
+| `research/methodology/43-whole-app-unlocked.md` | The unlock pass (ruling 118): what the old locks shaped, what is rebuilt, kept or deleted, the engine map, probes, and the one call left for him |
 | `research/methodology/40-retriage.md` | 189 engine-run issues mapped to the rerun, and the packet order for the next plan |
 | `architecture/workflow-engine/`, `library-and-data/`, `lab-and-pods/` | The three architecture spines and their companions |
 | `UI-HANDOFF.md` | Everything the UI session needs (`UI-NOTES.md` holds older harness event details) |

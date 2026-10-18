@@ -8,7 +8,7 @@ scope: 'The backend behind the Lab (Strategies bench: Build, Test, Train, Compar
 status: final
 created: '2026-10-16'
 updated: '2026-10-18'
-binds: [ruling-6, ruling-12, ruling-14, ruling-22, ruling-23, ruling-24, ruling-25, ruling-27, ruling-28, ruling-29, ruling-31, ruling-46, ruling-52, ruling-53, ruling-68, ruling-80, engine-AD-2, engine-AD-3, engine-AD-4, engine-AD-5, engine-AD-7, engine-AD-11, engine-AD-13, engine-AD-14, engine-AD-20, engine-AD-21, library-AD-3, library-AD-4, library-AD-7, library-AD-9, library-AD-17]
+binds: [ruling-118, ruling-6, ruling-12, ruling-14, ruling-22, ruling-23, ruling-24, ruling-25, ruling-27, ruling-28, ruling-29, ruling-31, ruling-46, ruling-52, ruling-53, ruling-68, ruling-80, engine-AD-2, engine-AD-3, engine-AD-4, engine-AD-5, engine-AD-7, engine-AD-11, engine-AD-13, engine-AD-14, engine-AD-20, engine-AD-21, engine-AD-52, engine-AD-54, engine-AD-55, library-AD-3, library-AD-4, library-AD-7, library-AD-9, library-AD-17]
 sources:
   - 'D:/QMX-worktrees/agent-system/tracker/qma-v2/research/methodology/26-operator-rulings-and-alignment.md (binding)'
   - 'research/methodology/23-ui-clickthrough.md and 23-ui-shots/ (ground truth), 10-ui-depth.md (corrected by 23)'
@@ -19,6 +19,7 @@ sources:
   - 'QMX branch qma/hp17: qmx_tools/service.py, qmb/doors/api, qmb/config/compiler.py, qmx_remote/models.py + providers.py, qmx_apps/manifest.py, qma/harness/__init__.py + tools.py'
   - 'docs: components/qmb.md, qml.md, qmf-risk.md, trading-node.md (TN-9, TN-19, TN-20); contracts CT-12, CT-22, CT-27, CT-28, CT-46, CT-47; ADR-0024'
   - 'research/methodology/27b-final-rubric-walk.md section 6 and wayfinder/REWRITE-NOTES.md (gap fixes per ruling 88, 2026-10-16 night; recorded in 27c-gap-fixes-applied.md): AD-2, AD-3, AD-5, AD-8, AD-9, AD-11, AD-12, AD-13 amended in place; AD ids stable'
+  - 'unlock pass 2026-10-18 (ruling 118, methodology/43-whole-app-unlocked.md): engine AD-52 to AD-60; inherited rows updated (guard, packs as plugins, one host); AD-14 amended in place; the Agents-panel Deferred row closed'
   - 'rerun pass 2026-10-18 evening (methodology/39-architecture-rerun.md): engine AD-16 and AD-40 (no usage caps), engine AD-19 and AD-35 (pack load path), alignment A M-7, M-13, M-17 and B mismatch 8; AD-12, AD-13, AD-14 amended in place, AD-18 appended'
 companions: [HLD.md, LLD.md, UI-TO-BACKEND-MAP.md, PLAIN-WORDS.md, OPEN-DECISIONS.md, DOC-CHANGES.md]
 ---
@@ -54,7 +55,8 @@ Labels on claims: **[retrieved]** read today from a cited file, screenshot or br
 | engine AD-13 roles, not models | workflow-engine | a Lab template names roles (`builder`, `validator`, `grill`, `generator`, `diagnoser`, `writer`, `explainer`); never a model id |
 | engine AD-14 Library contract; AD-20 placement preflight; AD-21 three surfaces, one API | workflow-engine | the Lab writes only through `LibraryPort`; placement states `available / configured / authorized / reachable / healthy`; Graph and Code are projections of one draft |
 | library AD-3 closed kind roster; AD-4 closed relations; AD-7 ref ownership and explicit merge; AD-9 fourteen verbs plus `adopt`, with Effects; AD-17 previews are schema data | library-and-data | the Lab adds no kind and no relation outside the roster; his drafts are on `refs/drafts/<item>` and agents edit on `refs/agents/<session>/<item>`; `main` is published-only; governed and lifecycle kinds merge into `main` under MANAGE (publishing asks once, ruling 80) |
-| harness `Effect` table and money gate (DESIGN.md, ruling 24) | QMA v2 harness | every Lab tool carries READ / DOMAIN_WRITE / MANAGE; `PROPOSE_MONEY` is never a Lab effect; the Lab's tool rows are `AGENT_OPERATIONS` entries that need his grant (engine HARNESS-REQUESTS H17) |
+| harness `Effect` table and the guard (engine AD-54, which replaced the money gate in the unlock pass, ruling 118) | QMA v2 harness | every Lab tool carries READ / DOMAIN_WRITE / MANAGE; `PROPOSE_MONEY` is never a Lab effect; the Lab's tool rows are `AGENT_OPERATIONS` entries added like any other change (no grant step since ruling 118) |
+| engine AD-55 packs are plugins; AD-52 one host | workflow-engine | the `qmx-lab` pack is a Claude plugin materialised from its published Library object; its tools are one in-process MCP server switched per session; the Lab service runs inside `qmx_host` |
 | engine AD-16 and AD-40, ruling 27 and the 2026-10-18 no-caps rule; engine AD-31, ruling 68 one QMB machine; engine AD-25 finite runs | workflow-engine | no USD ask and no usage ceiling anywhere in the Lab, only the providers' limits and the engine's stuck detector; backtests go to the `qmb` placement; a paper soak is a chain of finite daily runs |
 | QMB B-1..B-15 and DEC-0270 lanes; CT-47 occupancy | docs | one `qmb` run invocation per execution environment; QMB owns intra-run parallelism, its ledger and CT-32 |
 | ADR-0024 AD-11 (Book/BMS default, dummy forbidden), AD-15 (placement preflight) | docs | the pod adapter emits a complete Book + BMS or a complete PolicyPair, never a sentinel |
@@ -164,9 +166,9 @@ Arrows mean "may import or call". `documents`, `templates`, `pods` and `families
 
 ### AD-14 — The Lab copilot capability pack is the service with Effects
 
-- **Binds:** copilot pack, service, harness tools table
-- **Prevents:** tools that exist only in the UI (the click-through's "fiction" list), a hub copilot without Lab tools (ruling 12)
-- **Rule:** the 17 tools the Lab composer shows map one-to-one onto `qmx_lab.service` operations exposed as MCP tools on the control door with harness Effects (LLD section 7); the pack `qmx-lab` is a capability pack in the engine's sense (engine AD-19, AD-35): its tools are namespaced rows served by the in-process `qmx` MCP server, its skills (one per template) are Library `skill` objects read through the skill tool, plus the attachment resolvers (toolbox item, ticked runs, a tile, a code folder, a dataset) and the Lab prompt layer; it is not a second Claude plugin (the harness keeps its one locked plugin). The hub and any combined session load the same pack, mid-session included. A tool the pack does not list is not a Lab tool.
+- **Binds:** copilot pack, service, harness tools table, engine AD-55
+- **Prevents:** tools that exist only in the UI (the click-through's "fiction" list), a hub copilot without Lab tools (ruling 12), a Lab pack that re-implements skill loading the CLI already does
+- **Rule:** the 17 tools the Lab composer shows map one-to-one onto `qmx_lab.service` operations exposed as MCP tools with harness Effects (LLD section 7). The pack `qmx-lab` is a **Claude plugin** like every pack (engine AD-55, rewritten by the unlock pass, ruling 118): its skills (one per template), its agents and its commands load natively from the plugin view materialised from its published Library object; its tools are one in-process MCP server (`pack-qmx-lab`) switched on per session by the session's pack set (engine AD-35); the attachment resolvers (toolbox item, ticked runs, a tile, a code folder, a dataset) are tools of that server, and the Lab prompt layer is a skill. No `.mcp.json` and no hooks of the pack reach the CLI. The hub and any combined session load the same pack, mid-session included. A tool the pack does not list is not a Lab tool.
 
 ### AD-15 — One service, three doors, the UI computes nothing
 
@@ -273,7 +275,7 @@ qmx-agents/packages/qmx-lab/src/qmx_lab/
                  #   compute_engine, pod_book_bms, node_doors
   service/       # drafts, subjects, runs, scenarios, training, slots, pods, paper, panels, explain
   settings.py    # DEFAULTS
-plugins/qmx-lab/ # .claude-plugin/plugin.json, .mcp.json, skills/<template>/SKILL.md, prompts/lab-layer.md
+plugins/qmx-lab/ # .claude-plugin/plugin.json, skills/<template>/SKILL.md, skills/lab-layer/SKILL.md, agents/; tools served in-process (engine AD-55)
 ```
 
 ## Capability → Architecture Map
@@ -303,7 +305,7 @@ plugins/qmx-lab/ # .claude-plugin/plugin.json, .mcp.json, skills/<template>/SKIL
 | Broker demo / exchange testnet paper money | OPEN-2; v1 paper runs on the server paper ledger over live prices |
 | Pairs (one market against another) in the scenario builder | OPEN-6; QMB has no spread instrument today |
 | Robustness bar values, trial caps, overfit thresholds | GAP-0048/0049; AD-13 fixes that they are Settings data bound to the content hash |
-| Agents panel live sub-agent state | depends on harness requests (engine HARNESS-REQUESTS H1/H2); the panel reads engine spans until then |
+| Agents panel live sub-agent state | Closed by the unlock pass: the panel reads `run_turn` events and router journal rows (engine AD-53, AD-15); its build waits only on those packets |
 | Colab as a placement | not a `qmx_remote` provider at hp17 (`ssh \| amp \| modal \| e2b`); a notebook runtime arrives with the kernel adapter or as an `ssh` host |
 | "Explain it as" video and interactive explainers for Lab results | the output-layer design (engine Deferred) |
 | MIS configurations as per-unit Lab outputs | risk session; AD-17 fixes only the labeler path |
