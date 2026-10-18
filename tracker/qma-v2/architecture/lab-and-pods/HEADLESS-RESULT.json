@@ -1,6 +1,6 @@
 {
   "status": "partial",
-  "intent": "create",
+  "intent": "update",
   "altitude": "feature",
   "purpose": "build-substrate",
   "doc_workspace": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/lab-and-pods",
@@ -32,11 +32,13 @@
     "OPEN-3 who starts a paper run: the operator's MANAGE yes (recommended) vs the Lab rule",
     "OPEN-4 a mix is a pod with members and a split-across-pods allocator (recommended) vs a separate kind",
     "OPEN-5 Lab-scoped schedules under one standing allow rule (recommended) vs MANAGE per schedule",
-    "OPEN-6 pairs in the scenario builder: defer until QMB has a spread instrument (recommended) vs cut"
+    "OPEN-6 pairs in the scenario builder: defer until QMB has a spread instrument (recommended) vs cut",
+    "OPEN-7 MIS versions in the Lab (owner: risk session)"
   ],
   "conflicts_with_prior_decisions": [
     "Library spine AD-3 maps book-definition -> pod and bms-definition -> pod-block; the screens' pod is a stack of blocks across seven slots and a pod block is one pure rule, so this design reads the mirrors as two added governed kinds `book` and `bms` and keeps `pod` / `pod-block` as ungoverned design kinds (schema-file addition under library AD-3). The Library agent must ratify or reject.",
     "DEC-0261 / DEC-0275 say the node runs no per-bot paper lane and QMA-paper does not exist; this design adds a Lab paper run outside the node (an engine run on a paper ledger over live prices), which is neither, and routes demo-account paper through the node later (ruling 29 vs TN-9).",
     "qmx_tools run_backtest(config_ref) and the pre-registered-config door retire in favour of qmb.compile + the qmb node pack (AD-5)."
-  ]
+  ],
+  "rerun_2026_10_18": "AD-12, AD-13, AD-14 amended; AD-18 appended (board levers); record methodology/39"
 }

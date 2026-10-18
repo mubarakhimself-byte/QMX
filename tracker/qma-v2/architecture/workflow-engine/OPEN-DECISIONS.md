@@ -1,5 +1,22 @@
 # Open decisions (what is still his; the design proceeds on the recommendation)
 
+## After the rerun (2026-10-18 evening, `methodology/39`)
+
+His calls that remain, framed and not decided (D, E and F are parked for him by the operator's brief; G is new):
+
+D. **Grant the HG3 harness round, narrowed** (HARNESS-REQUESTS HG3 as 36 S8 framed it): H2 as rewritten by 36 C1 (the SDK `tools` list, so engine agent chats have no `Bash`, `PowerShell`, `Monitor`, `Write`, `Edit`, `NotebookEdit` or `WebFetch`; no hook-deny alternative), H18 close only (nothing deleted), H19 (compaction and hooks survive a restart), H22 (`py.typed`) and five bug fixes; H20 and H21 deferred, H23 and H25 dropped, H24 labelling only. **Recommend: yes, H2 first.** If no: engine agent nodes on the PC depend on an ask the engine rejects and are held when that ask does not fire (AD-24, E35).
+
+E. **Edited and model-written scripts never run bare on the PC** (AD-24): only scripts byte-identical to what QMX shipped run on the PC, inside a per-attempt Windows AppContainer; everything else runs in a container. When Docker is off, QMX starts Docker Desktop itself, then spills the attempt to Contabo, and waits only when neither works (36 S4). The five shipped templates that read the network (DB, T4, rs1, rs4, T3) declare `network: true` and stay on the PC while unedited (36 C3, the corrected count). **Recommend: yes.** If no: edited scripts would run on the host inside the AppContainer alone, which trusts one Windows boundary for code nobody reviewed.
+
+F. **A money scan that fails closed with no allow-list** (AD-36), with 36's conditions applied: the verb predicate `name_money_act_called` shared with the harness gate in `qma-core`; prose matched only in prompts, node notes, parameter values and proposal actions (comments, docstrings and READMEs get the secret check only); the whole template pack passing E36 before it ships. A false positive is fixed by rewording. **Recommend: yes.** If no: a reviewed allow-list of phrases, one more thing a model could try to widen.
+
+G. **Grant the HG4 rows outside the pool exception** (HARNESS-REQUESTS HG4: H26 `delegate` v2, H30 attachments, H31 permission floor and rules, H32 per-session pack sets, H34 session loops, H35 browser and HUD tools for the copilot, H37 background review fork). Rulings 92 and 102 ask for what they deliver; ruling 24 still asks for his yes on harness behaviour. H28 (budgets unset) follows his no-caps rule and the pool-exception rows (H10, H12, H14, H27, H29, H33, H36) follow rulings 39, 92, 95, 98 and 99. **Recommend: yes to all.** Each row has a fallback with no harness edit.
+
+1. **Which burst provider to pay for, and when** (money; nothing is paid for yet, ruling 69). Recommend: decide only when Contabo's four sessions overflow too often; the onboarding flow adds any provider without code (AD-30).
+
+Closed by the rerun (architect's calls under ruling 98 and the operator's brief; recorded in `methodology/39`): the routing option (A + B + D, AD-38); old **B** text (no usage caps, AD-40, settled); old **0** (folded into E with the corrected count of five); old **2** `host_harness` (allowed as a leaf attempt with key accounts; he removes a provider from `runs_on` if he wants every transcript on his machines); old **3** plan logins on Contabo and an owned Amp runner (yes; he signs in once on each with `qmx node login`); old **4** irreversible external effects (the recommended list stands: messages, posts, webhooks, outbound calls to non-QMX systems, desktop actions that submit or send, app operations an app marks so).
+
+
 Refreshed 2026-10-16 night against rulings 73-88 (27c gap fixes). The three calls at the top are his; everything below them is either still open with a recommendation, or closed with the ruling that closed it.
 
 ## After the first build run (2026-10-18)

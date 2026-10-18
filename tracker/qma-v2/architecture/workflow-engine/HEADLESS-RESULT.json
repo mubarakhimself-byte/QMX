@@ -3,47 +3,38 @@
   "intent": "update",
   "altitude": "initiative",
   "purpose": "build-substrate",
-  "doc_workspace": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine",
-  "spine": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine/ARCHITECTURE-SPINE.md",
-  "memlog": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine/.memlog.md",
+  "doc_workspace": "tracker/qma-v2/architecture/workflow-engine",
+  "spine": "tracker/qma-v2/architecture/workflow-engine/ARCHITECTURE-SPINE.md",
+  "memlog": "tracker/qma-v2/architecture/workflow-engine/.memlog.md",
   "companions": [
-    "../../research/methodology/35-architecture-amendment-after-run.md",
-    "DOC-CHANGES.md",
-    "HARNESS-REQUESTS.md",
-    "LIBRARY-REQUESTS.md",
-    "OPEN-DECISIONS.md",
-    "PLAIN-WORDS.md",
     "SOLUTION-DESIGN.md",
-    "reviews/reconcile-inputs.md",
-    "reviews/review-2026-10-18-amendment-gate.md",
-    "reviews/review-adversary.md",
-    "reviews/review-rubric-walker.md",
-    "reviews/review-verification-lens.md"
+    "HARNESS-REQUESTS.md",
+    "OPEN-DECISIONS.md",
+    "DOC-CHANGES.md",
+    "PLAIN-WORDS.md",
+    "LIBRARY-REQUESTS.md",
+    "reviews/review-2026-10-18-rerun-gate.md",
+    "../../research/methodology/39-architecture-rerun.md"
   ],
   "assumptions": [
-    "AppContainer denies CredRead of the user's generic credentials and blocks loopback by default [remembered]; live check E33 settles it, and a failing row switches host_confined off (shipped scripts then use the container tier).",
-    "agent.max_turns 40, host_confined job limits, zones_root paths and the network-off default are Claude's defaults, UI-editable.",
-    "Earlier assumptions stand: engine in-process beside the harness (granted, ruling 50); uuid7; numeric defaults are Claude's defaults."
+    "[remembered] Claude Code honours MCP tools/list_changed (probe P-PK; fallback next turn on the same session)",
+    "[remembered] the Anthropic Messages wire carries no audio or video blocks (multimodal layer pre-processes them)",
+    "[inferred] per-sub-agent effort via the @effort id suffix applied by the router on key and chat lanes (probe P3)",
+    "AppContainer read, CredRead and loopback denial remain [remembered] until E33",
+    "Claude's defaults for idle 300 s, in-tool 1,200 s, grace 120 s, loop.repeat 5, loop.window 8 (UI-editable)"
   ],
   "open_questions": [
-    "OPEN-DECISIONS D: grant the HG3 harness round, H2 (per-chat tools allow-list) first; without it agent nodes on the PC may be held (E35).",
-    "OPEN-DECISIONS E: edited workflows need Docker Desktop running (only shipped scripts run host_confined).",
-    "OPEN-DECISIONS F: the money scan fails closed with no allow-list.",
-    "OPEN-DECISIONS 0: the two network-reading shipped templates stay host_confined with network: true.",
-    "Earlier open items 1-4 (burst provider, host_harness, plan logins on owned machines, what counts as irreversible external) stand."
+    "D grant HG3 narrowed",
+    "E edited scripts never bare on the PC",
+    "F fail-closed money scan",
+    "G grant HG4 rows outside the pool exception",
+    "fifth quant lens",
+    "which burst provider to pay for and when"
   ],
   "conflicts_with_prior_decisions": [
-    "DEC-0417 board client-only (and six mirrors) vs ruling 31: board is a saved draft.",
-    "DEC-0487/0499 'Run refuses a mutable draft' and no test step vs ruling 23: tested state, test-mode runs on drafts.",
-    "DEC-0420/0439 QMA Mission Compiler + RoutineScheduler vs the new qmx-engine as the one runtime.",
-    "DEC-0312 node-kind vocabulary vs AD-5 names.",
-    "DEC-0328 missed fires recorded-not-replayed vs ruling 25: one merged catch-up run.",
-    "DEC-0271/DEC-0476/LIBRARY-AND-ATTACHMENTS no Library database, ten kinds vs ruling 28: one Library storing everything.",
-    "DEC-0443 pack state 'uninstalled' vs ruling 9: archived.",
-    "10-13 'exactly one Claude Max account' and 01-requirements R5 vs rulings 26/39: account pool.",
-    "Ruling 51 (OpenRouter OK for tests) vs the operator's 2026-10-18 ruling (tests on haiku via the plan login; OpenRouter only for provider proof): the latest wins (AD-11, AD-12).",
-    "DEC-0418 typed ports vs AD-4 amended: every v1 port carries data (DOC-CHANGES 32).",
-    "Built engine/tp4 behaviour that the amended spine reverses: script zone under the home, the engine interpreter for scripts, lint scope, CLI --mode live, runaway defaults, the Fable row, the Kimi test default (DOC-CHANGES 27-29)."
+    "DESIGN.md 'no QMX process in the plan request path' replaced by AD-38's same-host plan lane (ruling 98; DOC-CHANGES 33)",
+    "DESIGN.md 'GPT capacity one' and one Claude Max replaced by AD-12 (DOC-CHANGES 34)",
+    "harness [budgets] defaults replaced by AD-40 (settled no-caps rule; DOC-CHANGES 35)"
   ],
   "reason": "partial: open questions remain for him (OPEN-DECISIONS D, E, F); the reviewer gate ran inline and sequentially because the brief forbade sub-agents. Amendment of 2026-10-18 recorded in research/methodology/35."
 }

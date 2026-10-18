@@ -1,6 +1,6 @@
 # QMX workflow engine — solution design
 
-Projection of `ARCHITECTURE-SPINE.md` (the binding spine) into contracts, data models, sequence flows and failure modes. Written 2026-10-16, headless, from the memlog; amended 2026-10-18 after the first build run (§5.5, §25, E33-E41 and the rows marked with backlog ids; record in `methodology/35`). Where this file and the spine disagree, the spine wins. The rulings file `methodology/26` outranks both.
+Projection of `ARCHITECTURE-SPINE.md` (the binding spine) into contracts, data models, sequence flows and failure modes. Written 2026-10-16, headless, from the memlog; amended 2026-10-18 after the first build run (§5.5, §25, E33-E41 and the rows marked with backlog ids; record in `methodology/35`). Amended again the same evening by the rerun pass (§26, and §7, §17, §18, §20, §24 rows: routing lanes, no usage caps, Hermes adoptions; record in `methodology/39`). Where this file and the spine disagree, the spine wins. The rulings file `methodology/26` outranks both.
 
 Labels: **[retrieved]** read today from a cited file or branch; **[remembered]** training knowledge, not re-verified; **[inferred]** reasoned here. Numbers marked **Claude's default** are placeholders the operator changes in Settings.
 
@@ -44,7 +44,7 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
   "outputs": { "type": "object", "properties": { "note": { "$ref": "#/artifact" } } },
   "settings": {
     "timezone": "Europe/London",
-    "runaway": { "tokens": 400000, "agents": 12, "tool_calls": 600, "wall_seconds": 7200, "on_runaway": "pause" },
+    "limits": {},   // optional, only values he writes (AD-40); templates ship none
     "on_error": "park",
     "error_workflow": null,
     "caller_policy": "any | workflows_only | none",
@@ -64,7 +64,7 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
       "timeout": { "run_seconds": 600, "idle_seconds": 120 } },
     { "id": "n4", "name": "Read each paper", "type": "agent", "typeVersion": 1, "position": [660, 0],
       "role": "reader", "effect": "irreversible",
-      "parameters": { "skills": ["paper-question-battery"], "tools": ["Read", "WebFetch"], "max_turns": 12,
+      "parameters": { "skills": ["paper-question-battery"], "tools": ["Read", "WebFetch"],
                       "output_schema_ref": "schemas/paper_card.json", "browser_level": "none" },
       "runs_on": "pc" },
     { "id": "n5", "name": "Citations check", "type": "grader", "typeVersion": 1, "position": [880, 0],
@@ -106,7 +106,7 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
 | `nodes[].parameters.artifacts` | files or folders (ending `/`) the script leaves in `work/`; each entry may be `{path, type}` with a Library artifact type (`card`, `source`, `report`, `proposal`, `dataset`); `run-file` when untyped (AD-14) |
 | `settings.caller_policy` | who may invoke this workflow as a `subworkflow` |
 | `settings.error_workflow` | optional workflow id that receives `run.failed` events for this workflow |
-| `settings.runaway` | the runaway guard (AD-16): soft limits `tokens`, `agents`, `tool_calls`, `wall_seconds` and `on_runaway: pause | degrade`; no USD field exists; when absent the §17 defaults fill it in |
+| `settings.limits` | optional limits he writes himself (`tokens`, `turns`, `tool_calls`, `wall_seconds`), honoured as a pause (AD-16); absent by default and in every template; no USD field exists (AD-40). The old `settings.runaway` key is read as `limits` once and then rejected by the lint |
 
 ### 2.3 Node kinds [spine AD-5]
 
@@ -120,7 +120,7 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
 | `wait` | parks until a time, an engine event or a webhook; no compute while parked; a time hold writes a wake row the ticker honours (AD-10) | 0 | none | (n8n Wait) |
 | `human_gate` | parks with an ask in the inbox; `timeout` makes it an approval gate that resolves on timeout with `on_timeout` | 0 | none | `human_gate`, `approval_gate` |
 | `llm` | one model call with a JSON schema, through a one-turn tool-less harness Background chat on the leased account | low | irreversible | `task` |
-| `agent` | a harness Background chat with skills, tool allow-list, `max_turns`, structured output; session id saved for resume; in `runner_outside` mode (default) its code-running tools are sandbox MCP tools and the built-in Bash/Write/Edit are off; optional SDK sub-agents (depth 1, 3-5 concurrent, same chat tree and sandbox, tokens and tool calls carved from the node's runaway allowance); may write its own tools (`agent-tool`, `unreviewed`, no order verb) | high | irreversible | `agent` |
+| `agent` | a harness Background chat with skills, tool allow-list, structured output, no default turn or tool-call ceiling (AD-40); session id saved for resume; in `runner_outside` mode (default) its code-running tools are sandbox MCP tools and the built-in Bash/Write/Edit are off; optional sub-agents per role, each may resolve to another provider through the router (`via: native`, same chat tree and sandbox) or run as `delegate` v2 helpers (`via: delegate`); depth 1 by default; may write its own tools (`agent-tool`, `unreviewed`, no order verb) | high | irreversible | `agent` |
 | `rlm` | a prime-agent-style Python kernel (`execute / interrupt / snapshot / restore` over newline JSON) inside the node's sandbox, driven by the runner as the `sandbox_python` tool, with data fetched by hash into `/work/in`; `spawn`/`collect` sub-model calls are routed back to the runner's provider layer and land as spans; a `dill` snapshot after each cell is shipped by the sidecar as a `checkpoint` blob and restored on retry; cached sub-call results are never repaid; `resources.memory_mb` 4-8 GiB; `runsc` by default, `runc` when file I/O suffers | high | irreversible | — (ruling 52) |
 | `subworkflow` | invokes a child named as a block folder `blocks/<name>/` inside the parent or as a pinned published object, with typed inputs; own ledger namespace; `await` (a waiting child makes the node `waiting(child)`) or fire-and-forget; cancel cascades | varies | per callee | DEC-0455 nested invoke |
 | `grader` | `mode: deterministic` (a script check) or `mode: llm` (a judge on the `judge` role, refused at validation until the grader-llm packet, §25); outputs `verdict` + `feedback` on `pass`/`fail` ports | 0 or low | none | (Deep Agents rubric, `03`) |
@@ -138,7 +138,7 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
 1. Schema: the document parses against `qmx.workflow/1`; every `*_ref` resolves inside the workflow folder.
 2. Graph: exactly one `trigger`; every edge joins declared port names (every v1 port carries data, AD-4); fan-out nests one level only (`nesting_unsupported` otherwise, AD-5); `rule` and `loop` predicates pass `expr.check` with the names the definition may use (B-90); no cycles except through `loop` bodies; every node reachable; `cartesian` explicit; a `keyed-join` names a key.
 3. Roles, effects, placements and credentials resolve against Settings, the registry, the gateway and the keyring **by name** (preflight checks reachability later).
-4. Lint: no node calls `settings.write`; the one text-surface scan of AD-36 finds no money act in any name, note, parameter, setting, `meta`, port name, `pinData` key, script, prompt or other folder file (the harness gate's matcher, call-shaped), no forbidden import and no credential ref outside the allow-list; no node creates triggers; secrets by ref; a runaway guard is present when any `llm`/`agent` node exists (the defaults are filled in, and no field may name a USD cap); `agent` nodes take `max_turns` and `max_tool_calls` from Settings when they leave them out, and the lint refuses only a value below 1; a list edge into an `llm`/`agent` node is `chunk`, never `broadcast`; a `human_gate` sits only in front of an `irreversible_external` effect.
+4. Lint: no node calls `settings.write`; the one text-surface scan of AD-36 finds no money act in any name, note, parameter, setting, `meta`, port name, `pinData` key, script, prompt or other folder file (the harness gate's matcher, call-shaped), no forbidden import and no credential ref outside the allow-list; no node creates triggers; secrets by ref; no field may name a USD cap, and a `limits` block is accepted only as values he wrote (AD-40); `agent` nodes take `max_turns` and `max_tool_calls` from Settings when they leave them out, and the lint refuses only a value below 1; a list edge into an `llm`/`agent` node is `chunk`, never `broadcast`; a `human_gate` sits only in front of an `irreversible_external` effect.
 5. Note nodes (`type: note`) and unconnected nodes are allowed in a draft and refused at publish unless `disabled: true`.
 
 ---
@@ -153,10 +153,10 @@ Every run has two separate fields. **`mode: live | test`** is fixed at `run_crea
 | --- | --- | --- | --- | --- |
 | `queued` | created, no node started yet | no | `run_created` with no `node_started` | no |
 | `running` | at least one node started and the run is not waiting or ended | no | node events | no |
-| `waiting` | only waiting nodes remain: usage limit, `wait` node, retry backoff, placement full or unhealthy, runaway pause, a join timeout, a waiting child run, an irreversible external step waiting for the inbox; resumes on its own (a wake row, AD-10) or on the answer (a `reason` field says which) | no | `node_waiting` / `run_paused` | no |
+| `waiting` | only waiting nodes remain: usage limit, `wait` node, retry backoff, placement full or unhealthy, a pause at a limit he wrote, a join timeout, a waiting child run, an irreversible external step waiting for the inbox; resumes on its own (a wake row, AD-10) or on the answer (a `reason` field says which) | no | `node_waiting` / `run_paused` | no |
 | `passed` | every node ended ok or skipped and `run_finished` was written | yes | `run_finished` | yes, when `mode: live` and the workflow's `publish` rule is `auto`; never when `mode: test` |
 | `failed` | the ladder parked the run (`reason: parked`), or a grader failure ended it; he may resume it from the run card, which appends a new `running` status | yes, unless he resumes it | ladder step `park` | no |
-| `stopped` | ended by him, by the watchdog, or by a runaway pause that the next occurrence replaced (`reason: operator | watchdog | runaway`) | yes | `run_cancelled` | no |
+| `stopped` | ended by him or by the stuck detector (`reason: operator | watchdog | stalled | loop`) | yes | `run_cancelled` | no |
 | `interrupted` | the engine or a worker died with an attempt of unknown outcome; folded on restart and either resumed (`running`) or ended `failed` | until folded | an attempt with no terminal event and a dead worker | no |
 
 A workflow version is **tested** when a `tested-by` edge links it to a `workflow-run` whose status is `passed`, in either mode. Only `mode: test` excludes a passed run from the fast-forward.
@@ -165,9 +165,9 @@ A workflow version is **tested** when a `tested-by` edge links it to a `workflow
 stateDiagram-v2
   [*] --> queued
   queued --> running: claimed by scheduler or started by service
-  running --> waiting: limit, wait node, placement, runaway pause, external-effect gate
+  running --> waiting: provider limit, wait node, placement, a limit he wrote, external-effect gate
   waiting --> running: resume_at reached / event / answer / guard raised
-  waiting --> stopped: runaway pause replaced by the next occurrence
+  waiting --> stopped: he stops it
   running --> failed: ladder parked (reason parked)
   failed --> running: operator resume from the run card
   running --> passed
@@ -186,7 +186,7 @@ Node attempt states: `scheduled → started → (ok | failed | waiting | gate) `
 
 | Event | Data | Written by |
 | --- | --- | --- |
-| `run_created` | workflow item, pinned object id, content hash, inputs hash, trigger id or caller, mode `live | test` (fixed for the run), runaway guard | service or scheduler |
+| `run_created` | workflow item, pinned object id, content hash, inputs hash, trigger id or caller, mode `live | test` (fixed for the run), any `limits` he wrote | service or scheduler |
 | `run_input` | the inputs document (or artifact ref) | same |
 | `clock_tick` | `now` supplied at start and at every resume | scheduler |
 | `node_scheduled` | node id, iteration, partition (a chunk index on a `chunk` edge, with the chunk plan: item ranges, token estimate, resolved window), input hash, memo key | core |
@@ -195,7 +195,7 @@ Node attempt states: `scheduled → started → (ok | failed | waiting | gate) `
 | `log` | attempt, level, redacted line | worker |
 | `node_finished` | attempt, outputs by port (inline or artifact refs), output hash, span | worker |
 | `node_failed` | attempt, error code, signature, retryable, effect state `before | after | unknown` | worker |
-| `node_waiting` | attempt, reason `limit | wait | backoff | gate | placement | runaway | join | child`, `resume_at` (RFC 3339 UTC), event name; a `resume_at` writes one wake row | core |
+| `node_waiting` | attempt, reason `limit | wait | backoff | gate | placement | own_limit | join | child`, `resume_at` (RFC 3339 UTC), event name; a `resume_at` writes one wake row | core |
 | `gate_opened` / `gate_resolved` | ask text, options, inbox item id; answer, principal, at | core / service |
 | `event_received` | engine-bus event name and payload hash | scheduler |
 | `ladder_step` | attempt, step `retry | account | model | doctor | park`, reason | core |
@@ -236,7 +236,7 @@ Only nodes whose memo is missing or invalid run. A `broadcast` or `chunk` fan-ou
 
 ### 3.5 Loops, joins, subworkflows
 
-- `loop`: ports `in` (the first value) and `next` (each later value, handed back by the body; an edge into `next` is the one cycle a definition may hold), and `body` (the value while iterating) and `done` (the value once a stop fires) (settled in EP6). The body is the induced subgraph its `body` port reaches; each iteration mints node attempts with `iteration = k`; the stop condition is typed (`max_iterations`, `budget` (tokens the body's attempts reported, a share of the runaway allowance), `predicate` over the last value handed back, `no_progress_rounds` over a named metric); iteration state lives in the ledger, never in a node result (DEC-0312 iteration law ratified).
+- `loop`: ports `in` (the first value) and `next` (each later value, handed back by the body; an edge into `next` is the one cycle a definition may hold), and `body` (the value while iterating) and `done` (the value once a stop fires) (settled in EP6). The body is the induced subgraph its `body` port reaches; each iteration mints node attempts with `iteration = k`; the stop condition is typed (`max_iterations`, `budget` (tokens the body's attempts reported, only when he wrote one), `predicate` over the last value handed back, `no_progress_rounds` over a named metric); iteration state lives in the ledger, never in a node result (DEC-0312 iteration law ratified).
 - `join`: expected cardinality comes from the fan-out partition count; `all` waits for every partition, `any` fires on the first and marks the rest `late`, `quorum(n)` fires at n; watermark `all-expected | timeout | failed-aggregation`; late arrivals are recorded, not merged.
 - `subworkflow`: one nested run with its own `run_id`, `parent_run_id`, `call_depth` (ceiling in Settings); the child is a block folder `blocks/<name>/` inside the parent (carried in its bundle and content hash) or a pinned published object `(workflow_item, object_id)`; the parent node waits (`waiting(child)` while the child waits) or continues; cancelling the parent cancels its children; the callee's `caller_policy` is checked at validation whenever the child resolves and at dispatch; merging two live runs is refused (DEC-0455 ratified).
 - Readiness of a node with several inputs (AD-5): it runs when every source slot has settled, every `required: true` edge carried output, and at least one edge carried output; else it is skipped. An edge from outside a loop body into the body is context only.
@@ -292,7 +292,7 @@ fire:    id, trigger_id, occurrence_at, claimed_by, claimed_at, lease_until, sta
 
 ```text
 NodeJob:   run_id, node_id, iteration, partition, attempt, memo_key, idempotency_key,
-           node_definition (slice), inputs (inline or artifact refs), now, runaway_remaining (tokens, tool calls, wall time),
+           node_definition (slice), inputs (inline or artifact refs), now,
            resolved_model (profile, model, effort, account lease) | null,
            credentials (refs the node declared), workspace (path or remote mount id),
            placement, timeouts, mode live|test, pinned outputs (test mode)
@@ -359,9 +359,9 @@ flowchart LR
 | PC placement | Docker Desktop (WSL2 backend, Linux containers), same image, hardened `runc` (gVisor is not a supported setup there), concurrency 3; the UI shows "Docker is off" when it is |
 | Server placement (`contabo`) | Ubuntu LTS, Docker Engine, gVisor as runtime `runsc`, Tailscale to the PC; systemd units `qmx-hub` (Library Hub), `qmx-vault`, `qmx-node` (this engine's runner and worker with its own `qma.serve`, key-provider pool and the central relay), `qmx-egress` (fallback mode), plus market data and monitoring; **never the trading node, holds no broker credential**; today 6 cores, 12 GB RAM, 200 GB SSD (ruling 76); concurrent agent sessions are derived from RAM after those services take their share (AD-30, §21): about 4 today; burst placements absorb the overflow |
 | Burst placement | `E2BProvider` and `ModalProvider` (exist on hp17) boot the same image with the same sidecar and run token; the runner stays on `qmx-node` and reaches the burst container over the same remote call; GPU to Modal or to the server's card under `runc --gpus`; E2B Embed on the server later if `/dev/kvm` exists and pause/resume/fork or heavy RLM data work needs it |
-| Why Rivet's objection to workflow engines does not apply | Rivet argues an endless agent loop makes a workflow engine's replay grow forever. A QMX workflow is a finite run: it starts on a trigger, walks a DAG, and ends with `run_finished`; its ledger is bounded by the definition's nodes, loop caps and runaway guard. A Lab paper soak is therefore a chain of daily runs, never one week-long run (Lab AD-12). The never-ending agent is the copilot session, which lives in the QMA v2 harness, not in this engine |
+| Why Rivet's objection to workflow engines does not apply | Rivet argues an endless agent loop makes a workflow engine's replay grow forever. A QMX workflow is a finite run: it starts on a trigger, walks a DAG, and ends with `run_finished`; its ledger is bounded by the definition's nodes and its loop stop conditions. A Lab paper soak is therefore a chain of daily runs, never one week-long run (Lab AD-12). The never-ending agent is the copilot session, which lives in the QMA v2 harness, not in this engine |
 | Sync back | artifacts by hash, events, logs, spans, checkpoints; a sync-back size cap (Hermes `sync_back_max_bytes` idea, 2 GiB Claude's default); orphan and idle reapers on every placement |
-| Blast radius | fork bomb / `rm -rf`: read-only root, `/work` only, pids and memory limits · escape: `runsc` for model tiers, no sensitive mounts · exfiltration: nothing to steal in the box in `runner_outside`; egress allow-list in `cli_inside` · runaway: `maxTurns`, `max_tool_calls`, sub-agent caps, the engine's runaway guard checked before each retry (no USD cap, ruling 27) · stuck: sidecar heartbeat, watchdog, idle timeout 600 s, hard run timeout · Library garbage: writes land only on `refs/runs/<id>` and are versioned · one bad node: the semaphore isolates it; its failure parks only its own run |
+| Blast radius | fork bomb / `rm -rf`: read-only root, `/work` only, pids and memory limits · escape: `runsc` for model tiers, no sensitive mounts · exfiltration: nothing to steal in the box in `runner_outside`; egress allow-list in `cli_inside` · loops and stalls: the stuck detector of AD-16 (no usage ceiling, AD-40) · stuck: sidecar heartbeat, watchdog, idle timeout 600 s, hard run timeout · Library garbage: writes land only on `refs/runs/<id>` and are versioned · one bad node: the semaphore isolates it; its failure parks only its own run |
 
 ### 5.5 Script isolation on the PC: defence in depth [spine AD-24, AD-36, AD-37; amended 2026-10-18 after B-30, B-31, B-89]
 
@@ -445,7 +445,7 @@ sequenceDiagram
   C->>C: loop-me interview: Trigger? Checkpoints (pushed late)? Brief?
   C-->>O: 3 numbered questions, each with a recommended answer ("yes" accepts)
   O->>C: yes, yes, weekly instead of 6h
-  C->>C: BMad phases: classify (routine), requirements (folder dominion, roles, runaway guard), draft
+  C->>C: BMad phases: classify (routine), requirements (folder dominion, roles), draft
   C->>E: drafts.put(definition JSON)
   E-->>C: draft_id, revision, validate() findings
   C->>E: tests.run(draft_id)   # real cheap models by default (ruling 51)
@@ -474,8 +474,11 @@ account:  id, provider (claude|gpt|<key provider name>), label, kind plan|gpt|ke
           weight, enabled, test_only, state ready|cooldown|benched|needs_login,
           cooldown_until, last_error_signature, last_reading {window, utilization, resets_at, at}
 lease:    id, account_id, session_id, acquired_at, released_at, role, caller run_id|chat
-pool settings (per provider): strategy fill_first|round_robin|least_used, soft_cap_per_account,
-          cooldown_default_seconds (1h), rebind_on quota|auth
+          priority, background_priority normal|last, copilot_daily_driver bool,
+          his overrides (all unset by default): strategy, share, ceiling, concurrency, cooldown
+pool settings (per provider): strategy least_used|round_robin|fill_first|reset_window|random
+          (default least_used for background work, AD-12), provider concurrency (from its tier),
+          cooldown_default_seconds (1h), rebind_on quota|auth; cooldowns keyed (account, model)
 ```
 
 ### 7.2 Where it sits in the harness [retrieved: profiles.py, home.py, usage.py, harness.py on hp17]
@@ -485,11 +488,11 @@ pool settings (per provider): strategy fill_first|round_robin|least_used, soft_c
 | `PLAN` is one fixed name; `ClaudePlan` has no account field | `ClaudePlan(name="claude", account=AccountId)`; profile rows may list several accounts; the pool resolves `profile → account` |
 | one plan home `<qmx_home>/claude` | one plan home per plan account `<qmx_home>/claude/<account>/`, each signed in by the CLI's own `/login`; `projects/` junction per home into one shared transcript folder, as today |
 | `UsageLedger` keyed by window | keyed by `(account, window)`; `PlanWatch` records the account from the chat's launch |
-| `BackgroundCap.refusal(ledger)` | `refusal(ledger, account)`; the 50 % cap applies per account |
+| `BackgroundCap.refusal(ledger)` | removed with the cap (AD-40, HARNESS-REQUESTS H28); a share applies only if he sets one on an account |
 | `NewChat(profile=...)` | `NewChat(profile=..., account=None)`: `None` lets the pool pick; a set value pins (affinity) |
 | `Harness.start_chat` | calls `pool.acquire(profile, role, affinity)`; a `Lease` is stored on the `ChatRecord`; `close`/reap release it |
 | `relay` grants per key profile | unchanged; a key account is a `KeyProvider` row with its own `credential_ref`; the relay journal already tees usage per session, the pool sums it per account |
-| `siwc` one ChatGPT account | unchanged: GPT capacity one |
+| `siwc` one ChatGPT account | one sign-in home per GPT account, any number (HARNESS-REQUESTS H33); refresh under a cross-process file lock |
 | `quote`/`apply` for provider switch | reused for account rotation of a running chat on quota/auth error (resends uncached, warned in the span) |
 
 ### 7.3 Selection and the error ladder [retrieved: Hermes credential pools, CLIProxyAPI config, `25` sections 1.6 and 4.2]
@@ -499,8 +502,10 @@ acquire(profile, role, affinity):
   candidates = accounts(provider=profile) where enabled and not test_only (unless run.mode == test)
                 and state == ready and leases(account) < soft_cap
   if affinity in candidates: return lease(affinity)
-  strategy: fill_first → first by weight; round_robin → next after the last leased;
-            least_used → min(last_reading.utilization) then round_robin on ties
+  order candidates by priority, then background_priority (the copilot daily driver is `last` for background work)
+  strategy (default least_used): least_used → min(last_reading.utilization) then round_robin on ties;
+            round_robin → next after the last leased; reset_window → soonest upcoming reset first;
+            fill_first → first by priority (only when he picks it); random
   none → Closed(resume_at = min(cooldown_until, last_reading.resets_at) over the provider)
 on error from a leased chat:
   plan/usage limit reached → cooldown_until = resets_at (+60 s slack); rotate at once, no retry
@@ -512,7 +517,7 @@ on error from a leased chat:
 switch back: a chat moved off its first account checks each turn and moves back when its cooldown lifts
 ```
 
-The pool never touches a request body, never relays a plan token and never changes a user agent. Leases spread parallel engine nodes across accounts; sub-agents inside one CLI inherit their chat's account (the cache stays warm). For engine nodes the affinity key is `run_id:node_id`: every chunk of one node in one run asks for the same account first, so chunk 2 onward reads the prompt cache (AD-34); a different node spreads to the next account.
+The pool never touches a request body, never moves a plan token between plan homes and never changes a user agent (the plan lane forwards the CLI's own bearer untouched, AD-38). Leases spread parallel engine nodes across accounts; sub-agents inside one CLI inherit their chat's account (the cache stays warm). For engine nodes the affinity key is `run_id:node_id`: every chunk of one node in one run asks for the same account first, so chunk 2 onward reads the prompt cache (AD-34); a different node spreads to the next account.
 
 **Placement-aware pools (rulings 55, 39).** Each harness instance has its own pool and its accounts never leave that machine: the PC's holds the plan accounts plus key rows; `qmx-node` on the server holds key rows only (Kimi, GLM, Ollama Cloud, DeepSeek, MiniMax, others; OpenRouter flagged `test_only`). Because the agent loop runs outside the sandbox (AD-25 `runner_outside`), a PC agent node may use a plan account: the chat is a normal harness chat on the host and only its tool calls enter the container. The server's runners (`max_sessions` derived from RAM, about 4 on today's box, AD-30) are fed by key providers by design; the role tables in Settings carry separate candidate lists per placement (`pc` and `contabo`). Only the fallback `cli_inside` mode routes model traffic through `qmx-egress`, and it is never leased a plan account.
 
@@ -520,7 +525,7 @@ The pool never touches a request body, never relays a plan token and never chang
 
 `HarnessPort.start_chat(NewChat(..., kind=Background(), account=None))` returns the session and the lease (`Background` and `Child` are imported from the public package once HARNESS-REQUESTS H0 is granted; until then only `qmx_engine.ports.harness_adapter` imports them from `qma.harness.launch` under an allow-listed lint rule); `HarnessPort.usage()` returns per-account windows; the engine reads `Closed.resume_at` from the `LaunchRefused` subclass the pool raises **before** any send, so the harness's `_needs_you` path is never hit for a cap. For a `cli_inside` node the engine mints a run pass whose `relay_url` is the nearest relay; the container's CLI uses the pass as its token and the relay as its base URL; no key enters the container or the egress proxy (the relay leases the key-provider account through the same pool). Everything else is the public API as it stands.
 
-**The harness `[budgets]` settings and engine work** [retrieved `QH/launch.py:182-188`, `QH/harness.py:353-361`]. Every engine agent node is a Background chat, so three harness settings bind it: `max_live_chats` (default 4), `background_cap` (0.5 of the plan window) and `max_budget_usd` (5.0 per Background chat). The engine reads them through `SettingsPort` and never edits them. (1) `max_live_chats`: engine fan-out width is `max_live_chats − interactive_reserve`, so with the default 4 the PC runs only 2 engine chats; Settings shows the effect and the engine-host default becomes `max_live_chats` ≥ 6 on the PC (a Settings value, no code change). (2) `max_budget_usd`: the SDK ends a chat with `error_max_budget_usd` when its estimate passes the value; the engine maps that result to `waiting(runaway)` under AD-16, never to a failure and never to a question; under ruling 27 the engine-host default is raised far above any expected node (Settings shows it as a runaway guard, not a spending cap), and HARNESS-REQUESTS H7 no longer asks for a per-chat USD cap. (3) `background_cap`: on the plan a Background chat is refused at 50 % of the window with a `needs_you` block; the engine's admission control (AD-9) reads usage first and parks the node as `waiting(limit)` before that refusal can fire, so no `needs_you` appears. Whether the 50 % cap should still bind workflow agent nodes at all, given ruling 27, is his call (OPEN-DECISIONS B; recommended: keep it for plan accounts only, key providers have no such cap).
+**The harness `[budgets]` settings and engine work** [retrieved engine/base `qma/harness/launch.py:221-261, 518-519`, `harness.py:362-385`]. Rewritten by the rerun (AD-40). `background_cap`, `max_budget_usd` and the Background/Child `max_turns` are **unset by default** and accept unset (HARNESS-REQUESTS H28; today `parse_budgets` accepts only a positive finite number and the defaults are 0.5, 5.0 and 50); with them unset the SDK gets no budget and no turn cap and the harness never writes a usage `needs_you`. `max_live_chats` is machine capacity, derived from RAM on each host (AD-30: `floor((ram_budget_mb − overhead_mb) / session_mb)`, the hand-set value may only lower it); engine width is that minus `limits.interactive_reserve` (2), and chunks past it queue or spill, never fail. If he sets any of these himself, the engine treats an `error_max_budget_usd` or a cap refusal as a pause at his limit (AD-16), never as a question.
 
 ---
 
@@ -621,9 +626,10 @@ on node_failed(attempt):
        transient → one retry; bad_input → re-run upstream rule/script once if effect none; bad_output → one re-run with repair hint or next candidate
        logic → a challenger object on refs/challengers/<workflow_item> for the improve workflow (AD-26) + park
   else: park
-runaway-guard check every tick, in flight included (tokens = in + out + cache_write, cache reads never counted; agents; tool calls; wall time only while an attempt is in flight; no USD): breach → start nothing new, let in-flight attempts finish, then
-  on_runaway pause   → waiting(runaway) + info digest line; ends stopped(reason runaway) when the next occurrence starts or after limits.alert_after
-  on_runaway degrade → remaining model nodes take their role's cheapest candidate, released in waves no wider than the batch at the breach, guard rechecked per wave; a second breach pauses
+stuck detector every tick (AD-16; no usage ceilings, AD-40): no progress past timeout.idle (sleep-aware) → warn at 80 % through the steer channel → interrupt → grace → stalled → ladder;
+  repeated identical tool call + identical result loop.repeat times, or no new result in loop.window turns → one tool-less summary turn → stalled(loop) → ladder;
+  same node failing twice with one signature → doctor; three times → park; three restarts interrupting the run → park (crash loop)
+  a limit he wrote (limits.*) → pause waiting(own_limit) + info line; resume from the run card
 a failed fan-out partition walks this ladder on its own; its join counts it failed only after it parks
 park: status failed (reason parked), one inbox item (severity per §10.4), nothing waits; the next trigger occurrence starts a fresh run with continuity
 ```
@@ -635,7 +641,7 @@ Human gates: only an attempt in front of an `irreversible_external` effect may w
 | Condition | Action |
 | --- | --- |
 | attempt with no executor progress event (tool call, log line, turn, chunk event) past `timeout.idle_seconds`; the worker's liveness heartbeat never counts | cancel attempt; `failed(signature=stalled, retryable=true)` → ladder |
-| run past its runaway guard (`wall_seconds`, tokens, agents, tool calls) | `on_runaway`: pause as `waiting(runaway)` or degrade (§10.2); one `info` digest line; never an ask |
+| an agent repeating one identical tool call with an identical result `loop.repeat` times, or no new result in `loop.window` turns | interrupt, one tool-less summary turn, end `stalled(loop)`, walk the ladder; one `info` digest line; never an ask |
 | same node, same signature, 2 failures | skip retries, go to doctor |
 | fire with an expired lease and no run | `unknown`, inbox `normal`, no auto re-fire |
 | worker placement not `healthy` | nodes on it `waiting(placement)`, inbox after `alert_after` |
@@ -645,7 +651,7 @@ Human gates: only an attempt in front of an `irreversible_external` effect may w
 
 `id, run_id, trigger_id?, node_id?, severity, signature, title, cause, tried [ladder steps], cost_so_far, trace_link, placement, agent_mode, run mode, health, link_out, actions [retry|stronger_model|skip_node|open_trace|stop|resume], blocks_run, first_raised_at, last_raised_at, count, acknowledged_by?, resolved_by?, resolution`.
 
-Severity policy (ruling 77, spine AD-17): `normal`, `urgent` and `black` only for provider failures (a 401; every account of a role closed past `alert_after`; a placement unhealthy past `alert_after`), harness or ledger errors, an unknown outcome on an irreversible external effect, and a stolen or misused run pass. A park from logic, bad input or bad output, a runaway pause, a preflight failure caused by the workflow's own configuration, and a regressed champion are `info` lines in the daily digest. The notification channels themselves (toasts, phone, digest layout) are designed by the UI session. Human points inside a run (sign a promotion, accept a lesson, approve a tightening) are never inbox items: the run ends that branch with a typed `proposal` artifact whose actions he takes as `user` from the run card or the Library's proposals shelf (AD-17, LIBRARY-REQUESTS L19). Every text field of an item is written through AD-37's redaction.
+Severity policy (ruling 77, spine AD-17): `normal`, `urgent` and `black` only for provider failures (a 401; every account of a role closed past `alert_after`; a placement unhealthy past `alert_after`), harness or ledger errors, an unknown outcome on an irreversible external effect, and a stolen or misused run pass. A park from logic, bad input or bad output, a stall or loop stop, a pause at a limit he wrote, a preflight failure caused by the workflow's own configuration, and a regressed champion are `info` lines in the daily digest. The notification channels themselves (toasts, phone, digest layout) are designed by the UI session. Human points inside a run (sign a promotion, accept a lesson, approve a tightening) are never inbox items: the run ends that branch with a typed `proposal` artifact whose actions he takes as `user` from the run card or the Library's proposals shelf (AD-17, LIBRARY-REQUESTS L19). Every text field of an item is written through AD-37's redaction.
 
 ---
 
@@ -688,7 +694,7 @@ runs → note() rows → consolidate → lessons pool
         → live feedback() over the next K runs; pass rate below the previous version → pointer moves back + dead_end row
 main moves only by his click; a review card per champion change is tidying, not a gate
 standing rule per workflow: self_improve auto (default for workflows he created or enabled) | propose_only | off
-hard limits no rule lifts: money-path tools, risk and sizing settings, credentials, the deny-list, own runaway guard, other workflows
+hard limits no rule lifts: money-path tools, risk and sizing settings, credentials, the deny-list, its own `limits` block, other workflows
 promotion: a procedure row with f ≥ 5 and u/f > 0.8 is drafted into a skill; rows with f ≥ 5 and u/f ≤ 0.5 are archived
 ```
 
@@ -849,7 +855,7 @@ sequenceDiagram
 | Engine process crash | boot | ledger fold on restart; running attempts with dead workers → `unknown`; fires with expired leases → `unknown`; everything else resumes | `normal` item (a harness-level error, ruling 77) |
 | Downtime over several cron occurrences | tick grace | one merged catch-up fire per trigger | nothing |
 | Preflight failure (missing key, role, app) | scheduler | `blocked_config`, no run, one item keyed by signature | one item until fixed, severity per §10.4 (`normal` for a missing or rejected key, `info` for the workflow's own configuration) |
-| Runaway-guard breach (tokens, agents, tool calls, wall time) | core before each step | `on_runaway`: pause as `waiting(runaway)` or degrade to the cheapest candidates; never a spending cap (ruling 27) | one `info` digest line |
+| Stuck or looping attempt (no progress, repeated identical call, zero tokens) | watchdog every tick (AD-16) | warning, interrupt, grace, then `stalled` or `stalled(loop)` and the ladder; no usage ceiling exists (AD-40) | one `info` digest line |
 | Same node fails twice with one signature | watchdog | straight to doctor | item if parked |
 | Human gate waits for days | nothing (by design) | run stays `waiting`; `approval_gate` resolves on timeout per `on_timeout` | the ask in the inbox |
 | Definition edited while a run is live | versions are immutable | the run keeps its pinned version; the draft is separate | nothing |
@@ -952,20 +958,19 @@ sequenceDiagram
 | `limits.slack` | 60 s after a reset |
 | `pool.cooldown_default` | 1 h |
 | `pool.soft_cap_per_account` | 2 live chats |
-| `pool.strategy` | `least_used` for workflows, `fill_first` for copilots |
-| `runaway` guard per run (when the template sets none) | 2M tokens (`in + out + cache_write`; cache reads never counted), 16 agents, 1,000 tool calls (`runaway.tool_calls`), 4 h wall time counted only while an attempt is in flight, `on_runaway: pause`; no USD figure (ruling 27); `settings.DEFAULTS` follows this row (B-38) |
+| `roles.live_order` | `key, gpt, plan` for workflow roles (third-party models first); the copilot keeps the model he picks; tests use `roles.test_order` (the plan's `claude/haiku` first, OpenRouter only in provider-proof lanes) |
+| `pool.strategy` | `least_used` for background work; copilot chats pin the account he marks as daily driver (that account is `background_priority: last`); never `fill_first` by default |
+| usage limits (`runaway.*`, `on_runaway`, `background_share`, `max_budget_usd`, `background_cap`, `max_turns`, `max_tool_calls`, run wall-time timeouts) | **none** (AD-40); a `limits` block he writes is honoured as a pause; the rows below are stuck detection only |
+| stuck detector | `timeout.idle` 300 s (agent) and 600 s (script, no output and no CPU), `timeout.in_tool` 1,200 s, warning at 80 %, `timeout.grace` 120 s, `loop.repeat` 5 identical calls with identical results, `loop.window` 8 turns with no new result and no output change, crash loop 3 restarts, sleep-aware clock |
 | `retry.max_tries` | 3, backoff 30 / 120 / 600 s |
-| `timeout.run_seconds` / `idle_seconds` for `agent` | 1800 / 300 |
-| `agent.max_turns` | 40 (filled in when a node leaves it out; 200 tool calls fit at about five per turn) |
+| `timeout.run_seconds` for `agent` | unset (no wall-time ceiling, AD-40); idle per the stuck detector row |
 | `roles.test` | the cheap end of each role through the plan login (`claude/haiku`); OpenRouter rows only in provider-proof lanes |
 | `zones_root` | `%LOCALAPPDATA%\qmx-zones` on the PC, `/var/lib/qmx-node/zones` on Contabo; never the QMX home, inside it or above it |
 | script `network` | off unless the node declares `network: true` |
 | `host_confined` job limits | active processes 8, memory `resources.memory_mb` (Claude's default 1,024), UI restrictions on |
-| fan-out width | `max_live_chats − interactive_reserve` (2); raise the harness `[budgets] max_live_chats` to at least 6 on engine hosts (§7.4) |
-| harness `[budgets] max_budget_usd` on engine hosts | raised far above any expected node (Settings value; a runaway guard, not a spending cap; §7.4) |
-| `chunk.fill` | 0.30 of the resolved model's context window |
-| `agent.compact_at` | 0.40 of the context window |
-| `agent.max_tool_calls` | 200 per attempt |
+| fan-out width | host capacity (`max_live_chats` derived from RAM) minus `interactive_reserve` (2); further chunks queue or spill to `runs_on` placements |
+| `chunk.fill` | 0.30 of the resolved model's context window from the model registry |
+| `agent.compact_at` | 0.40 for windows of 512k and more, 0.75 below 512k; per-model override in the registry |
 | `memory` caps | workflow 200 lines, home 400, operator 200 |
 | `inline_limit_bytes` | 64 KiB |
 | `placement.pc.concurrency` | 3 |
@@ -980,7 +985,13 @@ sequenceDiagram
 | placement `relay` | `local` on `pc` and `contabo`; `central` (Contabo's relay) on every other row |
 | run pass `expires` / renew | attempt timeout, at most 1 h / renewed by each sidecar heartbeat |
 | vault sync interval / revocation pull | 60 s / every sync and on every pass refusal |
-| per-pass token cap | the run's remaining runaway-guard token allowance at mint time |
+| run pass request-rate alarm | revoke and one `urgent` item when a pass sends more requests than its run's live attempts can explain (theft detection, not a usage limit) |
+| `router.plan_lane` | on per Claude account once canaries P1 and P2 pass (AD-38) |
+| `delegate` batch | 10 children per batch, no ceiling; depth 1 |
+| multimodal roles | `vision_describer`, `transcriber`, `video_analyst` = `auto` (the chat model when capable) |
+| attended ask timeout | off (copilot waits); engine runs deny at once (AD-43) |
+| curator | stale at 14 days, archive at 30 (agent-created items only), consolidation off |
+| keep awake / start at login | on / on (AD-48) |
 | warm workers on Contabo | 2 |
 | `host_harness` leaf attempt timeout | the node's `timeout.run_seconds`; default 1 h |
 | Cua manifest `expiry` / `idle_timeout` | the attempt's timeout / 10 min |
@@ -1009,14 +1020,14 @@ flowchart LR
 | Source of truth | `qmx/*` entries in Windows Credential Manager, entered once in Settings (unchanged); Settings shows per entry `replicable: yes/no`, `vault_version`, last sync |
 | Replicable set | provider keys (`[providers]` rows), declared tool keys (Firecrawl, data vendors). Never: `qmx/ctrader-*`, the backup payload key, pairing keys, Claude plan logins |
 | Vault | `qmx-vault`, a systemd unit beside the Hub on Contabo; stores ciphertext only; decrypts with a private key held in Contabo's OS keyring; serves keys only to relays on the tailnet that present the pairing credential; not a Library object, not on the Hub's data path (Library AD-12 holds) |
-| Relay per host, or the central relay | the harness relay on each `relay: local` host reads keys from its local keyring (PC) or vault copy (Contabo, opted-in owned machines); it is the only key reader on that host; plan traffic never passes it. Every `relay: central` placement (the default for non-owned placements) runs no relay, holds no key, and sends model calls with its run pass over Tailscale to Contabo's relay, the central relay machine of ruling 75 |
+| Relay per host, or the central relay | the harness relay on each `relay: local` host reads keys from its local keyring (PC) or vault copy (Contabo, opted-in owned machines); it is the only key reader on that host; plan traffic passes only its own host's plan lane, untouched (AD-38), and never a central relay. Every `relay: central` placement (the default for non-owned placements) runs no relay, holds no key, and sends model calls with its run pass over Tailscale to Contabo's relay, the central relay machine of ruling 75 |
 | Run pass | minted by the owning engine instance per node attempt; extends the Library AD-12 run token with `model_scope` and `relay_url`; signed with the pairing key; verified by signature at the relay and the Hub (no lookup needed); TTL = attempt timeout, max 1 h, renewed by the sidecar heartbeat; bound to `placement` and checked against a source allow-list (tailnet addresses, or the declared egress of a managed provider) |
 | How each mode uses the pass | `runner_outside`: the chat on the runner host needs no pass for models (it is a harness chat on a leased account); the sandbox tool server and the sidecar carry the pass for the Hub. `cli_inside`: the pass is the CLI's `ANTHROPIC_AUTH_TOKEN`, the relay URL its base URL; the egress allow-list is the only proxy. `host_harness`: the pass is handed to the provider thread as its only credential, as the thread's provider base URL + token; the thread's own model calls still go to our relay |
 | Plan logins | per machine via the CLI's `/login`; `qmx node login <placement>` opens it there once; allowed machines: the PC, Contabo (`qmx-node`), an Amp runner on hardware he owns; a plan row in the pool carries `machine`; preflight refuses a plan account on any provider VM |
 | Rotation | a changed key in Settings → new `vault_version` → sync within 60 s; relays resolve keys at request time, so the next request uses the new key; in-flight streams finish on the old; the UI shows "key rotated, N relays updated" from sync acks |
 | Revocation | delete in Settings → tombstone replicates; relays refuse within one sync; revoked passes go on a signed revocation list every relay and the Hub pull per sync and on every refusal; the pairing key rotates by re-pairing every placement (a Settings action that shows which placements re-paired) |
 | Hub or vault unreachable | relays serve from their cached copy; passes already issued verify by signature; no new pass for a placement the engine cannot reach (it reads `unreachable`); sidecars buffer Library writes to the bucket layout (Library FM-3) and the PC pulls later; sync resumes by `vault_version` with tombstones winning |
-| Stolen pass (threat) | bounded by: scope (`model_scope`, `key_scope`, `write_prefix refs/runs/<id>`, `data_scope`), TTL, placement binding, source allow-list, a per-pass token cap = the run's remaining runaway-guard token allowance, and the revocation list. It cannot read any key, another run, `main`, or money (the Hub refuses tokens naming broker entries; no order verb off the PC harness). Worst case: that run's remaining token allowance used and junk on that run's branch |
+| Stolen pass (threat) | bounded by: scope (`model_scope`, `key_scope`, `write_prefix refs/runs/<id>`, `data_scope`), TTL, placement binding, source allow-list, the request-rate theft alarm, and the revocation list. It cannot read any key, another run, `main`, or money (the Hub refuses tokens naming broker entries; no order verb off the PC harness). Worst case: model calls inside its `model_scope` until expiry or the alarm revokes it, and junk on that run's branch |
 | Compromised worker (threat) | holds no key and in `runner_outside` no transcript; one pass with the bounds above; `runsc` and no sensitive mounts; detection = egress anomalies, pass rate caps, heartbeat loss; response = revoke pass, kill container, bench placement, one `urgent` item. In `cli_inside` and `host_harness` the run's transcript is also exposed: the listed trade-off of those modes |
 | Reconciliation with DESIGN.md | "the relay is the only reader of provider keys at run time" becomes "the relay on each host is that host's only key reader; keys reach a host only through the vault sync"; this, the tailnet-reachable relay and model-id routing are the load-balancer exception (ruling 39) |
 
@@ -1037,7 +1048,7 @@ request from a chat (any mode) → relay
 - The SDK's `AgentDefinition.model` accepts a full model id (study 29 §1.1 [retrieved]); that the CLI forwards a non-Claude id such as `deepseek-v4` unchanged, and that the tier env aliases do not rewrite it, is [inferred] until probe E24. The harness today refuses non-family ids behind a key by design (family guard) and must learn the provider table (HARNESS-REQUESTS H10).
 - Fallback that needs no harness change: fan-out across provider-specific `agent` nodes (one role per provider), joined by the engine; the Lab editor shows it as three nodes instead of one.
 - Any provider joins as a `KeyProvider` row: base URL + `qmx/*` key ref + four tiers + quirks; no code. OpenCode Go (OpenAI chat-completions format for GLM and Kimi) needs the translator lane (H12, reusing `qma/gpt/translate.py`'s shape) or direct Z.ai / Moonshot rows.
-- The Claude plan is never in a mixed chat (no relay on the plan path); GPT only through the GPT lane; `test_only` rows (OpenRouter) only in test mode.
+- Rewritten by the rerun: every chat, plan, GPT or key main, may mix providers through the router (AD-38, §26.1); plan bytes pass only the plan lane of the same host, untouched; GPT ids only through the GPT lane; `test_only` rows (OpenRouter) only in provider-proof lanes; OpenCode Go and other `openai_chat` models through the in-house chat lane (H12).
 
 ## 21. Hosting placements and RAM budgets [spine AD-30; rulings 55, 66, 69]
 
@@ -1089,7 +1100,9 @@ manifest (per node, agent cannot widen):
   profile: isolated | logged_in    # logged_in only on the PC, explicit grant, never unattended on a server
   expiry: attempt timeout; idle_timeout: 10 min
   input: one_native_input_at_a_time_per_desktop
-  deny (always): broker, MT5, cTrader, prop-firm windows and origins  # the money gate on desktop actions
+  deny (always): broker origins, prop-firm windows and origins, every live account window, and any MT5 or cTrader
+                 window whose account and server do not match the pinned demo account  # money gate first, AD-33, AD-44
+  demo_account: {app: mt5 | ctrader, account_id, server}   # read from the window before algo trading is turned on
 placement: desktop row (PC interactive session | Windows VM windows:2022 on KVM | Linux orb/runner desktop | Cua Linux sandbox)
 executor: Cua Driver (MIT) on the desktop as the MCP tool executor; loop in the runner (Rivet split)
 trace: every action with a screenshot; login wall or CAPTCHA → attempt ends, inbox item
@@ -1119,13 +1132,13 @@ Playwright and Stagehand stay for headless, logged-out research and cheap replay
 | E15 | AD-3 boundary | import-linter: `qmx_engine` imports only `qma.harness` top-level names |
 | E16 | AD-25 one image, nothing sensitive inside | run one `agent` node on the PC in Docker and one on `qmx-node`; both report the same image digest; `env` and the filesystem inside each container show no key, no transcript, no plan path; in `runner_outside` the container's only peer is the sidecar endpoint |
 | E17 | AD-25 tiers | an `agent-tool` call refuses to execute in `host_confined` or `runc`; a shipped script runs `host_confined` when Docker is off, while an edited copy of it and agent tool calls wait with the doctor line |
-| E18 | AD-4 sub-agents | an agent node with `subagents.max_concurrent: 3` spawns 5; only 3 run at once; a sub-agent's attempt to spawn is refused (depth 1); the node's runaway allowance is debited for all; their tool calls land in the node's container |
+| E18 | AD-4 sub-agents | an agent node with `subagents.max_concurrent: 3` spawns 5; only 3 run at once; a sub-agent's attempt to spawn is refused (depth 1); their spans are children of the node's span; their tool calls land in the node's container; a sub-agent naming a Kimi id is routed to Kimi by the router |
 | E19 | AD-27 already built | two workflows request the same build (same intent key); the second skips, links `consumed_by`, spends no tokens; a `dead_end` hit stops the node unless `retry_dead_ends` |
 | E20 | AD-26 champion | seed 3 failed and 3 passed runs; the improve workflow proposes; replay passes; `refs/champions/*` moves; force 10 failing live runs; the pointer moves back with a `dead_end` row; `main` is unchanged throughout |
-| E21 | AD-11 real-model tests | a draft test run resolves a cheap real candidate (OpenRouter allowed), writes on `refs/runs/<id>` with `mode: test`, ends `passed`, makes the draft tested, and is excluded from the fast-forward into `main`; with the `fake: true` switch no provider is called |
+| E21 | AD-11 real-model tests | a draft test run resolves the cheapest candidate through the plan login (`claude/haiku`), writes on `refs/runs/<id>` with `mode: test`, ends `passed`, makes the draft tested, and is excluded from the fast-forward into `main`; OpenRouter rows are used only by a named provider-proof lane; with the `fake: true` switch no provider is called |
 | E22 | AD-5 rlm | an `rlm` node runs three cells through `sandbox_python`; kill the container after cell two; a fresh container restores the snapshot and reruns only cell three; cached sub-calls are not repaid |
 | E24 | AD-29 mixed providers (probe, before the agent-node packet) | one chat with a Kimi main agent, a sub-agent whose `AgentDefinition.model` is a full DeepSeek id and a judge on GLM; the relay journal shows three providers leased for one session, each request routed by its `model` field; record whether the CLI forwards the full id unchanged; if not, the same workflow built as three provider-specific agent nodes passes |
-| E25 | AD-28 run pass bounds | mint a pass for run A; use it against run B's branch, against `main`, against a model outside its `model_scope`, after expiry, and after revocation: every call refused; a stolen pass replayed from a non-allow-listed source is refused; the per-pass token cap stops use at the run's runaway-guard token allowance |
+| E25 | AD-28 run pass bounds | mint a pass for run A; use it against run B's branch, against `main`, against a model outside its `model_scope`, after expiry, and after revocation: every call refused; a stolen pass replayed from a non-allow-listed source is refused; a burst far above the run's live attempts trips the request-rate alarm, revokes the pass and raises one `urgent` item |
 | E26 | AD-28 vault and outage | rotate a provider key in Settings; the next relayed request on Contabo uses the new key within one sync; delete a key: relays refuse within one sync; stop `qmx-vault` and the Hub: in-flight runs on Contabo keep calling models on cached keys, already-issued passes keep working, no new pass is minted for that placement and it reads `unreachable` |
 | E27 | AD-30 RAM budget and host_harness | set `contabo` to `ram_budget_mb` 12,288 and `overhead_mb` 6,144 so `max_sessions` derives to 4; dispatch 6 agent nodes with `runs_on: [contabo]`: 4 run, 2 wait `placement`; with `runs_on: [contabo, <burst row>]` the 2 spill to the burst row; a `host_harness` node on a managed host receives only a run pass, returns artifacts through the Hub and its trace is imported; a plan account requested on a provider VM is refused at preflight |
 | E28 | AD-33 Cua manifest | an agent node with `scope: browser B3` and a manifest naming two origins: a navigation to a third origin and to a broker domain is refused by the driver and the money gate; actions appear as screenshots in the trace; a second node asking for the same desktop waits (one native input at a time) |
@@ -1134,15 +1147,15 @@ Playwright and Stagehand stay for headless, logged-out research and cheap replay
 | E30 | AD-34 caching and lease affinity | the run of E29 on a 200k model: chunks 2-7 hold the same account lease as chunk 1 (affinity `run_id:node_id`) and each span from chunk 2 onward shows `cache_read > 0`; a forced quota rotation on chunk 4 records `uncached_resend: true` on that span only. Fallback if a provider reports no cache fields: assert the prompt prefix hash is identical across chunks and the lease journal shows one account |
 | E31 | AD-34 compaction and hooks | an agent node fed past 40 % of its window emits a `compacted{trigger: threshold}` span event preceded by a `memory_note` row on `refs/runs/<id>`; its tool calls appear as `tool` child spans from PostToolUse; a copilot chat open at the same time receives none of the engine hooks. Fallback (H15/H16 not granted): on a plan account the engine records `compacted{trigger: restart}`, the `memory_note`, a summary, and a second chat for the same attempt with the same memo key; on a key-provider row the provider's `CLAUDE_CODE_AUTO_COMPACT_WINDOW` quirk fires instead; tool spans come from the session's `tool` blocks |
 | E32 | ruling 83 templates run | every template shipped as a working default (engine, hub and Lab templates) passes one real-model test run (`mode: test`, cheap candidates) on the engine before it is listed on the Templates shelf; a template whose test fails is not listed |
-| E33 | AD-24 AppContainer boundary (probe, before the script-isolation packet) | start the script runtime's `python` in the `qmx-script` AppContainer with grants on the runtime, `code/` and `work/` only: it imports the standard library; opening `<home>/claude/.credentials.json` is denied; `CredReadW` on a throwaway `qmx/probe-*` entry fails; a connection to `127.0.0.1:<qmx-control port>` fails; HTTPS to a public host fails without `internetClient` and works with it; killing the engine process with `taskkill /F` kills the script (Job object). Any failing row switches `host_confined` off; shipped scripts then take the container tier |
+| E33 | AD-24 AppContainer boundary (probe, before the script-isolation packet) | start the script runtime's `python` in the `qmx-script` AppContainer with grants on the runtime, `code/` and `work/` only: it imports the standard library; opening `<home>/claude/.credentials.json` is denied; `CredReadW` on a throwaway `qmx/probe-*` entry fails; a connection to `127.0.0.1:<qmx-control port>` fails; HTTPS to a public host fails without `internetClient` and works with it; killing the engine process with `taskkill /F` kills the script (Job object); also denied (36 S1): a file under `%USERPROFILE%`, a file under `D:` worktrees, the Docker named pipes, the WSL share, a tailnet `100.x` address and the LAN gateway with `internetClient`; `CheckNetIsolation LoopbackExempt -s` does not list `qmx-script`; two concurrent attempts cannot read each other's `work/` (per-attempt profiles, S2). Any failing row switches `host_confined` off; shipped scripts then take the container tier |
 | E34 | AD-24 provenance | an unedited shipped template's script runs `host_confined`; change one byte and the same node runs in the `runc` container; with Docker off the edited copy waits `placement` with "Docker is off" |
-| E35 | AD-24 agent built-in tools | an engine agent chat asked to run `Bash`, `Write`, `Edit` or `NotebookEdit` either has no such tool (H2) or raises an ask the engine rejects; no such call executes; a resumed chat behaves the same (B-70) |
+| E35 | AD-24 agent built-in tools | with his real Settings (remembered "always allow" rows included), an engine agent chat asked to run `Bash`, `PowerShell`, `Monitor`, `Write`, `Edit`, `NotebookEdit` or `WebFetch` either has no such tool (H2 through the SDK `tools` list) or raises an ask the engine rejects; no such call executes; no allow rule matches a shell tool in any `wf-*` workspace; a resumed chat behaves the same (B-70, 36 C1) |
 | E36 | AD-36 scan | plant TP3's evidence set in a copy of a template: `broker.place_order('EURUSD', 1)` in a script, `client.close_position(42)`, `import qmn.orders`, `importlib.import_module("keyring")`, "Then place a market order to buy EURUSD" in a prompt, "Call close_all_positions" in a prompt, `credentials: {broker: qmx/ctrader-live}`, a node named `flatten_all`: each is refused with its file and line. `open_positions`, a variable named `promotion`, `rank_positions(...)` and a fixture saying "investors sell bonds" pass |
 | E37 | AD-37 redaction | a provider error echoing `key_sk-or-v1-…`, a script printing a resolved tool key to stderr, and an inbox item built from that failure: the ledger, the inbox title and cause, `explain`, REST and the Library run summary all show `[redacted…]`; the span counts the redactions |
 | E38 | AD-11 who starts what | `python -m qmx_engine run --mode live` is a usage error; `versions.publish`, `triggers.enable` and `runs.start` by an `agent` or `workflow` caller are refused; the copilot's publish tool returns a card; a `--fake` run reads `mode: test` |
 | E39 | AD-7 replay fork | edit node 4 of a passed 5-node run and replay it: nodes 1-3 write no `node_started` and reuse the source memos, nodes 4-5 run on haiku, the new run is `mode: test` with a `replay-of` edge |
 | E40 | AD-10 wakes | a run held on `wait seconds: 90` writes a wake row, reads `waiting` while held, and resumes on the tick after 90 s with no human action; a retry backoff does the same |
-| E41 | AD-16 runaway counting | a run whose agent turns read 500k cache tokens but write 50k does not trip a 400k guard; a run asleep 3 h in a `wait` is not paused as runaway on wake; a breach with three attempts in flight lets them finish and starts nothing new |
+| E41 | AD-16, AD-40 no caps, stuck detection | a run of 2 chunks × 300k tokens on a 1M model and a 6-hour wall time ends `passed` with no pause; an agent repeating one identical tool call with an identical result 5 times ends `stalled(loop)` after one summary turn; a run asleep 3 h in a `wait` resumes on its own; a run with a `limits.tokens` he wrote pauses at it with one `info` line and resumes from the run card |
 
 ## 25. Later packets found by the first build run (sketches; rules in the spine)
 
@@ -1151,7 +1164,7 @@ Planned work, not hardening: each closes a LATER-PACKET row of `methodology/34`.
 | Packet | Closes | Sketch |
 | --- | --- | --- |
 | Script isolation | B-30, B-31, B-89/B-93, B-17, B-39, L-25, L-39, L-40, L-50, L-52, L-58, B-78, B-80, B-44, B-45 | §5.5 layers 1-7: zones root, shipped manifest, `workers.confine` (AppContainer + Job object through `ctypes`), script runtime venv and boot audit hook, `definition.scan` over the descriptors matcher, `ledger.redact` at the three write seams, run-context env, CLI test-only, user-only publish and enable. Probe E33 first; live checks E14, E17, E33-E38 |
-| Gate folding | B-28, B-32 | `InboxPort.resolve` appends `gate_resolved{answer, principal}` through the ledger writer and wakes the run; the core folds `retry` (new attempt, same idempotency key shown), `skip_node` (node ends `skipped`, downstream readiness per AD-5), `stop` (`run_cancelled`), `resume` (lift a runaway pause after the guard was raised), `stronger_model` (next candidate); an `unknown` outcome on an `irreversible_external` step waits on its gate instead of forever |
+| Gate folding | B-28, B-32 | `InboxPort.resolve` appends `gate_resolved{answer, principal}` through the ledger writer and wakes the run; the core folds `retry` (new attempt, same idempotency key shown), `skip_node` (node ends `skipped`, downstream readiness per AD-5), `stop` (`run_cancelled`), `resume` (lift a pause at a limit he wrote, after he raised it), `stronger_model` (next candidate); an `unknown` outcome on an `irreversible_external` step waits on its gate instead of forever |
 | Nested fan-out | B-20 | partitions become paths (`"3/1"`), the memo key and spans carry the path, a join closes the innermost level, a loop inside a loop body carries an iteration path; validation allows depth `fanout.max_depth` (Claude's default 2) and refuses deeper |
 | Chunk retry under the ladder | B-35 | a failed partition walks retry, account, model and doctor on its own while its siblings' memos stand; the join's watermark waits while any partition has ladder steps left; only a parked partition counts as failed for `all`, and `any`/`quorum` proceed without it |
 | Grader `llm` mode | B-46, B-81 | deterministic checks first; on pass, one `llm` attempt on the `judge` role with a rubric schema `{verdict, score, feedback}`; refused when the resolved model id equals the producing node's (labelled `same_family` for the same family); routes by verdict to `pass`/`fail` |
@@ -1159,3 +1172,254 @@ Planned work, not hardening: each closes a LATER-PACKET row of `methodology/34`.
 | Ledger-derived run state | B-40, B-73, L-68 | `status_of(run_id)` is a pure fold over the run's events plus the worker's live-attempt set; at engine start every attempt with `node_started` and no ending is `interrupted` until folded (AD-8); `workflow_runs_list` reads the fold, never a cache, so in-flight runs show and a held run reads `waiting` |
 | Replay fork | B-82 | `service.runs.replay` per AD-7: seed the new test run with the source's recorded events, let the memo lookup consult the source run's memos for unchanged `(node definition hash, input hash)`, write `replay-of`; AD-26's fix and guard sets and the Lab's RV use it |
 | `engine_view` reads | B-80, L-84 | the `library` kind's read mode `engine_view` returns this workflow's runs (status, mode, totals), inbox items and spans through `service` reads, as JSON on `main`; a template such as RV's `week.py` takes them as an input instead of opening `InboxTable` |
+
+---
+
+## 26. The rerun amendment (2026-10-18 evening): routing, no caps, Hermes adoptions [spine AD-38 to AD-49 and the ADs amended in place]
+
+Record and reasons: `research/methodology/39-architecture-rerun.md`. Where this section and an earlier one disagree, this section wins; the spine wins over both.
+
+### 26.1 The model router: four lanes on every host [AD-38, AD-29]
+
+```mermaid
+flowchart LR
+  subgraph HOST["one machine (PC or Contabo)"]
+    CLI1[CLI on a Claude plan home<br/>own /login, base URL = router,<br/>x-qmx-grant in ANTHROPIC_CUSTOM_HEADERS]
+    CLI2[CLI on a GPT or key profile<br/>base URL = router, grant as auth token]
+    R{router = qma.harness.relay<br/>loopback, in qma.serve}
+    CLI1 --> R
+    CLI2 --> R
+    R -- "claude id + plan grant: bytes unchanged" --> ANT[api.anthropic.com]
+    R -- "gpt id" --> GPT[GPT lane: Responses translator + one of his GPT sign-ins]
+    R -- "third-party id, wire anthropic: bearer dropped, leased key" --> KEY[Kimi, GLM, DeepSeek, Qwen, MiniMax, Ollama Cloud, OpenCode Zen...]
+    R -- "third-party id, wire openai_chat" --> CHAT[chat lane: in-house translator H12 → OpenCode Go GLM/Kimi/DeepSeek...]
+  end
+  W[remote worker / provider thread with a run pass] -- tailnet --> CR{Contabo router: key, GPT and chat lanes only}
+```
+
+```text
+on request(grant, headers, body):
+  check grant (per launch; 401 before the body is read)
+  model = body.model ; row = registry.resolve(model)          # unknown → 400, never guessed
+  lane = plan   if row.provider == claude_plan and grant.kind == plan and grant.host == this host
+         gpt    if row.wire == responses
+         key    if row.wire == anthropic and row.provider != claude_plan
+         chat   if row.wire == openai_chat
+         refuse otherwise (a claude id on a non-plan grant → 400 "use delegate to a plan profile")
+  check row.provider ∈ grant.model_scope
+  plan:  remove only the router's own x-qmx-grant header; forward body and every other header as received to
+         api.anthropic.com; stream back unchanged; read usage from the stream;
+         journal one row (no header values, no body); nothing else touches the request
+  other: drop incoming Authorization/x-api-key ; egress stop (Claude token anywhere → 400 + black item)
+         lease = pool.acquire(row.provider, affinity = grant.affinity or session)   # (session, provider)
+         body' = quirks(row, body) + thinking(row, effort from @suffix or role)    # never User-Agent
+         forward with lease key; classify errors (AD-40); journal one row
+```
+
+| Main agent of the chat | Native sub-agent on Kimi / Qwen | Claude helper | GPT helper | Third-party helper with its own transcript |
+| --- | --- | --- | --- | --- |
+| Claude plan (copilot Opus, plan agent node) | yes, router key lane (A) | native, plan lane | native, GPT lane | `delegate` v2 |
+| GPT sign-in (Codex-style main) | yes, router key lane | `delegate` v2 to a plan profile | native | `delegate` v2 |
+| Key provider (Kimi or GLM main, D) | yes | `delegate` v2 to a plan profile | native, GPT lane | `delegate` v2 |
+| Any, with `router.plan_lane: off` on that Claude account | Claude main: `delegate` v2 only | — | — | `delegate` v2 |
+
+**Launch env per profile (the only harness change besides the pool):** plan launches gain `ANTHROPIC_BASE_URL` = router and `ANTHROPIC_CUSTOM_HEADERS: x-qmx-grant: <secret>` and no credential variable (the saved login stays the active credential); key and GPT launches are unchanged except for `CLAUDE_CODE_GATEWAY_HINT_HEADERS=1`, which adds request class and agent type to their requests for the journal. The plan lane sees `x-claude-code-session-id` and `x-claude-code-agent-id` the CLI sends anyway; it adds nothing.
+
+**Failure paths.** Router crashed: it is inside `qma.serve`, so its chats end with the process and the desktop host restarts both (AD-48); no new single point of failure exists. Canary fails at boot (P1 rerun as a self-test with local echo upstreams): the plan lane stays off for every Claude account, plan chats launch with no base URL as built, and one `black` item says why. Anthropic answers 401 through the plan lane: forwarded unchanged so the CLI's own recovery runs; the pool benches that plan account after the CLI fails, one inbox item "sign in again to <label>". A sub-agent's provider lacks tools or vision: the registry refuses that model for a node that declared the need (AD-13), and inside a chat the router refuses the request with a 400 naming the missing capability, so the CLI reports a failed sub-agent and the parent continues; images to a text-only model go through `vision_describer` first (AD-42).
+
+### 26.2 The model registry and data profiles [AD-39]
+
+```toml
+# profiles/kimi.toml (bundled; a user file of the same name overrides it)
+name = "kimi"            aliases = ["moonshot"]
+base_url = { intl = "https://api.moonshot.ai/anthropic" }
+auth = "bearer"          credentials = ["qmx/kimi-1", "qmx/kimi-2"]
+use = "any"              terms_note = ""             # he may write one; never gating
+usage_hook = "none"      cheap_aux = "kimi/k2.7-code"
+request_overrides = {}   # merged one level deep; User-Agent is never rewritten
+
+[[models]]
+qmx_id = "kimi/k3"       native = "kimi-k3[1m]"      wire = "anthropic"
+context_window = 1_000_000  max_output = 32_000      class = "strong"
+tools = true  vision = true  pdf = false  audio = false  video = false
+thinking = "optional"  budget = "ignored"  tool_choice_forcing = true
+prompt_cache = "top_level_only"  count_tokens = true
+
+[[models]]
+qmx_id = "kimi/k2.7-code" native = "kimi-k2.7-code"  wire = "anthropic"
+context_window = 256_000  class = "cheap"  thinking = "forced"  prompt_cache = "top_level_only"
+```
+
+| Bundled profile | Wire per model | Notes the registry carries |
+| --- | --- | --- |
+| Claude plan | anthropic (plan lane) | one home per account; ids `claude/opus`, `claude/sonnet`, `claude/haiku` |
+| GPT sign-in | responses (GPT lane) | one sign-in home per account |
+| Kimi API, Kimi Code | anthropic | top-level cache marker only; K2.7 Code forces thinking; Kimi Code: never touch User-Agent |
+| Z.ai GLM | anthropic | thinking and tool fields unconfirmed until P3 |
+| DeepSeek | anthropic | native ids mapped (`claude-opus*` style ids map to `deepseek-v4-pro`); budget ignored; automatic cache |
+| Qwen PAYG, Coding Plan, Token Plan | anthropic | Token Plan `auto` pinned to real ids; `use` default `any` (ruling 100) |
+| MiniMax | anthropic | global and China base URLs; `MiniMax-M2.7`, `-highspeed` as cheap aux |
+| OpenCode Zen, OpenCode Go | per model: anthropic or openai_chat | Go's GLM, Kimi and DeepSeek go through the chat lane; own User-Agent; session header forwarded |
+| Ollama Cloud | anthropic | bearer only; `prompt_cache = none`; no `count_tokens`; no tool-choice forcing |
+| Meta Muse | per its docs at onboarding | added through the onboarding flow |
+| OpenRouter | anthropic | `test_only`: provider-proof lanes only |
+
+### 26.3 Removing the caps: every limit, its fate, where it lives today [AD-40, AD-9, AD-16]
+
+| Limit today | Where [retrieved engine/base 132169c7] | Fate | Replacement |
+| --- | --- | --- | --- |
+| `max_budget_usd` 5.0 per Background/Child chat | `qma/harness/launch.py:232`, applied `:519` | removed (default unset; H28) | nothing; he may set one |
+| `background_cap` 0.5 of the plan window | `launch.py:229`; `harness.py:378` `BackgroundCap` + `needs_you` | removed (default unset; H28) | the provider's own window (AD-9) |
+| harness `max_turns` 50 for Background/Child | `launch.py:231`, `:518` | removed (default unset) | loop signature and no-progress (AD-16) |
+| `pool.accounts.*.background_share` 0.5 | `qmx_engine/settings.py`, `admission.py:43` fallback | default removed | his per-account value, unset by default |
+| `runaway.tokens` 400k, `.agents` 12, `.wall_seconds` 7,200, `on_runaway` | `settings.py`, `core/ladder.py` | removed | stuck detector; his `limits` block if he writes one |
+| `agent.max_turns` 12, `agent.max_tool_calls` 200 | `settings.py`, `nodes/agent.py:193-255` | removed | loop signature (AD-16) |
+| `timeout.agent.run` 1,800 s, `timeout.script.run` 600 s | `settings.py` | removed | idle timeouts (progress-based, sleep-aware) |
+| per-pass token cap | design only (AD-28) | removed | request-rate theft alarm |
+| `pool.strategy = "fill-first"` | `settings.py:46` | default changed | `least_used`; copilot account `background_priority: last` |
+| `limits.interactive_reserve` 2, `max_live_chats` 6 | `settings.py`, harness `[budgets]` | kept, re-based | chat slots are machine capacity derived from RAM; they queue work, never refuse it |
+| provider concurrency, 429, 402, windows | providers | kept | the only limits (AD-9, AD-12) |
+
+Kept on purpose, none a usage number: idle timeouts with a warning and grace, the loop signature (`loop.repeat` 5, `loop.window` 8), repeat error signatures, zero-token runs, the crash-loop counter, lost workers and missed fires.
+
+### 26.4 `delegate` v2 [AD-41]
+
+```text
+tool mcp__qmx__delegate
+  start(task, role? | model? | profile?, effort?, output_schema?, images[≤8]?, worktree?: bool, group?, target: chat | cli = chat)
+        → {handle, child_session_id?, resolved: {profile, account_alias, model, wire, effort}}
+  list(group?) → [{handle, state: queued|running|done|failed|stalled|unknown, elapsed, last_activity, provider, model}]
+  steer(handle, text) → {queued_for_checkpoint: true}        # result later says delivered | missed_steer
+  stop(handle, reason)
+completions (control.db): handle, parent_session, state, summary (bounded), artifact_id, schema_valid, delivered_at
+  stored before announce; delivered once between parent turns as InjectedText; owner gone → unknown
+child rules: tools ⊆ parent's; no delegate (unless role orchestrator and depth setting > 1), no clarify/ask,
+  no home/operator memory writes, no send_message, no scheduling; processes die with the child unless handed off
+```
+
+### 26.5 Multimodal pre-processing [AD-42]
+
+```mermaid
+flowchart LR
+  IN[attachment or @ref on a turn or node input] --> ART[(Library artifact by hash)]
+  ART --> CAP{resolved model capability row}
+  CAP -- image/pdf + vision/pdf --> NATIVE[native block]
+  CAP -- image/pdf, text-only model --> VD[vision_describer → description artifact]
+  ART -- audio --> TR[transcriber or local Whisper → transcript artifact]
+  ART -- video --> VA[frames + transcript → video_analyst → timeline artifact]
+  ART -- document --> DR[doc_read: text, scanned-PDF warning, SQLite preview]
+  NATIVE & VD & TR & VA & DR --> TURN[turn = derived text + pointers]
+```
+
+### 26.6 Permissions and rules [AD-43]
+
+| Context | Ask answer | Floor |
+| --- | --- | --- |
+| Engine run (Background, no human) | `deny` at once; `irreversible_external` steps go to the inbox (AD-4) | money gate first, destructive floor, his never-allow list |
+| Copilot chat (Interactive) | waits; optional attended timeout, fail-closed | same |
+| Delegated child | never asks (its asks are denied) | same, inherited, never widened |
+
+Rules page rows: `pattern, list (allow | deny), source (you | imported | suggested), added_at, last_matched`. Locked keys: money and risk/sizing keys are refused to agents in the Settings validator and need his unlock.
+
+### 26.7 Browser, desktop, take-over, HUD, MT5 on demo [AD-44, AD-33]
+
+```text
+take-over:  agent holds lease(epoch = n) → he clicks Take over → lease(epoch = n+1, holder = operator)
+            → every agent tool result stamped epoch n is void → he signs in → Hand back → lease(epoch = n+2, holder = agent)
+HUD:        bar position → window under it → read_window_below() → screenshot image block → model; never an input event
+MT5 demo:   manifest {app: mt5, demo_account: {account_id, server}} → driver reads the account and server from the window
+            → mismatch or live → refused before any input; algo trading toggled only after the match; order tickets → money gate refuses
+```
+
+### 26.8 Output directives [AD-45]
+
+```text
+::chart{run="<run_id>" metric="equity"}          → registered component, inline
+::preview{artifact="<sha256>"}                   → sandboxed srcdoc frame, theme tokens; talk-back ≤500 chars, ≤1/s, typed
+::app.<app_id>.<widget>{...}                     → a mini app's widget through the same registry
+unknown directive → plain text; component error → error chip
+```
+
+### 26.9 Template names and intake [AD-46; ruling 35]
+
+Rule for all 31: the id and title are a plain phrase; code prefixes leave the ids (`rs1-paper-scout` → `paper-scout-to-research-note`). Proposed titles for the ones that do not say what they do (editable defaults; he edits them with the copilot as he uses QMX, ruling 83):
+
+| Today | Proposed |
+| --- | --- |
+| A "Fill the Library, funnel stages 1 to 7" | "Turn a video, a playlist or saved posts into strategy ideas" |
+| B "Build and prove, funnel stages 8 to 12" | "Turn a strategy idea into a tested strategy, ending on paper" |
+| RS0 "Idea grill to term sheet" | "Question a rough idea until it is a clear test plan" |
+| DB "Desk brief" | "Morning market brief before each session" |
+| DM "Demo monitor and execution quality" | "Watch demo trades and check fill quality" |
+| T7 "Trade journal review in R" | "Review my trade journal in risk units" |
+| GW "Guard watchdogs" | "Check that the trading guards are alive" |
+| PP "Proposal pack he signs" | "Bundle a change for me to approve" |
+| L1 "Idea to first result" | "Get a first backtest result from an idea" |
+| RS8 "Big-data question" | "Answer a question over a large table" |
+| D9 "Mini-app-to-mini-app pipeline" | "Connect one mini app's output to another" |
+
+Template A also gains: playlist, channel and saved-collection expansion without asking; a chunked fan-out edge over the expanded list; the visual pass through AD-42; a cron or monitor trigger available; Instagram saves and TradingView rows through the browser pack (AD-44) when he turns `logged_in` on. The Firecrawl worked example (a scraped site → sort and categorise → ideation → plan → macro research) is §26.13 scenario S3.
+
+### 26.10 Copilot loops [AD-47]
+
+`session_loops(session_id, kind heartbeat|loop|goal, spec json, state, next_at, created_by, created_at)` in `qmx_control`; the engine ticker fires trigger kind `session` → `InjectedText` between turns; a coalesced fire never stacks.
+
+### 26.11 Desktop host [AD-48]
+
+```mermaid
+flowchart TB
+  D[qmx-desktop main process] -- starts, watches --> S[qma.serve: harness + control + engine + router]
+  D -- startup card stages --> UI[app windows: main, pop-out, HUD, Quick Entry]
+  D -- if needed --> DK[Docker Desktop start + health wait]
+  D -- heartbeat row --> T[Windows Scheduled Task dead-man check]
+  S -- event-loop watchdog --> D
+  D -- 3 quick restarts --> SAFE[safe mode: UI up, scheduler off, black item]
+```
+
+### 26.12 Worktrees and checkpoints [AD-49]
+
+A child with `worktree: true` gets `git worktree add <zones_root>/wt/<session>/<item> -b agents/<session>/<item>`; its result carries `path, branch, commits, dirty`; pruning requires the branch merged or archived. Checkpoints are a shadow git store per zone, taken before a destructive edit.
+
+### 26.13 Scenarios the design must survive
+
+| # | Scenario | What happens |
+| --- | --- | --- |
+| S1 | His copilot (Opus on the plan) says "have Kimi and Qwen each review this paper" | two native sub-agents name `kimi/k3` and `qwen/3.8-max`; the router sends each to its key lane with its own lease; thinking stays per provider; two journal rows per request carry the agent ids; the live dock shows both; Opus requests go out on the plan lane untouched |
+| S2 | A whole YouTube playlist (300 videos) through template A on a Kimi main | expansion without asking; captions, frames and transcripts through AD-42; a chunk edge sized from Kimi's 1M window (fill 0.30); chunks run up to host capacity on `contabo`, spill to burst rows, queue otherwise; no QMX ceiling; a 429 cools one Kimi key and the next chunk takes the other; finished chunk memos stand through any restart |
+| S3 | Firecrawl scrape of a site's articles → sort and categorise → ideation → plan → macro research | Firecrawl key under `qmx/tool/firecrawl` declared in `[credentials.tools]`; a `script` node scrapes (network declared, container tier); a chunked `agent` node categorises; an `agent` node ideates on GLM; a planner on DeepSeek; a macro research node fans out by topic; each stage memoised; the run ends `passed` and its results fast-forward to `main` (Library AD-18) |
+| S4 | Provider 429 mid-chunk | the attempt waits with `resume_at` from the provider; the pool cools that `(account, model)` and rotates the next lease; no partial output kept; the chunk re-runs alone on another account or after the reset (`uncached_resend`) |
+| S5 | 402 (no balance) on a key | the classifier says `billing`; the account cools one hour and rotates; if every account of the provider is out, the role's next candidate (another provider) takes the chunk; one inbox item only when every allowed account for the role is closed past `alert_after` |
+| S6 | 401 on the plan through the plan lane | forwarded unchanged; the CLI's own recovery fails; the pool benches that plan account and raises "sign in again"; the copilot falls to his next Claude account if he has one, else to the next role candidate |
+| S7 | Crash mid-chunk (PC power cut) | at restart the desktop host starts `qma.serve`; the orphan sweep folds open attempts `unknown`; model calls are retried once (duplicate spend accepted, AD-8), finished chunk memos stand, irreversible external steps go to the inbox |
+| S8 | Mixed providers in one run where one sub-agent's model lacks tools | the registry marks the model `tools = false`; a node declaring tools never resolves to it; inside a chat the router refuses the request naming the capability, the parent sees a failed sub-agent and continues or re-delegates |
+| S9 | A sub-agent on a text-only model is sent an image | `delegate` forwards a description from `vision_describer` instead of pixels (AD-41, AD-42) |
+| S10 | Every Kimi and GLM account exhausted overnight | nodes wait with the earliest provider reset; the run drains; it resumes by itself; one inbox item after `alert_after` (6 h) |
+| S11 | The PC is offline overnight | schedules whose `home_engine` is `contabo` keep firing; PC-homed schedules get one catch-up run on wake (AD-10); Contabo runs only key, GPT-on-Contabo and Contabo-plan work |
+| S12 | Contabo unreachable | central-relay placements wait `placement`; PC work continues on the PC router; model-written code falls back to the PC's hardened `runc` with a doctor line (AD-25) |
+| S13 | His copilot account is busy all day | workflows lease it last; with two Claude accounts they use the other; with one, background Claude work leases it only when every other candidate is closed |
+| S14 | An agent sets up an EA on MT5 demo | the driver reads the account and server, matches the pin, installs and attaches the EA, turns algo trading on; a click on the live account or an order ticket is refused by the manifest and the money gate |
+| S15 | An agent's browser hits a 2FA page | an inbox item opens the agent's screen; he takes over (epoch n+1), signs in, hands back; tool results from the old epoch are void |
+
+### 26.14 New live checks and probes
+
+| Id | Proves | Check |
+| --- | --- | --- |
+| P1 | AD-38 plan lane canary (fake upstreams) | a plan CLI through a test router with echo upstreams; the main calls an `Agent` with `model: kimi/k3`: the Kimi echo never receives an `sk-ant-` value or the grant header; the Anthropic echo receives a body hash-identical to what the CLI sent, `anthropic-beta` intact; runs at every boot as a self-test |
+| P2 | AD-38 plan lane, live | real plan login and a real Kimi key, three turns: the plan meter moves, a Kimi journal row carries the agent id, no 401, `cache_read_input_tokens` > 0 on turn 3 |
+| P3 | AD-39 per provider as a sub-agent | Kimi K3, K2.7 Code, GLM, DeepSeek, Qwen, Ollama Cloud, OpenCode Go (chat lane): a two-turn tool loop with thinking on; record quirks into the bundled profiles |
+| P5 | AD-41 delegate v2 | a plan copilot starts three helpers (Kimi, DeepSeek, Qwen) and keeps working; handles return at once, results arrive between turns, a restart mid-run delivers each completion exactly once |
+| P7 | AD-12 pool | two Kimi keys, 429 with `retry-after: 30` on key 1: key 1 cools 30 s, affinity moves the next request to key 2, switch-back after the cooldown, classifier `rate_limit` |
+| P-PK | AD-35 packs mid-session | add a mini app's pack to a running chat; the chat lists the new tools without a restart (`tools/list_changed`), else at the next turn on the same session id |
+| P-FK | AD-26 copilot background review | the SDK forks a Background copy of a finished session and writes only drafts |
+| E42 | AD-22 builder | the copilot builds, validates and test-runs a three-node workflow from a one-line request with no harness ask; the draft lands on its agent ref |
+| E43 | AD-40 no caps | a two-chunk 600k-token run on a 1M model and a six-hour run both end `passed` with no pause; `[budgets]` unset reaches the SDK as no budget and no turn cap; no `needs_you` appears |
+| E44 | AD-42 multimodal | an MP3 and an MP4 dropped on a turn produce transcript and timeline artifacts; a PNG to a text-only model goes through the describer; the turn sends only when both are ready |
+| E45 | AD-44 take-over | an agent's tool result under epoch n arriving after he took over is void; hand back resumes the agent |
+| E46 | AD-33/AD-44 MT5 demo | a manifest pinned to a demo account; the driver refuses a live-account window and an order ticket |
+| E47 | AD-45 directives | an unknown directive renders as text; a throwing component renders an error chip; a preview's talk-back is capped |
+| E48 | AD-46 templates | all 31 shipped templates pass E34 and E36 and a haiku test run; renamed ids resolve; template A expands a playlist fixture without an ask |
+| E49 | AD-48 desktop host | kill `qma.serve` three times quickly: safe mode, one `black` item; Docker down + an edited script: Docker starts, the attempt runs |
+
+### 26.15 Packets this amendment adds (for the next plan; nothing ships from this pass)
+
+Router and plan lane (P1, P2 first) · model registry and data profiles (P3) · pool (L2, now with priorities and per-model cooldowns) · caps removal (harness H28 plus engine defaults; a hygiene-size change) · chat lane translator (H12) · `delegate` v2 (P5) · multimodal layer · permissions and rules · browser pack for copilot and workflows · output directives (with the UI session) · skills/templates lifecycle, curator and template renames · copilot loops · desktop host · worktrees and reconcile · copilot builder skill. The spec-gap code rows 36 S10 lists that were not budgeted (`required` edges, enable derived from triggers, event keys, the `WorkerPort.run(job, emit)` shape, proposal artifacts in pp and dm) join a "2b spec-gap code" step; the rows about the runaway guard (B-49, L-48, L-46, `runaway.tool_calls`) are dropped with the guard.

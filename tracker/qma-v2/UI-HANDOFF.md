@@ -19,7 +19,7 @@ Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. So
 2. **Session home:** show a home badge. A session keeps its birth home. "Open in hub" must not rewrite the home, and there must be a way back to the Lab. Replace the one-way `absorb()` [10 §6.2-6.3, 23, ruling 12]. **The backend field is now designed (engine AD-35):** `home: {kind: general | lab | portfolio | library | app, project_id}` lives in `qmx_control` (`session_homes`), not in the harness, which keeps writing `origin="qma"`. The UI writes it once, right after `POST /api/chats` and before the first turn, with `PUT /api/sessions/<id>/home` (a second write is refused `home_fixed`); Child chats inherit the parent's home; a session with no home reads as `general`. Every screen can open and continue any session through the same session id and turn routes; "open in its home" is the way back.
 3. **Chat status words** (chat turns, not runs): add `failed`, `cancelled`, `expired` [10 §6.4]. Run statuses are a different set (§9 row 8) and have no `cancelled`.
 4. **Approvals:** the backend has four **decisions**: `allow_once`, `allow_always` (not offered when a QMX tool asks), `reject` (with a message) and `answers` (the reply to an AskUserQuestion). An answer returns `resolved | already_answered | expired | invalid | unknown`. There is no `reject_once` or `reject_always`, and "for this errand" doesn't exist. Add "expired, re-run from here" [`QH/routes.py:180-205`, `QH/chat.py:230-253` on hp17, 27b F11; 10 §6.5, 20b].
-5. **Sub-agents:** show start, end and result only. The backend has no live progress [10 §6.6].
+5. **Sub-agents:** show start, end and result only today. The backend has no live progress until `delegate` v2 and the router's per-agent journal rows ship (HARNESS-REQUESTS H26, H36; §12 row 1) [10 §6.6].
 6. **Harness features missing in the UI:** effort control, compaction events, stop/interrupt/steer, the model-switch cost warning, a usage page, Export per session [10 §6.12, UI-NOTES]. "Compact now" has **no backend**: the harness only observes compaction today; it needs harness request H15 (engine HARNESS-REQUESTS), so leave the button out until he grants it [27b F14].
 7. **Terminal:** label it read-only. It is not a shell [10 §6.13].
 8. **Output:** add a Markdown renderer and diagram parts in the panel catalog. These are pure UI work [10, 19].
@@ -39,7 +39,7 @@ Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. So
 - **Test runs use real models** through existing providers (ruling 51). Show each test report and its cost. Saving a draft and running a test never ask him; publishing and enabling ask once.
 - **Run timeline:** one trace per run and one span per step (status, cost, time, account, model). Steps that waited at a usage limit show `waiting (resume_at)` [engine §observability].
 - **Inbox items:** one per problem, with buttons: retry, stronger model, skip step, open trace, stop, resume. Long-pause alert after 6 h (editable) [engine §failure ladder]. Only provider failures and harness-level errors reach the inbox; everything else is a digest line (§9 row 9).
-- **Account pool settings:** list accounts per provider, the strategy (fill-first / round-robin / least-used), cooldowns. OpenRouter is marked test-only. GPT capacity is 1 [engine pool AD].
+- **Account pool settings:** list accounts per provider (any number of Claude, GPT and key accounts), each with priority, "my copilot account" (workflows use it last), and optional values he sets himself (strategy, share, ceiling, concurrency, cooldown), all empty by default. The default strategy for workflows is least-used, never fill-first. OpenRouter is marked "provider proof only" [engine AD-12, rerun].
 - **Defaults are all UI-editable.** The list is in `SOLUTION-DESIGN.md` §17.
 - **Copilot builder:** the copilot asks numbered questions with suggested answers, then draws the draft on the canvas.
 - **Templates:** a template is a copyable workflow. A variant is an overlay with a "variant of" link (ruling 48).
@@ -90,7 +90,7 @@ Binding rulings: `research/methodology/26-operator-rulings-and-alignment.md`. So
 
 - Workflow memory (`research/methodology/28-workflow-memory.md`): lessons and "already built" hints may surface in the UI.
 - Environments and deployment (`29-environments-and-deployment.md`): where each run runs (PC or server), shown on the run card.
-- Browser plan: the watch pane and lease queue. This is still owed to the operator.
+- Browser plan: now designed (engine AD-44; §12 rows 10-12): watch pane, lease queue, take-over, HUD. The plain-words journeys still go to him first (ruling 30).
 - Phone alerts: later (ruling 34).
 
 ## 8. Notifications (ruling 77)
@@ -104,7 +104,7 @@ Fifteen rows the UI session needs that earlier sections missed [27b §5]. Each n
 
 1. **Machines list in Settings** = the placement registry with live preflight states (`available → configured → authorized → reachable → healthy`), sessions in use / `max_sessions` (derived from RAM; about 4 on Contabo today), RAM in use, vault sync age, last error, and each row's `relay: local | central`. Run cards, spans and inbox items show `placement`, `agent_mode`, the run `mode` badge, `health`, `cost so far` and `link_out`. A live desktop or VM view loads only for nodes with `watch: true`, and only when he opens it. Provider dashboards are reached by the copilot, not rebuilt [engine AD-30, AD-32; SD §21, §23].
 2. **Keys once:** per key `replicable`, `vault_version` and last sync; "key rotated, N relays updated"; re-pair placements; `qmx node login <placement>` for a plan sign-in on an owned machine [engine AD-28; SD §19].
-3. **Providers and roles:** a provider row = base URL + key ref + four tiers + quirks (+ `wire: openai_chat`); role candidate lists **per placement** (`pc`, `contabo`, burst rows); OpenRouter marked test-only [engine AD-13, AD-29; SD §9].
+3. **Providers, models and roles:** a provider row is a profile (base URL per region, auth style, key refs, usage hook, an optional terms note he writes); each **model** row carries its own wire (`anthropic | openai_chat | responses`) and capabilities (tools, vision, PDF, audio, video, thinking, cache style, window); a "Test" button sends one token; role candidate lists **per placement** (`pc`, `contabo`, burst rows), generated from his providers until he edits them, third-party models first; OpenRouter marked "provider proof only" [engine AD-13, AD-39; SD §26.2].
 4. **Provider onboarding:** "Add a provider" starts the copilot flow that reads the provider's own published instructions and drafts a placement row; he applies it with one click and types any key once; a smoke test result card follows [engine AD-30, ruling 74; SD §21].
 5. **Cua scope and manifest editor** on an agent node (apps, origins, profile `isolated | logged_in`, expiry); screenshots in the trace; the always-on broker deny-list shown read-only [engine AD-33; SD §24].
 6. **Self-improvement:** per workflow `self_improve auto | propose_only | off`; a champion vs published badge; a "rolled back automatically" line [engine AD-26].
@@ -116,4 +116,84 @@ Fifteen rows the UI session needs that earlier sections missed [27b §5]. Each n
 12. **QMB machine** as a placement with its own queue depth [engine AD-31].
 13. **Lab paper** as a daily schedule: Day n of m, pause = disable the daily trigger [Lab AD-12].
 14. **Library home indicator:** off. The UI never shows which store answered, but shows `primary_moving` during a cut-over [library LLD §7].
-15. **Harness budgets** in Settings: `max_live_chats`, `max_budget_usd` (shown as a runaway guard, never as a spending cap), `background_cap`, each with its effect on workflows; and the engine's runaway guard per workflow (tokens, agents, tool calls, wall time, `on_runaway: pause | degrade`). No spend ask exists anywhere (ruling 27) [engine SD §7.4, §17].
+15. **No QMX limits (rewritten 2026-10-18 rerun):** Settings shows `max_budget_usd`, `background_cap` and `max_turns` as "unset (no QMX limit)" with a way for him to set his own; there is no runaway guard and no per-workflow token, agent, tool-call or wall-time ceiling. `max_live_chats` shows as machine capacity (derived from RAM), not a limit. A workflow may carry a `limits` block only if he writes one; the run card then shows "paused at your limit, resume". Stuck and loop stops show as `stalled` with the reason. No spend ask and no QMX limit bar exist anywhere [engine AD-9, AD-16, AD-40; SD §26.3].
+
+## 10. Operations patterns from Hermes (added 2026-10-18, study 37c)
+
+Patterns from Hermes Agent's TUI, desktop app and dashboard that make many runs and agents readable. Sources in `research/methodology/37c-hermes-operations.md`.
+
+1. **Live work dock** above the copilot composer: running sub-agents and workflow runs started from this chat, with name, elapsed time and latest activity; expand to a roster. Steer and Stop where the backend allows. Steer says "queued for the next checkpoint", not "read". Sub-agents still show start, end and result only until the harness emits progress (§1 item 5) [37c §12].
+2. **Queued messages panel:** a message typed while the agent works shows as `queued` and can be cancelled before it starts [37c §12; harness queue].
+3. **Context meter with breakdown:** % full, and a popover by category (system text, tools, skills, memory snapshot, MCP, conversation). Optional cache hit rate and tokens per second, off by default [37c §12; harness usage].
+4. **Failure card names the layer:** provider, key, relay, stream, harness, engine, disk. Actions match the layer: Retry (hidden when it would fail the same way), **Retry when the limit resets at HH:mm** with a countdown and Cancel (nothing retries after he closes the window), Switch model [37c §12; error class set, 37c §7] *(new backend: closed error classes)*.
+5. **"Why didn't it fire?" panel** on each trigger: ticker heartbeat age, version enabled, next fire, last 10 fires with status and reason (`silent`, `merged`, `blocked config`, `held until HH:mm`, `skipped`), open incident. The copilot answers the same question from the same read [37c §4] *(new backend: `service.explain_trigger`)*.
+6. **Trigger list columns:** name, schedule in words plus the cron text, state badge, delivery, last fire (status + delivery outcome), next fire, Run now. "Passed" and "delivered" are separate badges [37c §1] *(new backend: delivery field)*.
+7. **Incidents, not repeats:** one row per trigger and error signature with a count and first/last seen; Acknowledge keeps it quiet until the error changes; a passing run marks it resolved [37c §1] *(new backend: trigger incidents)*.
+8. **Engine health badge** in the status bar and on the Machines list: Running, Degraded (with reason), Heartbeat stale ("looks running but nothing is scheduled"), Old code ("restart to load the update"), Safe mode (after a restart loop) [37c §1, §7] *(new backend: heartbeat row, code stamp)*.
+9. **Resource banner:** only the most severe active warning (disk critical > memory critical > unexpected restart > disk low > memory low); dismissal lasts until the next engine boot [37c §7].
+10. **"Last run" diff scope:** for a workflow or copilot that changed files or Library items, a view of exactly what its latest run or turn changed [37c §12; Library run branch].
+11. **Pop-out a run or chat** into its own window without the sidebar, for a second monitor; live output streams into every window showing it [37c §12].
+12. **Simple mode:** a chat-first layout switch that hides the status bar, rails and terminal; it changes what is shown, not what QMX can do [37c §12].
+13. **Approvals:** keep the four decisions (§1 item 4). Add a visible badge whenever any auto-approve mode is on for a session, in the status bar and on session start [37c §12].
+14. **Machines list:** each machine has a device name; the same agent or workflow on two machines shows as `name@machine` [37c §12].
+15. **Settings, persona:** one short text box for the copilots' tone and defaults, with the "which file does what" help card beside it [37c §13] *(new backend: persona item)*.
+16. **Logs page:** filter by component (engine, scheduler, relay, harness, apps) and level, live tail; analytics by day and by model (tokens, cache hit, cost estimate) [37c §12].
+17. **Phone (later, ruling 34):** inbox actions as buttons with a timeout and a numbered-text fallback; one status message edited in place per run [37c §10].
+
+## 11. Desktop patterns from Hermes, second pass (added 2026-10-18, study 37d)
+
+Sources in `research/methodology/37d-hermes-full-pass.md`. Rows marked *(new backend)* need a proposal from 37d.
+
+1. **Widgets inside chat messages.** The model writes a directive paragraph such as `::chart{id="run-123"}`; a registered component renders it inline; an unknown directive shows as plain text; a crash shows an error chip, never a dead message [37d H-83] *(new backend: a directive registry the copilot is told about through a skill)*.
+2. **Live previews that talk back.** `::preview{file="…"}` renders an HTML explainer in a sandboxed frame with QMX theme tokens. A button inside can send a short hidden prompt back to the copilot (capped length, one per second, typed result). This is the home for animated explainers (ruling 7) [37d H-84].
+3. **HUD mode.** A floating, always-on-top chat bar over any app; where it sits is context ("what is this?" means the window below). Read only over broker windows [37d §4.12] *(new backend: `read_window_below` tool)*.
+4. **Loop, goal and heartbeat cards** above the composer: "Loop active · 2 runs · next 00:04:12", goal "3/20 turns", heartbeat interval; pause, resume, stop [37d H-67 to H-69] *(new backend)*.
+5. **Processes block in the live dock** under sub-agents: command, elapsed, last output line; flips to exit status, leaves after about 60 s [37d H-07].
+6. **Sub-agent steering:** Steer says "queued for the next checkpoint"; a result that missed the steer shows "steer did not land" [37d H-03] *(new backend: delegate v2)*.
+7. **Queued messages and "Turn lost during restart"** with a single Discard; the queue lives on the backend so every window sees it [`D:user-guide/desktop` "Composer history and queue editing"].
+8. **Model picker in the composer** with an effort pill that shows what is sent (`Ultra→Max`), favorites, and a confirm dialog when a switch is risky (large cached context, expensive model). Mid-chat switches warn that the cache resets [37d H-40].
+9. **Auxiliary-model warning** when side roles (titler, compactor, describer) sit on another provider than the main model [37d H-17].
+10. **Bots roster** (organogram): each named agent with avatar, title, persistent chat, routines, model pin, skills and tools; group rooms with @mentions; "Create on" a chosen machine; `name@machine` handles [37d H-106].
+11. **Agent screen with Take over / Hand back** for an agent's own desktop or browser at a login or 2FA step; the agent's tool results are void while he holds control [37d H-96].
+12. **Comment mode on a preview:** click elements on a live page, leave numbered pins, send them as one grouped message with cropped screenshots [`D:user-guide/desktop` "Comment mode"].
+13. **Artifacts gallery:** every image, file and link sessions produced, searchable, with a jump back to the producing chat [`D:user-guide/desktop` "Artifacts"].
+14. **Interface modes:** Simple (chat-first) and Advanced, each remembering its own layout [37c row 12, extended].
+15. **"Applies to" chips** on Settings pages when several agent homes exist, so an edit lands on the chosen one [`D:user-guide/desktop` "Per-profile settings"].
+16. **Quick Entry:** a global hotkey composer from anywhere [`D:user-guide/desktop` "Quick Entry"].
+17. **Conversation timeline rail** and reading-position memory per chat [`D:user-guide/desktop` "Chat"].
+18. **Restored unsent message** strip when a draft's chat disappeared [`D:user-guide/desktop` "Chat"].
+19. **Suggestions list:** proposed automations from templates, usage and newly connected accounts; Accept opens the enable card; Dismiss latches [37d H-71].
+20. **Template fill-in:** pick a template, answer its slots one at a time (or as a form), confirm before anything is scheduled [37d H-70].
+21. **Rules page:** "always allow" and "never allow" lists with their source (you, imported, suggested); the money deny list shown read-only [37d §4.2].
+22. **Passwords & Logins page** for site logins the browser agent may fill; never cards [37d H-55].
+23. **Multimodal attach:** drop images, PDFs, audio and video into the composer; audio and video show "transcribing" or "analysing" chips before the turn sends [37d §4.9] *(new backend)*.
+24. **Keep computer awake while working** setting [37d H-74].
+25. **Memory Graph:** skills and memories over time, filter All / Used / Learned, edit or archive a node [37d H-80].
+
+**User journeys for the UI session (from study 37d §5):** (1) ask about what I see through the HUD over TradingView; (2) hand a job to helpers on Kimi and DeepSeek from an Opus copilot and steer one; (3) keep an eye on the overnight Lab loop with a heartbeat; (4) turn a good chat into a template and accept a suggested schedule; (5) an agent hits a 2FA page, he takes over and hands back; (6) meet the team in the Bots roster and @mention the Researcher; (7) drop a podcast clip and a PDF into the composer and send when both are ready.
+
+## 12. The rerun pass (added 2026-10-18 evening, `research/methodology/39-architecture-rerun.md`)
+
+Backend decisions from the rerun that change or add screens. Engine AD numbers in brackets. Nothing here is built yet; build with demo mode off, so these places say "Not connected" until their packets ship.
+
+1. **Helpers on other models, visible.** The copilot (Opus on his plan) can run sub-agents on Kimi, Qwen, DeepSeek, GLM or MiniMax in the same chat, and full helper chats through `delegate` v2. The live dock shows each helper with its provider and model, elapsed time, last activity, Steer ("queued for the next checkpoint") and Stop; results land between turns as a summary card with a link to the helper's transcript [AD-38, AD-41].
+2. **Per-account switch "native helpers on other providers"** on each Claude account in Settings (the plan lane): on by default once its checks pass; off means helpers on other providers run only as full helper chats. One plain line explains it; it is not an approval [AD-38].
+3. **Model picker** lists models from the registry with capability chips (tools, vision, audio, video, thinking, window, cache) and the effort sent; a model that lacks something the chat needs is shown greyed with the reason [AD-39, AD-13].
+4. **Add a provider:** a profile row (or the copilot's onboarding flow) plus "Test"; MiniMax, Qwen, OpenCode, Ollama Cloud and the rest are rows, not features [AD-39, AD-30].
+5. **Accounts page:** any number of Claude, GPT and key accounts; priority; "my copilot account" (workflows use it last); optional values he sets (strategy, share, ceiling, concurrency, cooldown), empty by default; per account the provider's own usage reading, cooldown with its reset time, and "sign in again" when benched [AD-12].
+6. **No QMX limits anywhere.** No limit bar, no runaway guard, no spend ask. Run cards show estimates and the providers' own readings. A stop by the stuck detector reads `stalled` (no progress) or `stalled (loop)` with the agent's last summary [AD-16, AD-40].
+7. **Failure cards name the error class** (rate limit, plan quota, billing, sign-in, model not allowed, context too long, provider down) with actions that fit: wait for reset (time shown), switch account, next model [AD-40].
+8. **Attach anything:** images, PDFs, audio, video, files and `@file`, `@folder`, `@url`; chips show "transcribing", "analysing video", "reading" before the turn sends; the attachments land in the Library [AD-42].
+9. **Rules page:** always-allow and never-allow lists with each row's source (you, imported from Claude Code, suggested); the money and destructive floors shown read-only; locked money and risk keys show a lock and need his unlock [AD-43].
+10. **Browser and take-over:** the copilot can browse with a QMX Browser profile (`isolated`, or `logged_in` from a snapshot of his real profile, with "close your browser to refresh" when Windows needs it). Any agent browser or desktop can be watched live; Take over / Hand back; while he holds control the agent waits. A Passwords & Logins page for site logins only (never cards, never broker logins) [AD-44].
+11. **HUD:** a floating always-on-top chat bar over any app; "what is this?" reads the window underneath; read-only, broker windows included [AD-44].
+12. **MT5 and cTrader on demo:** an agent node's desktop manifest shows the pinned demo account and server; the run card shows "account matched" before any set-up step; live accounts are never offered [AD-33, AD-44].
+13. **Widgets and explainers in chat:** transcript directives render inline components; `::preview` renders an interactive explainer in a sandboxed frame whose buttons can talk back; unknown directives show as text; a broken widget shows an error chip; file paths in replies become artifact chips [AD-45].
+14. **Templates read plainly and fill in:** template titles say what they do (proposed renames in SOLUTION-DESIGN §26.9); "use this template" asks its slots one at a time or as a form; a Suggestions list offers schedules (never auto-created); skills and templates show stale or archived states from the curator [AD-46].
+15. **Loops on a chat:** heartbeat, loop and goal cards above the composer (interval or self-paced, ticks so far, goal checks), with pause, resume and stop [AD-47].
+16. **Desktop app chrome:** startup card with stages, safe-mode banner after a crash loop, "Docker is starting" line, keep-awake and start-at-login settings, pop-out windows, HUD window, Quick Entry hotkey. Never a web site [AD-48].
+17. **Combined sessions:** adding a pack (Lab, Portfolio, a workflow, a mini app) to a running chat shows "tools added" without restarting; if the next turn is needed, it says so [AD-35].
+18. **Worktrees:** a helper that edits a folder shows its branch and "changes ready to merge"; a collision shows a reconcile card or a merge-conflict view [AD-49].
+19. **Library check for the UI session:** he said the demo Library shows units, artifacts, bots, bot cards, relationships and logic; the study found no such shelves on `ui-review/repair` at `eea09941`. The backend roster has all of them (Library AD-3, AD-4). Please check which build he looks at and align the shelves to the roster [alignment B-79].
+20. **One Logs and Analytics view** for the copilot and workflows together: filter by component (router, harness, engine, scheduler, apps), level, day and model; tokens, cache hits, cost estimate per day and model; every copilot sub-agent appears as its own row [AD-15].
+
