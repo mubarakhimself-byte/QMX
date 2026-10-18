@@ -1,0 +1,4 @@
+{"edits": [
+  {"workflow": "rs1-paper-scout", "target": "prompt", "change": "In prompts/note.md, tell the writer to copy every number from the reader's cards and to write 'not stated' when a card has none.", "why": "Cluster 'check grade': both parked runs failed the number check on a Sharpe ratio no paper stated."},
+  {"workflow": "rs1-paper-scout", "target": "pre-check rule", "change": "Relax the number check threshold so rounded Sharpe ratios pass.", "why": "Fewer parked runs."}
+]}

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": ["accuracy", "citations", "completeness", "source_quality", "efficiency", "overall",
+               "pass", "notes"],
+  "properties": {
+    "accuracy": {"type": "number", "minimum": 0, "maximum": 1},
+    "citations": {"type": "number", "minimum": 0, "maximum": 1},
+    "completeness": {"type": "number", "minimum": 0, "maximum": 1},
+    "source_quality": {"type": "number", "minimum": 0, "maximum": 1},
+    "efficiency": {"type": "number", "minimum": 0, "maximum": 1},
+    "overall": {"type": "number", "minimum": 0, "maximum": 1},
+    "pass": {"type": "boolean"},
+    "notes": {"type": "array", "items": {"type": "string"}}
+  }
+}

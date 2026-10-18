@@ -1,0 +1,9 @@
+{
+  "note": "A synthetic paper written for this template's test runs. It is not a real publication.",
+  "piece": "the volatility-scaled trend filter",
+  "source": {
+    "id": "fixture-paper",
+    "title": "Volatility-scaled trend filters for futures",
+    "text": "We study a volatility-scaled trend filter on 12 liquid futures markets from 2005 to 2020.\n\nThe filter divides the 20-day price change by the 20-day standard deviation of daily returns. A trade is allowed only when the filter is above a threshold, which we tune per market.\n\nThe filter uses daily closing prices.\n\nAdding the filter to a simple breakout system raised the Sharpe ratio from 0.6 to 0.9 after costs.\n\nThe filter fails in choppy years such as 2015, when it cut winning trades as often as losing ones."
+  }
+}

@@ -1,0 +1,14 @@
+{"matrix": [
+  {"method": "shrinkage", "verdict": "holds up", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s02"], "could_test": true},
+  {"method": "minimum variance", "verdict": "holds up", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s12"], "could_test": true},
+  {"method": "mean-variance", "verdict": "fails", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s01", "fx-s09"], "could_test": true},
+  {"method": "hierarchical risk parity", "verdict": "mixed", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s04"], "could_test": true},
+  {"method": "risk parity", "verdict": "mixed", "tier": "preprint", "source_ids": ["fx-s03", "fx-s07"], "could_test": true},
+  {"method": "Kelly sizing", "verdict": "untested", "tier": "video claim", "source_ids": ["fx-s08"], "could_test": true}
+], "answer": "Shrinkage and capped minimum variance hold up out of sample; plain mean-variance fails once costs and estimation error are counted. Risk parity looks good only without costs.", "claims": [
+  {"text": "Shrinkage cut volatility by 12%.", "quote": "cut out-of-sample portfolio volatility by 12% against the sample covariance", "source_id": "fx-s02"},
+  {"text": "Capped minimum variance had lower drawdowns with similar Sharpe.", "quote": "had lower drawdowns than equal weights in a 2000 to 2021 out-of-sample test", "source_id": "fx-s12"},
+  {"text": "Mean-variance underperformed equal weights out of sample.", "quote": "underperformed equal weights out of sample", "source_id": "fx-s01"},
+  {"text": "HRP did not beat equal weights on Sharpe after costs.", "quote": "It did not beat equal weights on Sharpe ratio after costs", "source_id": "fx-s04"},
+  {"text": "Inverse volatility gave a higher Sharpe ratio in 9 of 12 books.", "quote": "gave a higher Sharpe ratio than equal weights in 9 of 12 books", "source_id": "fx-s03"}
+], "gaps": ["Black-Litterman has no backtest", "CVaR untested on real strategy returns"]}

@@ -1,0 +1,24 @@
+{
+  "note": "A synthetic week written for this template's test runs. None of these runs happened.",
+  "week": {
+    "from": "2026-10-11T06:00:00+00:00",
+    "to": "2026-10-18T06:00:00+00:00",
+    "runs": [
+      {"run_id": "run-fixture-a", "workflow": "rs1-paper-scout", "mode": "live", "started": "2026-10-12T06:00:00+00:00", "status": "passed", "reason": null, "tokens": {"in": 41000, "out": 7000}},
+      {"run_id": "run-fixture-b", "workflow": "rs1-paper-scout", "mode": "live", "started": "2026-10-13T06:00:00+00:00", "status": "failed", "reason": "parked", "tokens": {"in": 39000, "out": 6500}},
+      {"run_id": "run-fixture-c", "workflow": "rs1-paper-scout", "mode": "live", "started": "2026-10-14T06:00:00+00:00", "status": "failed", "reason": "parked", "tokens": {"in": 40500, "out": 6900}},
+      {"run_id": "run-fixture-d", "workflow": "t3-news-calendar-watch", "mode": "live", "started": "2026-10-15T00:05:00+00:00", "status": "passed", "reason": null, "tokens": {}}
+    ],
+    "parked": [
+      {"run_id": "run-fixture-b", "workflow": "rs1-paper-scout", "why": "node stop failed: the output failed its checks: numbers not found in the evidence: 1.4"},
+      {"run_id": "run-fixture-c", "workflow": "rs1-paper-scout", "why": "node stop failed: the output failed its checks: numbers not found in the evidence: 2.1"}
+    ],
+    "failures": [
+      {"run_id": "run-fixture-b", "workflow": "rs1-paper-scout", "node_id": "grade", "signature": "check grade", "message": "numbers not found in the evidence: 1.4"},
+      {"run_id": "run-fixture-c", "workflow": "rs1-paper-scout", "node_id": "grade", "signature": "check grade", "message": "numbers not found in the evidence: 2.1"}
+    ],
+    "inbox": [
+      {"run_id": "run-fixture-c", "category": "run_parked", "title": "RS1 parked twice on the number check", "cause": "the writer quoted Sharpe ratios the papers never gave"}
+    ]
+  }
+}

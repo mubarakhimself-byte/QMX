@@ -78,11 +78,47 @@ CATALOG: Final[tuple[Template, ...]] = (
         test_inputs={"fixture": "surprise"},
         test_cost="TP1 lane 3: quiet day 0 tokens, 1 s; surprise day 1 Kimi span, 6k in, 1k out",
     ),
-    Template("RS0", "Idea grill to term sheet", card("15", "R0"), "TP2"),
-    Template("RS2", "Source to component card", card("15", "R2", "R5"), "TP2"),
-    Template("RS4", "Literature review on a topic", card("15", "R4"), "TP2"),
-    Template("A", "Fill the Library, funnel stages 1 to 7", card("15", "R5"), "TP2"),
-    Template("RV", "Weekly review", card("15", "R9") + card("17", "D10"), "TP2"),
+    Template(
+        "RS0",
+        "Idea grill to term sheet",
+        card("15", "R0"),
+        "TP2",
+        folder="rs0-idea-grill",
+        test_inputs={"fixture": True},
+    ),
+    Template(
+        "RS2",
+        "Source to component card",
+        card("15", "R2", "R5", "R7"),
+        "TP2",
+        folder="rs2-source-to-component-card",
+        test_inputs={"fixture": True},
+    ),
+    Template(
+        "RS4",
+        "Literature review on a topic",
+        card("15", "R4", "R7"),
+        "TP2",
+        folder="rs4-literature-review",
+        test_inputs={"fixture": True},
+    ),
+    Template(
+        "A",
+        "Fill the Library, funnel stages 1 to 7",
+        card("15", "R5", "R7"),
+        "TP2",
+        folder="a-fill-the-library",
+        test_inputs={"fixture": "one-video"},
+    ),
+    Template(
+        "RV",
+        "Weekly review",
+        card("15", "R9") + card("17", "D10"),
+        "TP2",
+        folder="rv-weekly-review",
+        triggers=(Cron("0 6 * * 1", "UTC"),),
+        test_inputs={"fixture": True},
+    ),
     Template("DB", "Desk brief", card("16", "T1", "T2", "T10"), "TP3"),
     Template("T4", "Research desk overnight", card("16", "T4"), "TP3"),
     Template("DM", "Demo monitor and execution quality", card("16", "T5", "T9"), "TP3", NODE),
@@ -123,19 +159,59 @@ CATALOG: Final[tuple[Template, ...]] = (
     Template("D9", "Mini-app-to-mini-app pipeline", card("17", "D9"), "TP4", ("app-op",)),
 )
 
+ALL_BUILT: Final = (
+    "rs1-paper-scout",
+    "t3-news-calendar-watch",
+    "rs0-idea-grill",
+    "rs2-source-to-component-card",
+    "rs4-literature-review",
+    "a-fill-the-library",
+    "rv-weekly-review",
+)
+CALIBRATED: Final = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
+
 SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
     "preflight/scripts/new_ids.py": ("rs1-paper-scout/scripts/new_ids.py",),
     "paper-read/prompts/read.md": ("rs1-paper-scout/prompts/read.md",),
     "paper-read/schemas/cards.json": ("rs1-paper-scout/schemas/cards.json",),
-    "research-harness/scripts/citation_check.py": ("rs1-paper-scout/scripts/citation_check.py",),
-    "render-and-grade/scripts/render_and_grade.py": (
-        "rs1-paper-scout/scripts/render_and_grade.py",
-        "t3-news-calendar-watch/scripts/render_and_grade.py",
+    "research-harness/scripts/citation_check.py": (
+        "rs1-paper-scout/scripts/citation_check.py",
+        "rs4-literature-review/scripts/citation_check.py",
+        "_shared/understand-extract/scripts/citation_check.py",
+        "rs2-source-to-component-card/scripts/citation_check.py",
+        "a-fill-the-library/scripts/citation_check.py",
     ),
-    "render-and-grade/scripts/stop.py": (
-        "rs1-paper-scout/scripts/stop.py",
-        "t3-news-calendar-watch/scripts/stop.py",
+    "render-and-grade/scripts/render_and_grade.py": tuple(
+        f"{t}/scripts/render_and_grade.py" for t in ALL_BUILT
     ),
+    "render-and-grade/scripts/stop.py": tuple(f"{t}/scripts/stop.py" for t in ALL_BUILT),
+    "render-and-grade/scripts/deliver.py": tuple(
+        f"{t}/scripts/deliver.py" for t in ALL_BUILT if t != "a-fill-the-library"
+    ),
+    "understand-extract/scripts/sections.py": (
+        "rs2-source-to-component-card/scripts/sections.py",
+        "a-fill-the-library/scripts/sections.py",
+    ),
+    "understand-extract/prompts/sections.md": (
+        "rs2-source-to-component-card/prompts/sections.md",
+        "a-fill-the-library/prompts/sections.md",
+    ),
+    "understand-extract/schemas/claims.json": (
+        "rs2-source-to-component-card/schemas/claims.json",
+        "a-fill-the-library/schemas/claims.json",
+    ),
+    "understand-extract/scripts/card_holes.py": ("a-fill-the-library/scripts/card_holes.py",),
+    "understand-extract/prompts/extract.md": ("a-fill-the-library/prompts/extract.md",),
+    "understand-extract/schemas/cards.json": ("a-fill-the-library/schemas/cards.json",),
+    **{
+        f"calibrate/{name}": tuple(f"{t}/{name}" for t in CALIBRATED)
+        for name in (
+            "scripts/basis.py",
+            "scripts/agreement.py",
+            "prompts/sample.md",
+            "schemas/votes.json",
+        )
+    },
 }
 """Each shared block file, under `_shared/`, to its copies in the templates. A run holds only its
 own folder's files, so a template carries a byte-identical copy of each block file it uses."""

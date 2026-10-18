@@ -1,0 +1,51 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "understand-extract",
+  "name": "Understand and extract: one source to located claims and typed cards, holes kept",
+  "settings": {
+    "on_error": "park",
+    "caller_policy": "workflows_only",
+    "runaway": {"agents": 4, "tool_calls": 20, "wall_seconds": 3600, "on_runaway": "pause"}
+  },
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "source", "name": "Captured source", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/source.py", "fixture_ref": "fixtures/source.json"}},
+    {"id": "sections", "name": "Sections", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/sections.py"}},
+    {"id": "read", "name": "Read each chunk of sections", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "reader", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/sections.md", "schema_ref": "schemas/claims.json",
+                    "recording_ref": "fixtures/recorded/claims.json"}},
+    {"id": "claims", "name": "All claims", "type": "join", "typeVersion": 1,
+     "position": [880, 0], "parameters": {}},
+    {"id": "quotes", "name": "Quotes check", "type": "grader", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}},
+    {"id": "extract", "name": "Reconcile and extract cards", "type": "agent", "typeVersion": 1,
+     "position": [1320, 0], "role": "extractor", "effect": "none",
+     "parameters": {"brief_ref": "prompts/extract.md", "output_schema_ref": "schemas/cards.json",
+                    "tools": [], "max_turns": 4}},
+    {"id": "holes", "name": "Keep the holes", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/card_holes.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Captured source", "port": "in", "map": "one"}]]},
+    "Captured source": {"main": [[{"node": "Sections", "port": "in", "map": "one"}]]},
+    "Sections": {"main": [[{"node": "Read each chunk of sections", "port": "in", "map": "chunk",
+                            "chunk": {"by": "items", "size": 4}},
+                           {"node": "Quotes check", "port": "in", "map": "one"}]]},
+    "Read each chunk of sections": {"main": [[{"node": "All claims", "port": "in",
+                                               "map": "one"}]]},
+    "All claims": {"main": [[{"node": "Quotes check", "port": "in", "map": "one"}]]},
+    "Quotes check": {"pass": [[{"node": "Reconcile and extract cards", "port": "in", "map": "one"},
+                               {"node": "Keep the holes", "port": "in", "map": "one"}]],
+                     "fail": [[{"node": "Reconcile and extract cards", "port": "in", "map": "one"},
+                               {"node": "Keep the holes", "port": "in", "map": "one"}]]},
+    "Reconcile and extract cards": {"main": [[{"node": "Keep the holes", "port": "in",
+                                               "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

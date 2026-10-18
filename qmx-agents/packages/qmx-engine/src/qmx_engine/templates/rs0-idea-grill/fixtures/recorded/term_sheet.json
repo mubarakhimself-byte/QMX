@@ -1,0 +1,20 @@
+{
+  "idea": "Funding-rate spikes on BTC perpetual futures predict short-term price reversals.",
+  "dead_end_warning": "The Library holds a dead end for the same mechanism on ETH perpetual futures, killed by costs in its 2023 retest. This time the market is BTC, with deeper liquidity and lower costs per trade.",
+  "mechanism": "When funding spikes, one side of the perpetual market is crowded and pays to hold its position. Forced or tired holders unwind, which pushes price against the crowded side for a while.",
+  "universe": "BTC perpetual futures on one major venue",
+  "timeframe": "hourly bars",
+  "data_needed": ["8-hour funding rates", "hourly BTC perpetual prices", "venue fees and spreads"],
+  "entry": "Enter against the crowded side at the next hourly open after the 8-hour funding rate passes its 30-day 95th percentile.",
+  "exit": "Exit after 24 hours.",
+  "kill_criteria": ["A net Sharpe below 0.5 after costs.", "Fewer than 100 spikes in the test window."],
+  "capacity_guess": "About 1 million USD per trade before the spread cost doubles.",
+  "what_would_fake_this": "Spikes that cluster in a few volatile weeks, so one regime carries the whole result, or fills assumed at prices the book never offered.",
+  "assumptions": [
+    {"question": "What counts as a funding-rate spike?", "assumed": "An 8-hour funding rate above its 30-day 95th percentile."},
+    {"question": "Which universe and timeframe?", "assumed": "BTC perpetual futures on one major venue, hourly bars."},
+    {"question": "What is the entry and exit?", "assumed": "Enter against the crowded side at the next hourly open after a spike; exit after 24 hours."},
+    {"question": "What kills the idea?", "assumed": "A net Sharpe below 0.5 after costs, or fewer than 100 spikes in the test window."},
+    {"question": "How much capital can it take?", "assumed": "About 1 million USD per trade before the spread cost doubles."}
+  ]
+}

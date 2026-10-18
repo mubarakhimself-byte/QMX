@@ -7,6 +7,10 @@ The journal is `<home>/engine/runs/<run_id>/trace-<last seq>.jsonl`, written thr
 nothing new. It stays out of `<home>/runs/`, whose journals `qmx_control` lists as its own runs.
 Each drive adds one `workflow-run` object (SOLUTION-DESIGN 3.1); all of a run's writes carry the
 principal `run:<run_id>`.
+
+Every file a finished node listed as an artifact is read from the run's write zone and stored as a
+`run-file` artifact linked `produced-by` to the summary, once per run: a later drive stores only
+the files no earlier summary of the run already holds.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.library import JsonObject, LibraryPort, Mode, RunStatus, RunSummary, Stored
+from qmx_engine.runner import workspace
 
 PLACEMENT: JsonObject = {"name": "pc", "kind": "local"}
 
@@ -70,6 +75,7 @@ def export(
         run_id=run_id,
         principal=principal,
     )
+    files = run_files(home, run_id, events, library)
     summary = library.put_run_summary(
         RunSummary(
             run_id=run_id,
@@ -86,5 +92,39 @@ def export(
         principal=principal,
     )
     library.link(trace.object_id, "produced-by", summary.object_id, principal=principal)
+    for stored in files:
+        library.link(stored.object_id, "produced-by", summary.object_id, principal=principal)
     library.link(summary.object_id, "run-of", object_id, principal=principal)
     return summary
+
+
+def run_files(home: Path, run_id: str, events: list[Event], library: LibraryPort) -> list[Stored]:
+    """The artifact files of the run's finished nodes not yet stored by an earlier drive."""
+    held = {
+        (str(meta.get("node_id")), str(meta.get("path")))
+        for earlier in library.objects(run_id, "workflow-run")
+        for edge in library.edges(earlier.object_id, "produced-by", reverse=True)
+        if isinstance(meta := library.get(edge.from_id).fields.get("metadata"), dict)
+    }
+    workflow_id = str(events[0].data.get("workflow_id"))
+    zone = workspace(home, workflow_id) / "runs" / run_id
+    stored: list[Stored] = []
+    for event in events:
+        listed = event.data.get("artifacts") if event.kind == "node_finished" else None
+        if not isinstance(listed, list):
+            continue
+        node_id = str(event.data.get("node_id"))
+        for name in listed:
+            if (node_id, str(name)) in held:
+                continue
+            held.add((node_id, str(name)))
+            stored.append(
+                library.put_artifact(
+                    (zone / str(name)).read_bytes(),
+                    "run-file",
+                    {"node_id": node_id, "path": str(name)},
+                    run_id=run_id,
+                    principal=f"run:{run_id}",
+                )
+            )
+    return stored

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["edits"],
+  "properties": {
+    "edits": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["workflow", "target", "change", "why"],
+        "properties": {
+          "workflow": {"type": "string"},
+          "target": {"enum": ["prompt", "question battery", "brief", "skill text",
+                              "pre-check rule"]},
+          "change": {"type": "string"},
+          "why": {"type": "string"}
+        }
+      }
+    }
+  }
+}

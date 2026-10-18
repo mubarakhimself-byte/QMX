@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "required": ["item_id", "buckets", "reason", "time_map"],
+  "properties": {
+    "item_id": {"type": "string"},
+    "buckets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"enum": ["useless", "hint", "component", "full strategy", "knowledge"]}
+    },
+    "reason": {"type": "string"},
+    "time_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["start", "end", "label"],
+        "properties": {
+          "start": {"type": "number"},
+          "end": {"type": "number"},
+          "label": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{"questions": [
+  {"number": 1, "question": "What counts as a funding-rate spike?", "recommended": "An 8-hour funding rate above its 30-day 95th percentile."},
+  {"number": 2, "question": "Which universe and timeframe?", "recommended": "BTC perpetual futures on one major venue, hourly bars."},
+  {"number": 3, "question": "What is the entry and exit?", "recommended": "Enter against the crowded side at the next hourly open after a spike; exit after 24 hours."},
+  {"number": 4, "question": "What kills the idea?", "recommended": "A net Sharpe below 0.5 after costs, or fewer than 100 spikes in the test window."},
+  {"number": 5, "question": "How much capital can it take?", "recommended": "About 1 million USD per trade before the spread cost doubles."}
+], "known_shown": ["A dead end exists for funding-rate extremes on ETH perpetual futures, killed by costs in the 2023 retest."]}

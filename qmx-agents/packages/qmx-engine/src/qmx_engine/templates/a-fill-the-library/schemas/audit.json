@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "required": ["verdicts", "exceptions"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["card_id", "verdict", "reason"],
+        "properties": {
+          "card_id": {"type": "string"},
+          "verdict": {"enum": ["accepted", "rejected"]},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "exceptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question", "assumed"],
+        "properties": {"question": {"type": "string"}, "assumed": {"type": "string"}}
+      }
+    }
+  }
+}

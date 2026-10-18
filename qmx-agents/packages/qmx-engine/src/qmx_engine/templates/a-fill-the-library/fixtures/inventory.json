@@ -1,0 +1,13 @@
+{
+  "note": "Synthetic items for this template's test runs. The video ids are made up and point at no real video.",
+  "fixtures": {
+    "one-video": [
+      "https://www.youtube.com/watch?v=qmxFixture01&si=share",
+      "https://youtu.be/qmxFixture01"
+    ],
+    "no-captions": [
+      "https://www.youtube.com/watch?v=qmxFixture02",
+      "note: the London open fade might work on GBPUSD too"
+    ]
+  }
+}

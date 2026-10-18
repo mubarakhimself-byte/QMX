@@ -1,0 +1,14 @@
+{
+  "note": "Synthetic claims and source written for this block's test runs. Not a real publication.",
+  "items": [
+    {"id": "h1", "text": "A trend filter raises the average reversal trade to 1.1 pips.",
+     "quote": "raised the average trade to 1.1 pips", "source_id": "fixture-s2"},
+    {"id": "h2", "text": "The filter works best in the Asian session.",
+     "from": ["h1"]},
+    {"id": "h3", "text": "Reversal edges vanish after 2022."}
+  ],
+  "sources": [
+    {"id": "fixture-s2", "title": "Trend filters for short-horizon reversal",
+     "text": "Skipping reversal entries when the four-hour trend is strong removed 40% of trades and raised the average trade to 1.1 pips across six currency pairs."}
+  ]
+}

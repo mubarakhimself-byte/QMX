@@ -200,7 +200,8 @@ class HostScript:
 
 class Script:
     """`parameters.artifacts` may list files the script leaves in the zone; they are returned as
-    the attempt's artifacts, and a missing one fails it."""
+    the attempt's artifacts, and a missing one fails it. An entry ending in `/` names a folder:
+    every file under it is an artifact, so a script can leave one file per card."""
 
     def __init__(self, host: HostScript) -> None:
         self.host = host
@@ -215,10 +216,17 @@ class Script:
             tuple(a for a in listed if isinstance(a, str)) if isinstance(listed, list) else ()
         )
         zone = Path(job.workspace or ".").resolve()
+        files: list[str] = []
         for artifact in artifacts:
             path = (zone / artifact).resolve()
-            if not path.is_relative_to(zone) or not path.is_file():
+            inside = path.is_relative_to(zone)
+            if inside and artifact.endswith("/") and path.is_dir():
+                under = sorted(p for p in path.rglob("*") if p.is_file())
+                files += [p.relative_to(zone).as_posix() for p in under]
+            elif inside and path.is_file():
+                files.append(artifact)
+            else:
                 return failed(
                     "artifact_missing", "a listed artifact is not in the zone", retryable=False
                 )
-        return Ok({"main": found}, artifacts)
+        return Ok({"main": found}, tuple(files))

@@ -1,12 +1,16 @@
 """The template pack: every folder validates, every catalogue row names its card, install is
-idempotent, and `meta.needs` keeps a template a draft. Model turns come from a `FakePort` that
-answers each chat with the template's recorded answer for the prompt it was sent."""
+idempotent, `meta.needs` keeps a template a draft, and each template's test run delivers what its
+card promises. Model turns come from a `FakePort` that answers each chat from the template's
+recorded answers, picked by the prompt's first words; a chunked node gets the recorded items whose
+ids appear in its own chunk."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import shutil
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -28,32 +32,86 @@ from qmx_engine.triggers import rows
 FOLDERS = sorted(path.parent for path in PACK.rglob("definition.json"))
 RS1 = PACK / "rs1-paper-scout"
 T3 = PACK / "t3-news-calendar-watch"
+RS0 = PACK / "rs0-idea-grill"
+RS2 = PACK / "rs2-source-to-component-card"
+RS4 = PACK / "rs4-literature-review"
+A = PACK / "a-fill-the-library"
+RV = PACK / "rv-weekly-review"
 
 
 def recorded(folder: Path, name: str) -> str:
     return (folder / "fixtures" / "recorded" / name).read_text("utf-8")
 
 
-def answers(note: str | None = None) -> FakePort:
+def mine(folders: list[Path], name: str, key: str, field: str, chunk: str) -> str:
+    """The recorded items under `key` whose `field` names something in this chunk's input."""
+    found = [item for f in folders for item in json.loads(recorded(f, name))[key]]
+    return json.dumps({key: [item for item in found if str(item[field]) in chunk]})
+
+
+def votes(chunk: str) -> str:
+    items = json.loads(chunk)["in"]["items"]
+    return json.dumps({"votes": [{"id": item["id"], "answer": "holds"} for item in items]})
+
+
+def answers(
+    note: str | None = None, synthesis: str | None = None, planted: dict[str, str] | None = None
+) -> FakePort:
     """A port that answers every model turn from the recorded files, by the prompt's first words.
-    A reader gets the cards of the papers in its own chunk."""
-    cards = json.loads(recorded(RS1, "cards.json"))["cards"]
-    by_prompt = {
+    `planted` replaces the answer to a prompt that starts with its key."""
+    whole = {
         "You triage new quant-finance papers": recorded(RS1, "triage.json"),
         "You write the research note": note or recorded(RS1, "note.json"),
         "You are the desk's news scanner": recorded(T3, "notes.json"),
+        "You grill a trading idea": recorded(RS0, "questions.json"),
+        "You write the term sheet": recorded(RS0, "term_sheet.json"),
+        "You turn one piece of a paper": recorded(RS2, "component.json"),
+        "You plan a literature review": recorded(RS4, "plan.json"),
+        "You are the synthesiser of a literature review": synthesis
+        or recorded(RS4, "synthesis.json"),
+        "You judge a literature review": recorded(RS4, "judge.json"),
+        "You write the literature review": recorded(RS4, "review.json"),
+        "You triage one captured source": recorded(A, "triage.json"),
+        "You are the extractor for a quant research library": recorded(A, "cards.json"),
+        "You are the auditor": recorded(A, "audit.json"),
+        "You are the analyst of QMX's weekly": recorded(RV, "clusters.json"),
+        "You propose edits for QMX's": recorded(RV, "edits.json"),
+    } | (planted or {})
+    chunked: dict[str, Callable[[str], str]] = {
+        "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
+        "You are the section reader": lambda c: mine(
+            [RS2, A], "claims.json", "claims", "source_id", c
+        ),
+        "You are a searcher on a literature review": lambda c: mine(
+            [RS4], "findings.json", "findings", "source_id", c
+        ),
+        "You check headline claims": votes,
     }
 
     async def answer(port: FakePort, chat: str) -> Turn:
         text = next(sent for to, sent in reversed(port.sent) if to == chat)
-        if "You are the paper reader" in text:
-            given = text.rsplit("Input:\n", 1)[-1]
-            mine = [c for c in cards if c["paper_id"] in given]
-            return Turn(json.dumps({"cards": mine}), dict(TOKENS))
-        found = next((reply for start, reply in by_prompt.items() if start in text), "{}")
+        chunk = text.rsplit("Input:\n", 1)[-1]
+        for start, reply in chunked.items():
+            if start in text:
+                return Turn(reply(chunk), dict(TOKENS))
+        found = next((reply for start, reply in whole.items() if start in text), "{}")
         return Turn(found, dict(TOKENS))
 
-    return FakePort(*[answer] * 40)
+    return FakePort(*[answer] * 80)
+
+
+def try_template(home: Path, folder: Path, inputs: Any, port: FakePort | None = None) -> Any:
+    """`folder` saved as a draft and test-run with `inputs`: the report and what Deliver gave."""
+    with EngineService.open(home, harness=port or answers()) as svc:
+        item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+    with Reader.open(home) as reader:
+        delivered = [
+            cast(dict[str, Any], e.data["outputs"])["main"]
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished" and e.data.get("node_id") == "deliver"
+        ]
+    return report, delivered[0] if delivered else None
 
 
 @pytest.mark.parametrize("folder", FOLDERS, ids=lambda path: path.name)
@@ -73,7 +131,11 @@ def test_the_catalogue_lists_31_templates_each_with_a_source_card() -> None:
         "RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4",
     ]  # fmt: skip
     assert find("P1").needs == ("trading-node", "risk-session")
-    assert [t.folder for t in CATALOG if t.folder] == ["rs1-paper-scout", "t3-news-calendar-watch"]
+    assert [t.folder for t in CATALOG if t.folder] == [
+        "rs1-paper-scout", "t3-news-calendar-watch", "rs0-idea-grill",
+        "rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library",
+        "rv-weekly-review",
+    ]  # fmt: skip
 
 
 def test_each_template_carries_an_identical_copy_of_every_block_file_it_uses() -> None:
@@ -82,47 +144,181 @@ def test_each_template_carries_an_identical_copy_of_every_block_file_it_uses() -
             assert (PACK / copy).read_bytes() == (SHARED / shared).read_bytes(), copy
 
 
-def test_install_publishes_both_disabled_and_a_second_install_changes_nothing(
-    tmp_path: Path,
-) -> None:
-    with EngineService.open(tmp_path, harness=answers()) as svc:
-        first = asyncio.run(install(svc))
-        seen = len(svc.ctx.library.events())
-        second = asyncio.run(install(svc))
-        status = {row.template.id: (row.status, row.version) for row in listing(svc)}
-        library_after = len(svc.ctx.library.events())
-    with Reader.open(tmp_path) as reader:
-        triggers = rows.triggers(reader.connection)
+def test_rs0_records_every_unanswered_question_as_an_assumption(tmp_path: Path) -> None:
+    report, sheet = try_template(tmp_path, RS0, {"fixture": True})
 
-    assert [(i.template.id, i.action) for i in first] == [("RS1", "published"), ("T3", "published")]
-    assert [i.action for i in second] == ["unchanged", "unchanged"]
-    assert library_after == seen
-    assert status["RS1"] == ("published, disabled", "0.1.0")
-    assert status["T3"] == ("published, disabled", "0.1.0")
-    assert sum(s == ("not yet built", None) for s in status.values()) == 29
-    assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
-        ("rs1-paper-scout", "cron", False),
-        ("t3-news-calendar-watch", "cron", False),
+    assert report.status == "passed"
+    assert len(sheet["assumptions"]) == 5
+    assert sheet["dead_end_warning"].startswith("The Library holds a dead end")
+
+
+def test_rs2_keeps_the_holes_the_paper_leaves(tmp_path: Path) -> None:
+    report, card = try_template(tmp_path, RS2, {"fixture": True})
+
+    assert report.status == "passed"
+    assert card["holes"] == ["warm_up", "parameter threshold"]
+    assert card["changes"] == ["warm_up rests on no cited claim: unresolved"]
+    assert card["warm_up"] == {"value": "unresolved", "claim_id": ""}
+    assert [(c["id"], c["basis"], c["confidence"]) for c in card["calibration"]] == [
+        ("claimed_effect", "retrieved", "high"),
+        ("formula", "retrieved", "high"),
+    ]
+
+
+def test_rs4_splits_its_sources_into_chunks_by_the_setting_and_drops_none(tmp_path: Path) -> None:
+    report, review = try_template(tmp_path, RS4, {"fixture": True})
+    with Reader.open(tmp_path) as reader:
+        chunks = [
+            cast(dict[str, Any], e.data["plan"])["chunk"]["items"]
+            for e in reader.events(report.run_id)
+            if e.kind == "node_scheduled" and e.data.get("node_id") == "search"
+        ]
+
+    assert report.status == "passed"
+    assert chunks == [[0, 10], [10, 12]]
+    assert review["headline"].startswith("2 of 6 methods hold up")
+    assert [m["confidence"] for m in review["methods"]][:2] == ["high", "high"]
+
+
+def test_rs4_fails_when_the_synthesis_invents_a_quote(tmp_path: Path) -> None:
+    synthesis = json.loads(recorded(RS4, "synthesis.json"))
+    synthesis["claims"][0]["quote"] = "shrinkage doubled the Sharpe ratio of every book"
+    port = answers(synthesis=json.dumps(synthesis))
+    report, review = try_template(tmp_path, RS4, {"fixture": True}, port)
+
+    assert (report.status, review) == ("failed", None)
+
+
+def plant(folder: Path, name: str, path: list[str | int], text: str) -> str:
+    """The recorded answer with `text` appended to the string at `path`."""
+    doc = json.loads(recorded(folder, name))
+    node = doc
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] += text
+    return json.dumps(doc)
+
+
+@pytest.mark.parametrize(
+    ("folder", "inputs", "prompt", "planted"),
+    [
+        (RS0, {"fixture": True}, "You write the term sheet",
+         plant(RS0, "term_sheet.json", ["capacity_guess"], " About 75 million USD a day.")),
+        (RS2, {"fixture": True}, "You turn one piece of a paper",
+         plant(RS2, "component.json", ["claimed_effect", "value"], ", and to 1.45 net")),
+        (A, {"fixture": "one-video"}, "You are the extractor for a quant research library",
+         plant(A, "cards.json", ["cards", 0, "summary"], " Wins 73% of trades.")),
+    ],
+    ids=["rs0-capacity", "rs2-claimed-effect", "a-card-summary"],
+)  # fmt: skip
+def test_an_output_with_a_number_its_sources_never_gave_fails_the_test_run(
+    tmp_path: Path, folder: Path, inputs: Any, prompt: str, planted: str
+) -> None:
+    report, delivered = try_template(tmp_path, folder, inputs, answers(planted={prompt: planted}))
+
+    assert (report.status, delivered) == ("failed", None)
+
+
+def produced_files(home: Path, run_id: str) -> list[str]:
+    with EngineService.open(home) as svc:
+        library = svc.ctx.library
+        summary = library.objects(run_id, "workflow-run")[-1]
+        made = [
+            library.get(edge.from_id)
+            for edge in library.edges(summary.object_id, "produced-by", reverse=True)
+        ]
+    return sorted(
+        str(cast(dict[str, Any], m.fields["metadata"])["path"])
+        for m in made
+        if m.fields["type"] == "run-file"
+    )
+
+
+def test_a_lands_its_cards_as_run_artifacts_produced_by_the_run(tmp_path: Path) -> None:
+    report, entry = try_template(tmp_path, A, {"fixture": "one-video"})
+
+    assert report.status == "passed"
+    assert [(c["kind"], c["status"], c["exit"], c["audit"]["verdict"]) for c in entry["cards"]] == [
+        ("strategy", "entry_hypothesis", "unresolved", "accepted"),
+        ("component", "component", "unresolved", "accepted"),
+    ]
+    assert entry["inventory"][0]["provenance"] == [
+        "https://www.youtube.com/watch?v=qmxFixture01&si=share",
+        "https://youtu.be/qmxFixture01",
+    ]
+    assert produced_files(tmp_path, report.run_id) == sorted(
+        [f"library/cards/{c['library_id']}.json" for c in entry["cards"]]
+        + [f"library/sources/{s['library_id']}.json" for s in entry["sources"]]
+        + ["library/inventory.json"]
+    )
+
+
+def test_a_video_with_no_captions_is_recorded_and_the_run_goes_on(tmp_path: Path) -> None:
+    port = answers()
+    report, entry = try_template(tmp_path, A, {"fixture": "no-captions"}, port)
+
+    assert report.status == "passed"
+    assert port.chats == []
+    assert [(row["kind"], row["status"]) for row in entry["inventory"]] == [
+        ("video", "no captions"),
+        ("note", "skipped by the pre-filter: no trading words"),
+    ]
+
+
+def test_rv_names_the_runs_and_parked_items_of_its_own_home(tmp_path: Path) -> None:
+    try_template(tmp_path, RS0, {"fixture": True})
+    note = json.loads(recorded(RS1, "note.json"))
+    plant_number(note)
+    parked, _ = try_template(tmp_path, RS1, {"fixture": True}, answers(json.dumps(note)))
+    report, card = try_template(tmp_path, RV, None)
+
+    assert report.status == "passed"
+    assert [(r["workflow"], r["status"]) for r in card["runs"]] == [
+        ("rs0-idea-grill", "passed"),
+        ("rs1-paper-scout", "failed"),
+    ]
+    assert [p["run_id"] for p in card["parked"]] == [parked.run_id]
+    assert [e["status"].split(":")[0] for e in card["edits"]] == ["untested", "rejected"]
+
+
+def test_the_confidence_rule_needs_a_source_and_full_agreement() -> None:
+    basis = {
+        "items": [
+            {"id": "a", "text": "", "basis": "retrieved"},
+            {"id": "b", "text": "", "basis": "retrieved"},
+            {"id": "c", "text": "", "basis": "inferred"},
+            {"id": "d", "text": "", "basis": "remembered"},
+        ]
+    }
+    every = {"votes": [{"id": i, "answer": "holds"} for i in "abcd"]}
+    all_but_b = {"votes": [{"id": i, "answer": "holds"} for i in "acd"]}
+    done = subprocess.run(
+        [sys.executable, "-I", str(SHARED / "calibrate" / "scripts" / "agreement.py")],
+        input=json.dumps({"in": [basis, every, every, all_but_b]}),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert [(c["id"], c["confidence"]) for c in json.loads(done.stdout)["calibration"]] == [
+        ("a", "high"),
+        ("b", "medium"),
+        ("c", "medium"),
+        ("d", "low"),
     ]
 
 
 def test_a_quiet_calendar_day_makes_no_model_call(tmp_path: Path) -> None:
     port = answers()
-    with EngineService.open(tmp_path, harness=port) as svc:
-        item = svc.drafts.put("t3-news-calendar-watch", Bundle.read(T3), 0, caller=OPERATOR).item
-        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={"fixture": "quiet"}))
-        with Reader.open(tmp_path) as reader:
-            delivered: list[Any] = [
-                cast(dict[str, Any], e.data["outputs"])["main"]
-                for e in reader.events(report.run_id)
-                if e.kind == "node_finished" and e.data.get("node_id") == "deliver"
-            ]
+    report, strip = try_template(tmp_path, T3, {"fixture": "quiet"}, port)
 
     assert report.status == "passed"
     assert port.chats == []
-    assert [(d["surprise_count"], d["notes"], d["guard_cross_check"]) for d in delivered] == [
-        (0, [], "could not check: trading node")
-    ]
+    assert (strip["surprise_count"], strip["notes"], strip["guard_cross_check"]) == (
+        0,
+        [],
+        "could not check: trading node",
+    )
 
 
 def plant_number(note: dict[str, Any]) -> None:
@@ -169,3 +365,28 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert isinstance(refused_run, list)
     assert [(p.code, p.message) for p in refused_run] == [("needs_unmet", "needs: trading-node")]
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
+
+
+def test_install_publishes_seven_disabled_and_a_second_install_changes_nothing(
+    tmp_path: Path,
+) -> None:
+    with EngineService.open(tmp_path, harness=answers()) as svc:
+        first = asyncio.run(install(svc))
+        seen = len(svc.ctx.library.events())
+        second = asyncio.run(install(svc))
+        status = {row.template.id: (row.status, row.version) for row in listing(svc)}
+        library_after = len(svc.ctx.library.events())
+    with Reader.open(tmp_path) as reader:
+        triggers = rows.triggers(reader.connection)
+
+    built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV"]
+    assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built]
+    assert [i.action for i in second] == ["unchanged"] * 7
+    assert library_after == seen
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 7
+    assert sum(s == ("not yet built", None) for s in status.values()) == 24
+    assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
+        ("rs1-paper-scout", "cron", False),
+        ("rv-weekly-review", "cron", False),
+        ("t3-news-calendar-watch", "cron", False),
+    ]

@@ -1,0 +1,73 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rv-weekly-review",
+  "name": "Weekly review",
+  "inputs": {
+    "type": "object",
+    "properties": {"fixture": {"type": "boolean", "description": "use fixtures/week.json"}}
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the change card, or nothing when no run started this week"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 120000, "agents": 1, "tool_calls": 10, "wall_seconds": 1800,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Mondays at 06:00 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "week", "name": "The week's runs and inbox", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/week.py", "fixture_ref": "fixtures/week.json"}},
+    {"id": "any", "name": "Any run this week?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.runs != []"}},
+    {"id": "cluster", "name": "Cluster the failures", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "reviewer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/cluster.md", "schema_ref": "schemas/clusters.json",
+                    "recording_ref": "fixtures/recorded/clusters.json"}},
+    {"id": "propose", "name": "Propose at most three edits", "type": "llm", "typeVersion": 1,
+     "position": [880, 0], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/propose.md", "schema_ref": "schemas/edits.json",
+                    "recording_ref": "fixtures/recorded/edits.json"}},
+    {"id": "lint", "name": "Reject loosening edits", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/lint_edits.py"}},
+    {"id": "assemble", "name": "Change card", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Mondays at 06:00 UTC": {"main": [[{"node": "The week's runs and inbox", "port": "in",
+                                        "map": "one"}]]},
+    "The week's runs and inbox": {"main": [[{"node": "Any run this week?", "port": "in",
+                                             "map": "one"}]]},
+    "Any run this week?": {"true": [[{"node": "Cluster the failures", "port": "in", "map": "one"},
+                                     {"node": "Propose at most three edits", "port": "in",
+                                      "map": "one"},
+                                     {"node": "Change card", "port": "in", "map": "one"},
+                                     {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Cluster the failures": {"main": [[{"node": "Propose at most three edits", "port": "in",
+                                        "map": "one"},
+                                       {"node": "Change card", "port": "in", "map": "one"}]]},
+    "Propose at most three edits": {"main": [[{"node": "Reject loosening edits", "port": "in",
+                                               "map": "one"}]]},
+    "Reject loosening edits": {"main": [[{"node": "Change card", "port": "in", "map": "one"}]]},
+    "Change card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "RV"}
+}
