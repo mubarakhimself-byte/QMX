@@ -1,0 +1,16 @@
+{
+  "piece": "the volatility-scaled trend filter",
+  "name": "Volatility-scaled trend filter",
+  "formula": {"value": "20-day price change divided by the 20-day standard deviation of daily returns", "claim_id": "fixture-paper#s1-c1"},
+  "data_frequency": {"value": "daily closing prices", "claim_id": "fixture-paper#s1-c3"},
+  "warm_up": {"value": "20 days", "claim_id": ""},
+  "claimed_effect": {"value": "Raised a breakout system's Sharpe ratio from 0.6 to 0.9 after costs", "claim_id": "fixture-paper#s1-c4"},
+  "inputs": ["daily closing prices"],
+  "parameters": [
+    {"name": "lookback", "value": "20 days", "claim_id": "fixture-paper#s1-c1"},
+    {"name": "threshold", "value": "unresolved", "claim_id": ""}
+  ],
+  "failure_cases": [{"text": "Fails in choppy years such as 2015.", "claim_id": "fixture-paper#s1-c5"}],
+  "ablation_plan": {"hosts": ["a daily breakout system", "a moving-average crossover system"], "test": "Run each host with and without the filter on the same markets and costs, and compare net Sharpe and trade count."},
+  "assumptions": []
+}

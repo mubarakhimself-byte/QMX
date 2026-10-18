@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "required": ["cards", "gaps"],
+  "properties": {
+    "cards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "title", "item_id", "summary", "entry", "entry_claims", "exit",
+                     "exit_claims", "parameters", "market", "timeframe"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"enum": ["strategy", "component", "knowledge", "hint"]},
+          "title": {"type": "string"},
+          "item_id": {"type": "string"},
+          "summary": {"type": "string"},
+          "entry": {"type": "string"},
+          "entry_claims": {"type": "array", "items": {"type": "string"}},
+          "exit": {"type": "string"},
+          "exit_claims": {"type": "array", "items": {"type": "string"}},
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "value", "claim_id"],
+              "properties": {
+                "name": {"type": "string"},
+                "value": {"type": "string"},
+                "claim_id": {"type": "string"}
+              }
+            }
+          },
+          "market": {"type": "string"},
+          "timeframe": {"type": "string"}
+        }
+      }
+    },
+    "gaps": {"type": "array", "items": {"type": "string"}}
+  }
+}

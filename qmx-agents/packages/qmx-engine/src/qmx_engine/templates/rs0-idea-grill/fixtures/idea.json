@@ -1,0 +1,11 @@
+{
+  "note": "A synthetic idea and dead end written for this template's test runs. Neither is a real record.",
+  "idea": "Funding-rate spikes on BTC perpetual futures predict short-term price reversals.",
+  "dead_ends": [
+    {
+      "mechanism": "funding-rate extremes predict reversals",
+      "market": "ETH perpetual futures",
+      "why_dead": "the edge disappeared after costs in the 2023 retest"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["questions", "known_shown"],
+  "properties": {
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["number", "question", "recommended"],
+        "properties": {
+          "number": {"type": "integer"},
+          "question": {"type": "string"},
+          "recommended": {"type": "string"}
+        }
+      }
+    },
+    "known_shown": {"type": "array", "items": {"type": "string"}}
+  }
+}

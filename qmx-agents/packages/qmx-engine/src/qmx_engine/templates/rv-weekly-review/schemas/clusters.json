@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["clusters"],
+  "properties": {
+    "clusters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["signature", "label", "run_ids", "likely_cause"],
+        "properties": {
+          "signature": {"type": "string"},
+          "label": {"type": "string"},
+          "run_ids": {"type": "array", "items": {"type": "string"}},
+          "likely_cause": {"enum": ["prompt", "question battery", "brief", "skill text",
+                                    "pre-check rule", "provider", "data"]}
+        }
+      }
+    }
+  }
+}

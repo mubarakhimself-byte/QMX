@@ -1,0 +1,8 @@
+{"claims": [
+  {"id": "inv-gifjbbjgpf#s1-c1", "text": "The strategy fades the London open on EURUSD.", "quote": "the London open fade on EURUSD", "source_id": "inv-gifjbbjgpf#s1", "locator": "00:15-02:00", "tag": "source-stated"},
+  {"id": "inv-gifjbbjgpf#s1-c2", "text": "Mark the Asian session range on the 15-minute chart.", "quote": "Mark the Asian session high and low on the 15 minute chart", "source_id": "inv-gifjbbjgpf#s1", "locator": "00:15-02:00", "tag": "source-stated"},
+  {"id": "inv-gifjbbjgpf#s1-c3", "text": "Sell at the next open after price breaks the Asian high in the first London hour and closes back inside.", "quote": "When price breaks the Asian high in the first hour of London and closes back inside the range, sell at the next candle open", "source_id": "inv-gifjbbjgpf#s1", "locator": "00:15-02:00", "tag": "source-stated"},
+  {"id": "inv-gifjbbjgpf#s2-c1", "text": "The stop is five pips above the breakout wick.", "quote": "Put the stop five pips above the breakout wick", "source_id": "inv-gifjbbjgpf#s2", "locator": "02:10-04:00", "tag": "source-stated"},
+  {"id": "inv-gifjbbjgpf#s2-c2", "text": "The target is loosely the middle of the range.", "quote": "I usually take profit somewhere around the middle of the range", "source_id": "inv-gifjbbjgpf#s2", "locator": "02:10-04:00", "tag": "unresolved"},
+  {"id": "inv-gifjbbjgpf#s2-c3", "text": "Trade it only Tuesday to Thursday.", "quote": "I only trade it from Tuesday to Thursday because Monday ranges are too small", "source_id": "inv-gifjbbjgpf#s2", "locator": "02:10-04:00", "tag": "source-stated"}
+]}

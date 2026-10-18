@@ -1,0 +1,6 @@
+{"claims": [
+  {"id": "fixture-v1#s1-c1", "text": "Mark the Asian session range on the 15-minute chart.", "quote": "Mark the Asian session high and low on the 15 minute chart", "source_id": "fixture-v1#s1", "locator": "00:00-01:50", "tag": "source-stated"},
+  {"id": "fixture-v1#s1-c2", "text": "Sell when price breaks the Asian high in the first London hour and closes back inside.", "quote": "When price breaks the Asian high in the first hour of London and closes back inside the range", "source_id": "fixture-v1#s1", "locator": "00:00-01:50", "tag": "source-stated"},
+  {"id": "fixture-v1#s2-c1", "text": "The stop sits five pips above the breakout wick.", "quote": "Put the stop five pips above the breakout wick", "source_id": "fixture-v1#s2", "locator": "02:10-03:30", "tag": "source-stated"},
+  {"id": "fixture-v1#s2-c2", "text": "The target is loosely the middle of the range.", "quote": "I usually take profit somewhere around the middle of the range", "source_id": "fixture-v1#s2", "locator": "02:10-03:30", "tag": "unresolved"}
+]}

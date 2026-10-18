@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "required": ["claims"],
+  "properties": {
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "quote", "source_id", "locator", "tag"],
+        "properties": {
+          "id": {"type": "string"},
+          "text": {"type": "string"},
+          "quote": {"type": "string"},
+          "source_id": {"type": "string"},
+          "locator": {"type": "string"},
+          "tag": {"enum": ["source-stated", "inferred", "unresolved"]}
+        }
+      }
+    }
+  }
+}

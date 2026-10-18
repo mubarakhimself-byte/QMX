@@ -1,0 +1,11 @@
+{"topic": "Portfolio optimisation methods for combining a few trading strategies", "headline": "2 of 6 methods hold up after costs in out-of-sample studies: covariance shrinkage and capped minimum variance.", "methods": [
+  {"method": "shrinkage", "verdict": "holds up", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s02"], "could_test": true, "confidence": "high"},
+  {"method": "minimum variance", "verdict": "holds up", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s12"], "could_test": true, "confidence": "high"},
+  {"method": "mean-variance", "verdict": "fails", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s01", "fx-s09"], "could_test": true, "confidence": "high"},
+  {"method": "hierarchical risk parity", "verdict": "mixed", "tier": "peer-reviewed with out-of-sample test", "source_ids": ["fx-s04"], "could_test": true, "confidence": "high"},
+  {"method": "risk parity", "verdict": "mixed", "tier": "preprint", "source_ids": ["fx-s03", "fx-s07"], "could_test": true, "confidence": "high"},
+  {"method": "Kelly sizing", "verdict": "untested", "tier": "video claim", "source_ids": ["fx-s08"], "could_test": true, "confidence": "not calibrated"}
+], "could_test": ["Shrinkage against the sample covariance on the live book, with costs.", "Minimum variance with a 30% cap per strategy against equal weights."], "gaps": ["Black-Litterman has no backtest", "CVaR untested on real strategy returns"], "assumptions": [
+  {"question": "Which market?", "assumed": "Books of trading strategies in any liquid market."},
+  {"question": "How deep?", "assumed": "One row per method, no replication."}
+], "judge": {"overall": 0.9, "pass": true}, "banner": null}

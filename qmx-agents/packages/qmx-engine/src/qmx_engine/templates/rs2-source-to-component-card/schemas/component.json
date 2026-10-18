@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "stated": {
+      "type": "object",
+      "required": ["value", "claim_id"],
+      "properties": {"value": {"type": "string"}, "claim_id": {"type": "string"}}
+    }
+  },
+  "type": "object",
+  "required": ["piece", "name", "formula", "data_frequency", "warm_up", "claimed_effect", "inputs",
+               "parameters", "failure_cases", "ablation_plan", "assumptions"],
+  "properties": {
+    "piece": {"type": "string"},
+    "name": {"type": "string"},
+    "formula": {"$ref": "#/$defs/stated"},
+    "data_frequency": {"$ref": "#/$defs/stated"},
+    "warm_up": {"$ref": "#/$defs/stated"},
+    "claimed_effect": {"$ref": "#/$defs/stated"},
+    "inputs": {"type": "array", "items": {"type": "string"}},
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value", "claim_id"],
+        "properties": {
+          "name": {"type": "string"},
+          "value": {"type": "string"},
+          "claim_id": {"type": "string"}
+        }
+      }
+    },
+    "failure_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "claim_id"],
+        "properties": {"text": {"type": "string"}, "claim_id": {"type": "string"}}
+      }
+    },
+    "ablation_plan": {
+      "type": "object",
+      "required": ["hosts", "test"],
+      "properties": {
+        "hosts": {"type": "array", "items": {"type": "string"}},
+        "test": {"type": "string"}
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["question", "assumed"],
+        "properties": {"question": {"type": "string"}, "assumed": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "note": "A synthetic transcript written for this block's test runs. It is not a real video.",
+  "sources": [
+    {
+      "id": "fixture-v1",
+      "kind": "video",
+      "title": "The London open fade",
+      "segments": [
+        {"start": 0, "end": 20, "text": "Today I show you the London open fade on EURUSD."},
+        {"start": 20, "end": 60, "text": "Mark the Asian session high and low on the 15 minute chart."},
+        {"start": 60, "end": 110, "text": "When price breaks the Asian high in the first hour of London and closes back inside the range, sell at the next candle open."},
+        {"start": 130, "end": 170, "text": "Put the stop five pips above the breakout wick."},
+        {"start": 170, "end": 210, "text": "I usually take profit somewhere around the middle of the range, it depends."}
+      ]
+    }
+  ]
+}

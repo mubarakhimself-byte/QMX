@@ -1,0 +1,17 @@
+{
+  "type": "object",
+  "required": ["votes"],
+  "properties": {
+    "votes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "answer"],
+        "properties": {
+          "id": {"type": "string"},
+          "answer": {"enum": ["holds", "does not hold", "unclear"]}
+        }
+      }
+    }
+  }
+}

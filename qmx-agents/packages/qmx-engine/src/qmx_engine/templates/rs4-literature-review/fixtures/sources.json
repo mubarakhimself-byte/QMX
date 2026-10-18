@@ -1,0 +1,30 @@
+{
+  "note": "Synthetic sources written for this template's test runs. None is a real publication or video.",
+  "topic": "Portfolio optimisation methods for combining a few trading strategies",
+  "sources": [
+    {"id": "fx-s01", "venue": "journal, out-of-sample test", "title": "Equal weight is hard to beat",
+     "abstract": "Across 14 strategy books from 2000 to 2020, mean-variance weights estimated on five years of data underperformed equal weights out of sample. Estimation error in expected returns explained most of the gap."},
+    {"id": "fx-s02", "venue": "journal, out-of-sample test", "title": "Shrinking the covariance matrix",
+     "abstract": "Ledoit-Wolf shrinkage of the covariance matrix cut out-of-sample portfolio volatility by 12% against the sample covariance. Gains were largest when the number of assets was close to the length of the history."},
+    {"id": "fx-s03", "venue": "preprint", "title": "Risk parity for strategy books",
+     "abstract": "Weighting strategies by inverse volatility gave a higher Sharpe ratio than equal weights in 9 of 12 books. The paper uses no transaction costs."},
+    {"id": "fx-s04", "venue": "journal, out-of-sample test", "title": "Hierarchical risk parity out of sample",
+     "abstract": "Hierarchical risk parity matched minimum variance on volatility and beat it on turnover in a 2005 to 2022 out-of-sample test. It did not beat equal weights on Sharpe ratio after costs."},
+    {"id": "fx-s05", "venue": "practitioner paper", "title": "Black-Litterman views for a quant desk",
+     "abstract": "Blending equilibrium returns with desk views gave stable weights. The note reports no backtest."},
+    {"id": "fx-s06", "venue": "preprint", "title": "CVaR optimisation for fat tails",
+     "abstract": "Minimising conditional value at risk at the 95% level reduced the worst month by a third against mean-variance in simulated fat-tailed returns. Results on real strategy returns are left for future work."},
+    {"id": "fx-s07", "venue": "video with shown backtest", "title": "I tried risk parity on my bots",
+     "abstract": "The creator shows a backtest where inverse-volatility weights on four bots smoothed the equity curve from 2019 to 2023. Costs are not shown."},
+    {"id": "fx-s08", "venue": "video claim", "title": "Why Kelly sizing wins",
+     "abstract": "The creator claims full Kelly weights double returns for any book. No backtest is shown."},
+    {"id": "fx-s09", "venue": "journal, out-of-sample test", "title": "Turnover costs of optimised weights",
+     "abstract": "Monthly rebalanced mean-variance weights paid 1.8% a year in costs, which erased their in-sample edge. Imposing turnover limits recovered half of it."},
+    {"id": "fx-s10", "venue": "preprint", "title": "Regime-aware weights",
+     "abstract": "Switching between two weight sets by a volatility regime raised the Sharpe ratio from 0.7 to 0.8 in sample. No out-of-sample test is reported."},
+    {"id": "fx-s11", "venue": "practitioner paper", "title": "Correlation spikes in crises",
+     "abstract": "Strategy correlations rose towards one in the 2008 and 2020 sell-offs, so diversification fell when it was needed most."},
+    {"id": "fx-s12", "venue": "journal, out-of-sample test", "title": "Minimum variance with constraints",
+     "abstract": "Long-only minimum variance with a 30% cap per strategy had lower drawdowns than equal weights in a 2000 to 2021 out-of-sample test, with similar Sharpe ratio."}
+  ]
+}

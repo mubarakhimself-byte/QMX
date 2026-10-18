@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "x-prose": ["clusters", "edits"],
+  "required": ["summary", "week", "runs", "parked", "inbox", "clusters", "edits"],
+  "properties": {
+    "summary": {"type": "string"},
+    "week": {
+      "type": "object",
+      "required": ["from", "to", "source"],
+      "properties": {
+        "from": {"type": "string"},
+        "to": {"type": "string"},
+        "source": {"enum": ["engine", "fixture"]}
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["run_id", "workflow", "status"],
+        "properties": {
+          "run_id": {"type": "string"},
+          "workflow": {"type": "string"},
+          "status": {"type": "string"}
+        }
+      }
+    },
+    "parked": {"type": "array"},
+    "inbox": {"type": "array"},
+    "clusters": {"type": "array"},
+    "edits": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["workflow", "target", "change", "why", "status"],
+        "properties": {"status": {"type": "string", "pattern": "^(untested|rejected)"}}
+      }
+    }
+  }
+}

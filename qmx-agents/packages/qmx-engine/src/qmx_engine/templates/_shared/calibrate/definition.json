@@ -1,0 +1,42 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "calibrate",
+  "name": "Calibrate: basis labels, three blind samples, agreement, a confidence rule",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "claims", "name": "Headline items", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/claims.py", "fixture_ref": "fixtures/claims.json"}},
+    {"id": "basis", "name": "Basis labels", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/basis.py"}},
+    {"id": "sample_1", "name": "Sample 1", "type": "llm", "typeVersion": 1,
+     "position": [660, -120], "role": "reader", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/sample.md", "schema_ref": "schemas/votes.json",
+                    "recording_ref": "fixtures/recorded/votes.json"}},
+    {"id": "sample_2", "name": "Sample 2", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "reader", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/sample.md", "schema_ref": "schemas/votes.json",
+                    "recording_ref": "fixtures/recorded/votes.json"}},
+    {"id": "sample_3", "name": "Reviewer sample", "type": "llm", "typeVersion": 1,
+     "position": [660, 120], "role": "reviewer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/sample.md", "schema_ref": "schemas/votes.json",
+                    "recording_ref": "fixtures/recorded/votes.json"}},
+    {"id": "agreement", "name": "Agreement and confidence", "type": "script", "typeVersion": 1,
+     "position": [880, 0], "effect": "none", "parameters": {"script": "scripts/agreement.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Headline items", "port": "in", "map": "one"}]]},
+    "Headline items": {"main": [[{"node": "Basis labels", "port": "in", "map": "one"}]]},
+    "Basis labels": {"main": [[{"node": "Sample 1", "port": "in", "map": "one"},
+                               {"node": "Sample 2", "port": "in", "map": "one"},
+                               {"node": "Reviewer sample", "port": "in", "map": "one"},
+                               {"node": "Agreement and confidence", "port": "in", "map": "one"}]]},
+    "Sample 1": {"main": [[{"node": "Agreement and confidence", "port": "in", "map": "one"}]]},
+    "Sample 2": {"main": [[{"node": "Agreement and confidence", "port": "in", "map": "one"}]]},
+    "Reviewer sample": {"main": [[{"node": "Agreement and confidence", "port": "in",
+                                   "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

@@ -1,0 +1,4 @@
+{"class": "breadth", "question": "Which portfolio optimisation methods beat equal weights for a small book of trading strategies after costs and out of sample?", "look_for": "The method, its result after costs, whether the test was out of sample, and the market and period.", "assumptions": [
+  {"question": "Which market?", "assumed": "Books of trading strategies in any liquid market."},
+  {"question": "How deep?", "assumed": "One row per method, no replication."}
+]}

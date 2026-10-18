@@ -1,0 +1,62 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rs0-idea-grill",
+  "name": "Idea grill to term sheet",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "idea": {"type": "string", "description": "the idea in one or two sentences"},
+      "dead_ends": {"type": "array", "description": "known dead ends: mechanism, market, why_dead"},
+      "fixture": {"type": "boolean", "description": "use fixtures/idea.json"}
+    }
+  },
+  "outputs": {"type": "object", "description": "the graded term sheet with its assumptions"},
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 80000, "agents": 1, "tool_calls": 10, "wall_seconds": 1800,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "idea", "name": "Idea and what is known", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/idea.py", "fixture_ref": "fixtures/idea.json"}},
+    {"id": "grill", "name": "Grill", "type": "llm", "typeVersion": 1,
+     "position": [440, 0], "role": "planner", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/grill.md", "schema_ref": "schemas/questions.json",
+                    "recording_ref": "fixtures/recorded/questions.json"}},
+    {"id": "draft", "name": "Draft the term sheet", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/term_sheet.md", "schema_ref": "schemas/output.json",
+                    "recording_ref": "fixtures/recorded/term_sheet.json"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [880, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1100, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Idea and what is known", "port": "in", "map": "one"}]]},
+    "Idea and what is known": {"main": [[{"node": "Grill", "port": "in", "map": "one"},
+                                         {"node": "Draft the term sheet", "port": "in",
+                                          "map": "one"},
+                                         {"node": "Render and grade", "port": "in",
+                                          "map": "one"}]]},
+    "Grill": {"main": [[{"node": "Draft the term sheet", "port": "in", "map": "one"},
+                        {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Draft the term sheet": {"main": [[{"node": "Render and grade", "port": "in",
+                                        "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "RS0"}
+}
