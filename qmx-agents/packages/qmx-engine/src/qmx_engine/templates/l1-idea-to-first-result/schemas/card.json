@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "required": ["card", "questions", "dead_end_warning"],
+  "properties": {
+    "card": {
+      "type": "object",
+      "required": ["mechanism", "market", "timeframe", "session", "entry", "exit", "filters",
+                   "kill_rule", "data_needed", "what_would_fake_this"],
+      "properties": {
+        "mechanism": {"type": "string"},
+        "market": {"type": "string"},
+        "timeframe": {"type": "string"},
+        "session": {"type": "string"},
+        "entry": {"type": "string"},
+        "exit": {"type": ["string", "null"]},
+        "filters": {"type": "array", "items": {"type": "string"}},
+        "kill_rule": {"type": "string"},
+        "data_needed": {"type": "string"},
+        "what_would_fake_this": {"type": "string"}
+      }
+    },
+    "questions": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "required": ["field", "question", "recommended", "changes_logic"],
+        "properties": {
+          "field": {"type": "string"},
+          "question": {"type": "string"},
+          "recommended": {"type": "string"},
+          "changes_logic": {"type": "boolean"},
+          "alternatives": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "dead_end_warning": {"type": "string"}
+  }
+}

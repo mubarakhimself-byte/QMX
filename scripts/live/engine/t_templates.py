@@ -37,6 +37,22 @@ No lane touches the plan login or the ship home.
 - `gw` (TP3 lane 9, no model): GW validates and holds no model-bearing node.
 - `t4-fake` (TP3 lane 10) and `db-fake`: the template on the fake switch with no harness at all, so
   no provider can be called. Pass when the run passes with only fake spans.
+- `all` (TP4 lane 2, lane 8 and the perf block): the 9 runnable templates test-run on real models
+  with their catalogue inputs. Pass when 9 of 9 pass; logs each wall time, the pack's total, and
+  the pack's model spans and tokens. `all-recorded` runs the same on the recorded answers.
+- `install-recorded` (TP4 lane 3 on recorded answers, no spend): the pack installed, read back
+  through the engine host's workflow doors, and `templates list` grabbed as `tp4-install.png`.
+  Pass when 9 read published and disabled and 22 read drafts with their need. `install` is the
+  real-model lane.
+- `drafts-tp4` (TP4 lane 4) and `readmes-tp4`: TP4's 12 drafts, as `drafts` and `readmes`.
+- `doc` (TP4 lane 6, no model): every row of `docs/TEMPLATES.md` matches the catalogue.
+- `variant` (TP4 lane 7): RS1 cloned through `extends` and test-run; the published variant records
+  `variant-of` RS1's version. `variant-recorded` runs it on the recorded answers.
+- `money-pack` (TP4 lane 9, no model): the money lint over all 31 folders.
+- `all-plan`, `install-plan` and `variant-plan`: `all`, the install and `variant` with model
+  turns through the plan login on the ship home, under the lane lock, every role on
+  `claude/haiku` for the lane only. The engine runs on a throwaway home, and the ship home's
+  `settings.toml` must hash the same before and after.
 
 Spend is the relay journals' upper bound at the Kimi row's list prices.
 """
@@ -46,34 +62,40 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import hashlib
 import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
+from collections.abc import AsyncIterator, Callable
+from functools import partial
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
-from common import ENGINE_STORE, Log, boot, throwaway_home
+from common import ENGINE_STORE, SHIP_HOME, Log, boot, plan_harness, throwaway_home
+from ep2_lanes import ENGINE
 
 os.environ.setdefault("QMA_LIVE_SCRATCH", str(ENGINE_STORE / "homes" / "tp1-scratch"))
 
 from jsonschema import Draft202012Validator
 from llm_lanes import OPENROUTER_ROW, harnessed, relay_usd
 from qmx_engine.__main__ import install_templates, list_templates
-from qmx_engine.ledger.spans import Span
-from qmx_engine.ledger.store import Reader
-from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import validate
+from qmx_engine.ledger.spans import Span
+from qmx_engine.ledger.store import Reader
+from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.library import Bundle, drafts_ref
-from qmx_engine.ports.settings import ControlSettings
+from qmx_engine.ports.settings import ControlSettings, StaticSettings
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
-from qmx_engine.templates.catalog import CATALOG, PACK
+from qmx_engine.templates.catalog import CATALOG, PACK, find
 from qmx_engine.templates.install import current_draft
+from qmx_engine.templates.install import install as install_pack
 from qmx_engine.triggers import rows
 
 RS1: Final = PACK / "rs1-paper-scout"
@@ -86,6 +108,7 @@ RV: Final = PACK / "rv-weekly-review"
 DB: Final = PACK / "db-desk-brief"
 T4: Final = PACK / "t4-research-desk-overnight"
 TP3_FOLDERS: Final = [PACK / t.folder for t in CATALOG if t.pr == "TP3" and t.folder]
+PACK_FOLDERS: Final = [PACK / str(t.folder) for t in CATALOG]
 NODE_FACT: Final = "could not check: trading node"
 
 
@@ -496,9 +519,10 @@ def refusal(log: Log, label: str, need: str, attempt: Any) -> int:
     return 0
 
 
-def drafts(log: Log, home: Path) -> None:
+def drafts(pr: str, log: Log, home: Path) -> None:
+    waiting = [t for t in CATALOG if t.pr == pr and t.needs]
     refused = 0
-    for template in [t for t in CATALOG if t.pr == "TP3" and t.needs]:
+    for template in waiting:
         item, need = str(template.folder), f"needs: {', '.join(template.needs)}"
         with EngineService.open(home) as svc:
             svc.drafts.put(item, Bundle.read(PACK / item), 0, caller=OPERATOR)
@@ -516,14 +540,17 @@ def drafts(log: Log, home: Path) -> None:
                 log, f"{template.id} enable", need,
                 lambda: svc.versions.enable(forced, caller=OPERATOR),  # noqa: B023
             )  # fmt: skip
+    calls = 2 * len(waiting)
     log.check(
-        "all 20 test and enable calls are refused with the right need", refused == 20, refused
+        f"all {calls} test and enable calls are refused with the right need",
+        refused == calls,
+        refused,
     )
 
 
-def money(log: Log, home: Path) -> None:
+def money(folders: list[Path], log: Log, home: Path) -> None:
     clean = 0
-    for folder in TP3_FOLDERS:
+    for folder in folders:
         definition = json.loads((folder / "definition.json").read_text("utf-8"))
         acts = [p for p in validate(load(folder)) if p.code == "money_act"]
         held = [n["id"] for n in definition["nodes"] if n.get("credentials")]
@@ -542,20 +569,25 @@ def money(log: Log, home: Path) -> None:
     caught = [p.message for p in validate(load(control)) if p.code == "money_act"]
     log(f"control with a planted money act: {caught}")
     log.check(
-        f"all {len(TP3_FOLDERS)} TP3 folders pass the money lint and the planted act is caught",
-        clean == len(TP3_FOLDERS) and bool(caught),
-        {"clean": clean, "folders": len(TP3_FOLDERS), "control caught": bool(caught)},
+        f"all {len(folders)} folders pass the money lint and the planted act is caught",
+        clean == len(folders) and bool(caught),
+        {"clean": clean, "folders": len(folders), "control caught": bool(caught)},
     )
 
 
-def readmes(log: Log, home: Path) -> None:
+def readmes(pr: str, log: Log, home: Path) -> None:
+    waiting = [t for t in CATALOG if t.pr == pr and t.needs]
     named = 0
-    for template in [t for t in CATALOG if t.pr == "TP3" and t.needs]:
+    for template in waiting:
         text = (PACK / str(template.folder) / "README.md").read_text("utf-8").splitlines()
         line = next(x for x in text[1:] if x.strip())
         log(f"{template.id}: {line}")
         named += line.startswith("Waits for") and f"`needs: {', '.join(template.needs)}`" in line
-    log.check("each of the 10 draft READMEs names its need in one line", named == 10, named)
+    log.check(
+        f"each of the {len(waiting)} draft READMEs names its need in one line",
+        named == len(waiting),
+        named,
+    )
 
 
 def gw(log: Log, home: Path) -> None:
@@ -572,6 +604,269 @@ def gw(log: Log, home: Path) -> None:
     )
 
 
+Models = Literal["recorded", "openrouter", "plan"]
+
+RUNNABLE: Final = [t for t in CATALOG if not t.needs]
+HAIKU: Final = ("claude/haiku",)
+ROLE_ORDER_KEYS: Final = frozenset({"roles.test_only", "roles.test_order", "roles.live_order"})
+MODEL_KINDS: Final[dict[str, str]] = {
+    "recorded": "recorded answers, no provider",
+    "openrouter": "real models, the OpenRouter test row",
+    "plan": "real models, the plan login on haiku",
+}
+DOC: Final = ENGINE / "docs" / "TEMPLATES.md"
+
+
+def recorded_port() -> Any:
+    """The unit tests' port: every model turn answered from the templates' recorded answers, so
+    nothing reaches a provider."""
+    sys.path.insert(0, str(ENGINE / "tests"))
+    from test_templates import answers  # noqa: PLC0415
+
+    return answers()
+
+
+async def save_and_test(svc: EngineService, item: str, bundle: Bundle, inputs: Any) -> Any:
+    current = current_draft(svc, item)
+    revision = 0 if current is None else current.revision
+    svc.drafts.put(item, bundle, revision, caller=OPERATOR)
+    return await svc.tests.run(item, caller=OPERATOR, inputs=inputs)
+
+
+@contextlib.asynccontextmanager
+async def services(log: Log, home: Path, mode: Models) -> AsyncIterator[Callable[[], Any]]:
+    """Opens the engine service on `home` with its model turns answered by `mode`: the recorded
+    answers, the throwaway home's OpenRouter row, or the plan login on the ship home under the lane
+    lock. In plan mode every role is mapped to `claude/haiku` in the engine's settings for this
+    lane only; the ship home's own settings are read, never written."""
+    if mode == "recorded":
+        yield lambda: EngineService.open(home, harness=recorded_port())
+        return
+    opener = plan_harness(log) if mode == "plan" else harnessed(home)
+    async with opener as found:
+        settings: Any = ControlSettings(found.control)
+        if mode == "plan":
+            settings = StaticSettings(
+                {
+                    key: HAIKU if key.startswith("roles.") and key not in ROLE_ORDER_KEYS else value
+                    for key, value in settings.values().items()
+                }
+            )
+        adapter = HarnessAdapter(found.harness)
+        yield lambda: EngineService.open(home, settings=settings, harness=adapter)
+
+
+def tokens_of(spans: list[Span]) -> dict[str, int]:
+    return {k: sum(s.tokens.get(k, 0) for s in spans) for k in ("in", "out", "cache_read")}
+
+
+def cost_line(spans: list[Span], seconds: float) -> str:
+    """A test run's cost in the catalogue's words: spans and their models, tokens in thousands,
+    and seconds."""
+    models = "/".join(sorted({str(s.model) for s in spans})) or "no model"
+    k = {name: round(count / 1000) for name, count in tokens_of(spans).items()}
+    plural = "" if len(spans) == 1 else "s"
+    return (
+        f"TP4 lane 2: {len(spans)} {models} span{plural}; {k['in']}k in, {k['out']}k out,"
+        f" {k['cache_read']}k cache read; {seconds:.0f} s"
+    )
+
+
+def pack_tests(mode: Models, log: Log, home: Path) -> None:
+    """Each runnable template test-run once with its catalogue inputs: the wall time of each and
+    of the whole pack, and the pack's model spans and tokens (the cost Appendix E asks for)."""
+    asyncio.run(pack_run(log, home, mode))
+
+
+async def pack_run(log: Log, home: Path, mode: Models) -> None:
+    total_s, spans_n, tokens = 0.0, 0, dict.fromkeys(("in", "out", "cache_read"), 0)
+    failing = []
+    async with services(log, home, mode) as service:
+        for template in RUNNABLE:
+            folder = PACK / str(template.folder)
+            started = time.monotonic()
+            with service() as svc:
+                report = await save_and_test(
+                    svc, folder.name, Bundle.read(folder), template.test_inputs
+                )
+            seconds = time.monotonic() - started
+            spans = model_spans(home, report.run_id)
+            errors = schema_errors(folder, delivered(home, report.run_id))
+            if report.status != "passed" or errors:
+                failing.append(template.id)
+            total_s += seconds
+            spans_n += len(spans)
+            for name, count in tokens_of(spans).items():
+                tokens[name] += count
+            log_spans(log, spans)
+            log(
+                f"{template.id} {report.run_id} {report.status} {report.reason or ''}"
+                f" in {seconds:.1f} s, {len(spans)} model spans, tokens {tokens_of(spans)},"
+                f" schema errors {errors}"
+            )
+            if report.status == "passed" and mode != "recorded":
+                log(f"test_cost {template.id}: {cost_line(spans, seconds)}")
+    log.check(
+        f"{len(RUNNABLE) - len(failing)} of {len(RUNNABLE)} runnable templates pass their test run",
+        not failing,
+        failing,
+    )
+    kind = MODEL_KINDS[mode]
+    log(f"perf: pack test runs on {kind}: {total_s:.0f} s wall in all ({total_s / 60:.1f} min)")
+    log(f"cost: pack test runs on {kind}: {spans_n} model spans, tokens {tokens}")
+    if total_s > 3600:
+        log("note: a full retest of the pack takes over 60 minutes")
+
+
+def show(log: Log, lines: list[str], png: str) -> None:
+    """`lines` in a console window of their own, tall enough for the whole pack, grabbed with
+    ffmpeg as `<png>.png`."""
+    text = log.path.parent / f"{log.path.stem}.txt"
+    text.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    title = f"TP4 {png}"
+    viewer = (
+        "import ctypes,os,time;"
+        f"ctypes.windll.kernel32.SetConsoleTitleW({title!r});"
+        f"os.system('mode con: cols=110 lines={len(lines) + 3}');"
+        f"print(open({str(text)!r},encoding='utf-8').read(),flush=True);time.sleep(12)"
+    )
+    subprocess.Popen(["conhost.exe", sys.executable, "-c", viewer])  # noqa: S607
+    time.sleep(5)
+    shot = log.path.parent / f"{os.environ.get('ENGINE_LOG_PREFIX', '')}{png}.png"
+    grab = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "gdigrab"]
+    done = subprocess.run([*grab, "-i", f"title={title}", "-frames:v", "1", str(shot)], check=False)
+    log(f"screen {shot}: ffmpeg exit {done.returncode}")
+
+
+def install_lane(mode: Models, log: Log, home: Path) -> None:
+    """`templates install` (the `install` the CLI calls) on a fresh home, then the pack read back
+    through the engine host's workflow doors, and `templates list` shown in a console window
+    grabbed as `tp4-install.png` (`tp4-install-<mode>.png` off the recorded answers)."""
+    from x13_doors import host  # noqa: PLC0415
+
+    async def installed() -> Any:
+        async with services(log, home, mode) as service:
+            with service() as svc:
+                return await install_pack(svc)
+
+    done = asyncio.run(installed())
+    for found in done:
+        log(f"install: {found.template.id} {found.action}: {found.detail[:160]}")
+    actions = [(f.template.id, f.action) for f in done]
+    log.check(
+        "the install publishes the 9 runnable templates and saves the 22 others as drafts",
+        actions == [(t.id, "saved draft" if t.needs else "published") for t in CATALOG],
+        actions,
+    )
+    published, waiting = [], []
+    with host(log, home, "tp4-install-host") as (client, _, _):
+        for template in CATALOG:
+            item = str(template.folder)
+            versions = client.get(f"/api/workflows/{item}/versions").json()
+            draft = client.get(f"/api/workflows/{item}/draft").json()
+            needs = tuple(draft["definition"]["meta"].get("needs", []))
+            states = [(v["semver"], v["state"]) for v in versions]
+            log(f"host: {template.id} versions {states} draft {draft['state']} needs {needs}")
+            if states == [("0.1.0", "published")]:
+                published.append(template.id)
+            elif not states and draft["state"] == "validated" and needs == template.needs:
+                waiting.append(template.id)
+    log.check(
+        "the host shows 9 published and disabled and 22 drafts, each with its own need",
+        published == [t.id for t in RUNNABLE] and waiting == [t.id for t in CATALOG if t.needs],
+        {"published": published, "drafts": len(waiting)},
+    )
+    _, listed = captured(lambda: list_templates(home))
+    for line in listed:
+        log(f"list: {line}")
+    log.check(
+        "templates list shows 31 rows: 9 published and disabled, 22 drafts with their need",
+        listed[-1] == "31 templates"
+        and sum("published, disabled 0.1.0" in line for line in listed) == 9
+        and sum("validated draft, needs: " in line for line in listed) == 22,
+        listed[-1:],
+    )
+    png = "tp4-install" if mode == "recorded" else f"tp4-install-{mode}"
+    show(log, [f"templates list ({MODEL_KINDS[mode]})", *listed], png)
+
+
+def variant(mode: Models, log: Log, home: Path) -> None:
+    """RS1 cloned as a variant through `extends` and test-run; once published, the variant names
+    RS1's version as the one it is a variant of."""
+    asyncio.run(variant_run(log, home, mode))
+
+
+async def variant_run(log: Log, home: Path, mode: Models) -> None:
+    inputs = find("RS1").test_inputs
+    async with services(log, home, mode) as service:
+        with service() as svc:
+            first = await save_and_test(svc, RS1.name, Bundle.read(RS1), inputs)
+    log(f"RS1 test run {first.run_id} {first.status}")
+    item = "rs1-fx-papers"
+    with EngineService.open(home) as svc:
+        parent = svc.versions.publish(RS1.name, "0.1.0", caller=OPERATOR)
+    patch = {"op": "replace", "path": "/settings/timezone", "value": "Europe/London"}
+    overlay = {
+        "schema": "qmx.workflow/1",
+        "id": item,
+        "name": "Paper scout for FX papers",
+        "extends": {"workflow_item": RS1.name, "object_id": parent, "patches": [patch]},
+    }
+    async with services(log, home, mode) as service:
+        with service() as svc:
+            report = await save_and_test(svc, item, Bundle(overlay, {}), inputs)
+    log(f"variant test run {report.run_id} {report.status} {report.reason or ''}")
+    with EngineService.open(home) as svc:
+        published = svc.versions.publish(item, "0.1.0", caller=OPERATOR)
+        targets = [edge.to_id for edge in svc.ctx.library.edges(published, "variant-of")]
+    log(f"variant {published} variant-of {targets}; parent {parent}")
+    log.check(
+        "the variant passes its test run and records variant_of RS1's version",
+        report.status == "passed" and targets == [parent],
+        (report.status, targets, parent),
+    )
+
+
+def doc_rows() -> list[list[str]]:
+    """The TEMPLATES.md table as the catalogue and the definitions give it."""
+    found = []
+    for template in CATALOG:
+        definition = json.loads((PACK / str(template.folder) / "definition.json").read_text())
+        trigger = next(n for n in definition["nodes"] if n["type"] == "trigger")
+        crons = [f"cron `{c.expr}` {c.zone}" for c in template.triggers]
+        kinds = [
+            "cron (schedule not set yet)" if k == "cron" else k
+            for k in trigger["parameters"]["kinds"]
+            if k != "cron" or not crons
+        ]
+        if template.needs:
+            status, cost = "draft", "none until it can run"
+        else:
+            status, cost = "published, disabled", template.test_cost or "not measured yet"
+        needs = ", ".join(f"`{n}`" for n in template.needs) or "none"
+        found.append([template.id, template.name, status, cost, ", ".join(crons + kinds), needs])
+    return found
+
+
+def doc(log: Log, home: Path) -> None:
+    lines = DOC.read_text("utf-8").splitlines()
+    start = next(i for i, line in enumerate(lines) if line.startswith("| Id |"))
+    table = []
+    for line in lines[start + 2 :]:
+        if not line.startswith("| "):
+            break
+        table.append([cell.strip() for cell in line.strip().strip("|").split("|")])
+    expected = doc_rows()
+    for got, want in zip(table, expected, strict=False):
+        if got != want:
+            log(f"differs: doc {got} catalogue {want}")
+    log.check(
+        f"TEMPLATES.md has {len(expected)} rows and each matches the catalogue",
+        table == expected,
+        {"doc rows": len(table), "catalogue rows": len(expected)},
+    )
+
+
 LANES: Final = {
     "rs1": ("tp1", rs1),
     "t3": ("tp1", t3),
@@ -584,15 +879,47 @@ LANES: Final = {
     "rv": ("tp2", rv),
     "db": ("tp3", db),
     "t4": ("tp3", t4),
-    "drafts": ("tp3", drafts),
-    "money": ("tp3", money),
-    "readmes": ("tp3", readmes),
+    "drafts": ("tp3", partial(drafts, "TP3")),
+    "money": ("tp3", partial(money, TP3_FOLDERS)),
+    "readmes": ("tp3", partial(readmes, "TP3")),
     "gw": ("tp3", gw),
     "t4-fake": ("tp3", t4_fake),
     "db-fake": ("tp3", db_fake),
+    "all": ("tp4", partial(pack_tests, "openrouter")),
+    "all-plan": ("tp4", partial(pack_tests, "plan")),
+    "all-recorded": ("tp4", partial(pack_tests, "recorded")),
+    "install-plan": ("tp4", partial(install_lane, "plan")),
+    "install-recorded": ("tp4", partial(install_lane, "recorded")),
+    "drafts-tp4": ("tp4", partial(drafts, "TP4")),
+    "readmes-tp4": ("tp4", partial(readmes, "TP4")),
+    "doc": ("tp4", doc),
+    "variant": ("tp4", partial(variant, "openrouter")),
+    "variant-plan": ("tp4", partial(variant, "plan")),
+    "variant-recorded": ("tp4", partial(variant, "recorded")),
+    "money-pack": ("tp4", partial(money, PACK_FOLDERS)),
 }
-NO_MODEL: Final = frozenset({"drafts", "money", "readmes", "gw", "t4-fake", "db-fake"})
+NO_MODEL: Final = frozenset(
+    {
+        "drafts",
+        "money",
+        "readmes",
+        "gw",
+        "t4-fake",
+        "db-fake",
+        "all-recorded",
+        "install-recorded",
+        "drafts-tp4",
+        "readmes-tp4",
+        "doc",
+        "variant-recorded",
+        "money-pack",
+    }
+)
 """Lanes that open no harness and add no provider row: they spend nothing."""
+PLAN_LANES: Final = frozenset({"all-plan", "install-plan", "variant-plan"})
+"""Lanes whose model turns go through the plan login on the ship home, under the lane lock. The
+engine runs on a throwaway home; the ship home's `settings.toml` is hashed before and after."""
+SHIP_SETTINGS: Final = SHIP_HOME / "settings.toml"
 
 
 def main() -> int:
@@ -614,9 +941,17 @@ def main() -> int:
         pr = args.pr or owner
         os.environ["ENGINE_LOG_PREFIX"] = prefix  # each lane's harness boot scrubs it again
         log = Log(pr, f"{pr}-{name}")
-        home = throwaway_home(pr, name) if name in NO_MODEL else shared or openrouter_home(pr, name)
+        if name in NO_MODEL or name in PLAN_LANES:
+            home = throwaway_home(pr, name)
+        else:
+            home = shared or openrouter_home(pr, name)
         log(f"home {home}")
+        guarded = hashlib.sha256(SHIP_SETTINGS.read_bytes()).hexdigest()
         lane(log, home)
+        if name in PLAN_LANES:
+            after = hashlib.sha256(SHIP_SETTINGS.read_bytes()).hexdigest()
+            log(f"ship home settings.toml sha256 before {guarded} after {after}")
+            log.check("the ship home's settings.toml is unchanged", after == guarded, after)
         log(f"OpenRouter spend on this home so far, upper bound: ${relay_usd(home):.4f}")
         failed += log.verdict()
     return 1 if failed else 0

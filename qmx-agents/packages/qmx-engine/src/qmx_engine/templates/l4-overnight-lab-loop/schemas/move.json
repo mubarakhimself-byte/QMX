@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["move", "target", "value", "reason"],
+  "properties": {
+    "move": {"enum": ["add_class", "drop_class", "widen_range", "narrow_range",
+                      "switch_timeframe"]},
+    "target": {"type": "string"},
+    "value": {},
+    "reason": {"type": "string"}
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "d6-ml-training-run",
+  "name": "ML training run with a holdout",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "goal"
+    ],
+    "properties": {
+      "goal": {
+        "type": "string",
+        "description": "the slot and what the model should predict"
+      },
+      "ask_above_usd": {
+        "type": "number",
+        "description": "his ask-above number for compute"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the model card: splits with the sealed test, leakage checks, scores, the ablation"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 200000, "agents": 1, "tool_calls": 20, "wall_seconds": 28800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "grill", "name": "Settle the slot, label and features", "type": "llm", "typeVersion": 1, "position": [220, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/grill.md", "schema_ref": "schemas/scope.json"}, "effect": "none"},
+    {"id": "dataset", "name": "Build and split the dataset", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/dataset.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "leaks", "name": "Leakage and cost checks", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/leaks.py"}, "effect": "none"},
+    {"id": "clean", "name": "No leak and within budget?", "type": "rule", "typeVersion": 1, "position": [880, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
+    {"id": "train", "name": "Train, test once and ablate", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/train.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "verdict", "name": "Overfit, holdout and ablation verdict", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/verdict.py"}, "effect": "none"},
+    {"id": "write", "name": "Write the model card", "type": "llm", "typeVersion": 1, "position": [1540, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the model card", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1980, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [2200, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2420, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Settle the slot, label and features", "port": "in", "map": "one"}, {"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Settle the slot, label and features": {"main": [[{"node": "Build and split the dataset", "port": "in", "map": "one"}, {"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Assemble the model card", "port": "in", "map": "one"}]]},
+    "Build and split the dataset": {"main": [[{"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Leakage and cost checks": {"main": [[{"node": "No leak and within budget?", "port": "in", "map": "one"}, {"node": "Assemble the model card", "port": "in", "map": "one"}]]},
+    "No leak and within budget?": {"true": [[{"node": "Train, test once and ablate", "port": "in", "map": "one"}]]},
+    "Train, test once and ablate": {"main": [[{"node": "Overfit, holdout and ablation verdict", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Overfit, holdout and ablation verdict": {"main": [[{"node": "Write the model card", "port": "in", "map": "one"}, {"node": "Assemble the model card", "port": "in", "map": "one"}]]},
+    "Write the model card": {"main": [[{"node": "Assemble the model card", "port": "in", "map": "one"}]]},
+    "Assemble the model card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "D6", "needs": ["qmb-door", "sandbox"]}
+}

@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["mapping", "unmapped"],
+  "properties": {
+    "mapping": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "why"],
+        "properties": {"field": {"type": "string"}, "from": {"type": "string"}, "value": {},
+                       "why": {"type": "string"}}
+      }
+    },
+    "unmapped": {"type": "array", "items": {"type": "string"}}
+  }
+}

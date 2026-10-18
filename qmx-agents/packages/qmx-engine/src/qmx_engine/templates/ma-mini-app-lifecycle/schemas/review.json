@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["matches_interview", "extras", "notes"],
+  "properties": {
+    "matches_interview": {"type": "boolean"},
+    "extras": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "string"}
+  }
+}

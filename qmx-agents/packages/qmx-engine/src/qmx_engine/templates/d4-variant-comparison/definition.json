@@ -1,0 +1,53 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "d4-variant-comparison",
+  "name": "Variant generation and comparison",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "strategy",
+      "request"
+    ],
+    "properties": {
+      "strategy": {
+        "type": "object",
+        "description": "the strategy version and its spec"
+      },
+      "request": {
+        "type": "string",
+        "description": "try this on GBPUSD and on 15 minutes ..."
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the head-to-head page: variant cards, correlation grid, deflated Sharpe, luck warning"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 400000, "agents": 1, "tool_calls": 160, "wall_seconds": 10800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "plan", "name": "Plan the labelled variants", "type": "llm", "typeVersion": 1, "position": [220, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/plan.md", "schema_ref": "schemas/variants.json"}, "effect": "none"},
+    {"id": "identity", "name": "Identity rule and caps", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/identity.py"}, "effect": "none"},
+    {"id": "any", "name": "Any variant to build?", "type": "rule", "typeVersion": 1, "position": [660, 0], "parameters": {"expr": "items.build != []"}, "effect": "none"},
+    {"id": "build", "name": "Build the structural variants", "type": "agent", "typeVersion": 1, "position": [880, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": [], "max_turns": 80}, "effect": "none"},
+    {"id": "runs", "name": "Compile and run every variant", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/runs.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "dsr", "name": "Deflated Sharpe over the variants", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/deflated_sharpe.py"}, "effect": "none"},
+    {"id": "compare", "name": "Compare on identical windows", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/compare.py"}, "effect": "none"},
+    {"id": "write", "name": "Write the comparison", "type": "llm", "typeVersion": 1, "position": [1760, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the head-to-head page", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [2200, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [2420, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2640, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Plan the labelled variants", "port": "in", "map": "one"}, {"node": "Identity rule and caps", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Plan the labelled variants": {"main": [[{"node": "Identity rule and caps", "port": "in", "map": "one"}]]},
+    "Identity rule and caps": {"main": [[{"node": "Any variant to build?", "port": "in", "map": "one"}, {"node": "Compile and run every variant", "port": "in", "map": "one"}, {"node": "Assemble the head-to-head page", "port": "in", "map": "one"}]]},
+    "Any variant to build?": {"true": [[{"node": "Build the structural variants", "port": "in", "map": "one"}]]},
+    "Build the structural variants": {"main": [[{"node": "Compile and run every variant", "port": "in", "map": "one"}]]},
+    "Compile and run every variant": {"main": [[{"node": "Deflated Sharpe over the variants", "port": "in", "map": "one"}, {"node": "Compare on identical windows", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Deflated Sharpe over the variants": {"main": [[{"node": "Compare on identical windows", "port": "in", "map": "one"}]]},
+    "Compare on identical windows": {"main": [[{"node": "Write the comparison", "port": "in", "map": "one"}, {"node": "Assemble the head-to-head page", "port": "in", "map": "one"}]]},
+    "Write the comparison": {"main": [[{"node": "Assemble the head-to-head page", "port": "in", "map": "one"}]]},
+    "Assemble the head-to-head page": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "D4", "needs": ["qmb-door"]}
+}

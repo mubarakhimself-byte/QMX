@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["built"],
+  "properties": {
+    "built": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["spec_hash", "code_ref", "could_not_build"],
+        "properties": {
+          "spec_hash": {"type": "string"},
+          "code_ref": {"type": ["string", "null"]},
+          "could_not_build": {"type": ["string", "null"]}
+        }
+      }
+    }
+  }
+}

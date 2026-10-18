@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": ["reading", "code_ref", "graph_ref", "tests", "could_not_build"],
+  "properties": {
+    "reading": {"type": "integer"},
+    "code_ref": {"type": ["string", "null"]},
+    "graph_ref": {"type": ["string", "null"]},
+    "tests": {
+      "type": "array",
+      "items": {"type": "object", "required": ["name", "passed"],
+                "properties": {"name": {"type": "string"}, "passed": {"type": "boolean"}}}
+    },
+    "could_not_build": {"type": ["string", "null"]}
+  }
+}

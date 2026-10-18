@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["parent", "lineage", "refused", "cards", "correlations", "failed", "luck_warning",
+               "deflated_sharpe", "trials", "refused_variants", "summary"],
+  "x-prose": ["summary", "lineage"],
+  "properties": {
+    "parent": {"type": "string"},
+    "lineage": {"type": "array"},
+    "refused": {"type": ["string", "null"]},
+    "cards": {"type": "array"},
+    "correlations": {"type": "array"},
+    "failed": {"type": "array"},
+    "luck_warning": {"type": ["string", "null"]},
+    "deflated_sharpe": {"type": "object"},
+    "trials": {"type": "integer"},
+    "refused_variants": {"type": "array"},
+    "summary": {"type": "string"}
+  }
+}

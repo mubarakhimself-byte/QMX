@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["shows", "slot", "reads", "provides", "schedule", "tools", "risk_class",
+               "questions", "similar_note"],
+  "properties": {
+    "shows": {"type": "string"},
+    "slot": {"type": "string"},
+    "reads": {"type": "array", "items": {"type": "string"}},
+    "provides": {"type": "array", "items": {"type": "object", "required": ["name", "schema"]}},
+    "schedule": {"type": ["string", "null"]},
+    "tools": {"type": "array", "items": {"type": "string"}},
+    "risk_class": {"enum": ["read", "compute", "write_lab"]},
+    "questions": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {"type": "object", "required": ["question", "recommended"]}
+    },
+    "similar_note": {"type": "string"}
+  }
+}

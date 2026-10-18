@@ -1,0 +1,54 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "ma-mini-app-lifecycle",
+  "name": "Mini app lifecycle",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "request"
+    ],
+    "properties": {
+      "request": {
+        "type": "object",
+        "description": "kind (create, change, deprecate, archive)"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "an install card with the check report, or a deprecate or archive card with blast radius"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 500000, "agents": 2, "tool_calls": 200, "wall_seconds": 7200, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "request", "name": "Read the request", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/request.py"}, "effect": "none"},
+    {"id": "apps", "name": "Existing apps and consumers", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/apps.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "build", "name": "Build or retire?", "type": "rule", "typeVersion": 1, "position": [660, 0], "parameters": {"expr": "items.build"}, "effect": "none"},
+    {"id": "grill", "name": "Settle what the app does", "type": "llm", "typeVersion": 1, "position": [880, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/grill.md", "schema_ref": "schemas/interview.json"}, "effect": "none"},
+    {"id": "scaffold", "name": "Scaffold the app folder", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/scaffold.py"}, "effect": "none"},
+    {"id": "allowed", "name": "Scaffold allowed?", "type": "rule", "typeVersion": 1, "position": [1320, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
+    {"id": "builder", "name": "Build tests first, then the app", "type": "agent", "typeVersion": 1, "position": [1540, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": [], "max_turns": 40}, "effect": "none"},
+    {"id": "check", "name": "Run qmx app check", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/check.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "card", "name": "Install card", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/install_card.py"}, "effect": "none"},
+    {"id": "review", "name": "Review against the interview", "type": "llm", "typeVersion": 1, "position": [2200, 0], "role": "reviewer", "parameters": {"prompt_ref": "prompts/review.md", "schema_ref": "schemas/review.json"}, "effect": "none"},
+    {"id": "retire", "name": "Deprecate or archive card", "type": "script", "typeVersion": 1, "position": [2420, 0], "parameters": {"script": "scripts/retire.py"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the card", "type": "script", "typeVersion": 1, "position": [2640, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [2860, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [3080, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [3300, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Read the request", "port": "in", "map": "one"}]]},
+    "Read the request": {"main": [[{"node": "Existing apps and consumers", "port": "in", "map": "one"}]]},
+    "Existing apps and consumers": {"main": [[{"node": "Build or retire?", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Build or retire?": {"true": [[{"node": "Settle what the app does", "port": "in", "map": "one"}, {"node": "Scaffold the app folder", "port": "in", "map": "one"}]], "false": [[{"node": "Deprecate or archive card", "port": "in", "map": "one"}]]},
+    "Settle what the app does": {"main": [[{"node": "Scaffold the app folder", "port": "in", "map": "one"}, {"node": "Review against the interview", "port": "in", "map": "one"}]]},
+    "Scaffold the app folder": {"main": [[{"node": "Scaffold allowed?", "port": "in", "map": "one"}, {"node": "Install card", "port": "in", "map": "one"}]]},
+    "Scaffold allowed?": {"true": [[{"node": "Build tests first, then the app", "port": "in", "map": "one"}]]},
+    "Build tests first, then the app": {"main": [[{"node": "Run qmx app check", "port": "in", "map": "one"}]]},
+    "Run qmx app check": {"main": [[{"node": "Install card", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Install card": {"main": [[{"node": "Review against the interview", "port": "in", "map": "one"}, {"node": "Assemble the card", "port": "in", "map": "one"}]]},
+    "Review against the interview": {"main": [[{"node": "Assemble the card", "port": "in", "map": "one"}]]},
+    "Deprecate or archive card": {"main": [[{"node": "Assemble the card", "port": "in", "map": "one"}]]},
+    "Assemble the card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "MA", "needs": ["sandbox", "app-op"]}
+}

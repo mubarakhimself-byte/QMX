@@ -1,0 +1,33 @@
+{
+  "type": "object",
+  "required": ["universe", "period", "signal", "rebalance", "costs", "exit", "variants_tried",
+               "reported", "open_items"],
+  "properties": {
+    "universe": {"type": "string"},
+    "period": {"type": "object", "required": ["start", "end"]},
+    "signal": {"type": "string"},
+    "rebalance": {"type": "string"},
+    "costs": {"type": "string"},
+    "exit": {"type": ["string", "null"]},
+    "variants_tried": {"type": ["integer", "null"]},
+    "reported": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "value", "quote", "source_id", "where"],
+        "properties": {"metric": {"type": "string"}, "value": {"type": "number"},
+                       "quote": {"type": "string"}, "source_id": {"type": "string"},
+                       "where": {"type": "string"}}
+      }
+    },
+    "open_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["field", "pick", "changes_meaning"],
+        "properties": {"field": {"type": "string"}, "pick": {"type": "string"},
+                       "changes_meaning": {"type": "boolean"}}
+      }
+    }
+  }
+}

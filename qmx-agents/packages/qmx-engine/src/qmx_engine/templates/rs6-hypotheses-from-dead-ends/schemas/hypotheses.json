@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "required": ["hypotheses"],
+  "properties": {
+    "hypotheses": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["cluster", "move", "hypothesis", "mechanism", "kill_rule", "parents"],
+        "properties": {
+          "cluster": {"type": "string"},
+          "move": {"enum": ["condition", "slow_down", "invert", "transplant", "drop"]},
+          "hypothesis": {"type": "string"},
+          "mechanism": {"type": "string"},
+          "kill_rule": {"type": "string"},
+          "parents": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  }
+}

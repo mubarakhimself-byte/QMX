@@ -1,0 +1,52 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rs3-source-to-lab-test",
+  "name": "Source to a Lab test",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "source"
+    ],
+    "properties": {
+      "source": {
+        "type": "object",
+        "description": "id, kind (paper or video), url, text"
+      },
+      "ledger": {
+        "type": "array",
+        "description": "source hashes already processed"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the replication scorecard: reported vs ours vs ours with costs vs after publication"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 300000, "agents": 2, "tool_calls": 40, "wall_seconds": 7200, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "source", "name": "Source and ledger", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/source.py"}, "effect": "none"},
+    {"id": "new", "name": "New source?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.seen == False"}, "effect": "none"},
+    {"id": "spec", "name": "Write the replication spec", "type": "agent", "typeVersion": 1, "position": [660, 0], "role": "reader", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/spec.md", "output_schema_ref": "schemas/spec.json", "tools": [], "max_turns": 12}, "effect": "none"},
+    {"id": "cite", "name": "Reported numbers check", "type": "grader", "typeVersion": 1, "position": [880, 0], "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}, "effect": "none"},
+    {"id": "assume", "name": "Assumptions and branches", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/assumptions.py"}, "effect": "none"},
+    {"id": "lab", "name": "Build and run in the Lab", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/lab.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "compare", "name": "Compare with the paper", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/compare.py"}, "effect": "none"},
+    {"id": "write", "name": "Write the scorecard", "type": "llm", "typeVersion": 1, "position": [1760, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the scorecard", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [2200, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [2420, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2640, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Source and ledger", "port": "in", "map": "one"}]]},
+    "Source and ledger": {"main": [[{"node": "New source?", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "New source?": {"true": [[{"node": "Write the replication spec", "port": "in", "map": "one"}, {"node": "Reported numbers check", "port": "in", "map": "one"}]]},
+    "Write the replication spec": {"main": [[{"node": "Reported numbers check", "port": "in", "map": "one"}]]},
+    "Reported numbers check": {"pass": [[{"node": "Assumptions and branches", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]},
+    "Assumptions and branches": {"main": [[{"node": "Build and run in the Lab", "port": "in", "map": "one"}, {"node": "Compare with the paper", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Build and run in the Lab": {"main": [[{"node": "Compare with the paper", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Compare with the paper": {"main": [[{"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Write the scorecard": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
+    "Assemble the scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "RS3", "needs": ["qmb-door"]}
+}

@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["matches_card", "invented_values", "notes"],
+  "properties": {
+    "matches_card": {"type": "boolean"},
+    "invented_values": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "string"}
+  }
+}

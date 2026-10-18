@@ -1,0 +1,56 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "l1-idea-to-first-result",
+  "name": "Idea to first result",
+  "inputs": {
+    "type": "object",
+    "required": [
+      "idea"
+    ],
+    "properties": {
+      "idea": {
+        "type": "string",
+        "description": "his words, for example buy pullbacks to ..."
+      },
+      "board": {
+        "type": "string",
+        "description": "the Experimentation Board it belongs to"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the spec card and the in-sample first-result scorecard, one column per reading"},
+  "settings": {"timezone": "UTC", "runaway": {"tokens": 400000, "agents": 4, "tool_calls": 120, "wall_seconds": 7200, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "facts", "name": "Library, Toolbox and data facts", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/facts.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "card", "name": "Draft the card and its questions", "type": "llm", "typeVersion": 1, "position": [440, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/card.md", "schema_ref": "schemas/card.json"}, "effect": "none"},
+    {"id": "check", "name": "Spec check and readings", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/spec_check.py"}, "effect": "none"},
+    {"id": "complete", "name": "Spec complete?", "type": "rule", "typeVersion": 1, "position": [880, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
+    {"id": "readings", "name": "One item per reading", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/readings.py"}, "effect": "none"},
+    {"id": "build", "name": "Build each reading", "type": "agent", "typeVersion": 1, "position": [1320, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": [], "max_turns": 30}, "effect": "none"},
+    {"id": "built", "name": "All readings", "type": "join", "typeVersion": 1, "position": [1540, 0], "parameters": {}},
+    {"id": "run", "name": "Compile and backtest in-sample", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/run.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "gates", "name": "Quick gates", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/gates.py"}, "effect": "none"},
+    {"id": "write", "name": "Write what I built from your words", "type": "llm", "typeVersion": 1, "position": [2200, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
+    {"id": "assemble", "name": "Assemble the card and scorecard", "type": "script", "typeVersion": 1, "position": [2420, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [2640, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [2860, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [3080, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Library, Toolbox and data facts", "port": "in", "map": "one"}]]},
+    "Library, Toolbox and data facts": {"main": [[{"node": "Draft the card and its questions", "port": "in", "map": "one"}, {"node": "Assemble the card and scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Draft the card and its questions": {"main": [[{"node": "Spec check and readings", "port": "in", "map": "one"}]]},
+    "Spec check and readings": {"main": [[{"node": "Spec complete?", "port": "in", "map": "one"}, {"node": "Assemble the card and scorecard", "port": "in", "map": "one"}]]},
+    "Spec complete?": {"true": [[{"node": "One item per reading", "port": "in", "map": "one"}]]},
+    "One item per reading": {"main": [[{"node": "Build each reading", "port": "in", "map": "chunk", "chunk": {"by": "items", "size": 1}}]]},
+    "Build each reading": {"main": [[{"node": "All readings", "port": "in", "map": "one"}]]},
+    "All readings": {"main": [[{"node": "Compile and backtest in-sample", "port": "in", "map": "one"}]]},
+    "Compile and backtest in-sample": {"main": [[{"node": "Quick gates", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Quick gates": {"main": [[{"node": "Write what I built from your words", "port": "in", "map": "one"}, {"node": "Assemble the card and scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Write what I built from your words": {"main": [[{"node": "Assemble the card and scorecard", "port": "in", "map": "one"}]]},
+    "Assemble the card and scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "L1", "needs": ["qmb-door"]}
+}
