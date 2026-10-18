@@ -74,6 +74,7 @@ def test_a_script_sees_no_key_no_claude_name_and_no_plan_path(
 def test_a_script_past_its_timeout_is_killed_and_fails_retryable(tmp_path: Path) -> None:
     sleeper = node("sleep", "script", script="scripts/sleep.py")
     sleeper["timeout"] = {"run_seconds": 1}
+    sleeper["retry"] = {"max_tries": 1}
     root = folder(
         tmp_path / "wf",
         [START, sleeper],

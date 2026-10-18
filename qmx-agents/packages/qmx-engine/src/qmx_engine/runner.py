@@ -3,9 +3,14 @@
 `Run.drive` folds the run's events, carries out the commands the core returns, and folds again.
 Every event goes through the one `Ledger` writer before the next fold, so a worker's result is in
 the ledger before the core sees it. The runner writes what SOLUTION-DESIGN 3.2 gives the core:
-`node_scheduled`, a hold's `node_waiting`, a memo's `node_finished`, `ladder_step` park,
-`run_paused` and `run_finished`. The worker writes `node_started` and heartbeats, and the runner
-writes each attempt's ending from the result the worker returns.
+`node_scheduled`, a hold's `node_waiting`, a memo's `node_finished`, `ladder_step`, the doctor's
+`doctor_verdict`, `run_paused` and `run_finished`. The worker writes `node_started` and
+heartbeats, and the runner writes each attempt's ending from the result the worker returns.
+
+Every event that ruling 77 sends to the operator raises its inbox item as it is written: a provider
+failure, a system fault, or an irreversible external step of unknown outcome. While attempts run,
+the runner wakes every `scheduler.tick` for the watchdog, which cancels a stalled attempt. A ledger
+write error stops the engine claiming work and raises a `black` item.
 
 The recorded clock moves on with the wall clock: before an event, a `clock_tick` is written when a
 second or more passed since the last one, and every event's `at` is the latest tick. The core
@@ -25,24 +30,36 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Final, Literal, cast
+from typing import Final, Literal, Protocol, cast
 
 from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
 
-from qmx_engine.core.commands import Finish, Hold, Park, Pause, StartNode, UseMemo, Wait
-from qmx_engine.core.fold import fold
+from qmx_engine.core.commands import (
+    Climb,
+    Degrade,
+    Finish,
+    Hold,
+    Park,
+    Pause,
+    StartNode,
+    UseMemo,
+    Wait,
+)
+from qmx_engine.core.fold import fold, slot_of
+from qmx_engine.core.ladder import NO_DOCTOR, runaway_line, step_data
 from qmx_engine.core.partitions import RUN_SETTINGS
 from qmx_engine.core.ready import next_commands
 from qmx_engine.core.replay import idempotency_key, node_definition
 from qmx_engine.core.state import Slot, State
 from qmx_engine.definition.folder import content_hash, load
-from qmx_engine.definition.model import Workflow
+from qmx_engine.definition.model import Node, Workflow
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
+from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
-from qmx_engine.ledger.store import Ledger, Reader, ledger_path
+from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.base import Failed, NodeJob, ending
 from qmx_engine.nodes.grader import Grader
 from qmx_engine.nodes.join import Join
@@ -54,14 +71,19 @@ from qmx_engine.nodes.subworkflow import Subworkflow
 from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
 from qmx_engine.nodes.wait import resume_at
+from qmx_engine.ports.inbox import InboxPort, raised_by
 from qmx_engine.settings import DEFAULTS
+from qmx_engine.watchdog import Open, ledger_fault, stalled
 from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
 from qmx_engine.workers.local import AnyExecutor, LocalWorker
 
 TICK: Final = timedelta(seconds=1)
+LADDER_SETTINGS: Final = ("retry.max_tries", "retry.backoff")
+NOTICED: Final = frozenset({"node_failed", "gate_opened"})
 
 type Mode = Literal["live", "test"]
-type Status = Literal["passed", "failed", "waiting"]
+type Status = Literal["passed", "failed", "waiting", "interrupted"]
+type Classification = Literal["transient", "bad_input", "bad_output", "logic", "unavailable"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +97,69 @@ class Outcome:
 
 class Refused(Exception):
     """The run cannot start or resume; the message says why."""
+
+
+@dataclass(frozen=True, slots=True)
+class Consult:
+    """What the doctor reads: the failed attempt and every event of its slot so far."""
+
+    run_id: str
+    node_definition: JsonObject
+    slot: Slot
+    attempt: int
+    events: tuple[Event, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Verdict:
+    classification: Classification
+    hint: str | None = None
+
+
+class Doctor(Protocol):
+    """The ladder's doctor step (AD-16): a cheap `llm` node on the `doctor` role from EP10, which
+    classifies a failure and never edits a definition."""
+
+    async def classify(self, consult: Consult) -> Verdict: ...
+
+
+def recorded_settings(settings: Mapping[str, object], workflow: Workflow) -> JsonObject:
+    """The settings a run records for its core: chunk sizing, retry defaults, and the candidate
+    lists of the roles its nodes use."""
+    roles = sorted({f"roles.{node.role}" for node in workflow.nodes if node.role is not None})
+    found: JsonObject = {}
+    for key in (*RUN_SETTINGS, *LADDER_SETTINGS, *roles):
+        value = settings.get(key)
+        if isinstance(value, tuple):
+            found[key] = [v for v in cast(tuple[object, ...], value) if isinstance(v, int | str)]
+        elif isinstance(value, int | float | str):
+            found[key] = value
+    return found
+
+
+def runaway_guard(
+    settings: Mapping[str, object], workflow: Workflow, created: datetime
+) -> JsonObject:
+    """The run's guard: the workflow's own limits over the engine defaults, with the wall time as
+    a `deadline` instant the core compares against its clock."""
+    own = workflow.settings.runaway
+
+    def pick(name: str, key: str) -> object:
+        mine = getattr(own, name) if own is not None else None
+        return mine if mine is not None else settings.get(key)
+
+    wall = pick("wall_seconds", "runaway.wall_seconds")
+    guard: dict[str, object] = {
+        "tokens": pick("tokens", "runaway.tokens"),
+        "agents": pick("agents", "runaway.agents"),
+        "tool_calls": pick("tool_calls", "runaway.tool_calls"),
+        "wall_seconds": wall,
+        "deadline": None,
+        "on_runaway": pick("on_runaway", "on_runaway"),
+    }
+    if isinstance(wall, int):
+        guard["deadline"] = (created + timedelta(seconds=wall)).astimezone(UTC).isoformat()
+    return {key: value for key, value in guard.items() if isinstance(value, int | str)}
 
 
 def new_run_id(now: datetime) -> str:
@@ -106,7 +191,13 @@ class Engine:
         settings: Mapping[str, object] = DEFAULTS,
         worker: LocalWorker | None = None,
         wall: Callable[[], datetime] = lambda: datetime.now(UTC),
+        executors: Mapping[str, AnyExecutor] | None = None,
+        doctor: Doctor | None = None,
+        inbox: InboxPort | None = None,
+        watch_every: float | None = None,
     ) -> None:
+        """`executors` replace the built-in executor of a kind. Without a `doctor`, the ladder's
+        doctor step is recorded as skipped."""
         self.home = home
         self.ledger = ledger
         self.settings = settings
@@ -115,7 +206,20 @@ class Engine:
             concurrency=concurrency if isinstance(concurrency, int) else 1
         )
         self.wall = wall
+        self.executors = executors or {}
+        self.doctor = doctor
+        self._inbox = inbox
+        tick = settings.get("scheduler.tick")
+        self.watch_every = watch_every or (float(tick) if isinstance(tick, int | float) else 60.0)
+        self.claiming = True
+        """False once a ledger write failed: the scheduler claims no more fires."""
         self.children: set[asyncio.Future[Outcome]] = set()
+
+    @property
+    def inbox(self) -> InboxPort:
+        if self._inbox is None:
+            self._inbox = InboxTable.open(self.home)
+        return self._inbox
 
     def banned_values(self) -> tuple[str, ...]:
         """Where the plan login lives; no script's environment may point there."""
@@ -133,6 +237,8 @@ class Engine:
         parent_run_id: str | None = None,
         call_depth: int = 0,
     ) -> Outcome:
+        if not self.claiming:
+            raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
         if ledger_path(self.home).exists():
             with Reader.open(self.home) as reader:
@@ -199,6 +305,8 @@ class Run:
         self.now = ""
         self.ticked: datetime | None = None
         self.inflight: dict[asyncio.Task[None], StartNode] = {}
+        self.seen: dict[str, datetime] = {}
+        """Idempotency key of an attempt to when it last wrote an event, for the watchdog."""
         self.zone = workspace(engine.home, workflow.id) / "runs" / run_id
         self.executors = self.build_executors()
 
@@ -225,7 +333,7 @@ class Run:
                 call_depth=self.call_depth + 1,
             )
 
-        return {
+        built: dict[str, AnyExecutor] = {
             "trigger": Trigger(),
             "rule": Rule(),
             "loop": Loop(),
@@ -242,9 +350,23 @@ class Run:
                 spawn=self.engine.spawn,
             ),
         }
+        return built | dict(self.engine.executors)
 
     def write(self, kind: EventKind, data: JsonObject) -> None:
+        tried = self.tried(slot_of(data)) if kind in NOTICED else ()
         self.events.append(self.engine.ledger.append(self.run_id, kind, data, at=self.now))
+        item = raised_by(self.run_id, kind, data, tried)
+        if item is not None:
+            self.engine.inbox.raise_item(item, at=self.now)
+
+    def tried(self, slot: Slot) -> tuple[str, ...]:
+        """The slot's ladder steps since its last park."""
+        steps: list[str] = []
+        for event in self.events:
+            if event.kind == "ladder_step" and slot_of(event.data) == slot:
+                step = str(event.data.get("step"))
+                steps = [] if step == "park" else [*steps, step]
+        return tuple(steps)
 
     def append(self, kind: EventKind, data: JsonObject) -> None:
         """Write one event at the recorded clock, ticking it on first when it is a second behind."""
@@ -252,21 +374,20 @@ class Run:
         if self.ticked is None or wall - self.ticked >= TICK:
             self.ticked, self.now = wall, wall.isoformat()
             self.write("clock_tick", {"now": self.now})
+        attempt = data.get("attempt")
+        if isinstance(attempt, int) and "node_id" in data:
+            self.seen[idempotency_key(self.run_id, slot_of(data), attempt)] = wall
         self.write(kind, data)
 
     def create(self, inputs: JsonValue, parent_run_id: str | None) -> None:
         self.ticked = self.engine.wall()
         self.now = self.ticked.isoformat()
-        settings: JsonObject = {
-            key: value
-            for key in RUN_SETTINGS
-            if isinstance(value := self.engine.settings.get(key), int | float | str)
-        }
         self.write(
             "run_created",
             {
                 "mode": self.mode,
-                "settings": settings,
+                "settings": recorded_settings(self.engine.settings, self.definition),
+                "runaway": runaway_guard(self.engine.settings, self.definition, self.ticked),
                 "workflow_id": self.definition.id,
                 "folder": str(self.root),
                 "content_hash": content_hash(load(self.root)),
@@ -281,6 +402,12 @@ class Run:
         return fold(self.definition, self.events)
 
     async def drive(self) -> Outcome:
+        try:
+            return await self.steps()
+        except LedgerWriteError as error:
+            return await self.fault(error)
+
+    async def steps(self) -> Outcome:
         while True:
             state = self.state()
             commands = next_commands(state)
@@ -297,17 +424,81 @@ class Run:
                     case UseMemo():
                         self.settle_from_memo(command)
                         moved = True
+                    case Climb():
+                        await self.climb(command)
+                        moved = True
+                    case Degrade():
+                        self.append("log", runaway_line(command.detail, "degrade"))
+                        moved = True
                     case Finish() | Park() | Pause() | Wait():
                         ended = command
             if moved:
                 continue
             if self.inflight:
-                done, _ = await asyncio.wait(self.inflight, return_when=asyncio.FIRST_COMPLETED)
+                done, _ = await asyncio.wait(
+                    self.inflight,
+                    timeout=self.engine.watch_every,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if not done:
+                    self.watch()
                 for task in done:
                     del self.inflight[task]
                     task.result()
                 continue
             return self.end(ended, state)
+
+    def watch(self) -> None:
+        """Cancel every attempt the watchdog finds stalled; each then fails `stalled`."""
+        opens: list[Open] = []
+        for command in self.inflight.values():
+            node = self.node(command.node_id)
+            idle = node.timeout.idle_seconds if node.timeout is not None else None
+            kind = REGISTRY.kind(node.type)
+            if idle is None and kind is not None and kind.name == "agent":
+                found = self.engine.settings.get("timeout.agent.idle")
+                idle = found if isinstance(found, int) else None
+            last = self.seen.get(command.idempotency_key, self.engine.wall())
+            opens.append(Open(command.idempotency_key, last, idle))
+        for key in stalled(opens, self.engine.wall()):
+            self.engine.worker.cancel(key, stalled=True)
+
+    async def fault(self, error: LedgerWriteError) -> Outcome:
+        """The ledger cannot be written: stop claiming, stop this run's attempts, and raise the
+        item the operator must see. The run is folded on the next resume."""
+        self.engine.claiming = False
+        for task in self.inflight:
+            task.cancel()
+        await asyncio.gather(*self.inflight, return_exceptions=True)
+        self.inflight.clear()
+        at = self.now or self.engine.wall().isoformat()
+        self.engine.inbox.raise_item(ledger_fault(self.run_id, error), at=at)
+        return Outcome(self.run_id, "interrupted", str(error))
+
+    def node(self, node_id: str) -> Node:
+        return next(n for n in self.definition.nodes if n.id == node_id)
+
+    async def climb(self, command: Climb) -> None:
+        slot = Slot(command.node_id, command.iteration, command.partition)
+        at = None
+        if command.step == "retry":
+            at = resume_at(Hold(*slot, command.seconds or 0), self.now)
+        data = step_data(command, at)
+        doctor = self.engine.doctor
+        if command.step == "doctor" and doctor is None:
+            data |= {"skipped": True, "reason": NO_DOCTOR}
+        self.append("ladder_step", data)
+        if command.step != "doctor" or doctor is None:
+            return
+        node = self.node(command.node_id)
+        events = tuple(e for e in self.events if "node_id" in e.data and slot_of(e.data) == slot)
+        consult = Consult(self.run_id, node_definition(node), slot, command.attempt, events)
+        try:
+            verdict = await doctor.classify(consult)
+        except Exception:  # a broken doctor must not stop the run
+            verdict = Verdict("unavailable")
+        found: JsonObject = {"classification": verdict.classification, "hint": verdict.hint}
+        self.append("doctor_verdict", slot_keys(slot, command.attempt) | found)
 
     def launch(self, command: StartNode) -> None:
         self.append(
@@ -317,8 +508,10 @@ class Run:
                 command.attempt,
                 memo_key=command.memo_key,
                 plan=command.plan,
+                **({"ladder": command.ladder} if command.ladder is not None else {}),
             ),
         )
+        self.seen[command.idempotency_key] = self.engine.wall()
         node = next(n for n in self.definition.nodes if n.id == command.node_id)
         timeouts: JsonObject | None = None
         if node.timeout is not None and node.timeout.run_seconds is not None:
@@ -337,6 +530,7 @@ class Run:
             mode=self.mode,
             workspace=str(self.zone),
             timeouts=timeouts,
+            resolved_model=command.ladder,
         )
         task = asyncio.create_task(self.attempt(job))
         self.inflight[task] = command
@@ -380,11 +574,13 @@ class Run:
                 self.append("run_finished", {"status": "passed", "outputs_hash": digest})
                 return Outcome(self.run_id, "passed", None, command.outputs, digest)
             case Park():
-                self.append("ladder_step", {"step": "park", "reason": command.reason})
+                self.append("ladder_step", step_data(command))
                 return Outcome(self.run_id, "failed", command.reason)
             case Pause():
-                data: JsonObject = {"reason": command.reason, "resume_at": command.resume_at}
-                self.append("run_paused", data)
+                if command.detail is not None:
+                    self.append("log", runaway_line(command.detail, "pause"))
+                paused: JsonObject = {"reason": command.reason, "resume_at": command.resume_at}
+                self.append("run_paused", paused)
                 return Outcome(self.run_id, "waiting", command.reason)
             case Wait():
                 return Outcome(self.run_id, "waiting", f"waiting on {' '.join(command.node_ids)}")

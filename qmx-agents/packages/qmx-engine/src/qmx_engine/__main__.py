@@ -15,7 +15,7 @@ from qmx_engine.definition.validate import checked, validate
 from qmx_engine.ledger.store import Ledger, Reader, ledger_path
 from qmx_engine.runner import Engine, Outcome, Refused, new_run_id
 
-EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2}
+EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2, "interrupted": 3}
 
 
 def parser() -> argparse.ArgumentParser:

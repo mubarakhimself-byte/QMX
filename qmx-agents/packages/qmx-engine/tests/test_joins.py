@@ -99,7 +99,7 @@ def test_a_timeout_watermark_ends_an_unmet_join_once_its_hold_comes_due() -> Non
 def test_a_resume_keeps_the_partitions_a_fired_join_merged() -> None:
     script = Script(failing={("after", 0, None)}, slow={("work", 0), ("work", 3)})
     sim, first = run(script, mode="quorum", n=3)
-    assert first == Park("node after failed: boom: planted failure")
+    assert first == Park("node after failed: boom: planted failure", "after", attempt=1)
     finish(sim, "work", 3, {"main": "d"})  # the late two report in after the park
     finish(sim, "work", 0, {"main": "a"})
     script.slow.clear()

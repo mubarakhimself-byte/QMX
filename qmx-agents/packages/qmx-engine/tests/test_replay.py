@@ -76,7 +76,7 @@ def test_resume_after_node_3_fails_reruns_3_to_5_and_reuses_1_and_2() -> None:
     simulation = Simulation(chain(), "run-e2", step({"trigger": Trigger(), "script": script}))
 
     assert simulation.start({"topic": "q-fin"}, NOW) == Park(
-        "node n3 failed: boom: planted failure"
+        "node n3 failed: boom: planted failure", "n3", attempt=1
     )
     mark = len(simulation.events)
     ended = simulation.resume(LATER)

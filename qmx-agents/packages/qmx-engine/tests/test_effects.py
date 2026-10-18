@@ -53,24 +53,21 @@ def resume(home: Path, run_id: str) -> str:
 
 def test_a_retry_starts_from_the_zone_as_it_was_before_the_failed_attempt(tmp_path: Path) -> None:
     home = tmp_path / "home"
+    work = node("work", "script", script="scripts/work.py")
+    work["retry"] = {"backoff_seconds": [0]}
     root = folder(
         tmp_path / "wf",
-        [
-            START,
-            node("seed", "script", script="scripts/seed.py"),
-            node("work", "script", script="scripts/work.py"),
-        ],
+        [START, node("seed", "script", script="scripts/seed.py"), work],
         {"start": {"main": [edge("seed")]}, "seed": {"main": [edge("work")]}},
         {"seed": SEED, "work": WORK},
     )
     counter = str(tmp_path / "tries.txt")
 
-    first, _ = run_folder(root, home, counter)
-    status = resume(home, first.run_id)
+    first, events = run_folder(root, home, counter)
 
-    events = events_of(home, first.run_id)
     finished = [e.data["outputs"] for e in events if e.kind == "node_finished"]
-    assert (first.status, status) == ("failed", "passed")
+    steps = [e.data["step"] for e in events if e.kind == "ladder_step"]
+    assert (first.status, steps) == ("passed", ["retry"])
     assert finished[-1] == {"main": {"half": False, "seed": "v1"}}
     assert kinds(events, "seed").count("node_started") == 1
 

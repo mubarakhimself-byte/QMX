@@ -211,13 +211,11 @@ WORK: Final = """
 
 def snapshot(log: Log) -> None:
     home = throwaway_home("ep7", "snapshot")
+    work = node("work", "script", script="scripts/work.py")
+    work["retry"] = {"max_tries": 1}  # park on the first failure, so the resume is the retry
     root = write_folder(
         home / "wf-snapshot",
-        [
-            node("start", "trigger"),
-            node("seed", "script", script="scripts/seed.py"),
-            node("work", "script", script="scripts/work.py"),
-        ],
+        [node("start", "trigger"), node("seed", "script", script="scripts/seed.py"), work],
         {"start": {"main": [edge("seed")]}, "seed": {"main": [edge("work")]}},
         {"seed": SEED, "work": WORK},
     )
