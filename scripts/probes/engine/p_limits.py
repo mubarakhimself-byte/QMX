@@ -3,7 +3,8 @@ five-hour reading is fed to the harness's plan watch the way `s10_usage.feed` do
 `rate_limit_event` parsed by the SDK and projected by the harness. Then a Background plan chat's
 send must raise `LaunchRefused` before any CLI starts, and `Harness.usage()` must show the reset
 time. A Background chat on the fake key row still runs, as the control. First, a five-hour
-reading whose reset passes leaves no reading, and a Background plan send then refuses too.
+reading whose reset passes leaves no reading; what a Background plan send then does is logged, not
+checked, since that refusal is the harness's background cap, which CAPH removes (ruling 106).
 
     p_limits.py
 """
@@ -88,10 +89,10 @@ async def main() -> int:
                 f"a 10% five-hour reading that resets in {EXPIRES_IN_S} s: readings {before}, "
                 f"after its reset {after}; Background plan send then: {expired!r}"
             )
-            say.check(
-                "once the reading's reset passes, a Background plan send refuses for want of one",
-                expired is not None and "no reading" in expired,
-                expired,
+            say(
+                "probe bound, not a QMX limit: the harness's background cap still refuses a "
+                f"Background plan send with no reading ({expired!r}); CAPH removes that cap, and "
+                "the engine reads no share (CAPE)"
             )
             reading = fact({**REJECTED_FIVE_HOUR, "resetsAt": resets})
             say(f"fed {reading}")

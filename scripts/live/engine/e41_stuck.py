@@ -29,7 +29,6 @@ from typing import Any, Final
 
 from agent_lanes import edge, node
 from common import Log
-
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Ledger, Reader
@@ -58,7 +57,7 @@ SCHEMA: Final = {
     "properties": {"seen": {"type": "integer"}},
 }
 
-type Answer = Callable[["Port", str], Awaitable[Turn]] | str
+Answer = Callable[["Port", str], Awaitable[Turn]] | str
 
 
 class BuildLog(Log):
@@ -73,7 +72,7 @@ class BuildLog(Log):
 
 
 def build_home(slug: str) -> Path:
-    """A fresh folder under the build store's `homes/cape-<slug>`, for a lane that needs no model."""
+    """A fresh folder `homes/cape-<slug>` in the build store, for a lane that needs no model."""
     root = BUILD / "homes" / f"{PR}-{slug}"
     shutil.rmtree(root, ignore_errors=True)
     root.mkdir(parents=True)

@@ -234,6 +234,9 @@ class Attempt:
         """Why the stuck detector stopped the attempt, once it did."""
         self.calls: dict[str, StuckCall] = {}
         """Each finished tool call of the current turn, as the stuck detector compares it."""
+        self.judged = False
+        """Whether `calls` belong to a turn the detector may judge: off from a halt until the next
+        send, so a stop is not repeated over the calls that caused it."""
         zone = job.workspace or str(agent.workspace)
         self.masks = (zone, str(agent.workspace))
 
@@ -297,13 +300,14 @@ class Attempt:
             tool_open=activity.tool_open,
             pid=activity.cli,
             children_only=True,
-            calls=None if self.halted else tuple(self.calls.values()),
+            calls=tuple(self.calls.values()) if self.judged else None,
         )
 
     async def halt(self, why: str) -> None:
-        if self.halted is not None:
-            return
-        self.halted = why
+        """Interrupt the chat. Called again while the summary turn runs, it ends that turn too,
+        so a chat that loops through its summary turn still stops."""
+        self.halted = self.halted or why
+        self.judged = False
         if self.chat:
             await self.agent.harness.interrupt(self.chat)
 
@@ -368,7 +372,7 @@ class Attempt:
             return await self.agent.admission.refused(self.candidate, redact(str(refusal)))
         except ChatsFull as full:
             return self.ended(failed("chats_full", redact(str(full)), retryable=True))
-        self.calls = {}
+        self.calls, self.judged = {}, True
         turn = await harness.wait_turn(self.chat)
         if self.warming is not None:
             self.warming.set()

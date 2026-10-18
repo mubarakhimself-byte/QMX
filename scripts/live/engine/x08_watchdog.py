@@ -2,16 +2,17 @@
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/x08_watchdog.py [--base REV] [--trunk REV] [lane]`
-Lanes are `regression stalled runaway perf`; none named runs all. Each writes
+Lanes are `regression stalled limits perf`; none named runs all. Each writes
 `evidence/ep8/<ENGINE_LOG_PREFIX>ep8-<lane>.log`, and the script exits 1 if any lane failed.
 
 - `regression` (lane 1): trunk has no ladder; the harness is byte-identical to its base, and the
   EP7 `script-chain` fixture still finishes through the CLI.
-- `stalled` (lane 5): an attempt with no heartbeat past its idle timeout is cancelled and fails
-  `stalled`. The worker's heartbeat is set to an hour so the attempt stays silent.
-- `runaway` (lane 6): a guard of 2 agents over three `agent` nodes. The agent executor is a planted
-  stub, since the real one lands in EP11.
-- `perf`: one watchdog tick over 1,000 open attempts.
+- `stalled` (lane 5): an attempt with no progress past its idle timeout is warned, then after
+  its grace cancelled, and fails `stalled`. The worker's heartbeat beats every 0.2 s and is never
+  progress (CAPE, AD-16).
+- `limits` (lane 6, CAPE): no runaway guard exists; a `limits` block he wrote (`turns: 2`) over
+  three planted `agent` nodes pauses the run with one info line, and a resume goes on.
+- `perf`: one stuck-detector tick over 1,000 open attempts.
 
 No model, no key, no ship home.
 """
@@ -28,6 +29,7 @@ from typing import Any, Final
 
 from common import Log, throwaway_home
 from ep2_lanes import GIT, REPO
+from qma.harness import Pulse
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.model import Workflow
 from qmx_engine.ledger.inbox_table import InboxTable, inbox_path
@@ -35,7 +37,7 @@ from qmx_engine.ledger.store import Ledger
 from qmx_engine.nodes.base import NodeJob, NodeResult, Ok
 from qmx_engine.runner import Engine, Outcome
 from qmx_engine.settings import DEFAULTS
-from qmx_engine.watchdog import Open, stalled
+from qmx_engine.watchdog import Watchdog, Watched
 from qmx_engine.workers.local import LocalWorker
 from qmx_ledger.journal import fingerprint
 from x07_nodes import CHAIN, HARNESS, cli, edge, events, node, write_folder
@@ -87,9 +89,9 @@ def stalled_lane(log: Log) -> None:
             engine = Engine(
                 home,
                 ledger,
-                settings=DEFAULTS,
+                settings={**DEFAULTS, "timeout.grace": 1},
                 executors={"script": Hang()},
-                worker=LocalWorker(concurrency=3, heartbeat_seconds=3600),
+                worker=LocalWorker(concurrency=3, heartbeat_seconds=0.2),
                 watch_every=0.5,
             )
             return await engine.start(root, definition, mode="test", inputs=None)
@@ -104,7 +106,9 @@ def stalled_lane(log: Log) -> None:
         [(f["code"], f["retryable"]) for f in failed] == [("stalled", True)],
         failed,
     )
-    log.check("it was caught soon after its 2 s idle timeout", took < 10, f"{took:.1f} s")
+    log.check(
+        "it was caught soon after its 2 s idle timeout and 1 s grace", took < 10, f"{took:.1f} s"
+    )
 
 
 class Agent:
@@ -113,60 +117,62 @@ class Agent:
 
     def run(self, job: NodeJob) -> NodeResult:
         self.started.append(job.node_id)
-        return Ok({"main": job.node_id})
+        return Ok({"main": job.node_id}, span={"turns": 2})
 
 
-def runaway_lane(log: Log) -> None:
-    home = throwaway_home("ep8", "runaway")
+def limits_lane(log: Log) -> None:
+    home = throwaway_home("ep8", "limits")
     nodes: list[dict[str, Any]] = [node("start", "trigger")]
     nodes += [node(n, "agent") | {"role": "builder"} for n in ("a", "b", "c")]
     root = write_folder(
-        home / "wf-runaway",
+        home / "wf-limits",
         nodes,
-        {"start": {"main": [edge("a"), edge("b"), edge("c")]}},
+        {"start": {"main": [edge("a")]}, "a": {"main": [edge("b")]}, "b": {"main": [edge("c")]}},
         {},
-        runaway={"agents": 2},
+        limits={"turns": 2},
     )
     definition = Workflow.model_validate(load(root).document)
     agent = Agent()
 
-    async def go() -> Outcome:
+    async def go(run_id: str | None) -> Outcome:
         with Ledger.open(home) as ledger:
             engine = Engine(home, ledger, settings=DEFAULTS, executors={"agent": agent})
-            return await engine.start(root, definition, mode="test", inputs=None)
+            if run_id is None:
+                return await engine.start(root, definition, mode="test", inputs=None)
+            return await engine.resume(run_id)
 
-    outcome = asyncio.run(go())
+    outcome = asyncio.run(go(None))
     found = events(home, outcome.run_id)
     digest = [e.data["line"] for e in found if e.kind == "log" and e.data.get("digest")]
-    paused = [e.data for e in found if e.kind == "run_paused"]
+    after = [asyncio.run(go(outcome.run_id)).status for _ in range(2)]
     items = []
     if inbox_path(home).exists():
         with InboxTable.open(home) as inbox:
             items = inbox.list_items(open_only=False)
-    log(f"agents started: {agent.started}; run {outcome.status}: {outcome.reason}")
-    log(f"digest lines: {digest}; run_paused: {paused}")
-    log.check("the third agent never started", sorted(agent.started) == ["a", "b"], agent.started)
+    log(f"agents started: {agent.started}; run {outcome.status}: {outcome.reason}; then {after}")
+    log(f"digest lines: {digest}")
     log.check(
-        "the run is waiting(runaway)",
-        (outcome.status, outcome.reason) == ("waiting", "runaway"),
-        (outcome.status, outcome.reason),
+        "the run is waiting(limits) after the first agent",
+        (outcome.status, outcome.reason, agent.started[:1]) == ("waiting", "limits", ["a"]),
+        (outcome.status, outcome.reason, agent.started),
     )
     log.check("one info digest line", len(digest) == 1, digest)
+    log.check("two resumes finish the run", after == ["waiting", "passed"], after)
     log.check("no inbox item", items == [], items)
 
 
 def perf(log: Log) -> None:
     now = datetime.now(UTC)
-    attempts = [
-        Open(f"run:n{i}:0:1", now - timedelta(seconds=i % 600), 300) for i in range(OPEN_ATTEMPTS)
-    ]
+    dog = Watchdog(DEFAULTS, tick_seconds=60)
+    attempts = [Watched(f"run:n{i}:0:1", "agent", Pulse(i % 3)) for i in range(OPEN_ATTEMPTS)]
     runs = []
-    for _ in range(5):
+    found = []
+    for tick in range(5):
         began = time.perf_counter()
-        found = stalled(attempts, now)
+        found = dog.tick(now + timedelta(seconds=60 * tick), attempts)
         runs.append((time.perf_counter() - began) * 1000)
     log(f"ticks over {OPEN_ATTEMPTS} open attempts: {[f'{r:.3f}' for r in runs]} ms")
-    log(f"stalled found per tick: {len(found)}")
+    log(f"actions on the last tick: {len(found)}")
     log.check(
         "one watchdog tick over 1,000 open attempts (ms, not gated)", True, f"{min(runs):.3f} ms"
     )
@@ -181,7 +187,7 @@ def main() -> int:
     lanes: dict[str, Callable[[Log], None]] = {
         "regression": lambda log: regression(log, args.base, args.trunk),
         "stalled": stalled_lane,
-        "runaway": runaway_lane,
+        "limits": limits_lane,
         "perf": perf,
     }
     failed = 0

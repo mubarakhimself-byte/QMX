@@ -108,7 +108,6 @@ TICK: Final = timedelta(seconds=1)
 LADDER_SETTINGS: Final = ("retry.max_tries", "retry.backoff")
 NOTICED: Final = frozenset({"node_failed", "gate_opened"})
 SCRIPTS: Final = frozenset({"script", "grader", "monitor"})
-CRASH_LOOP: Final = "crash loop"
 
 type Mode = Literal["live", "test"]
 type Status = Literal["passed", "failed", "waiting", "interrupted"]
@@ -352,8 +351,7 @@ class Run:
         self.progress: dict[str, int] = {}
         """Idempotency key of an attempt to how many events it wrote, heartbeats left out."""
         self.started: set[str] = set()
-        self.held: set[str] = set()
-        """Chunks waiting at dispatch behind the warm-first gate."""
+        """Attempts that wrote `node_started`; one held at dispatch or queued for a slot has not."""
         self.stopping: set[str] = set()
         self.watchdog = Watchdog(engine.settings, engine.watch_every)
         self.meter = Meter()
@@ -572,7 +570,7 @@ class Run:
     def look(self, kind: str, key: str) -> Look:
         """What one attempt in flight shows the stuck detector."""
         executor = self.executors.get(kind)
-        if key in self.held or key not in self.started or kind == "subworkflow":
+        if key not in self.started or kind == "subworkflow":
             return Look(0, waiting=True)
         if isinstance(executor, Agent | Llm):
             return executor.look(key)
@@ -626,15 +624,14 @@ class Run:
                 self.append("log", data, progress=False)
             case "interrupt" if isinstance(agent, Agent):
                 await agent.stop(key, "idle")
-            case "interrupt":
-                pass
             case "stalled":
                 self.engine.worker.cancel(key, stalled=True)
-            case "loop" | "no_convergence" if key not in self.stopping:
-                self.stopping.add(key)
-                line = f"{command.node_id}: the stuck detector found {action.act}; it is stopped"
-                data = slot_keys(slot, command.attempt, level="info", digest=True, line=line)
-                self.append("log", data, progress=False)
+            case "loop" | "no_convergence":
+                if key not in self.stopping:
+                    self.stopping.add(key)
+                    line = f"{command.node_id}: the stuck detector found {action.act}; it stops"
+                    data = slot_keys(slot, command.attempt, level="info", digest=True, line=line)
+                    self.append("log", data, progress=False)
                 if isinstance(agent, Agent):
                     await agent.stop(key, action.act)
             case _:
@@ -646,23 +643,16 @@ class Run:
         many ticks only, and recorded on a run-level `heartbeat` when it moves a second."""
         now = self.engine.wall()
         last, self.marked = self.marked, now
-        if last is None or "wall_seconds" not in self.definition_limits():
+        limits = self.definition.settings.limits
+        if last is None or limits is None or limits.wall_seconds is None:
             return
-        running = any(
-            c.idempotency_key in self.started and c.idempotency_key not in self.held
-            for c in self.inflight.values()
-        )
-        if not running:
+        if not any(c.idempotency_key in self.started for c in self.inflight.values()):
             return
         before = int(self.active)
         gap = min((now - last).total_seconds(), MAX_TICKS * self.engine.watch_every)
         self.active += max(gap, 0.0)
         if int(self.active) > before:
             self.append("heartbeat", {"active_seconds": int(self.active)})
-
-    def definition_limits(self) -> JsonObject:
-        limits = self.definition.settings.limits
-        return {} if limits is None else limits.model_dump(exclude_none=True)
 
     async def fault(self, error: LedgerWriteError) -> Outcome:
         """The ledger cannot be written: stop claiming, stop this run's attempts, and raise the
@@ -752,11 +742,7 @@ class Run:
         kind = REGISTRY.kind(str(job.node_definition.get("type")))
         executor = self.executors[kind.name if kind is not None else ""]
         if gate is not None:
-            self.held.add(job.idempotency_key)
-            try:
-                await gate.wait()
-            finally:
-                self.held.discard(job.idempotency_key)
+            await gate.wait()
         result = await self.engine.worker.run(job, executor, self.append)
         slot = Slot(job.node_id, job.iteration, job.partition)
         if isinstance(result, Failed) and result.effect_state == "unknown":
@@ -831,7 +817,7 @@ class Run:
         restarts = self.state().restarts
         allowed = self.engine.settings.get("crash_loop.restarts")
         if interrupted and isinstance(allowed, int) and restarts >= allowed:
-            why = f"{CRASH_LOOP}: the engine stopped mid-run {restarts} times"
+            why = f"crash loop: the engine stopped mid-run {restarts} times"
             self.append("ladder_step", {"step": "park", "reason": why, "crash_loop": restarts})
 
     def unknown(self, slot: Slot, attempt: int, code: str, message: str) -> AfterUnknown:
