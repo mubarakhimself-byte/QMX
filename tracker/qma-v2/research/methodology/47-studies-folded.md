@@ -262,3 +262,121 @@ Both are also in `architecture/workflow-engine/OPEN-DECISIONS.md` (W1, W2). Noth
 - **Currency lens.** No new library version is bound. Hindsight is bound as a product choice (ruling 119), not a version; its facts are study 44's retrieved ones, and P-MEM checks the ones that matter before ship. The SDK facts used (`skills` filter, `system_prompt` file form, `fork_session`, `toggle_mcp_server`) were read from claude-agent-sdk 0.2.166 as installed.
 - **Adversary lens (two compliant units that still clash).** (a) The plugin loader and the Surface both deciding skill visibility: closed, the Surface computes the `skills` filter and the loader only materialises views. (b) Attached references kept in two places: closed, the chat record owns them and the session recorder alone mirrors them. (c) Two engine instances advancing one event cursor: closed, a trigger has one home (AD-10). (d) A stored and a derived mark disagreeing: closed, only `quarantined` is stored. (e) A standing grant lifting publish or enable: closed, never grantable and refused in the service (AD-11). (f) Banks and scopes as two partitions of memory: closed, scopes are Library ref namespaces with one writer, banks are Hindsight's index partitions by writer, mapped one way. (g) `pod-block` asking in the Lab but not in the Library: closed, both now say MANAGE for its merge into `main`. (h) Copilot records landing on `main` through a writer that does not own `main`: closed, the session recorder is `engine:<store>`, which AD-7 already lets fast-forward under AD-18.
 - **Not done:** no probe ran (all are build-time gates); the companions named in §9 were not re-projected.
+
+---
+
+## Review 48 applied (2026-10-18, the one fix round)
+
+Written by the architect (Opus 5.5), headless, BMad architecture skill in amend mode. No sub-agents, nothing committed. Input: `48-review-unlocked-and-folded.md` (0 critical, 8 high, 15 medium, 10 low). Where a finding rests on the SDK, the code truth was checked again: `claude-agent-sdk` 0.2.166 with its bundled CLI 2.1.299 in `D:/QMX-worktrees/eng-ep12/qmx-agents/.venv`, and `origin/engine/base` 132169c7 (`qma/harness/chat.py`, `launch.py`, `qmx_remote/*`).
+
+**Counts.** All 8 highs, all 15 mediums and all 10 lows were applied. No medium was rejected. One part was logged instead of designed: M10's question about ruling 116 goes to him as W3. `lint_spine.py` gives 0 findings on all three spines.
+
+**Verified while fixing, beyond the review:**
+
+- **`list_changed` cannot reach the CLI through the SDK today.** The pinned SDK's MCP bridge drops server notifications, `list_changed` included (`_internal/sdk_mcp_bridge.py` docstring). The CLI does advertise `sdk_mcp_tools_list_changed`. So H6 uses `reconnect_mcp_server("qmx")` until the SDK forwards the notification, and P-PK decides between the two.
+- **`exclude_dynamic_sections` moves, not drops.** The stripped sections go into the first user message (`types.py:46-56`), so the working folder still reaches the model.
+- **The bundled CLI knows every name the fixes use.** It contains the strings `excludeDynamicSections`, `systemPromptSnapshot`, `autoMemoryEnabled`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY`, `CronCreate`, `CronDelete`, `CronList`, `ScheduleWakeup`, `RemoteTrigger`, `EnterWorktree` and `ExitWorktree`.
+- **The built `qmx` server is already one server per chat** (`launch.py:468`), so H6 extends what exists. The `_keep_off` loop guards vetted external servers, not in-process ones.
+- **`qmx_remote/code.py` stays.** It is the isolated checkout with one push refspec that `worker.py` calls, and remote build attempts keep using it.
+
+### Finding to outcome
+
+| Finding | Outcome | Where |
+| --- | --- | --- |
+| H1 per-attempt folders break the cache | Applied. Every chat sets `exclude_dynamic_sections: true`. AD-18's stale workspace sentence is replaced. The CLI's auto memory is off for Background and Child chats. | AD-62, AD-18; H53, H54; P-SET cache case |
+| H2 recorded prompt after resume | Applied. Every chat sets `snapshot: false`. The spine says what reaches the model after a resume. The digest is computed per launch over what that launch passed. | AD-62, AD-35; H53; P-SYS resume case |
+| H3 declared Bash writes anywhere | Applied without a sandbox (rulings 115-117). File tools are confined by path. A declared shell writes the way Claude Code's does, within the guard's floor. What a run keeps is its declared outputs, and he is told so plainly. | AD-60, AD-24; E55, P-PERM; PLAIN-WORDS; UI-HANDOFF §14.2 |
+| H4 server runs invisible on the PC | Applied. The PC service forwards reads and inbox answers to the node with a host pass. It holds one event stream per reachable node and merges lists by `home_engine`. When a node is down its rows show "server unreachable since". Nothing replicates. | AD-3, AD-21, AD-65; §29.2; E68; UI-HANDOFF §16.1 |
+| H5 server chains stall when the PC sleeps | Applied (the review's second option). The flip to `primary = server` happens at the Contabo setup, unconditionally. P-LAT now measures latency and no longer gates the flip. | Library AD-19, AD-14; engine AD-64; E63 extended |
+| H6 toggle unreliable | Applied. Each chat has one `qmx` server that lists the Surface. A scope change re-lists it, by `list_changed` once the SDK forwards it and by `reconnect_mcp_server` until then. Nothing is switched off with `toggle_mcp_server`. Per-toolset servers return only if P-PK fails. | AD-61, AD-35, AD-55, AD-19; H47 rewritten, H32 superseded; P-PK restored, P-TG extended as the fallback |
+| H7 RUN1 deletes remote compute early | Applied. No remote code is deleted until the remote `WorkerPort` adapter passes E57 on a real placement. `code.py` is kept. | AD-57; program below |
+| H8 skills, agents and commands mid-chat | Applied. A chat loads only its pack set's plugins. Tools join at once. Skills, agents, commands and pack text join at the next turn, when the chat relaunches by resume. Two UI rows now say "tools now, skills on your next message". | AD-35, AD-55, Lab AD-14; H55; P-PL extended; UI-HANDOFF §14.5, §15.1 |
+| M1 resume across machines | Applied, because ruling 117 lists it. The ledger is mirrored to the Hub at each node end, and `runs.adopt` takes a Hub claim with fencing. Zone files do not travel, so nodes that wrote `work/` run again. | AD-7, Deferred row; E69 |
+| M2 E55 resume contradicts overlay deletion | Applied. After a crash, the retry is a new attempt with a fresh chat and a fresh overlay. | AD-51; E55; S7 |
+| M3 steer a live run with an edit | Applied. A live fork may name a newer published version and reuse memos under the replay rule. | AD-7; UI-HANDOFF §16.4 |
+| M4 claims in two channels | Applied. Claims live on the Hub store, which is the primary once the server exists. | Library AD-24, AD-7 |
+| M5 pause flag direction | Applied. The Hub holds the authoritative flag and sends it back in its heartbeat reply. A host that loses the Hub shows "pause state unknown". | AD-10, AD-65; §28.5 |
+| M6 memory rows outside the walk | Applied. A memory row gets its `derived-from` relations when it is written, and memory rows are in the P-TAINT fixture. | AD-18, Library AD-3 |
+| M7 battery on haiku | Applied. The battery runs on the model under change and compares it with the current model. | AD-66 |
+| M8 `complete` untested by default | Applied. Unit tests use a recorded transport. A provider-proof lane gates any packet that touches `complete`. | AD-56 |
+| M9 CLI scheduling tools | Applied. Every chat loses `CronCreate`, `CronDelete`, `CronList`, `ScheduleWakeup`, `RemoteTrigger` and `Workflow`, and the skills `schedule` and `loop`. Background and Child chats also lose the worktree tools. | AD-62; H56; E60 |
+| M10 money name check | Applied as hygiene: the vendored word list now covers operation names and external tool lists. His reading of ruling 116 is asked as W3. | AD-54; H58; E61; OPEN-DECISIONS W3 |
+| M11 probes without pass lines | Applied. P-MEM, P-LAT, P-TAINT, P-SRCH, P-EV and P-OPS each have a number and a fail branch. Contabo's overhead now counts Hindsight, which leaves 2 sessions with it and 4 without. | §28.8; AD-30, AD-25 |
+| M12 probes after their work | Applied in the program below. | — |
+| M13 `@folder` copies files | Applied. A file or folder is pinned by a manifest, and bytes are stored only for files the model reads. | AD-63 |
+| M14 delete floor too blunt | Applied. The floor now covers only what lies outside the chat's folder or worktree. In an Interactive chat it asks instead of refusing. | AD-54; H57 |
+| M15 agent tools have nowhere to load | Applied. An unreviewed tool loads only into the run that made it, and anywhere after his review. | AD-4, Library AD-3 |
+| L1 incomplete caller list | Applied in AD-59, including the two QML tests that would pass without checking anything. 43 §2 row 23 is left as written; this row corrects it. | AD-59 |
+| L2 DELETION-PLAN D2 target | Applied: D2 now names `qmx_host`. | DELETION-PLAN D2 |
+| L3 old SOLUTION-DESIGN rows | Applied: marked superseded in place (the §11 remote worker, the §8 adapter list, S7). | SOLUTION-DESIGN |
+| L4 Lab server count | Applied: the Lab brings two toolsets, `lab` and `pods`, on the one server. | Lab AD-14; DOC-CHANGES 52 |
+| L5 example apps | Applied: they migrate in the mini-app packet. | AD-57 |
+| L6 `pending` owner | Applied: `pending` is resolved when read. | AD-63 |
+| L7 `library-skills` hash | Applied: the hash covers a manifest of member ids. | AD-55 |
+| L8 skills on the command line | Applied: P-SET gains a case with 150 skills. | P-SET |
+| L9 draining Contabo | Applied: `qmx node update` drains the node first. | AD-30 |
+| L10 P-SYS repeats a probe | Applied: P-SYS keeps only its size, cache and resume cases. | AD-62; §28.8 |
+
+### Probe changes
+
+- **Restored:** P-PK, the first option for H47. It checks that a list change reaches the CLI, by `list_changed` or by reconnect, and runs before CAT.
+- **Demoted:** P-TG becomes the fallback. It now also checks:
+  - a switch-off sent while the server is still connecting;
+  - whether a switch-off persists across two chats in one workspace, and across a resume;
+  - a launch with 40 servers.
+- **Extended:**
+  - P-SET: cache reads across two folders, and a filter of 150 skills.
+  - P-SYS: trimmed to size and cache, plus a resume case with `snapshot: false`.
+  - P-PERM: a declared Bash writing outside the overlay.
+  - P-PL: a pack joining mid-session by resume, and agents limited to the pack set.
+- **Pass lines added:** P-MEM, P-LAT (which no longer gates the flip), P-TAINT (memory rows now in the fixture), P-SRCH, P-EV and P-OPS.
+- **Live checks:**
+  - New: E68 (a server run's 401 is seen and retried from the PC) and E69 (a run adopted on another machine).
+  - Rewritten: E55.
+  - Extended: E60 (no CLI scheduling tools), E61 (order-shaped names, wire names on the one server) and E63 (the chain runs with the PC asleep).
+
+### Program effects (against `HARDENING-PLAN.md`, 43 §10 and §7 above; the plan itself is not edited)
+
+| Packet | Effect | After |
+| --- | --- | --- |
+| HG3 (turn API) | **Widen:** add H53 (`exclude_dynamic_sections`, `snapshot: false`) and H54 (auto memory off for Background and Child). Both must land before AGW makes overlays the working folder. | P-SET with the cache case, P-PERM with the declared-Bash case |
+| AGW | **Re-gate:** after HG3's H53. E55 is rewritten for the honest Bash boundary and for retries in a new attempt. | HG3, SEC2A |
+| HRMH (guard) | **Widen:** add H57 (the delete floor scoped to the chat folder, with an Interactive ask) and the external-server half of H58. | — |
+| CAT | **Changed:** one `qmx` server per chat, re-listed on a scope change, replaces a server per toolset (H47 rewritten). The gate is **P-PK first**, and P-TG runs only if P-PK fails. | HRMH, HG3; P-NM, P-PK |
+| PACK | **Changed:** a chat loads only its pack set's plugins, and a pack change relaunches it by resume at the next turn (H55). | CAT; P-PL extended |
+| SURF | **Widen:** the digest is computed per launch over what was passed; add H56 (CLI scheduling tools and skills denied) and the P-SYS resume case. | CAT, HG3; P-SYS |
+| RUN1 | **Split.** **RUN1a:** the one run list, app schedules as triggers, and `RunIndex` dropping chat journals; nothing remote is deleted. **RUN1b:** deletes the control `runs_*` and `jobs_*` operations and `qmx_remote`'s `worker.py`, `runs.py` and `store.py`. | RUN1a after L1. RUN1b after **REM** passes E57 on a real placement |
+| New **REM** | The remote `WorkerPort` adapter with the sidecar, the Hub client and run passes, keeping `code.py` (AD-25, AD-57, Library AD-11 to AD-13). This turns Appendix G's row "Contabo node, vault and run passes" into a packet. | the RTR packets (passes) and LIB4 (the Hub); his Contabo setup |
+| DEL1-DEL3 | Now after RUN1a; otherwise unchanged. DEL3 also handles L1's extra callers and the two QML tests. | the guard, RUN1a, L1 |
+| DEL4 (LangChain) | **Re-sequenced** after RUN1b, because `qmx_remote/worker.py` is the LangGraph loop. | RUN1b |
+| OPS | **Widen:** forwarding for remote homes and the event stream (H4, E68), the pause flag in the Hub's heartbeat reply (M5), and draining the node before an update (L9). | L1, RUN1a; **P-OPS first** (M12); the sync part after LIB4 |
+| New **ADOPT** | Journal mirroring at each node end, and `runs.adopt` (M1, E69). | OPS, LIB4 |
+| TRG2 | The `event` part now waits on **P-EV** (M12), which has a pass line. | LIB1; P-EV |
+| LIB4 | **Changed:** the primary flip happens at the Contabo setup, unconditionally; claims live on the Hub; P-LAT measures but no longer gates. | the Hub; P-LAT |
+| LIB2 | The P-TAINT fixture includes memory rows (M6). | P-TAINT |
+| MEM | Memory rows are written with `derived-from`; P-MEM has pass and fail lines; Contabo's overhead includes Hindsight. | LIB1; P-MEM |
+| EVAL | Runs on the model under change and compares it with the current one (M7). | SURF |
+| FORK | Adds the live fork onto a newer published version (M3). | BUG3, REPLAY |
+| RTR4 or the `complete` packet | Unit tests use a recorded transport, and a provider-proof lane gates the merge (M8). | — |
+| REF1, REF2 | REF1 resolves `pending` when read (L6). REF2 pins files and folders by manifest (M13). | as before |
+| APP2 | Adds the `qmx app check` half of H58 (order-shaped names, M10), the example-app migration (L5) and the one-server wire names. | PACK, CAT, LIB1; P-APP, P-EV |
+| Dropped | Nothing. The design with a server per toolset survives only as P-TG's fallback. | — |
+
+### Reviewer gate (inline; sub-agents were not allowed)
+
+- **Lint.** `lint_spine.py` gives 0 findings on the engine, Library and Lab spines.
+- **Rubric.** No AD id changed. Each amended Rule still names what it binds and what it prevents. Every new mechanism reuses one that exists:
+  - one server per chat, as built;
+  - the SDK's prompt options;
+  - forwarding over the host pass and the tailnet, as already designed;
+  - Hub claims and object replication for `runs.adopt`.
+- **Adversary (two compliant units that still clash):**
+  - (a) The Surface and the plugin loader disagree on what a chat sees. Closed: one rule in AD-35, cited by AD-55 and Lab AD-14.
+  - (b) The PC and the node both fold an inbox answer. Closed: the PC forwards the answer, and only the run's home folds it.
+  - (c) The old and the new home both resume an adopted run. Closed: the adopter takes a Hub claim on `adopt:<run_id>`, and the old home checks the Hub before any resume.
+  - (d) The digest records slots that never reached the model. Closed: it is recorded per launch, over what was passed.
+  - (e) Claims split across two stores while the PC sleeps. Closed: all claims live on the Hub.
+- **Not done:**
+  - No probe ran; all of them are build-time gates.
+  - The Library and Lab HLD and LLD companions were not re-projected (DOC-CHANGES 51, 52).
+  - `HARDENING-PLAN.md` and `PROMPT-HARDENING.md` were not touched.

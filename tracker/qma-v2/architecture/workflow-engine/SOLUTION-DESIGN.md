@@ -308,7 +308,7 @@ A `ComputeProvider` adapter over Docker Desktop on WSL2 (installed on this PC, s
 
 ### 5.3 Remote worker (engine side of the gateway)
 
-The remote worker is the same `qmx_engine.nodes` code running on another machine with its own `qma.serve`, so model-bearing nodes use *that* machine's accounts and plan tokens never travel. The engine ships a **bundle** per node attempt and expects results back through `GatewayPort`:
+The remote worker is the same `qmx_engine.nodes` code running on another machine with its own `qma.serve` (superseded: `qmx_host --role node`, §27.1), so model-bearing nodes use *that* machine's accounts and plan tokens never travel. The engine ships a **bundle** per node attempt and expects results back through `GatewayPort`:
 
 | Direction | What | Form |
 | --- | --- | --- |
@@ -572,7 +572,7 @@ Reads `[engine]`, `[roles]`, `[scheduler]`, `[limits]`, `[budgets]` through `Con
 
 > **Superseded by §27.2 (unlock pass, ruling 118).** The port is rebuilt on `Harness.run_turn`, named permission policies and hook sinks; the polling, the ask rejection by poll and the compaction-restart fallback described below are deleted. Kept for the record.
 
-`start_chat(NewChat)`, `send(sid, InjectedText)`, `wait_turn(sid)` (see HARNESS-REQUESTS H1; until then: poll `GET /api/chats/{sid}` for `turn: idle` and read the last `text` block from `ControlService` sessions), `live(sid)`, `answer(ask, Reject|Answers)`, `interrupt(sid)`, `usage()`, `quote/apply`. The adapter marks every prompt `InjectedText` (verbatim, never a slash command), sets `NewChat.workspace = workspaces/wf-<id>/` and tells the agent its write zone `runs/<run_id>/`. Permission asks from an `agent` chat reach the engine as `permission` blocks; the adapter answers `Reject("unattended run")` at once for every ask except a tool the registry marks `irreversible_external`, for which it raises an inbox item and forwards the inbox's answer; if the harness's `unattended_ask_seconds` passes first the ask expires and the attempt continues without that tool (recorded on the span). Nothing else in a run ever waits for the operator (ruling 57). In `runner_outside` mode the adapter also passes the node's sandbox tool server as the chat's extra MCP server and disables `Bash`, `Write`, `Edit` and `NotebookEdit` (HARNESS-REQUESTS H2, H8). For context discipline (AD-34) it sets the per-chat compaction threshold and hooks (H15, H16) or, until they are granted, watches context from turn usage, restarts the attempt in a fresh chat at `agent.compact_at`, and reads tool calls from the session's `tool` blocks. It writes the session's home (AD-35) right after `start_chat`.
+*(Superseded by §27.2 and §29: the turn API replaces polling and the reject of asks, and an agent's working folder is its attempt overlay, AD-60.)* `start_chat(NewChat)`, `send(sid, InjectedText)`, `wait_turn(sid)` (see HARNESS-REQUESTS H1; until then: poll `GET /api/chats/{sid}` for `turn: idle` and read the last `text` block from `ControlService` sessions), `live(sid)`, `answer(ask, Reject|Answers)`, `interrupt(sid)`, `usage()`, `quote/apply`. The adapter marks every prompt `InjectedText` (verbatim, never a slash command), sets `NewChat.workspace = workspaces/wf-<id>/` and tells the agent its write zone `runs/<run_id>/`. Permission asks from an `agent` chat reach the engine as `permission` blocks; the adapter answers `Reject("unattended run")` at once for every ask except a tool the registry marks `irreversible_external`, for which it raises an inbox item and forwards the inbox's answer; if the harness's `unattended_ask_seconds` passes first the ask expires and the attempt continues without that tool (recorded on the span). Nothing else in a run ever waits for the operator (ruling 57). In `runner_outside` mode the adapter also passes the node's sandbox tool server as the chat's extra MCP server and disables `Bash`, `Write`, `Edit` and `NotebookEdit` (HARNESS-REQUESTS H2, H8). For context discipline (AD-34) it sets the per-chat compaction threshold and hooks (H15, H16) or, until they are granted, watches context from turn usage, restarts the attempt in a fresh chat at `agent.compact_at`, and reads tool calls from the session's `tool` blocks. It writes the session's home (AD-35) right after `start_chat`.
 
 ---
 
@@ -1407,7 +1407,7 @@ A child with `worktree: true` editing a **real git repository** gets `git worktr
 | S4 | Provider 429 mid-chunk | the attempt waits with `resume_at` from the provider; the pool cools that `(account, model)` and rotates the next lease; no partial output kept; the chunk re-runs alone on another account or after the reset (`uncached_resend`) |
 | S5 | 402 (no balance) on a key | the classifier says `billing`; the account cools one hour and rotates; if every account of the provider is out, the role's next candidate (another provider) takes the chunk; one inbox item only when every allowed account for the role is closed past `alert_after` |
 | S6 | 401 on the plan through the plan lane | forwarded unchanged; the CLI refreshes its own token; a routine expired token or a refresh race ends there and nothing is benched; only a CLI "needs `/login`" signal or three consecutive 401s on new requests over five minutes benches the account; his copilot then shows "sign in again" and waits, never moved to another account or provider; workflow roles skip the benched account (41 H2) |
-| S7 | Crash mid-chunk (PC power cut) | at restart the desktop host starts `qma.serve`; the orphan sweep folds open attempts `unknown`; model calls are retried once (duplicate spend accepted, AD-8), finished chunk memos stand, irreversible external steps go to the inbox |
+| S7 | Crash mid-chunk (PC power cut) | at restart the desktop host starts `qmx_host` (§27.1; `qma.serve` superseded); the orphan sweep folds open attempts `unknown`; model calls are retried once in a new attempt with a fresh chat and overlay (duplicate spend accepted, AD-8, AD-51), finished chunk memos stand, irreversible external steps go to the inbox |
 | S8 | Mixed providers in one run where one sub-agent's model lacks tools | the registry marks the model `tools = false`; a node declaring tools never resolves to it; inside a chat the router refuses the request naming the capability, the parent sees a failed sub-agent and continues or re-delegates |
 | S9 | A sub-agent on a text-only model is sent an image | `delegate` forwards a description from `vision_describer` instead of pixels (AD-41, AD-42) |
 | S10 | Every Kimi and GLM account exhausted overnight | nodes wait with the earliest provider reset; the run drains; it resumes by itself; one inbox item after `alert_after` (6 h) |
@@ -1429,7 +1429,7 @@ A child with `worktree: true` editing a **real git repository** gets `git worktr
 | P3 | AD-39 per provider as a sub-agent | Kimi K3, K2.7 Code, GLM, DeepSeek, Qwen, Ollama Cloud, OpenCode Go (chat lane): a **ten-turn** tool loop with thinking on, under a key main; the chat lane's thinking and `reasoning_content` round trip and translator-owned signatures hold (41 M9); record quirks into the bundled profiles and the normaliser fields |
 | P5 | AD-41 delegate v2 | a plan copilot starts three helpers (Kimi, DeepSeek, Qwen) and keeps working; handles return at once, results arrive between turns, a restart mid-run delivers each completion exactly once |
 | P7 | AD-12 pool | two Kimi keys, 429 with `retry-after: 30` on key 1: key 1 cools 30 s, affinity moves the next request to key 2, switch-back after the cooldown, classifier `rate_limit` |
-| P-PK (superseded by P-TG, §27.8) | AD-35 packs mid-session | add a mini app's pack to a running chat; the chat lists the new tools without a restart (`tools/list_changed`), else at the next turn on the same session id |
+| P-PK (restored by review 48 as the first option for H47; exact lines in HARNESS-REQUESTS) | AD-35 packs mid-session | add a mini app's pack to a running chat; the chat lists the new tools without a restart (`tools/list_changed`), else at the next turn on the same session id |
 | P-FK | AD-26 copilot background review | the SDK forks a Background copy of a finished session and writes only drafts |
 | E42 | AD-22 builder | the copilot builds, validates and test-runs a three-node workflow from a one-line request with no harness ask; the draft lands on its agent ref |
 | E43 | AD-40 no caps | a two-chunk 600k-token run on a 1M model and a six-hour run both end `passed` with no pause; a fake upstream with a 400 s prefill and another with a 900 s prefill on a 1M prompt are not resent (the launch's `API_TIMEOUT_MS` sits above the row timeout, 41 M4, 42 N16); on a `keepalive` row a late 429 after 15 s and a late prompt-too-long are retried 0 times, not resent and leave context accounting correct (42 N3); a Background parent that delegates under `max_live_chats = 1` finishes (42 N5); `[budgets]` unset reaches the SDK as no budget and no turn cap; no `needs_you` appears; a Background send past chat capacity waits for a slot (H28 b) |
@@ -1527,7 +1527,7 @@ class Harness:
     async def run_turn(self, sid: SessionId, prompt: Prompt) -> TurnHandle: ...
     async def interrupt(self, sid: SessionId) -> None: ...
     async def close_chat(self, sid: SessionId) -> None: ...          # H18, deletes nothing
-    async def set_packs(self, sid: SessionId, packs: frozenset[str]) -> None: ...  # toggles servers
+    async def set_packs(self, sid: SessionId, packs: frozenset[str]) -> None: ...  # tools now, plugins next turn (AD-35)
     def register_policy(self, name: str, policy: PermissionPolicy) -> None: ...
     def register_sink(self, name: str, sink: HookSink) -> None: ...
 
@@ -1556,9 +1556,9 @@ Order on a tool call: guard (deny wins) → the CLI's own rules (generated: Effe
   agents/<name>.md
   commands/<name>.md
   (never hooks/, never .mcp.json)
-launch: plugins = [core (install tree), *materialised(enabled packs)]
-        mcp_servers = {"qmx": ..., "app-<id>": in-process server for each enabled pack, ...}
-        servers outside the session's pack set start switched off; set_packs toggles them
+launch: plugins = [core (install tree), *materialised(pack set)]          (review 48 H8)
+        mcp_servers = {"qmx": the Surface's tools for this chat, pack tools included}   (review 48 H6, §29)
+        set_packs re-lists qmx at once; plugins and pack text change at the next turn by resume
 ```
 
 `qmx app check` (the publish gate, AD-19) adds: the materialised view parses as a plugin, its `!` lines are listed, it carries no `hooks/` or `.mcp.json`, and its tool server lists exactly the tools `app.toml` declares.
@@ -1604,7 +1604,7 @@ Moves in: `qma/harness/relay.py`, `qma/gpt/*`, `qma/harness/profiles.py`, the pl
 | Id | Proves | Check |
 | --- | --- | --- |
 | E54 | AD-52 | on one home, a copilot chat runs a turn while a workflow run with an agent node runs; kill the process mid-turn, restart: the chat shows its turn as unknown, the run resumes from its ledger; a second `qmx_host` on the same home refuses with one line |
-| E55 | AD-53, AD-60 | an agent node writes three files in its overlay and declares one; only the declared one commits; a write outside the overlay is denied with the policy's reason and the attempt goes on; kill the host mid-attempt: the resumed chat keeps `compact_at`, its tool spans still arrive, and its policy still applies |
+| E55 | AD-53, AD-60 | an agent node writes three files in its overlay and declares one; only the declared one commits; a `Write` outside the overlay is denied with the policy's reason and the attempt goes on; a declared `Bash` that writes `%TEMP%\qmx-e55.txt` succeeds and is neither committed nor recorded as output, while a `Bash` write into `control.db` is refused by the guard; kill the host mid-attempt: at restart the attempt folds `unknown`, its retry is a new attempt with a fresh chat and overlay, and that chat keeps `compact_at`, sends its tool spans and applies its policy (review 48 H3, M2) |
 | E56 | AD-54 | the guard refuses: a keyring reader, a read of a plan login, a write into `control.db`, a recursive delete outside the zone, a UNC path, a secret in a `curl` body, a bidi character; it allows: a WebFetch of a broker's public documentation page (refused by the old gate's broker-host rule), a write in `workspaces/`; his never-list refuses a command his always-list cannot lift; `propose_order` still asks |
 | E57 | AD-57 | a GPU job written as a one-node workflow runs on a burst placement and lands as a `workflow-run`; the removed control routes return 404; an app's interval schedule fires as an engine trigger |
 | E58 | AD-58 | a run with 40 rule nodes and 12 agent chunks: no rule waits on a slot; scripts run at `cpu_slots` at once; chats never exceed the slot table minus the reserve, and his Interactive chat starts while they run |
@@ -1627,8 +1627,8 @@ qmx_control.catalog
   check(row) -> [finding]                          # wire name ^[a-zA-Z0-9_-]+$, mcp__<server>__<name> <= 64,
                                                    # strict schema, description lint, declared == served
 qma.harness.tools
-  servers(toolsets) -> {name: McpSdkServerConfig}  # one in-process server per toolset: qmx-<toolset>,
-                                                   # pack-<name>, app-<id>; registered on every chat
+  server(surface) -> McpSdkServerConfig            # the chat's one in-process qmx server, listing the Surface;
+                                                   # a scope change re-lists it (list_changed or reconnect, §29)
   wrap(row)                                        # Grants for asking rows, result envelope and spill
 ```
 
@@ -1676,6 +1676,7 @@ instance: {app_id, home: pc | contabo | <provider row>, lease, profiles: [profil
 Heartbeat(host | run_id, at, cpu_seconds, rss_mb, machine_minutes, capacity_in_use{cpu, chat, container, gpu},
           claims[intent_key], qmx_version, kinds_digest, autonomy_paused, blob_cache?{count, bytes, digest}, free_disk_mb?)
 runs.fetch_home(run_id) -> local test-mode replay fork
+Hub reply: {autonomy_paused (authoritative), claims_renewed}     (review 48 M5)
 App incident classes: grant | workflow | view | dependency | host
 ```
 
@@ -1709,22 +1710,68 @@ purge(blob_id, reason)                                        # operator only, s
 
 | Id | Proves | Check |
 | --- | --- | --- |
-| E60 | AD-61, AD-62 | a Kimi-main intake agent node declaring `toolsets: [library, research, data, memory]` sees only those servers' tools plus its built-ins; a call to a `workflows` tool is refused by the guard; the span carries the surface digest; the snapshot test diffs when a description changes |
-| E61 | AD-61 | `qmx app check` refuses a pack whose tool name makes `mcp__app-<id>__<tool>` longer than 64 characters, and a pack whose served tools differ from its `[operations]` rows |
+| E60 | AD-61, AD-62 | a Kimi-main intake agent node declaring `toolsets: [library, research, data, memory]` sees only those servers' tools plus its built-ins; a call to a `workflows` tool is refused by the guard; the span carries the surface digest; the snapshot test diffs when a description changes; no chat lists `CronCreate`, `CronDelete`, `CronList`, `ScheduleWakeup`, `RemoteTrigger` or `Workflow` or the `schedule` and `loop` skills, and a Background chat lists no `EnterWorktree` (review 48 M9) |
+| E61 | AD-61 | `qmx app check` refuses a pack whose tool name makes `mcp__qmx__<toolset>_<op>` longer than 64 characters, a pack whose served tools differ from its `[operations]` rows, and an operation named like an order act (`place_order`) by the vendored word list (review 48 M10) |
 | E62 | AD-63 | in a Lab session he attaches pod v7 (pinned), the macro app's latest `bias` (follow), a folder and a video; he reopens the session in the hub: the same four references are listed, the video reads `pending` until its transcript lands, and the pod reads "newer version exists" after v8 is saved |
-| E63 | AD-64 | the macro app lands `bias` on the PC; an event trigger on Contabo fires once within one tick after replication; two re-deliveries of the same object fire nothing; `coalesce: latest` drops a superseded queued fire |
+| E63 | AD-64 | the macro app lands `bias` on the PC; an event trigger on Contabo fires once within one tick after replication; two re-deliveries of the same object fire nothing; `coalesce: latest` drops a superseded queued fire; with the PC asleep and the server primary, a Contabo app's landing fires the next Contabo app's event trigger and the chain completes (review 48 H5, K-09) |
 | E64 | AD-65, AD-10 | "pause everything": no fire is claimed on either host within one tick, running attempts finish their node, new nodes read `waiting(paused)`; clearing it gives one catch-up per trigger; a host whose kinds digest lacks a kind gets `node needs update` |
 | E65 | AD-18 | a Lab session notes a finding about pod P; a new hub session's `memory_recall` with `item:P` returns it; with Hindsight stopped the FTS5 adapter returns it; `forget` removes it from recall and `rebuild` does not bring it back |
 | E66 | Library AD-22, AD-23 | marking dataset r12 quarantined shows "built on quarantined input" with its path on every result built on it, refuses the trigger that pins it, and turns a hypothesis supported only by those results to `open`; clearing the mark restores all of it |
 | E67 | AD-27, Library AD-24 | two runs on two hosts start the same build within one second: one builds, the other waits and links; killing the first lets the second take the claim after one `ttl` |
 | P-NM | AD-61 | the pinned CLI with an in-process tool whose full name is 64, 65 and 80 characters and one with a dot: record which load and which the API refuses |
-| P-SYS | AD-62 | the pinned CLI takes the append text from a file (`--append-system-prompt-file` through `extra_args`) on Windows with a 60,000-character methodology: the launch passes, the text reaches the model, the cache reads it on the second turn; **fail:** slots keep within the command-line check and spill to skills |
+| P-SYS | AD-62 | (trimmed by review 48 L10: the file form itself passed in HP0 S20 OQ4) on Windows with a 60,000-character methodology through `--append-system-prompt-file`: the launch passes and the cache reads the text on the second turn; **resume case (H2):** with `snapshot: false`, change the append text, relaunch by resume, and the model quotes the new text; with `snapshot` omitted it quotes the old one; **fail:** slots keep within the command-line check and spill to skills; if the resume case fails, a slot change starts a fresh chat seeded with the session recap |
 | P-NEST | AD-5 | the built validator accepts a loop whose body calls a subworkflow that holds its own loop; **fail:** add that one exception to the validator |
-| P-MEM | AD-18 | on his material: Hindsight (embedded on the PC, then on Contabo) against the FTS5 adapter on "already built", a dead end, a Lab-to-hub follow-up and "what did we decide about pod X"; RAM on each host; retain cost and latency per session digest with a Kimi or DeepSeek extractor through the router; deleting a row by id removes the observations built from it; a time window filters recall |
-| P-EV | AD-64, Library AD-24 | the time from a PC commit to a Contabo event-trigger fire through the Hub, and a claim round trip; sets `scheduler.tick` for event triggers |
+| P-MEM | AD-18 | on his material: Hindsight (embedded on the PC, then on Contabo) against the FTS5 adapter on "already built", a dead end, a Lab-to-hub follow-up and "what did we decide about pod X"; RAM on each host; retain cost and latency per session digest with a Kimi or DeepSeek extractor through the router; deleting a row by id removes the observations built from it; a time window filters recall; **pass (review 48 M11):** Hindsight's top-5 hits match or beat FTS5's on each of the four question types, Hindsight with its embedding model stays within 2,048 MB RSS on each host, and a session-digest retain finishes within 30 s; **fail on RAM:** Hindsight stays on the PC and the server's runs recall through FTS5 over the same rows until the server grows; **fail on quality:** recorded and tuned, the choice stands (ruling 119) |
+| P-EV | AD-64, Library AD-24 | the time from a PC commit to a Contabo event-trigger fire through the Hub, and a claim round trip; sets `scheduler.tick` for event triggers; **pass (M11):** a fire within two ticks (120 s at the default 60 s tick) of the object reaching the Hub, and a claim round trip under 1 s at p95; **fail:** the Hub pushes ref-log rows on the engine event stream instead of the tick reading them |
 | P-APP | AD-64 | an app server started on Contabo from a Library bundle by hash; a volume lease handed from the PC to Contabo with a snapshot and restore |
-| P-LAT | Library AD-19 | the Library screens over the tailnet with the server primary and the PC as cache stay responsive; gates the default flip |
-| P-SRCH | Library AD-8 | a labelled question set over his real items: grounder precision and coverage together, the truncation constants, ranking under fan-out noise |
-| P-TAINT | Library AD-22 | `marks()` on a synthetic 100,000-item edge table in SQLite stays interactive for an item with a deep ancestry |
-| P-OPS | AD-65 | heartbeat volume with 20 agents on the 12 GB server |
+| P-LAT | Library AD-19 | the Library screens over the tailnet with the server primary and the PC as replica and cache; **pass (M11):** reads (list, item, search) p95 at most 300 ms and writes (put, land) p95 at most 1,500 ms; **fail:** a latency bug for the Hub packet (cache or batch); it no longer gates the flip, which is unconditional at the Contabo setup (review 48 H5) |
+| P-SRCH | Library AD-8 | a labelled question set over his real items: grounder precision and coverage together, the truncation constants, ranking under fan-out noise; **pass (M11):** precision at least 0.85 at coverage at least 0.70, and no truncation drops a top-5 hit; **fail:** tune the constants and ranking features and rerun before the search packet merges |
+| P-TAINT | Library AD-22 | `marks()` on a synthetic 100,000-item edge table in SQLite, memory rows included (review 48 M6); **pass (M11):** p95 at most 50 ms for an item with a 20-deep, 500-node ancestry; **fail:** a derived closure index rebuilt from the edges (an index, never evidence, Library AD-5) |
+| P-OPS | AD-65 | heartbeat volume with 20 agents on the 12 GB server; **pass (M11):** at a 30 s interval (Claude's default) a row is at most 4 KB and heartbeat work at most 1 % of one core per host; **fail:** idle hosts send deltas at a longer interval |
 | P-CELL | Lab AD-9 | five of his real notebooks graduate cells into script nodes with their read variables captured |
+
+## 29. Review 48 applied (2026-10-18, `research/methodology/48-review-unlocked-and-folded.md`) [AD-3, AD-7, AD-10, AD-18, AD-21, AD-24, AD-30, AD-35, AD-51, AD-54 to AD-57, AD-59 to AD-66 amended; Library AD-3, AD-7, AD-14, AD-19, AD-24; Lab AD-14]
+
+The decisions and the finding-to-outcome table are in `research/methodology/47-studies-folded.md` "Review 48 applied". Where this section and §27 or §28 disagree, this one wins.
+
+### 29.1 What every chat launches with [AD-62, AD-35, AD-55, AD-61]
+
+```text
+system_prompt = {type: preset, preset: claude_code, append: <slots>,
+                 exclude_dynamic_sections: true,     # per-folder sections move to the first user message
+                 snapshot: false}                    # rebuilt each request: a resume sees new slots
+plugins      = [core, *materialised(pack set)]       # not every enabled pack: agents and commands have no filter
+skills       = Surface filter (no schedule, loop)
+tools        = Surface built-ins (no CronCreate, CronDelete, CronList, ScheduleWakeup, RemoteTrigger, Workflow;
+               Background and Child also no EnterWorktree, ExitWorktree)
+mcp_servers  = {"qmx": one in-process server listing the Surface's toolsets, + vetted external servers}
+settings file: autoMemoryEnabled = false for Background and Child chats
+digest       = sha256(wire names + schema hashes, skills, plugins, prompt options, append text) per launch
+scope change : qmx re-lists now (tools/list_changed once the SDK forwards it, else reconnect_mcp_server("qmx"));
+               plugins, skills, agents, commands and slot text at the next turn by relaunch-by-resume
+```
+
+### 29.2 Remote homes on the PC [AD-21, AD-65, AD-7]
+
+```text
+PC engine service (home pc)
+  runs.list / runs.get / spans / inbox.list / incidents / explain_trigger
+      -> local ledger  +  forward(home_engine = contabo) over the tailnet with a host pass
+  inbox.resolve(item on contabo) -> forwarded; contabo folds gate_resolved in its own ledger
+  event stream: one SSE subscription per reachable owned node; on reconnect read its open items once
+  unreachable node: rows read "server unreachable since <t>" with the last values seen
+runs.adopt(run_id)   # refused while the home heartbeat is fresh
+  claim("adopt:<run_id>") on the Hub -> seed ledger from the mirrored events -> run_adopted{from, to}
+  -> fold open attempts unknown -> void memos of nodes that committed work/ files -> resume
+  old home at start: sees the adoption, marks its copy moved, never resumes it
+```
+
+### 29.3 Checks added by review 48
+
+| Id | Proves | Check |
+| --- | --- | --- |
+| E68 | AD-65, AD-21 | a Contabo-homed run's Kimi key returns 401: the item shows in the PC inbox and the copilot's `ops` answer within one event-stream round, and `retry` pressed on the PC resumes the run on Contabo; with Contabo unplugged the row reads "server unreachable since …" |
+| E69 | AD-7 | a PC-homed fan-out is cut mid-run and the PC's ledger file removed: `runs.adopt` on Contabo is refused while the PC heartbeat is fresh, then succeeds; finished chunks are not paid again; the PC, restarted, marks its copy `moved` and does not resume it |
+| E55 | AD-60, AD-51 | rewritten in §27.8 (declared Bash outside the overlay; crash retries in a new attempt) |
+| E60, E61, E63 | AD-62, AD-61, AD-64 | extended in §28.8 (CLI scheduling tools absent; order-shaped names refused; the chain runs with the PC asleep) |
+| P-PK, P-TG, P-SET, P-PERM, P-PL | AD-61, AD-35, AD-62, AD-60, AD-55 | exact lines in `HARNESS-REQUESTS.md` "Probes named above" |

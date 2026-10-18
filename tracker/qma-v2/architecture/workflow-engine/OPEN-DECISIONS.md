@@ -1,5 +1,9 @@
 # Open decisions (what is still his; the design proceeds on the recommendation)
 
+## After review 48 (2026-10-18, `research/methodology/48-review-unlocked-and-folded.md`)
+
+- **W3. Settled 2026-10-18 by the planning lead from rulings 115-118 (not his call).** He ruled agents have no path to money and that money-safety machinery is over-engineering, then unlocked the whole app (118). So the old order-word money gate goes and the guard (AD-54) stays as ordinary hygiene: sign-ins, keys, QMX's own databases and destructive commands.
+
 ## After the studies-folded pass (2026-10-18, `research/methodology/47-studies-folded.md`)
 
 The pass decided every design change in studies 44, 45 and 46 without him, and recorded his choice of Hindsight as ruling 119. Two questions about words stay his (study 45); the design proceeds without them and nothing waits:

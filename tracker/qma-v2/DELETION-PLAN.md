@@ -133,7 +133,7 @@ The coordinator runs every lane of a PR on the operator's PC in one boot, with t
 
 **Files.**
 
-- [ ] Edit `qmb/src/qmb/doors/cli/host.py`. Delete `DAEMON_SPAWN_MODULE` at `:104` and its export at `:43`, the daemon branches of `_spawn_argv` at `:692-693`, their callers near `:938` and `:1746`, and the daemon-only `invoke_host_*` helpers. Change the spawn module at `:1799` from `qmx_control` to `qma.serve`.
+- [ ] Edit `qmb/src/qmb/doors/cli/host.py`. Delete `DAEMON_SPAWN_MODULE` at `:104` and its export at `:43`, the daemon branches of `_spawn_argv` at `:692-693`, their callers near `:938` and `:1746`, and the daemon-only `invoke_host_*` helpers. Change the spawn module at `:1799` from `qmx_control` to `qmx_host` (`python -m qmx_host serve`; engine AD-52 deletes `qma.serve` after one release; review 48 L2).
 - [ ] Edit `qmb/tests/test_cli_host.py`, and delete or rewrite `qmb/tests/test_operator_study_cli.py`, which imports `qma`.
 - [ ] Edit the comment at root `pyproject.toml:341`.
 
