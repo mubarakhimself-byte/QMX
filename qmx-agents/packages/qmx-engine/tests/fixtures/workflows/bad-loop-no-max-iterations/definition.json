@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-loop-no-max-iterations",
+  "name": "bad-loop-no-max-iterations",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "l",
+      "name": "Again",
+      "type": "loop",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "predicate": "items.score >= 0.9"
+      }
+    },
+    {
+      "id": "s",
+      "name": "Improve",
+      "type": "script",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Again",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Again": {
+      "body": [
+        [
+          {
+            "node": "Improve",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Improve": {
+      "main": [
+        [
+          {
+            "node": "Again",
+            "port": "next",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "loop_max_iterations_missing"
+    ]
+  }
+}

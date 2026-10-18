@@ -26,9 +26,10 @@ from qmx_engine.core.commands import Finish, Park
 from qmx_engine.core.fold import fold
 from qmx_engine.core.ready import next_commands
 from qmx_engine.core.simulate import Entry, Simulation
+from qmx_engine.definition.expr import RuleRefused, check
 from qmx_engine.definition.model import Workflow
 from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok, step
-from qmx_engine.nodes.rule import Rule, RuleRefused, check
+from qmx_engine.nodes.rule import Rule
 from qmx_engine.nodes.trigger import Trigger
 
 HARNESS: Final = "qmx-agents/packages/qma-harness"

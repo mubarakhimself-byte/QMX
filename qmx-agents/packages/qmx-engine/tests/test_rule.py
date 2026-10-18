@@ -9,9 +9,10 @@ from pydantic import JsonValue
 
 from qmx_engine.core.commands import Finish
 from qmx_engine.core.simulate import Simulation
+from qmx_engine.definition.expr import RuleError, RuleRefused, evaluate
 from qmx_engine.definition.model import Workflow
 from qmx_engine.nodes.base import NodeJob, NodeResult, Ok, step
-from qmx_engine.nodes.rule import Rule, RuleError, RuleRefused, evaluate
+from qmx_engine.nodes.rule import Rule
 from qmx_engine.nodes.trigger import Trigger
 
 NOW = "2026-10-17T09:00:00+00:00"

@@ -38,6 +38,7 @@ def with_parameters(tmp_path: Path, parameters: dict[str, object]) -> Path:
         ("bad-money", [("money_act", "nodes[1].parameters.action")]),
         ("bad-broadcast", [("chunk_required", "connections.List papers.main[0][0]")]),
         ("bad-agent-no-max-turns", [("agent_max_turns_missing", "nodes[1].parameters")]),
+        ("bad-loop-no-max-iterations", [("loop_max_iterations_missing", "nodes[1].parameters")]),
         ("bad-human-gate", [("human_gate_misplaced", "nodes[1]")]),
     ],
 )

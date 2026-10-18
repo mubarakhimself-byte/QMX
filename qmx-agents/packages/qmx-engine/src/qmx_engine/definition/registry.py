@@ -40,8 +40,9 @@ class Kind:
 IN: Final = ("in",)
 MAIN: Final = ("main",)
 LOOP_BACK_PORT: Final = "next"
-"""An edge into a loop's `next` port closes the loop body; graph checks leave it out, so the
-body's cycle is the one cycle a definition may hold."""
+"""A loop takes its first value on `in` and each later one on `next`; it sends the value on `body`
+while it iterates and on `done` once a stop fires (settled in EP6). An edge into `next` closes the
+body; graph checks leave it out, so the body's cycle is the one cycle a definition may hold."""
 
 # Every kind is unavailable until the PR that builds its executor flips it (EP6 to EP11).
 BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
@@ -51,9 +52,9 @@ BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
             Kind("trigger", (), MAIN, "none"),
             Kind("script", IN, MAIN, "reversible"),
             Kind("rule", IN, ("true", "false"), "none"),
-            Kind("loop", ("in", LOOP_BACK_PORT), ("body", "main"), "none"),
-            Kind("join", IN, MAIN, "none"),
-            Kind("wait", IN, MAIN, "none"),
+            Kind("loop", ("in", LOOP_BACK_PORT), ("body", "done"), "none", available=True),
+            Kind("join", IN, MAIN, "none", available=True),
+            Kind("wait", IN, MAIN, "none", available=True),
             Kind("human_gate", IN, (), "none", outputs_param="options"),
             Kind("llm", IN, MAIN, "irreversible", RoleRule.REQUIRED, model_bearing=True),
             Kind("agent", IN, MAIN, "irreversible", RoleRule.REQUIRED, model_bearing=True),

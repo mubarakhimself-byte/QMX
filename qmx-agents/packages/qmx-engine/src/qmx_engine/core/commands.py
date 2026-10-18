@@ -25,6 +25,24 @@ class StartNode:
     node_definition: JsonObject
     inputs: JsonValue
     now: str | None
+    plan: JsonObject | None = None
+    """What the core decided for this slot (its chunk, a join's merge, a loop's stop), recorded on
+    `node_scheduled`."""
+
+
+@dataclass(frozen=True, slots=True)
+class Hold:
+    """Record that a slot may not start yet: a `wait` node, or a join under a `timeout` watermark.
+    The driver turns `seconds` into `resume_at` on the run's recorded clock and writes a
+    `node_waiting` with no attempt (SOLUTION-DESIGN 3.2: written by core), so the core itself never
+    does clock arithmetic (AD-6)."""
+
+    node_id: str
+    iteration: int
+    partition: int | None
+    seconds: int | None = None
+    until: str | None = None
+    event: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,7 +58,7 @@ class UseMemo:
 
 @dataclass(frozen=True, slots=True)
 class Wait:
-    """Nothing can start until a waiting node's time or event comes."""
+    """Nothing can start until a held or waiting node's time or event comes."""
 
     node_ids: tuple[str, ...]
     resume_at: str | None
@@ -56,7 +74,8 @@ class Pause:
 
 @dataclass(frozen=True, slots=True)
 class Finish:
-    """Every node settled. `outputs` holds each finished sink node's outputs by node id."""
+    """Every node settled. `outputs` holds each finished sink node's outputs by node id, as a list
+    in partition order for a node that fanned out."""
 
     outputs: JsonObject
 
@@ -68,7 +87,7 @@ class Park:
     reason: str
 
 
-type Command = StartNode | UseMemo | Wait | Pause | Finish | Park
+type Command = StartNode | Hold | UseMemo | Wait | Pause | Finish | Park
 
 
 def encode(commands: list[Command]) -> bytes:
