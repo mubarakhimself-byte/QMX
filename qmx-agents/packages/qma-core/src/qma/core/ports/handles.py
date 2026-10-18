@@ -267,7 +267,8 @@ def unset_money_path_fills(
     filled = [
         field
         for field in sorted(MONEY_PATH_RELEVANT_FIELDS)
-        if money_path_field_is_set(proposed, field) and not money_path_field_is_set(prior, field)
+        if money_path_field_is_set(proposed, field)
+        and not money_path_field_is_set(prior, field)
     ]
     return tuple(filled)
 
@@ -358,7 +359,9 @@ class EvidenceHandle:
         if is_handle_kind_contribution_point(kind):
             return refuse_plugin_handle_kind_extension(kind)
         try:
-            resolved_kind = kind if isinstance(kind, HandleKind) else parse_closed(HandleKind, kind)
+            resolved_kind = (
+                kind if isinstance(kind, HandleKind) else parse_closed(HandleKind, kind)
+            )
         except VocabularyError as exc:
             return _invalid("kind", str(exc), given=repr(kind))
         if resolved_kind not in CLOSED_HANDLE_KINDS:
@@ -366,7 +369,9 @@ class EvidenceHandle:
         if not isinstance(handle_id, str) or handle_id.strip() == "":
             return _invalid("handle_id", "EvidenceHandle requires a durable handle id")
         if not isinstance(evidence_ref, str) or evidence_ref.strip() == "":
-            return _invalid("evidence_ref", "EvidenceHandle requires an evidence reference")
+            return _invalid(
+                "evidence_ref", "EvidenceHandle requires an evidence reference"
+            )
         if contents is not None:
             return _policy(
                 "contents",
@@ -393,7 +398,9 @@ class EvidenceHandle:
         rec = bool(recorded)
         clo = bool(closed)
         ro = bool(read_only)
-        if resolved_kind in READ_ONLY_EVIDENCE_HANDLE_KINDS and (not rec or not clo or not ro):
+        if resolved_kind in READ_ONLY_EVIDENCE_HANDLE_KINDS and (
+            not rec or not clo or not ro
+        ):
             return _policy(
                 "evidence_state",
                 f"{resolved_kind.value} addresses recorded, closed, read-only "
@@ -516,7 +523,9 @@ class FieldLevelDiff:
         if not isinstance(candidate_ref, str) or candidate_ref.strip() == "":
             return _invalid("candidate_ref", "field-level diff requires candidate_ref")
         if not isinstance(predecessor_ref, str) or predecessor_ref.strip() == "":
-            return _invalid("predecessor_ref", "field-level diff requires predecessor_ref")
+            return _invalid(
+                "predecessor_ref", "field-level diff requires predecessor_ref"
+            )
         if not isinstance(fields, Sequence) or isinstance(fields, (str, bytes)):
             return _invalid("fields", "field-level diff fields must be an array")
         parsed: list[FieldLevelDiffEntry] = []
@@ -534,7 +543,9 @@ class FieldLevelDiff:
                     given=repr(path),
                 )
             if path in seen:
-                return _invalid("path", "field-level diff paths must be unique", path=path)
+                return _invalid(
+                    "path", "field-level diff paths must be unique", path=path
+                )
             if "ancestor" not in body or body["ancestor"] is None:
                 return _policy(
                     "ancestor",
@@ -623,7 +634,9 @@ class StrategyCandidate:
                 given=repr(zone),
             )
         if isinstance(payload_fp1, Mapping):
-            blocked = refuse_strategy_handle_assembly(cast("Mapping[str, object]", payload_fp1))
+            blocked = refuse_strategy_handle_assembly(
+                cast("Mapping[str, object]", payload_fp1)
+            )
             if blocked is not None:
                 return blocked
             return _policy(
@@ -632,17 +645,27 @@ class StrategyCandidate:
                 "CT-33/CT-34 JSON (DEC-0272; FR-W39)",
             )
         if not isinstance(payload_fp1, str) or not payload_fp1.startswith("fp1:"):
-            return _invalid("payload_fp1", "candidate identity is an fp1 content address")
+            return _invalid(
+                "payload_fp1", "candidate identity is an fp1 content address"
+            )
         if not isinstance(stable_id, str) or stable_id.strip() == "":
             return _invalid("stable_id", "candidate requires a stable id")
         if not isinstance(handle_id, str) or handle_id.strip() == "":
-            return _invalid("handle_id", "candidate requires the minting StrategyHandle id")
+            return _invalid(
+                "handle_id", "candidate requires the minting StrategyHandle id"
+            )
         if not isinstance(money_path_relevant, bool):
-            return _invalid("money_path_relevant", "money_path_relevant is a boolean flag")
+            return _invalid(
+                "money_path_relevant", "money_path_relevant is a boolean flag"
+            )
         if lineage_predecessor is not None and not isinstance(lineage_predecessor, str):
-            return _invalid("lineage_predecessor", "lineage predecessor is an fp1 string")
+            return _invalid(
+                "lineage_predecessor", "lineage predecessor is an fp1 string"
+            )
         if lineage_predecessor == "":
-            return _invalid("lineage_predecessor", "lineage predecessor is an fp1 string")
+            return _invalid(
+                "lineage_predecessor", "lineage predecessor is an fp1 string"
+            )
         parsed_record: str | None
         if record_fp1 is None:
             parsed_record = None
@@ -654,7 +677,9 @@ class StrategyCandidate:
         fields: tuple[str, ...]
         if touched_fields is None:
             fields = ()
-        elif isinstance(touched_fields, Sequence) and not isinstance(touched_fields, (str, bytes)):
+        elif isinstance(touched_fields, Sequence) and not isinstance(
+            touched_fields, (str, bytes)
+        ):
             parsed_fields: list[str] = []
             for item in cast("Sequence[object]", touched_fields):
                 if not isinstance(item, str) or item not in MONEY_PATH_RELEVANT_FIELDS:
@@ -666,7 +691,9 @@ class StrategyCandidate:
                 parsed_fields.append(item)
             fields = tuple(parsed_fields)
         else:
-            return _invalid("touched_fields", "touched_fields is a sequence of field names")
+            return _invalid(
+                "touched_fields", "touched_fields is a sequence of field names"
+            )
         if money_path_relevant and not fields:
             return _invalid(
                 "touched_fields",

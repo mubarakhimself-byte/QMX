@@ -86,7 +86,9 @@ _AFTER_TOOL_DECISIONS: Final[frozenset[HookResultDecision]] = frozenset(
         HookResultDecision.OBSERVE,
     }
 )
-_AFTER_ONLY_OBSERVE: Final[frozenset[HookResultDecision]] = frozenset({HookResultDecision.OBSERVE})
+_AFTER_ONLY_OBSERVE: Final[frozenset[HookResultDecision]] = frozenset(
+    {HookResultDecision.OBSERVE}
+)
 
 
 def build_hook_event_names() -> frozenset[str]:

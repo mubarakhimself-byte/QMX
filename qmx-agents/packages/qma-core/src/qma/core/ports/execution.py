@@ -150,7 +150,9 @@ def resolve_max_in_flight(
     try:
         resolved_kind = _kind_value(kind)
     except VocabularyError as exc:
-        return _max_in_flight_refusal("invalid_kind", given=repr(kind), matched=str(exc))
+        return _max_in_flight_refusal(
+            "invalid_kind", given=repr(kind), matched=str(exc)
+        )
     if declared is None:
         value = ENVIRONMENT_MAX_IN_FLIGHT_DEFAULT
     elif isinstance(declared, bool) or not isinstance(declared, int):
@@ -167,7 +169,10 @@ def resolve_max_in_flight(
         )
     else:
         value = declared
-    if resolved_kind in PINNED_SINGLE_SLOT_KINDS and value != ENVIRONMENT_MAX_IN_FLIGHT_DEFAULT:
+    if (
+        resolved_kind in PINNED_SINGLE_SLOT_KINDS
+        and value != ENVIRONMENT_MAX_IN_FLIGHT_DEFAULT
+    ):
         return _max_in_flight_refusal(
             "max_in_flight_pinned",
             kind=resolved_kind.value,
@@ -182,7 +187,9 @@ def _parse_optional_count(value: object, field: str) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise VocabularyError(f"{value!r} is not a positive count for {field} (CT-46; AD-17)")
+        raise VocabularyError(
+            f"{value!r} is not a positive count for {field} (CT-46; AD-17)"
+        )
     return value
 
 
@@ -233,11 +240,17 @@ def parse_environment_mount(value: object) -> EnvironmentMount:
         mode = str(mapping.get("mode", "ro") or "ro").strip().casefold()
         shared = bool(mapping.get("shared", False))
     else:
-        raise VocabularyError(f"{value!r} is not a member of closed vocabulary EnvironmentMount")
+        raise VocabularyError(
+            f"{value!r} is not a member of closed vocabulary EnvironmentMount"
+        )
     if not source or not target:
-        raise VocabularyError("environment mount requires source and target (CT-46; AD-17)")
+        raise VocabularyError(
+            "environment mount requires source and target (CT-46; AD-17)"
+        )
     if mode not in MOUNT_MODES:
-        raise VocabularyError(f"{mode!r} is not a member of closed vocabulary mount mode")
+        raise VocabularyError(
+            f"{mode!r} is not a member of closed vocabulary mount mode"
+        )
     return EnvironmentMount(source=source, target=target, mode=mode, shared=shared)
 
 
@@ -435,7 +448,9 @@ class ExecutionEnvironmentDeclaration:
         else:
             resolved_kind = parse_closed(ExecutionEnvironmentKind, kind)
         if network is None:
-            raise VocabularyError("network is required; no open default (AD-28; FR-Q47)")
+            raise VocabularyError(
+                "network is required; no open default (AD-28; FR-Q47)"
+            )
         if isinstance(network, NetworkPolicy):
             resolved_network = network
         else:

@@ -13,7 +13,11 @@ from types import MappingProxyType
 from typing import Final, cast
 
 from qma.core.ontology import ActorId
-from qma.core.vocabulary.enums import LeaseKind, QuantLedgerEntryKind, TaskLedgerEntryKind
+from qma.core.vocabulary.enums import (
+    LeaseKind,
+    QuantLedgerEntryKind,
+    TaskLedgerEntryKind,
+)
 from qma.core.vocabulary.registry import VocabularyError, parse_closed
 from qmf.core import Ok, Result
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
@@ -500,7 +504,9 @@ def parse_task_ledger_entry(value: object) -> Result[TaskLedgerEntry]:
             "(*_ref), never shared semantics (CT-51; DEC-0308)",
             given=sorted(overlap),
         )
-    missing = [field for field in sorted(LEDGER_ENTRY_REQUIRED_FIELDS) if field not in entry]
+    missing = [
+        field for field in sorted(LEDGER_ENTRY_REQUIRED_FIELDS) if field not in entry
+    ]
     if missing:
         return _invalid(
             "entry",
@@ -520,10 +526,18 @@ def parse_task_ledger_entry(value: object) -> Result[TaskLedgerEntry]:
             given=repr(entry.get("kind")),
         )
     attempt_no = entry.get("attempt_no")
-    if not isinstance(attempt_no, int) or isinstance(attempt_no, bool) or attempt_no < 0:
+    if (
+        not isinstance(attempt_no, int)
+        or isinstance(attempt_no, bool)
+        or attempt_no < 0
+    ):
         return _invalid("attempt_no", "attempt_no is a non-negative count (CT-51)")
     recorded_at = entry.get("recorded_at")
-    if not isinstance(recorded_at, int) or isinstance(recorded_at, bool) or recorded_at < 0:
+    if (
+        not isinstance(recorded_at, int)
+        or isinstance(recorded_at, bool)
+        or recorded_at < 0
+    ):
         return _invalid(
             "recorded_at",
             "recorded_at is the daemon-stamped UTC instant as int64 nanoseconds (CT-51; AD-6)",
@@ -583,7 +597,9 @@ def parse_task_ledger_entry(value: object) -> Result[TaskLedgerEntry]:
     elif isinstance(previous_holder, str) and previous_holder.strip():
         previous = previous_holder.strip()
     else:
-        return _invalid("previous_holder_agent_id", "previous holder is a non-empty agent id")
+        return _invalid(
+            "previous_holder_agent_id", "previous holder is a non-empty agent id"
+        )
     current_holder: str | None
     if holder is None:
         current_holder = None
@@ -594,9 +610,9 @@ def parse_task_ledger_entry(value: object) -> Result[TaskLedgerEntry]:
 
     hook_registry_id_raw = entry.get("hook_registry_id")
     if hook_registry_id_raw is None and isinstance(entry.get("authored_by"), Mapping):
-        hook_registry_id_raw = cast("Mapping[str, object]", entry.get("authored_by")).get(
-            "hook_registry_id"
-        )
+        hook_registry_id_raw = cast(
+            "Mapping[str, object]", entry.get("authored_by")
+        ).get("hook_registry_id")
     hook_registry_id: str | None
     if hook_registry_id_raw is None:
         hook_registry_id = None
@@ -670,7 +686,11 @@ def parse_quant_ledger_entry(value: object) -> Result[QuantLedgerEntry]:
             "(CT-51; DEC-0338; FR-Q59)",
             given=sorted(overlap),
         )
-    missing = [field for field in sorted(QUANT_LEDGER_ENTRY_REQUIRED_FIELDS) if field not in entry]
+    missing = [
+        field
+        for field in sorted(QUANT_LEDGER_ENTRY_REQUIRED_FIELDS)
+        if field not in entry
+    ]
     if missing:
         return _invalid(
             "entry",
@@ -691,12 +711,18 @@ def parse_quant_ledger_entry(value: object) -> Result[QuantLedgerEntry]:
             given=repr(entry.get("kind")),
         )
     recorded_at = entry.get("recorded_at")
-    if not isinstance(recorded_at, int) or isinstance(recorded_at, bool) or recorded_at < 0:
+    if (
+        not isinstance(recorded_at, int)
+        or isinstance(recorded_at, bool)
+        or recorded_at < 0
+    ):
         return _invalid(
             "recorded_at",
             "recorded_at is the daemon-stamped UTC instant as int64 nanoseconds (AD-6)",
         )
-    author = parse_ledger_author(entry.get("authored_by"), kind=TaskLedgerEntryKind.PROGRESS)
+    author = parse_ledger_author(
+        entry.get("authored_by"), kind=TaskLedgerEntryKind.PROGRESS
+    )
     if not isinstance(author, Ok):
         return author
     if author.value.daemon:

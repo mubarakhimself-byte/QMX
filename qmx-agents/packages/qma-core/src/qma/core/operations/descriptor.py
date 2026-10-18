@@ -77,7 +77,9 @@ BROKER_VENUE_OP_OWNER: Final[str] = "COMP-QMN"
 ERROR_REFUSAL_FAMILY: Final[str] = "CT-04"
 OPERATOR_CLI_ADAPTER: Final[str] = DoorAdapter.QMB_CLI.value
 OPERATOR_CLI_OWNERS: Final[frozenset[str]] = frozenset({"COMP-QMB"})
-FORBIDDEN_OPERATOR_CLI_ADAPTERS: Final[frozenset[str]] = frozenset({"qma-cli", "qmn-cli"})
+FORBIDDEN_OPERATOR_CLI_ADAPTERS: Final[frozenset[str]] = frozenset(
+    {"qma-cli", "qmn-cli"}
+)
 
 OPERATION_DESCRIPTOR_FIELDS: Final[tuple[str, ...]] = (
     "op_id",
@@ -103,7 +105,9 @@ OPERATION_DESCRIPTOR_FIELDS: Final[tuple[str, ...]] = (
     "lifecycle_verbs",
     "supported_doors",
 )
-FORBIDDEN_DESCRIPTOR_FIELDS: Final[frozenset[str]] = frozenset({"cardinality", "mapping"})
+FORBIDDEN_DESCRIPTOR_FIELDS: Final[frozenset[str]] = frozenset(
+    {"cardinality", "mapping"}
+)
 REQUIRED_REFUSAL_CODES: Final[frozenset[str]] = frozenset(
     {
         "INVALID_INPUT",
@@ -142,14 +146,18 @@ def _policy(field: str, reason: str, **extra: object) -> TypedRefusal:
     )
 
 
-def _parse_enum[EnumT: StrEnum](enum_type: type[EnumT], field: str, value: object) -> Result[EnumT]:
+def _parse_enum[EnumT: StrEnum](
+    enum_type: type[EnumT], field: str, value: object
+) -> Result[EnumT]:
     try:
         return Ok(parse_closed(enum_type, value))
     except VocabularyError as exc:
         return _invalid(field, str(exc), given=repr(value))
 
 
-def _require_str(field: str, value: object, *, allow_empty: bool = False) -> Result[str]:
+def _require_str(
+    field: str, value: object, *, allow_empty: bool = False
+) -> Result[str]:
     if not isinstance(value, str):
         return _invalid(field, f"{field} must be a string", given=repr(value))
     if not allow_empty and value.strip() == "":
@@ -165,7 +173,9 @@ def _require_str_tuple(field: str, value: object) -> Result[tuple[str, ...]]:
     items: list[str] = []
     for item in cast("Sequence[object]", value):
         if not isinstance(item, str) or item.strip() == "":
-            return _invalid(field, f"{field} entries must be non-empty strings", given=repr(item))
+            return _invalid(
+                field, f"{field} entries must be non-empty strings", given=repr(item)
+            )
         items.append(item)
     return Ok(tuple(items))
 
@@ -263,7 +273,9 @@ class OperationDescriptor:
     supported_doors: tuple[SupportedDoor, ...]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "compatibility", MappingProxyType(dict(self.compatibility)))
+        object.__setattr__(
+            self, "compatibility", MappingProxyType(dict(self.compatibility))
+        )
 
     @property
     def door_key(self) -> tuple[str, int]:
@@ -281,7 +293,9 @@ class OperationDescriptor:
             "output_cardinality": self.output_cardinality.value,
             "empty_policy": self.empty_policy.value,
             "configuration": dict(self.configuration.to_payload()),
-            "declared_operation_dependencies": list(self.declared_operation_dependencies),
+            "declared_operation_dependencies": list(
+                self.declared_operation_dependencies
+            ),
             "resource_needs": dict(self.resource_needs.to_payload()),
             "documentation_refs": list(self.documentation_refs),
             "validation_class": self.validation_class,
@@ -293,7 +307,9 @@ class OperationDescriptor:
             "error_refusal_shape": dict(self.error_refusal_shape.to_payload()),
             "progress": self.progress,
             "lifecycle_verbs": [verb.value for verb in self.lifecycle_verbs],
-            "supported_doors": [dict(door.to_payload()) for door in self.supported_doors],
+            "supported_doors": [
+                dict(door.to_payload()) for door in self.supported_doors
+            ],
         }
         return MappingProxyType(payload)
 
@@ -358,8 +374,14 @@ def parse_operation_descriptor(payload: object) -> Result[OperationDescriptor]:
             legal=sorted(APPLICATION_LAYER_OP_OWNERS),
         )
     version_raw = body["version"]
-    if not isinstance(version_raw, int) or isinstance(version_raw, bool) or version_raw < 1:
-        return _invalid("version", "version must be a positive integer", given=repr(version_raw))
+    if (
+        not isinstance(version_raw, int)
+        or isinstance(version_raw, bool)
+        or version_raw < 1
+    ):
+        return _invalid(
+            "version", "version must be a positive integer", given=repr(version_raw)
+        )
     input_schema = _require_str("input_schema", body["input_schema"])
     if not isinstance(input_schema, Ok):
         return input_schema
@@ -390,7 +412,9 @@ def parse_operation_descriptor(payload: object) -> Result[OperationDescriptor]:
     resource_needs = _parse_resource_needs(body["resource_needs"])
     if not isinstance(resource_needs, Ok):
         return resource_needs
-    documentation_refs = _require_str_tuple("documentation_refs", body["documentation_refs"])
+    documentation_refs = _require_str_tuple(
+        "documentation_refs", body["documentation_refs"]
+    )
     if not isinstance(documentation_refs, Ok):
         return documentation_refs
     validation_class = _require_str("validation_class", body["validation_class"])
@@ -402,14 +426,18 @@ def parse_operation_descriptor(payload: object) -> Result[OperationDescriptor]:
     elif isinstance(units_raw, str) and units_raw.strip():
         units = units_raw.strip()
     else:
-        return _invalid("units", "units must be a string or null", given=repr(units_raw))
+        return _invalid(
+            "units", "units must be a string or null", given=repr(units_raw)
+        )
     compatibility = _parse_compatibility(body["compatibility"])
     if not isinstance(compatibility, Ok):
         return compatibility
     effect_class = _parse_enum(EffectClass, "effect_class", body["effect_class"])
     if not isinstance(effect_class, Ok):
         return effect_class
-    permission_requests = _require_str_tuple("permission_requests", body["permission_requests"])
+    permission_requests = _require_str_tuple(
+        "permission_requests", body["permission_requests"]
+    )
     if not isinstance(permission_requests, Ok):
         return permission_requests
     placement = _parse_enum(OperationPlacement, "placement", body["placement"])
@@ -420,7 +448,9 @@ def parse_operation_descriptor(payload: object) -> Result[OperationDescriptor]:
         return error_shape
     progress_raw = body["progress"]
     if not isinstance(progress_raw, bool):
-        return _invalid("progress", "progress must be a boolean", given=repr(progress_raw))
+        return _invalid(
+            "progress", "progress must be a boolean", given=repr(progress_raw)
+        )
     lifecycle_verbs = _parse_lifecycle_verbs(body["lifecycle_verbs"])
     if not isinstance(lifecycle_verbs, Ok):
         return lifecycle_verbs
@@ -469,7 +499,9 @@ def _parse_configuration(raw: object) -> Result[OperationConfiguration]:
     body = mapped.value
     extra = set(body) - _CONFIGURATION_KEYS
     if extra:
-        return _invalid("configuration", "unknown configuration keys", extra=sorted(extra))
+        return _invalid(
+            "configuration", "unknown configuration keys", extra=sorted(extra)
+        )
     for key in ("defaults", "required_keys", "optional_keys"):
         if key not in body:
             return _invalid("configuration", f"configuration.{key} is required")
@@ -505,7 +537,9 @@ def _parse_resource_needs(raw: object) -> Result[ResourceNeeds]:
     body = mapped.value
     extra = set(body) - _RESOURCE_NEED_KEYS
     if extra:
-        return _invalid("resource_needs", "unknown resource_needs keys", extra=sorted(extra))
+        return _invalid(
+            "resource_needs", "unknown resource_needs keys", extra=sorted(extra)
+        )
     occupancy = _require_str("resource_needs.occupancy", body.get("occupancy"))
     if not isinstance(occupancy, Ok):
         return occupancy
@@ -554,7 +588,9 @@ def _parse_error_refusal_shape(raw: object) -> Result[ErrorRefusalShape]:
     extra = set(body) - _ERROR_SHAPE_KEYS
     if extra:
         return _invalid(
-            "error_refusal_shape", "unknown error_refusal_shape keys", extra=sorted(extra)
+            "error_refusal_shape",
+            "unknown error_refusal_shape keys",
+            extra=sorted(extra),
         )
     family = _require_str("error_refusal_shape.family", body.get("family"))
     if not isinstance(family, Ok):
@@ -600,7 +636,9 @@ def _parse_supported_doors(
     raw: object, *, owner: str, op_id: str
 ) -> Result[tuple[SupportedDoor, ...]]:
     if isinstance(raw, str) or not isinstance(raw, Sequence):
-        return _invalid("supported_doors", "supported_doors must be a sequence of {adapter, door}")
+        return _invalid(
+            "supported_doors", "supported_doors must be a sequence of {adapter, door}"
+        )
     doors: list[SupportedDoor] = []
     seen: set[tuple[str, str]] = set()
     for item in cast("Sequence[object]", raw):
@@ -610,9 +648,15 @@ def _parse_supported_doors(
                 "each supported door must be {adapter, door}",
                 given=repr(item),
             )
-        body = {str(key): value for key, value in cast("Mapping[object, object]", item).items()}
+        body = {
+            str(key): value
+            for key, value in cast("Mapping[object, object]", item).items()
+        }
         adapter_raw = body.get("adapter")
-        if isinstance(adapter_raw, str) and adapter_raw in FORBIDDEN_OPERATOR_CLI_ADAPTERS:
+        if (
+            isinstance(adapter_raw, str)
+            and adapter_raw in FORBIDDEN_OPERATOR_CLI_ADAPTERS
+        ):
             return _policy(
                 "supported_doors",
                 "QMB remains the only operator CLI; QMA and QMN ship no operator CLI "
@@ -639,7 +683,10 @@ def _parse_supported_doors(
         key = (adapter.value.value, door.value)
         if key in seen:
             return _invalid(
-                "supported_doors", "duplicate supported door", door=key[1], adapter=key[0]
+                "supported_doors",
+                "duplicate supported door",
+                door=key[1],
+                adapter=key[0],
             )
         seen.add(key)
         doors.append(SupportedDoor(adapter=adapter.value, door=door.value))

@@ -16,7 +16,10 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
-from qma.core.refusals.variants import NestedGrantUnionRefused, NestedPermissionUnionRefused
+from qma.core.refusals.variants import (
+    NestedGrantUnionRefused,
+    NestedPermissionUnionRefused,
+)
 from qma.core.vocabulary.enums import HookControl, HookResultDecision
 from qma.core.vocabulary.hooks import (
     HOOK_RESULT_PRECEDENCE,
@@ -274,9 +277,13 @@ def deny_binds_under_mode(
     softens ``deny`` or ``block_stop``.
     """
     resolved = (
-        decision if isinstance(decision, HookResultDecision) else HookResultDecision(decision)
+        decision
+        if isinstance(decision, HookResultDecision)
+        else HookResultDecision(decision)
     )
-    _ = mode if isinstance(mode, PermissionMode) else PermissionMode(mode)  # validate mode
+    _ = (
+        mode if isinstance(mode, PermissionMode) else PermissionMode(mode)
+    )  # validate mode
     return resolved in {HookResultDecision.DENY, HookResultDecision.BLOCK_STOP}
 
 

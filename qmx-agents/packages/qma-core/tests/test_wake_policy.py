@@ -55,11 +55,17 @@ def test_wake_policy_is_operator_authored_ui_editable_quant_scoped() -> None:
     assert payload["editability"] == "ui-editable"
     assert payload["home"] == WAKE_POLICY_HOME
     assert payload["quiet_hours_registry_key"] == QUIET_HOURS_REGISTRY_KEY
-    assert payload["max_wakes_per_window_registry_key"] == MAX_WAKES_PER_WINDOW_REGISTRY_KEY
+    assert (
+        payload["max_wakes_per_window_registry_key"]
+        == MAX_WAKES_PER_WINDOW_REGISTRY_KEY
+    )
     assert QUIET_HOURS_REGISTRY_KEY == "registry:quant.quiet_hours"
     assert MAX_WAKES_PER_WINDOW_REGISTRY_KEY == "registry:quant.max_wakes_per_window"
     assert mailbox_port.QUIET_HOURS_REGISTRY_KEY == QUIET_HOURS_REGISTRY_KEY
-    assert mailbox_port.MAX_WAKES_PER_WINDOW_REGISTRY_KEY == MAX_WAKES_PER_WINDOW_REGISTRY_KEY
+    assert (
+        mailbox_port.MAX_WAKES_PER_WINDOW_REGISTRY_KEY
+        == MAX_WAKES_PER_WINDOW_REGISTRY_KEY
+    )
     assert QUANT_WRITE_COMMAND == "quant.write"
 
 
@@ -81,7 +87,9 @@ def test_no_model_authors_alters_or_overrides_wake_policy() -> None:
 
 
 def test_quiet_hours_are_daily_interval_plus_iana_zone() -> None:
-    parsed = parse_quiet_hours({"start": "22:00", "end": "06:00", "iana_zone": "America/New_York"})
+    parsed = parse_quiet_hours(
+        {"start": "22:00", "end": "06:00", "iana_zone": "America/New_York"}
+    )
     assert is_ok(parsed)
     quiet = parsed.value
     assert isinstance(quiet, QuietHours)
@@ -96,7 +104,9 @@ def test_quiet_hours_are_daily_interval_plus_iana_zone() -> None:
     assert daytime.value.wraps_midnight is False
     assert daytime.value.contains_minute(10 * 60) is True
     assert daytime.value.contains_minute(17 * 60) is False
-    missing_zone = parse_quiet_hours({"start": "22:00", "end": "06:00", "iana_zone": ""})
+    missing_zone = parse_quiet_hours(
+        {"start": "22:00", "end": "06:00", "iana_zone": ""}
+    )
     assert is_refusal(missing_zone)
 
 

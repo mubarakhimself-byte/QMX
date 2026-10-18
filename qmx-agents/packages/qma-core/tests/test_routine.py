@@ -95,14 +95,22 @@ def test_routine_carries_exactly_seven_fields() -> None:
 
 
 def test_schedule_is_cron_or_interval_with_iana_zone() -> None:
-    cron = parse_routine_schedule({"kind": "cron", "expression": "30 6 * * *", "iana_zone": "UTC"})
+    cron = parse_routine_schedule(
+        {"kind": "cron", "expression": "30 6 * * *", "iana_zone": "UTC"}
+    )
     assert is_ok(cron)
     interval = parse_routine_schedule(
-        {"kind": "interval", "every_ns": 3_600_000_000_000, "iana_zone": "Europe/London"}
+        {
+            "kind": "interval",
+            "every_ns": 3_600_000_000_000,
+            "iana_zone": "Europe/London",
+        }
     )
     assert is_ok(interval)
     assert interval.value.every_ns == 3_600_000_000_000
-    no_zone = parse_routine_schedule({"kind": "cron", "expression": "0 9 * * *", "iana_zone": ""})
+    no_zone = parse_routine_schedule(
+        {"kind": "cron", "expression": "0 9 * * *", "iana_zone": ""}
+    )
     assert is_refusal(no_zone)
     invented = parse_routine_schedule({"kind": "once", "iana_zone": "UTC"})
     assert is_refusal(invented)

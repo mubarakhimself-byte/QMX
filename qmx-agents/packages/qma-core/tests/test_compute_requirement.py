@@ -123,7 +123,9 @@ def test_match_against_declared_capabilities() -> None:
 
 def test_named_kind_is_not_broadened() -> None:
     docker = _docker()
-    desktop_req = _requirement(kind="desktop", isolation="shared", capabilities=("display",))
+    desktop_req = _requirement(
+        kind="desktop", isolation="shared", capabilities=("display",)
+    )
     refused = match_compute_requirement(desktop_req, docker)
     assert is_refusal(refused)
     assert NoEnvironment.matches(refused)
@@ -134,7 +136,9 @@ def test_isolation_and_resource_ceilings() -> None:
     docker = _docker(cpu=1, memory=256)
     isolation = environment_isolation(docker)
     assert isolation is IsolationMode.REQUIRED
-    short = match_compute_requirement(_requirement(cpu=4, max_memory=512, memory=512), docker)
+    short = match_compute_requirement(
+        _requirement(cpu=4, max_memory=512, memory=512), docker
+    )
     assert is_refusal(short)
     short_fields = short.context["unmet"]
     assert isinstance(short_fields, tuple)

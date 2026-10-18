@@ -171,7 +171,9 @@ _DENIED_HOST_ROWS: Final[tuple[tuple[str, DeniedHostClass], ...]] = (
     ("platform-registry", DeniedHostClass.PLATFORM_REGISTRY),
 )
 
-DENIED_HOST_PATTERNS: Final[frozenset[str]] = frozenset(pattern for pattern, _ in _DENIED_HOST_ROWS)
+DENIED_HOST_PATTERNS: Final[frozenset[str]] = frozenset(
+    pattern for pattern, _ in _DENIED_HOST_ROWS
+)
 
 # Image / import / package tokens that fail image validation (AD-28; DEC-0347).
 FORBIDDEN_IMAGE_TOKENS: Final[frozenset[str]] = frozenset(
@@ -522,13 +524,19 @@ def validate_host_identity(
 ) -> Result[tuple[str, ...]]:
     """Refuse ``remote_host`` / ``desktop`` that name a trading-node identity."""
     resolved_kind = (
-        kind if isinstance(kind, ExecutionEnvironmentKind) else ExecutionEnvironmentKind(kind)
+        kind
+        if isinstance(kind, ExecutionEnvironmentKind)
+        else ExecutionEnvironmentKind(kind)
     )
     kind_token = resolved_kind.value
     hit = _first_denied(hosts)
     if hit is not None:
         host, cls = hit
-        reason = "trading_node_host" if cls is DeniedHostClass.TRADING_NODE else "denied_host"
+        reason = (
+            "trading_node_host"
+            if cls is DeniedHostClass.TRADING_NODE
+            else "denied_host"
+        )
         return refuse_reachability(
             surface="host",
             reason=reason,
@@ -566,7 +574,9 @@ def _profile_carries_authenticated_state(profile: ComputerUseProfile) -> str | N
         if any(token in lowered for token in _VENUE_PROFILE_TOKENS):
             return host
     for ref in profile.saved_credential_refs:
-        if any(ref.startswith(prefix) for prefix in OUT_OF_SCOPE_CREDENTIAL_REF_PREFIXES):
+        if any(
+            ref.startswith(prefix) for prefix in OUT_OF_SCOPE_CREDENTIAL_REF_PREFIXES
+        ):
             return ref
         lowered = ref.casefold()
         if any(token in lowered for token in _VENUE_PROFILE_TOKENS):

@@ -123,7 +123,9 @@ class PluginRosterEntry:
 def require_desk_prefix_plugin_id(plugin_id: str, desk: str) -> str:
     """Require ``plugin_id`` to use the desk prefix token (``{desk}-*``)."""
     if desk not in DESK_PREFIX_TOKENS:
-        raise ManifestError(f"desk must be one of {sorted(DESK_PREFIX_TOKENS)}; got {desk!r}")
+        raise ManifestError(
+            f"desk must be one of {sorted(DESK_PREFIX_TOKENS)}; got {desk!r}"
+        )
     expected = f"{desk}-"
     if not plugin_id.startswith(expected) or plugin_id == expected:
         raise ManifestError(
@@ -143,7 +145,9 @@ def _refuse_null_collections(raw: Mapping[str, object]) -> None:
             )
 
 
-def _refuse_operator_assigned_fields(raw: Mapping[str, object], *, plugin_id: str) -> None:
+def _refuse_operator_assigned_fields(
+    raw: Mapping[str, object], *, plugin_id: str
+) -> None:
     for forbidden in OPERATOR_ASSIGNED_MANIFEST_FIELDS:
         if forbidden in raw:
             raise ManifestError(
@@ -151,7 +155,9 @@ def _refuse_operator_assigned_fields(raw: Mapping[str, object], *, plugin_id: st
             )
 
 
-def _parse_contribution(raw: Mapping[str, object], *, plugin_id: str) -> ContributionDecl:
+def _parse_contribution(
+    raw: Mapping[str, object], *, plugin_id: str
+) -> ContributionDecl:
     point = raw.get("point")
     if not isinstance(point, str):
         raise ManifestError(f"contribution point must be a string; got {point!r}")
@@ -166,7 +172,13 @@ def _parse_contribution(raw: Mapping[str, object], *, plugin_id: str) -> Contrib
         raise ManifestError(
             f"manifest for {plugin_id!r} declares operator-assigned field 'model_family'"
         )
-    for binding_key in ("desk", "role", "desk_and_role", "binding", "tool_adapter_binding"):
+    for binding_key in (
+        "desk",
+        "role",
+        "desk_and_role",
+        "binding",
+        "tool_adapter_binding",
+    ):
         if binding_key in raw and point in {"tool_adapter", "ToolAdapter"}:
             raise ManifestError(
                 f"manifest for {plugin_id!r} declares operator-assigned field "
@@ -232,12 +244,16 @@ def parse_plugin_manifest(raw: Mapping[str, object]) -> PluginManifest:
     if not isinstance(desk, str) or not desk:
         raise ManifestError("desk is required as a non-empty string")
     if desk not in DESK_PREFIX_TOKENS:
-        raise ManifestError(f"desk must be one of {sorted(DESK_PREFIX_TOKENS)}; got {desk!r}")
+        raise ManifestError(
+            f"desk must be one of {sorted(DESK_PREFIX_TOKENS)}; got {desk!r}"
+        )
     require_desk_prefix_plugin_id(plugin_id, desk)
     if entrypoint is None:
         raise ManifestError("entrypoint is required")
     if not isinstance(entrypoint, str) or not entrypoint:
-        raise ManifestError(f"entrypoint must be a non-empty string; got {entrypoint!r}")
+        raise ManifestError(
+            f"entrypoint must be a non-empty string; got {entrypoint!r}"
+        )
 
     _refuse_operator_assigned_fields(raw, plugin_id=plugin_id)
 
@@ -248,7 +264,9 @@ def parse_plugin_manifest(raw: Mapping[str, object]) -> PluginManifest:
         raise ManifestError("dependencies must be a sequence")
     if not isinstance(contribs_raw, Sequence) or isinstance(contribs_raw, (str, bytes)):
         raise ManifestError("contributions must be a sequence")
-    if not isinstance(migrations_raw, Sequence) or isinstance(migrations_raw, (str, bytes)):
+    if not isinstance(migrations_raw, Sequence) or isinstance(
+        migrations_raw, (str, bytes)
+    ):
         raise ManifestError("migrations must be a sequence")
 
     try:
@@ -292,7 +310,9 @@ def parse_plugin_manifest(raw: Mapping[str, object]) -> PluginManifest:
     elif rollback_raw == "forward_only":
         rollback = "forward_only"
     else:
-        raise ManifestError(f"rollback must be 'forward_only' or omitted; got {rollback_raw!r}")
+        raise ManifestError(
+            f"rollback must be 'forward_only' or omitted; got {rollback_raw!r}"
+        )
 
     validate_migration_rollback_contract(tuple(migrations), rollback)
 
@@ -359,7 +379,9 @@ def validate_migration_rollback_contract(
     if rollback == "forward_only":
         return
     if rollback is not None:
-        raise ManifestError(f"rollback must be 'forward_only' or omitted; got {rollback!r}")
+        raise ManifestError(
+            f"rollback must be 'forward_only' or omitted; got {rollback!r}"
+        )
     for index, migration in enumerate(migrations):
         if "down" not in migration:
             raise ManifestError(

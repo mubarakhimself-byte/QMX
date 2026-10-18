@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from qma.core.barriers.reachability import parse_declaration, validate_declaration_surface
+from qma.core.barriers.reachability import (
+    parse_declaration,
+    validate_declaration_surface,
+)
 from qma.core.ports.execution import (
     DECLARATION_SURFACE_FIELDS,
     EnvironmentMount,
@@ -27,7 +30,14 @@ def test_declaration_carries_complete_ct46_surface() -> None:
         reachable_hosts=(),
         provider_ref="local-docker",
         image="qma-worker:isolated",
-        mounts=({"source": "/opt/qma/readonly", "target": "/data", "mode": "ro", "shared": True},),
+        mounts=(
+            {
+                "source": "/opt/qma/readonly",
+                "target": "/data",
+                "mode": "ro",
+                "shared": True,
+            },
+        ),
         environment_allowlist=("HTTP_PROXY", "NO_PROXY"),
         capabilities=("cpu", "memory"),
         lifecycle="ephemeral",
@@ -126,7 +136,12 @@ def test_shared_writable_mount_is_dirty_filesystem() -> None:
         provider_ref="local-docker",
         image="qma-worker:isolated",
         mounts=(
-            {"source": "/var/lib/qma/shared", "target": "/work", "mode": "rw", "shared": True},
+            {
+                "source": "/var/lib/qma/shared",
+                "target": "/work",
+                "mode": "rw",
+                "shared": True,
+            },
         ),
     )
     assert is_refusal(dirty)

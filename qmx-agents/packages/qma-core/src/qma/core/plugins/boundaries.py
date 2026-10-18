@@ -89,7 +89,9 @@ def scan_daemon_imports(root: Path) -> tuple[str, ...]:
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name == "qma.daemon" or alias.name.startswith("qma.daemon."):
+                    if alias.name == "qma.daemon" or alias.name.startswith(
+                        "qma.daemon."
+                    ):
                         hits.append(str(path))
                         break
             elif isinstance(node, ast.ImportFrom):
@@ -128,12 +130,18 @@ def scan_forbidden_runtime_calls(root: Path) -> tuple[str, ...]:
                 for alias in node.names:
                     top = alias.name.split(".", 1)[0]
                     full = alias.name
-                    if full in FORBIDDEN_IMPORT_MODULES or top in FORBIDDEN_IMPORT_MODULES:
+                    if (
+                        full in FORBIDDEN_IMPORT_MODULES
+                        or top in FORBIDDEN_IMPORT_MODULES
+                    ):
                         hits.append(f"{path}:{node.lineno}:import {alias.name}")
             elif isinstance(node, ast.ImportFrom):
                 module = node.module or ""
                 top = module.split(".", 1)[0] if module else ""
-                if module in FORBIDDEN_IMPORT_MODULES or top in FORBIDDEN_IMPORT_MODULES:
+                if (
+                    module in FORBIDDEN_IMPORT_MODULES
+                    or top in FORBIDDEN_IMPORT_MODULES
+                ):
                     hits.append(f"{path}:{node.lineno}:from {module}")
             elif isinstance(node, ast.Call):
                 func = node.func

@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from qma.core.vocabulary import CLOSED_VOCABULARIES, CallerKind, VocabularyError, parse_closed
+from qma.core.vocabulary import (
+    CLOSED_VOCABULARIES,
+    CallerKind,
+    VocabularyError,
+    parse_closed,
+)
 
 
 def test_caller_kind_is_closed_user_agent_workflow() -> None:

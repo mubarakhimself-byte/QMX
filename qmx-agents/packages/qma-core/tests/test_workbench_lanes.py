@@ -35,8 +35,12 @@ def _request(**fields: object):
 
 def test_coordinated_labels_are_two_objects() -> None:
     labels = coordinated_run_labels()
-    assert labels["qmb_ledger_workbench_lane"] == QMB_LEDGER_WORKBENCH_LANE == "governed"
-    assert labels["experiment_ledger_workbench_lane"] == EXPERIMENT_LEDGER_WORKBENCH_LANE
+    assert (
+        labels["qmb_ledger_workbench_lane"] == QMB_LEDGER_WORKBENCH_LANE == "governed"
+    )
+    assert (
+        labels["experiment_ledger_workbench_lane"] == EXPERIMENT_LEDGER_WORKBENCH_LANE
+    )
     assert labels["experiment_ledger_workbench_lane"] == "coordinated"
     assert labels["door"] == "coordinated"
     assert "workbench_lane" not in labels
@@ -65,7 +69,10 @@ def test_experiment_ledger_body_stamps_coordinated_and_refuses_collapse() -> Non
     assert is_ok(admitted)
     assert admitted.value["workbench_lane"] == "coordinated"
     collapsed = admit_experiment_evidence_body(
-        {"ct32_ref": "fp1:sha256:" + ("c" * 64), "qmb_ledger_workbench_lane": "governed"}
+        {
+            "ct32_ref": "fp1:sha256:" + ("c" * 64),
+            "qmb_ledger_workbench_lane": "governed",
+        }
     )
     assert is_refusal(collapsed)
     wrong = admit_experiment_evidence_body({"workbench_lane": "governed"})

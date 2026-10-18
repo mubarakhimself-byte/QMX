@@ -46,7 +46,9 @@ def test_roster_is_five_desk_prefix_packs() -> None:
 
 def test_pack_manifests_parse_through_plugin_manifest() -> None:
     for plugin_id in DESK_PLUGIN_PACK_IDS:
-        raw = json.loads((PLUGINS_ROOT / plugin_id / "manifest.json").read_text(encoding="utf-8"))
+        raw = json.loads(
+            (PLUGINS_ROOT / plugin_id / "manifest.json").read_text(encoding="utf-8")
+        )
         manifest = parse_plugin_manifest(raw)
         assert manifest.id == plugin_id
         assert manifest.desk == DESK_PLUGIN_PACK_DESKS[plugin_id]
@@ -70,7 +72,9 @@ def test_pack_manifests_parse_through_plugin_manifest() -> None:
 
 def test_analysis_backtest_declares_qmb_tool_and_owns_none_of_qmb() -> None:
     raw = json.loads(
-        (PLUGINS_ROOT / "analysis-backtest" / "manifest.json").read_text(encoding="utf-8")
+        (PLUGINS_ROOT / "analysis-backtest" / "manifest.json").read_text(
+            encoding="utf-8"
+        )
     )
     manifest = parse_plugin_manifest(raw)
     points = {(decl.point, decl.local_id) for decl in manifest.contributions}
@@ -89,9 +93,19 @@ def test_dec0345_verbs_and_no_daemon_import_from_packs() -> None:
 
 
 def test_contribution_reach_scan_hits_qmf_venue_image_only() -> None:
-    assert forbidden_reach_token_in_contribution({"image": "qmf-venue:latest"}) is not None
-    assert forbidden_reach_token_in_contribution({"name": "search", "acts": ("search",)}) is None
-    assert forbidden_reach_token_in_contribution({"summary": "never mention a broker here"}) is None
+    assert (
+        forbidden_reach_token_in_contribution({"image": "qmf-venue:latest"}) is not None
+    )
+    assert (
+        forbidden_reach_token_in_contribution({"name": "search", "acts": ("search",)})
+        is None
+    )
+    assert (
+        forbidden_reach_token_in_contribution(
+            {"summary": "never mention a broker here"}
+        )
+        is None
+    )
 
 
 def test_graph_template_payload_is_stateless() -> None:

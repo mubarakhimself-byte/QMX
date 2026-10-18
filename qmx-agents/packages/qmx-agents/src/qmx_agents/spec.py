@@ -281,7 +281,11 @@ async def _build(
                 raise ValueError(
                     "qmx-broker requires the node's qmx_home or an injected BrokerService"
                 )
-            broker = ctx.broker or BrokerService(cast(Path, ctx.qmx_home))
+            broker = ctx.broker
+            if broker is None:
+                home = cast(Path, ctx.qmx_home)
+                control = ctx.control or ControlService(home)
+                broker = BrokerService(home, brokers=lambda: control.settings_get("brokers"))
             ctx.broker = broker
             async with MCPAdapter(create_broker_server(broker)) as adapter:
                 broker_tools = await adapter.list_tools()

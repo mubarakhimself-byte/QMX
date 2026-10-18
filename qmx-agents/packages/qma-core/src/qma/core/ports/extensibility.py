@@ -333,7 +333,9 @@ def admit_extension_rung(value: ExtensionRung | int | str) -> Result[ExtensionRu
     return Ok(spec)
 
 
-def refuse_ui_contribution(point: str = UI_VIEW_CONTRIBUTION_POINT) -> UiContributionDeferred:
+def refuse_ui_contribution(
+    point: str = UI_VIEW_CONTRIBUTION_POINT,
+) -> UiContributionDeferred:
     """Refuse a UI widget / SDK contribution as GAP-0081 deferred."""
     return UiContributionDeferred.of(contribution_point=point)
 
@@ -387,7 +389,9 @@ def is_no_code_authoring_request(request: object) -> bool:
 def refuse_qmb_plugin_label(module: object) -> Result[str]:
     """Refuse calling a QMB module a plugin. QMA plugin vocabulary stays QMA-scoped."""
     if not isinstance(module, str) or not module:
-        return _invalid("module", "QMB module path must be a non-empty string", given=repr(module))
+        return _invalid(
+            "module", "QMB module path must be a non-empty string", given=repr(module)
+        )
     if module == "qmb" or module.startswith("qmb."):
         return ExtensionSurfaceRefused.of(
             reason="qmb_plugin_vocabulary",

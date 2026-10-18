@@ -10,7 +10,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from qmf.core.fingerprint import Fingerprint, fingerprint
-from qmf.core.refusal import RefusalCategory, Result, Retryability, TypedRefusal, is_refusal
+from qmf.core.refusal import (
+    RefusalCategory,
+    Result,
+    Retryability,
+    TypedRefusal,
+    is_refusal,
+)
 
 __all__ = [
     "content_address",
@@ -23,7 +29,9 @@ def content_address(value: object) -> Result[Fingerprint]:
     return fingerprint(value)
 
 
-def tree_digest(file_fingerprints: Mapping[str, str | Fingerprint]) -> Result[Fingerprint]:
+def tree_digest(
+    file_fingerprints: Mapping[str, str | Fingerprint],
+) -> Result[Fingerprint]:
     """Tree digest: ``fp1`` over a canonical manifest of per-file ``fp1`` values.
 
     ``file_fingerprints`` maps relative path → ``fp1:sha256:<hex>`` (string or

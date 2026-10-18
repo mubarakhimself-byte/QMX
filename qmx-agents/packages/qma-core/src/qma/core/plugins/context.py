@@ -79,7 +79,9 @@ class PluginContext(Protocol):
         """Bind MemoryProvider for ``desk`` (singleton scope key ``desk``)."""
         ...
 
-    def register_knowledge_source(self, source_id: str, source: KnowledgeSource) -> Disposer:
+    def register_knowledge_source(
+        self, source_id: str, source: KnowledgeSource
+    ) -> Disposer:
         """Bind KnowledgeSource for ``source_id``."""
         ...
 
@@ -89,7 +91,9 @@ class PluginContext(Protocol):
         """Bind ExecutionEnvironment for ``kind``."""
         ...
 
-    def register_compute_provider(self, kind: str, provider: ComputeProvider) -> Disposer:
+    def register_compute_provider(
+        self, kind: str, provider: ComputeProvider
+    ) -> Disposer:
         """Bind ComputeProvider for ``kind``."""
         ...
 
@@ -114,18 +118,26 @@ class PluginContext(Protocol):
         """Register multi ``skill`` as ``<plugin_id>:<local_id>``."""
         ...
 
-    def register_graph_template(self, local_id: str, template: Mapping[str, object]) -> Disposer:
+    def register_graph_template(
+        self, local_id: str, template: Mapping[str, object]
+    ) -> Disposer:
         """Register multi ``graph_template`` as ``<plugin_id>:<local_id>``."""
         ...
 
-    def register_model_deployment(self, local_id: str, deployment: ModelDeployment) -> Disposer:
+    def register_model_deployment(
+        self, local_id: str, deployment: ModelDeployment
+    ) -> Disposer:
         """Register multi ``model_deployment`` as ``<plugin_id>:<local_id>``."""
         ...
 
-    def register_toolset(self, local_id: str, toolset: Mapping[str, object]) -> Disposer:
+    def register_toolset(
+        self, local_id: str, toolset: Mapping[str, object]
+    ) -> Disposer:
         """Register multi ``toolset`` as ``<plugin_id>:<local_id>``."""
         ...
 
-    def register_worker_template(self, local_id: str, template: Mapping[str, object]) -> Disposer:
+    def register_worker_template(
+        self, local_id: str, template: Mapping[str, object]
+    ) -> Disposer:
         """Register multi ``worker_template`` as ``<plugin_id>:<local_id>``."""
         ...

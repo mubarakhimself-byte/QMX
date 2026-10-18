@@ -88,9 +88,9 @@ def test_bot_supersedes_and_new_edge_kinds_are_refused() -> None:
     assert is_refusal(minted)
     assert minted.context["mints_ct07_edge"] is False
     assert "experiment-predecessor" not in CT07_V1_EDGE_TYPES
-    assert refuse_procedure_new_ct07_edge(given="procedure-from").context["allowed"] == (
-        "branches-from"
-    )
+    assert refuse_procedure_new_ct07_edge(given="procedure-from").context[
+        "allowed"
+    ] == ("branches-from")
     code = admit_procedure_successor_change(EXPERIMENT_CHANGE_CODE)
     assert is_refusal(code)
     assert code.context["change"] == EXPERIMENT_CHANGE_RESOLVED_CONFIG

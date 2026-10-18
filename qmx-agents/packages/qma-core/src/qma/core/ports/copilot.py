@@ -76,7 +76,9 @@ APP_USE_MAY_APPLY: Final[bool] = False
 SKILLS_GRANT: Final[bool] = False
 CONTRIBUTION_HIT_IS_GRANT: Final[bool] = False
 HOOKS_OVERRIDE_PRIVILEGE_GATE: Final[bool] = False
-CONTEXT_TRANSFER_KINDS: Final[frozenset[str]] = frozenset({"selected_refs", "change_request"})
+CONTEXT_TRANSFER_KINDS: Final[frozenset[str]] = frozenset(
+    {"selected_refs", "change_request"}
+)
 
 
 def _policy(field: str, reason: str, **extra: object) -> TypedRefusal:

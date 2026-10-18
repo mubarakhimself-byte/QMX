@@ -73,4 +73,6 @@ def assert_ladder_is_code_declared() -> None:
             "capability ladder must equal CapabilityRung members in declaration order"
         )
     if set(CAPABILITY_LADDER) != set(CapabilityRung):
-        raise CapabilityError("capability ladder must cover every CapabilityRung member")
+        raise CapabilityError(
+            "capability ladder must cover every CapabilityRung member"
+        )

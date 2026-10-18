@@ -222,7 +222,9 @@ def parse_git_commit_ref(value: object) -> Result[str]:
     )
 
 
-def _refuse_gap_0085(mechanisms: object, extra: Mapping[str, object] | None) -> TypedRefusal | None:
+def _refuse_gap_0085(
+    mechanisms: object, extra: Mapping[str, object] | None
+) -> TypedRefusal | None:
     if mechanisms is not None:
         return _policy(
             "mechanisms",
@@ -233,7 +235,11 @@ def _refuse_gap_0085(mechanisms: object, extra: Mapping[str, object] | None) -> 
         )
     if extra is None:
         return None
-    hits = [key for key in extra if _normalize_mechanism_token(key) in GAP_0085_STRATEGY_MECHANISMS]
+    hits = [
+        key
+        for key in extra
+        if _normalize_mechanism_token(key) in GAP_0085_STRATEGY_MECHANISMS
+    ]
     if hits:
         return _policy(
             "mechanisms",
@@ -315,7 +321,9 @@ def _parse_cost_assumptions(value: object) -> Result[Mapping[str, int]]:
     parsed: dict[str, int] = {}
     for key, item in body.items():
         if not isinstance(key, str) or key.strip() == "":
-            return _invalid("cost_assumptions", "cost assumption keys are non-empty strings")
+            return _invalid(
+                "cost_assumptions", "cost assumption keys are non-empty strings"
+            )
         if isinstance(item, bool) or not isinstance(item, int):
             return _invalid(
                 "cost_assumptions",
@@ -523,7 +531,9 @@ class ExperimentSpec:
                 )
             next_code = code_ref
             next_config = (
-                self.resolved_config_ref if resolved_config_ref is None else resolved_config_ref
+                self.resolved_config_ref
+                if resolved_config_ref is None
+                else resolved_config_ref
             )
         else:
             if code_ref is not None:
@@ -544,7 +554,9 @@ class ExperimentSpec:
             next_config = resolved_config_ref
         created = self.try_create(
             data_ref=self.data_ref if data_ref is None else data_ref,
-            environment_ref=self.environment_ref if environment_ref is None else environment_ref,
+            environment_ref=self.environment_ref
+            if environment_ref is None
+            else environment_ref,
             seed=self.seed if seed is None else seed,
             model_and_harness_version=(
                 dict(self.model_and_harness_version)
@@ -552,7 +564,9 @@ class ExperimentSpec:
                 else model_and_harness_version
             ),
             cost_assumptions=(
-                dict(self.cost_assumptions) if cost_assumptions is None else cost_assumptions
+                dict(self.cost_assumptions)
+                if cost_assumptions is None
+                else cost_assumptions
             ),
             resolved_config_ref=next_config,
             code_ref=next_code,

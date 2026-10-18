@@ -349,7 +349,9 @@ def name_paper_noun(
     return Ok(PAPER_NOUN_RESEARCH)
 
 
-def refuse_qma_hub_write(*, act: object = "hub_write", given: object = None) -> TypedRefusal:
+def refuse_qma_hub_write(
+    *, act: object = "hub_write", given: object = None
+) -> TypedRefusal:
     """QMA never writes the B-15 hub; it holds candidate refs only."""
     return _policy(
         "hub",
@@ -407,11 +409,14 @@ class HubCandidateRef:
         )
 
 
-def admit_hub_candidate_ref(ref: object, *, act: object = None) -> Result[HubCandidateRef]:
+def admit_hub_candidate_ref(
+    ref: object, *, act: object = None
+) -> Result[HubCandidateRef]:
     """Admit a candidate ``_ref``. Hub writes and hub_publish stay refused."""
     token = _normalize(act).replace("_", ".") if act is not None else ""
     if act is not None and (
-        token in {item.replace("_", ".") for item in _HUB_WRITE_ACTS} or is_qma_paper_token(act)
+        token in {item.replace("_", ".") for item in _HUB_WRITE_ACTS}
+        or is_qma_paper_token(act)
     ):
         return refuse_qma_hub_write(act=act, given=ref)
     if not isinstance(ref, str) or ref.strip() == "":
@@ -511,7 +516,9 @@ def admit_exploratory_notebook(
     elif isinstance(imports, Sequence) and not isinstance(imports, (bytes, bytearray)):
         items = tuple(str(item) for item in cast("Sequence[object]", imports))
     else:
-        return _invalid("imports", "notebook imports are qmb and/or qml", given=repr(imports))
+        return _invalid(
+            "imports", "notebook imports are qmb and/or qml", given=repr(imports)
+        )
     admitted: list[str] = []
     for item in items:
         token = item.strip().casefold()
@@ -574,7 +581,13 @@ def admit_managed_interpreter(
     if jupyter_product is not None or _normalize(kind) in _JUPYTER_PRODUCTS:
         return refuse_jupyter_product(given=jupyter_given)
     owner_token = _normalize(owner)
-    if owner_token not in {"qma", "qma-daemon", "qma_core", "comp-qma-core", "comp-qma-daemon"}:
+    if owner_token not in {
+        "qma",
+        "qma-daemon",
+        "qma_core",
+        "comp-qma-core",
+        "comp-qma-daemon",
+    }:
         return _policy(
             "owner",
             "a managed interpreter lifecycle is a QMA ExecutionEnvironment (FR-W15; DEC-0279)",

@@ -90,9 +90,13 @@ def test_agent_authored_and_ledger_back_refs_refused() -> None:
 
 
 def test_retention_exempt_kinds_and_deferred_gaps() -> None:
-    assert frozenset({"trajectory", "session_replay"}) == TELEMETRY_RETENTION_EXEMPT_KINDS
+    assert (
+        frozenset({"trajectory", "session_replay"}) == TELEMETRY_RETENTION_EXEMPT_KINDS
+    )
     assert "trace" in TELEMETRY_KINDS
-    assert all(key.startswith("registry:telemetry.") for key in TELEMETRY_RETENTION_KEYS)
+    assert all(
+        key.startswith("registry:telemetry.") for key in TELEMETRY_RETENTION_KEYS
+    )
     assert "ledger_ref" in TELEMETRY_FORBIDDEN_LEDGER_KEYS
 
     traj = parse_telemetry_record(
@@ -113,7 +117,9 @@ def test_retention_exempt_kinds_and_deferred_gaps() -> None:
     model_hook = refuse_model_authored_hook_telemetry(given="model")
     assert model_hook.context["author"] == HARNESS_AUTHOR
     assert model_hook.context["model_authored_hook_emits"] is False
-    assert refuse_ledger_back_reference(key="ledger_ref").context["field"] == "ledger_ref"
+    assert (
+        refuse_ledger_back_reference(key="ledger_ref").context["field"] == "ledger_ref"
+    )
 
 
 def test_export_port_is_protocol_not_runtime_port() -> None:

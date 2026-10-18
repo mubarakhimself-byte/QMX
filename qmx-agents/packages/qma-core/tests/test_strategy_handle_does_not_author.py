@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from qma.core.content import content_address
-from qma.core.ports.experiments import GAP_0085_STRATEGY_MECHANISMS, parse_experiment_spec
+from qma.core.ports.experiments import (
+    GAP_0085_STRATEGY_MECHANISMS,
+    parse_experiment_spec,
+)
 from qma.core.ports.handles import (
     STRATEGY_HANDLE_LINEAGE_EDGE_TYPE,
     StrategyCandidate,
@@ -14,7 +17,10 @@ from qma.core.ports.handles import (
     refuse_strategy_handle_assembly,
     unset_money_path_fills,
 )
-from qma.core.vocabulary.handles import QMA_OWNED_CANDIDATE_ORIGIN, STRATEGY_CANDIDATE_ZONE
+from qma.core.vocabulary.handles import (
+    QMA_OWNED_CANDIDATE_ORIGIN,
+    STRATEGY_CANDIDATE_ZONE,
+)
 from qmf.core import is_ok, is_refusal
 
 CORE_SRC = Path(__file__).resolve().parents[1] / "src"
@@ -90,7 +96,11 @@ def test_strategy_handle_references_a_fingerprinted_registry_record() -> None:
     assert referenced.value.evidence_ref == record_fp1
     assert referenced.value.contents is None
     assembled = parse_registry_record_fp1(
-        {"kind": "bot-definition", "strategy_family_id": "trend", "confluence_set": ["fp1:x"]}
+        {
+            "kind": "bot-definition",
+            "strategy_family_id": "trend",
+            "confluence_set": ["fp1:x"],
+        }
     )
     assert is_refusal(assembled)
     assert assembled.context["field"] == "assembly"
@@ -113,7 +123,10 @@ def test_refuse_ct33_ct34_json_mechanism_nouns_and_random_condition() -> None:
     assert is_refusal(ct33)
     assert ct33.context["field"] == "assembly"
     ct34 = refuse_strategy_handle_assembly(
-        {"kind": "confluence", "legs": [{"role": "level", "producer_binding": _fp("zone")}]}
+        {
+            "kind": "confluence",
+            "legs": [{"role": "level", "producer_binding": _fp("zone")}],
+        }
     )
     assert ct34 is not None
     assert is_refusal(ct34)
@@ -122,7 +135,9 @@ def test_refuse_ct33_ct34_json_mechanism_nouns_and_random_condition() -> None:
     assert nouns is not None
     assert is_refusal(nouns)
     assert nouns.context["field"] == "mechanisms"
-    slots = refuse_strategy_handle_assembly({"note": "v1", "RandomCondition": {"min": 1, "max": 5}})
+    slots = refuse_strategy_handle_assembly(
+        {"note": "v1", "RandomCondition": {"min": 1, "max": 5}}
+    )
     assert slots is not None
     assert is_refusal(slots)
     assert slots.context["field"] == "random_condition"

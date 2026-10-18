@@ -121,7 +121,9 @@ def test_display_aliases_do_not_mint_records() -> None:
     )
     assert is_ok(coordinated)
     assert coordinated.value.mints_record is False
-    governed = resolve_display_alias(display="workspace", lane="governed", over="fp1:bot")
+    governed = resolve_display_alias(
+        display="workspace", lane="governed", over="fp1:bot"
+    )
     assert is_ok(governed)
     tab = mint_ui_tab_record(display="project")
     assert tab.context["mints_record"] is UI_TAB_MINTS_RECORD

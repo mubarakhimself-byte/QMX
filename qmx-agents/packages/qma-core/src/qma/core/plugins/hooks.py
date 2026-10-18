@@ -151,7 +151,9 @@ def build_hook_event(
 ) -> HookEvent:
     """Construct a HookEvent after validating the closed event name."""
     name = parse_hook_event_name(event)
-    resolved_source = source if isinstance(source, HookSource) else parse_closed(HookSource, source)
+    resolved_source = (
+        source if isinstance(source, HookSource) else parse_closed(HookSource, source)
+    )
     return HookEvent(
         event=name,
         phase=_phase_for_event(name),
@@ -177,7 +179,9 @@ def build_hook_result(
     if resolved is HookResultDecision.OBSERVE and (
         updated_input is not None or updated_output is not None
     ):
-        raise VocabularyError("observe may not carry updated_input or updated_output (AD-10)")
+        raise VocabularyError(
+            "observe may not carry updated_input or updated_output (AD-10)"
+        )
     secret_check = assert_no_secret_in_hook_payloads(
         updated_input=updated_input,
         updated_output=updated_output,
@@ -193,7 +197,9 @@ def build_hook_result(
         reason=reason,
         updated_input=dict(updated_input) if updated_input is not None else None,
         updated_output=dict(updated_output) if updated_output is not None else None,
-        injected_context=(dict(injected_context) if injected_context is not None else None),
+        injected_context=(
+            dict(injected_context) if injected_context is not None else None
+        ),
         ledger_entry=dict(ledger_entry) if ledger_entry is not None else None,
         verifier_ref=verifier_ref,
     )

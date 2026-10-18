@@ -109,7 +109,9 @@ class MoneyPathDeniedAct(StrEnum):
 # callers never receive an API that adds members.
 MONEY_PATH_DENY_LIST: Final[frozenset[MoneyPathAct]] = frozenset(MoneyPathAct)
 
-MONEY_PATH_DENIED_ACTS: Final[frozenset[MoneyPathDeniedAct]] = frozenset(MoneyPathDeniedAct)
+MONEY_PATH_DENIED_ACTS: Final[frozenset[MoneyPathDeniedAct]] = frozenset(
+    MoneyPathDeniedAct
+)
 
 MONEY_PATH_DENY_LIST_OWNER: Final[str] = "AD-16"
 
@@ -208,9 +210,21 @@ MONEY_PATH_STOP_NOUN: Final = "stop"
 """`stop` names a stop order only with a separate mutating verb (`update_stop`), never alone
 or as its own verb (`stop_server`)."""
 MONEY_PATH_MONEY_NOUNS: Final[frozenset[str]] = frozenset(
-    {"money", "fund", "currency", "invoice", "payment", "cash", "coin", "leverage", "margin"}
+    {
+        "money",
+        "fund",
+        "currency",
+        "invoice",
+        "payment",
+        "cash",
+        "coin",
+        "leverage",
+        "margin",
+    }
 )
-MONEY_PATH_NON_MONEY_OBJECTS: Final[frozenset[str]] = frozenset({"journal", "note", "watchlist"})
+MONEY_PATH_NON_MONEY_OBJECTS: Final[frozenset[str]] = frozenset(
+    {"journal", "note", "watchlist"}
+)
 """A noun right before one of these, or before `to_watchlist`, names that record's subject, not
 an object to act on (`add_trade_note`, `add_coin_to_watchlist`)."""
 MONEY_PATH_NON_MONEY_QUALIFIERS: Final[frozenset[str]] = frozenset({"display"})
@@ -248,7 +262,9 @@ scope, qualifier or bulk object anywhere (`cancel_all_open`, `mass_cancel`, `fla
 MONEY_PATH_BULK_QUALIFIERS: Final[frozenset[str]] = frozenset(
     {"bulk", "batch", "mass", "schedule", "countdown"}
 )
-MONEY_PATH_BULK_OBJECTS: Final[frozenset[str]] = frozenset({"book", "portfolio", "account"})
+MONEY_PATH_BULK_OBJECTS: Final[frozenset[str]] = frozenset(
+    {"book", "portfolio", "account"}
+)
 MONEY_PATH_BULK_CUTS: Final[frozenset[str]] = frozenset({"by", "for", "after"})
 """A bulk act is read up to the first of these (`close_all_by_symbol`, `cancel_by_cloid`)."""
 MONEY_PATH_CONJUNCTIONS: Final[frozenset[str]] = frozenset({"and", "then", "or"})
@@ -261,7 +277,9 @@ MONEY_PATH_BULK_VERBS: Final[frozenset[str]] = frozenset(
     }
 )  # fmt: skip
 """Verbs that act on orders or positions with no noun when scoped (`cancel_all`)."""
-MONEY_PATH_SCOPES_AFTER: Final[frozenset[str]] = frozenset({"all", "everything", "in", "out"})
+MONEY_PATH_SCOPES_AFTER: Final[frozenset[str]] = frozenset(
+    {"all", "everything", "in", "out"}
+)
 MONEY_PATH_SCOPES_BEFORE: Final[frozenset[str]] = frozenset(
     {"global", "market", "private", "partial", "panic"}
 )
@@ -406,7 +424,9 @@ def assert_deny_list_not_widenable(
         act.value for act in MONEY_PATH_DENIED_ACTS
     }
     proposed_values = {
-        item.value if isinstance(item, (MoneyPathAct, MoneyPathDeniedAct)) else str(item)
+        item.value
+        if isinstance(item, (MoneyPathAct, MoneyPathDeniedAct))
+        else str(item)
         for item in proposed
     }
     extras = proposed_values - allowed_values

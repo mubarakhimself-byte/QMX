@@ -122,7 +122,9 @@ def has_routine_edit_kind() -> bool:
     return "routine" in {kind.value for kind in RefinementEditKind}
 
 
-def refuse_agent_routine_write(*, source: object = "model", **extra: object) -> TypedRefusal:
+def refuse_agent_routine_write(
+    *, source: object = "model", **extra: object
+) -> TypedRefusal:
     """Refuse a model/agent/hook/Role/Mission attempt to author a Routine."""
     return _policy(
         "routine",
@@ -158,7 +160,9 @@ def authorize_routine_write(principal: PrincipalClass | str) -> Result[Principal
     return Ok(resolved)
 
 
-def authorize_routine_catch_up(principal: PrincipalClass | str) -> Result[PrincipalClass]:
+def authorize_routine_catch_up(
+    principal: PrincipalClass | str,
+) -> Result[PrincipalClass]:
     """Catch-up is an explicit operator-gated command — never a machine action."""
     if isinstance(principal, PrincipalClass):
         resolved = principal
@@ -236,11 +240,17 @@ class RoutineSchedule:
                 msg = "cron schedule does not carry every_ns (CT-49; FR-Q62)"
                 raise ValueError(msg)
         elif self.kind == "interval":
-            if self.every_ns is None or isinstance(self.every_ns, bool) or self.every_ns <= 0:
+            if (
+                self.every_ns is None
+                or isinstance(self.every_ns, bool)
+                or self.every_ns <= 0
+            ):
                 msg = "interval schedule requires a positive every_ns (CT-49; FR-Q62)"
                 raise ValueError(msg)
             if self.expression is not None:
-                msg = "interval schedule does not carry a cron expression (CT-49; FR-Q62)"
+                msg = (
+                    "interval schedule does not carry a cron expression (CT-49; FR-Q62)"
+                )
                 raise ValueError(msg)
         else:
             msg = "schedule kind is cron or interval (CT-49; FR-Q62)"
@@ -371,7 +381,9 @@ def parse_routine_schedule(value: object) -> Result[RoutineSchedule]:
                 given=sorted(extra),
             )
         return Ok(
-            RoutineSchedule(kind="cron", iana_zone=zone.strip(), expression=expression.strip())
+            RoutineSchedule(
+                kind="cron", iana_zone=zone.strip(), expression=expression.strip()
+            )
         )
 
     every_ns = entry.get("every_ns")
@@ -388,7 +400,9 @@ def parse_routine_schedule(value: object) -> Result[RoutineSchedule]:
             "interval schedule carries kind, every_ns, and iana_zone only (CT-49; FR-Q62)",
             given=sorted(extra),
         )
-    return Ok(RoutineSchedule(kind="interval", iana_zone=zone.strip(), every_ns=every_ns))
+    return Ok(
+        RoutineSchedule(kind="interval", iana_zone=zone.strip(), every_ns=every_ns)
+    )
 
 
 def _parse_goal(value: object) -> Result[Goal]:
@@ -414,7 +428,9 @@ def parse_routine(value: object) -> Result[Routine]:
     if isinstance(value, Routine):
         return Ok(value)
     if not isinstance(value, Mapping):
-        return _invalid("routine", "a Routine is an object (CT-49; FR-Q62)", given=repr(value))
+        return _invalid(
+            "routine", "a Routine is an object (CT-49; FR-Q62)", given=repr(value)
+        )
     entry = cast("Mapping[str, object]", value)
     unknown = set(entry) - ROUTINE_REQUIRED_FIELDS - ROUTINE_METADATA_KEYS
     if unknown:

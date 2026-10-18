@@ -63,7 +63,9 @@ STAGING_STORE_RECORD_TYPE: Final[str] = "refinement-proposal"
 ROLE_BASE_PATH: Final[str] = "role.base"
 ROLE_OVERLAY_PATH: Final[str] = "role.overlay"
 
-CLOSED_EDIT_KINDS: Final[frozenset[str]] = frozenset(member.value for member in RefinementEditKind)
+CLOSED_EDIT_KINDS: Final[frozenset[str]] = frozenset(
+    member.value for member in RefinementEditKind
+)
 
 EDIT_OPERATIONS: Final[frozenset[str]] = frozenset({"create", "update", "delete"})
 
@@ -415,7 +417,9 @@ def accept_refinement_proposal(
     )
 
 
-def validate_proposal_schema(proposal: RefinementProposal) -> Result[RefinementProposal]:
+def validate_proposal_schema(
+    proposal: RefinementProposal,
+) -> Result[RefinementProposal]:
     """Deterministic schema validation for a constructed proposal."""
     if not proposal.edits:
         return _invalid("edits", "a RefinementProposal carries one or more edits")
@@ -424,7 +428,10 @@ def validate_proposal_schema(proposal: RefinementProposal) -> Result[RefinementP
             return refuse_runtime_instance_edit(kind=edit.kind.value)
         if edit.kind is RefinementEditKind.ROLE and edit.path == ROLE_BASE_PATH:
             return refuse_role_base_on_proposal_path()
-        if edit.kind is RefinementEditKind.WORKER_TEMPLATE and edit.operation != "delete":
+        if (
+            edit.kind is RefinementEditKind.WORKER_TEMPLATE
+            and edit.operation != "delete"
+        ):
             shaped = validate_worker_template_shape(edit.content)
             if is_refusal(shaped):
                 return shaped

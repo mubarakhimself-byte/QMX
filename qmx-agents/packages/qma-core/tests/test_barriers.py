@@ -130,7 +130,9 @@ def test_qmb_import_scanner_catches_package_edge(tmp_path: Path) -> None:
 
 
 def test_permitted_parent_surfaces_default_deny() -> None:
-    assert (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.VALUE_TYPE) in (PERMITTED_PARENT_SURFACES)
+    assert (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.VALUE_TYPE) in (
+        PERMITTED_PARENT_SURFACES
+    )
     assert (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.TYPED_REFUSAL) in (
         PERMITTED_PARENT_SURFACES
     )
@@ -140,8 +142,14 @@ def test_permitted_parent_surfaces_default_deny() -> None:
     assert (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.DEV_ZONE_CANDIDATE_WRITE) in (
         PERMITTED_PARENT_SURFACES
     )
-    assert (ParentLibrary.QMF_RISK, ParentSurfaceKind.VALUE_TYPE) in PERMITTED_PARENT_SURFACES
-    assert (ParentLibrary.QMF_RISK, ParentSurfaceKind.TYPED_REFUSAL) in PERMITTED_PARENT_SURFACES
+    assert (
+        ParentLibrary.QMF_RISK,
+        ParentSurfaceKind.VALUE_TYPE,
+    ) in PERMITTED_PARENT_SURFACES
+    assert (
+        ParentLibrary.QMF_RISK,
+        ParentSurfaceKind.TYPED_REFUSAL,
+    ) in PERMITTED_PARENT_SURFACES
     assert (ParentLibrary.QMF_RISK, ParentSurfaceKind.PURE_CALCULATION) in (
         PERMITTED_PARENT_SURFACES
     )
@@ -202,7 +210,9 @@ def test_capability_ladder_six_ordered_rungs_code_declared() -> None:
         "persistent_remote_desktop",
     ]
     assert capability_rung_rank(CapabilityRung.CLI) == 1
-    assert parse_capability_rung("browser_automation") is CapabilityRung.BROWSER_AUTOMATION
+    assert (
+        parse_capability_rung("browser_automation") is CapabilityRung.BROWSER_AUTOMATION
+    )
     with pytest.raises(CapabilityError):
         parse_capability_rung("settings_override")
 

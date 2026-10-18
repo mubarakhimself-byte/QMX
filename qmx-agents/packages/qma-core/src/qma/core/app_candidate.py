@@ -35,7 +35,9 @@ def validate_unicode(value: object, field: str) -> Result[None]:
             try:
                 item.encode("utf-8")
             except UnicodeEncodeError:
-                return invalid_input(field, "text must contain valid Unicode encodable as UTF-8")
+                return invalid_input(
+                    field, "text must contain valid Unicode encodable as UTF-8"
+                )
         elif isinstance(item, Mapping):
             body = cast(Mapping[object, object], item)
             if id(body) in visited:
@@ -74,7 +76,10 @@ def json_object(content: bytes) -> Result[dict[str, object]]:
 
     try:
         value: object = json.loads(
-            content, object_pairs_hook=pairs, parse_constant=constant, parse_float=decimal
+            content,
+            object_pairs_hook=pairs,
+            parse_constant=constant,
+            parse_float=decimal,
         )
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         return invalid_input("content", f"expected finite, unambiguous JSON: {exc}")
@@ -89,7 +94,9 @@ def json_object(content: bytes) -> Result[dict[str, object]]:
 
 def token(field: str, value: object) -> Result[str]:
     if not isinstance(value, str) or not value.strip() or value != value.strip():
-        return invalid_input(field, "expected a non-empty string without surrounding whitespace")
+        return invalid_input(
+            field, "expected a non-empty string without surrounding whitespace"
+        )
     unicode = validate_unicode(value, field)
     if is_refusal(unicode):
         return unicode
@@ -102,7 +109,9 @@ def artifact_ref(value: object) -> Result[dict[str, object]]:
         return invalid_input("artifact_ref", "expected fp1, byte_count and media_type")
     body = dict(cast(Mapping[str, object], value))
     if set(body) != {"fp1", "byte_count", "media_type"}:
-        return invalid_input("artifact_ref", "expected exactly fp1, byte_count and media_type")
+        return invalid_input(
+            "artifact_ref", "expected exactly fp1, byte_count and media_type"
+        )
     parsed = Fingerprint.try_create(body["fp1"])
     if is_refusal(parsed):
         return parsed
@@ -135,12 +144,25 @@ class CandidateContent:
 
 def parse_candidate_content(value: object) -> Result[CandidateContent]:
     if not isinstance(value, Mapping):
-        return invalid_input("content", "expected the named data-only candidate descriptor")
+        return invalid_input(
+            "content", "expected the named data-only candidate descriptor"
+        )
     body = dict(cast(Mapping[str, object], value))
-    if set(body) != {"schema", "kind", "metadata", "composition_ref", "source_refs", "asset_refs"}:
-        return invalid_input("content", "unknown or missing candidate descriptor fields")
+    if set(body) != {
+        "schema",
+        "kind",
+        "metadata",
+        "composition_ref",
+        "source_refs",
+        "asset_refs",
+    }:
+        return invalid_input(
+            "content", "unknown or missing candidate descriptor fields"
+        )
     if body["schema"] != CONTENT_SCHEMA or body["kind"] != "data-only":
-        return invalid_input("schema", "MA02 accepts only v1 data-only candidate content")
+        return invalid_input(
+            "schema", "MA02 accepts only v1 data-only candidate content"
+        )
     metadata = body["metadata"]
     if not isinstance(metadata, Mapping):
         return invalid_input("metadata", "expected title and description")
@@ -156,11 +178,15 @@ def parse_candidate_content(value: object) -> Result[CandidateContent]:
     if is_refusal(comp):
         return comp
     if comp.value["media_type"] != "application/json":
-        return invalid_input("composition_ref", "composition must name application/json bytes")
+        return invalid_input(
+            "composition_ref", "composition must name application/json bytes"
+        )
     for field in ("source_refs", "asset_refs"):
         refs = body[field]
         if not isinstance(refs, list):
-            return invalid_input(field, "expected an array of immutable artifact references")
+            return invalid_input(
+                field, "expected an array of immutable artifact references"
+            )
         seen: set[str] = set()
         for ref in cast(list[object], refs):
             parsed = artifact_ref(ref)

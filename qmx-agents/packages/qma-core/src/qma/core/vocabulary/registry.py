@@ -89,7 +89,9 @@ CLOSED_VOCABULARIES: Final[tuple[ClosedVocabulary, ...]] = (
     ClosedVocabulary("job_handle_state", "AD-17", JobHandleState, "DEC-0316"),
     ClosedVocabulary("lease_kind", "AD-9", LeaseKind, "DEC-0308"),
     ClosedVocabulary("task_ledger_entry_kind", "AD-9", TaskLedgerEntryKind, "DEC-0308"),
-    ClosedVocabulary("quant_ledger_entry_kind", "AD-9", QuantLedgerEntryKind, "DEC-0308"),
+    ClosedVocabulary(
+        "quant_ledger_entry_kind", "AD-9", QuantLedgerEntryKind, "DEC-0308"
+    ),
     ClosedVocabulary("task_mission_state", "AD-12", TaskMissionState, "DEC-0311"),
     ClosedVocabulary("message_kind", "AD-20", MessageKind, "DEC-0319"),
     ClosedVocabulary("delivery_state", "AD-20", DeliveryState, "DEC-0319"),
@@ -100,10 +102,16 @@ CLOSED_VOCABULARIES: Final[tuple[ClosedVocabulary, ...]] = (
     ClosedVocabulary("session_attachment", "AD-14", SessionAttachment, "DEC-0313"),
     ClosedVocabulary("session_autonomy", "AD-14", SessionAutonomy, "DEC-0313"),
     ClosedVocabulary("ask_on_timeout", "AD-10", AskOnTimeout, "DEC-0309"),
-    ClosedVocabulary("memory_validation_state", "AD-18", MemoryValidationState, "DEC-0317"),
+    ClosedVocabulary(
+        "memory_validation_state", "AD-18", MemoryValidationState, "DEC-0317"
+    ),
     ClosedVocabulary("node_kind", "AD-13", NodeKind, "DEC-0312"),
-    ClosedVocabulary("execution_environment_kind", "AD-17", ExecutionEnvironmentKind, "DEC-0316"),
-    ClosedVocabulary("environment_lifecycle", "AD-17", EnvironmentLifecycle, "DEC-0316"),
+    ClosedVocabulary(
+        "execution_environment_kind", "AD-17", ExecutionEnvironmentKind, "DEC-0316"
+    ),
+    ClosedVocabulary(
+        "environment_lifecycle", "AD-17", EnvironmentLifecycle, "DEC-0316"
+    ),
     ClosedVocabulary("isolation_mode", "AD-17", IsolationMode, "DEC-0316"),
     ClosedVocabulary("network_policy", "AD-28", NetworkPolicy, "DEC-0327"),
     ClosedVocabulary("refinement_edit_kind", "AD-22", RefinementEditKind, "DEC-0321"),
@@ -122,10 +130,14 @@ CLOSED_VOCABULARIES: Final[tuple[ClosedVocabulary, ...]] = (
     ClosedVocabulary("door_adapter", "AD-21", DoorAdapter, "DEC-0434"),
     ClosedVocabulary("reconcile_policy", "AD-24", ReconcilePolicy, "DEC-0437"),
     ClosedVocabulary("effect_retry_outcome", "AD-24", EffectRetryOutcome, "DEC-0437"),
-    ClosedVocabulary("grant_evaluation_moment", "AD-24", GrantEvaluationMoment, "DEC-0437"),
+    ClosedVocabulary(
+        "grant_evaluation_moment", "AD-24", GrantEvaluationMoment, "DEC-0437"
+    ),
     ClosedVocabulary("caller_kind", "AD-24", CallerKind, "DEC-0464"),
     ClosedVocabulary("failure_class", "AD-5", FailureClass, "DEC-0456"),
-    ClosedVocabulary("artifact_completeness", "AD-26", ArtifactCompleteness, "DEC-0439"),
+    ClosedVocabulary(
+        "artifact_completeness", "AD-26", ArtifactCompleteness, "DEC-0439"
+    ),
 )
 
 
@@ -140,4 +152,6 @@ def parse_closed[EnumT: StrEnum](enum_type: type[EnumT], value: object) -> EnumT
             raise VocabularyError(
                 f"{value!r} is not a member of closed vocabulary {enum_type.__name__}"
             ) from exc
-    raise VocabularyError(f"{value!r} is not a member of closed vocabulary {enum_type.__name__}")
+    raise VocabularyError(
+        f"{value!r} is not a member of closed vocabulary {enum_type.__name__}"
+    )

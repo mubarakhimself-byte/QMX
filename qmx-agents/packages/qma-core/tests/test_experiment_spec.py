@@ -58,7 +58,9 @@ def _spec(
             if cost_assumptions is None
             else cost_assumptions
         ),
-        resolved_config_ref=_fp("config-a") if resolved_config_ref is None else resolved_config_ref,
+        resolved_config_ref=_fp("config-a")
+        if resolved_config_ref is None
+        else resolved_config_ref,
         code_ref=code_ref,
     )
     assert is_ok(created)

@@ -29,7 +29,7 @@ from qma.harness.launch import (
     LaunchRefused,
     TestMode,
 )
-from qma.harness.routes import serve
+from qma.harness.routes import chat_routes, control_service
 from qma.harness.stuck import (
     Alarm,
     Pulse,
@@ -77,8 +77,9 @@ __all__ = [
     "TestMode",
     "UnknownChat",
     "UntrustedPrompt",
+    "chat_routes",
+    "control_service",
     "judge_stuck",
-    "serve",
     "stuck_call",
     "stuck_digest",
     "watch_progress",

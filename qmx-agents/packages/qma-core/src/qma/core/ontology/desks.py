@@ -56,7 +56,9 @@ DESK_DISPLAY_NAMES: Final[dict[DeskSlug, str]] = {
     DeskSlug.PM: "PM",
 }
 
-ROLE_DISPLAY_NAMES: Final[frozenset[str]] = frozenset(member.value for member in RoleName)
+ROLE_DISPLAY_NAMES: Final[frozenset[str]] = frozenset(
+    member.value for member in RoleName
+)
 
 
 def role_slug_collision_key(name: str) -> str:

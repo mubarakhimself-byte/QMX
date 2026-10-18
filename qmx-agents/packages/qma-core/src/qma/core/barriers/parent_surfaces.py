@@ -73,16 +73,18 @@ PARENT_SURFACE_LIBRARIES: Final[frozenset[ParentLibrary]] = frozenset(ParentLibr
 
 # Default-deny allowlist. qmf-risk has no write surface; the single write is the
 # content-addressed dev-zone candidate artifact through qmf-registry (AD-14).
-PERMITTED_PARENT_SURFACES: Final[frozenset[tuple[ParentLibrary, ParentSurfaceKind]]] = frozenset(
-    {
-        (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.VALUE_TYPE),
-        (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.TYPED_REFUSAL),
-        (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.PURE_CALCULATION),
-        (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.DEV_ZONE_CANDIDATE_WRITE),
-        (ParentLibrary.QMF_RISK, ParentSurfaceKind.VALUE_TYPE),
-        (ParentLibrary.QMF_RISK, ParentSurfaceKind.TYPED_REFUSAL),
-        (ParentLibrary.QMF_RISK, ParentSurfaceKind.PURE_CALCULATION),
-    }
+PERMITTED_PARENT_SURFACES: Final[frozenset[tuple[ParentLibrary, ParentSurfaceKind]]] = (
+    frozenset(
+        {
+            (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.VALUE_TYPE),
+            (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.TYPED_REFUSAL),
+            (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.PURE_CALCULATION),
+            (ParentLibrary.QMF_REGISTRY, ParentSurfaceKind.DEV_ZONE_CANDIDATE_WRITE),
+            (ParentLibrary.QMF_RISK, ParentSurfaceKind.VALUE_TYPE),
+            (ParentLibrary.QMF_RISK, ParentSurfaceKind.TYPED_REFUSAL),
+            (ParentLibrary.QMF_RISK, ParentSurfaceKind.PURE_CALCULATION),
+        }
+    )
 )
 
 PROHIBITED_RECORD_FAMILIES: Final[frozenset[ProhibitedRecordFamily]] = frozenset(
@@ -106,7 +108,9 @@ def _resolve_library(library: ParentLibrary | str) -> ParentLibrary:
     try:
         return ParentLibrary(library)
     except ValueError as exc:
-        raise ParentSurfaceError(f"{library!r} is not a declared parent library") from exc
+        raise ParentSurfaceError(
+            f"{library!r} is not a declared parent library"
+        ) from exc
 
 
 def _resolve_kind(kind: ParentSurfaceKind | str) -> ParentSurfaceKind:
@@ -151,13 +155,19 @@ def assert_record_family_immutable(
     """Refuse construct/write/amend/delete of every prohibited record family."""
     try:
         resolved_family = (
-            family if isinstance(family, ProhibitedRecordFamily) else ProhibitedRecordFamily(family)
+            family
+            if isinstance(family, ProhibitedRecordFamily)
+            else ProhibitedRecordFamily(family)
         )
     except ValueError as exc:
-        raise ParentSurfaceError(f"{family!r} is not a prohibited record family") from exc
+        raise ParentSurfaceError(
+            f"{family!r} is not a prohibited record family"
+        ) from exc
     try:
         resolved_mutation = (
-            mutation if isinstance(mutation, ProhibitedMutation) else ProhibitedMutation(mutation)
+            mutation
+            if isinstance(mutation, ProhibitedMutation)
+            else ProhibitedMutation(mutation)
         )
     except ValueError as exc:
         raise ParentSurfaceError(f"{mutation!r} is not a prohibited mutation") from exc
@@ -196,11 +206,17 @@ def refuse_parent_money_path_write(
 
     Public QMA boundaries return this value; they never raise across the seam.
     """
-    family_token = family.value if isinstance(family, ProhibitedRecordFamily) else str(family)
-    mutation_token = mutation.value if isinstance(mutation, ProhibitedMutation) else str(mutation)
+    family_token = (
+        family.value if isinstance(family, ProhibitedRecordFamily) else str(family)
+    )
+    mutation_token = (
+        mutation.value if isinstance(mutation, ProhibitedMutation) else str(mutation)
+    )
     try:
         resolved_family = (
-            family if isinstance(family, ProhibitedRecordFamily) else ProhibitedRecordFamily(family)
+            family
+            if isinstance(family, ProhibitedRecordFamily)
+            else ProhibitedRecordFamily(family)
         )
     except ValueError:
         return _policy_refusal(
@@ -211,7 +227,9 @@ def refuse_parent_money_path_write(
         )
     try:
         resolved_mutation = (
-            mutation if isinstance(mutation, ProhibitedMutation) else ProhibitedMutation(mutation)
+            mutation
+            if isinstance(mutation, ProhibitedMutation)
+            else ProhibitedMutation(mutation)
         )
     except ValueError:
         return _policy_refusal(

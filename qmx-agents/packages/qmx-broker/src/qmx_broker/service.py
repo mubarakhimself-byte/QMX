@@ -6,8 +6,7 @@ import asyncio
 import hashlib
 import json
 import sqlite3
-import tomllib
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, closing
 from functools import partial
 from pathlib import Path
@@ -96,10 +95,13 @@ class BrokerService:
         home: Path,
         settings: BrokerSettings | None = None,
         factory: AdapterFactory | None = None,
+        *,
+        brokers: Callable[[], Mapping[str, object]] | None = None,
     ) -> None:
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.settings = settings
+        self.brokers = brokers
         self.factory: AdapterFactory = factory or partial(open_adapter, exchanges={})
         # cTrader permits a small number of sessions; concurrent MCP reads share
         # this gate instead of opening a socket for every simultaneous request.
@@ -112,13 +114,13 @@ class BrokerService:
             )
 
     def configured_settings(self) -> BrokerSettings:
+        """`settings` when given, else `[brokers]` from the reader the composition injects,
+        which is `ControlService.settings_get` (AD-52); with neither, no accounts."""
         if self.settings is not None:
             return self.settings
-        path = self.home / "settings.toml"
-        if not path.exists():
+        if self.brokers is None:
             return BrokerSettings()
-        with path.open("rb") as file:
-            return BrokerSettings.model_validate(tomllib.load(file).get("brokers", {}))
+        return BrokerSettings.model_validate(self.brokers())
 
     def list_accounts(self, offset: int = 0, limit: int = 100) -> Document:
         """List configured account identities; use all three ids in subsequent calls."""

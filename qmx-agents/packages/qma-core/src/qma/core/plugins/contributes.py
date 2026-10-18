@@ -86,7 +86,9 @@ def parse_pack_contributes(
             "(AD-2; RC-13; FR-WF-09)"
         )
     if not isinstance(raw, Sequence):
-        raise PackContributeError("contributes must be a sequence of {point, local_id} objects")
+        raise PackContributeError(
+            "contributes must be a sequence of {point, local_id} objects"
+        )
 
     items = cast(Sequence[object], raw)
     parsed: list[PackContribute] = []
@@ -115,7 +117,9 @@ def _parse_one(item: object, *, package_id: str) -> PackContribute:
             "contributes entries must be {point, local_id} objects, never an "
             f"opaque string; got {type(item).__name__} (AD-2; RC-13; FR-WF-09)"
         )
-    body = {str(key): value for key, value in cast(Mapping[object, object], item).items()}
+    body = {
+        str(key): value for key, value in cast(Mapping[object, object], item).items()
+    }
     point_raw = body.get("point")
     local_raw = body.get("local_id")
     if isinstance(point_raw, str) and ":" in point_raw and local_raw is None:
@@ -144,7 +148,9 @@ def _parse_one(item: object, *, package_id: str) -> PackContribute:
             )
         token = declared.strip()
         if token.casefold().startswith("fp1:"):
-            raise PackContributeError("contributes qualified_id is never fp1 (DEC-0415; FR-WF-03)")
+            raise PackContributeError(
+                "contributes qualified_id is never fp1 (DEC-0415; FR-WF-03)"
+            )
         try:
             validate_multi_contribution_key(token)
         except PortError as exc:

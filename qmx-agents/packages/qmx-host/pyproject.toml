@@ -1,0 +1,56 @@
+[project]
+name = "qmx-host"
+version = "0.1.0"
+description = "QMX host: the one process that serves the copilot, the workflows and the control doors"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "qma-harness",
+    "qmx-control",
+    "qmx-engine",
+    "fastapi==0.142.2",
+    "httpx==0.28.1",
+    "psutil>=7,<9",
+    "uvicorn>=0.35,<1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+qma-harness = { workspace = true }
+qmx-control = { workspace = true }
+qmx-engine = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.5",
+    "pyright==1.1.411",
+    "pytest>=9,<10",
+    "pytest-xdist>=3.8,<4",
+    "poethepoet==0.48.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-n 2 --dist worksteal"
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+extend-exclude = []
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
+"src/qmx_host/host.py" = ["S404"]
+
+[tool.pyright]
+include = ["src", "tests"]
+# qma-harness ships no py.typed; reading its source gives the host its real types.
+extraPaths = ["src", "../qma-harness/src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+[tool.poe.tasks]
+fmt-check = "ruff format --config pyproject.toml --check src tests"
+lint = "ruff check --config pyproject.toml src tests"
+types = "python -m pyright"

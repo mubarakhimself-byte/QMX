@@ -134,7 +134,9 @@ class Agent:
     capabilities_frozen: bool = True
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "effective_tool_ids", frozenset(self.effective_tool_ids))
+        object.__setattr__(
+            self, "effective_tool_ids", frozenset(self.effective_tool_ids)
+        )
         object.__setattr__(
             self,
             "effective_permissions",
@@ -156,7 +158,9 @@ class Subagent:
     capabilities_frozen: bool = True
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "effective_tool_ids", frozenset(self.effective_tool_ids))
+        object.__setattr__(
+            self, "effective_tool_ids", frozenset(self.effective_tool_ids)
+        )
         object.__setattr__(
             self,
             "effective_permissions",

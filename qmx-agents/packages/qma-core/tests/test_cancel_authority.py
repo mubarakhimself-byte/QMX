@@ -37,7 +37,10 @@ def test_job_handle_cancel_is_the_only_coordinated_authority() -> None:
 
 
 def test_plugin_routine_worker_ui_widget_cannot_cancel() -> None:
-    assert frozenset({"plugin", "routine", "worker", "ui_widget"}) == UNAUTHORIZED_CANCEL_WRITERS
+    assert (
+        frozenset({"plugin", "routine", "worker", "ui_widget"})
+        == UNAUTHORIZED_CANCEL_WRITERS
+    )
     for writer in UNAUTHORIZED_CANCEL_WRITERS:
         assert is_unauthorized_cancel_writer(writer)
         refused = authorize_coordinated_cancel(writer)
@@ -76,7 +79,10 @@ def test_daemon_outcome_writers_may_set_done_failed_aborted_not_cancelled() -> N
 
 
 def test_tab_close_is_client_detach_and_writes_no_terminal() -> None:
-    assert frozenset({"ui_client_detach", "tab_close", "wire.detach"}) == CLIENT_DETACH_EVENTS
+    assert (
+        frozenset({"ui_client_detach", "tab_close", "wire.detach"})
+        == CLIENT_DETACH_EVENTS
+    )
     for event in CLIENT_DETACH_EVENTS:
         assert is_client_detach_event(event)
         parsed = parse_client_detach_event(event)

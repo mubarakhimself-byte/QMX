@@ -54,7 +54,9 @@ def test_operation_surface_excludes_promote_and_keeps_reflect_off() -> None:
     assert "promote" not in MEMORY_PROVIDER_OPERATIONS
     assert frozenset({"reflect"}) == MEMORY_PROVIDER_OPTIONAL_OFF
     assert NO_PROMOTE_OPERATION is True
-    assert "promote" not in dir(MemoryProvider) or not hasattr(MemoryProvider, "promote")
+    assert "promote" not in dir(MemoryProvider) or not hasattr(
+        MemoryProvider, "promote"
+    )
 
 
 def test_parse_requires_mandatory_fields_and_seven_states() -> None:

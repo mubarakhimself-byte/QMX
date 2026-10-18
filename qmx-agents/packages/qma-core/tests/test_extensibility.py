@@ -7,7 +7,10 @@ from pathlib import Path
 
 from qma.core.plugins import DESK_PLUGIN_PACK_IDS, PluginContext
 from qma.core.plugins.context import PluginContext as PluginContextProtocol
-from qma.core.ports.cardinality import MULTI_CONTRIBUTION_POINTS, RETIRED_CONTRIBUTION_POINTS
+from qma.core.ports.cardinality import (
+    MULTI_CONTRIBUTION_POINTS,
+    RETIRED_CONTRIBUTION_POINTS,
+)
 from qma.core.ports.extensibility import (
     DEFERRED_EXTENSION_RUNG,
     GAP_0081_UI_CONTRIBUTION,
@@ -146,6 +149,7 @@ def test_qma_ui_contract_placeholder_is_not_shipped() -> None:
         "packages/qmx-ledger",
         "packages/qma-harness",
         "packages/qmx-engine",
+        "packages/qmx-host",
     }
     assert "packages/qma-ui-contract" not in members
     assert "qma-ui-contract" in text

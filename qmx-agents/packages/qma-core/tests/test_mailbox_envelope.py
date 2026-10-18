@@ -34,7 +34,12 @@ from qma.core.ports.mailbox import (
     refuse_external_agent_transport,
     refuse_lead_mailbox_catch_all,
 )
-from qma.core.vocabulary import CLOSED_VOCABULARIES, DeliveryState, MessageKind, parse_closed
+from qma.core.vocabulary import (
+    CLOSED_VOCABULARIES,
+    DeliveryState,
+    MessageKind,
+    parse_closed,
+)
 from qmf.core import is_ok, is_refusal
 
 
@@ -101,7 +106,9 @@ def test_closed_vocabs_cover_message_kind_and_delivery_state() -> None:
 
 
 def test_envelope_carries_required_fields_and_omits_optional_nulls() -> None:
-    parsed = parse_envelope(_envelope_body(mission_ref="mission-1", causation_id="cause-1"))
+    parsed = parse_envelope(
+        _envelope_body(mission_ref="mission-1", causation_id="cause-1")
+    )
     assert is_ok(parsed)
     payload = parsed.value.to_payload()
     assert payload["msg_id"] == "msg-1"
@@ -139,7 +146,9 @@ def test_optional_refs_are_omitted_never_null() -> None:
     refused = parse_envelope(_envelope_body(mission_ref=None))
     assert is_refusal(refused)
     assert refused.context["field"] == "mission_ref"
-    from_refused = parse_envelope({**_envelope_body(), "from_ref": "quant:research/lead"})
+    from_refused = parse_envelope(
+        {**_envelope_body(), "from_ref": "quant:research/lead"}
+    )
     assert is_refusal(from_refused)
     assert from_refused.context["field"] == "from"
 
@@ -175,8 +184,12 @@ def test_agent_is_never_a_to_address() -> None:
 
 
 def test_fp1_identity_excludes_correlation_and_causation() -> None:
-    first = parse_envelope(_envelope_body(correlation_id="corr-a", causation_id="cause-a"))
-    second = parse_envelope(_envelope_body(correlation_id="corr-b", causation_id="cause-b"))
+    first = parse_envelope(
+        _envelope_body(correlation_id="corr-a", causation_id="cause-a")
+    )
+    second = parse_envelope(
+        _envelope_body(correlation_id="corr-b", causation_id="cause-b")
+    )
     assert is_ok(first) and is_ok(second)
     identity_a = envelope_identity_content(first.value)
     identity_b = envelope_identity_content(second.value)

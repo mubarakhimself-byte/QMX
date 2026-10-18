@@ -216,8 +216,12 @@ def test_all_variant_factories_carry_structured_context() -> None:
             expected_schema_version=2,
             store_schema_version=9,
         ),
-        LaptopOffContinuationRefused.of(reason="laptop_only", detail="remote_unreachable"),
-        UnauthorizedCancelWriter.of(writer="plugin", state="cancelled", surface="job_handle"),
+        LaptopOffContinuationRefused.of(
+            reason="laptop_only", detail="remote_unreachable"
+        ),
+        UnauthorizedCancelWriter.of(
+            writer="plugin", state="cancelled", surface="job_handle"
+        ),
         UiContributionDeferred.of(contribution_point="ui_view"),
         NoCodeAuthoringRefused.of(request="qml_revival"),
         ExtensionSurfaceRefused.of(
