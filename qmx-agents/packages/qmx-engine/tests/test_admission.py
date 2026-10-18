@@ -17,7 +17,7 @@ from qmx_engine.roles import Candidate
 from qmx_engine.settings import DEFAULTS
 
 HAIKU = Candidate("claude", "haiku", None, 200_000, test_only=False)
-KIMI = Candidate("openrouter", "moonshotai/kimi-k2.5", None, 200_000, test_only=True)
+KIMI = Candidate("kimi", "k3", None, 200_000, test_only=False)
 RESETS = "2026-10-17T12:00:00+00:00"
 
 

@@ -10,9 +10,17 @@ from qmx_engine.settings import DEFAULTS
 SETTINGS = Path(__file__).resolve().parents[1] / "src" / "qmx_engine" / "settings.py"
 MARK = "# Claude's default, UI-editable"
 
-CHEAP = ("claude/haiku",)
-MID = ("claude/sonnet", "gpt")
-STRONG = ("claude/opus", "claude/fable", "gpt")
+CHEAP = (
+    "kimi/k2.7-code",
+    "deepseek",
+    "minimax/MiniMax-M2.7-highspeed",
+    "qwen",
+    "gpt",
+    "claude/haiku",
+)
+MID = ("glm", "qwen", "deepseek", "kimi", "gpt", "claude/sonnet")
+STRONG = ("kimi/k3", "deepseek/deepseek-v4-pro", "glm", "qwen", "gpt", "claude/opus")
+CHINESE = {"kimi", "deepseek", "minimax", "qwen", "glm"}
 
 
 def test_every_appendix_h_default_has_its_literal_value() -> None:
@@ -62,9 +70,20 @@ def test_every_appendix_h_default_has_its_literal_value() -> None:
         "roles.builder": STRONG,
         "roles.reviewer": STRONG,
         "roles.test_only": ("openrouter/moonshotai/kimi-k2.5",),
-        "roles.test_order": ("test_only", "cheap_first"),
-        "roles.live_order": ("plan", "key"),
+        "roles.test_order": ("test_only", "plan_cheap", "cheap"),
+        "roles.live_order": ("key", "gpt", "plan"),
     }
+
+
+def test_role_lists_lead_with_a_chinese_key_row_and_never_name_fable() -> None:
+    order_keys = {"roles.test_only", "roles.test_order", "roles.live_order"}
+    roles = {k: v for k, v in DEFAULTS.items() if k.startswith("roles.") and k not in order_keys}
+    every_row = [str(r) for v in DEFAULTS.values() if isinstance(v, tuple) for r in v]
+
+    assert [r for r in every_row if "fable" in r] == []
+    firsts = {k: str(v[0]).partition("/")[0] for k, v in roles.items() if isinstance(v, tuple)}
+    assert ({k for k, v in firsts.items() if v in CHINESE}, len(firsts)) == (set(roles), 13)
+    assert DEFAULTS["roles.live_order"] == ("key", "gpt", "plan")
 
 
 def test_defaults_cannot_be_changed_in_place() -> None:

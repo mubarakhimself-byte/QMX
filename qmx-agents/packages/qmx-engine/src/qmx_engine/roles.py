@@ -3,8 +3,11 @@
 A Settings row is `profile/model`, optionally `@effort`: `claude/haiku`,
 `openrouter/moonshotai/kimi-k2.5`, `claude/opus@high`. A row with no model, such as `gpt`, names
 no model the harness can run, so it is never resolved. `roles.test_only` lists the rows only a test
-run may use (ruling 51). A test run tries those first, then the role's rows from the cheap end; a
-live run tries plan rows, then key rows, and never a test-only row (ruling 26).
+run may use, and only when the role names one itself: that is a provider-proof lane (ruling 105).
+A test run builds its list by `roles.test_order`: those named test-only rows, then the plan's cheap
+end (the role's own haiku row, else `claude/haiku`), then the role's other rows from the cheap end.
+A live run sorts the role's rows by `roles.live_order` (key rows, then GPT, then the plan; ruling
+107), keeping the role's order inside a class, and never takes a test-only row.
 """
 
 from __future__ import annotations
@@ -15,8 +18,12 @@ from typing import Final, Literal
 
 from pydantic import JsonValue
 
+from qmx_engine.settings import DEFAULTS
+
 PLAN: Final = "claude"
 """The harness's plan profile."""
+GPT: Final = "gpt"
+"""The GPT plan lane's profile."""
 EFFORTS: Final = frozenset({"low", "medium", "high", "xhigh", "max"})
 CHEAPNESS: Final = ("haiku", "sonnet", "opus", "fable")
 """The plan's own tiers, cheapest first; any other model keeps its place after them."""
@@ -71,19 +78,38 @@ def _cheapness(candidate: Candidate) -> int:
     return CHEAPNESS.index(tier) if tier in CHEAPNESS else len(CHEAPNESS)
 
 
+def _steps(settings: Mapping[str, object], key: str) -> tuple[str, ...]:
+    return _rows(settings, key) if key in settings else _rows(DEFAULTS, key)
+
+
+def _live_class(candidate: Candidate) -> str:
+    if candidate.profile == PLAN:
+        return "plan"
+    return "gpt" if candidate.profile == GPT else "key"
+
+
 def order(settings: Mapping[str, object], role: str, mode: Mode) -> tuple[Candidate, ...]:
     """The role's candidates for a run in `mode`, in the order they are tried."""
     window = settings.get("context_window")
     window = window if isinstance(window, int) else DEFAULT_WINDOW
     flagged = set(_rows(settings, "roles.test_only"))
-    rows = _rows(settings, f"roles.{role}")
-    if mode == "test":
-        rows = (*sorted(flagged), *(r for r in rows if r not in flagged))
-    parsed = [parse(r, test_only=r in flagged, window=window) for r in dict.fromkeys(rows)]
+    rows = dict.fromkeys(_rows(settings, f"roles.{role}"))
+    parsed = [parse(r, test_only=r in flagged, window=window) for r in rows]
     found = [c for c in parsed if c is not None]
-    if mode == "test":
-        return tuple(sorted(found, key=lambda c: (not c.test_only, _cheapness(c))))
-    return tuple(sorted((c for c in found if not c.test_only), key=lambda c: c.profile != PLAN))
+    if mode == "live":
+        classes = _steps(settings, "roles.live_order")
+        rank = {name: i for i, name in enumerate(classes)}
+        kept = (c for c in found if not c.test_only)
+        return tuple(sorted(kept, key=lambda c: rank.get(_live_class(c), len(classes))))
+    rest = sorted((c for c in found if not c.test_only), key=_cheapness)
+    own = next((c for c in rest if c.profile == PLAN and _cheapness(c) == 0), None)
+    plan_cheap = own or Candidate(PLAN, CHEAPNESS[0], None, window, test_only=False)
+    steps = {
+        "test_only": [c for c in found if c.test_only],
+        "plan_cheap": [plan_cheap],
+        "cheap": [c for c in rest if c is not own],
+    }
+    return tuple(c for step in _steps(settings, "roles.test_order") for c in steps.get(step, ()))
 
 
 def resolve(

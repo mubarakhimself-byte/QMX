@@ -4,9 +4,12 @@ Each value is Claude's default, not the operator's, and every one is editable fr
 are dotted Settings paths. `*` in a `pool.accounts` key stands for any account. Durations are in
 seconds, fractions are of a model's context window or of an account's plan window, and a role's
 candidates are `profile/model` rows in the order they are tried. The role lists are SOLUTION-DESIGN
-section 9's, cut to the providers configured today: the plan, GPT once its lane is open, and the
-OpenRouter row for test runs only. `roles.test_order` tries the test-only rows first, then each
-role's cheap end; `roles.live_order` tries the plan, then key rows as the operator adds them.
+section 9's examples, key rows first with the Chinese models leading every tier (ruling 107), then
+GPT, then the plan; no list names Fable. A row with no model id (`glm`, `qwen`, `gpt`) is kept for
+its place and is never resolved until the registry names its model (RTR5). `roles.live_order` is
+the class order a live run sorts by. `roles.test_order` is how a test run builds its list: test-only
+rows the role names itself (a provider-proof lane), then the plan's cheap end `claude/haiku`
+(ruling 105), then the role's other rows from the cheap end.
 """
 
 from __future__ import annotations
@@ -17,9 +20,16 @@ from typing import Final
 
 type Setting = int | float | str | tuple[int, ...] | tuple[str, ...] | None
 
-_CHEAP: Final = ("claude/haiku",)
-_MID: Final = ("claude/sonnet", "gpt")
-_STRONG: Final = ("claude/opus", "claude/fable", "gpt")
+_CHEAP: Final = (
+    "kimi/k2.7-code",
+    "deepseek",
+    "minimax/MiniMax-M2.7-highspeed",
+    "qwen",
+    "gpt",
+    "claude/haiku",
+)
+_MID: Final = ("glm", "qwen", "deepseek", "kimi", "gpt", "claude/sonnet")
+_STRONG: Final = ("kimi/k3", "deepseek/deepseek-v4-pro", "glm", "qwen", "gpt", "claude/opus")
 
 DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
     {
@@ -68,7 +78,7 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "roles.builder": _STRONG,  # Claude's default, UI-editable
         "roles.reviewer": _STRONG,  # Claude's default, UI-editable
         "roles.test_only": ("openrouter/moonshotai/kimi-k2.5",),  # Claude's default, UI-editable
-        "roles.test_order": ("test_only", "cheap_first"),  # Claude's default, UI-editable
-        "roles.live_order": ("plan", "key"),  # Claude's default, UI-editable
+        "roles.test_order": ("test_only", "plan_cheap", "cheap"),  # Claude's default, UI-editable
+        "roles.live_order": ("key", "gpt", "plan"),  # Claude's default, UI-editable
     }
 )
