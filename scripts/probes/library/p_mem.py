@@ -11,9 +11,10 @@ when its text holds one of the question's answer phrases. Hindsight runs in-proc
 `chunks` mode, so both engines search the same rows. Observations are off on both banks:
 consolidation would send every row to the extractor, and the binding rules run it only from
 `consolidate`. A digest-sized text (the first 8,000 characters of his rulings file) is then
-retained in the default `concise` mode with a DeepSeek extractor on the OpenRouter row (provider
-proof); the key is read in-process from the keyring entry `qmx/openrouter` and never printed.
-Memory is the peak over this process and pg0's Postgres for the probe instance (see `Peak`).
+retained in the default `concise` mode with a DeepSeek extractor, reasoning off, on the
+OpenRouter row (provider proof); the key is read in-process from the keyring entry
+`qmx/openrouter` and never printed. Memory is the peak over this process and pg0's Postgres
+for the probe instance (see `Peak`).
 
 Runs in the throwaway venv under the store's `homes/prb-l/hs-venv`, with the model downloads in
 `homes/prb-l/hs-home`. pg0 ignores the moved profile and keeps its instance in
@@ -52,7 +53,9 @@ from common import (
 HS_HOME: Final = HOMES / "hs-home"
 SOURCES: Final = HOMES / "sources"
 ROWS: Final = HOMES / "p_mem_rows.jsonl"
-MODEL: Final = "deepseek/deepseek-v4.1-flash"
+MODEL: Final = "deepseek/deepseek-v4-flash"
+"""The fastest of three DeepSeek rows timed on the digest with reasoning off: 35 s, against
+103 s for v4.1-flash and 146 s for v3.2 (owner-decisions.tsv)."""
 CHUNK_CHARS: Final = 1500
 MIN_CHARS: Final = 80
 PLAN_REPO: Final = Path("D:/QMX-worktrees/agent-system")
@@ -361,16 +364,19 @@ def judge(
 
 class Peak:
     """Samples the memory of this process plus pg0's Postgres for the probe's instance (its
-    postmaster, found by data folder, and every backend under it). Two sums are kept: the RSS
-    sum, which counts Postgres's shared buffers once per backend, and the private-bytes sum,
-    which counts each page once. The verdict reads the private sum; both are logged."""
+    postmaster, found by data folder, and every backend under it). The resident figure is each
+    process's unique working set (USS) summed, plus the largest shared part of any one process
+    counted once; it is the tree's RSS with Postgres's shared buffers counted once. The plain RSS
+    sum, which counts the shared buffers once per backend, is logged beside it. Windows private
+    bytes are not used: they are commit charge, and the probe's Python commits about 4 GB it never
+    touches."""
 
     def __init__(self) -> None:
         import psutil  # noqa: PLC0415
 
         self.psutil = psutil
         self.peak_rss_mb = 0.0
-        self.peak_private_mb = 0.0
+        self.peak_resident_mb = 0.0
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self.watch, daemon=True)
 
@@ -385,22 +391,24 @@ class Peak:
         return found
 
     def current(self) -> tuple[float, float]:
-        rss = private = 0
+        """(RSS sum, resident) in MB."""
+        rss = unique = shared = 0
         for proc in self.tree():
             try:
-                info = proc.memory_info()
+                info = proc.memory_full_info()
             except self.psutil.Error:
                 continue
             rss += info.rss
-            private += getattr(info, "private", info.rss)
-        return rss / 2**20, private / 2**20
+            unique += info.uss
+            shared = max(shared, info.rss - info.uss)
+        return rss / 2**20, (unique + shared) / 2**20
 
     def watch(self) -> None:
         while not self.stop.is_set():
-            rss, private = self.current()
+            rss, resident = self.current()
             self.peak_rss_mb = max(self.peak_rss_mb, rss)
-            self.peak_private_mb = max(self.peak_private_mb, private)
-            self.stop.wait(1.0)
+            self.peak_resident_mb = max(self.peak_resident_mb, resident)
+            self.stop.wait(2.0)
 
     def leftovers(self) -> list[str]:
         return [f"{p.pid} {p.name()}" for p in self.tree()[1:]]
@@ -414,6 +422,11 @@ def isolate() -> None:
     os.environ["HF_HOME"] = str(HS_HOME / "hf")
     os.environ["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] = "local"
     os.environ["HINDSIGHT_API_RERANKER_PROVIDER"] = "local"
+    os.environ["HINDSIGHT_API_ENABLE_OBSERVATIONS"] = "false"
+    os.environ["HINDSIGHT_API_RETAIN_LLM_EXTRA_BODY"] = json.dumps(
+        {"reasoning": {"enabled": False}}
+    )
+    os.environ["HINDSIGHT_API_RETAIN_LLM_TIMEOUT"] = "600"
 
 
 def openrouter_key() -> str:
@@ -458,7 +471,7 @@ def run_hindsight(
                 ],
             )
         log.say(f"hindsight chunks retain of {len(rows)} rows: {time.perf_counter() - began:.0f} s")
-        log.say(f"rss after bulk retain {peak.current()[1]:.0f} MB private")
+        log.say(f"resident after bulk retain {peak.current()[1]:.0f} MB")
         for q in QUESTIONS:
             found = client.recall(bank_id=bank, query=q.text, budget="mid", max_tokens=4096)
             answers[q.text] = [r.text for r in found.results[:TOP]]
@@ -510,9 +523,9 @@ def main() -> None:
                 f"fts5 {relevant(fts.recall(q.text), q)}/5"
             )
     changed = [str(p) for p, h in hashes.items() if sha256_file(p) != h and p == HIS_LIBRARY]
-    result = judge(scores, peak.peak_private_mb, retain_s)
+    result = judge(scores, peak.peak_resident_mb, retain_s)
     result.notes.append(
-        f"peak private bytes {peak.peak_private_mb:.0f} MB; peak RSS sum {peak.peak_rss_mb:.0f} MB "
+        f"peak resident {peak.peak_resident_mb:.0f} MB; peak RSS sum {peak.peak_rss_mb:.0f} MB "
         "(counts shared buffers once per Postgres backend)"
     )
     result.notes.append(f"his library.db unchanged: {not changed}")
