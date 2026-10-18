@@ -210,7 +210,8 @@ class Ledger:
         except TypeError, ValueError:
             raise ValueError("`at` is not an ISO-8601 instant") from None
         try:
-            clean, redactions = redact_json(data)
+            # Through JSON first, so a string inside a tuple or a model is redacted too.
+            clean, redactions = redact_json(json.loads(encoded(data)))
             text = encoded(clean).decode()
         except TypeError, ValueError:
             raise ValueError("event data is not a JSON object") from None

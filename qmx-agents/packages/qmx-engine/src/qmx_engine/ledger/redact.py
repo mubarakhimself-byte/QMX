@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 import threading
-from typing import Final
+from typing import Final, cast
 
 from pydantic import JsonValue
 
@@ -85,25 +85,26 @@ def holds_value(data: bytes) -> bool:
     return any(value.encode() in data for value in values)
 
 
-def redact_json(value: JsonValue) -> tuple[JsonValue, int]:
-    """Every string in the value redacted, keys included, and the total count."""
+def redact_json(value: object) -> tuple[JsonValue, int]:
+    """Every string in the value redacted, keys included, and the total count. A tuple comes back
+    a list, as JSON would write it."""
     if isinstance(value, str):
         return counted(value)
     if isinstance(value, dict):
         total = 0
         out: dict[str, JsonValue] = {}
-        for key, item in value.items():
-            clean_key, n = counted(key)
+        for key, item in cast(dict[object, object], value).items():
+            clean_key, n = counted(str(key))
             clean, m = redact_json(item)
             out[clean_key] = clean
             total += n + m
         return out, total
-    if isinstance(value, list):
+    if isinstance(value, list | tuple):
         total = 0
         items: list[JsonValue] = []
-        for item in value:
+        for item in cast(list[object], value):
             clean, n = redact_json(item)
             items.append(clean)
             total += n
         return items, total
-    return value, 0
+    return cast(JsonValue, value), 0
