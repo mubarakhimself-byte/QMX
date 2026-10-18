@@ -43,6 +43,9 @@ class NodeJob:
     placement: str = "pc"
     timeouts: JsonObject | None = None
     pinned_outputs: JsonObject | None = None
+    session: str | None = None
+    """The chat an `agent` attempt picks up again: its slot's last chat, when the engine died
+    mid-attempt."""
 
 
 @dataclass(frozen=True, slots=True)

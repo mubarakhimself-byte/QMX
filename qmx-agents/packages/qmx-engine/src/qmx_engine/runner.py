@@ -18,7 +18,13 @@ reads only those ticks (AD-6).
 
 `Engine.resume` picks a run up again from the ledger. An attempt left in flight belongs to an
 engine that died, since only one engine process can hold the writer: its outcome is unknown, and
-`workers.effects.after_unknown` decides whether it retries, waits for an answer, or parks.
+`workers.effects.after_unknown` decides whether it retries, waits for an answer, or parks. An
+`agent` attempt after such a death picks up its slot's last chat.
+
+A model node that waits on a usage limit drains the run (AD-9): no new model attempt starts while
+any slot waits on a limit, and other nodes go on. Once nothing runs, the run writes `run_paused`
+and its own timer wakes it at the earliest `resume_at`, which already holds `limits.slack`, with
+`run_resumed`. The scheduler takes the wake over in EP12.
 """
 
 from __future__ import annotations
@@ -61,6 +67,7 @@ from qmx_engine.ledger.events import Event, EventKind, JsonObject
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
+from qmx_engine.nodes.agent import Agent
 from qmx_engine.nodes.base import Failed, NodeJob, ending
 from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
 from qmx_engine.nodes.fake_provider import FakeProvider
@@ -77,6 +84,8 @@ from qmx_engine.nodes.wait import Wait as WaitNode
 from qmx_engine.nodes.wait import resume_at
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import InboxPort, raised_by
+from qmx_engine.ports.library_fake import LibraryFake
+from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import order, resolve
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.watchdog import Open, ledger_fault, stalled
@@ -207,9 +216,11 @@ class Engine:
         inbox: InboxPort | None = None,
         watch_every: float | None = None,
         harness: HarnessPort | None = None,
+        memory: MemoryPort | None = None,
     ) -> None:
         """`executors` replace the built-in executor of a kind. Without a `doctor`, the ladder's
-        doctor step is recorded as skipped. Without a `harness`, model nodes fail `unavailable`."""
+        doctor step is recorded as skipped. Without a `harness`, model nodes fail `unavailable`.
+        Without `memory`, agent notes go to the memory stub over the home's Library."""
         self.home = home
         self.ledger = ledger
         self.settings = settings
@@ -223,6 +234,7 @@ class Engine:
         self.harness = harness
         self.admission = Admission(harness, settings) if harness is not None else None
         self._inbox = inbox
+        self._memory = memory
         tick = settings.get("scheduler.tick")
         self.watch_every = watch_every or (float(tick) if isinstance(tick, int | float) else 60.0)
         self.claiming = True
@@ -234,6 +246,16 @@ class Engine:
         if self._inbox is None:
             self._inbox = InboxTable.open(self.home)
         return self._inbox
+
+    @property
+    def memory(self) -> MemoryPort:
+        if self._memory is None:
+            self._memory = MemoryStub(LibraryFake.open(self.home))
+        return self._memory
+
+    async def until(self, instant: str) -> None:
+        delay = (datetime.fromisoformat(instant) - self.wall()).total_seconds()
+        await asyncio.sleep(max(delay, 0.0))
 
     def banned_values(self) -> tuple[str, ...]:
         """Where the plan login lives; no script's environment may point there."""
@@ -326,6 +348,8 @@ class Run:
         self.inflight: dict[asyncio.Task[None], StartNode] = {}
         self.seen: dict[str, datetime] = {}
         """Idempotency key of an attempt to when it last wrote an event, for the watchdog."""
+        self.woke: str | None = None
+        """The reset the run last woke itself at."""
         self.zone = workspace(engine.home, workflow.id) / "runs" / run_id
         self.executors = self.build_executors()
 
@@ -370,8 +394,23 @@ class Run:
                 spawn=self.engine.spawn,
             ),
             "llm": self.llm_executor(),
+            "agent": self.agent_executor(),
         }
         return built | dict(self.engine.executors)
+
+    def agent_executor(self) -> AnyExecutor:
+        engine = self.engine
+        if engine.harness is None or engine.admission is None:
+            return Unavailable()
+        return Agent(
+            self.root,
+            engine.harness,
+            engine.admission,
+            workspace(engine.home, self.definition.id),
+            record=self.append,
+            memory=engine.memory,
+            settings=engine.settings,
+        )
 
     def llm_executor(self) -> AnyExecutor:
         engine = self.engine
@@ -463,8 +502,11 @@ class Run:
             commands = next_commands(state)
             ended: Finish | Park | Pause | Wait | None = None
             moved = False
+            limits = drain(state)
             for command in commands:
                 match command:
+                    case StartNode() if limits and model_bearing(command.node_definition):
+                        ended = Pause("limit", earliest(limits))
                     case StartNode():
                         self.launch(command)
                         moved = True
@@ -496,7 +538,22 @@ class Run:
                     del self.inflight[task]
                     task.result()
                 continue
-            return self.end(ended, state)
+            outcome = self.end(ended, state)
+            wake = self.wake(ended)
+            if wake is None:
+                return outcome
+            await self.engine.until(wake)
+            self.woke = wake
+            self.append("run_resumed", {"reason": "limit"})
+
+    def wake(self, ended: Finish | Park | Pause | Wait | None) -> str | None:
+        """The instant a limit pause wakes the run; at once when a drain outlasted the reset. A
+        pause that names the reset the run already woke at, now past, does not wake it again, so
+        a stale reset cannot spin the run."""
+        if not isinstance(ended, Pause) or ended.reason != "limit" or ended.resume_at is None:
+            return None
+        ahead = datetime.fromisoformat(ended.resume_at) > self.engine.wall()
+        return ended.resume_at if ahead or ended.resume_at != self.woke else None
 
     def watch(self) -> None:
         """Cancel every attempt the watchdog finds stalled; each then fails `stalled`."""
@@ -565,9 +622,15 @@ class Run:
         )
         self.seen[command.idempotency_key] = self.engine.wall()
         node = next(n for n in self.definition.nodes if n.id == command.node_id)
+        slot = Slot(command.node_id, command.iteration, command.partition)
+        own = node.timeout
         timeouts: JsonObject | None = None
-        if node.timeout is not None and node.timeout.run_seconds is not None:
-            timeouts = {"run_seconds": node.timeout.run_seconds}
+        if own is not None:
+            limits = (("run_seconds", own.run_seconds), ("idle_seconds", own.idle_seconds))
+            timeouts = {key: value for key, value in limits if value is not None} or None
+        kind = REGISTRY.kind(node.type)
+        agent = kind is not None and kind.name == "agent"
+        session = resumed_chat(self.events, slot, command.attempt) if agent else None
         pins = self.definition.pin_data or {}
         pinned = pins.get(node.name) if self.mode == "test" else None
         job = NodeJob(
@@ -586,6 +649,7 @@ class Run:
             timeouts=timeouts,
             resolved_model=self.resolved(node, command.ladder),
             pinned_outputs=pinned_outputs(pinned) if pinned is not None else None,
+            session=session,
         )
         task = asyncio.create_task(self.attempt(job))
         self.inflight[task] = command
@@ -677,15 +741,20 @@ class Run:
             == (slot.node_id, slot.iteration, slot.partition)
         )
         verdict = after_unknown(definition, earlier)
+        key = idempotency_key(self.run_id, slot, attempt)
         if verdict == "retry":
             self.append(
                 "node_failed", slot_keys(slot, attempt) | failure(code, message, True, "unknown")
             )
             if model_bearing(definition):
-                line = f"{node.name}: a model call of unknown outcome is retried once"
-                self.append("log", slot_keys(slot, attempt, level="info", digest=True, line=line))
+                line = f"{node.name}: a model call of unknown outcome ({key}) is retried once"
+                self.append(
+                    "log",
+                    slot_keys(
+                        slot, attempt, level="info", digest=True, line=line, idempotency_key=key
+                    ),
+                )
             return verdict
-        key = idempotency_key(self.run_id, slot, attempt)
         self.append(
             "gate_opened",
             slot_keys(
@@ -713,6 +782,38 @@ class Run:
             ),
         )
         return verdict
+
+
+def drain(state: State) -> list[str | None]:
+    """The `resume_at` of every slot waiting on a usage limit in this pass; any one drains the
+    run."""
+    return [
+        run.resume_at
+        for run in state.nodes.values()
+        if run.phase == "waiting" and run.reason == "limit"
+    ]
+
+
+def earliest(times: list[str | None]) -> str | None:
+    known = [t for t in times if t is not None]
+    return min(known, key=datetime.fromisoformat) if known else None
+
+
+def resumed_chat(events: list[Event], slot: Slot, attempt: int) -> str | None:
+    """The chat the slot's previous attempt left when the engine died mid-attempt, else None."""
+    chat: str | None = None
+    died = False
+    for event in events:
+        if "node_id" not in event.data or slot_of(event.data) != slot:
+            continue
+        if event.data.get("attempt") != attempt - 1:
+            continue
+        found = event.data.get("session_id")
+        if event.kind == "heartbeat" and isinstance(found, str):
+            chat = found
+        elif event.kind == "node_failed":
+            died = event.data.get("code") == "interrupted"
+    return chat if died else None
 
 
 def pinned_outputs(pinned: Mapping[str, list[JsonValue]]) -> JsonObject:

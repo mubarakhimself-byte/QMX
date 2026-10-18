@@ -27,6 +27,7 @@ from qmx_engine.definition.lint import redact
 from qmx_engine.nodes.base import EffectState, Failed, NodeJob, NodeResult, Ok, Waiting
 from qmx_engine.nodes.script import failed
 from qmx_engine.ports.harness_adapter import ChatsFull, HarnessPort, Refusal, Turn
+from qmx_engine.prompts import Prompt, payload, static
 from qmx_engine.roles import Candidate
 
 DEFAULT_RUN_SECONDS: Final = 600.0
@@ -56,16 +57,7 @@ def candidate_of(resolved: JsonObject | None) -> Candidate | str:
 
 
 def brief(prompt: str, schema: JsonObject, inputs: JsonValue, hint: str | None = None) -> str:
-    parts = [
-        prompt.strip(),
-        TOOL_LESS,
-        "Reply with exactly one JSON document that matches this JSON schema, and nothing else:\n"
-        + json.dumps(schema, sort_keys=True),
-    ]
-    if hint is not None:
-        parts.append(f"A check of an earlier attempt says: {hint}")
-    parts.append("Input:\n" + json.dumps(inputs, sort_keys=True))
-    return "\n\n".join(parts)
+    return Prompt(static(prompt, [TOOL_LESS], schema), payload(inputs, hint=hint)).text
 
 
 def answer(text: str | None, schema: JsonObject) -> tuple[JsonValue, str | None]:
@@ -150,8 +142,6 @@ async def call(
     run_seconds: float,
 ) -> NodeResult:
     """One answer from a fresh Background chat on `candidate`, with one repair turn."""
-    if admission.cap() == 0:
-        return Waiting("limit", span={"detail": "the operator's reserve takes every live chat"})
     held = await admission.check(candidate)
     if held is not None:
         return held
@@ -199,11 +189,15 @@ async def turns(
         document, problem = answer(turn.text, schema)
         if problem is None:
             return Ok({"main": document}, span=usage.span() | {"repaired": usage.turns > 1})
-        prompt = (
-            f"That answer does not match the JSON schema ({problem}). Reply with only the "
-            "corrected JSON document."
-        )
+        prompt = repair(problem)
     return with_span(failed("bad_output", BAD_OUTPUT, retryable=True), usage)
+
+
+def repair(problem: str) -> str:
+    return (
+        f"That answer does not match the JSON schema ({problem}). Reply with only the corrected "
+        "JSON document."
+    )
 
 
 def read_ref(root: Path, parameters: JsonObject, name: str) -> str | None:
@@ -216,8 +210,8 @@ def read_ref(root: Path, parameters: JsonObject, name: str) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
-def node_schema(root: Path, parameters: JsonObject) -> JsonObject | None:
-    text = read_ref(root, parameters, "schema_ref")
+def node_schema(root: Path, parameters: JsonObject, name: str = "schema_ref") -> JsonObject | None:
+    text = read_ref(root, parameters, name)
     try:
         found: JsonValue = json.loads(text) if text is not None else None
     except ValueError:

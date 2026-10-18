@@ -44,6 +44,7 @@ IGNORED: Final = frozenset(
         "run_paused",
         "compacted",
         "memory_written",
+        "tool_called",
     }
 )
 """Kinds this core knows and that change nothing it decides yet."""

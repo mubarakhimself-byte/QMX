@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from qmx_control.service import ControlService
 
-from qmx_engine.admission import Admission
+from qmx_engine.admission import Admission, Held
 from qmx_engine.nodes.base import Waiting
 from qmx_engine.ports.harness_adapter import PlanUse
 from qmx_engine.ports.settings import ControlSettings
@@ -75,13 +75,13 @@ def test_the_plan_share_from_settings_parks_at_its_value(
     (tmp_path / "settings.toml").write_text(f"[budgets]\nbackground_cap = {cap}\n", "utf-8")
     settings = ControlSettings(ControlService(tmp_path)).values()
 
-    def check(used: float) -> Waiting | None:
+    def check(used: float) -> Held | None:
         gate = Admission(Plan(PlanUse(used, RESETS, None, None)), settings)  # type: ignore[arg-type]
         return asyncio.run(gate.check(HAIKU))
 
     parked = check(parks_at)
 
     assert settings["pool.accounts.claude.background_share"] == cap
-    assert parked is not None
+    assert isinstance(parked, Waiting)
     assert (parked.reason, parked.resume_at) == ("limit", "2026-10-17T12:01:00+00:00")
     assert check(runs_at) is None

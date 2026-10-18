@@ -8,8 +8,9 @@ its `events`. An ending event for an attempt that never started, such as a `node
 writes when no lease was admitted, has no span to close. The other span fields are read from these
 data keys when present: on `node_started` `parent_span_id role profile account model effort
 placement effect idempotency_key`; on the ending event `tokens cost_estimate_usd signature verdict
-same_family uncached_resend`; on `compacted` `trigger at_fraction`. Tool and chunk spans (AD-34)
-are written by the PRs that read tool calls.
+same_family uncached_resend`; on `compacted` `trigger at_fraction`. A `tool_called` event writes
+one `tool` span (AD-34), a child of its attempt's span, from its `tool` object: `id name
+duration_ms error`.
 """
 
 from __future__ import annotations
@@ -64,6 +65,10 @@ class Span:
     same_family: bool | None = None
     uncached_resend: bool = False
     events: list[JsonObject] = field(default_factory=list[JsonObject])
+    name: str | None = None
+    """A tool span's tool."""
+    duration_ms: int | None = None
+    error: str | None = None
 
     @property
     def duration_seconds(self) -> float | None:
@@ -160,6 +165,31 @@ def compacted(span: Span, event: Event) -> Span:
     return replace(span, events=[*span.events, entry])
 
 
+def tool(event: Event, key: AttemptKey) -> Span | None:
+    found = event.data.get("tool")
+    if not isinstance(found, dict) or not isinstance(tool_id := found.get("id"), str):
+        return None
+    node_id, iteration, partition, attempt = key
+    duration, error = found.get("duration_ms"), _text(found, "error")
+    return Span(
+        span_id=fingerprint([event.run_id, *key, tool_id])[:32],
+        trace_id=event.run_id,
+        node_id=node_id,
+        iteration=iteration,
+        partition=partition,
+        attempt=attempt,
+        started_at=event.at,
+        kind="tool",
+        parent_span_id=span_id(event.run_id, key),
+        placement=_text(found, "placement"),
+        ended_at=event.at,
+        status="failed" if error is not None else "ok",
+        name=_text(found, "name"),
+        duration_ms=duration if isinstance(duration, int) else None,
+        error=error,
+    )
+
+
 def from_record(record: str) -> Span:
     return Span(**json.loads(record))
 
@@ -193,6 +223,10 @@ def apply(connection: sqlite3.Connection, event: Event) -> None:
         return
     if event.kind == "node_started":
         _save(connection, started(event, key, _run_mode(connection, event.run_id)))
+        return
+    if event.kind == "tool_called":
+        if (child := tool(event, key)) is not None:
+            _save(connection, child)
         return
     if event.kind not in ENDINGS and event.kind != "compacted":
         return
