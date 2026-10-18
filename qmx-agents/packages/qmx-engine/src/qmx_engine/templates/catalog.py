@@ -67,7 +67,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rs1-paper-scout",
         triggers=(Cron("0 */6 * * *", "UTC"),),
         test_inputs={"fixture": True},
-        test_cost="TP1 lane 2: 5 Kimi spans; 47k in, 8k out, 86k cache read; 233 s",
+        test_cost="TP4 lane 2: 5 haiku spans; 0k in, 10k out, 71k cache read; 47 s",
     ),
     Template(
         "T3",
@@ -77,7 +77,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="t3-news-calendar-watch",
         triggers=(Cron("5 0 * * *", "UTC"),),
         test_inputs={"fixture": "surprise"},
-        test_cost="TP1 lane 3: quiet day 0 tokens, 1 s; surprise day 1 Kimi span, 6k in, 1k out",
+        test_cost="TP4 lane 2, surprise day: 1 haiku span; 0k in, 1k out, 15k cache read; 7 s",
     ),
     Template(
         "RS0",
@@ -86,6 +86,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="rs0-idea-grill",
         test_inputs={"fixture": True},
+        test_cost="TP4 lane 2: 2 haiku spans; 0k in, 10k out, 33k cache read; 53 s",
     ),
     Template(
         "RS2",
@@ -94,6 +95,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="rs2-source-to-component-card",
         test_inputs={"fixture": True},
+        test_cost="TP4 lane 2: 5 haiku spans; 0k in, 4k out, 92k cache read; 29 s",
     ),
     Template(
         "RS4",
@@ -102,6 +104,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="rs4-literature-review",
         test_inputs={"fixture": True},
+        test_cost="TP4 lane 2: 9 haiku spans; 0k in, 25k out, 163k cache read; 129 s",
     ),
     Template(
         "A",
@@ -110,6 +113,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="a-fill-the-library",
         test_inputs={"fixture": "one-video"},
+        test_cost="TP4 lane 2: 7 haiku spans; 0k in, 8k out, 127k cache read; 54 s",
     ),
     Template(
         "RV",
@@ -119,6 +123,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rv-weekly-review",
         triggers=(Cron("0 6 * * 1", "UTC"),),
         test_inputs={"fixture": True},
+        test_cost="TP4 lane 2: 2 haiku spans; 0k in, 1k out, 33k cache read; 17 s",
     ),
     Template(
         "DB",
@@ -132,6 +137,7 @@ CATALOG: Final[tuple[Template, ...]] = (
             Cron("5 17 * * 1-5", "America/New_York"),
         ),
         test_inputs={"fixture": "busy"},
+        test_cost="TP4 lane 2: 1 haiku span; 0k in, 2k out, 15k cache read; 13 s",
     ),
     Template(
         "T4",
@@ -141,6 +147,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="t4-research-desk-overnight",
         triggers=(Cron("0 3 * * 0-4", "Europe/London"),),
         test_inputs={"fixture": True},
+        test_cost="TP4 lane 2: 4 haiku spans; 0k in, 12k out, 66k cache read; 50 s",
     ),
     Template(
         "DM",

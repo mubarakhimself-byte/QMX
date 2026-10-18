@@ -175,17 +175,19 @@ How the pack is checked:
   credential, each runnable template's test run delivers what its card promises, a planted number
   in its output fails the run, and `templates install` publishes 9 disabled, saves 22 drafts, and
   changes nothing the second time.
-- `scripts/live/engine/t_templates.py` holds the lanes. `all` test-runs the 9 runnable templates
-  on real models and prints the pack's wall time, model spans and tokens. `install` installs the
-  pack on real models. `install-recorded`, `all-recorded` and `variant-recorded` run the same paths
-  on the recorded answers with no provider. `drafts-tp4`, `readmes-tp4`, `doc` and `money-pack`
-  need no model.
+- `scripts/live/engine/t_templates.py` holds the lanes. `all-plan` test-runs the 9 runnable
+  templates on real models through the plan login on the ship home, under the lane lock, with every
+  role mapped to `claude/haiku` for that lane only; the engine runs on a throwaway home and the ship
+  home's `settings.toml` is hashed before and after. It prints each template's `test_cost` line,
+  the pack's wall time, model spans and tokens. `install-plan` and `variant-plan` do the same for
+  the install and for a variant through `extends`. `all`, `install` and `variant` use a throwaway
+  home's OpenRouter test row instead, and the `-recorded` lanes the recorded answers with no
+  provider. `drafts-tp4`, `readmes-tp4`, `doc` and `money-pack` need no model.
 
-Real-model test cost so far, from the single test runs of TP1 and TP2 (TP2's before its fix
-round, so the catalogue keeps them unrecorded): RS1 233 s, T3 1 s quiet and 56 s on a surprise day,
-RS0 116 s, RS2 77 s, RS4 295 s, A 239 s and RV 46 s, about 18 minutes for 7 templates. DB and T4
-were built under the spend freeze and have no real-model run yet. On the recorded answers the 9
-templates make 35 model calls and the whole pack's test runs take 20 s.
+Real-model test cost at TP4 (`all-plan`, every role on haiku, 2026-10-18): all 9 pass, 36 haiku
+spans, 71k output tokens and 616k cache reads, 399 s of wall time for the whole pack (6.7 minutes).
+Each template's line is its catalogue `test_cost`. On the recorded answers the 9 templates make 35
+model calls and take 20 s.
 
 Where the drafts depart from their cards, and why:
 

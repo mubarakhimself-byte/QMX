@@ -11,19 +11,19 @@ uv run --no-sync python -m qmx_engine templates list --home <home>
 
 ## The 31 templates
 
-Status is what `templates install` leaves on a fresh home. Test cost is what the template's last test run on the cheapest test models cost, where a PR measured it. Triggers are the ways a run can start: a cron trigger is installed disabled, and manual means he or the copilot starts it.
+Status is what `templates install` leaves on a fresh home. Test cost is what the template's last test run cost on real models. At TP4 that is the plan login with every role on `claude/haiku` (`t_templates.py all-plan`). Triggers are the ways a run can start: a cron trigger is installed disabled, and manual means he or the copilot starts it.
 
 | Id | Template | Status | Test cost | Triggers | Needs |
 |---|---|---|---|---|---|
-| RS1 | Paper scout to research note | published, disabled | TP1 lane 2: 5 Kimi spans; 47k in, 8k out, 86k cache read; 233 s | cron `0 */6 * * *` UTC, manual | none |
-| T3 | News and macro calendar watch | published, disabled | TP1 lane 3: quiet day 0 tokens, 1 s; surprise day 1 Kimi span, 6k in, 1k out | cron `5 0 * * *` UTC, manual | none |
-| RS0 | Idea grill to term sheet | published, disabled | not measured yet | manual | none |
-| RS2 | Source to component card | published, disabled | not measured yet | manual | none |
-| RS4 | Literature review on a topic | published, disabled | not measured yet | manual | none |
-| A | Fill the Library, funnel stages 1 to 7 | published, disabled | not measured yet | manual | none |
-| RV | Weekly review | published, disabled | not measured yet | cron `0 6 * * 1` UTC, manual | none |
-| DB | Desk brief | published, disabled | not measured yet | cron `0 6 * * 1-5` Europe/London, cron `30 7 * * 1-5` America/New_York, cron `5 17 * * 1-5` America/New_York, manual | none |
-| T4 | Research desk overnight | published, disabled | not measured yet | cron `0 3 * * 0-4` Europe/London, manual | none |
+| RS1 | Paper scout to research note | published, disabled | TP4 lane 2: 5 haiku spans; 0k in, 10k out, 71k cache read; 47 s | cron `0 */6 * * *` UTC, manual | none |
+| T3 | News and macro calendar watch | published, disabled | TP4 lane 2, surprise day: 1 haiku span; 0k in, 1k out, 15k cache read; 7 s | cron `5 0 * * *` UTC, manual | none |
+| RS0 | Idea grill to term sheet | published, disabled | TP4 lane 2: 2 haiku spans; 0k in, 10k out, 33k cache read; 53 s | manual | none |
+| RS2 | Source to component card | published, disabled | TP4 lane 2: 5 haiku spans; 0k in, 4k out, 92k cache read; 29 s | manual | none |
+| RS4 | Literature review on a topic | published, disabled | TP4 lane 2: 9 haiku spans; 0k in, 25k out, 163k cache read; 129 s | manual | none |
+| A | Fill the Library, funnel stages 1 to 7 | published, disabled | TP4 lane 2: 7 haiku spans; 0k in, 8k out, 127k cache read; 54 s | manual | none |
+| RV | Weekly review | published, disabled | TP4 lane 2: 2 haiku spans; 0k in, 1k out, 33k cache read; 17 s | cron `0 6 * * 1` UTC, manual | none |
+| DB | Desk brief | published, disabled | TP4 lane 2: 1 haiku span; 0k in, 2k out, 15k cache read; 13 s | cron `0 6 * * 1-5` Europe/London, cron `30 7 * * 1-5` America/New_York, cron `5 17 * * 1-5` America/New_York, manual | none |
+| T4 | Research desk overnight | published, disabled | TP4 lane 2: 4 haiku spans; 0k in, 12k out, 66k cache read; 50 s | cron `0 3 * * 0-4` Europe/London, manual | none |
 | DM | Demo monitor and execution quality | draft | none until it can run | cron (schedule not set yet), manual | `trading-node` |
 | T7 | Trade journal review in R | draft | none until it can run | cron (schedule not set yet), manual | `trading-node` |
 | GW | Guard watchdogs | draft | none until it can run | cron (schedule not set yet), manual | `trading-node` |

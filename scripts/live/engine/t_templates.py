@@ -49,6 +49,10 @@ No lane touches the plan login or the ship home.
 - `variant` (TP4 lane 7): RS1 cloned through `extends` and test-run; the published variant records
   `variant-of` RS1's version. `variant-recorded` runs it on the recorded answers.
 - `money-pack` (TP4 lane 9, no model): the money lint over all 31 folders.
+- `all-plan`, `install-plan` and `variant-plan`: `all`, the install and `variant` with model
+  turns through the plan login on the ship home, under the lane lock, every role on
+  `claude/haiku` for the lane only. The engine runs on a throwaway home, and the ship home's
+  `settings.toml` must hash the same before and after.
 
 Spend is the relay journals' upper bound at the Kimi row's list prices.
 """
@@ -58,6 +62,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -65,11 +70,12 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import AsyncIterator, Callable
 from functools import partial
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
-from common import ENGINE_STORE, Log, boot, throwaway_home
+from common import ENGINE_STORE, SHIP_HOME, Log, boot, plan_harness, throwaway_home
 from ep2_lanes import ENGINE
 
 os.environ.setdefault("QMA_LIVE_SCRATCH", str(ENGINE_STORE / "homes" / "tp1-scratch"))
@@ -84,7 +90,7 @@ from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.library import Bundle, drafts_ref
-from qmx_engine.ports.settings import ControlSettings
+from qmx_engine.ports.settings import ControlSettings, StaticSettings
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import CATALOG, PACK, find
@@ -598,7 +604,16 @@ def gw(log: Log, home: Path) -> None:
     )
 
 
+Models = Literal["recorded", "openrouter", "plan"]
+
 RUNNABLE: Final = [t for t in CATALOG if not t.needs]
+HAIKU: Final = ("claude/haiku",)
+ROLE_ORDER_KEYS: Final = frozenset({"roles.test_only", "roles.test_order", "roles.live_order"})
+MODEL_KINDS: Final[dict[str, str]] = {
+    "recorded": "recorded answers, no provider",
+    "openrouter": "real models, the OpenRouter test row",
+    "plan": "real models, the plan login on haiku",
+}
 DOC: Final = ENGINE / "docs" / "TEMPLATES.md"
 
 
@@ -618,54 +633,85 @@ async def save_and_test(svc: EngineService, item: str, bundle: Bundle, inputs: A
     return await svc.tests.run(item, caller=OPERATOR, inputs=inputs)
 
 
-async def tested(home: Path, item: str, bundle: Bundle, inputs: Any, *, recorded: bool) -> Any:
-    """`bundle` saved as the draft `item` and test-run, on the recorded answers or on real
-    models through the home's harness."""
-    if recorded:
-        with EngineService.open(home, harness=recorded_port()) as svc:
-            return await save_and_test(svc, item, bundle, inputs)
-    async with harnessed(home) as opened:
-        with EngineService.open(
-            home, settings=ControlSettings(opened.control), harness=HarnessAdapter(opened.harness)
-        ) as svc:
-            return await save_and_test(svc, item, bundle, inputs)
+@contextlib.asynccontextmanager
+async def services(log: Log, home: Path, mode: Models) -> AsyncIterator[Callable[[], Any]]:
+    """Opens the engine service on `home` with its model turns answered by `mode`: the recorded
+    answers, the throwaway home's OpenRouter row, or the plan login on the ship home under the lane
+    lock. In plan mode every role is mapped to `claude/haiku` in the engine's settings for this
+    lane only; the ship home's own settings are read, never written."""
+    if mode == "recorded":
+        yield lambda: EngineService.open(home, harness=recorded_port())
+        return
+    opener = plan_harness(log) if mode == "plan" else harnessed(home)
+    async with opener as found:
+        settings: Any = ControlSettings(found.control)
+        if mode == "plan":
+            settings = StaticSettings(
+                {
+                    key: HAIKU if key.startswith("roles.") and key not in ROLE_ORDER_KEYS else value
+                    for key, value in settings.values().items()
+                }
+            )
+        adapter = HarnessAdapter(found.harness)
+        yield lambda: EngineService.open(home, settings=settings, harness=adapter)
 
 
 def tokens_of(spans: list[Span]) -> dict[str, int]:
     return {k: sum(s.tokens.get(k, 0) for s in spans) for k in ("in", "out", "cache_read")}
 
 
-def pack_tests(log: Log, home: Path, *, recorded: bool) -> None:
+def cost_line(spans: list[Span], seconds: float) -> str:
+    """A test run's cost in the catalogue's words: spans and their models, tokens in thousands,
+    and seconds."""
+    models = "/".join(sorted({str(s.model) for s in spans})) or "no model"
+    k = {name: round(count / 1000) for name, count in tokens_of(spans).items()}
+    plural = "" if len(spans) == 1 else "s"
+    return (
+        f"TP4 lane 2: {len(spans)} {models} span{plural}; {k['in']}k in, {k['out']}k out,"
+        f" {k['cache_read']}k cache read; {seconds:.0f} s"
+    )
+
+
+def pack_tests(mode: Models, log: Log, home: Path) -> None:
     """Each runnable template test-run once with its catalogue inputs: the wall time of each and
     of the whole pack, and the pack's model spans and tokens (the cost Appendix E asks for)."""
+    asyncio.run(pack_run(log, home, mode))
+
+
+async def pack_run(log: Log, home: Path, mode: Models) -> None:
     total_s, spans_n, tokens = 0.0, 0, dict.fromkeys(("in", "out", "cache_read"), 0)
     failing = []
-    for template in RUNNABLE:
-        folder = PACK / str(template.folder)
-        started = time.monotonic()
-        report = asyncio.run(
-            tested(home, folder.name, Bundle.read(folder), template.test_inputs, recorded=recorded)
-        )
-        seconds = time.monotonic() - started
-        spans = model_spans(home, report.run_id)
-        errors = schema_errors(folder, delivered(home, report.run_id))
-        if report.status != "passed" or errors:
-            failing.append(template.id)
-        total_s += seconds
-        spans_n += len(spans)
-        for name, count in tokens_of(spans).items():
-            tokens[name] += count
-        log(
-            f"{template.id} {report.run_id} {report.status} {report.reason or ''}"
-            f" in {seconds:.1f} s, {len(spans)} model spans, tokens {tokens_of(spans)},"
-            f" schema errors {errors}"
-        )
+    async with services(log, home, mode) as service:
+        for template in RUNNABLE:
+            folder = PACK / str(template.folder)
+            started = time.monotonic()
+            with service() as svc:
+                report = await save_and_test(
+                    svc, folder.name, Bundle.read(folder), template.test_inputs
+                )
+            seconds = time.monotonic() - started
+            spans = model_spans(home, report.run_id)
+            errors = schema_errors(folder, delivered(home, report.run_id))
+            if report.status != "passed" or errors:
+                failing.append(template.id)
+            total_s += seconds
+            spans_n += len(spans)
+            for name, count in tokens_of(spans).items():
+                tokens[name] += count
+            log_spans(log, spans)
+            log(
+                f"{template.id} {report.run_id} {report.status} {report.reason or ''}"
+                f" in {seconds:.1f} s, {len(spans)} model spans, tokens {tokens_of(spans)},"
+                f" schema errors {errors}"
+            )
+            if report.status == "passed" and mode != "recorded":
+                log(f"test_cost {template.id}: {cost_line(spans, seconds)}")
     log.check(
         f"{len(RUNNABLE) - len(failing)} of {len(RUNNABLE)} runnable templates pass their test run",
         not failing,
         failing,
     )
-    kind = "recorded answers, no provider" if recorded else "real models"
+    kind = MODEL_KINDS[mode]
     log(f"perf: pack test runs on {kind}: {total_s:.0f} s wall in all ({total_s / 60:.1f} min)")
     log(f"cost: pack test runs on {kind}: {spans_n} model spans, tokens {tokens}")
     if total_s > 3600:
@@ -692,14 +738,18 @@ def show(log: Log, lines: list[str], png: str) -> None:
     log(f"screen {shot}: ffmpeg exit {done.returncode}")
 
 
-def install_recorded(log: Log, home: Path) -> None:
-    """`templates install` on a fresh home with every model turn answered from the recorded
-    answers, then the pack read back through the engine host's workflow doors, and `templates
-    list` shown in a console window grabbed as `tp4-install.png`."""
+def install_lane(mode: Models, log: Log, home: Path) -> None:
+    """`templates install` (the `install` the CLI calls) on a fresh home, then the pack read back
+    through the engine host's workflow doors, and `templates list` shown in a console window
+    grabbed as `tp4-install.png` (`tp4-install-<mode>.png` off the recorded answers)."""
     from x13_doors import host  # noqa: PLC0415
 
-    with EngineService.open(home, harness=recorded_port()) as svc:
-        done = asyncio.run(install_pack(svc))
+    async def installed() -> Any:
+        async with services(log, home, mode) as service:
+            with service() as svc:
+                return await install_pack(svc)
+
+    done = asyncio.run(installed())
     for found in done:
         log(f"install: {found.template.id} {found.action}: {found.detail[:160]}")
     actions = [(f.template.id, f.action) for f in done]
@@ -736,14 +786,21 @@ def install_recorded(log: Log, home: Path) -> None:
         and sum("validated draft, needs: " in line for line in listed) == 22,
         listed[-1:],
     )
-    show(log, ["templates list (recorded answers, no provider)", *listed], "tp4-install")
+    png = "tp4-install" if mode == "recorded" else f"tp4-install-{mode}"
+    show(log, [f"templates list ({MODEL_KINDS[mode]})", *listed], png)
 
 
-def variant(log: Log, home: Path, *, recorded: bool) -> None:
+def variant(mode: Models, log: Log, home: Path) -> None:
     """RS1 cloned as a variant through `extends` and test-run; once published, the variant names
     RS1's version as the one it is a variant of."""
+    asyncio.run(variant_run(log, home, mode))
+
+
+async def variant_run(log: Log, home: Path, mode: Models) -> None:
     inputs = find("RS1").test_inputs
-    first = asyncio.run(tested(home, RS1.name, Bundle.read(RS1), inputs, recorded=recorded))
+    async with services(log, home, mode) as service:
+        with service() as svc:
+            first = await save_and_test(svc, RS1.name, Bundle.read(RS1), inputs)
     log(f"RS1 test run {first.run_id} {first.status}")
     item = "rs1-fx-papers"
     with EngineService.open(home) as svc:
@@ -755,7 +812,9 @@ def variant(log: Log, home: Path, *, recorded: bool) -> None:
         "name": "Paper scout for FX papers",
         "extends": {"workflow_item": RS1.name, "object_id": parent, "patches": [patch]},
     }
-    report = asyncio.run(tested(home, item, Bundle(overlay, {}), inputs, recorded=recorded))
+    async with services(log, home, mode) as service:
+        with service() as svc:
+            report = await save_and_test(svc, item, Bundle(overlay, {}), inputs)
     log(f"variant test run {report.run_id} {report.status} {report.reason or ''}")
     with EngineService.open(home) as svc:
         published = svc.versions.publish(item, "0.1.0", caller=OPERATOR)
@@ -826,14 +885,17 @@ LANES: Final = {
     "gw": ("tp3", gw),
     "t4-fake": ("tp3", t4_fake),
     "db-fake": ("tp3", db_fake),
-    "all": ("tp4", partial(pack_tests, recorded=False)),
-    "all-recorded": ("tp4", partial(pack_tests, recorded=True)),
-    "install-recorded": ("tp4", install_recorded),
+    "all": ("tp4", partial(pack_tests, "openrouter")),
+    "all-plan": ("tp4", partial(pack_tests, "plan")),
+    "all-recorded": ("tp4", partial(pack_tests, "recorded")),
+    "install-plan": ("tp4", partial(install_lane, "plan")),
+    "install-recorded": ("tp4", partial(install_lane, "recorded")),
     "drafts-tp4": ("tp4", partial(drafts, "TP4")),
     "readmes-tp4": ("tp4", partial(readmes, "TP4")),
     "doc": ("tp4", doc),
-    "variant": ("tp4", partial(variant, recorded=False)),
-    "variant-recorded": ("tp4", partial(variant, recorded=True)),
+    "variant": ("tp4", partial(variant, "openrouter")),
+    "variant-plan": ("tp4", partial(variant, "plan")),
+    "variant-recorded": ("tp4", partial(variant, "recorded")),
     "money-pack": ("tp4", partial(money, PACK_FOLDERS)),
 }
 NO_MODEL: Final = frozenset(
@@ -854,6 +916,10 @@ NO_MODEL: Final = frozenset(
     }
 )
 """Lanes that open no harness and add no provider row: they spend nothing."""
+PLAN_LANES: Final = frozenset({"all-plan", "install-plan", "variant-plan"})
+"""Lanes whose model turns go through the plan login on the ship home, under the lane lock. The
+engine runs on a throwaway home; the ship home's `settings.toml` is hashed before and after."""
+SHIP_SETTINGS: Final = SHIP_HOME / "settings.toml"
 
 
 def main() -> int:
@@ -875,9 +941,17 @@ def main() -> int:
         pr = args.pr or owner
         os.environ["ENGINE_LOG_PREFIX"] = prefix  # each lane's harness boot scrubs it again
         log = Log(pr, f"{pr}-{name}")
-        home = throwaway_home(pr, name) if name in NO_MODEL else shared or openrouter_home(pr, name)
+        if name in NO_MODEL or name in PLAN_LANES:
+            home = throwaway_home(pr, name)
+        else:
+            home = shared or openrouter_home(pr, name)
         log(f"home {home}")
+        guarded = hashlib.sha256(SHIP_SETTINGS.read_bytes()).hexdigest()
         lane(log, home)
+        if name in PLAN_LANES:
+            after = hashlib.sha256(SHIP_SETTINGS.read_bytes()).hexdigest()
+            log(f"ship home settings.toml sha256 before {guarded} after {after}")
+            log.check("the ship home's settings.toml is unchanged", after == guarded, after)
         log(f"OpenRouter spend on this home so far, upper bound: ${relay_usd(home):.4f}")
         failed += log.verdict()
     return 1 if failed else 0
