@@ -2735,7 +2735,7 @@ ADs AD-52, AD-59 (step 2's precondition). DELETION-PLAN D2 as review 48 L2 retar
 
 - [ ] Save a screenshot of lane 2's output as `review/qmbh-host.png`.
 - [ ] Record a 30 to 60 second video of `qmb host start`, `status` and `stop` with `ffmpeg -f gdigrab` as `review/qmbh.mp4`.
-- [ ] Post the screenshot, the video and the `qmb/` diff to the operator in chat, and wait for his review.
+- [ ] Post the screenshot, the video and the `qmb/` diff to the operator in chat and in `QUESTIONS-FOR-OPERATOR.md`. While his review is pending, build the next unblocked PR (prompt rule 18); never idle on it.
 
 **Merge.**
 

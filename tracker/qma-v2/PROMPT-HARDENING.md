@@ -33,15 +33,28 @@ Do not read the architecture folders in full. Builders read the ADs and sections
 12. **No unplanned work.** Findings outside a PR's section go to the store's `BACKLOG.md`, one line each.
 13. **Clean test environment.** Unset every `ANTHROPIC_*` and `CLAUDE*` name and `NODE_USE_SYSTEM_CA`, and keep `TMP`, `TEMP` and `UV_CACHE_DIR` on `D:`. One harness or host per home, under the lane lock.
 14. **Keep your context under 40 %.** Route reading to builders. Before you cross 40 %, run poteto-mode's "Pause safely" playbook, write the store's `RESUME.md`, and ask him to open a fresh session with the same prompt.
-15. **Ask him only what is his.** His gates are his merge click, his server step and paying for machines. His reviews are the four the plan names. Facts are yours to find. Ask through the AskUserQuestion tool, recommendation first, and only after he has read your message. An agent finishing is not his reply.
+15. *(Replaced by rule 18.)* His gates are still his merge click, his server step and paying for machines, and his reviews are the four the plan names. Facts are yours to find. An agent finishing is not his reply.
 16. **Speak plainly.** Short sentences, no codenames in what you tell him. He dictates, so expect transcription noise. Do the terminal work yourself.
 17. **Never merge, and delete nothing without his go.** That covers branches and worktrees.
+18. **Never stop to ask. Keep building.** After his first go, you never wait on him.
+    - If something needs his judgment, take the plan's default or your recommended option. Write a row in `decisions.tsv` with the reason, and add it to `QUESTIONS-FOR-OPERATOR.md` in the program store: the question, what you chose, and how to undo it. Then carry on.
+    - A PR blocked by one of his gates (merge click, server step, a review) is skipped. Post what the gate needs to `QUESTIONS-FOR-OPERATOR.md` and build the next unblocked PR. Never idle while any unblocked PR remains.
+    - Stop only when no unblocked PR remains, or a rule says stop (context near 40 %, rule 14). Then write `RESUME.md` and a plain-words summary.
+    - When he answers, apply the answer as a backlog item or a fix in the next PR it touches.
+19. **Write down everything you notice.** The program store keeps three files, updated as you go:
+    - `BACKLOG.md`: bugs and gaps found while building or checking, one line each, with the PR that found it.
+    - `IDEAS.md`: improvements you, the builders or the checkers spot anywhere in the app, even outside the plan (the whole app is unlocked), one line each with evidence.
+    - `lows.md`: low findings, as before.
+
+    Every builder and checker brief says to append to these files. Nothing found is lost, and none of it blocks.
 
 ## Start
 
 Arm the program as the plan's first section says. Check the bases, recheck that the merge of `engine/base` into `rebuild/base` is clean, and say which branch the stack roots on. Then state the protocol and the plan to the operator in plain words, list what only he can do, and stop. On his go, arm the hourly tick and spawn the first builder.
 
 ## Attention, for the operator
+
+- **It never stops to ask you.** After your first go it keeps building. Anything it wanted to ask is in `QUESTIONS-FOR-OPERATOR.md` in the program store, with what it chose and how to undo it. Bugs it found are in `BACKLOG.md`, and ideas for anywhere in the app are in `IDEAS.md`. Read them when you like; answers go in as backlog items.
 
 - **Commit first.** Have `HARDENING-PLAN.md` and `PROMPT-HARDENING.md` committed to the plan branch before you paste the prompt. The coordinator reads the plan from that branch every hour.
 - **Your merge click.** Merging the finished engine branch into the rebuild branch still has no conflict (checked again on 18 October). Only three late pieces wait for it, plus your final landing. Those are removing the old remote-run code, the old agent runtime and LangChain.
