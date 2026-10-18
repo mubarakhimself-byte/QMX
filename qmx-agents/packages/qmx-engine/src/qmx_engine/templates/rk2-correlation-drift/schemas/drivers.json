@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "required": ["drivers", "proposal"],
+  "properties": {
+    "drivers": {"type": "array", "items": {"type": "string"}},
+    "proposal": {"type": "string"}
+  }
+}

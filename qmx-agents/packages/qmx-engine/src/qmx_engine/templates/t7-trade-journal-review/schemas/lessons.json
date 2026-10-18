@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["lessons"],
+  "properties": {
+    "lessons": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["slice", "lesson", "candidate_causes", "encode_as"],
+        "properties": {
+          "slice": {"type": "string"},
+          "lesson": {"type": "string"},
+          "candidate_causes": {"type": "array", "items": {"type": "string"}},
+          "encode_as": {"enum": ["unit condition", "checklist line"]}
+        }
+      }
+    }
+  }
+}

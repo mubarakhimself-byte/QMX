@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["at", "currency_r", "pairs", "effective_bets", "unknown_units", "trips", "drivers",
+               "proposal"],
+  "x-prose": ["drivers", "proposal"],
+  "properties": {
+    "currency_r": {"type": "object"},
+    "pairs": {"type": "array"},
+    "effective_bets": {"type": "number"},
+    "trips": {"type": "array", "items": {"type": "string"}},
+    "drivers": {"type": "array", "items": {"type": "string"}},
+    "proposal": {"type": ["string", "null"]}
+  }
+}

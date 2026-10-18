@@ -1,0 +1,63 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "p1-portfolio-combination",
+  "name": "Portfolio combination study",
+  "inputs": {
+    "type": "object",
+    "properties": {"candidates": {"type": "array", "description": "the candidate strategies"}}
+  },
+  "outputs": {
+    "type": "object",
+    "description": "a read-only study: correlations, combined streams per method, marginal value"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 30000, "agents": 1, "tool_calls": 5, "wall_seconds": 1800,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "streams", "name": "Load the return streams", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 300}, "parameters": {"script": "scripts/streams.py"}},
+    {"id": "combine", "name": "Correlate, combine and stress", "type": "script",
+     "typeVersion": 1, "position": [440, 0], "effect": "none",
+     "timeout": {"run_seconds": 900}, "parameters": {"script": "scripts/combine.py"}},
+    {"id": "write", "name": "Write the study", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/study.json"}},
+    {"id": "assemble", "name": "Book picture", "type": "script", "typeVersion": 1,
+     "position": [880, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1320, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Load the return streams", "port": "in", "map": "one"}]]},
+    "Load the return streams": {"main": [[{"node": "Correlate, combine and stress", "port": "in",
+                                           "map": "one"}]]},
+    "Correlate, combine and stress": {"main": [[{"node": "Write the study", "port": "in",
+                                                 "map": "one"},
+                                                {"node": "Book picture", "port": "in",
+                                                 "map": "one"},
+                                                {"node": "Render and grade", "port": "in",
+                                                 "map": "one"}]]},
+    "Write the study": {"main": [[{"node": "Book picture", "port": "in", "map": "one"}]]},
+    "Book picture": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "P1", "needs": ["trading-node", "risk-session"]}
+}

@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": ["headline", "findings"],
+  "properties": {
+    "headline": {"type": "string"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["candidate", "text"],
+        "properties": {"candidate": {"type": "string"}, "text": {"type": "string"}}
+      }
+    }
+  }
+}

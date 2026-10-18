@@ -24,6 +24,19 @@ No lane touches the plan login or the ship home.
 - `rv` (TP2 lane 7): after a planted run that parks, the review names every run of the week in its
   home and the parked one.
 - `a-no-captions` (TP2 lane 10): a video with no captions is recorded and the run goes on.
+- `db` (TP3 lane 2): DB's busy day on real models. Pass when the brief validates and every node
+  fact reads `could not check`.
+- `t4` (TP3 lane 3): T4's synthetic night on real models. Pass when two or more analyst chunks run,
+  the run passes, and every line of the brief links to a source.
+- `drafts` (TP3 lane 4, no model): each of the 10 drafts saved, then its test run and its enable
+  tried. Pass when all 20 calls are refused with the draft's own need. Publish refuses an untested
+  draft, so the enable is tried on a version published straight through the Library.
+- `money` (TP3 lane 6, no model): the money lint over every TP3 folder, with a planted money act as
+  the control. Pass when every folder is clean and the control is caught.
+- `readmes` (TP3 lane 8, no model): each draft's README names its need in one line.
+- `gw` (TP3 lane 9, no model): GW validates and holds no model-bearing node.
+- `t4-fake` (TP3 lane 10) and `db-fake`: the template on the fake switch with no harness at all, so
+  no provider can be called. Pass when the run passes with only fake spans.
 
 Spend is the relay journals' upper bound at the Kimi row's list prices.
 """
@@ -52,10 +65,13 @@ from qmx_engine.__main__ import install_templates, list_templates
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import HarnessAdapter
-from qmx_engine.ports.library import Bundle
+from qmx_engine.definition.folder import load
+from qmx_engine.definition.registry import REGISTRY
+from qmx_engine.definition.validate import validate
+from qmx_engine.ports.library import Bundle, drafts_ref
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.service.api import EngineService
-from qmx_engine.service.context import OPERATOR
+from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import CATALOG, PACK
 from qmx_engine.templates.install import current_draft
 from qmx_engine.triggers import rows
@@ -67,6 +83,10 @@ RS2: Final = PACK / "rs2-source-to-component-card"
 RS4: Final = PACK / "rs4-literature-review"
 A: Final = PACK / "a-fill-the-library"
 RV: Final = PACK / "rv-weekly-review"
+DB: Final = PACK / "db-desk-brief"
+T4: Final = PACK / "t4-research-desk-overnight"
+TP3_FOLDERS: Final = [PACK / t.folder for t in CATALOG if t.pr == "TP3" and t.folder]
+NODE_FACT: Final = "could not check: trading node"
 
 
 def openrouter_home(pr: str, slug: str) -> Path:
@@ -351,8 +371,9 @@ def snapshot(home: Path) -> tuple[int, int, list[tuple[str, str, bool, str]]]:
 
 
 def install(log: Log, home: Path) -> None:
-    built = [t.id for t in CATALOG if t.folder]
-    timed = sorted((t.folder, "cron", False) for t in CATALOG if t.folder and t.triggers)
+    built = [t.id for t in CATALOG if t.folder and not t.needs]
+    drafts = [t.id for t in CATALOG if t.folder and t.needs]
+    timed = sorted((t.folder, "cron", False) for t in CATALOG if t.folder for _ in t.triggers)
     for attempt in (1, 2):
         started = time.monotonic()
         code, lines = captured(lambda: asyncio.run(install_templates(home)))
@@ -367,14 +388,17 @@ def install(log: Log, home: Path) -> None:
             log(f"after install 1: library events {before[0]}, ledger events {before[1]}")
             log(f"triggers: {before[2]}")
             published = [line for line in listed if "published, disabled 0.1.0" in line]
+            waiting = [line for line in listed if "validated draft, needs: " in line]
+            rest = 31 - len(built) - len(drafts)
             log.check(
-                f"the first install publishes {len(built)} disabled at 0.1.0; "
-                f"{31 - len(built)} are not yet built",
+                f"the first install publishes {len(built)} disabled at 0.1.0, saves "
+                f"{len(drafts)} drafts each with its need, and {rest} are not yet built",
                 code == 0
                 and [line.split()[0] for line in published] == built
-                and sum(line.endswith("not yet built") for line in listed) == 31 - len(built)
+                and [line.split()[0] for line in waiting] == drafts
+                and sum(line.endswith("not yet built") for line in listed) == rest
                 and listed[-1] == "31 templates",
-                (code, [line.split()[0] for line in published], listed[-1] if listed else None),
+                (code, [line.split()[0] for line in published], len(waiting), listed[-1:]),
             )
             log.check(
                 "each published template has its card's cron trigger, disabled",
@@ -393,6 +417,161 @@ def install(log: Log, home: Path) -> None:
             )
 
 
+def db(log: Log, home: Path) -> None:
+    _, card, _ = ran(log, home, DB, {"fixture": "busy"})
+    facts = card["node_facts"] if card else {}
+    log.check(
+        "every node fact reads could not check: trading node",
+        bool(facts) and set(facts.values()) == {NODE_FACT},
+        facts,
+    )
+    log(f"headline: {card and card['headline']}")
+    log(f"summary: {card and card['summary']}")
+
+
+def lines_of(brief: Any) -> list[Any]:
+    return [line for section in brief["sections"].values() for line in section] if brief else []
+
+
+def t4(log: Log, home: Path) -> None:
+    report, brief, spans = ran(log, home, T4, {"fixture": True})
+    chunks = [
+        d["plan"]["chunk"]["items"]
+        for d in node_events(home, report.run_id, "node_scheduled", "analyse")
+    ]
+    analysts = [s for s in spans if s.node_id == "analyse" and s.status == "ok"]
+    log.check(
+        "the night splits into two or more analyst chunks and every chunk's analyst ran",
+        len(chunks) >= 2 and len(analysts) == len(chunks),
+        {"chunks": chunks, "analysts ok": len(analysts)},
+    )
+    lines = lines_of(brief)
+    log.check(
+        "the brief has lines and every line links to at least one source",
+        bool(lines) and all(line["links"] for line in lines),
+        [(line["text"][:60], line["links"]) for line in lines],
+    )
+    log(f"cut: {json.dumps(brief and brief['cut'])[:1500]}")
+
+
+def fake_run(log: Log, home: Path, folder: Path, inputs: Any) -> Any:
+    """`folder` test-run on the fake switch in a service opened with no harness, so no provider
+    can be reached at all."""
+    with EngineService.open(home) as svc:
+        svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR)
+        started = time.monotonic()
+        report = asyncio.run(svc.tests.run(folder.name, caller=OPERATOR, inputs=inputs, fake=True))
+        seconds = time.monotonic() - started
+    with Reader.open(home) as reader:
+        profiles = sorted({s.profile for s in reader.spans(report.run_id) if s.profile})
+    result = delivered(home, report.run_id)
+    errors = schema_errors(folder, result)
+    log(f"fake run {report.run_id} {report.status} {report.reason or ''} in {seconds:.1f} s")
+    log.check(
+        f"the {folder.name} fake run passes with only fake spans and no relay call",
+        report.status == "passed" and profiles == ["fake"] and model_calls(home) == 0,
+        {"status": report.status, "span profiles": profiles, "relay calls": model_calls(home)},
+    )
+    log.check("the result validates against schemas/output.json", errors == [], errors)
+    return result
+
+
+def t4_fake(log: Log, home: Path) -> None:
+    brief = fake_run(log, home, T4, {"fixture": True})
+    log(f"lines: {[line['text'] for line in lines_of(brief)]}")
+
+
+def db_fake(log: Log, home: Path) -> None:
+    card = fake_run(log, home, DB, {"fixture": "busy"})
+    log(f"node facts: {card and card['node_facts']}")
+
+
+def refusal(log: Log, label: str, need: str, attempt: Any) -> int:
+    try:
+        attempt()
+    except Refused as error:
+        log(f"{label} refused: {error.code} {error}")
+        return int(error.code == "needs_unmet" and str(error).endswith(need))
+    log(f"{label} was not refused")
+    return 0
+
+
+def drafts(log: Log, home: Path) -> None:
+    refused = 0
+    for template in [t for t in CATALOG if t.pr == "TP3" and t.needs]:
+        item, need = str(template.folder), f"needs: {', '.join(template.needs)}"
+        with EngineService.open(home) as svc:
+            svc.drafts.put(item, Bundle.read(PACK / item), 0, caller=OPERATOR)
+            log(f"{template.id} draft state {svc.drafts.state(item)}")
+            refused += refusal(
+                log, f"{template.id} test", need,
+                lambda: asyncio.run(svc.tests.run(item, caller=OPERATOR)),  # noqa: B023
+            )  # fmt: skip
+            refusal(
+                log, f"{template.id} publish (untested)", need,
+                lambda: svc.versions.publish(item, "0.1.0", caller=OPERATOR),  # noqa: B023
+            )  # fmt: skip
+            forced = svc.ctx.library.publish(item, drafts_ref(item), "0.1.0", principal="lane")
+            refused += refusal(
+                log, f"{template.id} enable", need,
+                lambda: svc.versions.enable(forced, caller=OPERATOR),  # noqa: B023
+            )  # fmt: skip
+    log.check(
+        "all 20 test and enable calls are refused with the right need", refused == 20, refused
+    )
+
+
+def money(log: Log, home: Path) -> None:
+    clean = 0
+    for folder in TP3_FOLDERS:
+        definition = json.loads((folder / "definition.json").read_text("utf-8"))
+        acts = [p for p in validate(load(folder)) if p.code == "money_act"]
+        held = [n["id"] for n in definition["nodes"] if n.get("credentials")]
+        refs = [
+            p.name
+            for p in folder.rglob("*")
+            if p.is_file()
+            and any(w in p.read_text("utf-8") for w in ("qmn", "qmx/ctrader", "qmx/broker"))
+        ]
+        log(f"{folder.name}: money acts {acts}, credentials {held}, qmn or broker refs {refs}")
+        clean += not (acts or held or refs)
+    control = shutil.copytree(T4, home / "t4-control")
+    planted = json.loads((control / "definition.json").read_text("utf-8"))
+    planted["nodes"][2]["parameters"]["after"] = "close_all_positions"
+    (control / "definition.json").write_text(json.dumps(planted), "utf-8")
+    caught = [p.message for p in validate(load(control)) if p.code == "money_act"]
+    log(f"control with a planted money act: {caught}")
+    log.check(
+        f"all {len(TP3_FOLDERS)} TP3 folders pass the money lint and the planted act is caught",
+        clean == len(TP3_FOLDERS) and bool(caught),
+        {"clean": clean, "folders": len(TP3_FOLDERS), "control caught": bool(caught)},
+    )
+
+
+def readmes(log: Log, home: Path) -> None:
+    named = 0
+    for template in [t for t in CATALOG if t.pr == "TP3" and t.needs]:
+        text = (PACK / str(template.folder) / "README.md").read_text("utf-8").splitlines()
+        line = next(x for x in text[1:] if x.strip())
+        log(f"{template.id}: {line}")
+        named += line.startswith("Waits for") and f"`needs: {', '.join(template.needs)}`" in line
+    log.check("each of the 10 draft READMEs names its need in one line", named == 10, named)
+
+
+def gw(log: Log, home: Path) -> None:
+    folder = PACK / "gw-guard-watchdogs"
+    problems = validate(load(folder), publish=True)
+    definition = json.loads((folder / "definition.json").read_text("utf-8"))
+    kinds = [(n["id"], n["type"]) for n in definition["nodes"]]
+    bearing = [n for n, kind in kinds if (k := REGISTRY.kind(kind)) and k.model_bearing]
+    log(f"nodes: {kinds}")
+    log.check(
+        "GW validates for publish and holds no model-bearing node",
+        problems == [] and bearing == [],
+        {"problems": problems, "model-bearing": bearing},
+    )
+
+
 LANES: Final = {
     "rs1": ("tp1", rs1),
     "t3": ("tp1", t3),
@@ -403,7 +582,17 @@ LANES: Final = {
     "rs2": ("tp2", rs2),
     "a-no-captions": ("tp2", a_no_captions),
     "rv": ("tp2", rv),
+    "db": ("tp3", db),
+    "t4": ("tp3", t4),
+    "drafts": ("tp3", drafts),
+    "money": ("tp3", money),
+    "readmes": ("tp3", readmes),
+    "gw": ("tp3", gw),
+    "t4-fake": ("tp3", t4_fake),
+    "db-fake": ("tp3", db_fake),
 }
+NO_MODEL: Final = frozenset({"drafts", "money", "readmes", "gw", "t4-fake", "db-fake"})
+"""Lanes that open no harness and add no provider row: they spend nothing."""
 
 
 def main() -> int:
@@ -425,7 +614,7 @@ def main() -> int:
         pr = args.pr or owner
         os.environ["ENGINE_LOG_PREFIX"] = prefix  # each lane's harness boot scrubs it again
         log = Log(pr, f"{pr}-{name}")
-        home = shared or openrouter_home(pr, name)
+        home = throwaway_home(pr, name) if name in NO_MODEL else shared or openrouter_home(pr, name)
         log(f"home {home}")
         lane(log, home)
         log(f"OpenRouter spend on this home so far, upper bound: ${relay_usd(home):.4f}")

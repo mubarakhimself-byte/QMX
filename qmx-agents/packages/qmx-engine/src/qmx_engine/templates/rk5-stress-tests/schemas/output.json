@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["at", "results", "worst", "explanations", "proposals"],
+  "x-prose": ["explanations", "proposals"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {"type": "object", "required": ["id", "verdict"],
+                "properties": {"verdict": {"enum": ["pass", "fail", "not run"]}}}
+    },
+    "explanations": {"type": "array"},
+    "proposals": {"type": "array", "items": {"type": "string"}}
+  }
+}

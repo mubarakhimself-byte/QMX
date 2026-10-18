@@ -1,0 +1,18 @@
+{
+  "note": "The card's scenario library as shocks, editable. A historical window is applied as a shock in ATR until tick data exists to replay it.",
+  "scenarios": [
+    {"id": "snb-unpeg-2015", "name": "SNB unpeg, 15 Jan 2015", "kind": "historical", "instruments": ["EURCHF", "USDCHF"], "gap_atr": 30, "spread_x": 20, "slippage_pips": 50},
+    {"id": "brexit-2016", "name": "Brexit vote night, 24 Jun 2016", "kind": "historical", "instruments": ["GBPUSD", "EURGBP", "GBPJPY"], "gap_atr": 12, "spread_x": 8, "slippage_pips": 15},
+    {"id": "gbp-flash-2016", "name": "GBP flash crash, 7 Oct 2016", "kind": "historical", "instruments": ["GBPUSD", "GBPJPY"], "gap_atr": 10, "spread_x": 10, "slippage_pips": 20},
+    {"id": "jpy-flash-2019", "name": "JPY flash crash, 3 Jan 2019", "kind": "historical", "instruments": ["USDJPY", "AUDJPY", "GBPJPY", "EURJPY"], "gap_atr": 8, "spread_x": 10, "slippage_pips": 15},
+    {"id": "covid-2020", "name": "COVID week, 9-20 Mar 2020", "kind": "historical", "instruments": ["*"], "gap_atr": 4, "spread_x": 4, "slippage_pips": 5},
+    {"id": "rollover", "name": "Rollover spread blowout at 17:00 New York", "kind": "historical", "instruments": ["*"], "gap_atr": 0, "spread_x": 6, "slippage_pips": 3},
+    {"id": "monday-gap", "name": "Monday gap", "kind": "historical", "instruments": ["*"], "gap_atr": 2, "spread_x": 3, "slippage_pips": 4},
+    {"id": "spread-x3", "name": "Spread times 3 for 10 minutes", "kind": "synthetic", "instruments": ["*"], "gap_atr": 0, "spread_x": 3, "slippage_pips": 0},
+    {"id": "slip-2", "name": "2-pip slippage on every stop", "kind": "synthetic", "instruments": ["*"], "gap_atr": 0, "spread_x": 1, "slippage_pips": 2},
+    {"id": "gap-3atr", "name": "A gap of 3 ATR through stops", "kind": "synthetic", "instruments": ["*"], "gap_atr": 3, "spread_x": 1, "slippage_pips": 0},
+    {"id": "usd-rho-1", "name": "All USD pairs at correlation 1", "kind": "synthetic", "instruments": ["*USD*"], "gap_atr": 1, "spread_x": 1, "slippage_pips": 1},
+    {"id": "disconnect-5m", "name": "Broker disconnect for 5 minutes with positions open", "kind": "synthetic", "instruments": ["*"], "gap_atr": 1.5, "spread_x": 2, "slippage_pips": 2},
+    {"id": "all-stopped-2x", "name": "Every unit stopped at once at twice the slippage", "kind": "synthetic", "instruments": ["*"], "gap_atr": 0, "spread_x": 2, "slippage_pips": 4}
+  ]
+}

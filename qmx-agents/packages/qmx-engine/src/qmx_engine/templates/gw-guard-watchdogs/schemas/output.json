@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["at", "level", "gauge", "profiles", "alerts"],
+  "x-prose": ["alerts"],
+  "properties": {
+    "level": {"enum": ["green", "pass", "amber", "red", "black"]},
+    "gauge": {"type": "object", "required": ["cushion_usd", "worst_case_usd", "distance_r", "level"]},
+    "profiles": {"type": "array"},
+    "alerts": {"type": "array", "items": {"type": "string"}}
+  }
+}

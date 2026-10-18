@@ -1,0 +1,13 @@
+{
+  "note": "A synthetic quiet morning for the template's test runs: only a low-impact release, nothing from the desk or research, no alert and no decision.",
+  "date": "2026-10-16",
+  "edition": "morning",
+  "events": [
+    {"title": "Tertiary Industry Activity m/m", "currency": "JPY", "time_utc": "04:30", "impact": "low",
+     "forecast": "0.1%", "previous": "-0.2%", "source": "https://www.meti.go.jp/english/"}
+  ],
+  "desk": [],
+  "alerts": [],
+  "research": [],
+  "decisions": []
+}

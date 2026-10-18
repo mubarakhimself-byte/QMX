@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unit", "finding", "evidence", "severity"],
+        "properties": {
+          "unit": {"type": "string"},
+          "finding": {"type": "string"},
+          "evidence": {"type": "string"},
+          "severity": {"enum": ["minor", "major", "critical"]}
+        }
+      }
+    }
+  }
+}

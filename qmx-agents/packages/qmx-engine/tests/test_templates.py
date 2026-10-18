@@ -22,7 +22,7 @@ from qmx_engine.definition.folder import load
 from qmx_engine.definition.validate import checked, validate
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import Turn
-from qmx_engine.ports.library import Bundle
+from qmx_engine.ports.library import Bundle, drafts_ref
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import CATALOG, PACK, SHARED, SHARED_COPIES, find
@@ -37,6 +37,9 @@ RS2 = PACK / "rs2-source-to-component-card"
 RS4 = PACK / "rs4-literature-review"
 A = PACK / "a-fill-the-library"
 RV = PACK / "rv-weekly-review"
+DB = PACK / "db-desk-brief"
+T4 = PACK / "t4-research-desk-overnight"
+DRAFTS = [PACK / t.folder for t in CATALOG if t.folder and t.needs]
 
 
 def recorded(folder: Path, name: str) -> str:
@@ -76,6 +79,8 @@ def answers(
         "You are the auditor": recorded(A, "audit.json"),
         "You are the analyst of QMX's weekly": recorded(RV, "clusters.json"),
         "You propose edits for QMX's": recorded(RV, "edits.json"),
+        "You are the writer of the trader's desk brief": recorded(DB, "brief.json"),
+        "You are the coordinator of QMX's overnight": recorded(T4, "lines.json"),
     } | (planted or {})
     chunked: dict[str, Callable[[str], str]] = {
         "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
@@ -86,6 +91,9 @@ def answers(
             [RS4], "findings.json", "findings", "source_id", c
         ),
         "You check headline claims": votes,
+        "You are an analyst on QMX's overnight": lambda c: mine(
+            [T4], "claims.json", "claims", "source_id", c
+        ),
     }
 
     async def answer(port: FakePort, chat: str) -> Turn:
@@ -115,9 +123,20 @@ def try_template(home: Path, folder: Path, inputs: Any, port: FakePort | None = 
 
 
 @pytest.mark.parametrize("folder", FOLDERS, ids=lambda path: path.name)
-def test_every_folder_in_the_pack_validates_for_publish_and_runs(folder: Path) -> None:
+def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_it_back(
+    folder: Path,
+) -> None:
+    template = next((t for t in CATALOG if t.folder == folder.name), None)
+    found = checked(folder)
+
     assert validate(load(folder), publish=True) == []
-    assert not isinstance(checked(folder), list)
+    if template is None or not template.needs:
+        assert not isinstance(found, list)
+    else:
+        assert isinstance(found, list)
+        assert [(p.code, p.message) for p in found] == [
+            ("needs_unmet", f"needs: {', '.join(template.needs)}")
+        ]
 
 
 def test_the_catalogue_lists_31_templates_each_with_a_source_card() -> None:
@@ -134,8 +153,19 @@ def test_the_catalogue_lists_31_templates_each_with_a_source_card() -> None:
     assert [t.folder for t in CATALOG if t.folder] == [
         "rs1-paper-scout", "t3-news-calendar-watch", "rs0-idea-grill",
         "rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library",
-        "rv-weekly-review",
+        "rv-weekly-review", "db-desk-brief", "t4-research-desk-overnight", "dm-demo-monitor",
+        "t7-trade-journal-review", "gw-guard-watchdogs", "rk2-correlation-drift",
+        "dc-decay-and-limit-report", "rk5-stress-tests", "rk8-incident-post-mortem",
+        "p1-portfolio-combination", "p2-daily-book-report", "pp-proposal-pack",
     ]  # fmt: skip
+
+
+def test_each_built_folder_names_the_needs_its_catalogue_row_names() -> None:
+    for template in CATALOG:
+        if template.folder:
+            definition = json.loads((PACK / template.folder / "definition.json").read_text())
+            assert tuple(definition["meta"].get("needs", [])) == template.needs, template.id
+            assert definition["meta"]["template"] == template.id
 
 
 def test_each_template_carries_an_identical_copy_of_every_block_file_it_uses() -> None:
@@ -208,8 +238,12 @@ def plant(folder: Path, name: str, path: list[str | int], text: str) -> str:
          plant(RS2, "component.json", ["claimed_effect", "value"], ", and to 1.45 net")),
         (A, {"fixture": "one-video"}, "You are the extractor for a quant research library",
          plant(A, "cards.json", ["cards", 0, "summary"], " Wins 73% of trades.")),
+        (DB, {"fixture": "busy"}, "You are the writer of the trader's desk brief",
+         plant(DB, "brief.json", ["summary"], " Equity stands at 12,450 USD.")),
+        (T4, {"fixture": True}, "You are the coordinator of QMX's overnight",
+         plant(T4, "lines.json", ["lines", 0, "text"], " It could reach 1.0975 by noon.")),
     ],
-    ids=["rs0-capacity", "rs2-claimed-effect", "a-card-summary"],
+    ids=["rs0-capacity", "rs2-claimed-effect", "a-card-summary", "db-summary", "t4-line"],
 )  # fmt: skip
 def test_an_output_with_a_number_its_sources_never_gave_fails_the_test_run(
     tmp_path: Path, folder: Path, inputs: Any, prompt: str, planted: str
@@ -367,7 +401,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_seven_disabled_and_a_second_install_changes_nothing(
+def test_install_publishes_nine_disabled_saves_ten_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -379,14 +413,114 @@ def test_install_publishes_seven_disabled_and_a_second_install_changes_nothing(
     with Reader.open(tmp_path) as reader:
         triggers = rows.triggers(reader.connection)
 
-    built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV"]
-    assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built]
-    assert [i.action for i in second] == ["unchanged"] * 7
+    built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4"]
+    drafts = ["DM", "T7", "GW", "RK2", "DC", "RK5", "RK8", "P1", "P2", "PP"]
+    assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built] + [
+        (t, "saved draft") for t in drafts
+    ]
+    assert [i.action for i in second] == ["unchanged"] * 19
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 7
-    assert sum(s == ("not yet built", None) for s in status.values()) == 24
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 9
+    assert status["GW"] == ("validated draft, needs: trading-node", None)
+    assert status["P2"] == ("validated draft, needs: broker-read-token", None)
+    assert status["PP"] == ("validated draft, needs: trading-node, risk-session", None)
+    assert sum(s == ("not yet built", None) for s in status.values()) == 12
     assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
+        ("db-desk-brief", "cron", False),
+        ("db-desk-brief", "cron", False),
+        ("db-desk-brief", "cron", False),
         ("rs1-paper-scout", "cron", False),
         ("rv-weekly-review", "cron", False),
         ("t3-news-calendar-watch", "cron", False),
+        ("t4-research-desk-overnight", "cron", False),
     ]
+
+
+def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(tmp_path: Path) -> None:
+    """Fourteen kept claims: their ids sit in the graded prose, so they must carry no digits."""
+    report, brief = try_template(tmp_path, T4, {"fixture": True})
+    with Reader.open(tmp_path) as reader:
+        chunks = [
+            cast(dict[str, Any], e.data["plan"])["chunk"]["items"]
+            for e in reader.events(report.run_id)
+            if e.kind == "node_scheduled" and e.data.get("node_id") == "analyse"
+        ]
+    lines = [line for section in brief["sections"].values() for line in section]
+
+    assert report.status == "passed"
+    assert chunks == [[0, 6], [6, 12], [12, 14]]
+    assert sorted(c for line in lines for c in line["claim_ids"]) == [
+        f"c{x}" for x in "abcdefghijklmn"
+    ]
+    assert {k: len(v) for k, v in brief["sections"].items()} == {
+        "HIGH": 2, "MEDIUM": 0, "CALENDAR": 1, "POSITIONING": 1, "CROSS-ASSET": 0,
+    }  # fmt: skip
+    assert all(line["links"] for line in lines)
+    assert [(c["source_id"], c["analyst"], c["why"].split(":")[0]) for c in brief["cut"]] == [
+        ("n07", "analyst B", "a sentiment reading alone counts only from 5 sd; this is 1.2"),
+        ("n08", "analyst B", "single source"),
+        ("n12", "analyst B", "single source"),
+    ]
+    assert [h["instrument"] for h in brief["hint_cards"]] == ["EURUSD", "USDJPY"]
+
+
+def test_t4_fails_when_the_coordinator_writes_a_line_no_kept_claim_backs(tmp_path: Path) -> None:
+    lines = json.loads(recorded(T4, "lines.json"))
+    lines["lines"].append(
+        {
+            "section": "HIGH",
+            "text": "USDJPY breaks higher.",
+            "claim_ids": ["c99"],
+            "label": "inferred",
+        }
+    )
+    port = answers(planted={"You are the coordinator of QMX's overnight": json.dumps(lines)})
+    report, brief = try_template(tmp_path, T4, {"fixture": True}, port)
+
+    assert (report.status, brief) == ("failed", None)
+
+
+def test_db_reads_every_node_fact_as_could_not_check_and_a_quiet_day_costs_nothing(
+    tmp_path: Path,
+) -> None:
+    busy, card = try_template(tmp_path / "busy", DB, {"fixture": "busy"})
+    port = answers()
+    quiet, still = try_template(tmp_path / "quiet", DB, {"fixture": "quiet"}, port)
+
+    assert busy.status == "passed"
+    assert set(card["node_facts"].values()) == {"could not check: trading node"}
+    assert [d["run_id"] for d in card["decisions"]] == ["fixture-rs4"]
+    assert [e["title"] for e in card["tiles"]["events"]] == [
+        "CPI Flash Estimate y/y",
+        "Core Retail Sales m/m",
+    ]
+    assert (quiet.status, still["quiet"], port.chats) == ("passed", True, [])
+
+
+@pytest.mark.parametrize("folder", DRAFTS, ids=lambda path: path.name)
+def test_a_draft_validates_and_its_test_and_its_enable_are_refused_with_its_need(
+    tmp_path: Path, folder: Path
+) -> None:
+    need = f"needs: {', '.join(next(t.needs for t in CATALOG if t.folder == folder.name))}"
+    with EngineService.open(tmp_path) as svc:
+        item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
+        state = svc.drafts.state(item)
+        with pytest.raises(Refused) as tested:
+            asyncio.run(svc.tests.run(item, caller=OPERATOR))
+        forced = svc.ctx.library.publish(item, drafts_ref(item), "0.1.0", principal="test")
+        with pytest.raises(Refused) as enabled:
+            svc.versions.enable(forced, caller=OPERATOR)
+
+    assert state == "validated"
+    assert (tested.value.code, str(tested.value).endswith(need)) == ("needs_unmet", True)
+    assert (enabled.value.code, str(enabled.value).endswith(need)) == ("needs_unmet", True)
+
+
+@pytest.mark.parametrize("folder", FOLDERS, ids=lambda path: path.name)
+def test_no_template_names_a_money_act_or_holds_a_credential(folder: Path) -> None:
+    definition = json.loads((folder / "definition.json").read_text("utf-8"))
+    texts = [path.read_text("utf-8") for path in folder.rglob("*") if path.is_file()]
+
+    assert [p for p in validate(load(folder)) if p.code == "money_act"] == []
+    assert [n["id"] for n in definition["nodes"] if n.get("credentials")] == []
+    assert [t for t in texts if "qmn" in t or "qmx/ctrader" in t or "qmx/broker" in t] == []

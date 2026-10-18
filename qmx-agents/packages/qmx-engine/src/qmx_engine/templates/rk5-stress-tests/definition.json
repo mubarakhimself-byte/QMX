@@ -1,0 +1,59 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "rk5-stress-tests",
+  "name": "Stress tests",
+  "outputs": {
+    "type": "object",
+    "description": "each scenario's cushion left and guard reaction, the worst three, tightenings"
+  },
+  "settings": {
+    "timezone": "Europe/London",
+    "runaway": {"tokens": 40000, "agents": 1, "tool_calls": 5, "wall_seconds": 1800,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Sunday at 18:00", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "book", "name": "Book, guard or costs changed?", "type": "monitor", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 120},
+     "parameters": {"source": "scripts/book.py", "wake_when": "changed"}},
+    {"id": "stress", "name": "Run the scenarios", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none",
+     "parameters": {"script": "scripts/stress.py", "scenarios_ref": "data/scenarios.json"}},
+    {"id": "worst", "name": "Explain the worst three", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "synthesiser", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/worst.md", "schema_ref": "schemas/worst.json"}},
+    {"id": "assemble", "name": "Stress report", "type": "script", "typeVersion": 1,
+     "position": [880, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1320, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Sunday at 18:00": {"main": [[{"node": "Book, guard or costs changed?", "port": "in",
+                                   "map": "one"}]]},
+    "Book, guard or costs changed?": {"changed": [[{"node": "Run the scenarios", "port": "in",
+                                                    "map": "one"},
+                                                   {"node": "Render and grade", "port": "in",
+                                                    "map": "one"}]]},
+    "Run the scenarios": {"main": [[{"node": "Explain the worst three", "port": "in", "map": "one"},
+                                    {"node": "Stress report", "port": "in", "map": "one"}]]},
+    "Explain the worst three": {"main": [[{"node": "Stress report", "port": "in", "map": "one"}]]},
+    "Stress report": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "RK5", "needs": ["trading-node"]}
+}

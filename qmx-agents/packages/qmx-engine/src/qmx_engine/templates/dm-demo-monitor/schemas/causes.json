@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["causes"],
+  "properties": {
+    "causes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["unit", "cause", "evidence", "would_make_it_true"],
+        "properties": {
+          "unit": {"type": "string"},
+          "cause": {"enum": ["regime", "costs", "implementation", "chance"]},
+          "evidence": {"type": "string"},
+          "would_make_it_true": {"type": "string"}
+        }
+      }
+    }
+  }
+}

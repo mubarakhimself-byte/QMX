@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": ["incident", "timeline", "impact", "what_happened", "contributing_factors",
+               "candidate_causes", "challenges", "actions"],
+  "x-prose": ["what_happened", "contributing_factors", "candidate_causes", "challenges", "actions"],
+  "properties": {
+    "timeline": {"type": "array", "minItems": 1,
+                 "items": {"type": "object", "required": ["id", "at", "source", "text"]}},
+    "impact": {"type": "object", "required": ["loss_usd", "loss_r"]},
+    "actions": {"type": "array", "maxItems": 4}
+  }
+}

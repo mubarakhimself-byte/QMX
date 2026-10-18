@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "required": ["cards", "held_back"],
+  "x-prose": ["cards"],
+  "properties": {
+    "cards": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["unit", "decision", "checklist", "findings", "premortem", "recommendation",
+                     "default", "if_silent", "door", "blast_radius", "evidence"]
+      }
+    }
+  }
+}

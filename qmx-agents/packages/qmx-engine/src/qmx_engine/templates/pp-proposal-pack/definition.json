@@ -1,0 +1,72 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "pp-proposal-pack",
+  "name": "Proposal pack he signs",
+  "inputs": {
+    "type": "object",
+    "properties": {"decisions": {"type": "array", "description": "the decisions to propose"}}
+  },
+  "outputs": {
+    "type": "object",
+    "description": "at most three decision cards with evidence, checklist, findings, pre-mortem"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "runaway": {"tokens": 300000, "agents": 3, "tool_calls": 40, "wall_seconds": 3600,
+                "on_runaway": "pause"},
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow", "operator"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "evidence", "name": "Gather the evidence", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
+     "timeout": {"run_seconds": 300}, "parameters": {"script": "scripts/evidence.py"}},
+    {"id": "checklist", "name": "Checklist verdict", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/checklist.py"}},
+    {"id": "validate", "name": "Independent validator", "type": "agent", "typeVersion": 1,
+     "position": [660, -120], "role": "reviewer", "effect": "none", "retry": {"max_tries": 2},
+     "parameters": {"brief_ref": "prompts/validate.md",
+                    "output_schema_ref": "schemas/findings.json", "tools": [], "max_turns": 20}},
+    {"id": "premortem", "name": "Pre-mortem", "type": "llm", "typeVersion": 1,
+     "position": [880, -120], "role": "synthesiser", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/premortem.md", "schema_ref": "schemas/premortems.json"}},
+    {"id": "write", "name": "Write the cards", "type": "llm", "typeVersion": 1,
+     "position": [1100, -120], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/cards.json"}},
+    {"id": "assemble", "name": "Proposal pack", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Gather the evidence", "port": "in", "map": "one"}]]},
+    "Gather the evidence": {"main": [[{"node": "Checklist verdict", "port": "in", "map": "one"},
+                                      {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Checklist verdict": {"main": [[{"node": "Independent validator", "port": "in", "map": "one"},
+                                    {"node": "Pre-mortem", "port": "in", "map": "one"},
+                                    {"node": "Write the cards", "port": "in", "map": "one"},
+                                    {"node": "Proposal pack", "port": "in", "map": "one"}]]},
+    "Independent validator": {"main": [[{"node": "Pre-mortem", "port": "in", "map": "one"},
+                                        {"node": "Write the cards", "port": "in", "map": "one"},
+                                        {"node": "Proposal pack", "port": "in", "map": "one"}]]},
+    "Pre-mortem": {"main": [[{"node": "Write the cards", "port": "in", "map": "one"},
+                             {"node": "Proposal pack", "port": "in", "map": "one"}]]},
+    "Write the cards": {"main": [[{"node": "Proposal pack", "port": "in", "map": "one"}]]},
+    "Proposal pack": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in",
+                                    "map": "one"}]]}
+  },
+  "meta": {"template": "PP", "needs": ["trading-node", "risk-session"]}
+}

@@ -1,0 +1,9 @@
+{
+  "lines": [
+    {"section": "HIGH", "text": "EURUSD leans higher: the Fed sounds open to more cuts, two ECB officials push back on faster easing, and the US 10-year yield fell to 3.86%.", "claim_ids": ["ca", "cb", "cc", "cd", "ce"], "label": "inferred"},
+    {"section": "HIGH", "text": "USDJPY leans lower: a Fed governor backs more cuts if hiring slows, the BoJ keeps a hike in play, exporters and option buyers want yen, and intervention talk firmed it.", "claim_ids": ["cf", "cg", "ch", "ci", "cj", "ck"], "label": "inferred"},
+    {"section": "CALENDAR", "text": "US CPI for September lands today at 12:30 UTC and can move both pairs.", "claim_ids": ["cl", "cm"], "label": "retrieved"},
+    {"section": "POSITIONING", "text": "Retail traders are 78% long EURUSD, 5.4 sd above normal; a crowded long can unwind if the pair turns lower.", "claim_ids": ["cn"], "label": "inferred"}
+  ],
+  "summary": "Both pairs lean against the dollar into London: EURUSD higher and USDJPY lower on a softer Fed path. US CPI at 12:30 UTC is the event that can flip that read."
+}

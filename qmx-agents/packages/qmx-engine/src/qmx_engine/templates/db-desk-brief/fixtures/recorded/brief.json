@@ -1,0 +1,14 @@
+{
+  "headline": "EUR CPI at 09:00 UTC sets the tone; the desk leans against the dollar",
+  "summary": "Euro area CPI lands at 09:00 UTC with no new EURUSD entries from 08:30 to 09:30 UTC, then US core retail sales at 12:30 UTC. Overnight, the research desk leaned EURUSD higher and USDJPY lower on a softer Fed path, an ECB that sees no case for another cut, and yen-intervention talk. The paper scout flagged one paper on overnight drift in major pairs. One parked research run needs you. The account picture is unavailable: account, cushion, positions and unit states read could not check: trading node.",
+  "decisions": [
+    {"title": "RS4 run parked: the searcher failed twice", "recommendation": "Rerun the literature review once the provider is back.", "default": "The run stays parked and nothing is retried.", "if_silent": "No review lands this week; nothing else is affected.", "run_id": "fixture-rs4"}
+  ],
+  "watch_today": [
+    {"text": "No new EURUSD entries 08:30-09:30 UTC around euro area CPI.", "link": "https://ec.europa.eu/eurostat"},
+    {"text": "US core retail sales at 12:30 UTC.", "link": "https://www.census.gov/retail/index.html"},
+    {"text": "Desk: EURUSD leans higher on a softer Fed and a firm ECB.", "link": "https://www.ecb.europa.eu/press/html/index.en.html"},
+    {"text": "Desk: USDJPY leans lower on BoJ hike talk and intervention risk.", "link": "https://www.boj.or.jp/en/"},
+    {"text": "Paper: overnight drift in major currency pairs.", "link": "https://arxiv.org/"}
+  ]
+}
