@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import time
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -107,6 +108,16 @@ def refused(lock: Path) -> bool:
         return True
 
 
+def released(lock: Path) -> bool:
+    """Windows frees a killed holder's lock some milliseconds after its process handle signals."""
+    deadline = time.monotonic() + 5
+    while refused(lock):
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
 def test_two_holders_cannot_coexist_even_when_a_reclaimer_deletes_the_lock_file(
     tmp_path: Path,
 ) -> None:
@@ -125,7 +136,7 @@ def test_a_crashed_holders_lock_frees_when_its_process_dies(tmp_path: Path) -> N
         assert refused(lock)
         process.kill()
         process.wait()
-        assert not refused(lock)
+        assert released(lock)
     assert not refused(lock)
 
 
@@ -155,6 +166,7 @@ def test_heal_leaves_a_live_runs_plant_alone_and_restores_it_once_that_run_is_de
         assert not healed
         assert (root / "settings.json").read_text(encoding="utf-8") == PLANTED
         assert backup.exists()
+    assert released(lock)
     assert heal(backup, lock) == []
     assert (root / "settings.json").read_text(encoding="utf-8") == EARLIER
     assert not backup.exists()
