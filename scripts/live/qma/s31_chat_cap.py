@@ -1,12 +1,20 @@
-"""S31, the live-chat cap, and the HP11 perf probe. Key chats on the fake model in a throwaway
-home, so no plan turn and no provider credit is spent.
+"""S31, the live-chat table, and the HP11 and CAPH perf probes. Key chats on the fake model in a
+throwaway home, so no plan turn and no provider credit is spent. `QMA_LOG_SLUG` names the log.
 
     s31_chat_cap.py idle   cap 2, three chats with two idle. The third send closes the least
                            recently used one. A send to the closed chat then resumes it, and
                            the model gets the earlier conversation back (recall intact).
-    s31_chat_cap.py busy   cap 2, two chats mid-turn on a sleeping Bash call. A third send
-                           through the turn route returns 409, and the third chat shows a
-                           `needs_you` block naming both busy chats.
+    s31_chat_cap.py busy   cap 2, two Interactive chats mid-turn on a sleeping Bash call. A
+                           third Interactive send through the turn route returns 409, and the
+                           third chat shows a `needs_you` block naming both busy chats.
+    s31_chat_cap.py wait   CAPH lane 3 and its perf probe. cap 2, three Background chats, the
+                           first two mid-turn on a sleeping Bash call, three rounds. PASS when the
+                           third send waits while both are busy, then runs, and every turn ends
+                           with its answer and no `needs_you` block. Records the ms from the
+                           first freed slot to the waiting send taking it.
+    s31_chat_cap.py borrow CAPH lane 4. cap 1, an Interactive and then a Background parent each
+                           delegate to a helper. PASS when each helper's answer comes back as
+                           the tool result and each parent's turn ends with its own answer.
     s31_chat_cap.py perf   five evict-and-connect sends at the cap against five plain connects
                            below it. FAIL when the evict-and-connect median is more than 2 s
                            over the plain median. Trunk has no cap.
@@ -15,6 +23,7 @@ home, so no plan turn and no provider credit is spent.
 from __future__ import annotations
 
 import asyncio
+import os
 import statistics
 import sys
 import time
@@ -42,6 +51,7 @@ WORKSPACE = SCRATCH / "hp11-s31-ws"
 CODEWORD = "PLUMTREE"
 PERF_LIMIT_S = 2.0
 CYCLES = 5
+ROUNDS = 3
 
 
 def put_budgets(root: Path, **values: object) -> None:
@@ -248,23 +258,206 @@ async def perf_case(log: Log) -> None:
         fake.stop()
 
 
+async def background(session: Session, title: str) -> str:
+    from qma.harness import NewChat  # noqa: PLC0415
+    from qma.harness.launch import Background  # noqa: PLC0415
+
+    return await session.harness.start_chat(
+        NewChat(
+            title=title,
+            model="opus",
+            workspace=WORKSPACE,
+            profile="fake",
+            mode="bypassPermissions",
+            kind=Background(),
+        )
+    )
+
+
+def admissions(session: Session) -> dict[str, float]:
+    """When each chat last took a slot, by `perf_counter`."""
+    harness = session.harness
+    real = harness._take_slot
+    taken: dict[str, float] = {}
+
+    async def timed(chat: str, cap: int, *, wait: bool) -> None:
+        await real(chat, cap, wait=wait)
+        taken[chat] = time.perf_counter()
+
+    harness._take_slot = timed
+    return taken
+
+
+async def wait_case(log: Log) -> None:
+    sleep = {"command": "sleep 6", "description": "wait"}
+    routes: dict[str, list[Turn]] = {}
+    for n in range(ROUNDS):
+        for name in "AB":
+            routes[f"R{n}-{name} "] = [
+                Turn([tool_use("Bash", sleep)]),
+                Turn([text(f"{name} done")]),
+            ]
+        routes[f"R{n}-C "] = [Turn([text("C done")])]
+    fake = FakeModel([], routes=routes).start()
+    session, _ = await fake_session(log, "caph-s31-wait", fake, max_live_chats=2)
+    taken = admissions(session)
+    gaps: list[float] = []
+    try:
+        from qma.harness import InjectedText  # noqa: PLC0415
+
+        for n in range(ROUNDS):
+            first, second, third = [await background(session, f"r{n} {x}") for x in "abc"]
+            await session.harness.send(first, InjectedText(f"R{n}-A run the sleep."))
+            await session.harness.send(second, InjectedText(f"R{n}-B run the sleep."))
+            await asyncio.sleep(2)
+            waiting = asyncio.ensure_future(
+                session.harness.send(third, InjectedText(f"R{n}-C hello."))
+            )
+            await asyncio.sleep(1)
+            held = not waiting.done() and third not in live(session)
+            log.check(f"round {n}: the third send waits while both chats are busy", held, held)
+            freed: float | None = None
+            while not waiting.done():
+                busy = [session.harness._chat(chat).idle_seconds for chat in (first, second)]
+                if freed is None and any(seconds > 0 for seconds in busy):
+                    freed = time.perf_counter()
+                await asyncio.sleep(0.002)
+            await waiting
+            if freed is not None:
+                gaps.append((taken[third] - freed) * 1000)
+            records = await asyncio.gather(
+                *(wait_turn(session.home, chat, 120) for chat in (first, second, third))
+            )
+            answers = {
+                name: [
+                    str(block["content"])
+                    for block in session_blocks(session.control, chat)
+                    if block["type"] in {"text", "needs_you"}
+                ]
+                for name, chat in zip("abc", (first, second, third), strict=True)
+            }
+            log(f"round {n}: turns {[record.turn for record in records]}, blocks {answers}")
+            needs = [
+                block
+                for chat in (first, second, third)
+                for block in session_blocks(session.control, chat)
+                if block["type"] == "needs_you"
+            ]
+            ran = all(record.turn == "idle" for record in records) and all(
+                any(f"{name.upper()} done" in line for line in answers[name]) for name in "abc"
+            )
+            log.check(
+                f"round {n}: all three turns ended with their answers, no needs_you",
+                ran and not needs,
+                (ran, needs),
+            )
+        log(
+            "PERF freed slot to the waiting send taking it, ms: "
+            f"{[round(gap, 1) for gap in gaps]}, median "
+            f"{statistics.median(gaps) if gaps else float('nan'):.1f}"
+        )
+        log.check("a freed slot was seen in every round", len(gaps) == ROUNDS, len(gaps))
+    finally:
+        await session.harness.close()
+        fake.stop()
+
+
+async def borrow_case(log: Log) -> None:
+    from qma.harness import NewChat  # noqa: PLC0415
+    from qma.harness.launch import Background  # noqa: PLC0415
+    from s11_helpers import (  # noqa: PLC0415
+        DELEGATE,
+        DELEGATED,
+        calls,
+        children,
+        delegate,
+        open_home,
+    )
+
+    fake = FakeModel(
+        [Turn([delegate("fake2", "BORROW-ONE: count to three")]), Turn([text("parent one done")])],
+        routes={
+            "BORROW-ONE": [Turn([text("1 2 3")])],
+            "PARENT-TWO": [
+                Turn([delegate("fake2", "BORROW-TWO: count to two")]),
+                Turn([text("parent two done")]),
+            ],
+            "BORROW-TWO": [Turn([text("1 2")])],
+        },
+    ).start()
+    session = await open_home(
+        log, "caph-s31-borrow", fake, tools=["Bash"], budgets={"max_live_chats": 1}
+    )
+    try:
+        record, _ = await session.turn(log, "Delegate the count.")
+        interactive = session.chat
+        session.chat = await session.harness.start_chat(
+            NewChat(
+                title="caph background parent",
+                model="opus",
+                workspace=WORKSPACE,
+                profile="fake",
+                mode="bypassPermissions",
+                kind=Background(),
+            )
+        )
+        second, _ = await session.turn(log, "PARENT-TWO delegate the count.")
+        found = calls(fake, DELEGATE)
+        log(f"delegate results: {found}; delegate took {[round(d.took, 2) for d in DELEGATED]} s")
+        log.check(
+            "each helper's answer came back as its tool result",
+            [(err, out) for _, err, out in found] == [(False, "1 2 3"), (False, "1 2")],
+            found,
+        )
+        texts = {
+            name: [
+                str(block["content"])
+                for block in session_blocks(session.control, chat)
+                if block["type"] == "text"
+            ]
+            for name, chat in (("interactive", interactive), ("background", session.chat))
+        }
+        log.check(
+            "each parent's turn ended with its own answer",
+            record.turn == second.turn == "idle"
+            and "parent one done" in texts["interactive"][-1]
+            and "parent two done" in texts["background"][-1],
+            texts,
+        )
+        helpers = children(session)
+        log.check("the background parent has its helper", len(helpers) == 1, helpers)
+    finally:
+        await session.harness.close()
+        fake.stop()
+
+
 async def turn_send(session: Session, chat: str) -> None:
     from qma.harness import OperatorText  # noqa: PLC0415
 
     await session.harness.send(chat, OperatorText("hello"))
 
 
-PARTS = {"idle": idle_case, "busy": busy_case, "perf": perf_case}
+PARTS = {
+    "idle": idle_case,
+    "busy": busy_case,
+    "wait": wait_case,
+    "borrow": borrow_case,
+    "perf": perf_case,
+}
 
 
 def main() -> int:
     part = sys.argv[1] if len(sys.argv) > 1 else ""
     if part not in PARTS:
         raise SystemExit(f"usage: s31_chat_cap.py {{{'|'.join(PARTS)}}}")
-    log = Log(f"hp11-s31-{part}")
+    log = Log(os.environ.get("QMA_LOG_SLUG", f"hp11-s31-{part}"))
     boot()
     use_fake_home()
     use_fake_key()
+    if part == "borrow":
+        from s11_helpers import time_delegates  # noqa: PLC0415
+
+        time_delegates()
     asyncio.run(PARTS[part](log))
     return log.verdict()
 
