@@ -2,7 +2,17 @@
 
 Refreshed 2026-10-16 night against rulings 73-88 (27c gap fixes). The three calls at the top are his; everything below them is either still open with a recommendation, or closed with the ruling that closed it.
 
-## Calls for him first
+## After the first build run (2026-10-18)
+
+The calls A, B and C below are closed: A by ruling 89 (H0, H15, H16, H17 granted and built as HG1), B by ruling 90 (every account carries its own configurable background share; 50 % is only a default), C by ruling 91 (data is held until a deeper data study). The amendment after the run (`methodology/35`) adds these:
+
+D. **Grant the HG3 harness round** (HARNESS-REQUESTS H2 re-asked, H18-H25, plus five harness bug fixes). **Recommend: yes, H2 first.** H2 is the one with a security reason: until an engine agent chat can be started without the built-in `Bash`, `Write`, `Edit` and `NotebookEdit`, agent nodes on the PC depend on an ask the engine rejects (AD-24, live check E35), and are held if that ask does not come. The rest are tidiness and cost (closing chats, a cached brief, no asks for draft saves, typing, a public `ControlService`, telling his clicks from the copilot's calls, chat routes for the engine host).
+
+E. **Accept that edited workflows need Docker Desktop running** (AD-24). Only scripts byte-identical to what QMX shipped may run on the PC directly, and even those run inside a Windows AppContainer that cannot see his plan login, his keyring or QMX itself. A template he or the copilot edited runs its scripts in a container, so with Docker off it waits with "Docker is off" instead of running. **Recommend: yes.** Ruled the other way: edited scripts would run on the host inside the AppContainer too, which trusts the AppContainer alone for code nobody reviewed.
+
+F. **Accept a money scan that fails closed with no allow-list** (AD-36). It reads every script, prompt, name and note for call-shaped money verbs with the harness gate's own matcher. It will sometimes refuse an innocent sentence ("write the order of the sections" reads as "write order"), and the fix is to reword. **Recommend: yes.** Ruled the other way: a reviewed allow-list of phrases, which is one more thing a model could try to widen.
+
+## Calls for him first (closed, kept for the record)
 
 A. **Harness grants H0, H15, H16, H17** (HARNESS-REQUESTS). H0 exports `Background` and `Child` from `qma/harness/__init__.py`; H17 adds `AGENT_OPERATIONS` table rows for the new engine, Library and Lab tools (draft save and test run are `DOMAIN_WRITE`, so they never ask; publish, enable and live runs are `MANAGE`, so they ask once); H15 is a per-chat compaction threshold and H16 per-chat hooks for Background chats. None is inside ruling 39's load-balancer exception, so ruling 24 needs his explicit yes. **Recommend: yes to all four.** H0 and H17 are export-only and table-row edits; H15 and H16 are what ruling 78 calls critical. Each has a fallback with no harness edit (a narrow import allow-list; draft saves through `library_save` plus a test-on-save watcher; an engine-driven compaction restart; tool spans read from session blocks), so a "no" slows the build but does not block it.
 
@@ -11,6 +21,8 @@ B. **Does the harness's 50 % plan background cap still apply to workflow agent n
 C. **Accept study 30 for the first data packets** (rulings 58, 81: data is among the first things built; tick backup and import are early work). No architecture owns the market-data service, the tick backup or the import of the orphaned ~10 GB history; study 30 §4-§5 designs them. **Recommend: accept study 30 §4-§5 as the binding design for the first data packets** (back up the 10 GB first, one ingest path, `qmx-marketdata` on Contabo, `dataset` cards in the Library) and schedule them first. Ruled the other way: a short spine pass on data runs before any data packet.
 
 ## Still open (the design proceeds on the recommendation)
+
+0. **Whether the two templates that read the network (DB's calendar, T4's central-bank feeds) keep running `host_confined` with `network: true`, or move to the container tier** (AD-24). Recommend: keep them `host_confined` while they are byte-identical to the shipped pack, since the AppContainer still blocks his files, keyring and loopback; any edit moves them to the container automatically.
 
 1. **Which burst provider to try first.** Ruling 74 answered "Contabo first; every other provider addable later", and onboarding from a provider's published instructions is now designed (AD-30). Ruling 76 makes burst matter (about 4 sessions on Contabo). Nothing is paid for yet. Recommend: add his Contabo box as an Amp runner (free) for `host_harness` trials and Cloudroom's free tier as a comparison, both through the onboarding flow; keep E2B, Modal and Cloudflare as adapters with no account; decide on cost per agent-hour after one measured week.
 2. **Is `host_harness` acceptable at all** (a provider's harness holding the loop, transcript and run pass inside its VM, for compute only)? Ruling 75 gave no answer on provider-hosted harnesses. Recommend: yes, as a leaf node attempt with key accounts only, never owning schedules or state; refuse it if he wants every transcript on his own machines.

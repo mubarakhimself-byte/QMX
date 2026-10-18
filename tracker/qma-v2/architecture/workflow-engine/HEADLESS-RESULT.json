@@ -1,36 +1,36 @@
 {
   "status": "partial",
-  "intent": "create",
+  "intent": "update",
   "altitude": "initiative",
   "purpose": "build-substrate",
   "doc_workspace": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine",
   "spine": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine/ARCHITECTURE-SPINE.md",
   "memlog": "D:/QMX-worktrees/agent-system/tracker/qma-v2/architecture/workflow-engine/.memlog.md",
   "companions": [
-    "SOLUTION-DESIGN.md",
-    "PLAIN-WORDS.md",
-    "OPEN-DECISIONS.md",
-    "HARNESS-REQUESTS.md",
+    "../../research/methodology/35-architecture-amendment-after-run.md",
     "DOC-CHANGES.md",
+    "HARNESS-REQUESTS.md",
+    "LIBRARY-REQUESTS.md",
+    "OPEN-DECISIONS.md",
+    "PLAIN-WORDS.md",
+    "SOLUTION-DESIGN.md",
     "reviews/reconcile-inputs.md",
+    "reviews/review-2026-10-18-amendment-gate.md",
+    "reviews/review-adversary.md",
     "reviews/review-rubric-walker.md",
-    "reviews/review-verification-lens.md",
-    "reviews/review-adversary.md"
+    "reviews/review-verification-lens.md"
   ],
   "assumptions": [
-    "The engine running in the qma.serve process beside the harness, apart from every chat, satisfies ruling 24; a separate OS process would need new harness REST doors for Background chats and injected text.",
-    "Python 3.14 provides uuid.uuid7(); otherwise a vendored helper (ids stay time-ordered strings).",
-    "All numeric defaults (tick 60 s, grace 15 min, cooldown 1 h, alert_after 6 h, max tries 3, soft lease cap 2, fan-out = max_live_chats - 2) are Claude's defaults, UI-editable."
+    "AppContainer denies CredRead of the user's generic credentials and blocks loopback by default [remembered]; live check E33 settles it, and a failing row switches host_confined off (shipped scripts then use the container tier).",
+    "agent.max_turns 40, host_confined job limits, zones_root paths and the network-off default are Claude's defaults, UI-editable.",
+    "Earlier assumptions stand: engine in-process beside the harness (granted, ruling 50); uuid7; numeric defaults are Claude's defaults."
   ],
   "open_questions": [
-    "Engine seat confirmation (in-process beside the harness).",
-    "Real models in draft test runs: fake by default, real on explicit click.",
-    "Default pool routing: all configured providers, OpenRouter test-only, GPT capacity one.",
-    "Catch-up after downtime: one merged run per trigger, with a per-trigger record-only switch.",
-    "Who may enable a schedule: operator only; copilot creates disabled triggers.",
-    "Run doctor reach: re-run once with hint or stronger model; propose logic changes only.",
-    "claude_workflow node: off in v1 unless harness request H4 is granted.",
-    "Alert threshold for long pauses: 6 h."
+    "OPEN-DECISIONS D: grant the HG3 harness round, H2 (per-chat tools allow-list) first; without it agent nodes on the PC may be held (E35).",
+    "OPEN-DECISIONS E: edited workflows need Docker Desktop running (only shipped scripts run host_confined).",
+    "OPEN-DECISIONS F: the money scan fails closed with no allow-list.",
+    "OPEN-DECISIONS 0: the two network-reading shipped templates stay host_confined with network: true.",
+    "Earlier open items 1-4 (burst provider, host_harness, plan logins on owned machines, what counts as irreversible external) stand."
   ],
   "conflicts_with_prior_decisions": [
     "DEC-0417 board client-only (and six mirrors) vs ruling 31: board is a saved draft.",
@@ -40,7 +40,10 @@
     "DEC-0328 missed fires recorded-not-replayed vs ruling 25: one merged catch-up run.",
     "DEC-0271/DEC-0476/LIBRARY-AND-ATTACHMENTS no Library database, ten kinds vs ruling 28: one Library storing everything.",
     "DEC-0443 pack state 'uninstalled' vs ruling 9: archived.",
-    "10-13 'exactly one Claude Max account' and 01-requirements R5 vs rulings 26/39: account pool."
+    "10-13 'exactly one Claude Max account' and 01-requirements R5 vs rulings 26/39: account pool.",
+    "Ruling 51 (OpenRouter OK for tests) vs the operator's 2026-10-18 ruling (tests on haiku via the plan login; OpenRouter only for provider proof): the latest wins (AD-11, AD-12).",
+    "DEC-0418 typed ports vs AD-4 amended: every v1 port carries data (DOC-CHANGES 32).",
+    "Built engine/tp4 behaviour that the amended spine reverses: script zone under the home, the engine interpreter for scripts, lint scope, CLI --mode live, runaway defaults, the Fable row, the Kimi test default (DOC-CHANGES 27-29)."
   ],
-  "reason": "partial: open_questions non-empty (8 operator calls recorded with recommendations); no sub-agent tool was available in this process, so the reviewer gate ran inline and sequentially per the skill's fallback."
+  "reason": "partial: open questions remain for him (OPEN-DECISIONS D, E, F); the reviewer gate ran inline and sequentially because the brief forbade sub-agents. Amendment of 2026-10-18 recorded in research/methodology/35."
 }

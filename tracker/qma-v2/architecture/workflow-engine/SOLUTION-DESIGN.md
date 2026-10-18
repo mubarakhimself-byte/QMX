@@ -1,6 +1,6 @@
 # QMX workflow engine — solution design
 
-Projection of `ARCHITECTURE-SPINE.md` (the binding spine) into contracts, data models, sequence flows and failure modes. Written 2026-10-16, headless, from the memlog. Where this file and the spine disagree, the spine wins. The rulings file `methodology/26` outranks both.
+Projection of `ARCHITECTURE-SPINE.md` (the binding spine) into contracts, data models, sequence flows and failure modes. Written 2026-10-16, headless, from the memlog; amended 2026-10-18 after the first build run (§5.5, §25, E33-E41 and the rows marked with backlog ids; record in `methodology/35`). Where this file and the spine disagree, the spine wins. The rulings file `methodology/26` outranks both.
 
 Labels: **[retrieved]** read today from a cited file or branch; **[remembered]** training knowledge, not re-verified; **[inferred]** reasoned here. Numbers marked **Claude's default** are placeholders the operator changes in Settings.
 
@@ -98,10 +98,12 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
 | `nodes[].type` / `typeVersion` | from the AD-5 registry; an unknown type or version fails validation; old versions keep working after a kind changes |
 | `nodes[].role` | required on `llm`, `agent` and LLM-mode `grader`; forbidden elsewhere; must exist in Settings `[roles]` |
 | `nodes[].effect` | required; the registry supplies a default per kind that validation accepts |
-| `nodes[].credentials` | `qmx/*` refs only; a literal matching a token shape fails validation |
+| `nodes[].credentials` | `qmx/*` refs only, and only refs a Settings `[credentials.tools]` row declares; broker, venue, provider-key, control-token, GPT sign-in, pairing and backup refs are refused whatever the kind (AD-36); a literal matching a token shape fails validation |
 | `nodes[].runs_on` | a placement name from the registry (`pc` default, `contabo`, `qmb`, or an added provider row) or an ordered list of them; the first healthy one with free capacity takes the node (AD-30) |
-| `connections` | source node **name** → output port name → list of target lists; each target names `node`, `port`, `map` and for `keyed-join` the `key`; `cartesian` needs `"explicit": true`; a list into an `llm` or `agent` node must use `"map": "chunk"` with `chunk: {by: items | tokens, size?, fill?}` (AD-34) |
-| `pinData` | per node, per output port, the items a test run returns instead of executing; ignored in live mode |
+| `connections` | source node **name** → output port name → list of target lists; each target names `node`, `port`, `map`, optional `required: true` (the target is skipped when this edge carried no output, AD-5) and for `keyed-join` the `key`; `cartesian` needs `"explicit": true`; a list into an `llm` or `agent` node must use `"map": "chunk"` with `chunk: {by: items | tokens, size?, fill?}` (AD-34) |
+| `pinData` | per node, per output port, the items a test run returns instead of executing; ignored in live mode; part of the content hash, so a pin change drops `tested` (AD-11); a node is pinned on every output port or on none |
+| `nodes[].parameters.network` | `true` lets a script reach the network (AppContainer `internetClient` or the container's declared egress hosts, AD-24); default off |
+| `nodes[].parameters.artifacts` | files or folders (ending `/`) the script leaves in `work/`; each entry may be `{path, type}` with a Library artifact type (`card`, `source`, `report`, `proposal`, `dataset`); `run-file` when untyped (AD-14) |
 | `settings.caller_policy` | who may invoke this workflow as a `subworkflow` |
 | `settings.error_workflow` | optional workflow id that receives `run.failed` events for this workflow |
 | `settings.runaway` | the runaway guard (AD-16): soft limits `tokens`, `agents`, `tool_calls`, `wall_seconds` and `on_runaway: pause | degrade`; no USD field exists; when absent the §17 defaults fill it in |
@@ -111,17 +113,17 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
 | Kind | Executor does | Tokens | Default effect | DEC-0312 / DEC-0418 name it ratifies |
 | --- | --- | --- | --- | --- |
 | `trigger` | marks the entry; parameters say which trigger kinds may bind | 0 | none | (Routine, DEC-0328, stays outside the definition) |
-| `script` | runs a declared script in the AD-24 subprocess; stdout JSON or files become outputs | 0 | reversible | `deterministic_script` |
-| `rule` | evaluates a safe expression over inputs; routes by output port | 0 | none | `conditional` |
+| `script` | runs a declared script in its AD-24 tier (`host_confined` on the PC when byte-identical to the shipped manifest, the hardened container otherwise); inputs on stdin, stdout JSON or listed files become outputs | 0 | reversible | `deterministic_script` |
+| `rule` | evaluates one safe predicate over inputs; outputs `true` and `false` (a many-way branch is a chain of rules) | 0 | none | `conditional` |
 | `loop` | repeats a body subgraph; stop = typed condition (max iterations, token allowance, predicate, no-progress rounds) | 0 | none | `loop` with iteration law |
 | `join` | waits for `all`, `any` or `quorum(n)` inbound partitions; late arrivals after watermark are late, not merged | 0 | none | `join`, DEC-0439 algebra |
-| `wait` | parks until a time, an engine event or a webhook; no compute while parked | 0 | none | (n8n Wait) |
+| `wait` | parks until a time, an engine event or a webhook; no compute while parked; a time hold writes a wake row the ticker honours (AD-10) | 0 | none | (n8n Wait) |
 | `human_gate` | parks with an ask in the inbox; `timeout` makes it an approval gate that resolves on timeout with `on_timeout` | 0 | none | `human_gate`, `approval_gate` |
 | `llm` | one model call with a JSON schema, through a one-turn tool-less harness Background chat on the leased account | low | irreversible | `task` |
 | `agent` | a harness Background chat with skills, tool allow-list, `max_turns`, structured output; session id saved for resume; in `runner_outside` mode (default) its code-running tools are sandbox MCP tools and the built-in Bash/Write/Edit are off; optional SDK sub-agents (depth 1, 3-5 concurrent, same chat tree and sandbox, tokens and tool calls carved from the node's runaway allowance); may write its own tools (`agent-tool`, `unreviewed`, no order verb) | high | irreversible | `agent` |
 | `rlm` | a prime-agent-style Python kernel (`execute / interrupt / snapshot / restore` over newline JSON) inside the node's sandbox, driven by the runner as the `sandbox_python` tool, with data fetched by hash into `/work/in`; `spawn`/`collect` sub-model calls are routed back to the runner's provider layer and land as spans; a `dill` snapshot after each cell is shipped by the sidecar as a `checkpoint` blob and restored on retry; cached sub-call results are never repaid; `resources.memory_mb` 4-8 GiB; `runsc` by default, `runc` when file I/O suffers | high | irreversible | — (ruling 52) |
-| `subworkflow` | invokes another workflow version with typed inputs; own ledger namespace; `await` or fire-and-forget | varies | per callee | DEC-0455 nested invoke |
-| `grader` | deterministic check (script) or LLM judge on the `judge` role; outputs `verdict` + `feedback` on `pass`/`fail` ports | 0 or low | none | (Deep Agents rubric, `03`) |
+| `subworkflow` | invokes a child named as a block folder `blocks/<name>/` inside the parent or as a pinned published object, with typed inputs; own ledger namespace; `await` (a waiting child makes the node `waiting(child)`) or fire-and-forget; cancel cascades | varies | per callee | DEC-0455 nested invoke |
+| `grader` | `mode: deterministic` (a script check) or `mode: llm` (a judge on the `judge` role, refused at validation until the grader-llm packet, §25); outputs `verdict` + `feedback` on `pass`/`fail` ports | 0 or low | none | (Deep Agents rubric, `03`) |
 | `monitor` | runs a cheap source (script or URL), hashes it, fires `changed` with the diff or ends `silent` | 0 | none | (Hermes monitor, `25` section 1.4) |
 | `app_op` | invokes a mini app's exported operation through `ControlService.apps_call` with a `caller_kind: workflow` envelope | varies | declared by the op | DEC-0452/0455 invoke |
 | `library` | reads a kind by id/hash or writes an artifact, edge or run summary through `LibraryPort` | 0 | compensable (write) | `artifact_dependency` (read) |
@@ -134,9 +136,9 @@ The core decides *what runs next* from the ledger alone. Executors do the work a
 ### 2.4 Validation (the `validated` state)
 
 1. Schema: the document parses against `qmx.workflow/1`; every `*_ref` resolves inside the workflow folder.
-2. Graph: exactly one `trigger`; every edge joins declared ports of compatible kinds; no cycles except through `loop` bodies; every node reachable; `cartesian` explicit; a `keyed-join` names a key.
+2. Graph: exactly one `trigger`; every edge joins declared port names (every v1 port carries data, AD-4); fan-out nests one level only (`nesting_unsupported` otherwise, AD-5); `rule` and `loop` predicates pass `expr.check` with the names the definition may use (B-90); no cycles except through `loop` bodies; every node reachable; `cartesian` explicit; a `keyed-join` names a key.
 3. Roles, effects, placements and credentials resolve against Settings, the registry, the gateway and the keyring **by name** (preflight checks reachability later).
-4. Lint: no node calls `settings.write`; no parameter names a money act (deny-list `qma.core.barriers.money_path`); no node creates triggers; secrets by ref; a runaway guard is present when any `llm`/`agent` node exists (the defaults are filled in, and no field may name a USD cap); `agent` nodes have `max_turns` and `max_tool_calls`; a list edge into an `llm`/`agent` node is `chunk`, never `broadcast`; a `human_gate` sits only in front of an `irreversible_external` effect.
+4. Lint: no node calls `settings.write`; the one text-surface scan of AD-36 finds no money act in any name, note, parameter, setting, `meta`, port name, `pinData` key, script, prompt or other folder file (the harness gate's matcher, call-shaped), no forbidden import and no credential ref outside the allow-list; no node creates triggers; secrets by ref; a runaway guard is present when any `llm`/`agent` node exists (the defaults are filled in, and no field may name a USD cap); `agent` nodes take `max_turns` and `max_tool_calls` from Settings when they leave them out, and the lint refuses only a value below 1; a list edge into an `llm`/`agent` node is `chunk`, never `broadcast`; a `human_gate` sits only in front of an `irreversible_external` effect.
 5. Note nodes (`type: note`) and unconnected nodes are allowed in a draft and refused at publish unless `disabled: true`.
 
 ---
@@ -151,7 +153,7 @@ Every run has two separate fields. **`mode: live | test`** is fixed at `run_crea
 | --- | --- | --- | --- | --- |
 | `queued` | created, no node started yet | no | `run_created` with no `node_started` | no |
 | `running` | at least one node started and the run is not waiting or ended | no | node events | no |
-| `waiting` | only waiting nodes remain: usage limit, `wait` node, placement full or unhealthy, runaway pause, an irreversible external step waiting for the inbox; resumes on its own or on the answer (a `reason` field says which) | no | `node_waiting` / `run_paused` | no |
+| `waiting` | only waiting nodes remain: usage limit, `wait` node, retry backoff, placement full or unhealthy, runaway pause, a join timeout, a waiting child run, an irreversible external step waiting for the inbox; resumes on its own (a wake row, AD-10) or on the answer (a `reason` field says which) | no | `node_waiting` / `run_paused` | no |
 | `passed` | every node ended ok or skipped and `run_finished` was written | yes | `run_finished` | yes, when `mode: live` and the workflow's `publish` rule is `auto`; never when `mode: test` |
 | `failed` | the ladder parked the run (`reason: parked`), or a grader failure ended it; he may resume it from the run card, which appends a new `running` status | yes, unless he resumes it | ladder step `park` | no |
 | `stopped` | ended by him, by the watchdog, or by a runaway pause that the next occurrence replaced (`reason: operator | watchdog | runaway`) | yes | `run_cancelled` | no |
@@ -193,7 +195,7 @@ Node attempt states: `scheduled → started → (ok | failed | waiting | gate) `
 | `log` | attempt, level, redacted line | worker |
 | `node_finished` | attempt, outputs by port (inline or artifact refs), output hash, span | worker |
 | `node_failed` | attempt, error code, signature, retryable, effect state `before | after | unknown` | worker |
-| `node_waiting` | attempt, reason `limit | wait | gate | placement | runaway`, `resume_at`, event name | core |
+| `node_waiting` | attempt, reason `limit | wait | backoff | gate | placement | runaway | join | child`, `resume_at` (RFC 3339 UTC), event name; a `resume_at` writes one wake row | core |
 | `gate_opened` / `gate_resolved` | ask text, options, inbox item id; answer, principal, at | core / service |
 | `event_received` | engine-bus event name and payload hash | scheduler |
 | `ladder_step` | attempt, step `retry | account | model | doctor | park`, reason | core |
@@ -203,7 +205,7 @@ Node attempt states: `scheduled → started → (ok | failed | waiting | gate) `
 | `compacted` | attempt, trigger `threshold | auto | restart`, context fraction at compaction (AD-34) | worker |
 | `memory_written` | scope, rows added, size after | nodes.library |
 
-Every event carries `seq` (monotonic per run), `run_id`, `at` (from the recorded clock), `kind`, `data`. A `span` is derived from `node_started`/`node_finished|failed|waiting` pairs and stored as its own row for fast timelines.
+Every event carries `seq` (monotonic per run), `run_id`, `at` (from the recorded clock), `kind`, `data`. Every node event above (from `node_scheduled` to `doctor_verdict`, plus `tool_called`) carries the attempt key `node_id, iteration, partition, attempt` in `data` (one spelling, `partition`; AD-15). Span status `gate` derives from `gate_opened` until `gate_resolved`; `cancelled` from `node_failed{code: cancelled}` or from `run_cancelled`, which closes every open span. Every string in `data` passes AD-37's redaction in the writer before commit. A `span` is derived from `node_started`/`node_finished|failed|waiting` pairs and stored as its own row for fast timelines.
 
 Why SQLite and not the existing `qmx_ledger.RunJournal` (per-run fingerprint-chained JSONL) [retrieved hp17]: fire claims, leases and memo lookups need transactions and indexes across runs. The two meet at run end: the trace export is written through `RunJournal`, so the Library artifact carries the fingerprint chain, and the harness's per-chat `model_call` rows are joined by the chat id a span records. All JSON hashing uses `qmx_ledger.journal.fingerprint`; error signatures come from `ledger.signature`.
 
@@ -227,7 +229,7 @@ Only nodes whose memo is missing or invalid run. A `broadcast` or `chunk` fan-ou
 
 ### 3.4 Effects, idempotency and workspace snapshots [spine AD-8]
 
-- Before any attempt of a `reversible` node, the worker snapshots the run workspace (hard links or a copy under `workspaces/wf-<id>/runs/<run_id>/.snap/<attempt>`) and restores it before a retry.
+- Before any attempt of a `reversible` node, the worker snapshots the run's `work/` zone (hard links or a copy under `<zones_root>/<run_id>/.snap/<attempt>`, outside `work/`) and restores it before a retry; a restore writes only inside `work/`, and a junction or symlink there fails the attempt `zone_link` (AD-24).
 - A `compensable` node's write produces a new Library version or edge; compensation is `replaces` or `archived-as`, never delete.
 - An `irreversible` node receives `idempotency_key = run:node:iteration:attempt` and must pass it to the external side (the harness chat title carries it; an app op receives it in the envelope). After a failure with `effect_state: unknown` (worker died mid-call) an `irreversible_external` effect is **not** retried; the run parks with an `urgent` item that offers "retry (may duplicate)" with the key shown.
 - A model call is spend and therefore irreversible, but its *result* is memoised, so a rerun of a later node never repays it. After an `unknown` outcome a model call **is** retried once under the ladder (duplicate spend is accepted, ruling 27) and writes an `info` line; it never pages him (ruling 77).
@@ -236,7 +238,9 @@ Only nodes whose memo is missing or invalid run. A `broadcast` or `chunk` fan-ou
 
 - `loop`: ports `in` (the first value) and `next` (each later value, handed back by the body; an edge into `next` is the one cycle a definition may hold), and `body` (the value while iterating) and `done` (the value once a stop fires) (settled in EP6). The body is the induced subgraph its `body` port reaches; each iteration mints node attempts with `iteration = k`; the stop condition is typed (`max_iterations`, `budget` (tokens the body's attempts reported, a share of the runaway allowance), `predicate` over the last value handed back, `no_progress_rounds` over a named metric); iteration state lives in the ledger, never in a node result (DEC-0312 iteration law ratified).
 - `join`: expected cardinality comes from the fan-out partition count; `all` waits for every partition, `any` fires on the first and marks the rest `late`, `quorum(n)` fires at n; watermark `all-expected | timeout | failed-aggregation`; late arrivals are recorded, not merged.
-- `subworkflow`: one nested run with its own `run_id`, `parent_run_id`, `call_depth` (ceiling in Settings); the parent node waits or continues; the callee's `caller_policy` is checked at validation and at dispatch; merging two live runs is refused (DEC-0455 ratified).
+- `subworkflow`: one nested run with its own `run_id`, `parent_run_id`, `call_depth` (ceiling in Settings); the child is a block folder `blocks/<name>/` inside the parent (carried in its bundle and content hash) or a pinned published object `(workflow_item, object_id)`; the parent node waits (`waiting(child)` while the child waits) or continues; cancelling the parent cancels its children; the callee's `caller_policy` is checked at validation whenever the child resolves and at dispatch; merging two live runs is refused (DEC-0455 ratified).
+- Readiness of a node with several inputs (AD-5): it runs when every source slot has settled, every `required: true` edge carried output, and at least one edge carried output; else it is skipped. An edge from outside a loop body into the body is context only.
+- `join` words: a timeout waits with reason `join`; `no_progress_rounds` takes `direction: up | down`; a partition failing after its join fired writes one `info` line.
 
 ### 3.6 Drain and pause [spine AD-9]
 
@@ -300,7 +304,7 @@ NodeResult: ok(outputs by port, output_hash, artifacts[], span)
 
 ### 5.2 Local worker (the PC)
 
-A `ComputeProvider` adapter over Docker Desktop on WSL2 (installed on this PC, study 29 [retrieved]) that boots the same `qmx-worker` image per node attempt, concurrency 3 (Claude's default). Script-family nodes of `host` tier spawn the AD-24 subprocess instead. Model-family nodes run as harness Background chats in the local runner (this process): they first take a chat slot from `max_live_chats − interactive_reserve` (the engine's own count, so `ChatTableFull` never fires), then call `HarnessPort` (section 8.4) on the engine's event loop; their code-running tools are served by the runner-side sandbox tool server and executed in the container over the sidecar's remote call (section 5.4). `app_op` calls `ControlService.apps_call`; `library` calls `LibraryPort`. Heartbeats every 10 s from the sidecar while an attempt runs; cancel kills the container or the process tree, or calls `Harness.interrupt`. When Docker Desktop is off: scripts fall back to `host`, model-written-code tool calls wait with `waiting(placement)` and a "Docker is off" doctor line.
+A `ComputeProvider` adapter over Docker Desktop on WSL2 (installed on this PC, study 29 [retrieved]) that boots the same `qmx-worker` image per node attempt, concurrency 3 (Claude's default). Script-family nodes run in their AD-24 tier: `host_confined` (an AppContainer process in a Job object) for shipped scripts, this container for every other one. Model-family nodes run as harness Background chats in the local runner (this process): they first take a chat slot from `max_live_chats − interactive_reserve` (the engine's own count, so `ChatTableFull` never fires), then call `HarnessPort` (section 8.4) on the engine's event loop; their code-running tools are served by the runner-side sandbox tool server and executed in the container over the sidecar's remote call (section 5.4). `app_op` calls `ControlService.apps_call`; `library` calls `LibraryPort`. Heartbeats every 10 s from the sidecar while an attempt runs; cancel kills the container or the process tree, or calls `Harness.interrupt`. When Docker Desktop is off: shipped scripts still run `host_confined` (§5.5); every other script and every model-written-code tool call waits with `waiting(placement)` and a "Docker is off" doctor line; nothing falls back to a bare host process (AD-24).
 
 ### 5.3 Remote worker (engine side of the gateway)
 
@@ -341,9 +345,9 @@ flowchart LR
 | What never enters a sandbox | the engine core, ledger, scheduler, pool, credentials, permissions, session history, audit and traces, the inbox, agent-to-agent routing. A sandbox executes only tool calls that arrive over a remote call (Rivet; the lead adopted it, revising study 29's "the whole worker goes inside the box") |
 | Image | one OCI image `qmx-worker`: the sandbox tool executor, the RLM kernel, the sidecar, Python data libraries; built once, tagged by the engine version, the same digest on the PC, the server and the burst providers. In `cli_inside` mode the image also carries the Agent SDK with its bundled CLI |
 | Lifetime | fresh container per node attempt (matches AD-7 memo and retry rules); `warm: true` per agent keeps one container across its steps as an optimisation only, state in the Hub `SessionStore` |
-| Isolation tier (node attribute beside `placement`) | `host` (PC, trusted scripts only, AD-24) · `runc` hardened for trusted scripts and GPU jobs · `runsc` (gVisor) for anything a model wrote |
+| Isolation tier (node attribute beside `placement`) | `host_confined` (PC only, scripts byte-identical to the shipped template manifest, AppContainer + Job object, AD-24, §5.5) · `runc` hardened for every other script and GPU jobs · `runsc` (gVisor) for anything a model wrote; on the PC, model-written code runs in hardened `runc` with no network |
 | Hardened `runc` flags | `--read-only`, `--tmpfs /tmp`, `--cap-drop ALL`, `--security-opt no-new-privileges`, seccomp, `--pids-limit 256`, `--memory`, `--cpus`, non-root user, `/work` bind only (the existing `SSHProvider` recipe [retrieved hp17 `qmx_remote/providers.py`]) |
-| Mounts never made | the Docker socket, the host home, `~/.ssh`, any `.git` read-write (Sandcastle issue #1010 lesson), the plan home |
+| Mounts never made | the Docker socket, the host home, `~/.ssh`, any `.git` read-write (Sandcastle issue #1010 lesson), the plan home, the QMX home; a script container mounts only `<zones_root>/<run_id>/code` (read-only) and `work/` |
 | **Agent mode `runner_outside` (default for model-written code)** | the agent loop is a harness Background chat in the runner on that placement's host, holding its account lease through the harness as today (plan on the PC, keys on the server); the chat's built-in `Bash`, `Write`, `Edit`, `NotebookEdit` are disabled (HARNESS-REQUESTS H2/H8); the runner serves an MCP tool server `sandbox_bash`, `sandbox_write`, `sandbox_python` (the RLM kernel), `sandbox_tool_<name>` (agent-made tools) whose calls execute inside the container over the sidecar's remote call; `Read` may stay pointed at a synced read-only copy of `/work`; sub-agents are SDK sub-agents in the same chat tree, their tool calls reach the same container. Rivet notes Claude Code and Codex do not support this natively; agentOS adds it through sandbox mounting (probe E23 compares the two routes) |
 | **Agent mode `cli_inside` (fallback, per node)** | the Agent SDK and CLI run inside the container; model traffic carries the run pass to the nearest relay (AD-28, H11), which injects the key; `qmx-egress` holds only the domain allow-list; key accounts only, never a plan account; the transcript lives inside the box and is mirrored out by the sidecar |
 | Trade-offs between the modes | `runner_outside`: every credential, permission decision and transcript stays outside; one audit path; the blast radius is the container's `/work`; cost: the sandbox tools must match the built-in tools' quality and latency (probe E23). `cli_inside`: Claude Code's native tools and their polish; cost: the whole CLI is inside the blast radius, the transcript sits in the box, and plan accounts are excluded |
@@ -358,6 +362,47 @@ flowchart LR
 | Why Rivet's objection to workflow engines does not apply | Rivet argues an endless agent loop makes a workflow engine's replay grow forever. A QMX workflow is a finite run: it starts on a trigger, walks a DAG, and ends with `run_finished`; its ledger is bounded by the definition's nodes, loop caps and runaway guard. A Lab paper soak is therefore a chain of daily runs, never one week-long run (Lab AD-12). The never-ending agent is the copilot session, which lives in the QMA v2 harness, not in this engine |
 | Sync back | artifacts by hash, events, logs, spans, checkpoints; a sync-back size cap (Hermes `sync_back_max_bytes` idea, 2 GiB Claude's default); orphan and idle reapers on every placement |
 | Blast radius | fork bomb / `rm -rf`: read-only root, `/work` only, pids and memory limits · escape: `runsc` for model tiers, no sensitive mounts · exfiltration: nothing to steal in the box in `runner_outside`; egress allow-list in `cli_inside` · runaway: `maxTurns`, `max_tool_calls`, sub-agent caps, the engine's runaway guard checked before each retry (no USD cap, ruling 27) · stuck: sidecar heartbeat, watchdog, idle timeout 600 s, hard run timeout · Library garbage: writes land only on `refs/runs/<id>` and are versioned · one bad node: the semaphore isolates it; its failure parks only its own run |
+
+### 5.5 Script isolation on the PC: defence in depth [spine AD-24, AD-36, AD-37; amended 2026-10-18 after B-30, B-31, B-89]
+
+The first build ran host scripts as his user with the run's zone under the QMX home, so `../../../../claude` reached the plan login and `import keyring` reached every `qmx/*` entry, broker ones included [retrieved EP7 check, TP3 check B1]. Each layer below stops a different mistake; none is trusted alone.
+
+```mermaid
+flowchart LR
+  subgraph HOME["QMX home (never granted to a script)"]
+    PL[claude/ plan login]
+    ST[(engine.sqlite, Library store)]
+  end
+  KR[(Windows Credential Manager: qmx/* incl. broker, control token, GPT sign-in)]
+  subgraph ZONES["zones_root (outside the home)"]
+    C[run_id/code: read-only copy, hash-checked]
+    W[run_id/work: cwd, writable]
+  end
+  ENG[engine] -- "shipped bytes: AppContainer qmx-script + Job object" --> HC[host_confined script]
+  ENG -- "anything else: docker run --rm, runc hardened" --> CT[container script]
+  HC --> C
+  HC --> W
+  CT --> C
+  CT --> W
+  HC -. denied .-> PL
+  HC -. denied .-> KR
+  HC -. denied: loopback .-> ENG
+```
+
+| Layer | What it is | What it stops | Status |
+| --- | --- | --- | --- |
+| 1 Zones outside the home | `<zones_root>/<run_id>/code` (read-only copy of the folder files) and `work/` (cwd); `zones_root` never the home, inside it or above it | a relative path reaching the plan login or a store | design; replaces `<home>/workspaces/wf-<id>/runs/<run_id>` [retrieved `runner.workspace`] |
+| 2 Provenance picks the tier | `host_confined` only when every `.py` file in the folder is byte-identical to the shipped template manifest (sha256 per file, inside the engine package); else the hardened `runc` container | edited, imported, run-made or challenger code on the host | design |
+| 3 OS boundary | `host_confined`: AppContainer profile `qmx-script` (no capabilities; `internetClient` only with `network: true`; loopback blocked), ACL grants on the script runtime, `code/` and `work/` only. Container: `--read-only`, `--cap-drop ALL`, non-root, `code/` and `work/` mounts only, internal network unless egress hosts are declared | reading files and keyring entries outside the grant, calling QMX on loopback | design; probe E33 decides AppContainer (fallback: the container tier for shipped scripts too) |
+| 4 Lifetime | Job object with `KILL_ON_JOB_CLOSE`, active-process and memory limits, UI restrictions; containers `--rm --init` with `qmx.home`, `qmx.run`, `qmx.attempt` labels; start-up sweep before any resume | a script outliving the engine and racing a rerun (B-31); a fork bomb; clipboard reads | design |
+| 5 Separate script runtime | its own venv with only the shipped data libraries (no `keyring`, `qmn`, `qma`, `qmx_*`, `pywin32`); a boot module installs an audit hook refusing AD-36's imports and `subprocess`, `os.system`, `ctypes` and `winreg` events | `import keyring`, `import qmn`, dynamic imports, shelling out | design; today scripts run on the engine's own interpreter [retrieved `nodes/script.py:178`] |
+| 6 Text scan before run | AD-36: imports, call-shaped money verbs, credential allow-list | a money verb in code or a prompt; a broker ref; a forbidden import that would only fail at run time | design |
+| 7 Redaction at the write seams | AD-37 | a secret printed to stderr or echoed by a provider reaching the ledger, inbox, Library or REST | design |
+| 8 Agent chats | built-in `Bash`, `Write`, `Edit`, `NotebookEdit` removed per chat (H2); until then an ask the engine rejects, proven by E35 | an agent's own shell reaching the plan login or keyring (B-70) | H2 requested in HG3 |
+
+Launch of one `host_confined` attempt, in order: check the scan memo for the folder hash (AD-36); copy the read files into `code/` and verify every `.py` file's hash against the shipped manifest; create the AppContainer profile once per install and grant its SID on the runtime, `code/` and `work/`; build the environment (allow-list plus run context, AD-24); `CreateProcess` suspended with the AppContainer security capabilities; assign it to the attempt's Job object nested in the engine's job; resume; stream stdout and stderr through the redactor; on cancel or timeout close the job, which kills the tree.
+
+What stays out on purpose: a separate low-privilege Windows user (an admin step and a stored password, which is one more secret; AppContainer gives the same file and credential separation without them); Windows Sandbox (not on Windows 11 Home [retrieved session environment]); a host tier on Contabo (containers only there).
 
 ---
 
@@ -383,7 +428,7 @@ stateDiagram-v2
 
 ### 6.2 Test mode
 
-A test run is a run with `mode: test`: `pinData` outputs replace execution for pinned nodes; `llm`/`agent`/`rlm`/`grader(llm)` nodes use **real models** through the providers the harness already has, resolved from each role's cheap candidates, with OpenRouter rows admitted in test mode (ruling 51: "we don't want to assume, we want to make sure things work"); the **fake provider** (an executor that returns the pinned output, a recorded transcript, or a schema-valid canned document) is an explicit per-run switch for a no-spend dry run; `irreversible_external` nodes (messages, posts, webhooks, app ops marked so) are stubbed and log what they would have sent, while model spend and Library writes are real; the run writes on its own branch `refs/runs/<run_id>` like any run, with `mode: test` and an ordinary status from §3.1; the Library's fast-forward excludes `mode: test` runs even when they pass (LIBRARY-REQUESTS L9), and a passed test run makes the draft **tested**. The report binds to the draft's `content_hash`; any edit that changes the hash marks it stale.
+A test run is a run with `mode: test`: `pinData` outputs replace execution for pinned nodes; `llm`/`agent`/`rlm`/`grader(llm)` nodes use **real models** through the providers the harness already has, resolved from each role's cheap end through the plan login (`claude/haiku`; operator ruling of 2026-10-18), with OpenRouter rows admitted only in a provider-proof lane that names them (ruling 51: "we don't want to assume, we want to make sure things work"); the **fake provider** (an executor that returns the pinned output, a recorded transcript, or a schema-valid canned document) is an explicit per-run switch for a no-spend dry run; `irreversible_external` nodes (messages, posts, webhooks, app ops marked so) are stubbed and log what they would have sent, while model spend and Library writes are real; the run writes on its own branch `refs/runs/<run_id>` like any run, with `mode: test` and an ordinary status from §3.1; the Library's fast-forward excludes `mode: test` runs even when they pass (LIBRARY-REQUESTS L9), and a passed test run makes the draft **tested**. The report binds to the draft's `content_hash`; any edit that changes the hash marks it stale (the hash covers `pinData`, `meta.needs` and every folder file too, AD-11). A `fake: true` run is always `mode: test`, and the engine CLI runs folders in test mode only; a live run starts only through `service.runs.start` on a published object by a `user` principal or the scheduler.
 
 ### 6.3 The saved Board
 
@@ -406,12 +451,12 @@ sequenceDiagram
   C->>E: tests.run(draft_id)   # real cheap models by default (ruling 51)
   E-->>C: test-report (pass), run card
   C-->>O: draft panel in chat + run card; "Publish as v1.0.0 and enable weekly?"
-  O->>C: yes
-  C->>E: publish(draft_id) → version; triggers.create (asks MANAGE approval)
-  E-->>O: inbox: enabled, next fire
+  C-->>O: publish card + enable card (buttons call REST as user)
+  O->>E: clicks publish → version; clicks enable → trigger enabled
+  E-->>O: run card: enabled, next fire
 ```
 
-The copilot never edits the ledger, never enables without the operator's yes, and writes only through the API, so a copilot-built workflow passes the same validation and test gate as a hand-built one.
+The copilot never edits the ledger, never publishes or enables (those are his clicks as `user`, AD-11, AD-22), and writes only through the API, so a copilot-built workflow passes the same validation and test gate as a hand-built one.
 
 ### 6.5 Template → variant
 
@@ -548,11 +593,11 @@ Reads `[engine]`, `[roles]`, `[scheduler]`, `[limits]`, `[budgets]` through `Con
 
 | Role (Settings `[roles]`) | Default tier | Candidates (ordered, example) |
 | --- | --- | --- |
-| `triage`, `clarifier`, `scanner`, `doctor`, `judge` | cheap | kimi/k3 → claude/haiku (any account) |
+| `triage`, `clarifier`, `scanner`, `doctor`, `judge` | cheap | claude/haiku (plan) → kimi/k3 |
 | `reader`, `searcher`, `writer`, `extractor` | mid | claude/sonnet → glm → gpt |
-| `planner`, `synthesiser`, `builder`, `reviewer` | strong | claude/opus → claude/fable → gpt |
+| `planner`, `synthesiser`, `builder`, `reviewer` | strong | claude/opus → gpt (no default list names Fable, ruling 87; he may add a row in Settings) |
 
-Resolution at dispatch: walk the candidate list for the node's placement (`pc` lists may name plan accounts; `contabo` and burst lists name key providers only; `cli_inside` nodes skip plan rows), ask the pool for a lease per candidate's profile, take the first `ready`; the chosen `(profile, model, effort, account)` is written on `node_started`. Test mode admits `test_only` rows (OpenRouter) and prefers the cheap end of each list. Provider matrix for `agent` nodes: plan → `PlanLaunch`; Kimi, GLM, DeepSeek, MiniMax, Meta Muse, Ollama Cloud, OpenRouter (test only) → `KeyProvider` through the relay; GPT → `GptPlan` lane. OpenCode's chat-completions-only models need a translator lane that does not exist today [retrieved `25` section 5.4]; they are not candidates until one does (Deferred). The fake provider is an explicit per-run switch (`fake: true`) for a no-spend dry run; `mode: test` alone never selects it (ruling 51).
+Resolution at dispatch: walk the candidate list for the node's placement (`pc` lists may name plan accounts; `contabo` and burst lists name key providers only; `cli_inside` nodes skip plan rows), ask the pool for a lease per candidate's profile, take the first `ready`; the chosen `(profile, model, effort, account)` is written on `node_started`. Test mode resolves each role's cheap end through the plan login (`claude/haiku`, operator ruling of 2026-10-18) and admits `test_only` rows (OpenRouter) only in a provider-proof lane that names them. Provider matrix for `agent` nodes: plan → `PlanLaunch`; Kimi, GLM, DeepSeek, MiniMax, Meta Muse, Ollama Cloud, OpenRouter (test only) → `KeyProvider` through the relay; GPT → `GptPlan` lane. OpenCode's chat-completions-only models need a translator lane that does not exist today [retrieved `25` section 5.4]; they are not candidates until one does (Deferred). The fake provider is an explicit per-run switch (`fake: true`) for a no-spend dry run; `mode: test` alone never selects it (ruling 51).
 
 ---
 
@@ -576,9 +621,10 @@ on node_failed(attempt):
        transient → one retry; bad_input → re-run upstream rule/script once if effect none; bad_output → one re-run with repair hint or next candidate
        logic → a challenger object on refs/challengers/<workflow_item> for the improve workflow (AD-26) + park
   else: park
-runaway-guard check before every step (tokens, agents, tool calls, wall time; no USD): breach →
+runaway-guard check every tick, in flight included (tokens = in + out + cache_write, cache reads never counted; agents; tool calls; wall time only while an attempt is in flight; no USD): breach → start nothing new, let in-flight attempts finish, then
   on_runaway pause   → waiting(runaway) + info digest line; ends stopped(reason runaway) when the next occurrence starts or after limits.alert_after
-  on_runaway degrade → remaining model nodes take their role's cheapest candidate, continue once, then pause
+  on_runaway degrade → remaining model nodes take their role's cheapest candidate, released in waves no wider than the batch at the breach, guard rechecked per wave; a second breach pauses
+a failed fan-out partition walks this ladder on its own; its join counts it failed only after it parks
 park: status failed (reason parked), one inbox item (severity per §10.4), nothing waits; the next trigger occurrence starts a fresh run with continuity
 ```
 
@@ -588,7 +634,7 @@ Human gates: only an attempt in front of an `irreversible_external` effect may w
 
 | Condition | Action |
 | --- | --- |
-| attempt with no `heartbeat`/event past `timeout.idle_seconds` | cancel attempt; `failed(signature=stalled, retryable=true)` → ladder |
+| attempt with no executor progress event (tool call, log line, turn, chunk event) past `timeout.idle_seconds`; the worker's liveness heartbeat never counts | cancel attempt; `failed(signature=stalled, retryable=true)` → ladder |
 | run past its runaway guard (`wall_seconds`, tokens, agents, tool calls) | `on_runaway`: pause as `waiting(runaway)` or degrade (§10.2); one `info` digest line; never an ask |
 | same node, same signature, 2 failures | skip retries, go to doctor |
 | fire with an expired lease and no run | `unknown`, inbox `normal`, no auto re-fire |
@@ -599,7 +645,7 @@ Human gates: only an attempt in front of an `irreversible_external` effect may w
 
 `id, run_id, trigger_id?, node_id?, severity, signature, title, cause, tried [ladder steps], cost_so_far, trace_link, placement, agent_mode, run mode, health, link_out, actions [retry|stronger_model|skip_node|open_trace|stop|resume], blocks_run, first_raised_at, last_raised_at, count, acknowledged_by?, resolved_by?, resolution`.
 
-Severity policy (ruling 77, spine AD-17): `normal`, `urgent` and `black` only for provider failures (a 401; every account of a role closed past `alert_after`; a placement unhealthy past `alert_after`), harness or ledger errors, an unknown outcome on an irreversible external effect, and a stolen or misused run pass. A park from logic, bad input or bad output, a runaway pause, a preflight failure caused by the workflow's own configuration, and a regressed champion are `info` lines in the daily digest. The notification channels themselves (toasts, phone, digest layout) are designed by the UI session.
+Severity policy (ruling 77, spine AD-17): `normal`, `urgent` and `black` only for provider failures (a 401; every account of a role closed past `alert_after`; a placement unhealthy past `alert_after`), harness or ledger errors, an unknown outcome on an irreversible external effect, and a stolen or misused run pass. A park from logic, bad input or bad output, a runaway pause, a preflight failure caused by the workflow's own configuration, and a regressed champion are `info` lines in the daily digest. The notification channels themselves (toasts, phone, digest layout) are designed by the UI session. Human points inside a run (sign a promotion, accept a lesson, approve a tightening) are never inbox items: the run ends that branch with a typed `proposal` artifact whose actions he takes as `user` from the run card or the Library's proposals shelf (AD-17, LIBRARY-REQUESTS L19). Every text field of an item is written through AD-37's redaction.
 
 ---
 
@@ -636,7 +682,7 @@ node option reuse: exact (default for scripts) | similar (agent accepts a near m
 ```text
 runs → note() rows → consolidate → lessons pool
         → nightly improve workflow (per workflow or home): one challenger on refs/challengers/<workflow_item> (engine:<store>)
-        → replay against fix set (recent failed runs) + guard set (recent passed runs), pinned inputs, real models
+        → replay forks (AD-7: unchanged memos reused) against fix set (recent failed runs) + guard set (recent passed runs), pinned inputs, real models
         → gate passes? no → archive challenger + dead_end row
                       yes → refs/champions/<workflow_item> moves; tested_by → replay runs; scheduler runs it under self_improve: auto
         → live feedback() over the next K runs; pass rate below the previous version → pointer moves back + dead_end row
@@ -678,21 +724,24 @@ The hp17 signatures of `workflows_put` and `workflows_run` have no publish flag 
 | --- | --- | --- | --- | --- |
 | `drafts.get` / `drafts.put` / `drafts.validate` | `GET/PUT /api/workflows/{id}/draft`, `POST …/validate` | `workflow_drafts_get` (new), `workflow_drafts_put` (new), `workflows_validate` (exists) | READ / **DOMAIN_WRITE** / READ | Lab Graph mode, builder |
 | `tests.run(draft, subgraph?, fake?)` | `POST /api/workflows/{id}/test` | `workflow_tests_run` (new) | **DOMAIN_WRITE** | editor, builder |
-| `versions.publish` | `POST /api/workflows/{id}/publish` | `workflows_put` (exists, re-scoped to publish only) | MANAGE (his yes once, ruling 80) | editor, builder |
+| `versions.publish` | `POST /api/workflows/{id}/publish` | `workflows_put` (exists, re-scoped: returns a publish card, never publishes) | `user` principal only (ruling 80; refused for `agent` and `workflow` callers, AD-11) | editor; the builder shows the card |
 | `versions.list` / `versions.archive` | `GET /api/workflows/{id}/versions`, `POST …/archive` | `workflow_versions_list` (new), `workflow_versions_archive` (new) | READ / MANAGE | editor, builder |
 | `runs.start` (live, a published version) | `POST /api/workflow-runs` | `workflows_run` (exists, re-scoped to live runs only) | MANAGE | editor, copilot |
 | `runs.get/list/explain` | `GET /api/workflow-runs/*` | `workflow_runs_get`, `workflow_runs_list`, `workflow_runs_explain` (new) | READ | all three |
 | `runs.cancel/resume` | `POST /api/workflow-runs/{id}/cancel|resume` | `workflow_runs_cancel`, `workflow_runs_resume` (new) | MANAGE | UI, copilot |
-| `triggers.list` / `triggers.create/enable/disable/run_now` | `/api/triggers/*` | `workflow_triggers_list` (new) / `workflow_triggers_create`, `…_enable`, `…_disable`, `…_run_now` (new) | READ / MANAGE | editor, builder |
+| `triggers.list` / `triggers.create/enable/disable/run_now` | `/api/triggers/*` | `workflow_triggers_list` (new) / `workflow_triggers_create`, `…_enable` (returns an enable card), `…_disable`, `…_run_now` (new) | READ / MANAGE; enable is `user` only; a version's enabled state is derived from its enabled triggers (AD-10) | editor, builder |
+| `runs.replay(source_run_id, object, mode test)` | `POST /api/workflow-runs/{id}/replay` | `workflow_runs_replay` (new) | DOMAIN_WRITE (a test run) | Lab RV, improve workflow (AD-7, AD-26) |
 | `inbox.list/resolve` | `/api/inbox/*` | `workflow_inbox_list` (new) | READ (resolve is UI-only) | UI inbox, copilot |
 | mini-app archive (AD-19) | `POST /api/apps/{id}/archive` | `apps_archive` (new) | MANAGE | UI, copilot |
 | `events.stream` | `GET /api/engine/events` (SSE) | — | — | UI timelines, job panel |
 
 `runs_*`, `run_job`, `job_*` and `jobs_*` keep their remote-compute meaning. `DOMAIN_WRITE` runs without asking while `settings.toml [agents] domain_write = "allow"` (the harness default), so saving a draft and running a test never ask him; publishing, enabling and live runs ask once. Every new row is an `AGENT_OPERATIONS` entry in the harness and needs his grant (HARNESS-REQUESTS H17, together with the Library and Lab rows).
 
+**Amended 2026-10-18 (AD-11, AD-22; B-5, B-44, B-45, B-65, L-53).** Publish, enable and live start are `user` acts: the service refuses them for `agent` and `workflow` callers, and the copilot's `workflows_put`, `workflow_triggers_enable` and `workflows_run` rows return a card whose button calls REST as `user`. qmx-control cannot yet tell a REST call from a tool call (B-65), so until HG3 request H24 lands these three acts are served only by the engine host's own REST routes, which no `qmx` tool row dispatches to, behind the UI bearer. Draft saves and test runs still ask once in default mode today (B-5); HG3 request H20 makes `DOMAIN_WRITE` rows really never ask.
+
 **Until H17 is granted (no harness edit):** the builder saves a draft with the existing `library_save` (DOMAIN_WRITE) as a `workflow` object on the chat's own agent ref; the engine's Library watcher (Library AD-5) sees the new draft object, refuses any object that is not of kind `workflow`, runs `validate` first and, when its `meta.test_requested` nonce changed and validation passed, starts a test run on it; the copilot reads the result with `workflows_get`, `workflows_validate`, `library_get` and `library_search` (READ). Publish stays `workflows_put` and a live run stays `workflows_run`, which ask once, as they should. Enabling a schedule and archiving an app are done by him in the UI over REST. Nothing in that path asks him for a draft save or a test run.
 
-The Lab Graph mode binds the editor's node palette to the AD-5 registry (`service.registry()`), typed ports to port kinds, and "Run" to `tests.run` on a draft or `runs.start` on a version. Chat previews are `service.runs.explain` and `drafts.get` rendered as cards. The hub copilot calls the same tools from any session home.
+The Lab Graph mode binds the editor's node palette to the AD-5 registry (`service.registry()`), ports by name (every v1 port carries data, AD-4), and "Run" to `tests.run` on a draft or `runs.start` on a version. Chat previews are `service.runs.explain` and `drafts.get` rendered as cards. The hub copilot calls the same tools from any session home.
 
 ---
 
@@ -809,7 +858,10 @@ sequenceDiagram
 | Two engines on one ledger (misconfiguration) | fire-claim lease | the second never claims; `black` doctor line | doctor line |
 | Remote worker unreachable | `placement_status` | nodes on it `waiting(placement)` | item after `alert_after` |
 | Prompt-cache loss on account rotation | known cost | span marks `uncached_resend: true` | cost in the span |
-| Docker Desktop off on the PC | `placement_status(pc) != healthy` | scripts fall back to `host`; model-written-code tool calls `waiting(placement)` | doctor line "Docker is off" |
+| Docker Desktop off on the PC | `placement_status(pc) != healthy` | shipped scripts run `host_confined`; every other script and model-written-code tool call `waiting(placement)` | doctor line "Docker is off" |
+| A script tries to read the plan login, a keyring entry or QMX on loopback | AppContainer access check; audit hook; import scan at validate | access denied, the script fails, the attempt walks the ladder; an import of `keyring`/`qmn` never validates | item only if parked |
+| The engine crashes while scripts run | Job object closes | every confined process dies with it; labelled containers are stopped by the start-up sweep; their attempts fold `unknown` | `normal` item (harness-level error) |
+| A provider error echoes a key | redaction at the ledger writer | the stored text reads `[redacted…]`; the span counts the redaction | nothing |
 | Model runs `rm -rf`, a fork bomb, or fills the disk | container limits | read-only root, `/work` only, pids/memory/cpu limits, workspace quota, sync-back cap; the tool call fails and the attempt walks the ladder | item if parked |
 | Container escape attempt by model-written code | gVisor tier | `runsc` for `agent`/`rlm`/`agent-tool` tool calls; no sensitive mounts, no Docker socket; in `runner_outside` there is no credential or transcript in the box to take | nothing |
 | Key exfiltration from a container | design | `runner_outside`: no key exists inside; `cli_inside`: egress allow-list, a request to a non-listed domain is refused and logged | `normal` item on repeated attempts |
@@ -877,6 +929,15 @@ sequenceDiagram
 | Where drafts live | `fields.stage = draft` on `main`; `refs/drafts/<item>` with `main` published-only | `refs/drafts/<item>` | a scheduled run falling back to `main` would otherwise run a draft (27b B4) |
 | Owner of the session home | the harness (`origin`); the Library (sessions as a kind); `qmx_control` sessions, specified by the engine spine | `qmx_control`, AD-35 | no harness change (ruling 24); sessions are not Library objects (Library Deferred) |
 | Provider onboarding (ruling 74) | a hand-written adapter per provider; a copilot flow over the provider's published instructions onto generic adapters | copilot flow + generic adapters, his one click to apply | no hand-wiring; agents never write settings [retrieved `QH/tools.py` `OPERATIONS_LEFT_OUT`] |
+| Script OS boundary on the PC (2026-10-18, B-30) | env scrub only; a separate low-privilege Windows user; a Job object only; AppContainer; Docker/WSL hardened `runc`; Windows Sandbox | AppContainer + Job object for shipped scripts, hardened `runc` for everything else, Job objects for every process | the env scrub was proven insufficient [retrieved B-30]; a second user needs admin and a stored password; a Job object bounds lifetime, not reach; Windows Sandbox is absent on Windows 11 Home [retrieved]; AppContainer denies files, credentials and loopback without a second secret [retrieved Microsoft Learn; the credential and loopback rows are probe E33] |
+| Where script zones live | under the QMX home (built); move the plan login out of the home; a separate `zones_root` | separate `zones_root` | the harness owns `<home>/claude` (ruling 24) and a same-user process reaches any path; with a boundary that grants only the zone, the zone must not sit under the home [inferred] |
+| Money lint over scripts and prompts | bare identifier scan; a second engine matcher; the harness gate's own matcher, call-shaped | the gate's matcher, call-shaped (AD-36) | a bare scan flags `open_positions` and `promotion` [retrieved TP3 check]; `descriptors.name_money_act` already catches `placeorder`, `flatten`, `set_leverage` [retrieved probe] |
+| Redaction | per executor; at read (explain, REST); at the write seams | write seams (AD-37) | per-executor redaction missed the inbox and explain [retrieved L-50, L-52]; read-time redaction leaves the secret on disk |
+| Who publishes and enables | the MANAGE ask through the copilot; `user` only, with cards | `user` only | the service accepted `Caller("workflow")` [retrieved L-53] and qmx-control cannot tell REST from a tool call [retrieved B-65] |
+| Multi-input readiness | any input (built); all live inputs by default; `required` per edge | `required` per edge, default off | merges after a `rule` keep working; a gated data input can be required [retrieved B-24, B-87] |
+| Human points in a run | inbox decision cards; a waiting `human_gate`; typed proposal artifacts | proposals | ruling 77 keeps the inbox for provider and harness failures; ruling 57 says nothing waits |
+| Replay of a past run on an edited folder | prefix replay; a fresh test run on recorded inputs; a fork reusing unchanged memos | fork (AD-7) | reruns only what the edit changed, so the fix and guard sets cost only the changed suffix [inferred] |
+| Runaway defaults | `settings.py` 400k / 12 / 2 h; SD §17 2M / 16 / 1,000 / 4 h | SD §17, cache reads not counted | a chunked fan-out over 400k tokens of input would trip 400k by itself; counting cache reads tripped it after 20-25 turns [retrieved B-49] |
 
 ---
 
@@ -892,10 +953,14 @@ sequenceDiagram
 | `pool.cooldown_default` | 1 h |
 | `pool.soft_cap_per_account` | 2 live chats |
 | `pool.strategy` | `least_used` for workflows, `fill_first` for copilots |
-| `runaway` guard per run (when the template sets none) | 2M tokens, 16 agents, 1,000 tool calls, 4 h wall time, `on_runaway: pause`; no USD figure (ruling 27) |
+| `runaway` guard per run (when the template sets none) | 2M tokens (`in + out + cache_write`; cache reads never counted), 16 agents, 1,000 tool calls (`runaway.tool_calls`), 4 h wall time counted only while an attempt is in flight, `on_runaway: pause`; no USD figure (ruling 27); `settings.DEFAULTS` follows this row (B-38) |
 | `retry.max_tries` | 3, backoff 30 / 120 / 600 s |
 | `timeout.run_seconds` / `idle_seconds` for `agent` | 1800 / 300 |
-| `agent.max_turns` | 12 |
+| `agent.max_turns` | 40 (filled in when a node leaves it out; 200 tool calls fit at about five per turn) |
+| `roles.test` | the cheap end of each role through the plan login (`claude/haiku`); OpenRouter rows only in provider-proof lanes |
+| `zones_root` | `%LOCALAPPDATA%\qmx-zones` on the PC, `/var/lib/qmx-node/zones` on Contabo; never the QMX home, inside it or above it |
+| script `network` | off unless the node declares `network: true` |
+| `host_confined` job limits | active processes 8, memory `resources.memory_mb` (Claude's default 1,024), UI restrictions on |
 | fan-out width | `max_live_chats − interactive_reserve` (2); raise the harness `[budgets] max_live_chats` to at least 6 on engine hosts (§7.4) |
 | harness `[budgets] max_budget_usd` on engine hosts | raised far above any expected node (Settings value; a runaway guard, not a spending cap; §7.4) |
 | `chunk.fill` | 0.30 of the resolved model's context window |
@@ -979,7 +1044,7 @@ request from a chat (any mode) → relay
 | Placement kind | Examples | Mode | Who holds what | Cost |
 | --- | --- | --- | --- | --- |
 | `owned` always-on (`contabo`) | Contabo (6 cores, 12 GB, 200 GB SSD today): `qmx-hub`, `qmx-vault`, market data, monitoring, server engine + scheduler, `qmx-node` runner + the central relay, warm `qmx-worker` containers; about 4 agent sessions after those services (derived) | `runner_outside` (default), `cli_inside` | keys in the vault copy, read by the relay; plan login allowed (his machine); transcripts on the runner | fixed monthly |
-| `owned` PC (`pc`) | Docker Desktop, interactive desktop | `runner_outside`, `host` scripts | keyring, plan logins, its own relay | none |
+| `owned` PC (`pc`) | Docker Desktop, interactive desktop | `runner_outside`, `host_confined` scripts (shipped bytes only, AD-24) | keyring, plan logins, its own relay | none |
 | `managed_vm` | Amp orbs (E2B microVMs, Linux), E2B, Modal, Cloudflare containers | `runner_outside` with the runner on Contabo and the container remote; or `cli_inside` | only a run pass in the VM; model calls go to the central relay | per minute / per second; nothing committed |
 | `managed_agent_host` | Cloudroom threads, Amp threads, an Amp runner in Claude Code mode | `host_harness` | the provider's harness runs the loop inside its VM with the run pass; key accounts only (plan only on an owned Amp runner) | free tiers exist; nothing committed |
 | `qmb` | the dedicated backtest machine | `app_op` door | no model account; Library + market data only | owned |
@@ -1050,10 +1115,10 @@ Playwright and Stagehand stay for headless, logged-out research and cheap replay
 | E11 | AD-16 ladder order | force failures; `ladder_step` events read retry, retry, model, doctor, park in that order |
 | E12 | AD-17 one item per incident | 5 retries of one signature produce one inbox item with `count: 5` |
 | E13 | AD-20 remote | a `script` node with `runs_on: contabo` produces outputs by hash through the gateway stub; events land in the local ledger |
-| E14 | AD-24 script envelope | a script prints `env`; no provider key, no `CLAUDE_CONFIG_DIR`, no plan path appears |
+| E14 | AD-24 script envelope | a script prints `env`; no provider key, no `CLAUDE_CONFIG_DIR`, no plan path, no home path appears; `QMX_RUN_ID`, `QMX_MODE`, `QMX_FAKE`, `QMX_NOW`, `QMX_WORK` and `QMX_CODE` do |
 | E15 | AD-3 boundary | import-linter: `qmx_engine` imports only `qma.harness` top-level names |
 | E16 | AD-25 one image, nothing sensitive inside | run one `agent` node on the PC in Docker and one on `qmx-node`; both report the same image digest; `env` and the filesystem inside each container show no key, no transcript, no plan path; in `runner_outside` the container's only peer is the sidecar endpoint |
-| E17 | AD-25 tiers | an `agent-tool` call refuses to execute in `host` or `runc`; a trusted script runs in `host` when Docker is off and agent tool calls wait with the doctor line |
+| E17 | AD-25 tiers | an `agent-tool` call refuses to execute in `host_confined` or `runc`; a shipped script runs `host_confined` when Docker is off, while an edited copy of it and agent tool calls wait with the doctor line |
 | E18 | AD-4 sub-agents | an agent node with `subagents.max_concurrent: 3` spawns 5; only 3 run at once; a sub-agent's attempt to spawn is refused (depth 1); the node's runaway allowance is debited for all; their tool calls land in the node's container |
 | E19 | AD-27 already built | two workflows request the same build (same intent key); the second skips, links `consumed_by`, spends no tokens; a `dead_end` hit stops the node unless `retry_dead_ends` |
 | E20 | AD-26 champion | seed 3 failed and 3 passed runs; the improve workflow proposes; replay passes; `refs/champions/*` moves; force 10 failing live runs; the pointer moves back with a `dead_end` row; `main` is unchanged throughout |
@@ -1069,3 +1134,28 @@ Playwright and Stagehand stay for headless, logged-out research and cheap replay
 | E30 | AD-34 caching and lease affinity | the run of E29 on a 200k model: chunks 2-7 hold the same account lease as chunk 1 (affinity `run_id:node_id`) and each span from chunk 2 onward shows `cache_read > 0`; a forced quota rotation on chunk 4 records `uncached_resend: true` on that span only. Fallback if a provider reports no cache fields: assert the prompt prefix hash is identical across chunks and the lease journal shows one account |
 | E31 | AD-34 compaction and hooks | an agent node fed past 40 % of its window emits a `compacted{trigger: threshold}` span event preceded by a `memory_note` row on `refs/runs/<id>`; its tool calls appear as `tool` child spans from PostToolUse; a copilot chat open at the same time receives none of the engine hooks. Fallback (H15/H16 not granted): on a plan account the engine records `compacted{trigger: restart}`, the `memory_note`, a summary, and a second chat for the same attempt with the same memo key; on a key-provider row the provider's `CLAUDE_CODE_AUTO_COMPACT_WINDOW` quirk fires instead; tool spans come from the session's `tool` blocks |
 | E32 | ruling 83 templates run | every template shipped as a working default (engine, hub and Lab templates) passes one real-model test run (`mode: test`, cheap candidates) on the engine before it is listed on the Templates shelf; a template whose test fails is not listed |
+| E33 | AD-24 AppContainer boundary (probe, before the script-isolation packet) | start the script runtime's `python` in the `qmx-script` AppContainer with grants on the runtime, `code/` and `work/` only: it imports the standard library; opening `<home>/claude/.credentials.json` is denied; `CredReadW` on a throwaway `qmx/probe-*` entry fails; a connection to `127.0.0.1:<qmx-control port>` fails; HTTPS to a public host fails without `internetClient` and works with it; killing the engine process with `taskkill /F` kills the script (Job object). Any failing row switches `host_confined` off; shipped scripts then take the container tier |
+| E34 | AD-24 provenance | an unedited shipped template's script runs `host_confined`; change one byte and the same node runs in the `runc` container; with Docker off the edited copy waits `placement` with "Docker is off" |
+| E35 | AD-24 agent built-in tools | an engine agent chat asked to run `Bash`, `Write`, `Edit` or `NotebookEdit` either has no such tool (H2) or raises an ask the engine rejects; no such call executes; a resumed chat behaves the same (B-70) |
+| E36 | AD-36 scan | plant TP3's evidence set in a copy of a template: `broker.place_order('EURUSD', 1)` in a script, `client.close_position(42)`, `import qmn.orders`, `importlib.import_module("keyring")`, "Then place a market order to buy EURUSD" in a prompt, "Call close_all_positions" in a prompt, `credentials: {broker: qmx/ctrader-live}`, a node named `flatten_all`: each is refused with its file and line. `open_positions`, a variable named `promotion`, `rank_positions(...)` and a fixture saying "investors sell bonds" pass |
+| E37 | AD-37 redaction | a provider error echoing `key_sk-or-v1-…`, a script printing a resolved tool key to stderr, and an inbox item built from that failure: the ledger, the inbox title and cause, `explain`, REST and the Library run summary all show `[redacted…]`; the span counts the redactions |
+| E38 | AD-11 who starts what | `python -m qmx_engine run --mode live` is a usage error; `versions.publish`, `triggers.enable` and `runs.start` by an `agent` or `workflow` caller are refused; the copilot's publish tool returns a card; a `--fake` run reads `mode: test` |
+| E39 | AD-7 replay fork | edit node 4 of a passed 5-node run and replay it: nodes 1-3 write no `node_started` and reuse the source memos, nodes 4-5 run on haiku, the new run is `mode: test` with a `replay-of` edge |
+| E40 | AD-10 wakes | a run held on `wait seconds: 90` writes a wake row, reads `waiting` while held, and resumes on the tick after 90 s with no human action; a retry backoff does the same |
+| E41 | AD-16 runaway counting | a run whose agent turns read 500k cache tokens but write 50k does not trip a 400k guard; a run asleep 3 h in a `wait` is not paused as runaway on wake; a breach with three attempts in flight lets them finish and starts nothing new |
+
+## 25. Later packets found by the first build run (sketches; rules in the spine)
+
+Planned work, not hardening: each closes a LATER-PACKET row of `methodology/34`. DOC-CHANGES row 27 lists them for ENGINE-PLAN Appendix G. Order is the triage's: security first.
+
+| Packet | Closes | Sketch |
+| --- | --- | --- |
+| Script isolation | B-30, B-31, B-89/B-93, B-17, B-39, L-25, L-39, L-40, L-50, L-52, L-58, B-78, B-80, B-44, B-45 | §5.5 layers 1-7: zones root, shipped manifest, `workers.confine` (AppContainer + Job object through `ctypes`), script runtime venv and boot audit hook, `definition.scan` over the descriptors matcher, `ledger.redact` at the three write seams, run-context env, CLI test-only, user-only publish and enable. Probe E33 first; live checks E14, E17, E33-E38 |
+| Gate folding | B-28, B-32 | `InboxPort.resolve` appends `gate_resolved{answer, principal}` through the ledger writer and wakes the run; the core folds `retry` (new attempt, same idempotency key shown), `skip_node` (node ends `skipped`, downstream readiness per AD-5), `stop` (`run_cancelled`), `resume` (lift a runaway pause after the guard was raised), `stronger_model` (next candidate); an `unknown` outcome on an `irreversible_external` step waits on its gate instead of forever |
+| Nested fan-out | B-20 | partitions become paths (`"3/1"`), the memo key and spans carry the path, a join closes the innermost level, a loop inside a loop body carries an iteration path; validation allows depth `fanout.max_depth` (Claude's default 2) and refuses deeper |
+| Chunk retry under the ladder | B-35 | a failed partition walks retry, account, model and doctor on its own while its siblings' memos stand; the join's watermark waits while any partition has ladder steps left; only a parked partition counts as failed for `all`, and `any`/`quorum` proceed without it |
+| Grader `llm` mode | B-46, B-81 | deterministic checks first; on pass, one `llm` attempt on the `judge` role with a rubric schema `{verdict, score, feedback}`; refused when the resolved model id equals the producing node's (labelled `same_family` for the same family); routes by verdict to `pass`/`fail` |
+| pinData | B-47, L-26 | in test mode a node pinned on every output port ends `node_finished{source: pinned}` without running and without spend; pins are checked against the node's output schema at validation; live mode ignores them; pins are in the content hash |
+| Ledger-derived run state | B-40, B-73, L-68 | `status_of(run_id)` is a pure fold over the run's events plus the worker's live-attempt set; at engine start every attempt with `node_started` and no ending is `interrupted` until folded (AD-8); `workflow_runs_list` reads the fold, never a cache, so in-flight runs show and a held run reads `waiting` |
+| Replay fork | B-82 | `service.runs.replay` per AD-7: seed the new test run with the source's recorded events, let the memo lookup consult the source run's memos for unchanged `(node definition hash, input hash)`, write `replay-of`; AD-26's fix and guard sets and the Lab's RV use it |
+| `engine_view` reads | B-80, L-84 | the `library` kind's read mode `engine_view` returns this workflow's runs (status, mode, totals), inbox items and spans through `service` reads, as JSON on `main`; a template such as RV's `week.py` takes them as an input instead of opening `InboxTable` |
