@@ -12,6 +12,7 @@ members = [
     "qmx-apps",
     "qmx-broker",
     "qmx-control",
+    "qmx-engine",
     "qmx-ledger",
     "qmx-remote",
     "qmx-tools",
@@ -2859,6 +2860,51 @@ dev = [
     { name = "pytest-cov", specifier = ">=7,<8" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
     { name = "ruff", specifier = "==0.16.5" },
+]
+
+[[package]]
+name = "qmx-engine"
+version = "0.1.0"
+source = { editable = "packages/qmx-engine" }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "pydantic" },
+    { name = "qma-core" },
+    { name = "qma-harness" },
+    { name = "qmx-control" },
+    { name = "qmx-ledger" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "types-jsonschema" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jsonschema", specifier = "==4.26.0" },
+    { name = "pydantic", specifier = "==2.13.4" },
+    { name = "qma-core", editable = "packages/qma-core" },
+    { name = "qma-harness", editable = "packages/qma-harness" },
+    { name = "qmx-control", editable = "packages/qmx-control" },
+    { name = "qmx-ledger", editable = "packages/qmx-ledger" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-cov", specifier = ">=7,<8" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "ruff", specifier = "==0.16.5" },
+    { name = "types-jsonschema" },
 ]
 
 [[package]]
