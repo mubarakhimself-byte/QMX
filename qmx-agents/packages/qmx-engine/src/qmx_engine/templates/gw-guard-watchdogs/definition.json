@@ -8,8 +8,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 1000, "agents": 1, "tool_calls": 1, "wall_seconds": 120,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -19,8 +17,7 @@
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
     {"id": "guard", "name": "Read account and guard", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [10, 30], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 30}, "parameters": {"script": "scripts/guard.py"}},
+     "retry": {"max_tries": 3, "backoff_seconds": [10, 30], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/guard.py"}},
     {"id": "cushion", "name": "Kill-line distance", "type": "script", "typeVersion": 1,
      "position": [440, -80], "effect": "none", "parameters": {"script": "scripts/cushion.py"}},
     {"id": "profiles", "name": "Tighten-only check", "type": "script", "typeVersion": 1,

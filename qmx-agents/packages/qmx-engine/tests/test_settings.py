@@ -23,6 +23,26 @@ STRONG = ("kimi/k3", "deepseek/deepseek-v4-pro", "glm", "qwen", "gpt", "claude/o
 CHINESE = {"kimi", "deepseek", "minimax", "qwen", "glm"}
 
 
+DELETED_CAPS = (
+    "runaway.tokens",
+    "runaway.agents",
+    "runaway.wall_seconds",
+    "runaway.usd",
+    "on_runaway",
+    "agent.max_turns",
+    "agent.max_tool_calls",
+    "timeout.agent.run",
+    "timeout.script.run",
+    "pool.accounts.*.background_share",
+    "budgets.max_live_chats",
+)
+
+
+def test_no_usage_cap_is_a_default() -> None:
+    assert [key for key in DELETED_CAPS if key in DEFAULTS] == []
+    assert [key for key in DEFAULTS if key.startswith(("runaway", "budgets"))] == []
+
+
 def test_every_appendix_h_default_has_its_literal_value() -> None:
     assert dict(DEFAULTS) == {
         "scheduler.tick": 60,
@@ -35,23 +55,20 @@ def test_every_appendix_h_default_has_its_literal_value() -> None:
         "chunk.size": 10,
         "chunk.fill": 0.3,
         "agent.compact_at": 0.4,
-        "agent.max_tool_calls": 200,
-        "agent.max_turns": 12,
-        "runaway.tokens": 400_000,
-        "runaway.agents": 12,
-        "runaway.wall_seconds": 7_200,
-        "runaway.usd": None,
-        "on_runaway": "pause",
-        "pool.accounts.*.background_share": 0.5,
         "pool.accounts.*.ceiling": None,
         "pool.accounts.*.cooldown": 300,
-        "pool.strategy": "fill-first",
-        "budgets.max_live_chats": 6,
+        "pool.strategy": "least_used",
         "retry.max_tries": 3,
         "retry.backoff": (30, 120, 600),
-        "timeout.agent.run": 1_800,
         "timeout.agent.idle": 300,
-        "timeout.script.run": 600,
+        "timeout.script.idle": 600,
+        "timeout.in_tool": 1_200,
+        "timeout.grace": 120,
+        "timeout.warn_at": 0.8,
+        "loop.repeat": 5,
+        "loop.window": 8,
+        "loop.no_convergence": 6,
+        "crash_loop.restarts": 3,
         "subworkflow.max_depth": 3,
         "inline_limit_bytes": 65_536,
         "placement.pc.concurrency": 3,

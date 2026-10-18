@@ -14,8 +14,6 @@
   },
   "settings": {
     "timezone": "Europe/London",
-    "runaway": {"tokens": 40000, "agents": 1, "tool_calls": 10, "wall_seconds": 900,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -26,7 +24,6 @@
     {"id": "gather", "name": "Gather the day", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120},
      "parameters": {"script": "scripts/gather.py", "busy_fixture_ref": "fixtures/day-busy.json",
                     "quiet_fixture_ref": "fixtures/day-quiet.json"}},
     {"id": "quiet_day", "name": "Quiet day?", "type": "rule", "typeVersion": 1,

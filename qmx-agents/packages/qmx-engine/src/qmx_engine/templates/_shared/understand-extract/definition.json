@@ -4,8 +4,7 @@
   "name": "Understand and extract: one source to located claims and typed cards, holes kept",
   "settings": {
     "on_error": "park",
-    "caller_policy": "workflows_only",
-    "runaway": {"agents": 4, "tool_calls": 20, "wall_seconds": 3600, "on_runaway": "pause"}
+    "caller_policy": "workflows_only"
   },
   "nodes": [
     {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
@@ -27,7 +26,7 @@
     {"id": "extract", "name": "Reconcile and extract cards", "type": "agent", "typeVersion": 1,
      "position": [1320, 0], "role": "extractor", "effect": "none",
      "parameters": {"brief_ref": "prompts/extract.md", "output_schema_ref": "schemas/cards.json",
-                    "tools": [], "max_turns": 4}},
+                    "tools": []}},
     {"id": "holes", "name": "Keep the holes", "type": "script", "typeVersion": 1,
      "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/card_holes.py"}}
   ],

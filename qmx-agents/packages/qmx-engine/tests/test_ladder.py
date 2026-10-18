@@ -85,29 +85,56 @@ def test_each_retry_waits_its_backoff_on_the_recorded_clock(tmp_path: Path) -> N
     assert len(script.jobs) == 3
 
 
-def test_a_runaway_breach_between_rungs_pauses_instead_of_retrying(tmp_path: Path) -> None:
+def test_a_wall_time_limit_he_wrote_pauses_the_run_before_its_retry_starts(
+    tmp_path: Path,
+) -> None:
     clock = Clock()
 
     def slow_failure(_: NodeJob) -> NodeResult:
         clock.move(120)
         return fails("too slow")
 
+    script = Planted(slow_failure)
     run = flow(
         tmp_path,
         [node("start", "trigger"), node("step", "script", script="scripts/step.py")],
         {"start": {"main": [edge("step")]}},
-        runaway={"wall_seconds": 60},
-        executors={"script": Planted(slow_failure)},
+        limits={"wall_seconds": 60},
+        executors={"script": script},
         wall=clock,
     )
 
     outcome = run.start()
 
     events = run.events(outcome.run_id)
-    assert (outcome.status, outcome.reason, steps(events)) == ("waiting", "runaway", [])
-    assert [line["on_runaway"] for line in of_kind(events, "log")] == ["pause"]
-    assert of_kind(events, "run_paused")[0]["reason"] == "runaway"
+    assert (outcome.status, outcome.reason, steps(events)) == ("waiting", "limits", ["retry"])
+    assert [line["line"] for line in of_kind(events, "log")] == [
+        "limits: wall_seconds 120 of 60; the run pauses until it is resumed"
+    ]
+    assert of_kind(events, "run_paused")[0]["reason"] == "limits"
+    assert len(script.jobs) == 1
     assert run.items() == []
+
+
+def test_with_no_limits_written_a_long_run_never_pauses(tmp_path: Path) -> None:
+    clock = Clock()
+
+    def six_hours(_: NodeJob) -> NodeResult:
+        clock.move(6 * 3600)
+        return OK
+
+    run = flow(
+        tmp_path,
+        [node("start", "trigger"), node("step", "script", script="scripts/step.py")],
+        {"start": {"main": [edge("step")]}},
+        executors={"script": Planted(six_hours)},
+        wall=clock,
+    )
+
+    outcome = run.start()
+
+    assert outcome.status == "passed"
+    assert of_kind(run.events(outcome.run_id), "run_paused") == []
 
 
 def test_the_same_failure_twice_goes_straight_to_the_doctor(tmp_path: Path) -> None:

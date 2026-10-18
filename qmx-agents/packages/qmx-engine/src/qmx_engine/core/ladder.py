@@ -1,4 +1,4 @@
-"""The failure ladder and the runaway guard (AD-16, SOLUTION-DESIGN 10.2).
+"""The failure ladder and his limits (AD-16, SOLUTION-DESIGN 10.2).
 
 `climb` picks the next rung for one failed slot from its `Walk`, in this order: an irreversible
 step that failed after its effect parks, since any rerun would repeat it (AD-8); the same signature
@@ -7,20 +7,24 @@ outcome never reaches the ladder unless it may rerun: the runner opens a gate fo
 account rung records `skipped: no pool` until the account pool packet (L2). Each call returns one
 rung, so every step is in the ledger before the next is chosen.
 
-The runaway guard is checked before every rung and before any new attempt starts. It has limits on
-tokens, agents, tool calls and wall time, and no USD figure (ruling 27). A breach never asks: it
-pauses the run, or under `on_runaway: degrade` lets it go on once and pauses on the next breach.
+An attempt the stuck detector ended in a loop parks at once with its summary, since a rerun would
+loop again; one that did not converge walks the ladder like any other failure.
+
+There is no runaway guard and no usage ceiling (AD-40). A `limits` block he wrote is checked
+before any new attempt starts, which is at each turn end and every tick, since the driver folds
+again on both. A breach never asks and never ends the run: no new attempt starts, the running ones
+finish, and the run pauses with one `info` line until he resumes it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import replace
 from typing import Final
 
 from pydantic import JsonValue
 
-from qmx_engine.core.commands import Climb, Command, Degrade, Park, Pause, Rung, StartNode
+from qmx_engine.core.commands import Climb, Command, Park, Rung, StartNode
+from qmx_engine.core.fold import used
 from qmx_engine.core.state import Failure, JsonObject, NodeRun, Slot, State, Walk
 from qmx_engine.definition.model import Node
 from qmx_engine.definition.registry import REGISTRY
@@ -102,6 +106,8 @@ def climb(state: State, node: Node, slot: Slot, run: NodeRun, reason: str) -> li
         or (declared == "irreversible" and not model_bearing(node))
     ):
         return park(f"{reason}; it failed after its effect, so a rerun would repeat it")
+    if failure.stalled == "loop":
+        return park(f"{reason}; the agent was looping, so a rerun would loop again")
     tries, backoff = retries(state, node, failure)
     taken = walk.steps.count("retry")
     roles = candidates(state, node)
@@ -122,10 +128,7 @@ def climb(state: State, node: Node, slot: Slot, run: NodeRun, reason: str) -> li
         step = rung("doctor", "no rung left before the doctor")
     else:
         return park(doctored(reason, walk))
-    detail = breach(state)
-    if detail is None:
-        return [step]
-    return runaway(state, detail, [step])
+    return [step]
 
 
 def doctored(reason: str, walk: Walk) -> str:
@@ -146,61 +149,26 @@ def asks(state: State, node: Node, slot: Slot) -> JsonObject | None:
             found["candidate"] = roles[moved]
         if walk.verdict == "bad_output" and walk.hint is not None:
             found["hint"] = walk.hint
-    if state.degraded and model_bearing(node):
-        found["degrade"] = True
     return found or None
 
 
-def _limit(state: State, name: str) -> int | None:
-    found = _ints(state.runaway.get(name))
-    return found[0] if found else None
-
-
-def agents(state: State) -> int:
-    """Attempts of `agent` nodes started over the run."""
-    kinds = {n.id: REGISTRY.kind(n.type) for n in state.definition.nodes}
-    return sum(
-        count
-        for slot, count in state.attempts.items()
-        if (kind := kinds.get(slot.node_id)) is not None and kind.name == "agent"
-    )
-
-
 def breach(state: State) -> str | None:
-    """The limit the run is already past, if any. The wall-time deadline is an instant compared as
-    text against the recorded clock, so the core does no clock arithmetic (AD-6)."""
-    used = {"tokens": sum(state.spent.values()), "tool_calls": state.tool_calls}
-    for name, count in used.items():
-        limit = _limit(state, name)
-        if limit is not None and count >= limit:
-            return f"{name} {count} of {limit}"
-    deadline = state.runaway.get("deadline")
-    if isinstance(deadline, str) and state.now is not None and state.now >= deadline:
-        return f"wall time past {deadline}"
+    """The first of his limits the run is past since its allowance began, if any."""
+    found = used(state.spent, state.turns, state.tools, state.active_seconds)
+    for key, limit in state.limits.items():
+        count = found.get(key, 0) - state.allowance.get(key, 0)
+        if count >= limit:
+            return f"{key} {count} of {limit}"
     return None
 
 
 def admit(state: State, commands: Sequence[Command]) -> tuple[list[Command], str | None]:
-    """Hold back the new attempts the guard does not allow: every one after a breach, and each
-    `agent` attempt past the agents limit. Returns what may go ahead and the breach, if any."""
+    """Hold back every new attempt once a limit he wrote is reached. Returns what may go ahead
+    and the breach, if any."""
     detail = breach(state)
-    if detail is not None:
-        return [c for c in commands if not isinstance(c, StartNode)], detail
-    limit = _limit(state, "agents")
-    if limit is None:
+    if detail is None:
         return list(commands), None
-    kinds = {n.id: REGISTRY.kind(n.type) for n in state.definition.nodes}
-    started = agents(state)
-    kept: list[Command] = []
-    for command in commands:
-        kind = kinds.get(command.node_id) if isinstance(command, StartNode) else None
-        if kind is not None and kind.name == "agent":
-            if started >= limit:
-                detail = f"agents {started} of {limit}"
-                continue
-            started += 1
-        kept.append(command)
-    return kept, detail
+    return [c for c in commands if not isinstance(c, StartNode)], detail
 
 
 def step_data(command: Climb | Park, resume_at: str | None = None) -> JsonObject:
@@ -234,30 +202,11 @@ def step_data(command: Climb | Park, resume_at: str | None = None) -> JsonObject
     return data
 
 
-def runaway_line(detail: str, on_runaway: str) -> JsonObject:
-    """The run-level `info` digest line a breach writes; the fold reads `on_runaway` back."""
-    then = "goes on once on the cheapest candidates" if on_runaway == "degrade" else "pauses"
+def limits_line(detail: str) -> JsonObject:
+    """The run-level `info` digest line a limits pause writes."""
     return {
         "level": "info",
         "digest": True,
-        "line": f"runaway guard: {detail}; the run {then}",
-        "runaway": detail,
-        "on_runaway": on_runaway,
+        "line": f"limits: {detail}; the run pauses until it is resumed",
+        "limits": detail,
     }
-
-
-def runaway(state: State, detail: str, held: Sequence[Command]) -> list[Command]:
-    """A breach: degrade once when the run allows it, carrying on with `held`, else pause."""
-    if state.runaway.get("on_runaway") == "degrade" and not state.degraded:
-        return [Degrade(detail), *(cheapest(c) for c in held)]
-    return [Pause("runaway", None, detail)]
-
-
-def cheapest(command: Command) -> Command:
-    """A model attempt let through by a degrade asks for its role's cheapest candidate."""
-    if not isinstance(command, StartNode):
-        return command
-    kind = REGISTRY.kind(str(command.node_definition.get("type")))
-    if kind is None or not kind.model_bearing:
-        return command
-    return replace(command, ladder={**(command.ladder or {}), "degrade": True})

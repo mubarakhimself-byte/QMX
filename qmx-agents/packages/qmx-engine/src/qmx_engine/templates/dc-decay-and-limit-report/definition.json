@@ -8,8 +8,6 @@
   },
   "settings": {
     "timezone": "America/New_York",
-    "runaway": {"tokens": 40000, "agents": 1, "tool_calls": 5, "wall_seconds": 900,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -19,8 +17,7 @@
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
     {"id": "journal", "name": "Load journals and baselines", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120}, "parameters": {"script": "scripts/journal.py"}},
+     "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/journal.py"}},
     {"id": "decay", "name": "Decay tests and levels", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/decay.py"}},
     {"id": "flagged", "name": "Any amber or red?", "type": "rule", "typeVersion": 1,

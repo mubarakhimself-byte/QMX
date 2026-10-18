@@ -5,11 +5,13 @@ Event data keys the fold reads (SOLUTION-DESIGN 3.2): `run_created.settings`, `r
 with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_finished` that carries
 `memo: true`, `outputs` on `node_finished`, `tokens` on an ending event, `code` and `message` on
 `node_failed`, `reason`, `resume_at` and `event` on `node_waiting`, `plan.join.merged` on a join's
-`node_scheduled`, `run_created.runaway`, `tool_calls` on an ending event, `signature`,
-`retryable` and `effect_state` on `node_failed`, `step`, `resume_at` and the slot keys on
-`ladder_step`, `classification` and `hint` on `doctor_verdict`, and `on_runaway` on a run-level
-`log`. A `node_waiting` with no `attempt` is a hold the core asked for. `run_resumed` opens a new
-pass but keeps every slot waiting on a gate.
+`node_scheduled`, `run_created.limits`, `turns` on an ending event, one `tool_called` per tool
+call, `active_seconds` on a run-level `heartbeat`, `signature`, `retryable`, `effect_state` and
+`stalled` on `node_failed`, `step`, `resume_at` and the slot keys on `ladder_step`,
+`classification` and `hint` on `doctor_verdict`, and `reason` on `run_paused` and `run_resumed`.
+A `node_waiting` with no `attempt` is a hold the core asked for. `run_resumed` opens a new pass
+but keeps every slot waiting on a gate; after a `limits` pause it also moves the limits'
+allowance on.
 
 A `retry` or `model` step, and a doctor verdict the node may be re-run on, put the slot back to
 pending: it starts again as a new attempt once its retry is due.
@@ -41,10 +43,8 @@ IGNORED: Final = frozenset(
         "log",
         "gate_opened",
         "gate_resolved",
-        "run_paused",
         "compacted",
         "memory_written",
-        "tool_called",
     }
 )
 """Kinds this core knows and that change nothing it decides yet."""
@@ -93,7 +93,12 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
     received: list[tuple[str, int]] = []
     joins: dict[Slot, tuple[int, ...]] = {}
     walks: dict[Slot, Walk] = {}
-    tool_calls = 0
+    turns: dict[Slot, int] = {}
+    tools: dict[Slot, int] = {}
+    active = 0
+    paused: str | None = None
+    allowance: dict[str, int] = {}
+    restarts = 0
     for event in events:
         data, kind, seq = event.data, event.kind, event.seq
         if not state.run_id:
@@ -106,21 +111,31 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
         current = nodes.get(slot)
         if kind in ENDINGS and "attempt" in data:
             spent[slot] = spent.get(slot, 0) + tokens(data)
-            tool_calls += _int(data.get("tool_calls")) or 0
+            turns[slot] = turns.get(slot, 0) + (_int(data.get("turns")) or 0)
         match kind:
             case "run_created":
-                state = replace(
-                    state, settings=_object(data, "settings"), runaway=_object(data, "runaway")
-                )
+                limits = {k: n for k, v in _object(data, "limits").items() if (n := _int(v))}
+                state = replace(state, settings=_object(data, "settings"), limits=limits)
             case "run_input":
                 state = replace(state, inputs=data.get("inputs"))
             case "clock_tick":
                 state = replace(state, now=_text(data, "now"))
             case "event_received":
                 received.append((_text(data, "event") or "", seq))
+            case "run_paused":
+                paused = _text(data, "reason")
             case "run_resumed":
                 nodes = {s: run for s, run in nodes.items() if gated(run)}
                 state = replace(state, ended=None)
+                if paused == "limits":
+                    allowance = used(spent, turns, tools, active)
+                if data.get("reason") == "interrupted":
+                    restarts += 1
+                paused = None
+            case "tool_called":
+                tools[slot] = tools.get(slot, 0) + 1
+            case "heartbeat" if "node_id" not in data:
+                active = _int(data.get("active_seconds")) or active
             case "node_scheduled":
                 attempt = _int(data.get("attempt")) or 0
                 attempts[slot] = max(attempts.get(slot, 0), attempt)
@@ -145,6 +160,7 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                     _text(data, "signature") or "",
                     data.get("retryable") is True,
                     _text(data, "effect_state") or "before",
+                    _text(data, "stalled"),
                 )
                 nodes[slot] = replace(
                     current, phase="failed", seq=seq, error=error, failure=failure
@@ -180,8 +196,6 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                 walks[slot] = replace(walk, verdict=verdict, hint=_text(data, "hint"))
                 if verdict in RERUN_VERDICTS:
                     nodes.pop(slot, None)
-            case "log" if data.get("on_runaway") == "degrade":
-                state = replace(state, degraded=True)
             case "run_finished":
                 state = replace(state, ended="passed")
             case "run_cancelled":
@@ -205,5 +219,23 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
         received=tuple(received),
         joins=joins,
         walks=walks,
-        tool_calls=tool_calls,
+        turns=turns,
+        tools=tools,
+        active_seconds=active,
+        allowance=allowance,
+        restarts=restarts,
     )
+
+
+def used(
+    spent: Mapping[Slot, int], turns: Mapping[Slot, int], tools: Mapping[Slot, int], active: int
+) -> dict[str, int]:
+    """What the run has used, keyed as `State.limits` is: the run's totals by name, and each
+    node's as `<node id>.<name>`."""
+    found: dict[str, int] = {"wall_seconds": active}
+    for name, counts in (("tokens", spent), ("turns", turns), ("tool_calls", tools)):
+        for slot, count in counts.items():
+            found[name] = found.get(name, 0) + count
+            key = f"{slot.node_id}.{name}"
+            found[key] = found.get(key, 0) + count
+    return found

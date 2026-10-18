@@ -31,7 +31,7 @@ class StartNode:
     `node_scheduled`."""
     ladder: JsonObject | None = None
     """What the failure ladder asks of this attempt: the role `candidate` a model step moved to, a
-    doctor's repair `hint`, or `degrade` after a runaway breach. EP10 resolves it to a model."""
+    doctor's repair `hint`. EP10 resolves it to a model."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,20 +70,13 @@ class Wait:
 
 @dataclass(frozen=True, slots=True)
 class Pause:
-    """Every unfinished node waits on a usage limit or the runaway guard: pause the run."""
+    """Every unfinished node waits on a provider's limit, or a limit he wrote was reached: pause
+    the run."""
 
     reason: str
     resume_at: str | None
     detail: str | None = None
-    """Which runaway limit was breached, for the digest line."""
-
-
-@dataclass(frozen=True, slots=True)
-class Degrade:
-    """The runaway guard was breached under `on_runaway: degrade`: the run goes on once with its
-    model nodes on their role's cheapest candidate, and pauses on the next breach (AD-16)."""
-
-    detail: str
+    """Which of his limits was reached, for the digest line."""
 
 
 type Rung = Literal["retry", "account", "model", "doctor"]
@@ -126,7 +119,7 @@ class Park:
     attempt: int | None = None
 
 
-type Command = StartNode | Hold | UseMemo | Wait | Pause | Degrade | Climb | Finish | Park
+type Command = StartNode | Hold | UseMemo | Wait | Pause | Climb | Finish | Park
 
 
 def encode(commands: list[Command]) -> bytes:

@@ -105,7 +105,7 @@ def flow(
     nodes: list[dict[str, Any]],
     connections: dict[str, dict[str, Any]],
     *,
-    runaway: dict[str, Any] | None = None,
+    limits: dict[str, Any] | None = None,
     **engine_args: Any,
 ) -> Flow:
     root = tmp / "wf"
@@ -115,8 +115,8 @@ def flow(
         if script:
             (root / script).write_text("print(1)\n", encoding="utf-8")
     document = workflow(nodes, connections).model_dump(mode="json", by_alias=True)
-    if runaway is not None:
-        document["settings"] = {"runaway": runaway}
+    if limits is not None:
+        document["settings"] = {"limits": limits}
     (root / "definition.json").write_text(json.dumps(document), encoding="utf-8")
     return Flow(root, Workflow.model_validate(document), tmp / "home", engine_args)
 

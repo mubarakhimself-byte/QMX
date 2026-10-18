@@ -13,8 +13,6 @@
   "outputs": {"type": "object", "description": "the graded review: headline, methods matrix, gaps"},
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 800000, "agents": 25, "tool_calls": 300, "wall_seconds": 5400,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -25,7 +23,6 @@
     {"id": "sources", "name": "Topic and sources", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120},
      "parameters": {"script": "scripts/sources.py", "fixture_ref": "fixtures/sources.json"}},
     {"id": "plan", "name": "Plan the review", "type": "llm", "typeVersion": 1,
      "position": [440, 0], "role": "planner", "effect": "none",
@@ -37,7 +34,7 @@
      "position": [880, 0], "role": "searcher", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/search.md", "output_schema_ref": "schemas/findings.json",
-                    "tools": [], "max_turns": 4}},
+                    "tools": []}},
     {"id": "findings", "name": "All findings", "type": "join", "typeVersion": 1,
      "position": [1100, 0], "parameters": {}},
     {"id": "synthesise", "name": "Synthesise", "type": "llm", "typeVersion": 1,

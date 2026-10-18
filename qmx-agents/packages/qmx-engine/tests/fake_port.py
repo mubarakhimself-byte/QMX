@@ -4,6 +4,7 @@ folders, with its brief and schema files."""
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
@@ -16,7 +17,7 @@ from qma.harness import ChatHooks
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Ledger, Reader
-from qmx_engine.ports.harness_adapter import CompactRefused, PlanUse, Turn
+from qmx_engine.ports.harness_adapter import Activity, CompactRefused, PlanUse, Turn
 from qmx_engine.runner import Engine, Mode, Outcome
 from qmx_engine.settings import DEFAULTS
 
@@ -31,7 +32,6 @@ def agent(name: str, **parameters: JsonValue) -> dict[str, Any]:
         "output_schema_ref": "schemas/card.json",
         "tools": ["Read", "Grep"],
         "skills": ["paper-question-battery"],
-        "max_turns": 12,
         **parameters,
     }
     return node(name, "agent", **found) | {"role": "reader"}
@@ -82,12 +82,13 @@ class FakePort:
         self.hooks: dict[str, ChatHooks] = {}
         self.sent: list[tuple[str, str]] = []
         self.interrupted: list[str] = []
+        self.activities: dict[str, Activity] = {}
+        """What each chat shows the stuck detector; a running turn with nothing to show else."""
+        self.halts: dict[str, asyncio.Event] = {}
+        """Set when the chat is interrupted, so an answer can wait for it."""
 
     def profiles(self) -> frozenset[str]:
         return frozenset({"claude", "openrouter"})
-
-    def max_live_chats(self) -> int:
-        return 4
 
     async def plan_use(self) -> PlanUse:
         return self.uses.pop(0) if len(self.uses) > 1 else self.uses[0]
@@ -117,7 +118,9 @@ class FakePort:
     async def send(self, chat: str, text: str) -> None:
         self.sent.append((chat, text))
 
-    async def wait_turn(self, chat: str, *, timeout: float, idle: float | None = None) -> Turn:
+    async def wait_turn(
+        self, chat: str, *, timeout: float | None = None, idle: float | None = None
+    ) -> Turn:
         found = self.answers.pop(0)
         if isinstance(found, Turn):
             return found
@@ -127,6 +130,13 @@ class FakePort:
 
     async def interrupt(self, chat: str) -> None:
         self.interrupted.append(chat)
+        self.halted(chat).set()
+
+    def halted(self, chat: str) -> asyncio.Event:
+        return self.halts.setdefault(chat, asyncio.Event())
 
     def context(self, chat: str) -> int | None:
         return None
+
+    def activity(self, chat: str) -> Activity:
+        return self.activities.get(chat, Activity(0, running=True))

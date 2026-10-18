@@ -118,8 +118,7 @@ def resolve(
     ladder: Mapping[str, JsonValue] | None,
 ) -> Candidate | str:
     """The candidate an attempt runs on, or why there is none. The failure ladder's model rung
-    names its candidate; otherwise the first whose profile the harness has. Under a runaway
-    degrade the cheapest available one is taken."""
+    names its candidate; otherwise the first whose profile the harness has."""
     ready = [c for c in candidates if c.profile in profiles]
     named = ladder.get("candidate") if ladder is not None else None
     if isinstance(named, str):
@@ -132,6 +131,4 @@ def resolve(
     if not ready:
         listed = ", ".join(c.name for c in candidates) or "none"
         return f"no candidate has a profile in the harness (candidates: {listed})"
-    if ladder is not None and ladder.get("degrade") is True:
-        return min(ready, key=_cheapness)
     return ready[0]

@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
-  "id": "bad-agent-no-max-turns",
-  "name": "bad-agent-no-max-turns",
+  "id": "agent-no-limits",
+  "name": "agent-no-limits",
   "nodes": [
     {
       "id": "t",
@@ -44,8 +44,6 @@
     }
   },
   "meta": {
-    "expect": [
-      "agent_max_turns_missing"
-    ]
+    "expect": []
   }
 }

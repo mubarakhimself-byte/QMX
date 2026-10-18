@@ -24,13 +24,6 @@
   },
   "settings": {
     "timezone": "Europe/London",
-    "runaway": {
-      "tokens": 400000,
-      "agents": 12,
-      "tool_calls": 600,
-      "wall_seconds": 7200,
-      "on_runaway": "pause"
-    },
     "on_error": "park",
     "error_workflow": null,
     "caller_policy": "any",
@@ -105,7 +98,6 @@
         ]
       },
       "timeout": {
-        "run_seconds": 600,
         "idle_seconds": 120
       }
     },
@@ -128,7 +120,6 @@
           "Read",
           "WebFetch"
         ],
-        "max_turns": 12,
         "output_schema_ref": "schemas/paper_card.json",
         "browser_level": "none"
       },

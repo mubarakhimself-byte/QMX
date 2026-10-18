@@ -8,8 +8,6 @@
   },
   "settings": {
     "timezone": "Europe/London",
-    "runaway": {"tokens": 40000, "agents": 1, "tool_calls": 5, "wall_seconds": 1800,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -20,7 +18,6 @@
     {"id": "book", "name": "Book, guard or costs changed?", "type": "monitor", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120},
      "parameters": {"source": "scripts/book.py", "wake_when": "changed"}},
     {"id": "stress", "name": "Run the scenarios", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none",

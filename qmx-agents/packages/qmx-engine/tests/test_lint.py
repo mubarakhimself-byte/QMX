@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 
 from qmx_engine.definition.folder import load
-from qmx_engine.definition.lint import effective_runaway
-from qmx_engine.definition.model import Settings
 from qmx_engine.definition.validate import validate
 
 FIXTURES = Path(__file__).parent / "fixtures" / "workflows"
@@ -37,7 +35,6 @@ def with_parameters(tmp_path: Path, parameters: dict[str, object]) -> Path:
         ("bad-trigger-creation", [("trigger_creation", "nodes[1].parameters.op")]),
         ("bad-money", [("money_act", "nodes[1].parameters.action")]),
         ("bad-broadcast", [("chunk_required", "connections.List papers.main[0][0]")]),
-        ("bad-agent-no-max-turns", [("agent_max_turns_missing", "nodes[1].parameters")]),
         ("bad-loop-no-max-iterations", [("loop_max_iterations_missing", "nodes[1].parameters")]),
         ("bad-human-gate", [("human_gate_misplaced", "nodes[1]")]),
     ],
@@ -138,12 +135,19 @@ def test_a_human_gate_in_front_of_an_external_send_passes(tmp_path: Path) -> Non
     assert problems(folder) == []
 
 
-def test_a_missing_runaway_guard_takes_the_defaults_and_names_no_usd() -> None:
-    assert effective_runaway(Settings()).model_dump() == {
-        "tokens": 400_000,
-        "agents": 12,
-        "tool_calls": None,
-        "wall_seconds": 7_200,
-        "on_runaway": "pause",
-    }
-    assert effective_runaway(Settings.model_validate({"runaway": {"tokens": 50}})).tokens == 50
+def test_an_agent_with_no_limits_validates() -> None:
+    assert problems(FIXTURES / "agent-no-limits") == []
+
+
+def test_only_a_limit_he_wrote_below_one_is_refused(tmp_path: Path) -> None:
+    folder = Path(shutil.copytree(FIXTURES / "agent-no-limits", tmp_path / "wf"))
+    path = folder / "definition.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["settings"] = {"limits": {"turns": 2, "wall_seconds": 0}}
+    document["nodes"][1]["limits"] = {"tool_calls": -1, "tokens": 1}
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    assert problems(folder) == [
+        ("limit_below_one", "settings.limits.wall_seconds"),
+        ("limit_below_one", "nodes[1].limits.tool_calls"),
+    ]

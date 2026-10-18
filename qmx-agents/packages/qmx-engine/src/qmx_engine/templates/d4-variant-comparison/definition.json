@@ -20,14 +20,14 @@
     }
   },
   "outputs": {"type": "object", "description": "the head-to-head page: variant cards, correlation grid, deflated Sharpe, luck warning"},
-  "settings": {"timezone": "UTC", "runaway": {"tokens": 400000, "agents": 1, "tool_calls": 160, "wall_seconds": 10800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "plan", "name": "Plan the labelled variants", "type": "llm", "typeVersion": 1, "position": [220, 0], "role": "planner", "parameters": {"prompt_ref": "prompts/plan.md", "schema_ref": "schemas/variants.json"}, "effect": "none"},
     {"id": "identity", "name": "Identity rule and caps", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/identity.py"}, "effect": "none"},
     {"id": "any", "name": "Any variant to build?", "type": "rule", "typeVersion": 1, "position": [660, 0], "parameters": {"expr": "items.build != []"}, "effect": "none"},
-    {"id": "build", "name": "Build the structural variants", "type": "agent", "typeVersion": 1, "position": [880, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": [], "max_turns": 80}, "effect": "none"},
-    {"id": "runs", "name": "Compile and run every variant", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/runs.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "build", "name": "Build the structural variants", "type": "agent", "typeVersion": 1, "position": [880, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": []}, "effect": "none"},
+    {"id": "runs", "name": "Compile and run every variant", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/runs.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
     {"id": "dsr", "name": "Deflated Sharpe over the variants", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/deflated_sharpe.py"}, "effect": "none"},
     {"id": "compare", "name": "Compare on identical windows", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/compare.py"}, "effect": "none"},
     {"id": "write", "name": "Write the comparison", "type": "llm", "typeVersion": 1, "position": [1760, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},

@@ -14,8 +14,8 @@ from flows import edge, folder, node
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.store import Ledger, Reader
-from qmx_engine.nodes.agent import RESUMED, SUMMARISE
-from qmx_engine.ports.harness_adapter import ToolCall, Turn
+from qmx_engine.nodes.agent import RESUMED, STUCK_SUMMARY, SUMMARISE
+from qmx_engine.ports.harness_adapter import Activity, ToolCall, ToolStep, Turn
 from qmx_engine.ports.inbox import InboxPort
 from qmx_engine.runner import Engine
 from qmx_engine.settings import DEFAULTS
@@ -138,27 +138,97 @@ def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbo
     assert "run-died:read:0:1" in str(info[0]["line"])
 
 
-def test_tool_calls_past_max_tool_calls_interrupt_the_chat_and_pause_the_run(
+QUICK = {"scheduler.tick": 0.05}
+SUMMARY = "I read a.txt again and again and it never changed."
+
+
+def read_steps(count: int, *, same: bool) -> tuple[ToolStep, ...]:
+    return tuple(
+        ToolStep(
+            f"t{n}",
+            "Read",
+            {"path": "a.txt" if same else f"page-{n}.txt"},
+            f"text {n * (not same)}",
+        )
+        for n in range(count)
+    )
+
+
+def test_a_looping_agent_is_stopped_and_parks_stalled_loop_with_its_summary(
     tmp_path: Path,
 ) -> None:
-    async def busy(port: FakePort, chat: str) -> Turn:
-        hook = port.hooks[chat].post_tool_use
-        assert hook is not None
-        for n in range(3):
-            await hook({"tool_use_id": f"t{n}", "tool_name": "Read"})  # type: ignore[arg-type]
-        await asyncio.sleep(0)
+    async def loops(port: FakePort, chat: str) -> Turn:
+        port.activities[chat] = Activity(10, read_steps(5, same=True), running=True)
+        await port.halted(chat).wait()
         return Turn(None)
 
-    port = FakePort(busy)
-    root = one_agent(tmp_path / "wf", max_tool_calls=2)
+    port = FakePort(loops, SUMMARY)
+    root = one_agent(tmp_path / "wf")
 
-    outcome = asyncio.run(drive(root, tmp_path / "home", port))
+    outcome = asyncio.run(drive(root, tmp_path / "home", port, settings=QUICK))
     events = events_of(tmp_path / "home", outcome.run_id)
 
-    waiting = [e.data["reason"] for e in events if e.kind == "node_waiting"]
-    assert (outcome.status, outcome.reason) == ("waiting", "runaway")
+    [failed] = [e.data for e in events if e.kind == "node_failed"]
+    assert (failed["code"], failed["stalled"], failed["output"]) == ("stalled", "loop", SUMMARY)
+    assert outcome.status == "failed"
+    assert outcome.reason is not None and "the agent was looping" in outcome.reason
     assert port.interrupted == ["chat-1"]
-    assert waiting == ["runaway"]
+    assert port.sent[-1] == ("chat-1", STUCK_SUMMARY)
+
+
+def test_an_agent_making_progress_runs_on_past_hundreds_of_tool_calls(tmp_path: Path) -> None:
+    async def pages(port: FakePort, chat: str) -> Turn:
+        hook = port.hooks[chat].post_tool_use
+        assert hook is not None
+        for n in range(300):
+            port.activities[chat] = Activity(n, read_steps(n, same=False), running=True)
+            await hook({"tool_use_id": f"t{n}", "tool_name": "Read"})  # type: ignore[arg-type]
+            await asyncio.sleep(0.001)
+        return Turn(CARD)
+
+    port = FakePort(pages)
+    root = one_agent(tmp_path / "wf")
+
+    outcome = asyncio.run(drive(root, tmp_path / "home", port, settings=QUICK))
+    events = events_of(tmp_path / "home", outcome.run_id)
+
+    assert outcome.status == "passed"
+    assert sum(1 for e in events if e.kind == "tool_called") == 300
+    assert port.interrupted == []
+
+
+def test_held_chunks_start_only_after_the_first_chunk_ends_its_turn(tmp_path: Path) -> None:
+    root = agent_files(
+        folder(
+            tmp_path / "wf",
+            [node("start", "trigger"), agent("read"), node("all", "join")],
+            {
+                "start": {"main": [edge("read", "chunk", chunk={"by": "items", "size": 1})]},
+                "read": {"main": [edge("all")]},
+            },
+            {},
+        )
+    )
+    home = tmp_path / "home"
+    started_during_first_turn: list[int] = []
+
+    async def slow(port: FakePort, chat: str) -> Turn:
+        await asyncio.sleep(0.3)
+        with Reader.open(home) as reader:
+            query = "SELECT COUNT(*) FROM events WHERE kind = 'node_started'"
+            started_during_first_turn.append(reader.connection.execute(query).fetchone()[0])
+        return Turn(CARD)
+
+    port = FakePort(slow, CARD, CARD)
+
+    outcome = asyncio.run(drive(root, home, port, ["a", "b", "c"], settings=QUICK))
+
+    events = events_of(home, outcome.run_id)
+    started = [e.data["partition"] for e in events if e.kind == "node_started"]
+    assert outcome.status == "passed"
+    assert started_during_first_turn == [2]
+    assert sorted(p for p in started if isinstance(p, int)) == [0, 1, 2]
+    assert [e for e in events if e.kind == "node_failed"] == []
 
 
 @pytest.mark.parametrize("mode", ["cli_inside", "host_harness"])

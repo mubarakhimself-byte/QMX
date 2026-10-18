@@ -11,7 +11,7 @@ import pytest
 
 from qmx_engine.__main__ import main
 from qmx_engine.definition.folder import content_hash, load
-from qmx_engine.definition.model import Workflow, json_schema
+from qmx_engine.definition.model import Workflow, dropped, json_schema
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import DEFAULT_ROLES, runnable, validate
 
@@ -136,13 +136,12 @@ def test_a_pack_type_is_checked_against_its_base_kind(tmp_path: Path) -> None:
 
 
 def test_roles_placements_and_credentials_resolve_by_name(tmp_path: Path) -> None:
-    folder = copy("bad-agent-no-max-turns", tmp_path)
+    folder = copy("agent-no-limits", tmp_path)
     document = json.loads((folder / "definition.json").read_text(encoding="utf-8"))
     document["nodes"][1] |= {
         "role": "poet",
         "runs_on": ["pc", "server-1"],
         "credentials": {"broker": "plain-value", "feed": "qmx/feed"},
-        "parameters": {"max_turns": 4},
     }
     (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")
 
@@ -150,12 +149,27 @@ def test_roles_placements_and_credentials_resolve_by_name(tmp_path: Path) -> Non
     assert codes(folder, roles=frozenset({"poet"})) == ["placement_unknown", "credential_not_ref"]
 
 
-def test_a_usd_cap_in_the_runaway_guard_is_not_part_of_the_format(tmp_path: Path) -> None:
+def test_an_old_runaway_block_and_run_timeout_fold_to_nothing(tmp_path: Path) -> None:
     folder = copy("draft-rlm", tmp_path)
-    edit(folder, {"settings": {"runaway": {"tokens": 1000, "usd": 5}}})
+    edit(folder, {"settings": {"runaway": {"tokens": 1000, "usd": 5, "on_runaway": "degrade"}}})
+    document = json.loads((folder / "definition.json").read_text(encoding="utf-8"))
+    document["nodes"][1]["timeout"] = {"run_seconds": 600, "idle_seconds": 90}
+    (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")
+
+    assert validate(load(folder)) == []
+    workflow = Workflow.model_validate(load(folder).document)
+    assert dropped(workflow) == ["settings.runaway", "nodes[1].timeout.run_seconds"]
+    assert workflow.settings.limits is None
+    assert workflow.nodes[1].timeout is not None
+    assert workflow.nodes[1].timeout.model_dump(exclude_none=True) == {"idle_seconds": 90}
+
+
+def test_a_usd_limit_is_not_part_of_the_format(tmp_path: Path) -> None:
+    folder = copy("draft-rlm", tmp_path)
+    edit(folder, {"settings": {"limits": {"tokens": 1000, "usd": 5}}})
 
     assert [(p.code, p.path) for p in validate(load(folder))] == [
-        ("schema_invalid", "settings.runaway.usd")
+        ("schema_invalid", "settings.limits.usd")
     ]
 
 
@@ -173,12 +187,12 @@ def test_no_output_echoes_a_key_pasted_into_a_ref_a_role_or_a_name(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     key = "sk-proj-" + "Zq9" * 12
-    folder = copy("bad-agent-no-max-turns", tmp_path)
+    folder = copy("agent-no-limits", tmp_path)
     document = json.loads((folder / "definition.json").read_text(encoding="utf-8"))
     document["nodes"][1] |= {
         "role": key,
         "runs_on": key,
-        "parameters": {"max_turns": 4, "api_key_ref": key},
+        "parameters": {"api_key_ref": key},
     }
     document["connections"][key] = {"main": [[{"node": key, "port": key, "map": "one"}]]}
     (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")

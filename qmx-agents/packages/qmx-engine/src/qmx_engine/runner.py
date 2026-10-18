@@ -9,8 +9,19 @@ heartbeats, and the runner writes each attempt's ending from the result the work
 
 Every event that ruling 77 sends to the operator raises its inbox item as it is written: a provider
 failure, a system fault, or an irreversible external step of unknown outcome. While attempts run,
-the runner wakes every `scheduler.tick` for the watchdog, which cancels a stalled attempt. A ledger
-write error stops the engine claiming work and raises a `black` item.
+the runner wakes every `scheduler.tick` for the stuck detector (`watchdog`, AD-16), which reads what
+each attempt shows and warns, interrupts, ends a stalled attempt, or stops a looping agent. There
+is no runaway guard and no run timeout (AD-40). A ledger write error stops the engine claiming
+work and raises a `black` item.
+
+An `agent` chunk is held at dispatch behind the warm-first gate until the first chunk of its node
+ends a turn (AD-9): it is scheduled but not started, so it writes no `node_started` and the stuck
+detector sees it as a recorded wait.
+
+A `limits` block he wrote is recorded on `run_created`; the core holds new attempts once one is
+reached and the run pauses. For `wall_seconds` the runner records the run's active time, outside
+recorded waits and host sleep, on a run-level `heartbeat`. The engine dying mid-run
+`crash_loop.restarts` times parks the run with one inbox item.
 
 The recorded clock moves on with the wall clock: before an event, a `clock_tick` is written when a
 second or more passed since the last one, and every event's `at` is the latest tick. The core
@@ -39,12 +50,12 @@ from pathlib import Path
 from typing import Final, Literal, Protocol, cast
 
 from pydantic import JsonValue
+from qma.harness import Pulse
 from qmx_ledger.journal import fingerprint
 
 from qmx_engine.admission import Admission
 from qmx_engine.core.commands import (
     Climb,
-    Degrade,
     Finish,
     Hold,
     Park,
@@ -54,13 +65,13 @@ from qmx_engine.core.commands import (
     Wait,
 )
 from qmx_engine.core.fold import fold, slot_of
-from qmx_engine.core.ladder import NO_DOCTOR, runaway_line, step_data
+from qmx_engine.core.ladder import NO_DOCTOR, limits_line, step_data
 from qmx_engine.core.partitions import RUN_SETTINGS
 from qmx_engine.core.ready import next_commands
 from qmx_engine.core.replay import idempotency_key, node_definition
 from qmx_engine.core.state import Slot, State
 from qmx_engine.definition.folder import content_hash, load
-from qmx_engine.definition.model import Node, Workflow
+from qmx_engine.definition.model import Node, Workflow, dropped
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
@@ -68,7 +79,7 @@ from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.agent import Agent
-from qmx_engine.nodes.base import Failed, NodeJob, ending
+from qmx_engine.nodes.base import Failed, Look, NodeJob, ending
 from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
 from qmx_engine.nodes.fake_provider import FakeProvider
 from qmx_engine.nodes.grader import Grader
@@ -89,13 +100,15 @@ from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import order, resolve
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers.rows import put_wake
-from qmx_engine.watchdog import Open, ledger_fault, stalled
+from qmx_engine.watchdog import MAX_TICKS, Action, Kind, Meter, Watchdog, Watched, ledger_fault
 from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
 from qmx_engine.workers.local import AnyExecutor, LocalWorker
 
 TICK: Final = timedelta(seconds=1)
 LADDER_SETTINGS: Final = ("retry.max_tries", "retry.backoff")
 NOTICED: Final = frozenset({"node_failed", "gate_opened"})
+SCRIPTS: Final = frozenset({"script", "grader", "monitor"})
+CRASH_LOOP: Final = "crash loop"
 
 type Mode = Literal["live", "test"]
 type Status = Literal["passed", "failed", "waiting", "interrupted"]
@@ -158,29 +171,17 @@ def recorded_settings(
     return found
 
 
-def runaway_guard(
-    settings: Mapping[str, object], workflow: Workflow, created: datetime
-) -> JsonObject:
-    """The run's guard: the workflow's own limits over the engine defaults, with the wall time as
-    a `deadline` instant the core compares against its clock."""
-    own = workflow.settings.runaway
-
-    def pick(name: str, key: str) -> object:
-        mine = getattr(own, name) if own is not None else None
-        return mine if mine is not None else settings.get(key)
-
-    wall = pick("wall_seconds", "runaway.wall_seconds")
-    guard: dict[str, object] = {
-        "tokens": pick("tokens", "runaway.tokens"),
-        "agents": pick("agents", "runaway.agents"),
-        "tool_calls": pick("tool_calls", "runaway.tool_calls"),
-        "wall_seconds": wall,
-        "deadline": None,
-        "on_runaway": pick("on_runaway", "on_runaway"),
-    }
-    if isinstance(wall, int):
-        guard["deadline"] = (created + timedelta(seconds=wall)).astimezone(UTC).isoformat()
-    return {key: value for key, value in guard.items() if isinstance(value, int | str)}
+def recorded_limits(workflow: Workflow) -> JsonObject:
+    """The limits he wrote, keyed as the core reads them: the run's by name, a node's as
+    `<node id>.<name>`. Empty unless he wrote one; QMX has no default (AD-40)."""
+    found: JsonObject = {}
+    if workflow.settings.limits is not None:
+        found |= workflow.settings.limits.model_dump(exclude_none=True)
+    for node in workflow.nodes:
+        if node.limits is not None:
+            mine = node.limits.model_dump(exclude_none=True)
+            found |= {f"{node.id}.{name}": value for name, value in mine.items()}
+    return found
 
 
 def new_run_id(now: datetime) -> str:
@@ -348,8 +349,18 @@ class Run:
         self.now = ""
         self.ticked: datetime | None = None
         self.inflight: dict[asyncio.Task[None], StartNode] = {}
-        self.seen: dict[str, datetime] = {}
-        """Idempotency key of an attempt to when it last wrote an event, for the watchdog."""
+        self.progress: dict[str, int] = {}
+        """Idempotency key of an attempt to how many events it wrote, heartbeats left out."""
+        self.started: set[str] = set()
+        self.held: set[str] = set()
+        """Chunks waiting at dispatch behind the warm-first gate."""
+        self.stopping: set[str] = set()
+        self.watchdog = Watchdog(engine.settings, engine.watch_every)
+        self.meter = Meter()
+        self.watched: datetime | None = None
+        self.marked: datetime | None = None
+        self.active = 0.0
+        """The run's active seconds, for a `wall_seconds` limit."""
         self.woke: str | None = None
         """The reset the ticker last woke this run at."""
         self.zone = workspace(engine.home, workflow.id) / "runs" / run_id
@@ -357,13 +368,8 @@ class Run:
 
     def build_executors(self) -> dict[str, AnyExecutor]:
         settings = self.engine.settings
-        timeout = settings.get("timeout.script.run")
         max_depth = settings.get("subworkflow.max_depth")
-        host = HostScript(
-            self.root,
-            float(timeout) if isinstance(timeout, int | float) else 600.0,
-            self.engine.banned_values(),
-        )
+        host = self.host = HostScript(self.root, None, self.engine.banned_values())
 
         def launch(
             root: Path, workflow: Workflow, inputs: JsonValue, run_id: str
@@ -458,15 +464,19 @@ class Run:
                 steps = [] if step == "park" else [*steps, step]
         return tuple(steps)
 
-    def append(self, kind: EventKind, data: JsonObject) -> None:
-        """Write one event at the recorded clock, ticking it on first when it is a second behind."""
+    def append(self, kind: EventKind, data: JsonObject, *, progress: bool = True) -> None:
+        """Write one event at the recorded clock, ticking it on first when it is a second behind.
+        `progress` is False for the stuck detector's own lines, which are no attempt's progress."""
         wall = self.engine.wall()
         if self.ticked is None or wall - self.ticked >= TICK:
             self.ticked, self.now = wall, wall.isoformat()
             self.write("clock_tick", {"now": self.now})
         attempt = data.get("attempt")
-        if isinstance(attempt, int) and "node_id" in data:
-            self.seen[idempotency_key(self.run_id, slot_of(data), attempt)] = wall
+        if progress and isinstance(attempt, int) and "node_id" in data and kind != "heartbeat":
+            key = idempotency_key(self.run_id, slot_of(data), attempt)
+            self.progress[key] = self.progress.get(key, 0) + 1
+            if kind == "node_started":
+                self.started.add(key)
         self.write(kind, data)
 
     def create(self, inputs: JsonValue, parent_run_id: str | None) -> None:
@@ -478,7 +488,7 @@ class Run:
                 "mode": self.mode,
                 "fake": self.fake,
                 "settings": recorded_settings(self.engine.settings, self.definition, self.mode),
-                "runaway": runaway_guard(self.engine.settings, self.definition, self.ticked),
+                "limits": recorded_limits(self.definition),
                 "workflow_id": self.definition.id,
                 "folder": str(self.root),
                 "content_hash": content_hash(load(self.root)),
@@ -488,6 +498,11 @@ class Run:
         )
         self.write("run_input", {"inputs": inputs})
         self.write("clock_tick", {"now": self.now})
+        gone = dropped(self.definition)
+        if gone:
+            line = f"ignored {', '.join(gone)}: QMX sets no usage limit of its own"
+            ignored = list[JsonValue](gone)
+            self.write("log", {"level": "info", "digest": True, "line": line, "ignored": ignored})
 
     def state(self) -> State:
         return fold(self.definition, self.events)
@@ -499,7 +514,9 @@ class Run:
             return await self.fault(error)
 
     async def steps(self) -> Outcome:
+        self.active = float(self.state().active_seconds)
         while True:
+            self.mark_active()
             state = self.state()
             commands = next_commands(state)
             ended: Finish | Park | Pause | Wait | None = None
@@ -521,9 +538,6 @@ class Run:
                     case Climb():
                         await self.climb(command)
                         moved = True
-                    case Degrade():
-                        self.append("log", runaway_line(command.detail, "degrade"))
-                        moved = True
                     case Finish() | Park() | Pause() | Wait():
                         ended = command
             if moved:
@@ -534,8 +548,12 @@ class Run:
                     timeout=self.engine.watch_every,
                     return_when=asyncio.FIRST_COMPLETED,
                 )
-                if not done:
-                    self.watch()
+                self.mark_active()
+                now = self.engine.wall()
+                if self.watched is None or (now - self.watched).total_seconds() >= (
+                    self.engine.watch_every
+                ):
+                    await self.watch(now)
                 for task in done:
                     del self.inflight[task]
                     task.result()
@@ -551,20 +569,100 @@ class Run:
         woke = datetime.fromisoformat(self.woke) if self.woke is not None else None
         return reset > self.engine.wall() or reset != woke
 
-    def watch(self) -> None:
-        """Cancel every attempt the watchdog finds stalled; each then fails `stalled`."""
-        opens: list[Open] = []
+    def look(self, kind: str, key: str) -> Look:
+        """What one attempt in flight shows the stuck detector."""
+        executor = self.executors.get(kind)
+        if key in self.held or key not in self.started or kind == "subworkflow":
+            return Look(0, waiting=True)
+        if isinstance(executor, Agent | Llm):
+            return executor.look(key)
+        if isinstance(executor, Script | Grader | Monitor):
+            return self.host.look(key)
+        return Look(self.progress.get(key, 0))
+
+    async def watch(self, now: datetime) -> None:
+        """One tick of the stuck detector over every attempt in flight."""
+        self.watched = now
+        watched: list[Watched] = []
+        commands: dict[str, StartNode] = {}
         for command in self.inflight.values():
+            key = command.idempotency_key
             node = self.node(command.node_id)
-            idle = node.timeout.idle_seconds if node.timeout is not None else None
-            kind = REGISTRY.kind(node.type)
-            if idle is None and kind is not None and kind.name == "agent":
-                found = self.engine.settings.get("timeout.agent.idle")
-                idle = found if isinstance(found, int) else None
-            last = self.seen.get(command.idempotency_key, self.engine.wall())
-            opens.append(Open(command.idempotency_key, last, idle))
-        for key in stalled(opens, self.engine.wall()):
-            self.engine.worker.cancel(key, stalled=True)
+            found = REGISTRY.kind(node.type)
+            name = found.name if found is not None else ""
+            look = self.look(name, key)
+            busy = look.pid is not None and self.meter.busy(
+                key, look.pid, children_only=look.children_only
+            )
+            pulse = Pulse(look.progress, look.in_flight, look.waiting, look.tool_open, busy)
+            kind: Kind = "agent" if name == "agent" else "script" if name in SCRIPTS else "other"
+            own = node.timeout
+            watched.append(
+                Watched(
+                    key,
+                    kind,
+                    pulse,
+                    look.calls,
+                    own.idle_seconds if own is not None else None,
+                    own.in_tool_seconds if own is not None else None,
+                )
+            )
+            commands[key] = command
+        self.meter.forget(commands)
+        for action in self.watchdog.tick(now, watched):
+            await self.act(action, commands[action.key])
+
+    async def act(self, action: Action, command: StartNode) -> None:
+        key = action.key
+        slot = Slot(command.node_id, command.iteration, command.partition)
+        agent = self.executors.get("agent")
+        match action.act:
+            case "warn":
+                line = (
+                    f"{command.node_id}: no progress for {action.quiet_seconds:.0f} s; "
+                    "it is interrupted at its idle timeout"
+                )
+                data = slot_keys(slot, command.attempt, level="warn", line=line)
+                self.append("log", data, progress=False)
+            case "interrupt" if isinstance(agent, Agent):
+                await agent.stop(key, "idle")
+            case "interrupt":
+                pass
+            case "stalled":
+                self.engine.worker.cancel(key, stalled=True)
+            case "loop" | "no_convergence" if key not in self.stopping:
+                self.stopping.add(key)
+                line = f"{command.node_id}: the stuck detector found {action.act}; it is stopped"
+                data = slot_keys(slot, command.attempt, level="info", digest=True, line=line)
+                self.append("log", data, progress=False)
+                if isinstance(agent, Agent):
+                    await agent.stop(key, action.act)
+            case _:
+                pass
+
+    def mark_active(self) -> None:
+        """Count the run's active time for a `wall_seconds` limit: wall time while an attempt
+        runs outside a recorded wait, a gap past `MAX_TICKS` ticks (host sleep) counted as that
+        many ticks only, and recorded on a run-level `heartbeat` when it moves a second."""
+        now = self.engine.wall()
+        last, self.marked = self.marked, now
+        if last is None or "wall_seconds" not in self.definition_limits():
+            return
+        running = any(
+            c.idempotency_key in self.started and c.idempotency_key not in self.held
+            for c in self.inflight.values()
+        )
+        if not running:
+            return
+        before = int(self.active)
+        gap = min((now - last).total_seconds(), MAX_TICKS * self.engine.watch_every)
+        self.active += max(gap, 0.0)
+        if int(self.active) > before:
+            self.append("heartbeat", {"active_seconds": int(self.active)})
+
+    def definition_limits(self) -> JsonObject:
+        limits = self.definition.settings.limits
+        return {} if limits is None else limits.model_dump(exclude_none=True)
 
     async def fault(self, error: LedgerWriteError) -> Outcome:
         """The ledger cannot be written: stop claiming, stop this run's attempts, and raise the
@@ -616,14 +714,12 @@ class Run:
                 **({"ladder": command.ladder} if command.ladder is not None else {}),
             ),
         )
-        self.seen[command.idempotency_key] = self.engine.wall()
         node = next(n for n in self.definition.nodes if n.id == command.node_id)
         slot = Slot(command.node_id, command.iteration, command.partition)
         own = node.timeout
         timeouts: JsonObject | None = None
         if own is not None:
-            limits = (("run_seconds", own.run_seconds), ("idle_seconds", own.idle_seconds))
-            timeouts = {key: value for key, value in limits if value is not None} or None
+            timeouts = own.model_dump(exclude_none=True) or None
         kind = REGISTRY.kind(node.type)
         agent = kind is not None and kind.name == "agent"
         session = resumed_chat(self.events, slot, command.attempt) if agent else None
@@ -647,12 +743,20 @@ class Run:
             pinned_outputs=pinned_outputs(pinned) if pinned is not None else None,
             session=session,
         )
-        task = asyncio.create_task(self.attempt(job))
+        executor = self.executors.get(kind.name if kind is not None else "")
+        gate = executor.hold(job) if isinstance(executor, Agent) else None
+        task = asyncio.create_task(self.attempt(job, gate))
         self.inflight[task] = command
 
-    async def attempt(self, job: NodeJob) -> None:
+    async def attempt(self, job: NodeJob, gate: asyncio.Event | None = None) -> None:
         kind = REGISTRY.kind(str(job.node_definition.get("type")))
         executor = self.executors[kind.name if kind is not None else ""]
+        if gate is not None:
+            self.held.add(job.idempotency_key)
+            try:
+                await gate.wait()
+            finally:
+                self.held.discard(job.idempotency_key)
         result = await self.engine.worker.run(job, executor, self.append)
         slot = Slot(job.node_id, job.iteration, job.partition)
         if isinstance(result, Failed) and result.effect_state == "unknown":
@@ -693,7 +797,7 @@ class Run:
                 return Outcome(self.run_id, "failed", command.reason)
             case Pause():
                 if command.detail is not None:
-                    self.append("log", runaway_line(command.detail, "pause"))
+                    self.append("log", limits_line(command.detail))
                 if self.wakes(command):
                     self.engine.ledger.write(put_wake(self.run_id, str(command.resume_at)))
                 paused: JsonObject = {"reason": command.reason, "resume_at": command.resume_at}
@@ -724,6 +828,11 @@ class Run:
                 continue
             interrupted = True
         self.append("run_resumed", {"reason": "interrupted" if interrupted else reason})
+        restarts = self.state().restarts
+        allowed = self.engine.settings.get("crash_loop.restarts")
+        if interrupted and isinstance(allowed, int) and restarts >= allowed:
+            why = f"{CRASH_LOOP}: the engine stopped mid-run {restarts} times"
+            self.append("ladder_step", {"step": "park", "reason": why, "crash_loop": restarts})
 
     def unknown(self, slot: Slot, attempt: int, code: str, message: str) -> AfterUnknown:
         """Record an attempt whose outcome is unknown: a crash, a timeout or a cancel. A step that

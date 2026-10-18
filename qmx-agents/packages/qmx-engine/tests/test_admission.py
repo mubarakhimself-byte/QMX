@@ -1,5 +1,5 @@
-"""Admission of engine chats: the operator's reserve, a refusal mapped to a limit wait, and the plan
-account's background share read from the harness's settings."""
+"""Admission of engine chats: the operator's reserve of the harness slot table, a refusal mapped to
+a limit wait, and no QMX share or budget: a plan attempt waits only on a used-up window."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from qmx_control.service import ControlService
 
-from qmx_engine.admission import Admission, Held
+from qmx_engine.admission import Admission
 from qmx_engine.nodes.base import Waiting
 from qmx_engine.ports.harness_adapter import PlanUse
 from qmx_engine.ports.settings import ControlSettings
@@ -22,12 +22,8 @@ RESETS = "2026-10-17T12:00:00+00:00"
 
 
 class Plan:
-    def __init__(self, use: PlanUse, max_live_chats: int = 4) -> None:
+    def __init__(self, use: PlanUse) -> None:
         self.use = use
-        self.cap = max_live_chats
-
-    def max_live_chats(self) -> int:
-        return self.cap
 
     async def plan_use(self) -> PlanUse:
         return self.use
@@ -68,20 +64,17 @@ def test_a_refused_plan_send_waits_for_the_used_up_window_plus_slack() -> None:
     assert asyncio.run(gate.check(KIMI)) is None
 
 
-@pytest.mark.parametrize(("cap", "parks_at", "runs_at"), [(0.5, 0.5, 0.49), (0.9, 0.9, 0.6)])
-def test_the_plan_share_from_settings_parks_at_its_value(
-    tmp_path: Path, cap: float, parks_at: float, runs_at: float
-) -> None:
-    (tmp_path / "settings.toml").write_text(f"[budgets]\nbackground_cap = {cap}\n", "utf-8")
+def test_engine_slots_come_from_the_harness_slot_table_through_settings(tmp_path: Path) -> None:
+    (tmp_path / "settings.toml").write_text(
+        "[budgets]\nmax_live_chats = 7\nbackground_cap = 0.5\n", "utf-8"
+    )
     settings = ControlSettings(ControlService(tmp_path)).values()
+    gate = Admission(Plan(PlanUse(0.1, RESETS, None, None)), settings)  # type: ignore[arg-type]
 
-    def check(used: float) -> Held | None:
-        gate = Admission(Plan(PlanUse(used, RESETS, None, None)), settings)  # type: ignore[arg-type]
-        return asyncio.run(gate.check(HAIKU))
+    assert (settings["max_live_chats"], gate.cap()) == (7, 5)
+    assert [key for key in settings if "background_share" in key] == []
 
-    parked = check(parks_at)
 
-    assert settings["pool.accounts.claude.background_share"] == cap
-    assert isinstance(parked, Waiting)
-    assert (parked.reason, parked.resume_at) == ("limit", "2026-10-17T12:01:00+00:00")
-    assert check(runs_at) is None
+@pytest.mark.parametrize("used", [0.5, 0.9, 0.99])
+def test_a_plan_attempt_runs_at_any_use_until_its_window_is_used_up(used: float) -> None:
+    assert asyncio.run(admission(PlanUse(used, RESETS, None, None)).check(HAIKU)) is None

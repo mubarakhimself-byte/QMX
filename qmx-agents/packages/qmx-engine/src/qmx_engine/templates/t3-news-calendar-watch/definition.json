@@ -14,8 +14,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 60000, "agents": 1, "tool_calls": 10, "wall_seconds": 1800,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -26,7 +24,6 @@
     {"id": "calendar", "name": "Calendar changed?", "type": "monitor", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120},
      "parameters": {"source": "scripts/calendar.py", "wake_when": "changed",
                     "quiet_fixture_ref": "fixtures/calendar-quiet.json",
                     "surprise_fixture_ref": "fixtures/calendar-surprise.json"}},

@@ -8,8 +8,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 30000, "agents": 1, "tool_calls": 5, "wall_seconds": 600,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -19,8 +17,7 @@
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
     {"id": "book", "name": "Read the book", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120}, "parameters": {"script": "scripts/book.py"}},
+     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/book.py"}},
     {"id": "exposure", "name": "Exposure, correlation and drift rules", "type": "script",
      "typeVersion": 1, "position": [440, 0], "effect": "none",
      "parameters": {"script": "scripts/exposure.py"}},

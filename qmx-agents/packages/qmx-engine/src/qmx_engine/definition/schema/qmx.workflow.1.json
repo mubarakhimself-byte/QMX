@@ -114,6 +114,50 @@
       "type": "object"
     },
     "JsonValue": {},
+    "Limits": {
+      "additionalProperties": false,
+      "description": "Limits he wrote on a node; honoured as a pause (AD-16). No template ships one, and none\nexists by default. The lint refuses a value below 1.",
+      "properties": {
+        "tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tokens"
+        },
+        "tool_calls": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tool Calls"
+        },
+        "turns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turns"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    },
     "Memory": {
       "additionalProperties": false,
       "properties": {
@@ -185,6 +229,17 @@
         "id": {
           "title": "Id",
           "type": "string"
+        },
+        "limits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Limits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "name": {
           "title": "Name",
@@ -373,43 +428,13 @@
       "title": "Retry",
       "type": "object"
     },
-    "Runaway": {
+    "RunLimits": {
       "additionalProperties": false,
-      "description": "The runaway guard (AD-16). It has no USD field, so a definition cannot name a spend cap.",
+      "description": "Limits he wrote on a workflow. `wall_seconds` counts active time only.",
       "properties": {
-        "agents": {
-          "anyOf": [
-            {
-              "exclusiveMinimum": 0,
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Agents"
-        },
-        "on_runaway": {
-          "anyOf": [
-            {
-              "enum": [
-                "pause",
-                "degrade"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "On Runaway"
-        },
         "tokens": {
           "anyOf": [
             {
-              "exclusiveMinimum": 0,
               "type": "integer"
             },
             {
@@ -422,7 +447,6 @@
         "tool_calls": {
           "anyOf": [
             {
-              "exclusiveMinimum": 0,
               "type": "integer"
             },
             {
@@ -432,10 +456,21 @@
           "default": null,
           "title": "Tool Calls"
         },
+        "turns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Turns"
+        },
         "wall_seconds": {
           "anyOf": [
             {
-              "exclusiveMinimum": 0,
               "type": "integer"
             },
             {
@@ -446,7 +481,7 @@
           "title": "Wall Seconds"
         }
       },
-      "title": "Runaway",
+      "title": "RunLimits",
       "type": "object"
     },
     "Settings": {
@@ -499,6 +534,17 @@
           "default": null,
           "title": "Inline Limit Bytes"
         },
+        "limits": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunLimits"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "memory": {
           "anyOf": [
             {
@@ -521,17 +567,6 @@
           ],
           "default": null,
           "title": "On Error"
-        },
-        "runaway": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Runaway"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         },
         "timezone": {
           "anyOf": [
@@ -602,6 +637,7 @@
     },
     "Timeout": {
       "additionalProperties": false,
+      "description": "The stuck detector's windows (AD-16). No run timeout exists (AD-40).",
       "properties": {
         "idle_seconds": {
           "anyOf": [
@@ -616,7 +652,7 @@
           "default": null,
           "title": "Idle Seconds"
         },
-        "run_seconds": {
+        "in_tool_seconds": {
           "anyOf": [
             {
               "exclusiveMinimum": 0,
@@ -627,7 +663,7 @@
             }
           ],
           "default": null,
-          "title": "Run Seconds"
+          "title": "In Tool Seconds"
         }
       },
       "title": "Timeout",

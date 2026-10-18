@@ -9,9 +9,17 @@ spec) live in `validate`, not here, so each failure names its code.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Literal, NamedTuple
+from typing import Any, ClassVar, Literal, NamedTuple, Self, cast
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    ModelWrapValidatorHandler,
+    PrivateAttr,
+    model_validator,
+)
 
 from qmx_engine.definition.registry import Effect
 
@@ -48,9 +56,51 @@ class Retry(Strict):
     retry_on: list[str] | None = None
 
 
-class Timeout(Strict):
-    run_seconds: int | None = Field(default=None, gt=0)
+class Legacy(Strict):
+    """A part that drops fields older documents carried and QMX no longer has (AD-40). Each
+    dropped field is named in `dropped`, so a run can say once that it was ignored."""
+
+    _gone: ClassVar[frozenset[str]] = frozenset()
+    _dropped: tuple[str, ...] = PrivateAttr(default=())
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _drop(cls, data: Any, handler: ModelWrapValidatorHandler[Self]) -> Self:
+        dropped: tuple[str, ...] = ()
+        if isinstance(data, dict) and cls._gone:
+            found = cast(dict[str, Any], data)
+            dropped = tuple(sorted(cls._gone & found.keys()))
+            data = {k: v for k, v in found.items() if k not in cls._gone}
+        model = handler(data)
+        model._dropped = dropped
+        return model
+
+    @property
+    def dropped(self) -> tuple[str, ...]:
+        return self._dropped
+
+
+class Timeout(Legacy):
+    """The stuck detector's windows (AD-16). No run timeout exists (AD-40)."""
+
+    _gone: ClassVar[frozenset[str]] = frozenset({"run_seconds"})
     idle_seconds: int | None = Field(default=None, gt=0)
+    in_tool_seconds: int | None = Field(default=None, gt=0)
+
+
+class Limits(Strict):
+    """Limits he wrote on a node; honoured as a pause (AD-16). No template ships one, and none
+    exists by default. The lint refuses a value below 1."""
+
+    tokens: int | None = None
+    turns: int | None = None
+    tool_calls: int | None = None
+
+
+class RunLimits(Limits):
+    """Limits he wrote on a workflow. `wall_seconds` counts active time only."""
+
+    wall_seconds: int | None = None
 
 
 class Node(Strict):
@@ -64,29 +114,21 @@ class Node(Strict):
     effect: Effect | None = None
     retry: Retry | None = None
     timeout: Timeout | None = None
+    limits: Limits | None = None
     runs_on: str | list[str] = "pc"
     credentials: dict[str, str] = Field(default_factory=dict[str, str])
     disabled: bool = False
     notes: str | None = None
 
 
-class Runaway(Strict):
-    """The runaway guard (AD-16). It has no USD field, so a definition cannot name a spend cap."""
-
-    tokens: int | None = Field(default=None, gt=0)
-    agents: int | None = Field(default=None, gt=0)
-    tool_calls: int | None = Field(default=None, gt=0)
-    wall_seconds: int | None = Field(default=None, gt=0)
-    on_runaway: Literal["pause", "degrade"] | None = None
-
-
 class Memory(Strict):
     scopes: list[str] = Field(default_factory=list[str])
 
 
-class Settings(Strict):
+class Settings(Legacy):
+    _gone: ClassVar[frozenset[str]] = frozenset({"runaway"})
     timezone: str | None = None
-    runaway: Runaway | None = None
+    limits: RunLimits | None = None
     on_error: str | None = None
     error_workflow: str | None = None
     caller_policy: Literal["any", "workflows_only", "none"] | None = None
@@ -143,6 +185,16 @@ class Workflow(Strict):
     connections: Connections = Field(default_factory=dict[str, dict[str, list[list[Target]]]])
     pin_data: dict[str, dict[str, list[JsonValue]]] | None = Field(default=None, alias="pinData")
     meta: Meta = Field(default_factory=Meta)
+
+
+def dropped(workflow: Workflow) -> list[str]:
+    """The paths of fields the document carried that QMX no longer has, such as an old `runaway`
+    block or a node's `timeout.run_seconds`."""
+    found = [f"settings.{name}" for name in workflow.settings.dropped]
+    for i, node in enumerate(workflow.nodes):
+        if node.timeout is not None:
+            found += [f"nodes[{i}].timeout.{name}" for name in node.timeout.dropped]
+    return found
 
 
 def json_schema() -> dict[str, JsonValue]:
