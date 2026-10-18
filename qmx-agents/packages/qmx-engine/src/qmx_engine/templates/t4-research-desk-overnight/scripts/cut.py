@@ -8,6 +8,9 @@ normal (POSITIONING). Two or more items make the group HIGH when they agree on a
 when the direction is unclear, and CROSS-ASSET when every item behind it is on the cross-asset
 beat. Every cut names the analyst (the chunk) whose claim it was.
 
+Claim ids and analyst names are letters, never digits (`ca`, `cb`, ... and `analyst A`), because
+the grade reads every digit run in the brief's prose as a number that must come from the news.
+
 The input is the quotes check's pass: the analyst items and every chunk's claims, told apart by
 shape.
 """
@@ -16,6 +19,16 @@ import json
 import sys
 
 SENTIMENT_SD = 5
+
+
+def letters(n):
+    """0 -> a, 25 -> z, 26 -> aa, like spreadsheet columns."""
+    out = ""
+    n += 1
+    while n:
+        n, rest = divmod(n - 1, 26)
+        out = chr(ord("a") + rest) + out
+    return out
 
 
 def flat(given):
@@ -35,9 +48,9 @@ by_id = {item["id"]: item for item in items}
 night = items[0]["night"]
 
 seen, claims, cut = set(), [], []
-for analyst, chunk in enumerate(chunks, start=1):
+for analyst, chunk in enumerate(chunks):
     for given_claim in chunk.get("claims", []):
-        claim = given_claim | {"analyst": f"analyst {analyst}"}
+        claim = given_claim | {"analyst": f"analyst {letters(analyst).upper()}"}
         key = (claim["source_id"], claim["quote"], claim["instrument"], claim["direction"])
         if key in seen:
             continue
@@ -81,7 +94,7 @@ for (instrument, direction, _), members in groups.items():
         continue
     ids = []
     for claim in members:
-        found = f"c{len(kept) + 1}"
+        found = f"c{letters(len(kept))}"
         ids.append(found)
         kept.append(
             claim | {"id": found, "section": name, "link": by_id[claim["source_id"]]["link"]}

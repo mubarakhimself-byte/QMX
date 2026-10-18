@@ -437,6 +437,7 @@ def test_install_publishes_nine_disabled_saves_ten_drafts_and_a_second_install_c
 
 
 def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(tmp_path: Path) -> None:
+    """Fourteen kept claims: their ids sit in the graded prose, so they must carry no digits."""
     report, brief = try_template(tmp_path, T4, {"fixture": True})
     with Reader.open(tmp_path) as reader:
         chunks = [
@@ -447,15 +448,18 @@ def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(tmp_pat
     lines = [line for section in brief["sections"].values() for line in section]
 
     assert report.status == "passed"
-    assert chunks == [[0, 6], [6, 10]]
+    assert chunks == [[0, 6], [6, 12], [12, 14]]
+    assert sorted(c for line in lines for c in line["claim_ids"]) == [
+        f"c{x}" for x in "abcdefghijklmn"
+    ]
     assert {k: len(v) for k, v in brief["sections"].items()} == {
         "HIGH": 2, "MEDIUM": 0, "CALENDAR": 1, "POSITIONING": 1, "CROSS-ASSET": 0,
     }  # fmt: skip
     assert all(line["links"] for line in lines)
     assert [(c["source_id"], c["analyst"], c["why"].split(":")[0]) for c in brief["cut"]] == [
-        ("n07", "analyst 2", "a sentiment reading alone counts only from 5 sd; this is 1.2"),
-        ("n08", "analyst 2", "single source"),
-        ("n12", "analyst 2", "single source"),
+        ("n07", "analyst B", "a sentiment reading alone counts only from 5 sd; this is 1.2"),
+        ("n08", "analyst B", "single source"),
+        ("n12", "analyst B", "single source"),
     ]
     assert [h["instrument"] for h in brief["hint_cards"]] == ["EURUSD", "USDJPY"]
 

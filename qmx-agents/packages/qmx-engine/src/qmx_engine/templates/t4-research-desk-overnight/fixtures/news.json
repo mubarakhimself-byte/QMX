@@ -49,6 +49,22 @@
     {"id": "n12", "beat": "rates", "currencies": ["USD"], "tier1": false, "sentiment_sd": null,
      "published": "2026-10-14T23:00:00Z", "link": "https://www.federalreserve.gov/newsevents.htm",
      "title": "Regional Fed president urges patience on rates",
-     "text": "A regional Federal Reserve president urged patience on rates and said the outlook is balanced."}
+     "text": "A regional Federal Reserve president urged patience on rates and said the outlook is balanced."},
+    {"id": "n13", "beat": "headlines", "currencies": ["JPY"], "tier1": false, "sentiment_sd": null,
+     "published": "2026-10-15T01:45:00Z", "link": "https://www.nikkei.com/",
+     "title": "Japanese exporters sell dollars into the month-end fix",
+     "text": "Japanese exporters were reported selling dollars into the month-end fix, adding to yen demand through the Asian session."},
+    {"id": "n14", "beat": "rates", "currencies": ["EUR"], "tier1": false, "sentiment_sd": null,
+     "published": "2026-10-14T17:30:00Z", "link": "https://www.ecb.europa.eu/press/html/index.en.html",
+     "title": "ECB chief economist says wage growth is still too strong",
+     "text": "The ECB chief economist said wage growth is still too strong to justify faster easing. The euro firmed against the dollar after the remarks."},
+    {"id": "n15", "beat": "cross_asset", "currencies": ["USD"], "tier1": false, "sentiment_sd": null,
+     "published": "2026-10-14T20:30:00Z", "link": "https://home.treasury.gov/",
+     "title": "US two-year yield drops to a six-month low",
+     "text": "The US two-year Treasury yield dropped to a six-month low as traders priced more Fed cuts, weighing on the dollar across the majors."},
+    {"id": "n16", "beat": "headlines", "currencies": ["JPY"], "tier1": false, "sentiment_sd": null,
+     "published": "2026-10-15T02:30:00Z", "link": "https://www.cmegroup.com/markets/fx.html",
+     "title": "Yen call options see heavy demand",
+     "text": "Demand for yen call options rose sharply overnight as traders hedged against a sharp yen rally."}
   ]
 }
