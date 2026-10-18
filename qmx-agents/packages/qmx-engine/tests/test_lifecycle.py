@@ -156,3 +156,18 @@ def test_a_variant_resolves_before_its_test_and_publishes_variant_of(tmp_path: P
     assert report.status == "passed"
     assert head.bundle.definition["extends"] is None
     assert lineage == [("variant-of", parent)]
+
+
+def test_an_agent_can_neither_publish_nor_enable(tmp_path: Path) -> None:
+    agent = Caller("agent", "session-1")
+    with EngineService.open(tmp_path) as svc:
+        item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=agent).item
+        asyncio.run(svc.tests.run(item, caller=agent))
+        with refused("operator_only"):
+            svc.versions.publish(item, "1.0.0", caller=agent)
+        version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)
+        with refused("operator_only"):
+            svc.versions.enable(version, caller=agent)
+        enabled = svc.versions.enable(version, caller=OPERATOR)
+
+    assert enabled.state == "enabled"
