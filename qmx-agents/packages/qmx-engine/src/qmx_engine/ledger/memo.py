@@ -3,7 +3,8 @@
 A memo is keyed by `(run_id, node_id, iteration, partition_id, sha256(inputs),
 sha256(node_definition))`, hashed with `qmx_ledger.journal.fingerprint` so two processes agree on
 it. Writes go through the ledger's writer; `has`, `valid` and `outputs` read through a `Reader`. A
-memo stays stored after it is invalidated, so `has` still finds it and `valid` does not.
+memo stays stored after it is invalidated, so `has` still finds it and `valid` does not. Outputs
+are stored redacted (AD-37), the same text the node's committed event holds.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from pydantic import JsonValue
 from qmx_ledger.journal import encoded, fingerprint
 
+from qmx_engine.ledger.redact import redact_json
 from qmx_engine.ledger.store import Ledger, Reader, Transaction
 
 
@@ -61,7 +63,7 @@ class MemoKey:
 
 
 def record(ledger: Ledger, key: MemoKey, outputs: JsonValue) -> None:
-    text = encoded(outputs).decode()
+    text = encoded(redact_json(outputs)[0]).decode()
 
     def operation(txn: Transaction) -> None:
         txn.connection.execute(

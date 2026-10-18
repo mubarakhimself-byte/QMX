@@ -7,6 +7,10 @@ SQL. The kind and edge columns carry `CHECK`s over the closed sets. A write onto
 `refs/runs/<run_id>` must carry the principal `run:<run_id>` (Library AD-7). The fake's merge into
 `main` is always a fast-forward, so a published version keeps its draft's content hash and always
 gets the draft's `tested-by` edges.
+
+Every write passes the one redaction (AD-37): object fields (run summaries, test reports, memory
+rows, artifact metadata), annotations and the contents of every text artifact, trace exports
+included. A binary artifact holding a value the engine registered is refused.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from typing import Any, Final, Self, cast
 from pydantic import JsonValue
 from qmx_ledger.journal import encoded, fingerprint
 
+from qmx_engine.ledger.redact import holds_value, redact, redact_json
 from qmx_engine.ports.library import (
     EDGES,
     KINDS,
@@ -125,6 +130,16 @@ def _stored(row: tuple[object, ...]) -> Stored:
     )
 
 
+def _redacted_blob(data: bytes) -> bytes:
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        if holds_value(data):
+            raise LibraryRefused("secret_in_blob", "a binary artifact holds a secret") from None
+        return data
+    return redact(text).encode()
+
+
 class LibraryFake:
     def __init__(self, path: Path, *, wall: Callable[[], datetime] | None = None) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,6 +182,7 @@ class LibraryFake:
     ) -> Stored:
         if ref.startswith("refs/runs/") and principal != f"run:{ref.removeprefix('refs/runs/')}":
             raise LibraryRefused("wrong_principal", f"only the run itself writes on {ref}")
+        fields = cast(JsonObject, redact_json(fields)[0])
         (count,) = self.db.execute("SELECT count(*) FROM objects").fetchone()
         object_id = f"obj-{fingerprint([kind, item, ref, fields, blob, count])[:24]}"
         stored = Stored(
@@ -315,6 +331,7 @@ class LibraryFake:
         principal: str,
         intent_key: str | None = None,
     ) -> Stored:
+        data = _redacted_blob(data)
         with self.db:
             digest = self._blob(data)
             fields: JsonObject = {"type": type_, "metadata": metadata, "intent_key": intent_key}
@@ -441,7 +458,13 @@ class LibraryFake:
             self.db.execute(
                 "INSERT INTO annotations (object_id, key, value, principal, at) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (object_id, key, json.dumps(value), principal, self.wall().isoformat()),
+                (
+                    object_id,
+                    key,
+                    json.dumps(redact_json(value)[0]),
+                    principal,
+                    self.wall().isoformat(),
+                ),
             )
 
     def annotation(self, object_id: str, key: str) -> JsonValue:

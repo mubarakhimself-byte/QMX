@@ -11,17 +11,22 @@ principal `run:<run_id>`.
 Every file a finished node listed as an artifact is read from the run's write zone and stored as a
 `run-file` artifact linked `produced-by` to the summary, once per run: a later drive stores only
 the files no earlier summary of the run already holds.
+
+The journal on disk is a store too, so each record passes the one redaction (AD-37) before it is
+appended; the Library adapter redacts the artifact and the summary again as it writes them.
 """
 
 from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
+from typing import cast
 
 from pydantic import JsonValue
 from qmx_ledger.journal import RunJournal
 
 from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.redact import redact_json
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.library import JsonObject, LibraryPort, Mode, RunStatus, RunSummary, Stored
@@ -42,6 +47,10 @@ def totals(events: list[Event], spans: list[Span]) -> JsonObject:
         "tokens": dict[str, JsonValue](tokens),
         "cost_estimate_usd": sum(costs) if costs else None,
     }
+
+
+def clean(record: JsonObject) -> JsonObject:
+    return cast(JsonObject, redact_json(record)[0])
 
 
 def export(
@@ -65,8 +74,8 @@ def export(
         at = events[-1].at
         with RunJournal(path, run_id, clock=lambda: at) as journal:
             for span in spans:
-                journal.append("span", asdict(span))
-            journal.append("summary", {"status": status, "reason": reason, "totals": summed})
+                journal.append("span", clean(asdict(span)))
+            journal.append("summary", clean({"status": status, "reason": reason, "totals": summed}))
     principal = f"run:{run_id}"
     trace = library.put_artifact(
         path.read_bytes(),

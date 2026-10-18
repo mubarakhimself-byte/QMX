@@ -28,6 +28,8 @@ IMPURE_IMPORTS = (
     "subprocess",
     "httpx",
 )
+PURE_FROM_LEDGER = ("qmx_engine.ledger.redact",)
+"""The one redaction function (AD-37) is pure text work; the definition lint shares its shapes."""
 CLOCK_ENTROPY_ENVIRONMENT = (
     "time.time",
     "time.time_ns",
@@ -146,7 +148,11 @@ def refused_imports(found: Modules) -> Offenders:
 def impure_imports_in_pure_layers(found: Modules) -> Offenders:
     return offenders(
         found,
-        lambda module, name: within(module, PURE) and within(name, IMPURE_IMPORTS),
+        lambda module, name: (
+            within(module, PURE)
+            and within(name, IMPURE_IMPORTS)
+            and not within(name, PURE_FROM_LEDGER)
+        ),
         targets,
     )
 

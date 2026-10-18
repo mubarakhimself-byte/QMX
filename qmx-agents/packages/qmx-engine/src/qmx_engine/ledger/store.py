@@ -10,7 +10,9 @@ holds the owner's pid for the refusal message. The OS drops the lock when its pr
 killed writer leaves nothing to clean up. `Reader` opens its own `mode=ro` connection and never
 takes the lock.
 
-No error raised here quotes event data: messages name the SQLite error code, never a value.
+No error raised here quotes event data: messages name the SQLite error code, never a value. Every
+string in an event's data is redacted before it is queued (AD-37), so the stored text is the only
+text: the event `append` returns, its span's `redactions` count and every reader see the same.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from qmx_ledger.journal import encoded
 from qmx_engine.ledger import spans
 from qmx_engine.ledger.events import KINDS, Event, EventKind, JsonObject
 from qmx_engine.ledger.migrations import migrate, schema_version
+from qmx_engine.ledger.redact import redact_json
 
 BATCH_LIMIT: Final = 256
 BUSY_TIMEOUT_S: Final = 5.0
@@ -207,9 +210,11 @@ class Ledger:
         except TypeError, ValueError:
             raise ValueError("`at` is not an ISO-8601 instant") from None
         try:
-            text = encoded(data).decode()
+            clean, redactions = redact_json(data)
+            text = encoded(clean).decode()
         except TypeError, ValueError:
             raise ValueError("event data is not a JSON object") from None
+        data = cast(JsonObject, clean)
         if kind == "node_started" and spans.attempt_of(data) is None:
             raise ValueError("node_started needs a string node_id and an integer attempt")
 
@@ -220,7 +225,7 @@ class Ledger:
                 (run_id, seq, at, kind, text),
             )
             event = Event(seq, run_id, at, kind, data)
-            spans.apply(txn.connection, event)
+            spans.apply(txn.connection, event, redactions)
             return event
 
         return self.write(operation)

@@ -18,13 +18,13 @@ from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Reader, ledger_path
 from qmx_engine.ports.library import (
+    MAIN,
     Bundle,
     JsonObject,
     Mode,
     RunStatus,
     RunSummary,
     Stored,
-    is_draft_ref,
 )
 from qmx_engine.runner import Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
@@ -206,7 +206,9 @@ class Runs:
         self.ctx = ctx
 
     def version_state(self, version: Stored) -> State:
-        if is_draft_ref(version.ref):
+        """Published means on `main` (AD-11, L-51); any other ref, a run's own included, is a
+        draft."""
+        if version.ref != MAIN:
             return "draft"
         found = self.ctx.library.annotation(version.object_id, "state")
         return cast(State, found) if found in ("enabled", "disabled", "archived") else "published"
