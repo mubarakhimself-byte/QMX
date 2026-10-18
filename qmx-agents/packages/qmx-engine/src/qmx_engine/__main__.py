@@ -105,7 +105,7 @@ async def start(args: argparse.Namespace) -> int:
         return 1
     home: Path = args.home or Path(tempfile.mkdtemp(prefix="qmx-engine-"))
     run_id = args.run_id or new_run_id(datetime.now(UTC))
-    print(f"run {run_id} home {home}", flush=True)
+    print(f"run {run_id} home {home} mode: {args.mode}", flush=True)
     harness: Harness | None = None
     settings: Mapping[str, Setting] = DEFAULTS
     if not args.fake and model_bearing(found[1]):
