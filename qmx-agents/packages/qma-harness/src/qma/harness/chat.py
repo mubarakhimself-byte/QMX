@@ -1106,6 +1106,8 @@ class Chat:
             external_unattended=external_unattended,
         )
         self._gate = gate
+        if not self.record.config.tools:
+            return {}, gate, {}
         return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
 
     async def _routing(self, settings: str) -> Launch:

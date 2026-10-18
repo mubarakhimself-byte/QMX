@@ -35,7 +35,7 @@ home = test_chat.home
 CHILD = SessionId("0" * 32)
 NO_READING = (
     "the background cap holds this chat: there is no reading of the plan's five-hour window "
-    "yet; read it with POST /api/usage/meter or run an Interactive plan turn"
+    "yet; POST /api/usage/meter reads it with one haiku plan turn"
 )
 
 
@@ -337,5 +337,65 @@ def test_the_overage_stop_ends_a_running_background_chat(home: QmxHome) -> None:
         assert FakeClient.made[0].disconnected is True
         assert turn_of(home, news) == "idle"
         assert live(harness) == []
+
+    run(body, home)
+
+
+async def release_next_client() -> None:
+    made = len(FakeClient.made)
+    await settle(lambda: len(FakeClient.made) > made)
+    FakeClient.made[-1].go.set()
+
+
+def test_the_meter_runs_one_bare_haiku_turn_on_a_cold_ledger(home: QmxHome) -> None:
+    FakeClient.script = lambda _: [
+        rate_limit(status="allowed", rateLimitType="five_hour", utilization=0.2),
+        result(),
+    ]
+
+    async def body(harness: Harness) -> None:
+        release = asyncio.create_task(release_next_client())
+        reading = await harness.meter()
+        await release
+        assert reading is not None
+        assert reading.reading.utilization == 0.2
+        (made,) = FakeClient.made
+        assert (made.queries, made.options.model) == (["Reply with the single word OK."], "haiku")
+        assert (made.options.tools, made.options.mcp_servers) == ([], {})
+        assert list(home.chats_dir.glob("*.json")) == []
+        assert list(home.workspaces_dir.iterdir()) == []
+        FakeClient.script = test_chat.replies
+        await harness.send(await chat(harness, "news", Background()), InjectedText("headlines"))
+        assert len(FakeClient.made) == 2
+
+    run(body, home)
+
+
+def test_the_meter_runs_no_turn_while_a_reading_is_live(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        read_plan(harness, 0.1)
+        reading = await harness.meter()
+        assert reading is not None
+        assert reading.reading.utilization == 0.1
+        assert FakeClient.made == []
+
+    run(body, home)
+
+
+def test_the_meter_refuses_without_a_turn_while_a_plan_window_is_used_up(
+    home: QmxHome,
+) -> None:
+    async def body(harness: Harness) -> None:
+        FakeClient.script = lambda _: [
+            rate_limit(status="rejected", rateLimitType="five_hour", overageStatus="rejected"),
+            result(),
+        ]
+        await finished(harness, home, await chat(harness, "operator"))
+        with pytest.raises(LaunchRefused) as refused:
+            await harness.meter()
+        assert str(refused.value) == "the plan meter will not run: a plan window is used up"
+        with pytest.raises(LaunchRefused):
+            await harness.send(await chat(harness, "news", Background()), InjectedText("x"))
+        assert len(FakeClient.made) == 1
 
     run(body, home)

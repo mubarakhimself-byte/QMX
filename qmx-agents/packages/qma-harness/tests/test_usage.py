@@ -344,8 +344,8 @@ def reading_ledger(utilization: float) -> UsageLedger:
 
 
 NO_READING = (
-    "there is no reading of the plan's five-hour window yet; read it with "
-    "POST /api/usage/meter or run an Interactive plan turn"
+    "there is no reading of the plan's five-hour window yet; POST /api/usage/meter "
+    "reads it with one haiku plan turn"
 )
 
 
