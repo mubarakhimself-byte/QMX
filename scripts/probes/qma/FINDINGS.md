@@ -1,4 +1,6 @@
-# HP0 findings
+# QMA probe findings
+
+## HP0 findings
 
 Each row is one question from HARNESS-PLAN HP0. Evidence logs live in `D:/QMX-worktrees/qma-ship/evidence/hp0/`.
 
@@ -56,3 +58,61 @@ How each probe reads, from `p_providers.py`. B1 passes on a Bash call whose resu
 | Lockdown. A probe chat runs only its exact commands | `p_providers.py lockdown` | See the lockdown paragraph above (`hp1-lockdown.log`). | PASS | HP7 `s08_providers.py` and every later probe chat |
 
 To rerun, use the probe venv's Python from this folder, in this order: `p_providers.py lockdown`, `p_providers.py openrouter --budget USD`, `p_resume.py --budget USD`, `p_providers.py perf --budget USD --runs N`, `p_providers.py toolsearch`. `--probes` runs some of a row's probes, and `--ledger` names the guard's ledger (default `evidence/hp1/openrouter-spend.tsv`). Unset every `ANTHROPIC_*` and `CLAUDE*` name in the shell first, and set `PYTHONIOENCODING=utf-8`, because a model reply can hold characters the Windows console code page cannot print. `p_resume.py` spends at most 2 plan turns and `perf` one per run. The fix round used 6 plan turns: the S36 plan turn, its `/compact`, and 4 perf turns.
+
+## GPT on the ChatGPT plan (HP2)
+
+Probe: `scripts/probes/qma/p_gpt.py`, run from the repo root with
+`uv run --project qmx-agents --no-sync python scripts/probes/qma/p_gpt.py run`.
+Contract: `tracker/qma-v2/research/one-engine/02b-providers-translator-policy.md` section D, probes P0 to P5.
+Evidence: `D:/QMX-worktrees/qma-ship/evidence/hp2/`. The probe writes the row below to `hp2-findings-row.md` there.
+
+Trunk has no GPT route on the plan, so there is no trunk baseline. The head median of the P2 first byte is the reference for HP16.
+
+| Route | Date | Verdict | Model | tools_shape | reasoning_replay | Steps |
+|---|---|---|---|---|---|---|
+| GPT on ChatGPT plan | 2026-10-14 | viable | model `gpt-6.1-sol` | tools_shape `namespace` | reasoning_replay `false` | P1 PASS: 7 models, gpt slugs ['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']; P2 PASS: completed, first byte 3.99 s; P3-namespace PASS: call echo_word namespace=qma, turn2 response.completed; P3-plain PASS: call echo_word namespace=None, turn2 response.completed; P4 FAIL: turn1 response.completed, code None, param None, encrypted 0; P5 PASS: refused ['temperature', 'metadata', 'system_role_item']; accepted ['max_output_tokens']; unclassified []; perf PASS: median first byte 2.70 s over 5 runs |
+
+P0 passed on the operator's sign-in. `hp2-p0.log` (13:16 UTC) shows an `oaiapp_` client issued and `chatgpt.tokens.use.direct` among the granted scopes. The row above is the fourth run, `run --reuse` on 2026-10-14 from 18:04 to 18:47 UTC. It refreshed the stored token after waiting 2,270 s for `earliest_refresh_at`, and `hp2-reuse.log` shows the refresh reply still grants `chatgpt.tokens.use.direct`. The secrets scan read 79 files, subfolders included, and found no token value. Runs one to three are kept under `run1-fold-bug/`, `run2-p5-stop/` and `run3-04a95899/`.
+
+The verdict reads `not viable` only when 02b's stop rule fires. Either P2 returns `subscription_sharing_user_not_eligible`, or P3's turn one completes with no tool call in both tool shapes. Any other failure reads `inconclusive`, and the run should be repeated. That covers a 429 usage limit, a 5xx, a network error at any step, a failed token refresh, and a P3 shape that fails for another reason.
+
+What the row means for the HP16 translator:
+
+- Tools. Both shapes return a function call and complete turn two. In the namespace shape the call names namespace `qma`, which P3 now requires. The namespace shape is kept because the route's rules ask for it.
+- Stream. The route sends an empty `output` on `response.completed`. Output items arrive only in `response.output_item.done`, which is where OpenAI's streaming reference says to take an item for replay.
+- Reasoning. `include: ["reasoning.encrypted_content"]` with `reasoning.effort` medium is accepted, but no reasoning item came back, so there was nothing to replay. Carry-over is off.
+- Field strip. The translator strips all four probed fields, `max_output_tokens`, `temperature`, `metadata` and a `system` role item, whatever the route does with them. On this route `max_output_tokens` returns 200 and completes, against the preview-limitations page. The other three return 400.
+- Perf. Median first byte 2.70 s over five P2 runs one minute apart, under the 10 s rule. Run 3 had a 2.45 s median and the verifier's run had 2.39 s.
+
+### Lane 8 ruling
+
+The coordinator ruled that the route accepting `max_output_tokens` is a fact, not a bug. Lane 8 passes when every barred field's outcome is recorded with the route's real error message, or with its 200. P5 now checks that rule. A 400 counts as a refusal only when its message or `param` names the field. A 400 for any other cause leaves the field unclassified and fails P5.
+
+### Error messages for HP16's error mapping
+
+Every 400 from this route had `code` and `param` null. Only `error.message` names the cause:
+
+| Field | HTTP | `error.message` |
+|---|---|---|
+| `max_output_tokens` | 200 | none, the request completes |
+| `temperature` | 400 | `Unsupported parameter: temperature` |
+| `metadata` | 400 | `Unsupported parameter: metadata` |
+| `system` role item | 400 | `System messages are not allowed` |
+
+The documented `subscription_sharing_unsupported_capability` code never appeared, so HP16 cannot map these errors on the code alone (`hp2-p5.log`, and the verifier's `verify/hp2-wire-spy-run.log`).
+
+### Notes for HP16 from the HP2 verify
+
+- F8. The probe checks the id_token's `iss`, `aud` and `nonce` only. It does not check the signature against OpenAI's JWKS, does not check `exp`, does not match the account (`sub`) on reauthorization, and does not keep the id_token. `qma.gpt.siwc` in HP16 must add the signature, `exp` and account checks.
+- F9. `earliest_refresh_at` is the access token's expiry minus 300 s. P0 issued a token at 13:16:06 UTC with `earliest_refresh_at` 14:11:06, and each later refresh set the next one about 54 minutes later. A refresh is allowed only in the last five minutes of a token's life. The probe now waits up to 3,600 s. The old 1,800 s cap refused any `run --reuse` or `refresh` started within about 25 minutes of the last refresh, and this run's 2,270 s wait would have been refused.
+- F10. "No reasoning item returned" is measured. "Replay is unsupported" is not proven. Each of the samples used one trivial tool prompt and got 0 reasoning items, and 02b's P4 fail signal, a 400 with `param` `include`, never fired. HP16 should re-probe with a prompt that needs reasoning before it turns carry-over on.
+- F12. `x-request-id` is absent on every `api.openai.com` reply in every run. OpenAI's errors page says to keep the request ID, so HP16 has to find which header this route uses.
+
+### Fix round 2 (verifier notes N1 to N5)
+
+This round changes only error paths. Nothing on the happy path changed, so the round-2 live lanes at `aa5a6f09` stand and no live run was made. Every log line, verdict and exit code that a passing run writes is the same as before.
+
+- N4. P3 counts toward the stop rule in two cases: turn one completes with no `echo_word` call, or turn one gets a 4xx other than 408 or 429, which means the route refuses tools. A turn one that fails transiently (a 408, a 429, a 5xx or a network error) and a failed turn two do not count. A call with the wrong namespace in the namespace shape is a FAIL that does not count either. A turn one that does not complete is logged as `turn1 not completed` with its status, code and message. If both shapes fail and both failures count, the verdict reads `not viable`. Otherwise it reads `inconclusive`. This rule is the coordinator's ruling on 02b section D, and it changes only the error path. A viable run against the stub route writes the same logs, stdout and findings row at `7f501ad6` and after this change, apart from timestamps and timings.
+- N2. A network error at the token endpoint or at `/v1/models` is a FAIL step. `run` still writes `hp2-verdict.json` and the findings row as `inconclusive`, and runs the secrets scan when a session exists. This holds for a refresh at `--reuse`, a refresh mid-chain, and the `refresh` command.
+- N5. If the token reply carries no `scope`, the reuse log reads `UNVERIFIED chatgpt.tokens.use.direct`, and the stored scopes are not used for that check. The chain still runs, and P2 then tests eligibility at inference.
+- N1 and N3. New tests cover a FINDINGS.md outside the evidence folder and the 3,600 s refresh wait cap. The code did not change for these.
