@@ -50,9 +50,7 @@ def test_contributes_are_point_local_id_objects_not_opaque_strings() -> None:
     with pytest.raises(PackContributeError, match="opaque string"):
         parse_pack_contributes(["tool:inspect"], package_id="sector-intel")
     with pytest.raises(ManifestError, match="opaque string"):
-        parse_plugin_manifest(
-            _manifest(contributes=["capability:qmb.analysis.project"])
-        )
+        parse_plugin_manifest(_manifest(contributes=["capability:qmb.analysis.project"]))
 
 
 def test_qualified_id_defaults_to_package_id_colon_local_id() -> None:
@@ -63,24 +61,14 @@ def test_qualified_id_defaults_to_package_id_colon_local_id() -> None:
     )
     assert manifest.contributes == (PackContribute(point="tool", local_id="inspect"),)
     assert (
-        qualify_pack_contribute(manifest.id, manifest.contributes[0])
-        == "research-corpus:inspect"
+        qualify_pack_contribute(manifest.id, manifest.contributes[0]) == "research-corpus:inspect"
     )
     declared = parse_pack_contributes(
-        [
-            {
-                "point": "tool",
-                "local_id": "inspect",
-                "qualified_id": "research-notes:inspect",
-            }
-        ],
+        [{"point": "tool", "local_id": "inspect", "qualified_id": "research-notes:inspect"}],
         package_id="research-corpus",
     )
     assert declared[0].qualified_id == "research-notes:inspect"
-    assert (
-        qualify_pack_contribute("research-corpus", declared[0])
-        == "research-notes:inspect"
-    )
+    assert qualify_pack_contribute("research-corpus", declared[0]) == "research-notes:inspect"
 
 
 def test_omitted_contributes_derive_from_multi_contributions() -> None:

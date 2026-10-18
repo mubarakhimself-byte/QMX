@@ -60,28 +60,22 @@ __all__ = [
 ]
 
 
-RECONCILE_POLICIES: Final[frozenset[str]] = frozenset(
-    member.value for member in ReconcilePolicy
-)
+RECONCILE_POLICIES: Final[frozenset[str]] = frozenset(member.value for member in ReconcilePolicy)
 
-EFFECT_RETRY_BY_CLASS: Final[Mapping[EffectClass, EffectRetryOutcome]] = (
-    MappingProxyType(
-        {
-            EffectClass.NONE: EffectRetryOutcome.MAY_RETRY,
-            EffectClass.READ: EffectRetryOutcome.MAY_RETRY,
-            EffectClass.APPEND_EVIDENCE: EffectRetryOutcome.DEDUPE,
-            EffectClass.MUTATE_CONFIG: EffectRetryOutcome.CAS,
-            EffectClass.PLACE_RUN: EffectRetryOutcome.RUN_IDENTITY,
-            EffectClass.EXTERNAL_EGRESS: EffectRetryOutcome.RECEIPT_OR_UNKNOWN,
-        }
-    )
+EFFECT_RETRY_BY_CLASS: Final[Mapping[EffectClass, EffectRetryOutcome]] = MappingProxyType(
+    {
+        EffectClass.NONE: EffectRetryOutcome.MAY_RETRY,
+        EffectClass.READ: EffectRetryOutcome.MAY_RETRY,
+        EffectClass.APPEND_EVIDENCE: EffectRetryOutcome.DEDUPE,
+        EffectClass.MUTATE_CONFIG: EffectRetryOutcome.CAS,
+        EffectClass.PLACE_RUN: EffectRetryOutcome.RUN_IDENTITY,
+        EffectClass.EXTERNAL_EGRESS: EffectRetryOutcome.RECEIPT_OR_UNKNOWN,
+    }
 )
 
 # Derived from Story 54.3 — do not add classes here; that would loosen the matrix.
 HOST_RETRY_EFFECT_CLASSES: Final[frozenset[EffectClass]] = frozenset(
-    effect
-    for effect, kind in EFFECT_RETRY_BY_CLASS.items()
-    if kind is EffectRetryOutcome.MAY_RETRY
+    effect for effect, kind in EFFECT_RETRY_BY_CLASS.items() if kind is EffectRetryOutcome.MAY_RETRY
 )
 HOST_RETRY_POLICY_OVERRIDE: Final[frozenset[ReconcilePolicy]] = frozenset(
     {ReconcilePolicy.NEVER_RETRY, ReconcilePolicy.UNKNOWN_MANUAL}
@@ -242,11 +236,7 @@ def bind_pack_retry_attempts(
     parsed = parse_pack_retry_attempts(pack_attempts)
     if not isinstance(parsed, Ok):
         return parsed
-    if (
-        isinstance(host_ceiling, bool)
-        or not isinstance(host_ceiling, int)
-        or host_ceiling < 1
-    ):
+    if isinstance(host_ceiling, bool) or not isinstance(host_ceiling, int) or host_ceiling < 1:
         return _invalid(
             "attempt_ceiling",
             "host-registered attempt ceiling is a positive integer",
@@ -335,11 +325,7 @@ def host_may_dispatch(
     """
     if unknown_blocked or cas_conflict or prior_result is not None:
         return Ok(False)
-    if (
-        isinstance(attempt_id, bool)
-        or not isinstance(attempt_id, int)
-        or attempt_id < 1
-    ):
+    if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
         return _invalid(
             "attempt_id",
             "attempt_id must be a positive integer",
@@ -397,9 +383,7 @@ def host_may_send_again(
 def cas_config_revision(*, bound: object, live: object) -> Result[int]:
     """Compare-and-set on ``config_revision`` (``mutate-config``)."""
     if isinstance(bound, bool) or not isinstance(bound, int):
-        return _invalid(
-            "config_revision", "config_revision must be an integer", given=repr(bound)
-        )
+        return _invalid("config_revision", "config_revision must be an integer", given=repr(bound))
     if isinstance(live, bool) or not isinstance(live, int):
         return _invalid(
             "config_revision",
@@ -419,10 +403,7 @@ def cas_config_revision(*, bound: object, live: object) -> Result[int]:
 
 def place_run_identity(logical_invocation_id: object) -> Result[str]:
     """``place-run`` uses ``logical_invocation_id`` as the run identity."""
-    if (
-        not isinstance(logical_invocation_id, str)
-        or logical_invocation_id.strip() == ""
-    ):
+    if not isinstance(logical_invocation_id, str) or logical_invocation_id.strip() == "":
         return _invalid(
             "logical_invocation_id",
             "place-run run identity is a non-empty logical_invocation_id",
@@ -454,9 +435,7 @@ def reconcile_external_egress(
                 disposition="replay",
                 reconcile_policy=policy.value,
                 logical_invocation_id=identity.value,
-                handle_state=JobHandleState.UNKNOWN
-                if receipt is None
-                else JobHandleState.DONE,
+                handle_state=JobHandleState.UNKNOWN if receipt is None else JobHandleState.DONE,
                 prior_result=prior_result,
                 duplicated=False,
             )
@@ -509,9 +488,7 @@ class EffectOutcome:
 
     def __post_init__(self) -> None:
         if self.prior_result is not None:
-            object.__setattr__(
-                self, "prior_result", MappingProxyType(dict(self.prior_result))
-            )
+            object.__setattr__(self, "prior_result", MappingProxyType(dict(self.prior_result)))
 
     def to_payload(self) -> Mapping[str, object]:
         payload: dict[str, object] = {

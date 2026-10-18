@@ -96,13 +96,9 @@ _VIEW_FORBIDDEN_KEYS: Final[frozenset[str]] = frozenset(
         "invoke",
     }
 )
-_SUGGESTED_OP_KEYS: Final[frozenset[str]] = frozenset(
-    {"op_id", "op_version", "qualified_id"}
-)
+_SUGGESTED_OP_KEYS: Final[frozenset[str]] = frozenset({"op_id", "op_version", "qualified_id"})
 _COPILOT_PROFILE_KEYS: Final[frozenset[str]] = frozenset({"prompts", "suggested_ops"})
-_VIEW_REQUEST_KEYS: Final[frozenset[str]] = frozenset(
-    {"view_id", "op_id", "view_version"}
-)
+_VIEW_REQUEST_KEYS: Final[frozenset[str]] = frozenset({"view_id", "op_id", "view_version"})
 
 
 class PackSdkError(ValueError):
@@ -140,9 +136,7 @@ class CopilotProfile:
         return MappingProxyType(
             {
                 "prompts": list(self.prompts),
-                "suggested_ops": [
-                    dict(item.to_payload()) for item in self.suggested_ops
-                ],
+                "suggested_ops": [dict(item.to_payload()) for item in self.suggested_ops],
             }
         )
 
@@ -208,9 +202,7 @@ def parse_optional_copilot_profile(raw: Mapping[str, object]) -> CopilotProfile 
         return None
     value = raw["copilot_profile"]
     if value is None:
-        raise PackSdkError(
-            "copilot_profile must be omitted when unused, never null (DEC-0452)"
-        )
+        raise PackSdkError("copilot_profile must be omitted when unused, never null (DEC-0452)")
     return parse_copilot_profile(value)
 
 
@@ -220,9 +212,7 @@ def parse_copilot_profile(value: object) -> CopilotProfile:
         raise PackSdkError(
             f"copilot_profile must be a mapping request blob; got {type(value).__name__}"
         )
-    body = {
-        str(key): item for key, item in cast(Mapping[object, object], value).items()
-    }
+    body = {str(key): item for key, item in cast(Mapping[object, object], value).items()}
     stolen_grant = sorted(key for key in body if key in _GRANT_IDENTITY_KEYS)
     if stolen_grant:
         raise PackSdkError(
@@ -254,9 +244,7 @@ def parse_pack_views(raw: Mapping[str, object]) -> tuple[PackViewRequest, ...]:
         return ()
     value = raw["views"]
     if value is None:
-        raise PackSdkError(
-            "views must be an empty collection when undeclared, never null (CT-42)"
-        )
+        raise PackSdkError("views must be an empty collection when undeclared, never null (CT-42)")
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
         raise PackSdkError("views must be a sequence of view:* wire DTO requests")
     parsed: list[PackViewRequest] = []
@@ -278,9 +266,7 @@ def _parse_str_tuple(value: object, *, field: str) -> tuple[str, ...]:
     items: list[str] = []
     for item in cast(Sequence[object], value):
         if not isinstance(item, str) or item.strip() == "":
-            raise PackSdkError(
-                f"{field} entries must be non-empty strings; got {item!r}"
-            )
+            raise PackSdkError(f"{field} entries must be non-empty strings; got {item!r}")
         items.append(item)
     return tuple(items)
 
@@ -296,9 +282,7 @@ def _parse_suggested_ops(value: object) -> tuple[SuggestedOp, ...]:
             raise PackSdkError(
                 "suggested_ops entries must be {op_id, op_version, qualified_id} objects"
             )
-        body = {
-            str(key): val for key, val in cast(Mapping[object, object], item).items()
-        }
+        body = {str(key): val for key, val in cast(Mapping[object, object], item).items()}
         extra = sorted(key for key in body if key not in _SUGGESTED_OP_KEYS)
         if extra:
             raise PackSdkError(f"suggested_ops unknown fields {extra}")
@@ -309,9 +293,7 @@ def _parse_suggested_ops(value: object) -> tuple[SuggestedOp, ...]:
             )
         op_id = body.get("op_id")
         if not isinstance(op_id, str) or op_id.strip() == "":
-            raise PackSdkError(
-                f"suggested_ops.op_id must be a non-empty string; got {op_id!r}"
-            )
+            raise PackSdkError(f"suggested_ops.op_id must be a non-empty string; got {op_id!r}")
         version = body.get("op_version")
         if isinstance(version, bool) or not isinstance(version, int) or version < 1:
             raise PackSdkError(
@@ -323,9 +305,7 @@ def _parse_suggested_ops(value: object) -> tuple[SuggestedOp, ...]:
                 f"suggested_ops.qualified_id must be a non-empty string; got {qualified!r}"
             )
         parsed.append(
-            SuggestedOp(
-                op_id=op_id.strip(), op_version=version, qualified_id=qualified.strip()
-            )
+            SuggestedOp(op_id=op_id.strip(), op_version=version, qualified_id=qualified.strip())
         )
     return tuple(parsed)
 
@@ -357,9 +337,7 @@ def _parse_one_view(item: object) -> PackViewRequest:
         raise PackSdkError(f"views unknown fields {extra}")
     view_id = body.get("view_id")
     if not isinstance(view_id, str) or view_id.strip() == "":
-        raise PackSdkError(
-            f"views.view_id must be a non-empty view:* id; got {view_id!r}"
-        )
+        raise PackSdkError(f"views.view_id must be a non-empty view:* id; got {view_id!r}")
     token = view_id.strip()
     folded = token.casefold()
     retired_ids = {"ui_view", "view", "copilot", "copilot_profile"}
@@ -382,14 +360,8 @@ def _parse_one_view(item: object) -> PackViewRequest:
             f"(got {op_id!r})"
         )
     version_raw = body.get("view_version", 1)
-    if (
-        isinstance(version_raw, bool)
-        or not isinstance(version_raw, int)
-        or version_raw < 1
-    ):
-        raise PackSdkError(
-            f"views.view_version must be a positive integer; got {version_raw!r}"
-        )
+    if isinstance(version_raw, bool) or not isinstance(version_raw, int) or version_raw < 1:
+        raise PackSdkError(f"views.view_version must be a positive integer; got {version_raw!r}")
     return PackViewRequest(
         view_id=token,
         op_id=op_id.strip(),

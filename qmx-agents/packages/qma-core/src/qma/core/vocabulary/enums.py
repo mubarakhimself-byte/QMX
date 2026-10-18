@@ -243,18 +243,16 @@ TASK_MISSION_NONTERMINAL_STATES: Final[frozenset[TaskMissionState]] = frozenset(
 )
 
 # Fixed, total JobHandle → Task mapping applied by the daemon alone (DEC-0316).
-JOB_HANDLE_TO_TASK_STATE: Final[Mapping[JobHandleState, TaskMissionState]] = (
-    MappingProxyType(
-        {
-            JobHandleState.QUEUED: TaskMissionState.RUNNING,
-            JobHandleState.RUNNING: TaskMissionState.RUNNING,
-            JobHandleState.DONE: TaskMissionState.DONE,
-            JobHandleState.FAILED: TaskMissionState.FAILED,
-            JobHandleState.ABORTED: TaskMissionState.FAILED,
-            JobHandleState.CANCELLED: TaskMissionState.CANCELLED,
-            JobHandleState.UNKNOWN: TaskMissionState.UNKNOWN,
-        }
-    )
+JOB_HANDLE_TO_TASK_STATE: Final[Mapping[JobHandleState, TaskMissionState]] = MappingProxyType(
+    {
+        JobHandleState.QUEUED: TaskMissionState.RUNNING,
+        JobHandleState.RUNNING: TaskMissionState.RUNNING,
+        JobHandleState.DONE: TaskMissionState.DONE,
+        JobHandleState.FAILED: TaskMissionState.FAILED,
+        JobHandleState.ABORTED: TaskMissionState.FAILED,
+        JobHandleState.CANCELLED: TaskMissionState.CANCELLED,
+        JobHandleState.UNKNOWN: TaskMissionState.UNKNOWN,
+    }
 )
 
 

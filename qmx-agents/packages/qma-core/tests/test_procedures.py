@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from qma.core.barriers import (
-    assert_no_qmb_import,
-    scan_qmb_imports,
-    validate_worker_image,
-)
+from qma.core.barriers import assert_no_qmb_import, scan_qmb_imports, validate_worker_image
 from qma.core.control import (
     ANALYSIS_PROCEDURE_ID,
     COMPOSITION_NON_LINEAR,

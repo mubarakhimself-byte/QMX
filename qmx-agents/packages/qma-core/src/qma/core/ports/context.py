@@ -21,8 +21,6 @@ class ContextCompiler(Protocol):
     (see ``PORT_CONTRACTS``). Handle contents never enter a compiled window.
     """
 
-    def compile_context(
-        self, handles: Sequence[EvidenceHandle]
-    ) -> Mapping[str, object]:
+    def compile_context(self, handles: Sequence[EvidenceHandle]) -> Mapping[str, object]:
         """Compile handle *references* only. Contents stay out of the window."""
         ...

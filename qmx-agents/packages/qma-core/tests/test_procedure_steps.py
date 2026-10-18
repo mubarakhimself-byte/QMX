@@ -75,15 +75,7 @@ def test_run_commands_occupy_and_query_commands_do_not() -> None:
 def test_pack_step_types_match_door_occupancy() -> None:
     ids = {str(node["id"]) for node in PROCEDURE_STEP_TYPES}
     assert {"backtest", "optimize", "sweep", "robustness", "rerun", "download"} <= ids
-    assert {
-        "project",
-        "compare",
-        "rank",
-        "gap-check",
-        "verify",
-        "catalog",
-        "list",
-    } <= ids
+    assert {"project", "compare", "rank", "gap-check", "verify", "catalog", "list"} <= ids
     for node in PROCEDURE_STEP_TYPES:
         classified = classify_procedure_step(node)
         assert is_ok(classified)

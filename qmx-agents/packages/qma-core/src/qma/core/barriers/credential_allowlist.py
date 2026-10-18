@@ -88,10 +88,7 @@ def is_credential_ref_allowed(credential_ref: object) -> bool:
     """True only when ``credential_ref`` is an exact allowlisted reference."""
     if not isinstance(credential_ref, str) or not credential_ref:
         return False
-    if any(
-        credential_ref.startswith(prefix)
-        for prefix in OUT_OF_SCOPE_CREDENTIAL_REF_PREFIXES
-    ):
+    if any(credential_ref.startswith(prefix) for prefix in OUT_OF_SCOPE_CREDENTIAL_REF_PREFIXES):
         return False
     return classify_credential_ref(credential_ref) is not None
 

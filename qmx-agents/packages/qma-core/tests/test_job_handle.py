@@ -214,9 +214,7 @@ def test_handle_records_logical_run_attempt_and_artifact_inventory() -> None:
         attempt_id=2,
         artifacts=(
             {"fp1": "fp1:sha256:partial", "completeness": "partial"},
-            JobArtifact(
-                fp1="fp1:sha256:gone", completeness=ArtifactCompleteness.MISSING
-            ),
+            JobArtifact(fp1="fp1:sha256:gone", completeness=ArtifactCompleteness.MISSING),
         ),
     )
     assert is_ok(handle)

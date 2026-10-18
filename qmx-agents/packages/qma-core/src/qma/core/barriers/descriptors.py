@@ -79,11 +79,7 @@ def _splits(name: str) -> tuple[list[str], list[str]]:
     humps and letter-digit seams and drops digit words and a `v` before them, so `placeOrder`,
     `PlaceOrderV2` and `place_order2` read as `place_order`."""
     plain = [word for word in re.split(r"[\W_]+", name.casefold()) if word]
-    raw = [
-        word
-        for word in re.split(r"[\W_]+", _BOUNDARY.sub("_", name).casefold())
-        if word
-    ]
+    raw = [word for word in re.split(r"[\W_]+", _BOUNDARY.sub("_", name).casefold()) if word]
     humped = [
         word
         for word, after in zip(raw, [*raw[1:], ""][: len(raw)], strict=True)
@@ -112,12 +108,8 @@ def _fold(word: str) -> str:
     return word
 
 
-_BULK_ACTORS: Final = (
-    MONEY_PATH_BULK_VERBS | MONEY_PATH_STRONG_BULK_VERBS | MONEY_PATH_MONEY_VERBS
-)
-_SPLIT_SCOPES: Final = (
-    MONEY_PATH_SCOPES_AFTER | MONEY_PATH_SCOPES_BEFORE | MONEY_PATH_ORDER_TYPES
-)
+_BULK_ACTORS: Final = MONEY_PATH_BULK_VERBS | MONEY_PATH_STRONG_BULK_VERBS | MONEY_PATH_MONEY_VERBS
+_SPLIT_SCOPES: Final = MONEY_PATH_SCOPES_AFTER | MONEY_PATH_SCOPES_BEFORE | MONEY_PATH_ORDER_TYPES
 
 
 def _segment(word: str) -> list[str]:
@@ -132,8 +124,7 @@ def _segment(word: str) -> list[str]:
             (
                 [*head, word[start:stop]]
                 for start in range(stop)
-                if (head := best[start]) is not None
-                and _fold(word[start:stop]) in _VOCABULARY
+                if (head := best[start]) is not None and _fold(word[start:stop]) in _VOCABULARY
             ),
             key=len,
             default=None,
@@ -191,14 +182,9 @@ def _names_record(words: list[str]) -> bool:
         run
         for start in range(len(nominal))
         for stop in range(start + 2, len(nominal) + 1)
-        if (run := nominal[start:stop])[0] in _VERBS
-        or not any(word in _VERBS for word in run)
+        if (run := nominal[start:stop])[0] in _VERBS or not any(word in _VERBS for word in run)
     )
-    if any(
-        match_money_path_act("_".join(run))
-        for run in acting_runs
-        if "_".join(run) in _PHRASES
-    ):
+    if any(match_money_path_act("_".join(run)) for run in acting_runs if "_".join(run) in _PHRASES):
         return False
     return _word_act(nominal) is None
 
@@ -208,9 +194,9 @@ def _reads(words: list[str]) -> bool:
     `get_deposit_history`), or a last word naming a record of no act."""
     if _names_record(words):
         return True
-    return any(
-        w in MONEY_PATH_READ_WORDS - MONEY_PATH_READ_NOUNS for w in words
-    ) and not any(w in MONEY_PATH_MUTATING_VERBS for w in words)
+    return any(w in MONEY_PATH_READ_WORDS - MONEY_PATH_READ_NOUNS for w in words) and not any(
+        w in MONEY_PATH_MUTATING_VERBS for w in words
+    )
 
 
 def _run_act(words: list[str]) -> str | None:
@@ -222,9 +208,7 @@ def _run_act(words: list[str]) -> str | None:
         for stop in range(start + 2, count + 1)
         if (run := "_".join(words[start:stop])) in _PHRASES
     )
-    return next(
-        (matched for run in runs if (matched := match_money_path_act(run))), None
-    )
+    return next((matched for run in runs if (matched := match_money_path_act(run))), None)
 
 
 _READ_VERBS: Final = MONEY_PATH_READ_WORDS - MONEY_PATH_READ_NOUNS
@@ -240,9 +224,7 @@ def _bulk_head(words: list[str]) -> list[str]:
     """`words` up to the first `MONEY_PATH_BULK_CUTS` word, without trailing words or read
     nouns at the end (`close_all_by_symbol` and `cancel_all_report` read `close_all` and
     `cancel_all`)."""
-    cut = next(
-        (i for i, word in enumerate(words) if word in MONEY_PATH_BULK_CUTS), len(words)
-    )
+    cut = next((i for i, word in enumerate(words) if word in MONEY_PATH_BULK_CUTS), len(words))
     head = words[:cut]
     while head and head[-1] in MONEY_PATH_TRAILING_WORDS | MONEY_PATH_READ_NOUNS:
         head.pop()
@@ -259,8 +241,7 @@ def _bulk_act(words: list[str]) -> str | None:
         (
             word
             for word, after in zip(head, [*head[1:], ""][: len(head)], strict=True)
-            if word in MONEY_PATH_STRONG_BULK_VERBS
-            and not (word == "kill" and after == "switch")
+            if word in MONEY_PATH_STRONG_BULK_VERBS and not (word == "kill" and after == "switch")
         ),
         None,
     )
@@ -310,9 +291,7 @@ def _object_noun(words: list[str], index: int, nouns: frozenset[str]) -> bool:
     )
 
 
-_NAME_NOUNS: Final = (
-    MONEY_PATH_FAMILY_NOUNS | MONEY_PATH_MONEY_NOUNS | {MONEY_PATH_STOP_NOUN}
-)
+_NAME_NOUNS: Final = MONEY_PATH_FAMILY_NOUNS | MONEY_PATH_MONEY_NOUNS | {MONEY_PATH_STOP_NOUN}
 
 
 def _word_act(words: list[str]) -> str | None:
@@ -342,9 +321,7 @@ def _word_act(words: list[str]) -> str | None:
     if words and words[-1] in MONEY_PATH_PROTECTION_NOUNS:
         return "protection"
     family = next((word for word in words if word in MONEY_PATH_FAMILY_NOUNS), None)
-    qualifier = next(
-        (word for word in words if word in MONEY_PATH_BULK_QUALIFIERS), None
-    )
+    qualifier = next((word for word in words if word in MONEY_PATH_BULK_QUALIFIERS), None)
     if family is not None and qualifier is not None:
         return f"{qualifier}_{family}"
     kind = next(

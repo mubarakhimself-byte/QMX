@@ -107,9 +107,7 @@ def assert_no_secret_in_hook_payloads(
 def _scan_mapping(mapping: Mapping[object, object], *, path: str) -> Result[None]:
     for key_obj, value in mapping.items():
         if not isinstance(key_obj, str):
-            return _invalid(
-                "surface", "secret-excluded keys must be strings", path=path
-            )
+            return _invalid("surface", "secret-excluded keys must be strings", path=path)
         key_lower = key_obj.lower()
         if key_lower in FORBIDDEN_SECRET_PAYLOAD_KEYS:
             return _policy(

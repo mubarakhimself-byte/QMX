@@ -112,9 +112,7 @@ def is_client_detach_event(event: object) -> bool:
     return isinstance(event, str) and event in CLIENT_DETACH_EVENTS
 
 
-def parse_client_detach_event(
-    event: ClientDetachEvent | str,
-) -> Result[ClientDetachEvent]:
+def parse_client_detach_event(event: ClientDetachEvent | str) -> Result[ClientDetachEvent]:
     """Parse a client-detach token. Tab-close is not cancel."""
     try:
         return Ok(parse_closed(ClientDetachEvent, event))
@@ -200,9 +198,7 @@ def authorize_terminal_writer(
         )
     if token in DAEMON_TERMINAL_WRITERS:
         return Ok(token)
-    return refuse_unauthorized_cancel(
-        writer=token, state=state.value, surface="job_handle"
-    )
+    return refuse_unauthorized_cancel(writer=token, state=state.value, surface="job_handle")
 
 
 @dataclass(frozen=True, slots=True)

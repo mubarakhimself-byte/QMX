@@ -86,9 +86,7 @@ __all__ = [
 
 ANALYSIS_BACKTEST_PLUGIN_ID: Final[str] = "analysis-backtest"
 QMB_BACKTEST_TOOL_LOCAL_ID: Final[str] = "qmb"
-QMB_BACKTEST_TOOL_ID: Final[str] = (
-    f"{ANALYSIS_BACKTEST_PLUGIN_ID}:{QMB_BACKTEST_TOOL_LOCAL_ID}"
-)
+QMB_BACKTEST_TOOL_ID: Final[str] = f"{ANALYSIS_BACKTEST_PLUGIN_ID}:{QMB_BACKTEST_TOOL_LOCAL_ID}"
 QMB_CLI_PROGRAM: Final[str] = "qmb"
 QMB_CLI_ARGV: Final[tuple[str, ...]] = ("backtest", "run")
 QMB_MCP_METHOD: Final[str] = "qmb.backtest.run"
@@ -625,10 +623,7 @@ class QmbBacktestRequest:
             return declared
         if not isinstance(task_id, str) or task_id.strip() == "":
             return _invalid("task_id", "QMB door request requires a task_id")
-        if (
-            not isinstance(experiment_spec_fp1, str)
-            or experiment_spec_fp1.strip() == ""
-        ):
+        if not isinstance(experiment_spec_fp1, str) or experiment_spec_fp1.strip() == "":
             return _invalid(
                 "experiment_spec_fp1",
                 "QMB door request requires a recorded ExperimentSpec fp1",
@@ -639,17 +634,12 @@ class QmbBacktestRequest:
                 "QMB door request requires a recorded evidence reference",
             )
         if is_forbidden_live_money_path_target(evidence_ref):
-            return refuse_venue_account_backtest(
-                field="evidence_ref", given=evidence_ref
-            )
+            return refuse_venue_account_backtest(field="evidence_ref", given=evidence_ref)
         if recorded is not True:
             return refuse_venue_account_backtest(field="recorded", given=recorded)
         if world != QMB_WORLD_REPLAY:
             field = "world"
-            if (
-                isinstance(world, str)
-                and world.strip().casefold() in _NON_REPLAY_WORLDS
-            ):
+            if isinstance(world, str) and world.strip().casefold() in _NON_REPLAY_WORLDS:
                 return refuse_venue_account_backtest(field=field, given=world)
             return _invalid(
                 "world",
@@ -671,17 +661,11 @@ class QmbBacktestRequest:
             return parsed_env
         try:
             resolved_door = (
-                door
-                if isinstance(door, QmbDoorKind)
-                else parse_closed(QmbDoorKind, door)
+                door if isinstance(door, QmbDoorKind) else parse_closed(QmbDoorKind, door)
             )
         except VocabularyError as exc:
             return _invalid("door", str(exc), given=repr(door))
-        env_ref = (
-            environment_ref.strip()
-            if isinstance(environment_ref, str)
-            else parsed_env.value
-        )
+        env_ref = environment_ref.strip() if isinstance(environment_ref, str) else parsed_env.value
         return Ok(
             cls(
                 owner=parsed_owner.value,
@@ -827,11 +811,7 @@ def build_qmb_door_invocation(
     """Build a CLI/MCP run invocation. Payload carries refs; QMA does not re-specify QMB."""
     if not job_id.strip():
         return _invalid("job_id", "QMB door invocation requires a job id")
-    if (
-        isinstance(attempt_id, bool)
-        or not isinstance(attempt_id, int)
-        or attempt_id < 1
-    ):
+    if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
         return _invalid("attempt_id", "the QMA job attempt is a positive integer")
     occupancy: QmbDoorOccupancy | None
     if command is None:
@@ -873,9 +853,7 @@ def build_qmb_door_invocation(
         "qmb_owned": sorted(QMB_OWNED_CONCERNS),
         "route": list(QMB_ROUTE),
         "command": occupancy.command if occupancy is not None else "backtest.run",
-        "occupancy": occupancy.occupancy
-        if occupancy is not None
-        else QMB_OCCUPANCY_RUN,
+        "occupancy": occupancy.occupancy if occupancy is not None else QMB_OCCUPANCY_RUN,
         "mints_ct32": occupancy.mints_ct32 if occupancy is not None else True,
         "mints_experiment_spec": False,
         "children_are_qma_jobs": False,
@@ -909,14 +887,8 @@ def build_qmb_query_invocation(
     """Validate the attempt id and build a query that consumes no occupancy."""
     if not job_id.strip():
         return _invalid("job_id", "QMB door invocation requires a job id")
-    if (
-        isinstance(attempt_id, bool)
-        or not isinstance(attempt_id, int)
-        or attempt_id < 1
-    ):
-        return _invalid(
-            "attempt_id", "QMB door invocation requires a positive attempt id"
-        )
+    if isinstance(attempt_id, bool) or not isinstance(attempt_id, int) or attempt_id < 1:
+        return _invalid("attempt_id", "QMB door invocation requires a positive attempt id")
     classified = classify_qmb_door_occupancy(command)
     if not isinstance(classified, Ok):
         return classified
@@ -949,12 +921,7 @@ def build_qmb_query_invocation(
     }
     if extra is not None:
         for key, value in extra.items():
-            if key in {
-                "occupancy",
-                "mints_ct32",
-                "mints_experiment_spec",
-                "import_edge",
-            }:
+            if key in {"occupancy", "mints_ct32", "mints_experiment_spec", "import_edge"}:
                 continue
             payload[key] = value
     return Ok(

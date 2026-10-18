@@ -296,9 +296,7 @@ def test_missing_refusal_codes_are_refused() -> None:
 
 
 def test_fragment_descriptor_is_refused() -> None:
-    refused = parse_operation_descriptor(
-        {"op_id": "qmb.analysis.project", "version": 1}
-    )
+    refused = parse_operation_descriptor({"op_id": "qmb.analysis.project", "version": 1})
     assert is_refusal(refused)
     assert refused.context["field"] == "descriptor"
     missing = refused.context["missing"]
@@ -369,9 +367,7 @@ def test_door_matrix_is_keyed_by_op_id_and_version() -> None:
     summary = owner_door_summary(descriptors)
     assert "COMP-QMB" in summary
     # Owner union is a summary only: it is not the per-op supported set.
-    assert set(summary["COMP-QMB"]) != {
-        door.adapter.value for door in project.supported_doors
-    }
+    assert set(summary["COMP-QMB"]) != {door.adapter.value for door in project.supported_doors}
 
 
 def test_unsupported_door_is_typed_unsupported_door() -> None:
@@ -430,9 +426,7 @@ def test_qmb_is_the_only_operator_cli() -> None:
     minted_qma_cli = dict(_CONTRACTS_PROJECT)
     minted_qma_cli["owner"] = "COMP-QMA"
     minted_qma_cli["op_id"] = "qma.procedure.start"
-    minted_qma_cli["supported_doors"] = [
-        {"adapter": "qma-cli", "door": "qma procedure start"}
-    ]
+    minted_qma_cli["supported_doors"] = [{"adapter": "qma-cli", "door": "qma procedure start"}]
     published = publish_operation_descriptor(minted_qma_cli)
     assert is_refusal(published)
     assert published.context["adapter"] == "qma-cli"
@@ -440,9 +434,7 @@ def test_qmb_is_the_only_operator_cli() -> None:
     qmb_cli_on_qma = dict(_CONTRACTS_PROJECT)
     qmb_cli_on_qma["owner"] = "COMP-QMA"
     qmb_cli_on_qma["op_id"] = "qma.procedure.start"
-    qmb_cli_on_qma["supported_doors"] = [
-        {"adapter": "qmb-cli", "door": "qmb procedure start"}
-    ]
+    qmb_cli_on_qma["supported_doors"] = [{"adapter": "qmb-cli", "door": "qmb procedure start"}]
     refused_cli = publish_operation_descriptor(qmb_cli_on_qma)
     assert is_refusal(refused_cli)
     assert refused_cli.context["owner"] == "COMP-QMA"

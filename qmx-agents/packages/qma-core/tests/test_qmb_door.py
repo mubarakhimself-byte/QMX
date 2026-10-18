@@ -125,14 +125,10 @@ def test_one_qmb_job_per_environment_occupancy() -> None:
     assert second.context["field"] == "qmb_job"
     other = admit_qmb_job(first.value, occupancy_key="local", job_id="qmb:local:t3")
     assert is_ok(other)
-    released = release_qmb_job(
-        first.value, occupancy_key="docker", job_id="qmb:docker:t1"
-    )
+    released = release_qmb_job(first.value, occupancy_key="docker", job_id="qmb:docker:t1")
     retry = admit_qmb_job(released, occupancy_key="docker", job_id="qmb:docker:t2")
     assert is_ok(retry)
-    named = refuse_second_qmb_job(
-        environment_ref="docker", occupying_job_id="qmb:docker:t1"
-    )
+    named = refuse_second_qmb_job(environment_ref="docker", occupying_job_id="qmb:docker:t1")
     assert named.category is RefusalCategory.POLICY_REJECTION
 
 

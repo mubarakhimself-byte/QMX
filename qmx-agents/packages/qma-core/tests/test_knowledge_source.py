@@ -39,10 +39,7 @@ def _confidence(**overrides: object) -> dict[str, object]:
 
 
 def test_operation_surface_is_literal_query_only() -> None:
-    assert (
-        frozenset({"snapshot", "search", "retrieve", "cite"})
-        == KNOWLEDGE_SOURCE_OPERATIONS
-    )
+    assert frozenset({"snapshot", "search", "retrieve", "cite"}) == KNOWLEDGE_SOURCE_OPERATIONS
     assert frozenset({"search", "retrieve", "cite"}) == KNOWLEDGE_QUERY_SURFACE
     assert EVIDENCE_CONFIDENCE_DIMENSION_COUNT == 6
 

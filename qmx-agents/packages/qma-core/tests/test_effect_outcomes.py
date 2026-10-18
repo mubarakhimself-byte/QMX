@@ -41,12 +41,7 @@ from qma.core.refusals import (
     NestedPermissionUnionRefused,
     StaleObservation,
 )
-from qma.core.vocabulary import (
-    EffectClass,
-    EffectRetryOutcome,
-    JobHandleState,
-    ReconcilePolicy,
-)
+from qma.core.vocabulary import EffectClass, EffectRetryOutcome, JobHandleState, ReconcilePolicy
 from qmf.core import is_ok, is_refusal
 from qmf.core.refusal import RefusalCategory, Retryability, TypedRefusal
 
@@ -55,13 +50,9 @@ def test_every_effect_class_has_a_closed_retry_outcome() -> None:
     assert set(EFFECT_RETRY_BY_CLASS) == set(EffectClass)
     assert EFFECT_RETRY_BY_CLASS[EffectClass.NONE] is EffectRetryOutcome.MAY_RETRY
     assert EFFECT_RETRY_BY_CLASS[EffectClass.READ] is EffectRetryOutcome.MAY_RETRY
-    assert (
-        EFFECT_RETRY_BY_CLASS[EffectClass.APPEND_EVIDENCE] is EffectRetryOutcome.DEDUPE
-    )
+    assert EFFECT_RETRY_BY_CLASS[EffectClass.APPEND_EVIDENCE] is EffectRetryOutcome.DEDUPE
     assert EFFECT_RETRY_BY_CLASS[EffectClass.MUTATE_CONFIG] is EffectRetryOutcome.CAS
-    assert (
-        EFFECT_RETRY_BY_CLASS[EffectClass.PLACE_RUN] is EffectRetryOutcome.RUN_IDENTITY
-    )
+    assert EFFECT_RETRY_BY_CLASS[EffectClass.PLACE_RUN] is EffectRetryOutcome.RUN_IDENTITY
     assert EFFECT_RETRY_BY_CLASS[EffectClass.EXTERNAL_EGRESS] is (
         EffectRetryOutcome.RECEIPT_OR_UNKNOWN
     )

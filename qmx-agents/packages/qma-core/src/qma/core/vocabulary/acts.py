@@ -47,9 +47,7 @@ def validate_governed_act(
         raise VocabularyError(f"{act!r} is not a governed act") from exc
     try:
         resolved_target = (
-            target
-            if isinstance(target, GovernedActTarget)
-            else GovernedActTarget(target)
+            target if isinstance(target, GovernedActTarget) else GovernedActTarget(target)
         )
     except ValueError as exc:
         raise VocabularyError(f"{target!r} is not a governed-act target") from exc

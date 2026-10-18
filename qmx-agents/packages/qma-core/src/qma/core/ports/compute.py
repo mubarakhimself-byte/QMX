@@ -62,28 +62,20 @@ class ComputeProvider(Protocol):
 
 def _parse_positive_count(value: object, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise VocabularyError(
-            f"{value!r} is not a positive count for {field} (CT-46; AD-17)"
-        )
+        raise VocabularyError(f"{value!r} is not a positive count for {field} (CT-46; AD-17)")
     return value
 
 
 def _parse_timeout(value: object) -> Duration:
     if isinstance(value, Duration):
         if value.value_ns <= 0:
-            raise VocabularyError(
-                "timeout must be a positive span from a recorded UTC instant"
-            )
+            raise VocabularyError("timeout must be a positive span from a recorded UTC instant")
         return value
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise VocabularyError(
-            f"{value!r} is not a positive nanosecond timeout span (CT-46; AD-17)"
-        )
+        raise VocabularyError(f"{value!r} is not a positive nanosecond timeout span (CT-46; AD-17)")
     created = Duration.try_create(value)
     if not isinstance(created, Ok):
-        raise VocabularyError(
-            "timeout must be a signed int64 nanosecond quantity (CT-02)"
-        )
+        raise VocabularyError("timeout must be a signed int64 nanosecond quantity (CT-02)")
     return created.value
 
 
@@ -107,14 +99,8 @@ def _parse_gpu(value: object) -> GpuRequirement | None:
     mapping = cast(Mapping[str, object], value)
     count_raw = mapping.get("count", mapping.get("gpu"))
     kind_raw = mapping.get("kind")
-    kind = (
-        str(kind_raw).strip()
-        if isinstance(kind_raw, str) and str(kind_raw).strip()
-        else None
-    )
-    return GpuRequirement(
-        count=_parse_positive_count(count_raw, "gpu.count"), kind=kind
-    )
+    kind = str(kind_raw).strip() if isinstance(kind_raw, str) and str(kind_raw).strip() else None
+    return GpuRequirement(count=_parse_positive_count(count_raw, "gpu.count"), kind=kind)
 
 
 def _refuse_named_host(**named: object) -> None:
@@ -276,9 +262,7 @@ def parse_compute_requirement(
         )
 
 
-def environment_isolation(
-    declaration: ExecutionEnvironmentDeclaration,
-) -> IsolationMode:
+def environment_isolation(declaration: ExecutionEnvironmentDeclaration) -> IsolationMode:
     """Isolation the environment can provide. Pinned hosts are shared."""
     if is_pinned_single_slot_kind(declaration.kind):
         return IsolationMode.SHARED

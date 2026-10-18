@@ -104,9 +104,7 @@ def test_multi_contribution_points_and_keys() -> None:
         "toolset",
         "worker_template",
     } == MULTI_CONTRIBUTION_POINTS
-    assert qualified_contribution_id("research-corpus", "search") == (
-        "research-corpus:search"
-    )
+    assert qualified_contribution_id("research-corpus", "search") == ("research-corpus:search")
     assert validate_multi_contribution_key("dev-factory:build") == (
         "dev-factory",
         "build",

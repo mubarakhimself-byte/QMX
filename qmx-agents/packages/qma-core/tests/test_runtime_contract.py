@@ -28,11 +28,7 @@ from qma.core.control.runtime import (
 )
 from qma.core.ontology import ActorId, DeskSlug, Quant, RoleName
 from qma.core.vocabulary.enums import ExecutionModel, SessionAttachment, SessionAutonomy
-from qma.core.vocabulary.registry import (
-    CLOSED_VOCABULARIES,
-    VocabularyError,
-    parse_closed,
-)
+from qma.core.vocabulary.registry import CLOSED_VOCABULARIES, VocabularyError, parse_closed
 from qmf.core import is_ok, is_refusal
 
 

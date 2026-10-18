@@ -88,15 +88,11 @@ def test_requested_capabilities_is_alias_of_permissions() -> None:
 
     with pytest.raises(ManifestError, match="two live request fields"):
         parse_plugin_manifest(
-            _manifest(
-                permissions=["library.read"], requested_capabilities=["library.read"]
-            )
+            _manifest(permissions=["library.read"], requested_capabilities=["library.read"])
         )
     with pytest.raises(ManifestError, match="two live request fields"):
         parse_plugin_manifest(
-            _manifest(
-                permissions=["library.read"], requested_capabilities=["library.write"]
-            )
+            _manifest(permissions=["library.read"], requested_capabilities=["library.write"])
         )
 
 
@@ -154,9 +150,7 @@ def test_optional_copilot_profile_is_request_not_grant_or_point() -> None:
     with pytest.raises(ManifestError, match="not a contribution point"):
         parse_plugin_manifest(_manifest(copilot_profile={"point": "copilot"}))
     with pytest.raises(ManifestError, match="undeclared or retired"):
-        parse_plugin_manifest(
-            _manifest(contributes=[{"point": "copilot", "local_id": "default"}])
-        )
+        parse_plugin_manifest(_manifest(contributes=[{"point": "copilot", "local_id": "default"}]))
     with pytest.raises(ManifestError, match="undeclared or retired"):
         parse_plugin_manifest(
             _manifest(contributes=[{"point": "copilot_profile", "local_id": "panel"}])
@@ -180,14 +174,10 @@ def test_optional_view_star_is_wire_dto_not_contribution_or_json_render() -> Non
 
     with pytest.raises(ManifestError, match="not a plugin contribution point"):
         parse_plugin_manifest(
-            _manifest(
-                views=[{"view_id": "view:heatmap", "op_id": "x", "point": "view"}]
-            )
+            _manifest(views=[{"view_id": "view:heatmap", "op_id": "x", "point": "view"}])
         )
     with pytest.raises(ManifestError, match="json-render"):
-        parse_plugin_manifest(
-            _manifest(views=[{"view_id": "json-render:heatmap", "op_id": "x"}])
-        )
+        parse_plugin_manifest(_manifest(views=[{"view_id": "json-render:heatmap", "op_id": "x"}]))
     with pytest.raises(ManifestError, match="widgets never own invoke"):
         parse_plugin_manifest(
             _manifest(
@@ -201,13 +191,9 @@ def test_optional_view_star_is_wire_dto_not_contribution_or_json_render() -> Non
             )
         )
     with pytest.raises(ManifestError, match="undeclared or retired"):
-        parse_plugin_manifest(
-            _manifest(contributes=[{"point": "view", "local_id": "heatmap"}])
-        )
+        parse_plugin_manifest(_manifest(contributes=[{"point": "view", "local_id": "heatmap"}]))
     with pytest.raises(ManifestError, match="undeclared or retired"):
-        parse_plugin_manifest(
-            _manifest(contributes=[{"point": "ui_view", "local_id": "panel"}])
-        )
+        parse_plugin_manifest(_manifest(contributes=[{"point": "ui_view", "local_id": "panel"}]))
 
 
 def test_host_runtime_and_toolbox_law_constants() -> None:

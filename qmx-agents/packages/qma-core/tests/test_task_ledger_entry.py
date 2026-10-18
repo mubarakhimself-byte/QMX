@@ -15,12 +15,7 @@ from qma.core.ports.ledgers import (
     parse_task_ledger_entry,
     stamp_hook_returned_ledger_entry,
 )
-from qma.core.vocabulary import (
-    CLOSED_VOCABULARIES,
-    LeaseKind,
-    TaskLedgerEntryKind,
-    parse_closed,
-)
+from qma.core.vocabulary import CLOSED_VOCABULARIES, LeaseKind, TaskLedgerEntryKind, parse_closed
 from qmf.core import is_ok, is_refusal
 
 
@@ -35,10 +30,7 @@ def test_closed_vocabs_cover_leases_and_entry_kinds() -> None:
     assert "lease_kind" in names
     assert "task_ledger_entry_kind" in names
     assert parse_closed(LeaseKind, "dispatch_lease") is LeaseKind.DISPATCH_LEASE
-    assert (
-        parse_closed(TaskLedgerEntryKind, "reassigned")
-        is TaskLedgerEntryKind.REASSIGNED
-    )
+    assert parse_closed(TaskLedgerEntryKind, "reassigned") is TaskLedgerEntryKind.REASSIGNED
     assert TaskLedgerEntryKind.REASSIGNED in DAEMON_AUTHORED_ENTRY_KINDS
     assert TaskLedgerEntryKind.UNKNOWN_TAIL in DAEMON_AUTHORED_ENTRY_KINDS
     assert TaskLedgerEntryKind.PROGRESS not in DAEMON_AUTHORED_ENTRY_KINDS
@@ -185,9 +177,7 @@ def test_complete_task_completed_parses_five_fields() -> None:
     )
     assert is_ok(parsed)
     assert parsed.value.task_completed_complete is True
-    assert (
-        missing_task_completed_fields(parsed.value.to_payload()["task_completed"]) == ()
-    )
+    assert missing_task_completed_fields(parsed.value.to_payload()["task_completed"]) == ()
 
 
 def test_hook_returned_ledger_entry_requires_daemon_and_registry_id() -> None:

@@ -113,9 +113,7 @@ ENVELOPE_OPTIONAL_REFS: Final[frozenset[str]] = frozenset(
 ENVELOPE_PRODUCT_SESSION_FIELD: Final[str] = "product_session_ref"
 PRODUCT_SESSION_OWN_IDENTITY_FIELD: Final[str] = "product_session_id"
 PRODUCT_SESSION_REF_PREFIX: Final[str] = "psess:"
-ENVELOPE_ADDITIVE_FIELDS: Final[frozenset[str]] = frozenset(
-    {ENVELOPE_PRODUCT_SESSION_FIELD}
-)
+ENVELOPE_ADDITIVE_FIELDS: Final[frozenset[str]] = frozenset({ENVELOPE_PRODUCT_SESSION_FIELD})
 FORBIDDEN_ENVELOPE_SESSION_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "product_session_id",
@@ -139,12 +137,8 @@ MAILBOX_INSPECT_SHA: Final[str] = "34c148be"
 PRODUCT_SESSION_REF_EXISTED_AT_INSPECT_SHA: Final[bool] = False
 ENVELOPE_TYPES_EXISTED_AT_INSPECT_SHA: Final[bool] = True
 
-MESSAGE_KIND_VALUES: Final[frozenset[str]] = frozenset(
-    member.value for member in MessageKind
-)
-DELIVERY_STATE_VALUES: Final[frozenset[str]] = frozenset(
-    member.value for member in DeliveryState
-)
+MESSAGE_KIND_VALUES: Final[frozenset[str]] = frozenset(member.value for member in MessageKind)
+DELIVERY_STATE_VALUES: Final[frozenset[str]] = frozenset(member.value for member in DeliveryState)
 
 # Product-chat send uses mailbox kinds; approval_request is the gate-raised
 # human-approval channel, not a Home composer mint (Story 69.4; CT-48).
@@ -168,9 +162,7 @@ GAP_0079_EXTERNAL_TRANSPORT: Final[str] = "GAP-0079"
 
 # from, to, and causation_id are unsuffixed whitelist exceptions (DEC-0304).
 # Do not add product_session_id or originating_psess (AM-14; DEC-0495).
-ENVELOPE_REF_LAW_EXCEPTIONS: Final[frozenset[str]] = frozenset(
-    {"from", "to", "causation_id"}
-)
+ENVELOPE_REF_LAW_EXCEPTIONS: Final[frozenset[str]] = frozenset({"from", "to", "causation_id"})
 _REF_LAW_EXCEPTIONS: Final[frozenset[str]] = ENVELOPE_REF_LAW_EXCEPTIONS
 _QMA_SESSION_PREFIX: Final[str] = "sess:"
 
@@ -421,9 +413,7 @@ class Envelope:
     artifact_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if isinstance(self.body, Mapping) and not isinstance(
-            self.body, MappingProxyType
-        ):
+        if isinstance(self.body, Mapping) and not isinstance(self.body, MappingProxyType):
             object.__setattr__(self, "body", MappingProxyType(dict(self.body)))
         object.__setattr__(self, "artifact_refs", tuple(self.artifact_refs))
 
@@ -457,9 +447,7 @@ class Envelope:
         return MappingProxyType(payload)
 
 
-def envelope_identity_content(
-    value: Envelope | Mapping[str, object],
-) -> Mapping[str, object]:
+def envelope_identity_content(value: Envelope | Mapping[str, object]) -> Mapping[str, object]:
     """fp1 identity payload: tracing ids and ``product_session_ref`` excluded."""
     raw = dict(value.to_payload() if isinstance(value, Envelope) else value)
     for field in ENVELOPE_FP1_EXCLUDED_FIELDS:
@@ -483,9 +471,7 @@ def parse_envelope(value: object) -> Result[Envelope]:
     if "msg_id" not in aliases and "id" in aliases:
         aliases["msg_id"] = aliases["id"]
 
-    missing = [
-        field for field in sorted(ENVELOPE_REQUIRED_FIELDS) if field not in aliases
-    ]
+    missing = [field for field in sorted(ENVELOPE_REQUIRED_FIELDS) if field not in aliases]
     if missing:
         return _invalid(
             "envelope",
@@ -526,11 +512,7 @@ def parse_envelope(value: object) -> Result[Envelope]:
         return _invalid("priority", "priority is an integer (CT-48; DEC-0319)")
 
     created_at = aliases.get("created_at")
-    if (
-        not isinstance(created_at, int)
-        or isinstance(created_at, bool)
-        or created_at < 0
-    ):
+    if not isinstance(created_at, int) or isinstance(created_at, bool) or created_at < 0:
         return _invalid(
             "created_at",
             "created_at is the creation time as int64 UTC nanoseconds (CT-48; AD-6)",

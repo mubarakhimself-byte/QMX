@@ -47,17 +47,11 @@ class PortContract:
 
     def __post_init__(self) -> None:
         if self.cardinality is Cardinality.SINGLETON and not self.scope_key:
-            raise PortError(
-                f"singleton port {self.name!r} must declare an explicit scope key"
-            )
+            raise PortError(f"singleton port {self.name!r} must declare an explicit scope key")
         if self.cardinality is Cardinality.MULTI and self.scope_key is not None:
-            raise PortError(
-                f"multi port {self.name!r} must not declare a singleton scope key"
-            )
+            raise PortError(f"multi port {self.name!r} must not declare a singleton scope key")
         if self.replaceable_default and self.name != "ContextCompiler":
-            raise PortError(
-                "only ContextCompiler may declare a replaceable default binding"
-            )
+            raise PortError("only ContextCompiler may declare a replaceable default binding")
 
 
 # Singleton scope keys (AD-1): MemoryProvider/desk, KnowledgeSource/source_id,
@@ -137,26 +131,18 @@ def require_singleton_scope_key(port_name: str, scope_key: str | None) -> str:
     if expected is None:
         raise PortError(f"singleton port {port_name!r} missing declared scope key")
     if scope_key is None or scope_key == "":
-        raise PortError(
-            f"singleton {port_name} rejected without explicit scope key {expected!r}"
-        )
+        raise PortError(f"singleton {port_name} rejected without explicit scope key {expected!r}")
     if scope_key != expected:
-        raise PortError(
-            f"singleton {port_name} requires scope key {expected!r}, got {scope_key!r}"
-        )
+        raise PortError(f"singleton {port_name} requires scope key {expected!r}, got {scope_key!r}")
     return expected
 
 
 def qualified_contribution_id(plugin_id: object, local_id: object) -> str:
     """Build the daemon-wide multi contribution key ``<plugin_id>:<local_id>``."""
     if not isinstance(plugin_id, str) or not plugin_id or ":" in plugin_id:
-        raise PortError(
-            f"plugin_id must be a non-empty string without ':'; got {plugin_id!r}"
-        )
+        raise PortError(f"plugin_id must be a non-empty string without ':'; got {plugin_id!r}")
     if not isinstance(local_id, str) or not local_id or ":" in local_id:
-        raise PortError(
-            f"local_id must be a non-empty string without ':'; got {local_id!r}"
-        )
+        raise PortError(f"local_id must be a non-empty string without ':'; got {local_id!r}")
     return f"{plugin_id}:{local_id}"
 
 

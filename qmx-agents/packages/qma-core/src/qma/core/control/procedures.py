@@ -149,9 +149,7 @@ _RESOLVED_CONFIG_CHANGE_TOKENS: Final[frozenset[str]] = frozenset(
 )
 
 ANALYSIS_PROCEDURE_LOCAL_ID: Final[str] = "procedure"
-ANALYSIS_PROCEDURE_ID: Final[str] = (
-    f"{ANALYSIS_BACKTEST_PLUGIN_ID}:{ANALYSIS_PROCEDURE_LOCAL_ID}"
-)
+ANALYSIS_PROCEDURE_ID: Final[str] = f"{ANALYSIS_BACKTEST_PLUGIN_ID}:{ANALYSIS_PROCEDURE_LOCAL_ID}"
 ANALYSIS_PROCEDURE_SKILL_LOCAL_ID: Final[str] = "steps"
 ANALYSIS_PROCEDURE_SKILL_ID: Final[str] = (
     f"{ANALYSIS_BACKTEST_PLUGIN_ID}:{ANALYSIS_PROCEDURE_SKILL_LOCAL_ID}"
@@ -460,9 +458,7 @@ def refuse_linear_wizard(*, given: object = "research-backtest-paper") -> TypedR
     )
 
 
-def refuse_sq_custom_projects_clone(
-    *, given: object = "custom_projects"
-) -> TypedRefusal:
+def refuse_sq_custom_projects_clone(*, given: object = "custom_projects") -> TypedRefusal:
     """SQ Custom Projects remain a donor shape, not a clone."""
     return _policy(
         "product",

@@ -160,16 +160,11 @@ class ToolRecord:
 
     def __post_init__(self) -> None:
         if ":" not in self.tool_id:
-            msg = (
-                "tool_id must be fully-qualified <plugin_id>:<local_id> (AD-16; FR-Q41)"
-            )
+            msg = "tool_id must be fully-qualified <plugin_id>:<local_id> (AD-16; FR-Q41)"
             raise VocabularyError(msg)
         if self.plugin_id is None:
             object.__setattr__(self, "plugin_id", self.tool_id.split(":", 1)[0])
-        if (
-            self.kind is ToolKind.COMPUTER_USE
-            and self.requires_environment_kind is None
-        ):
+        if self.kind is ToolKind.COMPUTER_USE and self.requires_environment_kind is None:
             object.__setattr__(self, "requires_environment_kind", "desktop")
         # Freeze schema mapping.
         object.__setattr__(self, "schema", MappingProxyType(dict(self.schema)))
@@ -258,7 +253,9 @@ class ToolsetRecord:
             raise VocabularyError(msg)
         for tool_id in self.tool_ids:
             if ":" not in tool_id:
-                msg = f"toolset lists fully-qualified tool ids only; got {tool_id!r} (AD-16; FR-Q41)"
+                msg = (
+                    f"toolset lists fully-qualified tool ids only; got {tool_id!r} (AD-16; FR-Q41)"
+                )
                 raise VocabularyError(msg)
         object.__setattr__(self, "tool_ids", tuple(dict.fromkeys(self.tool_ids)))
 

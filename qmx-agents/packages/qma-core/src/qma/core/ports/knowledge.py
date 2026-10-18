@@ -51,9 +51,7 @@ KNOWLEDGE_SOURCE_OPERATIONS: Final[frozenset[str]] = frozenset(
 )
 
 # Desk-agnostic Tool Registry query surface (CT-44; DEC-0318).
-KNOWLEDGE_QUERY_SURFACE: Final[frozenset[str]] = frozenset(
-    {"search", "retrieve", "cite"}
-)
+KNOWLEDGE_QUERY_SURFACE: Final[frozenset[str]] = frozenset({"search", "retrieve", "cite"})
 
 EVIDENCE_CONFIDENCE_DIMENSION_COUNT: Final[int] = 6
 
@@ -342,9 +340,7 @@ def build_corpus_snapshot(
                 path=raw_path,
                 given=repr(type(raw_payload).__name__),
             )
-        digests[raw_path.strip().replace("\\", "/")] = fingerprint_bytes(
-            raw_payload
-        ).value
+        digests[raw_path.strip().replace("\\", "/")] = fingerprint_bytes(raw_payload).value
     tree = tree_digest(digests)
     if is_refusal(tree):
         return tree
@@ -490,9 +486,7 @@ def parse_provenance(
             given=repr(type(value).__name__),
         )
     body = cast("Mapping[str, object]", value)
-    missing = sorted(
-        field for field in PROVENANCE_MANDATORY_FIELDS if field not in body
-    )
+    missing = sorted(field for field in PROVENANCE_MANDATORY_FIELDS if field not in body)
     if missing:
         return _invalid(
             "provenance",

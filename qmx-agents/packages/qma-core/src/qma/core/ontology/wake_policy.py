@@ -74,9 +74,7 @@ def _policy(field: str, reason: str, **extra: object) -> TypedRefusal:
     )
 
 
-def refuse_model_wake_policy_write(
-    *, source: object = "model", **extra: object
-) -> TypedRefusal:
+def refuse_model_wake_policy_write(*, source: object = "model", **extra: object) -> TypedRefusal:
     """Refuse a model/agent/hook attempt to author, alter, or override WakePolicy."""
     return _policy(
         "wake_policy",

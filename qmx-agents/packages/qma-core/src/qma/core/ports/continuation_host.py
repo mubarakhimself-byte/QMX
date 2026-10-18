@@ -46,9 +46,7 @@ __all__ = [
 ]
 
 
-CONTINUATION_LAPTOP_OFF_PROMISED_KEY: Final[str] = (
-    "registry:continuation.laptop_off_promised"
-)
+CONTINUATION_LAPTOP_OFF_PROMISED_KEY: Final[str] = "registry:continuation.laptop_off_promised"
 GAP_0062_HOST_MACHINE: Final[str] = "operator_config"
 GAP_0062_ALWAYS_ON_HOST: Final[Mapping[str, str]] = MappingProxyType(
     {
@@ -306,9 +304,7 @@ def evaluate_laptop_off_configuration(
                 reason=lifetime.value,
             )
         )
-    remote_registered = tuple(
-        env for env in envs if is_remote_continuation_kind(env.kind)
-    )
+    remote_registered = tuple(env for env in envs if is_remote_continuation_kind(env.kind))
     reachable_remote = tuple(env for env in remote_registered if env.reachable)
     reachable = tuple(env for env in envs if env.reachable)
     reachable_only_colocated = bool(reachable) and all(

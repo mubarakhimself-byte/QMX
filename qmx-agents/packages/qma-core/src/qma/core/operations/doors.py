@@ -106,9 +106,7 @@ def owner_door_summary(
             token = door.adapter.value
             if token not in adapters:
                 adapters.append(token)
-    return MappingProxyType(
-        {owner: tuple(adapters) for owner, adapters in grouped.items()}
-    )
+    return MappingProxyType({owner: tuple(adapters) for owner, adapters in grouped.items()})
 
 
 def admit_operation_door(
@@ -122,9 +120,7 @@ def admit_operation_door(
     """Admit a door for ``op_id`` + ``version``. Unsupported → ``UnsupportedDoor``."""
     adapter_token = adapter.value if isinstance(adapter, DoorAdapter) else adapter
     if not isinstance(adapter_token, str) or adapter_token.strip() == "":
-        return _invalid(
-            "adapter", "door adapter must be a non-empty string", given=repr(adapter)
-        )
+        return _invalid("adapter", "door adapter must be a non-empty string", given=repr(adapter))
     adapter_token = adapter_token.strip()
     if adapter_token in FORBIDDEN_OPERATOR_CLI_ADAPTERS:
         return UnsupportedDoor.of(

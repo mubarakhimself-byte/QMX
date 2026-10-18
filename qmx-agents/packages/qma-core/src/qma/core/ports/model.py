@@ -250,9 +250,7 @@ def unmet_constraint_for(
         return "tools"
     if needs.vision and not any(entry.supports_vision for entry in class_pool):
         return "vision"
-    if needs.reasoning_effort and not any(
-        entry.supports_reasoning_effort for entry in class_pool
-    ):
+    if needs.reasoning_effort and not any(entry.supports_reasoning_effort for entry in class_pool):
         return "reasoning_effort"
     if needs.parallel_tool_calls and not any(
         entry.supports_parallel_tool_calls for entry in class_pool
@@ -316,9 +314,7 @@ def select_from_eligible(
         return selected, round_robin_cursor
 
     if policy is RoutingPolicy.FILL_FIRST:
-        unsaturated = [
-            entry for entry in pool if entry.fill_units < entry.fill_capacity
-        ]
+        unsaturated = [entry for entry in pool if entry.fill_units < entry.fill_capacity]
         candidates: Sequence[DeploymentRecord] = unsaturated if unsaturated else pool
         _fi, selected = max(
             enumerate(candidates),
@@ -346,9 +342,7 @@ def resolve_model_request(
 ) -> Result[RoutingDecision]:
     """Resolve ModelClass → Deployment; never crosses a class boundary (FR-Q38)."""
     resolved_policy = (
-        policy
-        if isinstance(policy, RoutingPolicy)
-        else parse_closed(RoutingPolicy, policy)
+        policy if isinstance(policy, RoutingPolicy) else parse_closed(RoutingPolicy, policy)
     )
     pool = eligible_pool(request, catalog)
     if not pool:

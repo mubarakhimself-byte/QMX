@@ -40,9 +40,7 @@ def test_ontology_chain_and_work_vocabulary() -> None:
 
 
 def test_desk_slugs_exactly_five_and_shared_with_plugin_prefixes() -> None:
-    assert (
-        frozenset({"research", "trading", "dev", "analysis", "pm"}) == DESK_SLUG_VALUES
-    )
+    assert frozenset({"research", "trading", "dev", "analysis", "pm"}) == DESK_SLUG_VALUES
     assert DESK_PREFIX_TOKENS == DESK_SLUG_VALUES
     assert MANIFEST_DESK_PREFIXES == DESK_PREFIX_TOKENS
     assert set(DeskSlug) == {

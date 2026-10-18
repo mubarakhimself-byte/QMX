@@ -286,14 +286,10 @@ class MemoryCandidate:
 
     def __post_init__(self) -> None:
         if not isinstance(self.provenance, MappingProxyType):
-            object.__setattr__(
-                self, "provenance", MappingProxyType(dict(self.provenance))
-            )
+            object.__setattr__(self, "provenance", MappingProxyType(dict(self.provenance)))
         if not isinstance(self.content, MappingProxyType):
             object.__setattr__(self, "content", MappingProxyType(dict(self.content)))
-        object.__setattr__(
-            self, "supporting_artifacts", tuple(self.supporting_artifacts)
-        )
+        object.__setattr__(self, "supporting_artifacts", tuple(self.supporting_artifacts))
         object.__setattr__(self, "validation_history", tuple(self.validation_history))
         if self.corroboration_count < 0:
             msg = "corroboration_count must be >= 0 (CT-43)"
@@ -331,9 +327,7 @@ class MemoryCandidate:
             validation_history=history,
         )
 
-    def to_payload(
-        self, *, include_admission_confidence: bool = True
-    ) -> Mapping[str, object]:
+    def to_payload(self, *, include_admission_confidence: bool = True) -> Mapping[str, object]:
         """JSON-native candidate payload.
 
         When ``include_admission_confidence`` is false the field is omitted so the
@@ -382,13 +376,9 @@ def parse_memory_candidate(
         )
     body = cast("Mapping[str, object]", value)
     if for_propose and "admission_confidence" in body:
-        return refuse_propose_with_admission_confidence(
-            given=body.get("admission_confidence")
-        )
+        return refuse_propose_with_admission_confidence(given=body.get("admission_confidence"))
 
-    missing = sorted(
-        field for field in MEMORY_CANDIDATE_MANDATORY_FIELDS if field not in body
-    )
+    missing = sorted(field for field in MEMORY_CANDIDATE_MANDATORY_FIELDS if field not in body)
     if missing:
         return _invalid(
             "candidate",
@@ -528,9 +518,7 @@ class MemoryProvider(Protocol):
         """Persist an admitted candidate into provider-owned storage."""
         ...
 
-    def recall(
-        self, scope: str, token_budget: int
-    ) -> Result[tuple[MemoryCandidate, ...]]:
+    def recall(self, scope: str, token_budget: int) -> Result[tuple[MemoryCandidate, ...]]:
         """Return admitted memory fitting the caller token budget."""
         ...
 
@@ -546,9 +534,7 @@ class MemoryProvider(Protocol):
         """Return supersession history for a memory id."""
         ...
 
-    def supersede(
-        self, memory_id: str, successor: MemoryCandidate
-    ) -> Result[MemoryCandidate]:
+    def supersede(self, memory_id: str, successor: MemoryCandidate) -> Result[MemoryCandidate]:
         """Mark ``memory_id`` superseded by ``successor``."""
         ...
 

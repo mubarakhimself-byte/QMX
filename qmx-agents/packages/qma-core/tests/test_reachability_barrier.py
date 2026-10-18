@@ -71,9 +71,7 @@ def test_none_enumerates_empty_set_unenumerated_refused() -> None:
     assert is_refusal(empty_allowlist)
     assert empty_allowlist.context["reason"] == "unenumerated_hosts"
 
-    listed = validate_network_posture(
-        "allowlist", ("pypi.org", "files.pythonhosted.org")
-    )
+    listed = validate_network_posture("allowlist", ("pypi.org", "files.pythonhosted.org"))
     assert is_ok(listed)
     assert listed.value[1] == ("pypi.org", "files.pythonhosted.org")
 
@@ -148,9 +146,7 @@ def test_image_validation_refuses_venue_broker_and_node_client() -> None:
     assert qmb_image.context["reason"] == "forbidden_image"
 
     clean = validate_worker_image(
-        WorkerImageManifest.from_values(
-            image="qma-worker:isolated", packages=("qma-core",)
-        )
+        WorkerImageManifest.from_values(image="qma-worker:isolated", packages=("qma-core",))
     )
     assert is_ok(clean)
 
@@ -210,9 +206,7 @@ def test_computer_use_profile_carries_no_venue_state() -> None:
     assert login.context["reason"] == "venue_profile_state"
 
     creds = validate_computer_use_profile(
-        ComputerUseProfile.from_values(
-            saved_credential_refs=("cred://broker/icmarkets",)
-        )
+        ComputerUseProfile.from_values(saved_credential_refs=("cred://broker/icmarkets",))
     )
     assert is_refusal(creds)
     assert creds.context["reason"] == "venue_profile_state"
@@ -220,9 +214,7 @@ def test_computer_use_profile_carries_no_venue_state() -> None:
 
 @pytest.mark.parametrize("via", sorted(HANDED_VIA_SURFACES))
 def test_venue_login_cannot_be_handed_through_agent_surfaces(via: str) -> None:
-    handed = validate_computer_use_profile(
-        ComputerUseProfile.from_values(handed_via=via)
-    )
+    handed = validate_computer_use_profile(ComputerUseProfile.from_values(handed_via=via))
     assert is_refusal(handed)
     assert handed.context["reason"] == "handed_venue_login"
     assert handed.context["via"] == via

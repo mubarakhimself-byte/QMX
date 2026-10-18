@@ -221,9 +221,7 @@ def parse_job_artifact(payload: object) -> Result[JobArtifact]:
     try:
         completeness = parse_closed(ArtifactCompleteness, mapping.get("completeness"))
     except VocabularyError as exc:
-        return _invalid(
-            "completeness", str(exc), given=repr(mapping.get("completeness"))
-        )
+        return _invalid("completeness", str(exc), given=repr(mapping.get("completeness")))
     return Ok(JobArtifact(fp1=fp1.strip(), completeness=completeness))
 
 
@@ -334,9 +332,7 @@ class JobHandle:
             "later_commands": [dict(item) for item in self.later_commands],
         }
         if self.originating_product_session_ref is not None:
-            payload["originating_product_session_ref"] = (
-                self.originating_product_session_ref
-            )
+            payload["originating_product_session_ref"] = self.originating_product_session_ref
         if self.abort_reason is not None:
             payload["abort_reason"] = self.abort_reason
         if self.unknown_trigger is not None:
@@ -383,15 +379,11 @@ class JobHandle:
             task_id=self.task_id,
             wake_mailbox=self.wake_mailbox,
             abort_reason=self.abort_reason if abort_reason is None else abort_reason,
-            unknown_trigger=(
-                self.unknown_trigger if unknown_trigger is None else unknown_trigger
-            ),
+            unknown_trigger=(self.unknown_trigger if unknown_trigger is None else unknown_trigger),
             correlation_id=self.correlation_id,
             wake_armed=self.wake_armed if wake_armed is None else wake_armed,
             recorded_resolution=(
-                self.recorded_resolution
-                if recorded_resolution is None
-                else recorded_resolution
+                self.recorded_resolution if recorded_resolution is None else recorded_resolution
             ),
             logical_run_id=self.logical_run_id,
             attempt_id=self.attempt_id,
@@ -432,9 +424,7 @@ class JobHandle:
             return _forbidden_state_refusal(str(raw_state))
         try:
             resolved_state = (
-                state
-                if isinstance(state, JobHandleState)
-                else parse_closed(JobHandleState, state)
+                state if isinstance(state, JobHandleState) else parse_closed(JobHandleState, state)
             )
         except VocabularyError as exc:
             return _invalid("state", str(exc), given=repr(state))
@@ -492,8 +482,7 @@ class JobHandle:
         corr = correlation_id.strip() if isinstance(correlation_id, str) else ""
         reason = (
             abort_reason.strip()
-            if resolved_state is JobHandleState.ABORTED
-            and isinstance(abort_reason, str)
+            if resolved_state is JobHandleState.ABORTED and isinstance(abort_reason, str)
             else None
         )
         durable_id = job_id.strip()
@@ -561,9 +550,7 @@ class JobHandle:
             mapping = cast("Mapping[object, object]", recorded)
             resolution = {str(key): value for key, value in mapping.items()}
         else:
-            return _invalid(
-                "recorded_resolution", "recorded_resolution must be an object"
-            )
+            return _invalid("recorded_resolution", "recorded_resolution must be an object")
         return cls.try_create(
             job_id=payload.get("job_id"),
             owner=payload.get("owner"),
@@ -579,9 +566,7 @@ class JobHandle:
             attempt_id=payload.get("attempt_id", 1),
             artifacts=payload.get("artifacts", ()),
             later_commands=payload.get("later_commands", ()),
-            originating_product_session_ref=payload.get(
-                "originating_product_session_ref"
-            ),
+            originating_product_session_ref=payload.get("originating_product_session_ref"),
         )
 
 

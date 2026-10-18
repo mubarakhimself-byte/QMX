@@ -131,14 +131,10 @@ def test_timeout_decision_fail_closed_carve_outs() -> None:
     assert HOOK_TIMEOUT_REASON == "hook_timeout"
     assert timeout_decision_for_event("before_tool") is HookResultDecision.DENY
     assert timeout_decision_for_event("before_memory_write") is HookResultDecision.DENY
-    assert (
-        timeout_decision_for_event("before_ledger_append") is HookResultDecision.ALLOW
-    )
+    assert timeout_decision_for_event("before_ledger_append") is HookResultDecision.ALLOW
     assert timeout_decision_for_event("agent_stop") is HookResultDecision.OBSERVE
     assert timeout_decision_for_event("after_tool") is HookResultDecision.OBSERVE
-    assert (
-        timeout_decision_for_event("after_ledger_append") is HookResultDecision.OBSERVE
-    )
+    assert timeout_decision_for_event("after_ledger_append") is HookResultDecision.OBSERVE
     assert timeout_decision_for_event("review_required") is HookResultDecision.DENY
 
 
@@ -156,18 +152,10 @@ def test_hook_result_total_precedence() -> None:
     assert hook_result_rank("defer") < hook_result_rank("ask")
     assert hook_result_rank("ask") < hook_result_rank("allow")
     assert hook_result_rank("allow") < hook_result_rank("observe")
-    assert (
-        most_restrictive_hook_result(("allow", "deny", "observe"))
-        is HookResultDecision.DENY
-    )
+    assert most_restrictive_hook_result(("allow", "deny", "observe")) is HookResultDecision.DENY
     # observe never participates when a non-observe decision is present.
-    assert (
-        most_restrictive_hook_result(("observe", "allow")) is HookResultDecision.ALLOW
-    )
-    assert (
-        most_restrictive_hook_result(("observe", "observe"))
-        is HookResultDecision.OBSERVE
-    )
+    assert most_restrictive_hook_result(("observe", "allow")) is HookResultDecision.ALLOW
+    assert most_restrictive_hook_result(("observe", "observe")) is HookResultDecision.OBSERVE
 
 
 def test_handle_and_work_states() -> None:
@@ -251,41 +239,22 @@ def test_handle_and_work_states() -> None:
     )
     assert JOB_HANDLE_TERMINAL_STATES.isdisjoint(JOB_HANDLE_NONTERMINAL_STATES)
     assert TASK_MISSION_TERMINAL_STATES.isdisjoint(TASK_MISSION_NONTERMINAL_STATES)
-    assert frozenset(JobHandleState) == (
-        JOB_HANDLE_TERMINAL_STATES | JOB_HANDLE_NONTERMINAL_STATES
-    )
+    assert frozenset(JobHandleState) == (JOB_HANDLE_TERMINAL_STATES | JOB_HANDLE_NONTERMINAL_STATES)
     assert frozenset(TaskMissionState) == (
         TASK_MISSION_TERMINAL_STATES | TASK_MISSION_NONTERMINAL_STATES
     )
-    assert (
-        map_job_handle_to_task_state(JobHandleState.QUEUED) is TaskMissionState.RUNNING
-    )
-    assert (
-        map_job_handle_to_task_state(JobHandleState.RUNNING) is TaskMissionState.RUNNING
-    )
+    assert map_job_handle_to_task_state(JobHandleState.QUEUED) is TaskMissionState.RUNNING
+    assert map_job_handle_to_task_state(JobHandleState.RUNNING) is TaskMissionState.RUNNING
     assert map_job_handle_to_task_state(JobHandleState.DONE) is TaskMissionState.DONE
-    assert (
-        map_job_handle_to_task_state(JobHandleState.FAILED) is TaskMissionState.FAILED
-    )
-    assert (
-        map_job_handle_to_task_state(JobHandleState.ABORTED) is TaskMissionState.FAILED
-    )
-    assert (
-        map_job_handle_to_task_state(JobHandleState.CANCELLED)
-        is TaskMissionState.CANCELLED
-    )
-    assert (
-        map_job_handle_to_task_state(JobHandleState.UNKNOWN) is TaskMissionState.UNKNOWN
-    )
+    assert map_job_handle_to_task_state(JobHandleState.FAILED) is TaskMissionState.FAILED
+    assert map_job_handle_to_task_state(JobHandleState.ABORTED) is TaskMissionState.FAILED
+    assert map_job_handle_to_task_state(JobHandleState.CANCELLED) is TaskMissionState.CANCELLED
+    assert map_job_handle_to_task_state(JobHandleState.UNKNOWN) is TaskMissionState.UNKNOWN
     assert len(JOB_HANDLE_TO_TASK_STATE) == len(JobHandleState)
     for job_state in JobHandleState:
         mapped = map_job_handle_to_task_state(job_state)
-        assert is_job_handle_terminal(job_state) is (
-            job_state in JOB_HANDLE_TERMINAL_STATES
-        )
-        assert is_task_mission_terminal(mapped) is (
-            mapped in TASK_MISSION_TERMINAL_STATES
-        )
+        assert is_job_handle_terminal(job_state) is (job_state in JOB_HANDLE_TERMINAL_STATES)
+        assert is_task_mission_terminal(mapped) is (mapped in TASK_MISSION_TERMINAL_STATES)
         # aborted never becomes cancelled (DEC-0316).
         if job_state is JobHandleState.ABORTED:
             assert mapped is not TaskMissionState.CANCELLED
@@ -337,10 +306,7 @@ def test_memory_graph_environment_refinement_scopes() -> None:
         "browser",
         "desktop",
     }
-    assert {member.value for member in EnvironmentLifecycle} == {
-        "ephemeral",
-        "persistent",
-    }
+    assert {member.value for member in EnvironmentLifecycle} == {"ephemeral", "persistent"}
     assert {member.value for member in NetworkPolicy} == {"none", "allowlist"}
     assert len(tuple(RefinementEditKind)) == 9
     assert "variable" not in {member.value for member in RefinementEditKind}
