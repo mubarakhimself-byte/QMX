@@ -25,9 +25,8 @@ STORE: Final = Path("D:/QMX-worktrees/qma-ship/build")
 EVIDENCE: Final = STORE / "evidence" / "prb-l"
 HOMES: Final = STORE / "homes" / "prb-l"
 HIS_LIBRARY: Final = Path.home() / ".qmx" / "library.db"
-HIS_TRANSCRIPTS: Final = Path.home() / ".claude" / "projects" / "C--Users-Mubarak-Desktop-QMX"
 
-type Outcome = Literal["PASS", "FAIL"]
+Outcome = Literal["PASS", "FAIL"]
 
 
 @dataclass(frozen=True)

@@ -32,10 +32,13 @@ REPEATS: Final = 10
 PASS_P95_MS: Final = 50.0
 SEED: Final = 2026_10_18
 WALKED: Final = ("consumed", "derived-from", "uses", "compiles-to")
+WALK_PARAMS: Final = {f"w{n}": relation for n, relation in enumerate(WALKED)}
 NOT_WALKED: Final = ("cites", "mentions")
 KINDS: Final = ("artifact", "backtest-result", "dataset", "memory-row", "workflow-run", "source")
 RANK: Final = {"none": 0, "superseded": 1, "corrected": 2, "quarantined": 3}
-FALLBACK: Final = "LIB2 adds a derived closure index rebuilt from the edges (an index, never evidence)."
+FALLBACK: Final = (
+    "LIB2 adds a derived closure index rebuilt from the edges (an index, never evidence)."
+)
 
 SCHEMA: Final = """
 CREATE TABLE items(item_id TEXT PRIMARY KEY, kind TEXT NOT NULL, head TEXT NOT NULL);
@@ -49,11 +52,11 @@ CREATE INDEX edges_down ON edges(dst, type);
 CREATE INDEX objects_item ON objects(item_id);
 """
 
-MARKS_SQL: Final = f"""
+MARKS_SQL: Final = """
 WITH RECURSIVE up(node, child) AS (
-  SELECT dst, src FROM edges WHERE src = :start AND type IN {WALKED}
+  SELECT dst, src FROM edges WHERE src = :start AND type IN (:w0, :w1, :w2, :w3)
   UNION
-  SELECT e.dst, e.src FROM edges e JOIN up ON e.src = up.node WHERE e.type IN {WALKED}
+  SELECT e.dst, e.src FROM edges e JOIN up ON e.src = up.node WHERE e.type IN (:w0, :w1, :w2, :w3)
 )
 SELECT up.node, up.child,
   (SELECT m.mark FROM objects o JOIN marks m ON m.item_id = o.item_id
@@ -77,7 +80,9 @@ def marks(db: sqlite3.Connection, object_id: str) -> Marks:
     """The worst mark upstream of `object_id` and the path that carries it (Library AD-22)."""
     child_of: dict[str, str] = {}
     worst, at = "none", ""
-    for node, child, stored, superseded, corrected in db.execute(MARKS_SQL, {"start": object_id}):
+    for node, child, stored, superseded, corrected in db.execute(
+        MARKS_SQL, {"start": object_id, **WALK_PARAMS}
+    ):
         child_of.setdefault(node, child)
         mark = (
             "quarantined"
@@ -115,7 +120,7 @@ def oid(n: int) -> str:
 def build(path: Path) -> list[str]:
     """Write the store and return the probed tips, half with a quarantined root 20 hops up."""
     path.unlink(missing_ok=True)
-    rng = random.Random(SEED)
+    rng = random.Random(SEED)  # noqa: S311
     db = sqlite3.connect(path)
     db.executescript(SCHEMA)
     items: list[tuple[str, str, str]] = []
@@ -190,7 +195,11 @@ def verdict(samples_ms: Sequence[float], ancestry: int, levels: int) -> Verdict:
     }
     if ancestry < 500 or levels < 20:
         return Verdict(
-            "P-TAINT", "FAIL", numbers, "the probe graph is smaller than the pass line names", FALLBACK
+            "P-TAINT",
+            "FAIL",
+            numbers,
+            "the probe graph is smaller than the pass line names",
+            FALLBACK,
         )
     if worst <= PASS_P95_MS:
         return Verdict("P-TAINT", "PASS", numbers, f"p95 is within {PASS_P95_MS:.0f} ms")
@@ -216,9 +225,12 @@ def main() -> None:
     samples: list[float] = []
     ancestry, deepest = CLUSTER, 0
     for tip in tips:
-        for _ in range(REPEATS):
+        began = time.perf_counter()
+        found = marks(db, tip)
+        samples.append((time.perf_counter() - began) * 1000)
+        for _ in range(REPEATS - 1):
             began = time.perf_counter()
-            found = marks(db, tip)
+            marks(db, tip)
             samples.append((time.perf_counter() - began) * 1000)
         hops = depth(found, tip)
         ancestry, deepest = min(ancestry, len(found.child_of)), max(deepest, hops)

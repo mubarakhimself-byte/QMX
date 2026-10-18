@@ -1,0 +1,310 @@
+{
+  "note": "Claude's default (HARDENING-PLAN Appendix H): 40 questions written by the PRB-L builder over his ~/.qmx/library.db as of 2026-10-18, because no labelled set exists. The operator may replace them. His store holds 11 items, all one workflow-result titled remote-flow with the same content, so 12 questions expect every one of those ids and 28 expect an abstention.",
+  "source_sha256": "304a0e994f0c19e6ecb95d2a09ec17c7573e9b674aedf715b028a71a2b905a0b",
+  "questions": [
+    {
+      "question": "the remote-flow result",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "remote flow workflow result",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "show me the workflow-result from remote-flow",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "what did the remote-flow run produce",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "the resumed remote flow output",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "remote-flow",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "latest remote-flow workflow result",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "results of the remote flow workflow",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "find the workflow result named remote-flow",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "which workflow results do I have",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "open the remote-flow item",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "remote flow first and resumed results",
+      "expected": [
+        "33b60b36-0207-4cca-b221-40dea5e4768e",
+        "5c9a3ad7-bc80-45fd-8891-fcadd99d6e1a",
+        "15a376cf-c81a-43d1-9bc9-20271eba54dd",
+        "9df34f75-8efd-4000-8aa3-afe7e97650eb",
+        "2126ac41-c240-43c9-b36c-90d8754c2dff",
+        "38ff65b2-6433-4f03-936c-c523e991c5dd",
+        "d2ccbe7e-6e59-435a-9afa-c787cafd731b",
+        "0a1b1754-1d4e-4577-9568-3675688d1f1b",
+        "6945707e-4bfe-49b3-bb84-326a72fcc2b0",
+        "2ec1bae1-c1c4-48bc-a956-fff1634056b0",
+        "c454a345-02f7-45a8-b24d-f9af16df18c5"
+      ]
+    },
+    {
+      "question": "EURUSD London breakout backtest",
+      "expected": []
+    },
+    {
+      "question": "the momentum pod hypothesis",
+      "expected": []
+    },
+    {
+      "question": "my risk sizing notes",
+      "expected": []
+    },
+    {
+      "question": "the XAUUSD mean reversion dataset",
+      "expected": []
+    },
+    {
+      "question": "last week's morning digest",
+      "expected": []
+    },
+    {
+      "question": "the Contabo heartbeat report",
+      "expected": []
+    },
+    {
+      "question": "OpenRouter spend summary",
+      "expected": []
+    },
+    {
+      "question": "the revolution loop template",
+      "expected": []
+    },
+    {
+      "question": "Kimi K2.5 eval results",
+      "expected": []
+    },
+    {
+      "question": "the trading node spine",
+      "expected": []
+    },
+    {
+      "question": "a dead end about volatility filters",
+      "expected": []
+    },
+    {
+      "question": "the holdout dataset card for GBPJPY",
+      "expected": []
+    },
+    {
+      "question": "articles about order flow",
+      "expected": []
+    },
+    {
+      "question": "the cTrader demo account statement",
+      "expected": []
+    },
+    {
+      "question": "pod P backtest result",
+      "expected": []
+    },
+    {
+      "question": "the Hindsight memory decision",
+      "expected": []
+    },
+    {
+      "question": "my YouTube playlist clippings",
+      "expected": []
+    },
+    {
+      "question": "the copilot session from yesterday",
+      "expected": []
+    },
+    {
+      "question": "the risk lab handoff",
+      "expected": []
+    },
+    {
+      "question": "drawdown chart for the champion workflow",
+      "expected": []
+    },
+    {
+      "question": "the QML research epics",
+      "expected": []
+    },
+    {
+      "question": "test report for the dual-run diff",
+      "expected": []
+    },
+    {
+      "question": "which hypotheses are refuted",
+      "expected": []
+    },
+    {
+      "question": "the London session volatility study",
+      "expected": []
+    },
+    {
+      "question": "my mini app outputs",
+      "expected": []
+    },
+    {
+      "question": "the gold scalping strategy book",
+      "expected": []
+    },
+    {
+      "question": "news sentiment source list",
+      "expected": []
+    },
+    {
+      "question": "the challenger workflow for EURUSD",
+      "expected": []
+    }
+  ]
+}

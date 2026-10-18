@@ -97,8 +97,8 @@ def verdict(parent: Sequence[str], inner: Sequence[str]) -> Verdict:
 
 
 def main() -> None:
-    from qmx_engine.definition.folder import load
-    from qmx_engine.definition.validate import checked, validate
+    from qmx_engine.definition.folder import load  # noqa: PLC0415
+    from qmx_engine.definition.validate import checked, validate  # noqa: PLC0415
 
     log = Log("prb-l-taint-nest")
     parent, inner, control = shapes(HOMES / "p_nest")
