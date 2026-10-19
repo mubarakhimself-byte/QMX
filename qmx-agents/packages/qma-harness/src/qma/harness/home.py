@@ -36,6 +36,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import PermissionResultDeny
@@ -47,10 +48,13 @@ from qma.harness.launch import (
     Budgets,
     ChatConfig,
     ChatKind,
+    ChatPermissions,
     Child,
+    Home,
     Interactive,
     LaunchRefused,
     PlanLaunch,
+    SubAgent,
     argv_length,
     build_options,
     launch_env,
@@ -144,6 +148,11 @@ class QmxHome:
     @property
     def agent_memory_dir(self) -> Path:
         return self.root / "agent-memory"
+
+    def launch_dir(self, chat: SessionId) -> Path:
+        """The settings and system text files of the chat's current launch. Under `chats/`,
+        which the gate protects, so no agent edits what its next launch reads."""
+        return self.chats_dir / chat
 
     def memory_dir(self, workspace: Path) -> Path:
         """Auto memory for launches in `workspace`. Not a protected path, so agents read and
@@ -614,6 +623,7 @@ def _kind(document: Mapping[str, Any]) -> ChatKind:
 
 def _record_document(record: ChatRecord) -> dict[str, object]:
     config = record.config
+    permissions = config.permissions
     return {
         "session_id": record.session_id,
         "config": {
@@ -623,6 +633,29 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
             "mode": config.mode,
             "workspace": str(config.workspace),
             "kind": _kind_document(config.kind),
+            "compact_at": config.compact_at,
+            "tools": None if config.tools is None else list(config.tools),
+            "home": {"kind": config.home.kind, "project_id": config.home.project_id},
+            "packs": list(config.packs),
+            "agents": {
+                name: {
+                    "description": agent.description,
+                    "prompt": agent.prompt,
+                    "tools": None if agent.tools is None else list(agent.tools),
+                    "model": agent.model,
+                }
+                for name, agent in config.agents.items()
+            },
+            "mcp_servers": dict(config.mcp_servers),
+            "append_system_prompt": config.append_system_prompt,
+            "hook_sink": config.hook_sink,
+            "permissions": {
+                "policy": permissions.policy,
+                "allow": list(permissions.allow),
+                "deny": list(permissions.deny),
+            },
+            "policy_args": dict(config.policy_args),
+            "claude_hooks": dict(config.claude_hooks),
         },
         "started": record.started,
         "turn": record.turn,
@@ -630,9 +663,14 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
 
 
 def _record(document: Mapping[str, Any]) -> ChatRecord:
+    """A record written before an option existed reads that option's default."""
     config = document["config"]
     if document["turn"] not in ("idle", "running"):
         raise ValueError(f"unknown turn state {document['turn']!r}")
+    home = cast("dict[str, Any]", config.get("home") or {})
+    permissions = cast("dict[str, Any]", config.get("permissions") or {})
+    agents = cast("dict[str, dict[str, Any]]", config.get("agents") or {})
+    tools = config.get("tools")
     return ChatRecord(
         session_id=session_id(document["session_id"]),
         config=ChatConfig(
@@ -642,6 +680,31 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
             mode=config["mode"],
             workspace=Path(config["workspace"]),
             kind=_kind(config["kind"]),
+            compact_at=config.get("compact_at"),
+            tools=None if tools is None else tuple(tools),
+            home=Home(home.get("kind", "general"), home.get("project_id")),
+            packs=tuple(config.get("packs", ())),
+            agents=MappingProxyType(
+                {
+                    name: SubAgent(
+                        agent["description"],
+                        agent["prompt"],
+                        None if agent.get("tools") is None else tuple(agent["tools"]),
+                        agent.get("model"),
+                    )
+                    for name, agent in agents.items()
+                }
+            ),
+            mcp_servers=MappingProxyType(config.get("mcp_servers") or {}),
+            append_system_prompt=config.get("append_system_prompt"),
+            hook_sink=config.get("hook_sink"),
+            permissions=ChatPermissions(
+                permissions.get("policy"),
+                tuple(permissions.get("allow", ())),
+                tuple(permissions.get("deny", ())),
+            ),
+            policy_args=MappingProxyType(config.get("policy_args") or {}),
+            claude_hooks=MappingProxyType(config.get("claude_hooks") or {}),
         ),
         started=bool(document["started"]),
         turn=document["turn"],
@@ -825,14 +888,16 @@ async def _no_tools(
 DOCTOR_CHAT: Final = session_id("00000000-0000-4000-8000-000000000000")
 
 
-def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) -> DoctorLine:
+def _argv_line(home: QmxHome, workspace: Path, launcher: Path) -> DoctorLine:
+    files = home.launch_dir(DOCTOR_CHAT)
     options = build_options(
         ChatConfig(PLAN, "opus", None, "default", workspace, Interactive()),
         session_id=DOCTOR_CHAT,
         transcript_exists=False,
         env=launch_env(PlanLaunch(), home=home, session_id=DOCTOR_CHAT, cap=""),
         home=home,
-        settings_json=settings,
+        settings_file=files / "settings.json",
+        system_file=files / "system.md",
         launcher=launcher,
         can_use_tool=_no_tools,
         mcp_servers={},
@@ -889,12 +954,12 @@ def doctor(
     shown = json.dumps(document, sort_keys=True, separators=(",", ":"))
     lines.append(
         DoctorLine(
-            "inline settings",
-            len(settings) < ARGV_BUDGET,
-            f"{len(settings)} characters for {workspace}: {shown}",
+            "launch settings",
+            True,
+            f"{len(settings)} characters, passed by file, for {workspace}: {shown}",
         )
     )
-    lines.append(_argv_line(home, workspace, settings, launcher))
+    lines.append(_argv_line(home, workspace, launcher))
     auth = plan_auth_method(home, settings)
     lines.append(
         DoctorLine(

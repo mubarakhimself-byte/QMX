@@ -61,6 +61,7 @@ GATE = money.GateRules(
 )
 
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
+FILES = Path("D:/qmx/chats") / CHAT
 
 
 async def refuse(name: str, _input: dict[str, Any], _context: ToolPermissionContext) -> Any:
@@ -145,7 +146,8 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         transcript_exists=False,
         env={"CLAUDE_CONFIG_DIR": "D:/qmx/claude"},
         home=home,
-        settings_json='{"forceLoginMethod":"claudeai"}',
+        settings_file=FILES / "settings.json",
+        system_file=FILES / "system.md",
         launcher=launcher,
         can_use_tool=refuse,
         mcp_servers={},
@@ -160,7 +162,8 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
-            "append": instructions(home, workspace),
+            "exclude_dynamic_sections": True,
+            "snapshot": False,
         },
         permission_mode="default",
         model="haiku",
@@ -168,7 +171,7 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         cwd=workspace,
         env={"CLAUDE_CONFIG_DIR": "D:/qmx/claude"},
         setting_sources=[],
-        settings='{"forceLoginMethod":"claudeai"}',
+        settings=str(FILES / "settings.json"),
         plugins=[{"type": "local", "path": str(home.plugin_dir)}],
         strict_mcp_config=True,
         mcp_servers={},
@@ -179,7 +182,10 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         resume=None,
         include_partial_messages=True,
         enable_file_checkpointing=True,
-        extra_args={"replay-user-messages": None},
+        extra_args={
+            "replay-user-messages": None,
+            "append-system-prompt-file": (FILES / "system.md").as_posix(),
+        },
         verbatim_prompts=False,
         max_turns=None,
         max_budget_usd=None,
@@ -190,7 +196,8 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         transcript_exists=True,
         env={},
         home=home,
-        settings_json="{}",
+        settings_file=FILES / "settings.json",
+        system_file=FILES / "system.md",
         launcher=launcher,
         can_use_tool=refuse,
         mcp_servers={},
@@ -207,23 +214,24 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
 def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
     home: QmxHome, workspace: Path
 ) -> None:
-    (workspace / "AGENTS.md").write_text("x" * 31_000, encoding="utf-8")
+    big: dict[str, Any] = {"big": {"type": "stdio", "command": "x" * 31_000}}
     options = build_options(
         ChatConfig(PLAN, "haiku", None, "default", workspace, Interactive()),
         session_id=CHAT,
         transcript_exists=False,
         env={},
         home=home,
-        settings_json="{}",
+        settings_file=FILES / "settings.json",
+        system_file=FILES / "system.md",
         launcher=Path(sys.executable),
         can_use_tool=refuse,
-        mcp_servers={},
+        mcp_servers=big,
         gate=GATE,
         budgets=Budgets(),
     )
-    with pytest.raises(LaunchRefused, match=r"largest part is QMX\.md and the workspace CLAUDE"):
+    with pytest.raises(LaunchRefused, match=r"largest part is the MCP config"):
         assert_argv_fits(options)
-    (workspace / "AGENTS.md").write_text("short", encoding="utf-8")
+    (workspace / "AGENTS.md").write_text("x" * 31_000, encoding="utf-8")
     assert_argv_fits(
         build_options(
             ChatConfig(PLAN, "haiku", None, "default", workspace, Interactive()),
@@ -231,7 +239,8 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
             transcript_exists=False,
             env={},
             home=home,
-            settings_json="{}",
+            settings_file=FILES / "settings.json",
+            system_file=FILES / "system.md",
             launcher=Path(sys.executable),
             can_use_tool=refuse,
             mcp_servers={},

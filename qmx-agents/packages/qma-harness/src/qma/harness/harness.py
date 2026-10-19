@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import json
 import logging
 import os
 import shutil
@@ -26,7 +27,8 @@ from collections import Counter
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, cast
 
 from qmx_broker.service import BrokerService
 from qmx_control.models import ControlError
@@ -51,6 +53,7 @@ from qma.harness.chat import (
     ChatDeps,
     InjectedText,
     OperatorText,
+    Policy,
     Prompt,
     Quote,
     RewindPoint,
@@ -66,6 +69,8 @@ from qma.harness.home import (
     DoctorLine,
     QmxHome,
     SessionId,
+    check_hooks,
+    check_rules,
     cli_version,
     ensure_homes,
     list_records,
@@ -76,18 +81,24 @@ from qma.harness.home import (
 )
 from qma.harness.launch import (
     LAUNCHER,
+    Background,
     Budgets,
     ChatConfig,
     ChatHooks,
     ChatKind,
+    ChatPermissions,
     Child,
     ConfigChange,
     Effort,
+    Home,
+    HookSink,
     Interactive,
+    JsonMap,
     LaunchRefused,
     PermissionMode,
     PlanLaunch,
     RelayedLaunch,
+    SubAgent,
     TestMode,
     assert_scrubbed,
     chat_options_refusal,
@@ -120,6 +131,7 @@ from qma.harness.profiles import (
     KeyProvider,
     Profile,
     ProfileError,
+    ProfileName,
     Profiles,
     gpt_refusal,
     parse_profiles,
@@ -128,6 +140,7 @@ from qma.harness.profiles import (
 from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
 from qma.harness.tools import DelegateRefused, keyring_refs, secret_files
+from qma.harness.turns import TurnHandle, watch_turn
 from qma.harness.usage import (
     PostureView,
     ReadingView,
@@ -149,16 +162,20 @@ UNKNOWN_OUTCOME = "the last turn ended with an unknown outcome; send a message t
 METER_WAIT_S = 60.0
 METER_MODEL = "haiku"
 METER_PROMPT = "Reply with the single word OK."
+METER_COOLDOWN_S = 300.0
+"""Claude's default. After a meter turn that brought no reading, no other runs this long, so a
+turn with no rate-limit event does not cost a haiku turn on every later call (L-16)."""
 REAP_TICK_S = 60.0
-SLOT_POLL_S = 0.1
-"""How often a send waiting for a slot looks again. A slot frees when a turn ends or a CLI
-exits, which the chat does not signal to the harness."""
 
 log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class NewChat:
+    """Every option of a chat. All but `hooks` are written on the chat record at birth, so a
+    chat reloaded after a host restart launches as it started. Sinks and policies are named
+    here and resolved on the harness at each launch, never stored as callables."""
+
     title: str
     model: str = "opus"
     effort: Effort | None = None
@@ -172,12 +189,54 @@ class NewChat:
     """Background and Child only: auto-compact at this share of the context window. None
     keeps the CLI's default."""
     hooks: ChatHooks | None = None
-    """Background and Child only: observe-only callbacks after the money gate."""
+    """Background and Child only: observe-only callbacks after the money gate, held in this
+    process only. A program that must keep its hooks across a restart names a `hook_sink`."""
+    home: Home | None = None
+    """None is `general`, or the parent's home for a Child."""
+    packs: tuple[str, ...] = ()
+    tools: tuple[str, ...] | None = None
+    """None is the `claude_code` preset; `()` is no tool at all."""
+    agents: Mapping[str, SubAgent] = field(default_factory=dict[str, SubAgent])
+    mcp_servers: Mapping[str, JsonMap] = field(default_factory=dict[str, JsonMap])
+    append_system_prompt: str | None = None
+    hook_sink: str | None = None
+    permissions: ChatPermissions = field(default_factory=ChatPermissions)
+    policy_args: JsonMap = field(default_factory=dict[str, Any])
+    claude_hooks: JsonMap = field(default_factory=dict[str, Any])
+
+    def config(self, profile: ProfileName, workspace: Path, home: Home) -> ChatConfig:
+        return ChatConfig(
+            profile=profile,
+            model=self.model,
+            effort=self.effort,
+            mode=self.mode,
+            workspace=workspace,
+            kind=self.kind,
+            compact_at=self.compact_at,
+            hooks=self.hooks,
+            tools=self.tools,
+            home=home,
+            packs=self.packs,
+            agents=MappingProxyType(dict(self.agents)),
+            mcp_servers=MappingProxyType(dict(self.mcp_servers)),
+            append_system_prompt=self.append_system_prompt,
+            hook_sink=self.hook_sink,
+            permissions=self.permissions,
+            policy_args=MappingProxyType(dict(self.policy_args)),
+            claude_hooks=MappingProxyType(dict(self.claude_hooks)),
+        )
 
     def __post_init__(self) -> None:
-        refusal = chat_options_refusal(self.kind, self.compact_at, self.hooks)
+        refusal = chat_options_refusal(self.config(ProfileName(PLAN), Path(), Home()))
         if refusal is not None:
             raise LaunchRefused(refusal)
+        try:
+            check_hooks(self.claude_hooks)
+            check_rules(self.permissions.allow, "permissions.allow")
+            check_rules(self.permissions.deny, "permissions.deny")
+            json.dumps([dict(self.mcp_servers), dict(self.policy_args)])
+        except (LaunchRefused, TypeError, ValueError) as error:
+            raise LaunchRefused(f"a chat option cannot be stored: {error}") from None
 
 
 class UnknownChat(ControlError):
@@ -233,8 +292,16 @@ class Harness:
         self._lenders: dict[SessionId, SessionId] = {}
         """Each `delegate` child and the parent blocked on it, whose slot the child uses."""
         self._ram_mb = machine_ram_mb()
-        self._options: dict[SessionId, tuple[float | None, ChatHooks | None]] = {}
-        """Each chat's `compact_at` and `hooks` from `NewChat`, which its record does not hold."""
+        self._hooks: dict[SessionId, ChatHooks] = {}
+        """Each chat's `NewChat.hooks`, the one option the record cannot hold. Dropped when the
+        chat ends through `close_chat`."""
+        self._freed = asyncio.Event()
+        """Set whenever a slot may have freed: a turn ended, a CLI ended or a send let go."""
+        self._deps = replace(self._deps, on_free=self._freed.set)
+        self._background: set[asyncio.Task[None]] = set()
+        """Sends `run_turn` left running and closes `close_chat` shielded."""
+        self._metered: float | None = None
+        """When the last meter turn ran, on the loop clock."""
         self._reaper = asyncio.create_task(self._reap())
         self.control_port: int | None = None
         """The qmx-control port, set by the server, so the exposure probe can try it."""
@@ -242,6 +309,17 @@ class Harness:
     @property
     def home(self) -> QmxHome:
         return self._deps.home
+
+    def register_sink(self, name: str, sink: HookSink) -> None:
+        """A hook sink chats name in `NewChat.hook_sink`. The host registers its sinks right
+        after `open`, before any chat launches; a launch naming an unregistered sink is
+        refused rather than run without its hooks."""
+        self._deps.sinks[name] = sink
+
+    def register_policy(self, name: str, policy: Policy) -> None:
+        """A permission policy chats name in `NewChat.permissions.policy`, registered like a
+        sink. It answers the chat's asks in-process."""
+        self._deps.policies[name] = policy
 
     @property
     def control(self) -> ControlService:
@@ -322,9 +400,8 @@ class Harness:
         return cls(deps, watch)
 
     async def start_chat(self, spec: NewChat) -> SessionId:
-        """A qmx-control session, then a chat record with `started=False`. No process yet.
-        `compact_at` and `hooks` stay in this harness, because the record on disk does not hold
-        them, and join the chat's config when the chat is first used."""
+        """A qmx-control session, then a chat record with `started=False` holding every
+        option of `spec`. No process yet."""
         home, control = self._deps.home, self._deps.control
         workspace = spec.workspace
         if workspace is not None and not workspace.is_dir():
@@ -341,6 +418,7 @@ class Harness:
             raise LaunchRefused(f"{spec.profile} cannot run the model {spec.model!r}")
         await self._gpt_ready(profile)
         parent = spec.kind.parent if isinstance(spec.kind, Child) else None
+        born = spec.home or (Home() if parent is None else self._chat(parent).record.config.home)
         created = control.sessions_create(
             SessionInput(title=spec.title, origin="qma", parent_id=parent)
         )
@@ -348,23 +426,52 @@ class Harness:
         if workspace is None:
             workspace = home.workspaces_dir / chat
             workspace.mkdir(parents=True, exist_ok=True)
-        config = ChatConfig(
-            profile=profile.name,
-            model=spec.model,
-            effort=spec.effort,
-            mode=spec.mode,
-            workspace=workspace.resolve(),
-            kind=spec.kind,
-            compact_at=spec.compact_at,
-            hooks=spec.hooks,
-        )
+        config = spec.config(profile.name, workspace.resolve(), born)
         write_record(home, ChatRecord(chat, config, started=False, turn="idle"))
-        if spec.compact_at is not None or spec.hooks is not None:
-            self._options[chat] = (spec.compact_at, spec.hooks)
+        if spec.hooks is not None:
+            self._hooks[chat] = spec.hooks
         return chat
 
+    async def set_packs(self, chat: SessionId, packs: tuple[str, ...]) -> None:
+        """Store the chat's pack set on its record. A Cold chat launches with it; a live chat
+        keeps its current launch until its next relaunch."""
+        await self._chat(chat).set_packs(tuple(packs))
+
+    async def run_turn(self, chat: SessionId, prompt: Prompt) -> TurnHandle:
+        """Send `prompt` and return the turn's handle. Returns once the prompt reached the CLI
+        or waits for a slot (a `Queued` event says so). A refusal before either raises as
+        `send` does; one after resolves the handle `failed` with its reason."""
+        handle = TurnHandle(prompt.text)
+        sent = asyncio.create_task(self._dispatch(chat, prompt, handle))
+        queued = asyncio.create_task(handle.queued.wait())
+        try:
+            await asyncio.wait({sent, queued}, return_when=asyncio.FIRST_COMPLETED)
+        except BaseException:
+            sent.cancel()
+            raise
+        finally:
+            queued.cancel()
+        if sent.done():
+            sent.result()
+            return handle
+
+        def landed(task: asyncio.Task[None]) -> None:
+            if task.cancelled():
+                handle.finish(None)
+            elif (error := task.exception()) is not None:
+                handle.finish(None, str(error))
+
+        sent.add_done_callback(landed)
+        self._background.add(sent)
+        sent.add_done_callback(self._background.discard)
+        return handle
+
     async def send(self, chat: SessionId, prompt: Prompt) -> None:
-        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks.
+        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks."""
+        await self._dispatch(chat, prompt, None)
+
+    async def _dispatch(self, chat: SessionId, prompt: Prompt, handle: TurnHandle | None) -> None:
+        """`send`, feeding the turn's handle when `run_turn` asked.
         `InjectedText` into an Interactive chat raises `UntrustedPrompt`. A plan chat refuses
         while the overage stop holds, with a `needs_you` block. An unattended plan chat refuses
         at a `background_cap` only when the operator wrote one. A Cold chat needs a slot first
@@ -390,9 +497,9 @@ class Harness:
                         f"[budgets] background_cap of {share:.0%}"
                     )
         slots = live_chat_slots(budgets, self._ram_mb)
-        await self._take_slot(chat, slots, wait=not isinstance(kind, Interactive))
+        await self._take_slot(chat, slots, wait=not isinstance(kind, Interactive), handle=handle)
         try:
-            await found.send(prompt)
+            await found.send(prompt, handle)
         finally:
             self._release(chat)
 
@@ -400,14 +507,18 @@ class Harness:
         self._sending[chat] -= 1
         if not self._sending[chat]:
             del self._sending[chat]
+        self._freed.set()
 
-    async def _take_slot(self, chat: SessionId, cap: int, *, wait: bool) -> None:
+    async def _take_slot(
+        self, chat: SessionId, cap: int, *, wait: bool, handle: TurnHandle | None = None
+    ) -> None:
         """Hold a slot for `chat` while a send to it runs, closing the least recently used
         idle chat when the table is full. A chat being sent to is never evicted. With no chat
         idle, `wait` waits until a slot frees; otherwise this raises `ChatTableFull`. A
         `delegate` child uses the slot of the parent blocked on it (42 N5), so a parent never
         waits on a child that waits on the parent's slot. Admission is one critical section,
-        so two sends never both take the last slot."""
+        so two sends never both take the last slot. A waiting send wakes when a turn ends, a
+        CLI ends or another send lets go; nothing polls."""
         while True:
             async with self._admit:
                 while True:
@@ -427,6 +538,7 @@ class Harness:
                         reverse=True,
                     )
                     if not idle:
+                        self._freed.clear()
                         break
                     for found in idle:
                         if await found.close_if_idle(0):
@@ -436,7 +548,9 @@ class Harness:
                     full = ChatTableFull(cap, tuple(busy))
                     await self._needs_you(chat, str(full), busy=busy)
                     raise full
-            await asyncio.sleep(SLOT_POLL_S)
+            if handle is not None:
+                handle.on_queued()
+            await self._freed.wait()
 
     async def _delegate(self, parent: SessionId, profile: str, prompt: str) -> str:
         """Backs `mcp__qmx__delegate`. Refuses a profile outside `Profiles.delegate_targets`.
@@ -445,7 +559,9 @@ class Harness:
         operator wrote) on the parent's model tier, workspace and mode. Sends the prompt as
         `InjectedText`, because a model wrote it, and returns the turn's final text. The parent
         is blocked on this tool call, so the child uses the parent's slot. The overage stop
-        refuses through `send`. The child closes, and its grant is revoked, however this ends."""
+        refuses through `send`. The turn runs under the stuck rules (H45): a loop, a fixer that
+        does not converge or a stall interrupts it and refuses with the verdict. The child
+        closes, and its grant is revoked, however this ends."""
         profiles = await asyncio.to_thread(self._deps.relay.profiles)
         refusal = profiles.delegate_refusal(profile)
         if refusal is not None:
@@ -465,24 +581,24 @@ class Harness:
             )
         except (ProfileError, LaunchRefused) as refused:
             raise DelegateRefused(f"the helper did not start: {refused}") from None
-        found = self._chat(child)
-        end = found.next_end()
         self._lenders[child] = parent
         try:
-            await self.send(child, InjectedText(prompt))
-            ended = await end
+            handle = await self.run_turn(child, InjectedText(prompt))
+            verdict = await watch_turn(handle, functools.partial(self.interrupt, child))
+            ended = await handle.result()
         except LaunchRefused as refused:
             raise DelegateRefused(f"the helper did not start: {refused}") from None
         finally:
-            end.cancel()
-            await found.close()
+            await self.close_chat(child)
             del self._lenders[child]
-        if ended is None:
+        if verdict is not None:
+            raise DelegateRefused(f"the helper was stopped by the stuck rules: {verdict}")
+        if ended.status == "unknown":
             raise DelegateRefused("the helper's process ended before it answered")
-        text = ended.result or ""
+        text = ended.text or ""
         if self._deps.redaction:
             text = redact(text)
-        if not ended.ok:
+        if ended.status != "ok":
             raise DelegateRefused(f"the helper's turn failed: {text or ended.terminal_reason}")
         return text
 
@@ -686,10 +802,12 @@ class Harness:
         return report
 
     async def meter(self) -> ReadingView | None:
-        """The live five-hour reading. With none in the ledger, one haiku plan turn with no
-        tools writes it, because the turn's rate-limit event carries the reading and `/usage`
-        no longer does (CLI 2.1.299). Its chat record and workspace are removed after the turn,
-        so the chat list does not keep it. While a plan window is used up or plan use is
+        """The live five-hour reading. With none in the ledger, one tool-less haiku Background
+        turn writes it, because the turn's rate-limit event carries the reading and `/usage`
+        no longer does (CLI 2.1.299). A turn that brought no reading runs no other for
+        `METER_COOLDOWN_S`. The chat leaves the table, its record and its workspace before its
+        process is awaited closed, so nothing lists it even when the close is cancelled; its
+        control session stays as the audit row. While a plan window is used up or plan use is
         stopped, no turn runs and this raises `LaunchRefused`."""
         async with self._metering:
             held = self._ledger.reading("five_hour")
@@ -700,22 +818,28 @@ class Harness:
             )
             if stop is not None:
                 raise LaunchRefused(f"the plan meter will not run: {stop}")
-            sid = await self.start_chat(NewChat(title="Plan usage meter", model=METER_MODEL))
+            now = asyncio.get_running_loop().time()
+            if self._metered is not None and now - self._metered < METER_COOLDOWN_S:
+                return None
+            self._metered = now
+            sid = await self.start_chat(
+                NewChat(title="Plan usage meter", model=METER_MODEL, kind=Background(), tools=())
+            )
             chat = self._chat(sid)
-            chat.record = replace(chat.record, config=replace(chat.record.config, tools=False))
             try:
-                await self.send(sid, OperatorText(METER_PROMPT))
-                loop = asyncio.get_running_loop()
-                deadline = loop.time() + METER_WAIT_S
-                while chat.record.turn == "running" and loop.time() < deadline:
-                    await asyncio.sleep(0.2)
+                handle = await self.run_turn(sid, OperatorText(METER_PROMPT))
+                with contextlib.suppress(TimeoutError):
+                    await asyncio.wait_for(handle.result(), METER_WAIT_S)
             finally:
-                await chat.close()
                 del self._chats[sid]
                 record_path(self._deps.home, sid).unlink(missing_ok=True)
                 await asyncio.to_thread(
                     shutil.rmtree, self._deps.home.workspaces_dir / sid, ignore_errors=True
                 )
+                await asyncio.to_thread(
+                    shutil.rmtree, self._deps.home.launch_dir(sid), ignore_errors=True
+                )
+                await chat.close()
             return self._ledger.reading("five_hour")
 
     async def quote(self, chat: SessionId, change: ConfigChange) -> Quote:
@@ -754,6 +878,20 @@ class Harness:
 
     async def interrupt(self, chat: SessionId) -> None:
         await self._chat(chat).interrupt()
+
+    async def close_chat(self, chat: SessionId) -> None:
+        """End the chat's CLI process and drop it from the table (H18). Nothing is deleted:
+        the record, transcript and session stay, and the next send resumes the session. A turn
+        still running ends with an unknown outcome. The close runs in a task of its own, so a
+        caller cancelled meanwhile (the SDK cancels an interrupted tool call that way) still
+        leaves no process behind."""
+        found = self._chats.pop(chat, None)
+        self._hooks.pop(chat, None)
+        if found is not None:
+            closing = asyncio.ensure_future(found.close())
+            self._background.add(closing)
+            closing.add_done_callback(self._background.discard)
+            await asyncio.shield(closing)
 
     async def rewind_points(self, chat: SessionId) -> list[RewindPoint]:
         self._chat(chat)
@@ -811,6 +949,9 @@ class Harness:
             await self._reaper
         for chat in list(self._chats.values()):
             await chat.close()
+        for task in list(self._background):
+            task.cancel()
+        await asyncio.gather(*self._background, return_exceptions=True)
         await self._deps.relay.close()
         self._deps.procs.close()
 
@@ -820,10 +961,9 @@ class Harness:
             record = read_record(self._deps.home, chat)
             if record is None:
                 raise UnknownChat(chat)
-            if chat in self._options:
-                compact_at, hooks = self._options[chat]
-                config = replace(record.config, compact_at=compact_at, hooks=hooks)
-                record = replace(record, config=config)
+            hooks = self._hooks.get(chat)
+            if hooks is not None:
+                record = replace(record, config=replace(record.config, hooks=hooks))
             found = self._chats[chat] = Chat(record, self._deps)
         return found
 

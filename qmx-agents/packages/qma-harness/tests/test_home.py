@@ -217,7 +217,7 @@ def test_doctor_names_the_homes_scrubbed_names_and_a_relayed_login(
     assert str(home.relayed_dir / ".credentials.json") in lines["relayed home login"].detail
     assert lines["relayed projects link"].ok
     assert not lines["plan auth method"].ok
-    settings = json.loads(lines["inline settings"].detail.split(": ", 1)[1])
+    settings = json.loads(lines["launch settings"].detail.split(": ", 1)[1])
     assert settings["forceLoginMethod"] == "claudeai"
     assert lines["keep list"].detail == "JAVA_HOME; an edit applies at the next start"
     assert sum(name.startswith("departure ") for name in lines) == 19
@@ -519,7 +519,7 @@ def test_doctor_shows_hooks_as_structure_and_hides_every_operator_value(
     leaked = ["qsecret1", "QMX_HOOK_TOKEN", "ssecret2", "csecret3", "asecret4", "csecret5"]
     leaked += ["isecret6", "psecret7", "hooks.example", "notify", "curl"]
     assert [(line.name, word) for line in lines for word in leaked if word in line.detail] == []
-    inline = {line.name: line for line in lines}["inline settings"]
+    inline = {line.name: line for line in lines}["launch settings"]
     settings = json.loads(inline.detail.split(": ", 1)[1])
     assert settings["hooks"] == {
         "Stop": [
@@ -619,32 +619,27 @@ ARGV_LINE = re.compile(
 )
 
 
-def test_doctor_reports_the_whole_plan_launch_command_line(
+def test_the_system_text_and_settings_no_longer_grow_the_plan_launch_command_line(
     home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _throwaway_home(monkeypatch, tmp_path)
     ensure_homes(home)
     control = control_service(home)
 
-    def read() -> tuple[int, bool, int, str]:
+    def read() -> tuple[bool, int, str]:
         lines = {
             line.name: line
             for line in doctor(home, control, scrubbed=(), keep=(), launcher=LAUNCHER)
         }
-        inline = int(lines["inline settings"].detail.split(" ", 1)[0])
         line = lines["plan launch command line"]
         found = ARGV_LINE.fullmatch(line.detail)
         assert found is not None, line.detail
-        return inline, line.ok, int(found[1]), found[2]
+        return line.ok, int(found[1]), found[2]
 
-    inline, ok, total, _ = read()
+    ok, total, _ = read()
     assert ok
-    assert total > inline + 200
     (home.workspaces_dir / "CLAUDE.md").write_text("x" * 31_000, encoding="utf-8")
-    _, ok, total, largest = read()
-    assert not ok
-    assert total > 31_000
-    assert largest == "QMX.md and the workspace CLAUDE.md and AGENTS.md"
+    assert read() == (True, total, read()[2])
 
 
 @pytest.mark.parametrize(

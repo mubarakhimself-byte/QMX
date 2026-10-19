@@ -422,7 +422,7 @@ def _observer(hook: ChatHook) -> HookCallback:
         del tool_use_id, context
         try:
             await asyncio.wait_for(hook(hook_input), OBSERVER_TIMEOUT_S)
-        except (Exception, asyncio.CancelledError):
+        except Exception, asyncio.CancelledError:
             log.exception("a chat hook failed; the chat goes on")
         return {}
 

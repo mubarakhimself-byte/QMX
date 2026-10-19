@@ -13,13 +13,27 @@ replays the prompt or opens the next turn, whichever comes first.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Mapping
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, cast
 
 from qmx_control.service import SessionBlock
 
 from qma.harness.project import INTERRUPTED, TurnEnded
+from qma.harness.stuck import (
+    DEFAULT_RULES,
+    Alarm,
+    Pulse,
+    Quiet,
+    StuckCall,
+    StuckRules,
+    StuckTimeouts,
+    StuckVerdict,
+    judge_stuck,
+    stuck_call,
+    watch_progress,
+)
 
 type TurnStatus = Literal["ok", "failed", "interrupted", "unknown"]
 """`unknown`: the process ended before the turn's result, so its outcome cannot be known."""
@@ -111,6 +125,10 @@ class TurnResult:
     terminal_reason: str | None
 
 
+DEFAULT_TIMEOUTS: Final = StuckTimeouts()
+TICK_S: Final = 5.0
+"""How often a quiet turn's no-progress clock is read."""
+
 USAGE_FIELDS: Final = {
     "input_tokens": "input_tokens",
     "output_tokens": "output_tokens",
@@ -144,11 +162,21 @@ class TurnHandle:
     _compactions: list[str] = field(default_factory=list[str])
     _replies: dict[str, Mapping[str, Any]] = field(default_factory=dict[str, Mapping[str, Any]])
     _waiting: bool = False
+    queued: asyncio.Event = field(default_factory=asyncio.Event)
+    """Set once the send has to wait for a slot."""
 
     async def events(self) -> AsyncIterator[TurnEvent]:
         """Every event of the turn, ending when the turn ends. One reader only."""
-        while (event := await self._events.get()) is not None:
+        while (event := await self.next_event()) is not None:
             yield event
+
+    async def next_event(self) -> TurnEvent | None:
+        """The next event, or None once the turn ended. Safe to cancel, so a reader may wait
+        on it with a timeout."""
+        event = await self._events.get()
+        if event is None:
+            self._events.put_nowait(None)
+        return event
 
     async def result(self) -> TurnResult:
         return await asyncio.shield(self._result)
@@ -167,7 +195,9 @@ class TurnHandle:
             self._emit(WaitingOnModel(waiting))
 
     def on_queued(self) -> None:
-        self._emit(Queued())
+        if not self.queued.is_set():
+            self.queued.set()
+            self._emit(Queued())
 
     def on_started(self) -> None:
         self.attached = True
@@ -184,7 +214,7 @@ class TurnHandle:
             return
         call = str(content.get("id", ""))
         if content.get("state") == "started":
-            arguments = content.get("arguments") or {}
+            arguments = cast("dict[str, Any]", content.get("arguments") or {})
             started = ToolCall(call, str(content.get("name", "")), arguments, None)
             self._tools[call] = started
             self._wait(False)
@@ -199,7 +229,8 @@ class TurnHandle:
             content.get("state") == "error",
         )
         self._tools[call] = finished
-        self._emit(ToolFinished(call, known.name, known.arguments, finished.result or "", finished.error))
+        result = finished.result or ""
+        self._emit(ToolFinished(call, known.name, known.arguments, result, finished.error))
         self._wait(True)
 
     def on_delta(self) -> None:
@@ -225,17 +256,11 @@ class TurnHandle:
         for usage in self._replies.values():
             for name, total in USAGE_FIELDS.items():
                 totals[total] += int(usage.get(name) or 0)
-            details = usage.get("output_tokens_details") or {}
+            details = cast("dict[str, Any]", usage.get("output_tokens_details") or {})
             thinking += int(details.get("thinking_tokens") or 0)
         last = list(self._replies.values())[-1] if self._replies else None
-        context = (
-            None
-            if last is None
-            else sum(
-                int(last.get(name) or 0)
-                for name in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
-            )
-        )
+        read = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+        context = None if last is None else sum(int(last.get(name) or 0) for name in read)
         status = "failed" if ended is None and reason is not None else status_of(ended)
         self._result.set_result(
             TurnResult(
@@ -250,3 +275,51 @@ class TurnHandle:
             )
         )
         self._events.put_nowait(None)
+
+
+async def watch_turn(
+    handle: TurnHandle,
+    interrupt: Callable[[], Awaitable[None]],
+    *,
+    rules: StuckRules = DEFAULT_RULES,
+    timeouts: StuckTimeouts = DEFAULT_TIMEOUTS,
+    tick: float = TICK_S,
+) -> StuckVerdict | Alarm | None:
+    """Run the stuck rules over a turn's events as they come (AD-16, H45): the loop and
+    no-convergence rules on each finished tool call, the no-progress rule on every event and
+    every quiet `tick`. Interrupts the turn on the first verdict and returns it, or returns
+    None when the turn ends on its own."""
+    calls: list[StuckCall] = []
+    quiet, progress, in_flight, open_tools = Quiet(), 0, False, 0
+    clock = time.monotonic()
+    while True:
+        try:
+            event = await asyncio.wait_for(handle.next_event(), tick)
+        except TimeoutError:
+            event = None
+        else:
+            if event is None:
+                return None
+        match event:
+            case ToolStarted():
+                open_tools += 1
+            case ToolFinished(name=name, arguments=arguments, result=result, error=error):
+                open_tools = max(0, open_tools - 1)
+                calls.append(stuck_call(name, arguments, result, error=error))
+                verdict = judge_stuck(calls, rules)
+                if verdict != "progress":
+                    await interrupt()
+                    return verdict
+            case WaitingOnModel(waiting=waiting):
+                in_flight = waiting
+            case _:
+                pass
+        if event is not None and not isinstance(event, WaitingOnModel):
+            progress += 1
+        now = time.monotonic()
+        pulse = Pulse(progress, in_flight=in_flight, tool_open=open_tools > 0)
+        quiet, alarm = watch_progress(quiet, pulse, now - clock, timeouts)
+        clock = now
+        if alarm in ("interrupt", "stalled"):
+            await interrupt()
+            return alarm
