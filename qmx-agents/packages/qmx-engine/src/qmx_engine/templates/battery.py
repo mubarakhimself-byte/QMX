@@ -150,8 +150,10 @@ async def run(
     subject: str,
     mode: Mode = "live",
     caller: Caller = OPERATOR,
+    fake: bool = False,
 ) -> JsonObject:
-    """Both sides run at once; the result names, per task, pass^3 on each side."""
+    """Both sides run at once; the result names, per task, pass^3 on each side. `fake` answers
+    every try and the judge from the recorded answers, for a lane that spends nothing."""
     judge = judge_for([candidate.model, baseline.model], judges)
     bundle, object_id = _bundle(svc, mode, caller)
     started = time.monotonic()
@@ -169,6 +171,7 @@ async def run(
             subgraph=None,
             caller=caller,
             pins=pins,
+            fake=fake,
         )
         return outcome.run_id
 
