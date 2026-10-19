@@ -324,3 +324,23 @@ def test_the_run_index_never_lists_a_chat_journal(tmp_path: Path) -> None:
     assert [run["id"] for run in service.runs_list()] == ["r2"]
     with pytest.raises(ControlError, match="Unknown run id"):
         service.runs_get("chat-1")
+
+
+def test_a_background_run_keeps_its_model_and_a_mirrored_chat_stays_out(tmp_path: Path) -> None:
+    ControlService(tmp_path).close()
+    chat = tmp_path / "runs" / "chat-1" / "journal.jsonl"
+    append(chat, "chat-1", 1, "run_start", {"agent": "primary", "session_id": "chat-1"})
+    row = {"id": "chat-1", "kind": "agent", "session_id": "chat-1", "journal": str(chat)}
+    with closing(sqlite3.connect(tmp_path / "control.db")) as db, db:
+        db.execute("INSERT INTO work VALUES('runs','chat-1',?)", (json.dumps(row),))
+    service = ControlService(tmp_path)
+    service.record_work("runs", "bg-1", {"session_id": "child-1", "status": "running"})
+    background = tmp_path / "runs" / "bg-1" / "journal.jsonl"
+    append(background, "bg-1", 1, "run_start", {"agent": "builder", "session_id": "child-1"})
+    append(background, "bg-1", 2, "model_call", {"agent": "builder", "model": "fake:model"})
+    append(background, "bg-1", 3, "run_end", {"status": "completed"})
+    assert service.runs_get("bg-1")["model"] == {"builder": "fake:model"}
+    service.close()
+    service = ControlService(tmp_path)
+    assert [run["id"] for run in service.runs_list()] == ["bg-1"]
+    assert service.runs_get("bg-1")["status"] == "completed"
