@@ -27,7 +27,9 @@ recorded waits and host sleep, on a run-level `heartbeat`. The engine dying mid-
 
 The recorded clock moves on with the wall clock: before an event, a `clock_tick` is written when a
 second or more passed since the last one, and every event's `at` is the latest tick. The core
-reads only those ticks (AD-6).
+reads only those ticks (AD-6). Every instant the runner writes, the clock's, a hold's, a retry's
+and a provider wait's `resume_at`, is UTC in one form (`nodes.wait.utc_text`), so the core's text
+comparison is time order; a naive instant is read as UTC (L-37).
 
 `Engine.resume` picks a run up again from the ledger. An attempt left in flight belongs to an
 engine that died, since only one engine process can hold the writer: its outcome is unknown, and
@@ -37,7 +39,13 @@ engine that died, since only one engine process can hold the writer: its outcome
 A model node that waits on a usage limit drains the run (AD-9): no new model attempt starts while
 any slot waits on a limit, and other nodes go on. Once nothing runs, the run leaves a wake at the
 earliest `resume_at`, which already holds `limits.slack`, writes `run_paused` and returns
-`waiting`. The scheduler's ticker resumes it at that instant with `run_resumed` (`triggers`).
+`waiting`. The scheduler's ticker resumes it at that instant with `run_resumed` (`triggers`). A
+run held on a time `wait` or a retry backoff leaves a wake at its earliest `resume_at` the same
+way (AD-10), so only the ticker resumes it on time.
+
+A run's settings are read from the port as it opens and kept for the pass (B-42), with a trigger's
+role and effort pins over them. `Engine.cancel` stops a run and every live run under it: each
+records `run_cancelled`, its attempts are cancelled and it ends `stopped` (AD-5, B-66).
 """
 
 from __future__ import annotations
@@ -81,7 +89,7 @@ from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.agent import Agent
-from qmx_engine.nodes.base import Failed, Look, NodeJob, ending
+from qmx_engine.nodes.base import Failed, Look, NodeJob, Waiting, ending
 from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
 from qmx_engine.nodes.fake_provider import FakeProvider
 from qmx_engine.nodes.grader import Grader
@@ -94,7 +102,7 @@ from qmx_engine.nodes.script import HostScript, Script
 from qmx_engine.nodes.subworkflow import Subworkflow
 from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
-from qmx_engine.nodes.wait import resume_at, utc_text
+from qmx_engine.nodes.wait import resume_at, utc, utc_text
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import InboxPort, Raise, raised_by
 from qmx_engine.ports.library_fake import LibraryFake
@@ -235,7 +243,7 @@ class Engine:
         self._settings = settings
         settings = self.settings
         self.worker = worker or LocalWorker(Capacity.of(settings))
-        self.wall = wall
+        self.wall: Callable[[], datetime] = lambda: utc(wall())
         self.executors = executors or {}
         self.doctor = doctor
         self.harness = harness
@@ -858,6 +866,8 @@ class Run:
         if gate is not None:
             await gate.wait()
         result = await self.engine.worker.run(job, executor, self.append)
+        if isinstance(result, Waiting) and result.resume_at is not None:
+            result = replace(result, resume_at=utc_text(datetime.fromisoformat(result.resume_at)))
         slot = Slot(job.node_id, job.iteration, job.partition)
         if isinstance(result, Failed) and result.effect_state == "unknown":
             self.unknown(slot, job.attempt, result.code, result.message)

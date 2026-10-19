@@ -431,12 +431,22 @@ def test_l33_an_executor_that_raises_fails_its_node_and_the_run_parks(tmp_path: 
     assert (outcome.status, [f["code"] for f in failed]) == ("failed", ["executor_error"])
 
 
-def test_l37_instants_compare_as_instants_and_a_naive_clock_is_utc() -> None:
-    held = Hold("2026-10-17T09:00:00.500000+00:00", None, 1)
+def test_l37_every_instant_the_runner_writes_is_utc_in_one_form(tmp_path: Path) -> None:
+    run = flow(
+        tmp_path,
+        [START, node("call", "script", script="scripts/call.py")],
+        {"start": {"main": [edge("call")]}},
+        executors={"script": Planted(Waiting("limit", "2026-10-17T14:00:00+02:00"))},
+        wall=lambda: datetime(2026, 10, 17, 9, 0),  # naive, read as UTC
+    )
 
-    assert due(held, "2026-10-17T09:00:00Z", ()) is False
-    assert due(held, "2026-10-17T11:00:01+02:00", ()) is True
-    assert utc_text(datetime(2026, 10, 17, 9, 0)) == "2026-10-17T09:00:00+00:00"
+    outcome = run.start()
+
+    events = run.events(outcome.run_id)
+    clock = [e.data["now"] for e in events if e.kind == "clock_tick"]
+    waited = [str(e.data["resume_at"]) for e in events if e.kind == "node_waiting"]
+    assert (set(clock), waited) == ({"2026-10-17T09:00:00+00:00"}, ["2026-10-17T12:00:00+00:00"])
+    assert due(Hold(waited[0], None, 1), "2026-10-17T11:59:59.900000+00:00", ()) is False
 
 
 def test_l38_a_node_id_with_a_colon_is_refused(tmp_path: Path) -> None:

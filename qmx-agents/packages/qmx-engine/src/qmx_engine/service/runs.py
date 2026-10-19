@@ -165,15 +165,15 @@ async def run_bundle(
 
 
 def fire_after(ctx: Context, outcome: Outcome, item: str | None = None) -> None:
-    """Fire every `after` trigger on a passed run's workflow (AD-10). `item` is read from the
-    run's last summary when not given."""
+    """Fire every `after` trigger on a passed live run's workflow (AD-10). Without `item`, the
+    workflow and the mode are read from the run's last summary."""
     if outcome.status != "passed":
         return
     if item is None:
         found = ctx.library.objects(outcome.run_id, "workflow-run")
-        item = str(found[-1].fields.get("workflow_item")) if found else None
-    if item is None:
-        return
+        if not found or found[-1].fields.get("mode") != "live":
+            return
+        item = str(found[-1].fields.get("workflow_item"))
     with Reader.open(ctx.home) as reader:
         listed = triggers(reader.connection, "WHERE kind = 'after' AND enabled = 1")
     upstream: dict[str, JsonValue] = {
