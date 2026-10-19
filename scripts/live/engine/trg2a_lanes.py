@@ -569,12 +569,16 @@ def secrets(log: Log) -> None:
 def processes(log: Log) -> None:
     import psutil  # noqa: PLC0415
 
-    found = []
-    for process in psutil.process_iter(["name", "cmdline"]):
+    found, desktop = [], 0
+    for process in psutil.process_iter(["name", "cmdline", "exe"]):
         name = (process.info["name"] or "").lower()
         line = " ".join(process.info["cmdline"] or [])
-        if name.startswith(("claude", "qma-cli-launcher")) or "qmx_host" in line:
+        exe = str(process.info["exe"] or "")
+        if name.startswith("claude") and ("WindowsApps" in exe or "Roaming\\Claude" in exe):
+            desktop += 1
+        elif name.startswith(("claude", "qma-cli-launcher")) or "qmx_host" in line:
             found.append((process.pid, name, line[:120]))
+    log(f"left out: {desktop} processes of the Claude desktop app and its own Claude Code session")
     for row in found:
         log(f"  {row}")
     log.check("no qmx_host, claude or qma-cli-launcher process is left", not found, len(found))
