@@ -73,6 +73,12 @@ REPO: Final = Path(__file__).resolve().parents[3]
 HAIKU: Final = "claude/haiku"
 DEEPSEEK: Final = "openrouter/deepseek/deepseek-chat"
 KIMI: Final = "openrouter/moonshotai/kimi-k2.5"
+DEEPSEEK_PROVIDER: Final = {
+    **OPENROUTER_ROW,
+    "tiers": {**OPENROUTER_ROW["tiers"], "haiku": DEEPSEEK.removeprefix("openrouter/")},
+}
+"""The OpenRouter row with DeepSeek as a tier model, since a key profile runs only the models of
+its tiers; Kimi, the judge, keeps the other tiers."""
 SHIP_SETTINGS: Final = SHIP_HOME / "settings.toml"
 SUITES: Final = ("qmx-engine", "qmx-control")
 PYTEST: Final = ("run", "--no-sync", "python", "-m", "pytest", "tests", "-q", "-n", "2", "-rf")
@@ -104,9 +110,8 @@ class EvalLog(Log):
 
 
 def home(slug: str) -> Path:
-    root = STORE / "homes" / f"eval-{slug}"
-    if root.exists():
-        shutil.rmtree(root)
+    """A fresh folder per run: a run's code zone is read-only, so an old home is left in place."""
+    root = STORE / "homes" / f"eval-{slug}-{time.strftime('%m%d-%H%M%S')}"
     root.mkdir(parents=True)
     return root
 
@@ -238,7 +243,7 @@ def compare(log: Log) -> None:
 async def compare_run(log: Log, judge_log: Log, root: Path) -> None:
     keyed = root / "openrouter-home"
     keyed.mkdir()
-    ControlService(keyed).settings_put("providers", {"openrouter": OPENROUTER_ROW})
+    ControlService(keyed).settings_put("providers", {"openrouter": DEEPSEEK_PROVIDER})
     tasks = [t for t in SEEDS if t["id"] in COMPARE_TASKS]
     settings = StaticSettings({**DEFAULTS, "roles.test_only": (DEEPSEEK, KIMI)})
     subject = model_subject(HAIKU, DEEPSEEK)

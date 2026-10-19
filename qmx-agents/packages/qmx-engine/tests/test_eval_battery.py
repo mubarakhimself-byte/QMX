@@ -184,6 +184,27 @@ def test_a_model_change_reports_pass3_per_task_for_the_new_model_and_the_baselin
     )
 
 
+def test_a_side_whose_tries_ran_on_another_model_reports_no_pass3(tmp_path: Path) -> None:
+    values = {**DEFAULTS, "roles.test_only": ("kimi/k3", KIMI)}
+    tasks = [t for t in SEEDS if t["id"] == "quant-basis-points"]
+    with EngineService.open(tmp_path, settings=StaticSettings(values), harness=answering()) as svc:
+        result = asyncio.run(
+            battery.run(
+                svc,
+                tasks,
+                Side("kimi/k3"),
+                Side(HAIKU),
+                judges=(KIMI,),
+                subject="no kimi profile",
+                mode="test",
+            )
+        )
+
+    assert result["candidate"]["status"] == "fell back to another model"
+    assert result["candidate"]["fell_back"] == ["try_1", "try_2", "try_3"]
+    assert result["per_task"] == [{"id": "quant-basis-points", "candidate": None, "baseline": True}]
+
+
 def test_the_template_test_run_on_its_seed_tasks_passes_all_20(tmp_path: Path) -> None:
     result = battery_run(tmp_path, answering(), SEEDS)
 

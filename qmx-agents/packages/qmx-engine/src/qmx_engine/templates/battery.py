@@ -112,7 +112,10 @@ def _bundle(svc: EngineService, mode: Mode, caller: Caller) -> tuple[Bundle, str
     return bundle, draft.object_id
 
 
-def _side(svc: EngineService, run_id: str, side: Side) -> JsonObject:
+def _side(svc: EngineService, run_id: str, side: Side, *, fake: bool) -> JsonObject:
+    """One side's report. A try whose last attempt ran on another model, because the side's row
+    was unavailable and the failure ladder or resolution moved on, voids the side's pass^3: it
+    would measure the wrong model."""
     with Reader.open(svc.ctx.home) as reader:
         events = reader.events(run_id)
         spans = reader.spans(run_id)
@@ -126,14 +129,21 @@ def _side(svc: EngineService, run_id: str, side: Side) -> JsonObject:
     def ran(role: str) -> list[JsonValue]:
         return [*sorted({f"{s.profile}/{s.model}" for s in spans if s.role == role and s.model})]
 
+    last = {s.node_id: s for s in sorted(spans, key=lambda s: s.attempt) if s.role == SUBJECT_ROLE}
+    wanted = side.model.partition("@")[0]
+    moved = sorted(n for n, s in last.items() if f"{s.profile}/{s.model}" != wanted)
+    status = "failed" if not delivered else "passed"
+    if moved and not fake:
+        status, report = "fell back to another model", {}
     return {
         "model": side.model,
         "family": family(side.model),
         "surface_digest": side.surface_digest,
         "run_id": run_id,
-        "status": "passed" if delivered else "failed",
+        "status": status,
         "ran_on": ran(SUBJECT_ROLE),
         "judged_on": ran(JUDGE_ROLE),
+        "fell_back": [*moved] if not fake else [],
         "passed": report.get("passed"),
         "total": report.get("total"),
         "tasks": report.get("tasks", []),
@@ -177,7 +187,7 @@ async def run(
 
     ran = await asyncio.gather(one(candidate), one(baseline))
     pairs = zip(ran, (candidate, baseline), strict=True)
-    sides = [_side(svc, run_id, side) for run_id, side in pairs]
+    sides = [_side(svc, run_id, side, fake=fake) for run_id, side in pairs]
     by_side = [
         {str(t["id"]): t["pass3"] for t in cast(list[JsonObject], s["tasks"])} for s in sides
     ]
