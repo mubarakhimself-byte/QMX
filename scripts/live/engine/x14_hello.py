@@ -1,4 +1,4 @@
-"""EP14's example lanes: `examples/hello-chunks` on the engine host.
+"""EP14's example lanes: `examples/hello-chunks` on `python -m qmx_host` (`x13_doors.host`).
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/x14_hello.py [--window] [test|resume ...]`
