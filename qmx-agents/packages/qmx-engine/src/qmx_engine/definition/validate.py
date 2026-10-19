@@ -294,7 +294,7 @@ def writers(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
         for j, output in enumerate(files):
             path = f"nodes[{i}].outputs.files[{j}].path"
             if leaves_work(output.path.replace("<partition>", "0")):
-                yield Problem("output_path_invalid", path, "an output path stays inside work/")
+                yield Problem("output_path_invalid", path, "an output path must stay inside work/")
             elif (
                 node.name in partitioned
                 and output.merge == "replace"
