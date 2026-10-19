@@ -838,6 +838,16 @@ class Store:
             ref = MAIN
         return str(ref), str(principal), str(at)
 
+    def history(self, item: str) -> list[tuple[str, str, str]]:
+        """`(kind, ref, principal)` of every move of `item` to an object, oldest first."""
+        with self._mutex:
+            rows = self.catalog.db.execute(
+                "SELECT o.kind, m.ref, m.principal FROM moves m "
+                "JOIN objects o ON o.object_id = m.new_head WHERE m.item = ? ORDER BY m.seq",
+                (item,),
+            )
+            return [(str(kind), str(ref), str(who)) for kind, ref, who in rows]
+
     def placements(self, after: int = 0) -> list[dict[str, Any]]:
         """The ref moves after `after` that placed an object for the first time."""
         with self._mutex:
