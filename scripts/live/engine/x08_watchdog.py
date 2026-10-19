@@ -91,7 +91,7 @@ def stalled_lane(log: Log) -> None:
                 ledger,
                 settings={**DEFAULTS, "timeout.grace": 1},
                 executors={"script": Hang()},
-                worker=LocalWorker(concurrency=3, heartbeat_seconds=0.2),
+                worker=LocalWorker(heartbeat_seconds=0.2),
                 watch_every=0.5,
             )
             return await engine.start(root, definition, mode="test", inputs=None)

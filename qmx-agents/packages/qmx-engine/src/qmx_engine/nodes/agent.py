@@ -12,6 +12,8 @@ summary.
 The warm-first gate is the runner's, at dispatch (AD-9): `hold` returns the event a chunk waits on
 before it starts, so a held chunk writes no `node_started` and is never an idle attempt. The first
 chunk of a node's iteration sets it when its first turn ends, so the others read its prompt cache.
+Each chat's slot comes from the harness slot table, the only chat-slot counter (AD-58): a send
+waits there, served by the run's priority, and `look` reports that wait as a recorded wait.
 
 Each chat starts with `compact_at` and per-chat hooks (H15, H16). PostToolUse records each tool
 call as a child span as it happens, PreCompact writes the working state with `memory_note` and
@@ -55,7 +57,6 @@ from qmx_engine.nodes.llm import (
 )
 from qmx_engine.nodes.script import failed
 from qmx_engine.ports.harness_adapter import (
-    ChatsFull,
     CompactRefused,
     HarnessPort,
     Refusal,
@@ -182,8 +183,6 @@ class Agent:
         )
         attempt = Attempt(self, job, candidate, text, schema, warming)
         self.attempts[job.idempotency_key] = attempt
-        await self.admission.acquire()
-        attempt.queued = False
         try:
             return await attempt.run()
         except asyncio.CancelledError:
@@ -191,8 +190,6 @@ class Agent:
                 with contextlib.suppress(Exception):
                     await self.harness.interrupt(attempt.chat)
             raise
-        finally:
-            await self.admission.release()
 
 
 class Attempt:
@@ -228,8 +225,6 @@ class Attempt:
         self.context: int | None = None
         self.fallback: str | None = None
         """Why the chat runs without `compact_at` and hooks, when it does."""
-        self.queued = True
-        """Waiting for an engine chat slot: a recorded wait, not an idle attempt."""
         self.halted: str | None = None
         """Why the stuck detector stopped the attempt, once it did."""
         self.calls: dict[str, StuckCall] = {}
@@ -286,8 +281,10 @@ class Attempt:
         return self.ended(failed("bad_output", BAD_OUTPUT, retryable=True))
 
     def look(self) -> Look:
-        if self.queued or not self.chat:
-            return Look(0, waiting=self.queued, in_flight=not self.queued)
+        if not self.chat:
+            return Look(0, in_flight=True)
+        if self.agent.harness.queued(self.chat):
+            return Look(0, waiting=True)
         activity = self.agent.harness.activity(self.chat)
         for step in activity.steps:
             if step.result is not None and step.id not in self.calls:
@@ -367,11 +364,9 @@ class Attempt:
     async def turn(self, text: str) -> Turn | NodeResult:
         harness = self.agent.harness
         try:
-            await harness.send(self.chat, text)
+            await harness.send(self.chat, text, priority=self.job.priority)
         except Refusal as refusal:
             return await self.agent.admission.refused(self.candidate, redact(str(refusal)))
-        except ChatsFull as full:
-            return self.ended(failed("chats_full", redact(str(full)), retryable=True))
         self.calls, self.judged = {}, True
         turn = await harness.wait_turn(self.chat)
         if self.warming is not None:

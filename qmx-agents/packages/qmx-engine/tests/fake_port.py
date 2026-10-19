@@ -115,8 +115,11 @@ class FakePort:
             self.hooks[chat] = hooks
         return chat
 
-    async def send(self, chat: str, text: str) -> None:
+    async def send(self, chat: str, text: str, *, priority: int = 0) -> None:
         self.sent.append((chat, text))
+
+    def queued(self, chat: str) -> bool:
+        return False
 
     async def wait_turn(
         self, chat: str, *, timeout: float | None = None, idle: float | None = None

@@ -1,5 +1,6 @@
-"""The live-chat table: budgets, capacity from RAM, prompt kinds, eviction, waiting for a slot,
-`ChatTableFull`, reaping, a written background cap and the overage stop on a Background chat."""
+"""The live-chat table: budgets, capacity from RAM, prompt kinds, eviction, waiting for a slot in
+priority order behind the Interactive reserve, `ChatTableFull`, reaping, a written background cap
+and the overage stop on a Background chat."""
 
 from __future__ import annotations
 
@@ -104,6 +105,9 @@ def live(harness: Harness) -> list[SessionId]:
         ),
         ({"unattended_ask_seconds": -5, "background_cap": float("nan")}, Budgets()),
         ({"background_cap": 1}, Budgets(background_cap=1.0)),
+        ({"interactive_reserve": 0}, Budgets(interactive_reserve=0)),
+        ({"interactive_reserve": -1}, Budgets()),
+        ({"interactive_reserve": 1.5}, Budgets()),
     ],
 )
 def test_budgets_parse_and_fall_back_per_value(raw: dict[str, object], expected: Budgets) -> None:
@@ -225,23 +229,55 @@ def test_an_interactive_send_to_a_full_table_of_busy_chats_refuses_and_names_the
     run(body, home)
 
 
-def test_a_background_send_past_capacity_waits_and_runs_when_a_slot_frees(
+def test_background_chats_leave_the_reserve_so_an_interactive_chat_starts_at_once(
     home: QmxHome,
 ) -> None:
-    budgets(home, max_live_chats=2)
+    budgets(home, max_live_chats=4)
 
     async def body(harness: Harness) -> None:
         first, second, third = [await chat(harness, name, Background()) for name in "abc"]
+        operator = await chat(harness, "operator")
         await harness.send(first, InjectedText("long"))
         await harness.send(second, InjectedText("long"))
         waiting = asyncio.ensure_future(harness.send(third, InjectedText("one more")))
         await asyncio.sleep(0.5)
+        table = harness.slot_table()
         assert (waiting.done(), len(FakeClient.made), blocks(home, third)) == (False, 2, [])
+        assert (table.capacity, table.reserve, table.waiting) == (4, 2, (third,))
+        assert table.unattended == tuple(sorted([first, second]))
+        await asyncio.wait_for(harness.send(operator, OperatorText("hi")), 1)
+        assert (waiting.done(), len(FakeClient.made)) == (False, 3)
         FakeClient.made[0].go.set()
         await asyncio.wait_for(waiting, 2)
-        assert len(FakeClient.made) == 3
-        assert FakeClient.made[2].queries == ["one more"]
-        assert live(harness) == sorted([second, third])
+        assert FakeClient.made[3].queries == ["one more"]
+        assert live(harness) == sorted([second, third, operator])
+        assert harness.slot_table().waiting == ()
+
+    run(body, home)
+
+
+def test_waiting_background_sends_get_a_freed_slot_by_priority_then_age(home: QmxHome) -> None:
+    budgets(home, max_live_chats=1, interactive_reserve=0)
+    order: list[SessionId] = []
+
+    async def body(harness: Harness) -> None:
+        busy, low, older, newer = [await chat(harness, n, Background()) for n in "abcd"]
+        await harness.send(busy, InjectedText("long"))
+
+        async def send(sid: SessionId, priority: int) -> None:
+            await harness.send(sid, InjectedText("go"), priority=priority)
+            order.append(sid)
+
+        sends: list[asyncio.Future[None]] = []
+        for sid, priority in [(low, 1), (older, 5), (newer, 5)]:
+            sends.append(asyncio.ensure_future(send(sid, priority)))
+            await asyncio.sleep(0.1)
+        assert harness.slot_table().waiting == (older, newer, low)
+        for turn in range(3):
+            FakeClient.made[turn].go.set()
+            await settle(lambda served=turn + 1: len(order) == served)
+        await asyncio.wait_for(asyncio.gather(*sends), 2)
+        assert order == [older, newer, low]
 
     run(body, home)
 

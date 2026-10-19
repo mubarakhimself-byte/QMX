@@ -43,7 +43,7 @@ class StubHarness:
         self.home.chats_dir.mkdir(parents=True)
         (root / "runs" / CHAT).mkdir(parents=True)
 
-    async def send(self, chat: str, prompt: object) -> None:
+    async def send(self, chat: str, prompt: object, *, priority: int = 0) -> None:
         self.prompts.append(prompt)
         self.control.blocks.append(
             {"type": "permission", "seq": 7, "content": {"state": "asking", "tool": "Write"}}

@@ -334,7 +334,7 @@ def concurrency(log: Log) -> None:
         {"start": {"main": [edge(n) for n in names]}},
         {"timed": TIMED},
     )
-    outcome, seconds = in_process(home, root, **{"placement.pc.concurrency": 3})
+    outcome, seconds = in_process(home, root, **{"placement.pc.cpu_slots": 3})
     spans = [outcome.outputs[n]["main"] for n in names]  # type: ignore[index]
     moments = sorted([(b, 1) for b, _ in spans] + [(e, -1) for _, e in spans])
     running, most = 0, 0

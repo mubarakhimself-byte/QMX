@@ -1,12 +1,14 @@
 """The in-process worker on the PC (SOLUTION-DESIGN 5.2, AD-20).
 
-`run` carries out one attempt: it waits for one of `placement.pc.concurrency` slots, writes
-`node_started`, opens the attempt's overlay for a script-family node, runs the executor while a
-`heartbeat` goes out every 10 s, and returns the result. An `ok` attempt commits its declared
+`run` carries out one attempt: it takes the capacity its kind uses from the host's table
+(`admission.Capacity`, AD-58), waiting by priority then age, writes `node_started`, opens the
+attempt's overlay for a script-family node, runs the executor while a `heartbeat` goes out every
+10 s, and returns the result. An `ok` attempt commits its declared
 outputs into the run's shared zone and records `zone_committed`; any other ending deletes the
 overlay, which is the reversible undo (AD-8, AD-51). The runner writes the ending event, so a
-result lands in the ledger before the core sees it. A `subworkflow` attempt takes no slot: it
-only waits on its child, whose own nodes take slots, so a parent can never starve its child.
+result lands in the ledger before the core sees it. Pure kinds take no slot, so a rule or join
+never waits behind a script; a `subworkflow` attempt only waits on its child, whose own nodes take
+slots, so a parent can never starve its child.
 `cancel` stops an attempt, and the executor kills its process tree on the way out.
 
 Every script process sits in the engine's Job object, which kills it when the engine dies
@@ -31,17 +33,18 @@ from typing import Final, cast
 
 import psutil
 
+from qmx_engine.admission import Capacity
 from qmx_engine.definition.model import Outputs
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.events import EventKind, JsonObject
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import AsyncExecutor, Executor, Failed, NodeJob, NodeResult, Ok
+from qmx_engine.settings import DEFAULTS
 from qmx_engine.watchdog import STALLED, STALLED_MESSAGE
 from qmx_engine.workers import effects
 from qmx_engine.workers.zones import Overlay, RunZone, ZoneError, slot_name
 
 HEARTBEAT_SECONDS: Final = 10.0
-UNSLOTTED: Final = frozenset({"subworkflow"})
 WRITERS: Final = frozenset({"script", "grader", "monitor"})
 """The kinds whose attempt runs a script and so gets an overlay."""
 RESOLVED: Final = ("role", "profile", "model", "effort", "candidate", "test_only", "unresolved")
@@ -191,8 +194,10 @@ def attempt_keys(job: NodeJob) -> JsonObject:
 
 
 class LocalWorker:
-    def __init__(self, *, concurrency: int, heartbeat_seconds: float = HEARTBEAT_SECONDS) -> None:
-        self.slots = asyncio.Semaphore(concurrency)
+    def __init__(
+        self, capacity: Capacity | None = None, *, heartbeat_seconds: float = HEARTBEAT_SECONDS
+    ) -> None:
+        self.capacity = capacity or Capacity.of(DEFAULTS)
         self.heartbeat_seconds = heartbeat_seconds
         self.running: dict[str, asyncio.Task[object]] = {}
         self.cancelled: dict[str, Failed] = {}
@@ -204,9 +209,8 @@ class LocalWorker:
             self.running[job.idempotency_key] = cast(asyncio.Task[object], task)
         try:
             kind = REGISTRY.kind(str(job.node_definition.get("type")))
-            if kind is not None and kind.name in UNSLOTTED:
-                return await self.attempt(job, executor, emit)
-            async with self.slots:
+            name = kind.name if kind is not None else ""
+            async with self.capacity.held(name, job.placement, job.priority):
                 return await self.attempt(job, executor, emit)
         except asyncio.CancelledError:
             failure = self.cancelled.pop(job.idempotency_key, None)

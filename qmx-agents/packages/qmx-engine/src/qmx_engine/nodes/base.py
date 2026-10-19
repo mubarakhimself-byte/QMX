@@ -46,6 +46,8 @@ class NodeJob:
     session: str | None = None
     """The chat an `agent` attempt picks up again: its slot's last chat, when the engine died
     mid-attempt."""
+    priority: int = 0
+    """The run's priority: waiting work is served higher first, then oldest first (AD-58)."""
 
 
 @dataclass(frozen=True, slots=True)
