@@ -17,6 +17,7 @@ Writes `evidence/sec2a/<ENGINE_LOG_PREFIX>sec2a-<lane>.log`. No model, no keyrin
 from __future__ import annotations
 
 import json
+import shutil
 import statistics
 import subprocess
 import sys
@@ -30,7 +31,7 @@ from common import Log, throwaway_home
 from ep2_lanes import AGENTS, clean_env
 from qmx_engine.definition.model import OutputFile
 from qmx_engine.nodes.base import NodeJob
-from qmx_engine.workers.zones import RunZone
+from qmx_engine.workers.zones import RunZone, zones_root
 from x07_nodes import ENGINE, cli, events, node, of, write_folder
 
 CHUNK: Final = """
@@ -83,6 +84,13 @@ os.replace = replace
 from qmx_engine.__main__ import main
 sys.exit(main(sys.argv[1:]))
 """
+
+
+def fresh_home(slug: str) -> Path:
+    """A throwaway home with no zones left beside it from an earlier run of the lane."""
+    home = throwaway_home("sec2a", slug)
+    shutil.rmtree(zones_root(home), ignore_errors=True)
+    return home
 
 
 def edge(target: str, map_: str = "one") -> dict[str, Any]:
@@ -206,7 +214,7 @@ def roll_forward(log: Log, home: Path) -> None:
 
 
 def overlays(log: Log) -> None:
-    home = throwaway_home("sec2a", "e50")
+    home = fresh_home("e50")
     sibling_and_scratch(log, home)
     second_writer(log, home)
     roll_forward(log, home)
@@ -276,7 +284,7 @@ def kill_engine(log: Log, home: Path, engine: list[str], name: str) -> float | N
 
 
 def lifetime(log: Log) -> None:
-    home = throwaway_home("sec2a", "lifetime")
+    home = fresh_home("lifetime")
     gone = kill_engine(log, home, ENGINE, "life")
     log.check("the script died with the engine within 2 s", gone is not None and gone < 2, gone)
     log("control: the same engine with the Job object switched off")
@@ -285,7 +293,7 @@ def lifetime(log: Log) -> None:
 
 
 def sweep(log: Log) -> None:
-    home = throwaway_home("sec2a", "sweep")
+    home = fresh_home("sweep")
     run_id = "run-e50-sweep"
     engine = start_engine(home, sleeper(home, "wf-sweep"), run_id)
     wait_for_pid(home / "pid.txt")
@@ -317,7 +325,7 @@ def sweep(log: Log) -> None:
 
 
 def perf(log: Log) -> None:
-    home = throwaway_home("sec2a", "perf")
+    home = fresh_home("perf")
     timings: list[float] = []
     for round_ in range(5):
         zone = RunZone(Path(f"{home.resolve()}.zones") / f"run-perf-{round_}")
