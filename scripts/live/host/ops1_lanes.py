@@ -431,11 +431,22 @@ def lane_secrets(log: Log) -> None:
     log.check("secret scan is clean", done.returncode == 0, done.returncode)
 
 
+def desktop_app(process: psutil.Process) -> bool:
+    """The Claude desktop app or a session it runs, the operator's and never a lane's."""
+    for member in [process, *process.parents()]:
+        with contextlib.suppress(psutil.Error):
+            if "WindowsApps" in member.exe() and member.name().lower() == "claude.exe":
+                return True
+    return False
+
+
 def lane_processes(log: Log) -> None:
     names = ("claude", "qma-cli-launcher")
     left = []
     for process in psutil.process_iter(["name", "cmdline"]):
         with contextlib.suppress(psutil.Error):
+            if desktop_app(process):
+                continue
             line = " ".join(process.info["cmdline"] or [])
             name = (process.info["name"] or "").lower()
             ours = "homes" in line and "ops1-" in line
