@@ -4,7 +4,8 @@ From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/x04_ledger.py [--base REV] [--trunk REV] [lane]`
 Lanes are `regression burst kill second-writer write-error migrate spans memo stats reader perf
 keys`; none named runs all. Each lane writes
-`evidence/ep4/<ENGINE_LOG_PREFIX>ep4-<lane>.log`, and the script exits 1 if any lane failed. No lane needs a model, a key or the ship home.
+`evidence/ep4/<ENGINE_LOG_PREFIX>ep4-<lane>.log`, and the script exits 1 if any lane failed. No
+lane needs a model, a key or the ship home.
 """
 
 from __future__ import annotations
