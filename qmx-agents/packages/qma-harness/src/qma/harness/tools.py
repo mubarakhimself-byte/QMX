@@ -286,7 +286,8 @@ async def _bound(
 
 
 type HostRead = Callable[[dict[str, Any]], Awaitable[Mapping[str, object]]]
-"""A host read the harness serves itself: the chat-slot table or a chat's journal."""
+"""A host read served to an `agent_tool` row: the harness's chat-slot table or a chat's journal,
+or one the hosting process passes to `Harness.open`, such as its heartbeats."""
 
 NO_ARGUMENTS: Final[Mapping[str, object]] = MappingProxyType({"type": "object", "properties": {}})
 HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(

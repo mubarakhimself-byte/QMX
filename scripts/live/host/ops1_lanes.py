@@ -62,6 +62,8 @@ from x13_doors import LANE_HOST, free_port, healthy, host, kill_tree  # noqa: E4
 
 PR: Final = "ops1"
 STORE: Final = Path("D:/QMX-worktrees/qma-ship/build")
+PREFIX: Final = os.environ.get("ENGINE_LOG_PREFIX", "")
+"""Read before `boot()`, which scrubs the environment."""
 REPO: Final = Path(__file__).resolve().parents[3]
 APP: Final = "exchange-status"
 ITEM: Final = "ops1-sleeper"
@@ -85,7 +87,7 @@ class Log(EngineLog):
     def __init__(self, slug: str) -> None:
         folder = STORE / "evidence" / PR
         folder.mkdir(parents=True, exist_ok=True)
-        self.path = folder / f"{os.environ.get('ENGINE_LOG_PREFIX', '')}{slug}.log"
+        self.path = folder / f"{PREFIX}{slug}.log"
         self.path.write_text("", encoding="utf-8")
         self.passed = True
 
@@ -311,8 +313,8 @@ def tool_calls(client: httpx.Client, chat: str, after: int) -> tuple[list[str], 
     text: list[str] = []
     last = after
     for event in events.json():
-        last = max(last, int(event.get("seq", last)))
-        block = event.get("block") or event.get("data", {}).get("block") or {}
+        last = max(last, int(event["id"]))
+        block = event.get("data", {}).get("block") or {}
         content = block.get("content", {})
         if block.get("type") == "tool" and content.get("name"):
             names.append(str(content["name"]))
@@ -437,9 +439,11 @@ def lane_processes(log: Log) -> None:
             line = " ".join(process.info["cmdline"] or [])
             name = (process.info["name"] or "").lower()
             ours = "homes" in line and "ops1-" in line
-            if any(n in name for n in names) or (
-                "qmx_host" in line and (ours or "qma-ship" in line)
-            ) or ours:
+            if (
+                any(n in name for n in names)
+                or ("qmx_host" in line and (ours or "qma-ship" in line))
+                or ours
+            ):
                 left.append((process.pid, name, line[:120]))
     log(f"left: {left}")
     log.check("no host, app, claude or launcher process is left", left == [], left)
