@@ -237,6 +237,16 @@ HOST_ROWS: Final = (
         "the host's last ten rows.",
     ),
     _row(
+        "library",
+        "mark",
+        "agent_tool",
+        "mark",
+        "manage",
+        "Quarantine a Library item, or clear its quarantine, with a reason. Everything built on "
+        "it shows the mark and its path, and triggers that pin it are refused until it clears.",
+        reversibility="reversible",
+    ),
+    _row(
         "delegate",
         "run",
         "delegate",
@@ -246,8 +256,10 @@ HOST_ROWS: Final = (
         "helper starts fresh: put the whole task in the prompt. It cannot start helpers.",
     ),
 )
-"""Rows the harness serves itself (the chat-slot table, the relay journal and `delegate`) and
-`heartbeats`, which the host serves through the harness from its heartbeat log (AD-65)."""
+"""Rows the harness serves itself (the chat-slot table, the relay journal and `delegate`),
+`heartbeats`, which the host serves through the harness from its heartbeat log (AD-65), and
+`library_mark`, which the host serves from the Library store as the operator once he approves
+(Library AD-22: only the operator marks)."""
 
 
 def control_rows() -> tuple[OperationSpec, ...]:

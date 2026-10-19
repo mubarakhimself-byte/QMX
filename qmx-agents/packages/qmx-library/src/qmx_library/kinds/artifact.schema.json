@@ -12,6 +12,14 @@
       },
       "metadata": {
         "type": "object"
+      },
+      "outcome": {
+        "type": "string",
+        "enum": [
+          "supports",
+          "refutes",
+          "inconclusive"
+        ]
       }
     }
   },

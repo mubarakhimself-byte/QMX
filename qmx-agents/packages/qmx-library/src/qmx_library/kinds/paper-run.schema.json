@@ -6,7 +6,16 @@
   "identity": "manifest",
   "fields": {
     "type": "object",
-    "properties": {}
+    "properties": {
+      "outcome": {
+        "type": "string",
+        "enum": [
+          "supports",
+          "refutes",
+          "inconclusive"
+        ]
+      }
+    }
   },
   "blobs": {
     "report": {

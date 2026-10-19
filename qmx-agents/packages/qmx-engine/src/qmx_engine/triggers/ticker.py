@@ -77,6 +77,7 @@ from qmx_engine.triggers.preflight import (
     market_shut_until,
     placement_wait,
     preflight,
+    quarantined_input,
 )
 from qmx_engine.triggers.quota import closed_until
 from qmx_engine.triggers.rows import (
@@ -314,7 +315,7 @@ class Scheduler:
                 profiles=None if harness is None else harness.profiles(),
                 credentials=self.credentials,
                 skills=self.skills,
-            )
+            ) or quarantined_input(version.object_id, self.ctx.library)
             if blocked is not None:
                 self._blocked(fire, trigger, blocked)
                 return

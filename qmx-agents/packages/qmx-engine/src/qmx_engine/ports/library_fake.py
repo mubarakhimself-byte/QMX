@@ -474,3 +474,7 @@ class LibraryFake:
             (object_id, key),
         ).fetchone()
         return None if row is None else json.loads(row[0])
+
+    def quarantine_path(self, object_id: str) -> tuple[str, ...]:
+        """The fake stores no marks."""
+        return ()

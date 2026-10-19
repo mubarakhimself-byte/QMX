@@ -36,10 +36,12 @@ from typing import IO, Any, Final, Literal, Protocol, Self, cast
 
 from pydantic import JsonValue
 
-from qmx_library.fts import Catalog
+from qmx_library.fts import Catalog, norm
 from qmx_library.kinds import Kind, kind, schema_files
+from qmx_library.marks import CLEAR, QUARANTINED, Marks, marks, marks_ref
 from qmx_library.port import (
     RELATIONS,
+    AsOf,
     BlobRef,
     BlobView,
     Class,
@@ -52,6 +54,7 @@ from qmx_library.port import (
     MergeResult,
     ObjectId,
     ObjectView,
+    Relation,
     Step,
     Strategy,
     normalised,
@@ -92,6 +95,31 @@ def canonical(value: object) -> bytes:
 
 def fp1(value: object) -> ObjectId:
     return f"fp1:sha256:{sha256(canonical(value)).hexdigest()}"
+
+
+def locator(value: JsonObject) -> JsonObject:
+    """Where in its source an object came from: `{seconds}`, `{page, paragraph?}` or `{line}`
+    (AD-4)."""
+
+    def count(key: str) -> bool:
+        found = value.get(key)
+        return isinstance(found, int) and not isinstance(found, bool) and found >= 1
+
+    seconds = value.get("seconds")
+    match sorted(value):
+        case ["seconds"] if isinstance(seconds, int | float) and not isinstance(seconds, bool):
+            ok = seconds >= 0
+        case ["line"]:
+            ok = count("line")
+        case ["page"]:
+            ok = count("page")
+        case ["page", "paragraph"]:
+            ok = count("page") and count("paragraph")
+        case _:
+            ok = False
+    if not ok:
+        raise LibraryRefused("schema_invalid", f"{value!r} is not a locator")
+    return value
 
 
 def _sharded(root: Path, hexdigest: str, suffix: str = "") -> Path:
@@ -352,13 +380,16 @@ class Store:
         spec = kind(draft.kind)
         fields = cast(JsonObject, self.redactor.redact_json(draft.fields)[0])
         spec.check(fields, set(draft.blobs))
-        relations: list[dict[str, str]] = []
-        for relation, to in draft.relations:
-            name = normalised(relation)
+        relations: list[JsonObject] = []
+        for relation in draft.relations:
+            name, to = normalised(relation[0]), relation[1]
             if name not in RELATIONS:
-                raise LibraryRefused("unknown_relation", f"{relation!r} is not a relation")
+                raise LibraryRefused("unknown_relation", f"{relation[0]!r} is not a relation")
             self._require(to)
-            relations.append({"type": name, "to": to})
+            entry: JsonObject = {"type": name, "to": to}
+            if len(relation) == 3:
+                entry["locator"] = locator(relation[2])
+            relations.append(entry)
         for parent in parents:
             self._require(parent)
         manifest: dict[str, JsonValue] = {
@@ -571,7 +602,7 @@ class Store:
                 blobs[slot] = BlobRef(chosen)
         if entries:
             return self._conflict(who, item, into, base, ours, theirs, entries)
-        relations = dict.fromkeys([*o.relations, *t.relations])
+        relations: dict[Relation, None] = dict.fromkeys([*o.relations, *t.relations])
         relations |= dict.fromkeys([("merged-from", ours), ("merged-from", theirs)])
         draft = Draft(
             o.kind,
@@ -668,11 +699,43 @@ class Store:
             self.annotate(who, done.object_id, {"tags": [f"commit: {message}"]})
         return done
 
-    def resolve(self, who: Principal, item: str, ref: str = MAIN) -> ObjectId:
-        found = self.catalog.head(item, ref)
-        if found is None:
+    def resolve(
+        self, who: Principal, item: str, ref: str = MAIN, *, as_of: AsOf | None = None
+    ) -> ObjectId:
+        with self._mutex:
+            if as_of is None:
+                found = self.catalog.head(item, ref)
+                head = None if found is None else found[0]
+            else:
+                row = self.catalog.db.execute(
+                    "SELECT new_head FROM moves WHERE item = ? AND ref = ? AND seq <= ? "
+                    "ORDER BY seq DESC LIMIT 1",
+                    (item, ref, self._cut(as_of)[0]),
+                ).fetchone()
+                head = None if row is None else str(row[0])
+        if head is None:
             raise LibraryRefused("not_found", f"{item} has no {ref}")
-        return found[0]
+        return head
+
+    def _cut(self, as_of: AsOf) -> tuple[int, str]:
+        """The last ref-log position and the time `as_of` names; `(0, "")` before the first."""
+        db = self.catalog.db
+        if isinstance(as_of, int):
+            row = db.execute(
+                "SELECT seq, at FROM moves WHERE seq <= ? ORDER BY seq DESC LIMIT 1", (as_of,)
+            ).fetchone()
+            return (0, "") if row is None else (int(row[0]), str(row[1]))
+        at = as_of.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        (seq,) = db.execute(
+            "SELECT coalesce(max(seq), 0) FROM moves WHERE julianday(at) <= julianday(?)", (at,)
+        ).fetchone()
+        return int(seq), at
+
+    def _placed_by(self, object_id: ObjectId, seq: int) -> bool:
+        row = self.catalog.db.execute(
+            "SELECT 1 FROM moves WHERE new_head = ? AND seq <= ? LIMIT 1", (object_id, seq)
+        ).fetchone()
+        return row is not None
 
     def _view(self, object_id: ObjectId) -> ObjectView:
         row = self._require(object_id)
@@ -692,13 +755,31 @@ class Store:
             tuple(json.loads(parents)),
             tuple((r["type"], r["to"]) for r in json.loads(relations)),
             self.catalog.annotations(object_id),
+            {r["to"]: r["locator"] for r in json.loads(relations) if "locator" in r},
         )
 
     def get(
-        self, who: Principal, object_id: ObjectId, *, blobs: Literal["meta", "fetch"] = "meta"
+        self,
+        who: Principal,
+        object_id: ObjectId,
+        *,
+        blobs: Literal["meta", "fetch"] = "meta",
+        as_of: AsOf | None = None,
     ) -> ObjectView:
+        """The object; with `as_of`, refused `not_found` unless a ref held it by then, and its
+        annotations as they stood then."""
         with self._mutex:
             view = self._view(object_id)
+            if as_of is not None:
+                seq, at = self._cut(as_of)
+                if not self._placed_by(object_id, seq):
+                    raise LibraryRefused("not_found", f"no object {object_id} as of {as_of}")
+                rows = self.catalog.db.execute(
+                    "SELECT key, value FROM annotations WHERE object_id = ? "
+                    "AND julianday(at) <= julianday(?) ORDER BY seq",
+                    (object_id, at),
+                )
+                view = replace(view, annotations={str(k): json.loads(v) for k, v in rows})
         if blobs == "meta":
             return view
         spec = kind(view.kind)
@@ -725,9 +806,42 @@ class Store:
         kind: str | None = None,
         include_archived: bool = False,
         limit: int = 20,
+        as_of: AsOf | None = None,
     ) -> list[Hit]:
+        """FTS5 over the objects; with `as_of`, over the objects that were the head of a ref
+        then, and the items active then."""
         with self._mutex:
-            return self.catalog.search(text, kind, include_archived, limit)
+            if as_of is None:
+                return self.catalog.search(text, kind, include_archived, limit)
+            words = norm(text).split()
+            if not words:
+                raise LibraryRefused("invalid_search", "the search names no word")
+            seq, _ = self._cut(as_of)
+            rows = self.catalog.db.execute(
+                "SELECT s.object_id, s.item, s.kind, s.title, bm25(search) AS rank FROM search s "
+                "WHERE search MATCH :query AND (:kind IS NULL OR s.kind = :kind) "
+                "AND EXISTS (SELECT 1 FROM moves m WHERE m.new_head = s.object_id "
+                "  AND m.seq <= :seq AND NOT EXISTS (SELECT 1 FROM moves n WHERE n.item = m.item"
+                "  AND n.ref = m.ref AND n.seq > m.seq AND n.seq <= :seq)) "
+                "AND (:archived OR coalesce((SELECT new_head FROM moves WHERE item = s.item "
+                "  AND ref = 'refs/items/' || s.item || '/state' AND seq <= :seq "
+                "  ORDER BY seq DESC LIMIT 1), 'active') <> 'archived') "
+                "ORDER BY rank, s.item, s.object_id",
+                {
+                    "query": " ".join(f'"{word}"' for word in words),
+                    "kind": kind,
+                    "seq": seq,
+                    "archived": include_archived,
+                },
+            )
+            best: dict[str, Hit] = {}
+            for object_id, item, found_kind, title, rank in rows:
+                best.setdefault(
+                    str(item), Hit(str(object_id), str(item), str(found_kind), str(title), -rank)
+                )
+                if len(best) == limit:
+                    break
+            return list(best.values())
 
     def search_runs(self, who: Principal, text: str, workflow: str | None = None) -> list[Hit]:
         hits = self.search(who, text, kind="workflow-run", limit=1000)
@@ -742,26 +856,22 @@ class Store:
         types: Sequence[str] = (),
         direction: Literal["out", "in", "both"] = "out",
         depth: int = 2,
+        *,
+        as_of: AsOf | None = None,
     ) -> list[Step]:
+        """With `as_of`, only edges written by then, to objects a ref held by then."""
         wanted = {normalised(t) for t in types}
         seen = set(start)
         steps: list[Step] = []
         frontier = list(start)
         with self._mutex:
+            cut = None if as_of is None else self._cut(as_of)
             for level in range(1, depth + 1):
                 reached: list[str] = []
                 for node in frontier:
                     found = [
-                        *(
-                            self.catalog.relations_of(node, reverse=False)
-                            if direction != "in"
-                            else []
-                        ),
-                        *(
-                            self.catalog.relations_of(node, reverse=True)
-                            if direction != "out"
-                            else []
-                        ),
+                        *(self._relations(node, False, cut) if direction != "in" else []),
+                        *(self._relations(node, True, cut) if direction != "out" else []),
                     ]
                     for other, relation, origin in found:
                         if (wanted and relation not in wanted) or other in seen:
@@ -772,10 +882,40 @@ class Store:
                 frontier = reached
         return steps
 
+    def _relations(
+        self, node: ObjectId, reverse: bool, cut: tuple[int, str] | None
+    ) -> list[tuple[str, str, str]]:
+        if cut is None:
+            return self.catalog.relations_of(node, reverse=reverse)
+        mine, other = ("to_id", "from_id") if reverse else ("from_id", "to_id")
+        rows = self.catalog.db.execute(
+            f"SELECT {other}, type, origin FROM relations WHERE {mine} = ? "  # noqa: S608
+            "AND (origin = 'birth' OR julianday(at) <= julianday(?)) "
+            f"AND EXISTS (SELECT 1 FROM moves m WHERE m.new_head = {other} AND m.seq <= ?) "
+            "ORDER BY coalesce(seq, 0)",
+            (node, cut[1], cut[0]),
+        )
+        return [(str(a), str(b), str(c)) for a, b, c in rows]
+
+    def marks(self, who: Principal, object_id: ObjectId) -> Marks:
+        """The worst mark on `object_id` or upstream of it, with its path (AD-22)."""
+        with self._mutex:
+            self._require(object_id)
+            return marks(self.catalog.db, object_id)
+
+    def mark(self, who: Principal, item: str, quarantined: bool, reason: str) -> None:
+        """Set or clear `quarantined` on `item`: a move of `refs/items/<item>/marks`, by the
+        operator alone (AD-22)."""
+        if who.who != "operator":
+            raise LibraryRefused("ref_not_owned", f"{who} may not mark {item}; the operator marks")
+        with self._writing():
+            if self.catalog.state(item) is None:
+                raise LibraryRefused("not_found", f"no item {item}")
+            value = QUARANTINED if quarantined else CLEAR
+            self._move(who, item, marks_ref(item), value, reason=reason)
+
     def ground(self, who: Principal, text: str) -> Grounding:
         """Items whose title, tag or alias occurs in `text`, longest alias first; no model."""
-        from qmx_library.fts import norm  # noqa: PLC0415
-
         rest = f" {norm(text)} "
         items: list[str] = []
         with self._mutex:

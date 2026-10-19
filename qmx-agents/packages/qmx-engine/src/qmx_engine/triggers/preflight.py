@@ -15,6 +15,11 @@ which costs a digest line; only a missing key is a provider failure, which raise
 Sundays and every `market.holidays` date, each read in the trigger's IANA zone, and a fire while
 it is shut is held until the next open day begins (Claude's default calendar).
 
+A fire whose pinned version is built on a quarantined input (Library AD-22: a `consumed`,
+`derived-from` or `uses` path up to an item the operator quarantined) is blocked with
+`quarantined_input` and the path, a configuration fault; clearing the mark lets the next fire
+start.
+
 A placement is checked against the kinds its host's newest heartbeat names (AD-20, AD-65): a
 node whose kind that host's code does not know waits `placement` with `node needs update`, and
 the fire is held until a newer heartbeat lists the kind. A placement no heartbeat has named yet
@@ -36,6 +41,7 @@ from qmx_engine.definition.lint import TOOL_KEY
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.signature import signature
+from qmx_engine.ports.library import LibraryPort
 from qmx_engine.roles import order, resolve
 
 type Cause = Literal["config", "provider"]
@@ -117,6 +123,14 @@ def preflight(
                     message = f"{node.name}: skill {skill} is not installed"
                     return Blocked("config", "skill_missing", message)
     return None
+
+
+def quarantined_input(object_id: str, library: LibraryPort) -> Blocked | None:
+    path = library.quarantine_path(object_id)
+    if not path:
+        return None
+    message = f"{object_id} is built on quarantined input: {' -> '.join(path)}"
+    return Blocked("config", "quarantined_input", message)
 
 
 def placement_wait(workflow: Workflow, kinds: Mapping[str, Collection[str]]) -> str | None:
