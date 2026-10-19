@@ -149,7 +149,13 @@ ATTENDED_MODES: Final[frozenset[str]] = frozenset({"default", "acceptEdits", "pl
 """Permission modes in which the CLI asks before an MCP tool runs."""
 
 QMX_SERVER: Final = "qmx"
-DELEGATE_TOOL: Final = f"mcp__{QMX_SERVER}__delegate"
+DELEGATE_TOOL: Final = f"mcp__{QMX_SERVER}_delegate__run"
+
+
+def is_qmx_server(server: str) -> bool:
+    """QMX's own in-process servers: one per toolset, `qmx_<toolset>`."""
+    return server == QMX_SERVER or server.startswith(f"{QMX_SERVER}_")
+
 
 _RULE: Final = re.compile(r"\s*([^\s()]+)\s*(?:\((.*)\))?\s*", re.DOTALL)
 
@@ -218,8 +224,12 @@ class GuardRules:
     never: tuple[Rule, ...] = ()
     always: tuple[Rule, ...] = ()
     dropped_servers: set[str] = field(default_factory=set[str])
-    """External MCP servers the chat left out after launch. The only field that changes once
-    the chat runs."""
+    """External MCP servers the chat left out after launch. Changes while the chat runs."""
+    qmx_servers: frozenset[str] = frozenset()
+    """Every QMX toolset server the chat was launched with, on or off."""
+    surface: set[str] = field(default_factory=set[str])
+    """The QMX servers switched on: the chat's surface. Changes on a scope change, before the
+    CLI is told, so a stale tool list never reaches a server the chat no longer has."""
 
     @functools.cached_property
     def folded(self) -> _Folded:
@@ -265,7 +275,7 @@ def mcp_server(tool_name: str) -> str | None:
 
 
 def _external_unattended(tool_name: str, server: str, rules: GuardRules, mode: str | None) -> bool:
-    if server == QMX_SERVER or (mode in ATTENDED_MODES and not rules.unattended):
+    if is_qmx_server(server) or (mode in ATTENDED_MODES and not rules.unattended):
         return False
     bare = tool_name.removeprefix(f"mcp__{server}__")
     return not {f"{server}/{bare}", f"{server}/*"} & rules.external_unattended
@@ -829,8 +839,10 @@ def guard(
     always-allow list (Allow), else Pass. Nothing after the floor lifts it.
     """
     if agent_id and tool_name.casefold() == DELEGATE_TOOL:
-        return _deny("a sub-agent cannot start a helper chat (mcp__qmx__delegate)")
+        return _deny(f"a sub-agent cannot start a helper chat ({DELEGATE_TOOL})")
     server = mcp_server(tool_name)
+    if server is not None and is_qmx_server(server) and server not in rules.surface:
+        return _deny(f"{tool_name} is outside this chat's tools")
     if server is not None and server in rules.dropped_servers:
         return _deny(f"the MCP server {server} was left out of this chat ({tool_name})")
     if server is not None and _external_unattended(tool_name, server, rules, permission_mode):

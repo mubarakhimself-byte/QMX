@@ -2,7 +2,7 @@
 `TestMode(gate_hook=False, deny_rules=False)`, on the fake model.
 
 Chat 1 asks for order A and the operator allows it once, which writes one unsigned row. Then
-`[claude] permissions.allow` names `mcp__qmx__propose_order`, and with the gate hook off nothing
+`[claude] permissions.allow` names `mcp__qmx_node__propose_order`, and with the gate hook off nothing
 makes chat 2 ask: its replay of order A reaches the tool handler with no grant.
 
 PASS when chat 2 never asks, its replay is refused for a missing grant, and the row count

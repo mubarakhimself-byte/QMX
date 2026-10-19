@@ -17,7 +17,8 @@ from fastapi import APIRouter
 from fastapi.testclient import TestClient
 from fastmcp import Client
 
-from qmx_control.server import OPERATIONS, create_app, create_mcp, local_token
+from qmx_control.catalog import control_rows, rest_routes
+from qmx_control.server import create_app, create_mcp, local_token
 from qmx_control.service import (
     ControlError,
     ControlService,
@@ -76,11 +77,15 @@ def test_rest_mcp_parity_and_openapi(tmp_path: Path) -> None:
     service.settings_put("budgets", {"model_calls": 10})
     cases: list[tuple[str, str, dict[str, Any]]] = [
         ("library_search", "/api/library?query=rates", {"query": "rates"}),
-        ("sessions_list", "/api/sessions", {}),
-        ("runs_list", "/api/runs", {}),
-        ("jobs_list", "/api/jobs", {}),
-        ("settings_get", "/api/settings/budgets", {"section": "budgets"}),
-        ("sessions_stream", f"/api/sessions/{session['id']}/events", {"session_id": session["id"]}),
+        ("ops_sessions", "/api/sessions", {}),
+        ("workflows_remote_list", "/api/runs", {}),
+        ("workflows_jobs_list", "/api/jobs", {}),
+        ("settings_read_get", "/api/settings/budgets", {"section": "budgets"}),
+        (
+            "ops_sessions_stream",
+            f"/api/sessions/{session['id']}/events",
+            {"session_id": session["id"]},
+        ),
     ]
 
     async def compare() -> None:
@@ -94,20 +99,22 @@ def test_rest_mcp_parity_and_openapi(tmp_path: Path) -> None:
                 values = {"model_calls": 25}
                 written = rest.put("/api/settings/budgets", headers=HEADERS, json=values)
                 assert (
-                    await mcp.call_tool("settings_put", {"section": "budgets", "values": values})
+                    await mcp.call_tool(
+                        "settings_read_put", {"section": "budgets", "values": values}
+                    )
                 ).data == written.json()
                 tools = {tool.name: tool for tool in await mcp.list_tools()}
-                assert tools["apps_publish"].annotations is not None
-                assert tools["apps_publish"].annotations.model_dump(by_alias=True)[
+                assert tools["apps_admin_publish"].annotations is not None
+                assert tools["apps_admin_publish"].annotations.model_dump(by_alias=True)[
                     "destructiveHint"
                 ]
-                assert tools["apps_stop"].meta is not None
-                assert tools["apps_stop"].meta["interrupt_on"] is True
+                assert tools["apps_admin_stop"].meta is not None
+                assert tools["apps_admin_stop"].meta["interrupt_on"] is True
                 schema = rest.get("/openapi.json", headers=HEADERS).json()
                 ids = {
                     op["operationId"] for path in schema["paths"].values() for op in path.values()
                 }
-                assert {entry[0] for entry in OPERATIONS} <= ids
+                assert {row.name for row in control_rows()} <= ids
                 assert "HTTPBearer" in schema["components"]["securitySchemes"]
 
     asyncio.run(compare())
@@ -160,7 +167,9 @@ def test_writes_persist_and_errors_are_clear(tmp_path: Path) -> None:
 
     async def unavailable() -> None:
         async with Client(create_mcp(reopened)) as mcp:
-            result = await mcp.call_tool("apps_test", {"app_id": "missing"}, raise_on_error=False)
+            result = await mcp.call_tool(
+                "apps_admin_test", {"app_id": "missing"}, raise_on_error=False
+            )
             assert result.is_error
             assert "not_found" in str(result.content)
 
@@ -173,12 +182,13 @@ def test_unavailable_errors_match_across_doors(tmp_path: Path) -> None:
     async def compare() -> None:
         with TestClient(create_app(service, TOKEN)) as rest:
             async with Client(create_mcp(service)) as mcp:
-                for name, method, route, _ in OPERATIONS:
+                for row, door in rest_routes(control_rows()):
+                    name, method, route = row.name, door.verb, door.path
                     if name not in {
-                        "apps_test",
-                        "apps_publish",
-                        "apps_evidence",
-                    } and not name.startswith("workflows_"):
+                        "apps_admin_test",
+                        "apps_admin_publish",
+                        "apps_admin_evidence",
+                    } and not row.target.startswith("workflows_"):
                         continue
                     args: dict[str, Any] = {}
                     path = route
@@ -190,7 +200,7 @@ def test_unavailable_errors_match_across_doors(tmp_path: Path) -> None:
                         path = path.replace("{workflow_id}", "missing-workflow")
                     params: dict[str, str] = {}
                     body = None
-                    if name in {"apps_create", "apps_update"}:
+                    if name in {"apps_admin_create", "apps_admin_update"}:
                         args["path"] = "uninstalled"
                         params["path"] = "uninstalled"
                     if name in {"workflows_put", "workflows_validate"}:
@@ -330,7 +340,7 @@ def test_mcp_over_authenticated_http(tmp_path: Path) -> None:
         async def call() -> None:
             async with Client(url, auth=TOKEN) as client:
                 result = await client.call_tool(
-                    "sessions_create", {"session": {"title": "HTTP MCP"}}
+                    "ops_sessions_create", {"session": {"title": "HTTP MCP"}}
                 )
                 assert json.loads(json.dumps(result.data))["title"] == "HTTP MCP"
                 saved = await client.call_tool(

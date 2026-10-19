@@ -40,7 +40,9 @@ def test_backup_settings_and_rest_mcp_restore(
                 }
                 response = rest.put("/api/settings/backup", headers=headers, json=values)
                 assert response.status_code == 200, response.text
-                assert (await mcp.call_tool("settings_get", {"section": "backup"})).data == values
+                assert (
+                    await mcp.call_tool("settings_read_get", {"section": "backup"})
+                ).data == values
                 backed = rest.post("/api/apps/exchange-status/backup", headers=headers)
                 assert backed.status_code == 200, backed.text
                 assert backed.json()["restore_test"] == {"passed": True}
@@ -54,7 +56,7 @@ def test_backup_settings_and_rest_mcp_restore(
                 service.apps_stop("exchange-status")
                 (volume / "blobs/report.txt").write_text("changed")
                 restored = await mcp.call_tool(
-                    "apps_restore",
+                    "apps_admin_restore",
                     {"app_id": "exchange-status", "snapshot_id": backed.json()["snapshot_id"]},
                 )
                 assert restored.data["checksums"] == backed.json()["checksums"]

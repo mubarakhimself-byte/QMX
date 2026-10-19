@@ -30,7 +30,7 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
                     params={"path": str(example), "trust": "first_party"},
                 )
                 assert installed.status_code == 200, installed.text
-                assert (await mcp.call_tool("apps_list", {})).data == rest.get(
+                assert (await mcp.call_tool("apps_admin_list", {})).data == rest.get(
                     "/api/apps", headers=headers
                 ).json()
                 started = rest.post("/api/apps/exchange-status/start", headers=headers)
@@ -39,7 +39,7 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
                 assert psutil.pid_exists(pid)
                 registry = rest.get("/api/apps/registry", headers=headers)
                 assert registry.status_code == 200
-                assert (await mcp.call_tool("apps_registry", {})).data == registry.json()
+                assert (await mcp.call_tool("apps_admin_registry", {})).data == registry.json()
                 response = rest.post(
                     "/api/apps/exchange-status/tools/record",
                     headers=headers,
@@ -51,7 +51,8 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
                 )
                 assert response.status_code == 200, response.text
                 snapshot = await mcp.call_tool(
-                    "apps_call", {"app_id": "exchange-status", "tool": "snapshot", "arguments": {}}
+                    "apps_admin_call",
+                    {"app_id": "exchange-status", "tool": "snapshot", "arguments": {}},
                 )
                 assert snapshot.data["artifact_ref"]["producer_app"] == "exchange-status"
                 saved = rest.get(f"/api/library/{snapshot.data['library_id']}", headers=headers)
@@ -79,7 +80,7 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
                     is None
                 )
                 failed = await mcp.call_tool(
-                    "apps_start", {"app_id": "missing"}, raise_on_error=False
+                    "apps_admin_start", {"app_id": "missing"}, raise_on_error=False
                 )
                 assert failed.is_error
                 assert "not_found" in str(failed.content)

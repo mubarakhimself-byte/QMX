@@ -1,4 +1,4 @@
-"""HP13 lanes 2 to 10 and the perf probe: native helpers (S11), `mcp__qmx__delegate` and its
+"""HP13 lanes 2 to 10 and the perf probe: native helpers (S11), `mcp__qmx_delegate__run` and its
 refusals. Every part runs in a throwaway home on the fake model except `kimi`, whose helper
 chat makes one short real OpenRouter turn under the spend guard. No part uses the plan.
 
@@ -15,8 +15,8 @@ chat makes one short real OpenRouter turn under the spend guard. No part uses th
                                that grant gets 401 once the child ended.
     s11_helpers.py tools       lane 6. PASS when the child's server info, its `init` tool list
                                and the tools its requests offer hold no Task, Agent or
-                               mcp__qmx__delegate.
-    s11_helpers.py subagent    lane 7. A native helper calls mcp__qmx__delegate. PASS when the
+                               mcp__qmx_delegate__run.
+    s11_helpers.py subagent    lane 7. A native helper calls mcp__qmx_delegate__run. PASS when the
                                gate denies it and no child session exists.
     s11_helpers.py full        lane 8. `max_live_chats` = 1. PASS when delegate returns a tool
                                error naming the busy chat in under 2 s and no child launched.
@@ -68,7 +68,7 @@ from money_lane import direct_row, results
 from s31_chat_cap import put_budgets
 from switch_lane import OPENROUTER_ROW, spend_ledger
 
-DELEGATE: Final = "mcp__qmx__delegate"
+DELEGATE: Final = "mcp__qmx_delegate__run"
 WORKSPACE: Final = SCRATCH / "hp13-ws"
 PERF_RUNS: Final = 5
 PERF_LIMIT_S: Final = 5.0

@@ -79,7 +79,7 @@ class Background:
 
 @dataclass(frozen=True)
 class Child:
-    """Started by `mcp__qmx__delegate` from a parent chat. Its prompt was written by a model.
+    """Started by `mcp__qmx_delegate__run` from a parent chat. Its prompt was written by a model.
     `unattended` is copied from the parent, so a child of a Background chat is unattended.
     It gets no `delegate` tool and no Agent tool, so a child never starts children."""
 
@@ -209,6 +209,9 @@ class ChatConfig:
     tool at all: no built-in and no MCP server."""
     home: Home = Home()
     packs: tuple[str, ...] = ()
+    toolsets: tuple[str, ...] | None = None
+    """QMX toolsets on this chat's surface. None is every core toolset (a copilot); an engine
+    node passes the toolsets it declares."""
     agents: Mapping[str, SubAgent] = MappingProxyType({})
     mcp_servers: Mapping[str, JsonMap] = MappingProxyType({})
     """Extra MCP servers for this chat alone, vetted like the operator's."""

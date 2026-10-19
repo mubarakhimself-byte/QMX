@@ -49,7 +49,7 @@ def test_broker_settings_and_portfolio_queue_rest_mcp_parity(tmp_path: Path) -> 
                 written = rest.put("/api/settings/brokers", headers=headers, json=values)
                 assert written.status_code == 200
                 assert (
-                    await client.call_tool("settings_get", {"section": "brokers"})
+                    await client.call_tool("settings_read_get", {"section": "brokers"})
                 ).data == written.json()
                 broker = BrokerService(tmp_path, brokers=lambda: service.settings_get("brokers"))
                 assert broker.list_accounts()["accounts"][0]["currency"] == "USD"
@@ -65,7 +65,7 @@ def test_broker_settings_and_portfolio_queue_rest_mcp_parity(tmp_path: Path) -> 
                 )
                 queued = rest.get("/api/portfolio/proposals", headers=headers)
                 assert queued.status_code == 200 and len(queued.json()) == 1
-                assert (await client.call_tool("portfolio_proposals", {})).data == queued.json()
+                assert (await client.call_tool("broker_read_proposals", {})).data == queued.json()
                 assert queued.json()[0]["executed"] is False
                 assert rest.get("/api/portfolio/proposals").status_code == 401
                 invalid = rest.put(

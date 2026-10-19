@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import functools
 import itertools
 import json
@@ -182,6 +183,8 @@ class NewChat:
     home: Home | None = None
     """None is `general`, or the parent's home for a Child."""
     packs: tuple[str, ...] = ()
+    toolsets: tuple[str, ...] | None = None
+    """QMX toolsets on the chat's surface; None is every core toolset."""
     tools: tuple[str, ...] | None = None
     """None is the `claude_code` preset; `()` is no tool at all."""
     agents: Mapping[str, SubAgent] = field(default_factory=dict[str, SubAgent])
@@ -205,6 +208,7 @@ class NewChat:
             tools=self.tools,
             home=home,
             packs=self.packs,
+            toolsets=self.toolsets,
             agents=MappingProxyType(dict(self.agents)),
             mcp_servers=MappingProxyType(dict(self.mcp_servers)),
             append_system_prompt=self.append_system_prompt,
@@ -286,7 +290,11 @@ class PlanWatch:
 
 class Harness:
     def __init__(self, deps: ChatDeps, watch: PlanWatch) -> None:
-        self._deps = replace(deps, delegate=self._delegate)
+        self._deps = replace(
+            deps,
+            delegate=self._delegate,
+            host=MappingProxyType({"slot_table": self._slots_read, "journal": self._journal_read}),
+        )
         self._chats = watch.chats
         """The one table of chats, Cold and Live. Only the harness writes it."""
         self._ledger = watch.ledger
@@ -439,9 +447,36 @@ class Harness:
         return chat
 
     async def set_packs(self, chat: SessionId, packs: tuple[str, ...]) -> None:
-        """Store the chat's pack set on its record. A Cold chat launches with it; a live chat
-        keeps its current launch until its next relaunch."""
+        """Store the chat's pack set on its record and re-list a live chat's QMX tools. A Cold
+        chat launches with it."""
         await self._chat(chat).set_packs(tuple(packs))
+
+    async def set_toolsets(self, chat: SessionId, toolsets: tuple[str, ...] | None) -> None:
+        """Change which QMX toolsets the chat has (None is every core toolset). A live chat's
+        tools change on its next model request, with no relaunch."""
+        await self._chat(chat).set_toolsets(None if toolsets is None else tuple(toolsets))
+
+    async def _slots_read(self, _arguments: dict[str, Any]) -> Mapping[str, object]:
+        return dataclasses.asdict(self.slot_table())
+
+    async def _journal_read(self, arguments: dict[str, Any]) -> Mapping[str, object]:
+        """One page of a chat's request journal, oldest first, with the offset of the next."""
+        chat = session_id(str(arguments.get("session_id", "")))
+        path = journal_path(self._deps.home, chat)
+        if not path.is_file():
+            raise KeyError(f"chat {chat} has no request journal")
+        text = await asyncio.to_thread(path.read_text, encoding="utf-8")
+        found = [json.loads(line) for line in text.splitlines() if line.strip()]
+        offset, limit = int(arguments.get("offset", 0)), int(arguments.get("limit", 50))
+        page = found[offset : offset + limit]
+        end = offset + len(page)
+        return {
+            "rows": [
+                {"seq": row["seq"], "time": row["time"], "event": row["event"], **row["payload"]}
+                for row in page
+            ],
+            "next_offset": end if end < len(found) else None,
+        }
 
     async def run_turn(self, chat: SessionId, prompt: Prompt, *, priority: int = 0) -> TurnHandle:
         """Send `prompt` and return the turn's handle. Returns once the prompt reached the CLI
@@ -615,7 +650,7 @@ class Harness:
                 self._freed.set()
 
     async def _delegate(self, parent: SessionId, profile: str, prompt: str) -> str:
-        """Backs `mcp__qmx__delegate`. Refuses a profile outside `Profiles.delegate_targets`.
+        """Backs `mcp__qmx_delegate__run`. Refuses a profile outside `Profiles.delegate_targets`.
         Starts a Child chat (a qmx-control child session with `parent_id`, verbatim, `unattended`
         copied from the parent, its own relay grant, any [budgets] turn and spend limits the
         operator wrote) on the parent's model tier, workspace and mode. Sends the prompt as

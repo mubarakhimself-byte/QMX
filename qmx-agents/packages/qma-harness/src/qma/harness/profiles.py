@@ -41,7 +41,7 @@ RESERVED: Final = frozenset({PLAN, GPT})
 """Names of the built-in kinds. A `gpt` row becomes a `GptPlan`, never a key provider."""
 DELEGATE_TARGETS: Final = "delegate_targets"
 """`[providers] delegate_targets = ["kimi", ...]`: the profiles an agent may name in
-`mcp__qmx__delegate`. Missing means none."""
+`mcp__qmx_delegate__run`. Missing means none."""
 NON_MODEL_ROWS: Final = frozenset({"litestream", DELEGATE_TARGETS})
 """`[providers]` keys that are not model hosts."""
 
@@ -247,7 +247,7 @@ class Profiles:
     by_name: Mapping[ProfileName, Profile]
     errors: Mapping[str, str] = field(default_factory=dict[str, str])
     delegate_targets: frozenset[ProfileName] = frozenset()
-    """Profiles an agent may name in `mcp__qmx__delegate`. UI-editable allow-list."""
+    """Profiles an agent may name in `mcp__qmx_delegate__run`. UI-editable allow-list."""
 
     def get(self, name: str) -> Profile:
         found = self.by_name.get(ProfileName(name))

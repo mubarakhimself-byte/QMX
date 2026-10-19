@@ -13,6 +13,8 @@ from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, Literal
 
+from qmx_control.catalog import node_types, rows
+
 type Effect = Literal["none", "reversible", "compensable", "irreversible", "irreversible_external"]
 
 
@@ -103,6 +105,18 @@ class Registry:
     kinds: Mapping[str, Kind] = BASE_KINDS
     packs: Mapping[str, str] = field(default_factory=dict[str, str])
     """Pack type name to its base kind name."""
+    operations: Mapping[str, Kind] = field(default_factory=dict[str, Kind])
+    """Node types `<pack>.<toolset>_<op>` derived from operation catalog rows (AD-61): each is
+    an `app_op` with the row's reversibility, unavailable until that executor is built."""
+
+    def with_operations(self, types: Mapping[str, Effect]) -> Registry:
+        """Add a node type per catalog row, from `qmx_control.catalog.node_types`."""
+        base = self.kinds["app_op"]
+        found = {name: replace(base, name=name, effect=effect) for name, effect in types.items()}
+        bad = sorted(name for name in found if not PACK_TYPE.fullmatch(name))
+        if bad:
+            raise ValueError(f"operation types are not <pack>.<name>: {', '.join(bad)}")
+        return replace(self, operations={**self.operations, **found})
 
     def with_pack(self, type_name: str, base_kind: str) -> Registry:
         if not PACK_TYPE.fullmatch(type_name):
@@ -116,7 +130,9 @@ class Registry:
         `note`. None for an unknown type."""
         if type_name == NOTE.name:
             return NOTE
+        if type_name in self.operations:
+            return self.operations[type_name]
         return self.kinds.get(self.packs.get(type_name, type_name))
 
 
-REGISTRY: Final = Registry()
+REGISTRY: Final = Registry().with_operations(node_types(rows()))

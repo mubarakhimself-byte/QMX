@@ -9,19 +9,14 @@ from unittest.mock import MagicMock
 
 import pytest
 from qmx_broker.service import BrokerService
-from qmx_control.server import OPERATIONS
+from qmx_control.catalog import DOMAIN_ROWS, Binds, OperationSpec, control_rows, rows
 from qmx_control.service import ControlService
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
 
-from qma.harness.guard import Ask, Deny, guard, normalize_path
+from qma.harness.guard import Deny, guard, normalize_path
 from qma.harness.home import QmxHome
-from qma.harness.money_words import named_money_act
 from qma.harness.tools import (
-    AGENT_OPERATIONS,
-    DOMAIN_EFFECTS,
-    DOMAIN_LEFT_OUT,
-    OPERATIONS_LEFT_OUT,
     Effect,
     Grant,
     Grants,
@@ -31,7 +26,7 @@ from qma.harness.tools import (
     VetCache,
     args_digest,
     asks,
-    build_server,
+    build_servers,
     domain_write_policy,
     guard_rules,
     keyring_refs,
@@ -49,66 +44,37 @@ async def nothing(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def plain(name: str, effect: Effect = Effect.READ, target: object = None) -> ToolDef:
-    return ToolDef(name, name, {"type": "object"}, effect, nothing, target=target)
-
-
-def test_every_control_operation_is_declared_or_left_out_by_name() -> None:
-    names = {row[0] for row in OPERATIONS}
-    assert set(AGENT_OPERATIONS) | set(OPERATIONS_LEFT_OUT) == names
-    assert not set(AGENT_OPERATIONS) & set(OPERATIONS_LEFT_OUT)
-    assert {"settings_put", "backup_weekly"} <= set(OPERATIONS_LEFT_OUT)
-
-
-def test_every_destructive_operation_is_manage() -> None:
-    wrong = [
-        name
-        for name, _, _, destructive in OPERATIONS
-        if destructive and name in AGENT_OPERATIONS and AGENT_OPERATIONS[name] is not Effect.MANAGE
-    ]
-    assert wrong == []
+    toolset, _, op = name.partition("_")
+    return ToolDef(toolset, op, name, {"type": "object"}, effect, nothing, target=target)
 
 
 def test_engine_rows_save_and_test_quietly_and_ask_once_to_publish_or_run_live() -> None:
-    assert {name: effect for name, effect in AGENT_OPERATIONS.items() if "workflow" in name} == {
-        "workflows_get": Effect.READ,
-        "workflows_put": Effect.MANAGE,
-        "workflows_validate": Effect.READ,
-        "workflows_run": Effect.MANAGE,
-        "workflow_drafts_get": Effect.READ,
-        "workflow_drafts_put": Effect.DOMAIN_WRITE,
-        "workflow_tests_run": Effect.DOMAIN_WRITE,
-        "workflow_versions_list": Effect.READ,
-        "workflow_versions_archive": Effect.MANAGE,
-        "workflow_runs_list": Effect.READ,
-        "workflow_runs_get": Effect.READ,
-        "workflow_runs_explain": Effect.READ,
-        "workflow_runs_cancel": Effect.MANAGE,
-        "workflow_runs_resume": Effect.MANAGE,
-        "workflow_triggers_list": Effect.READ,
-        "workflow_triggers_create": Effect.MANAGE,
-        "workflow_triggers_enable": Effect.MANAGE,
-        "workflow_triggers_disable": Effect.MANAGE,
-        "workflow_triggers_run_now": Effect.MANAGE,
-        "workflow_inbox_list": Effect.READ,
-    }
-    assert AGENT_OPERATIONS["apps_archive"] is Effect.MANAGE
+    approvals = {row.name: row.approval for row in rows()}
     policy = domain_write_policy({})
     quiet_or_asking = {
-        name: asks(AGENT_OPERATIONS[name], policy)
-        for name in ("workflow_drafts_put", "workflow_tests_run", "workflows_put", "workflows_run")
+        name: asks(Effect(approvals[name]), policy)
+        for name in (
+            "workflows_drafts_put",
+            "workflows_tests_run",
+            "workflows_put",
+            "workflows_run",
+            "apps_admin_archive",
+        )
     }
     assert quiet_or_asking == {
-        "workflow_drafts_put": False,
-        "workflow_tests_run": False,
+        "workflows_drafts_put": False,
+        "workflows_tests_run": False,
         "workflows_put": True,
         "workflows_run": True,
+        "apps_admin_archive": True,
     }
 
 
-def test_every_domain_function_is_declared_or_left_out_by_name() -> None:
+def test_every_domain_function_has_a_row_or_stays_a_stdio_door() -> None:
     names = {name for group in domain_functions(MagicMock()).values() for name in group}
-    assert set(DOMAIN_EFFECTS) | set(DOMAIN_LEFT_OUT) == names
-    assert not set(DOMAIN_EFFECTS) & set(DOMAIN_LEFT_OUT)
+    rowed = {row.target for row in DOMAIN_ROWS}
+    assert rowed | {"library_search", "library_save", "propose_order"} == names
+    assert not rowed & {"library_search", "library_save", "propose_order"}
 
 
 def test_asks_table() -> None:
@@ -134,42 +100,49 @@ def test_asks_table() -> None:
 
 def test_s28_a_tool_with_no_effect_does_not_construct() -> None:
     with pytest.raises(TypeError, match="missing 1 required positional argument: 'call'"):
-        ToolDef("read_x", "read", {}, nothing)  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue, reportArgumentType]
+        ToolDef("data", "x", "read", {}, nothing)  # type: ignore[call-arg]  # pyright: ignore[reportCallIssue, reportArgumentType]
     bad: Any = None
-    with pytest.raises(TypeError, match="read_x declares no Effect"):
-        ToolDef("read_x", "read", {}, bad, nothing)
-
-
-def test_no_agent_operation_names_an_order_act() -> None:
-    assert [name for name in AGENT_OPERATIONS if named_money_act(name)] == []
-    assert [name for name in DOMAIN_EFFECTS if named_money_act(name)] == []
-    assert named_money_act("place_order") == "submit_order"
+    with pytest.raises(TypeError, match="data_x declares no Effect"):
+        ToolDef("data", "x", "read", {}, bad, nothing)
 
 
 def test_s28_a_second_propose_money_tool_refuses_the_build(tmp_path: Path) -> None:
     broker = BrokerService(tmp_path)
-    real = plain("propose_order", Effect.PROPOSE_MONEY, broker.propose_order)
-    impostor = plain("stage_trade", Effect.PROPOSE_MONEY, lambda: None)
-    build_server([real], grants=Grants(), domain_write="allow")
-    with pytest.raises(ToolSurfaceError, match="stage_trade is not the broker's propose_order"):
-        build_server([real, impostor], grants=Grants(), domain_write="allow")
+    real = plain("node_propose_order", Effect.PROPOSE_MONEY, broker.propose_order)
+    impostor = plain("node_stage_trade", Effect.PROPOSE_MONEY, lambda: None)
+    build_servers([real], grants=Grants(), domain_write="allow")
+    with pytest.raises(ToolSurfaceError, match="node_stage_trade is not the broker's propose"):
+        build_servers([real, impostor], grants=Grants(), domain_write="allow")
 
 
 def test_a_duplicate_name_refuses_the_build() -> None:
-    with pytest.raises(ToolSurfaceError, match="duplicate QMX tool names: read_bars"):
-        build_server(
-            [plain("read_bars"), plain("read_bars")], grants=Grants(), domain_write="allow"
+    with pytest.raises(ToolSurfaceError, match="duplicate QMX tool names: data_bars"):
+        build_servers(
+            [plain("data_bars"), plain("data_bars")], grants=Grants(), domain_write="allow"
         )
+
+
+def test_each_toolset_is_its_own_server_and_a_long_name_refuses_the_build() -> None:
+    servers = build_servers(
+        [plain("data_bars"), plain("data_calendar"), plain("library_get")],
+        grants=Grants(),
+        domain_write="allow",
+    )
+    assert sorted(servers) == ["qmx_data", "qmx_library"]
+    assert plain("data_bars").full == "mcp__qmx_data__bars"
+    with pytest.raises(ToolSurfaceError, match="longer than 64 characters"):
+        build_servers([plain("data_" + "x" * 50)], grants=Grants(), domain_write="allow")
 
 
 def test_an_asking_tool_runs_once_per_grant_for_its_exact_arguments() -> None:
     grants = Grants()
     [tool] = sdk_tools([plain("apps_publish", Effect.MANAGE)], grants, "allow")
+    assert tool.name == "publish"
     refused = asyncio.run(tool.handler({"app_id": "a"}))
     assert refused["is_error"] is True
     assert "no approval was given" in refused["content"][0]["text"]
     grants.record(
-        Grant("mcp__qmx__apps_publish", args_digest("mcp__qmx__apps_publish", {"app_id": "a"}))
+        Grant("mcp__qmx_apps__publish", args_digest("mcp__qmx_apps__publish", {"app_id": "a"}))
     )
     assert asyncio.run(tool.handler({"app_id": "b"}))["is_error"] is True
     assert asyncio.run(tool.handler({"app_id": "a"})) == {
@@ -182,7 +155,7 @@ def test_grants_off_and_reads_skip_the_grant() -> None:
     [manage] = sdk_tools(
         [plain("apps_publish", Effect.MANAGE)], Grants(), "allow", enforce_grants=False
     )
-    [read] = sdk_tools([plain("read_bars")], Grants(), "ask")
+    [read] = sdk_tools([plain("data_bars")], Grants(), "ask")
     assert "is_error" not in asyncio.run(manage.handler({}))
     assert "is_error" not in asyncio.run(read.handler({}))
 
@@ -201,12 +174,13 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
         tool_defs(control=control, broker=BrokerService(home.root), domain=domain, delegate=None)
     )
     effects = {tool.name: tool.effect for tool in defs}
-    assert len(defs) == len(AGENT_OPERATIONS) + 7 + len(DOMAIN_EFFECTS)
-    assert effects["propose_order"] is Effect.PROPOSE_MONEY
+    served = [row for row in rows() if row.agent and row.binds not in ("agent_tool", "delegate")]
+    assert len(defs) == len(served)
     assert [name for name, effect in effects.items() if effect is Effect.PROPOSE_MONEY] == [
-        "propose_order"
+        "node_propose_order"
     ]
-    build_server(defs, grants=Grants(), domain_write="ask")
+    assert "apps_admin_call" not in effects
+    build_servers(defs, grants=Grants(), domain_write="ask")
     rules = guard_rules(
         defs,
         domain_write="allow",
@@ -216,9 +190,10 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
         unattended=False,
         external_unattended=frozenset(),
     )
-    assert {"mcp__qmx__apps_publish", "mcp__qmx__propose_order"} <= rules.mandatory_asks
-    assert "mcp__qmx__read_bars" not in rules.mandatory_asks
-    assert "mcp__qmx__library_save" not in rules.mandatory_asks
+    assert {"mcp__qmx_apps_admin__publish", "mcp__qmx_node__propose_order"} <= rules.mandatory_asks
+    assert "mcp__qmx_data__bars" not in rules.mandatory_asks
+    assert "mcp__qmx_library__save" not in rules.mandatory_asks
+    assert rules.surface == set(rules.qmx_servers)
     assert rules.keyring_names == {"qmx/ctrader"}
     assert rules.variables["CLAUDE_CONFIG_DIR"].endswith("/home/claude")
     assert any(path.endswith("/home/settings.toml") for path in rules.protected_paths)
@@ -251,10 +226,12 @@ def test_server_config_shapes() -> None:
         "url": "http://127.0.0.1:9/mcp",
     }
     for name, row, message in [
-        ("qmx", {"command": "py"}, "belongs to QMX"),
+        ("qmx", {"command": "py"}, "belong to QMX"),
+        ("qmx_library", {"command": "py"}, "belong to QMX"),
         ("f", {"url": "https://x", "credential_ref": "qmx/f"}, "stored credential"),
         ("f", {}, "a command or a url"),
-        ("qmx__evil", {"command": "py"}, "single _"),
+        ("qmx__evil", {"command": "py"}, "belong to QMX"),
+        ("evil__x", {"command": "py"}, "single _"),
         ("my.server", {"command": "py"}, "single _"),
         ("_w", {"command": "py"}, "single _"),
     ]:
@@ -389,56 +366,24 @@ def test_no_read_or_domain_write_operation_publishes_an_app(tmp_path: Path) -> N
     defs = asyncio.run(
         tool_defs(control=control, broker=BrokerService(home.root), domain=domain, delegate=None)
     )
+    control_ops = {row.name for row in control_rows()}
     quiet = [
         tool
         for tool in defs
-        if tool.name in AGENT_OPERATIONS and tool.effect in {Effect.READ, Effect.DOMAIN_WRITE}
+        if tool.name in control_ops and tool.effect in {Effect.READ, Effect.DOMAIN_WRITE}
     ]
-    assert "apps_test" in {tool.name for tool in quiet}
+    assert "apps_admin_test" in {tool.name for tool in quiet}
     for tool in quiet:
         arguments = fill(tool.input_schema)
-        if tool.name == "apps_test":
+        if tool.name == "apps_admin_test":
             arguments["auto_publish"] = True
             assert "auto_publish" not in tool.input_schema["properties"]  # type: ignore[operator]  # pyright: ignore[reportOperatorIssue]
         result = asyncio.run(tool.call(arguments))
-        if tool.name == "apps_test":
+        if tool.name == "apps_admin_test":
             assert '"stage":"shadow"' in result["content"][0]["text"].replace(" ", "")
     assert control.runtime.road.published == []
     control.apps_test("app-1")
     assert control.runtime.road.published == ["app-1"]
-
-
-@pytest.mark.parametrize(
-    ("target", "verdict"),
-    [
-        (target, Ask("mcp__qmx__apps_call always asks you"))
-        for target in ("place_order", "get_quote")
-    ],
-)
-def test_apps_call_asks_whatever_app_tool_it_names(
-    tmp_path: Path, target: str, verdict: Deny | Ask
-) -> None:
-    rules = guard_rules(
-        [plain("apps_call", Effect.MANAGE)],
-        domain_write="allow",
-        home=QmxHome(tmp_path / "home"),
-        config_dir=tmp_path / "home" / "claude",
-        keyring_names=frozenset(),
-        unattended=False,
-        external_unattended=frozenset(),
-    )
-    arguments: dict[str, object] = {"app_id": "broker-app", "tool": target, "arguments": {}}
-    assert (
-        guard(
-            "mcp__qmx__apps_call",
-            arguments,
-            rules,
-            cwd="/",
-            agent_id=None,
-            permission_mode="default",
-        )
-        == verdict
-    )
 
 
 def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
@@ -594,18 +539,20 @@ def test_tools_the_cli_loaded_that_vetting_never_saw_are_named() -> None:
     assert unvetted_tools(status, {"ext": frozenset({"get_weather", "submit_order"})}) == []
 
 
-@pytest.mark.parametrize("table", ["AGENT_OPERATIONS", "BROKER_EFFECTS", "DOMAIN_EFFECTS"])
-def test_a_table_row_missing_on_its_server_refuses_the_tool_list(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, table: str
+@pytest.mark.parametrize("binds", ["control_op", "broker", "domain_fn"])
+def test_a_row_missing_on_its_server_refuses_the_tool_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, binds: Binds
 ) -> None:
     from qma.harness import tools
 
-    monkeypatch.setattr(tools, table, {**getattr(tools, table), "gone_tool": Effect.READ})
+    gone = OperationSpec("data", "gone", binds, "gone_tool", "read", "", "none")
+    found = rows()
+    monkeypatch.setattr(tools, "rows", lambda: (*found, gone))
     home = QmxHome(tmp_path / "home")
     control = ControlService(home.root)
     domain = DomainContext(root=home.root)
     domain.control, domain.library = control, control.library
-    with pytest.raises(ToolSurfaceError, match="missing on their server: gone_tool"):
+    with pytest.raises(ToolSurfaceError, match=r"missing on their server: (data_gone|gone_tool)"):
         asyncio.run(
             tool_defs(
                 control=control, broker=BrokerService(home.root), domain=domain, delegate=None

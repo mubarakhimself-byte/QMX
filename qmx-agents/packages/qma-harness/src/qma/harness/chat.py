@@ -131,18 +131,19 @@ from qma.harness.project import (
 )
 from qma.harness.relay import GrantRefused
 from qma.harness.tools import (
-    PREFIX,
-    SERVER,
     Grant,
     Grants,
+    HostRead,
+    ToolDef,
     ToolSurfaceError,
     VetCache,
     args_digest,
     asks,
-    build_server,
+    build_servers,
     domain_write_policy,
     guard_rules,
     keyring_refs,
+    surface,
     tool_defs,
     unvetted_tools,
     vet_mcp_servers,
@@ -443,6 +444,8 @@ class ChatDeps:
     """External MCP tool lists already vetted, by config digest, for this harness."""
     delegate: Callable[[SessionId, str, str], Awaitable[str]] | None = None
     """`Harness._delegate`, called with the calling chat's id, a profile and a prompt."""
+    host: Mapping[str, HostRead] = field(default_factory=dict[str, HostRead])
+    """The `ops` reads the harness serves itself, by catalog target."""
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
     sinks: dict[str, HookSink] = field(default_factory=dict[str, HookSink])
@@ -747,6 +750,7 @@ class Chat:
         self._stream = _Stream()
         self._grants = Grants()
         self._gate: GuardRules | None = None
+        self._defs: list[ToolDef] = []
         self._asks: dict[int, _Ask] = {}
         self._settled: dict[int, AnswerStatus] = {}
         self._usage: tuple[RunJournal, Totals] | None = None
@@ -786,6 +790,28 @@ class Chat:
     async def set_packs(self, packs: tuple[str, ...]) -> None:
         async with self._lock:
             self._write(config=replace(self.record.config, packs=packs))
+            await self._relist()
+
+    async def set_toolsets(self, toolsets: tuple[str, ...] | None) -> None:
+        async with self._lock:
+            self._write(config=replace(self.record.config, toolsets=toolsets))
+            await self._relist()
+
+    async def _relist(self) -> None:
+        """Switch the live chat's toolset servers to its record's surface, with no relaunch
+        (probe P-TG). The guard's surface changes first, so a removed tool is refused even if
+        the CLI still lists it. A Cold chat launches with the new surface."""
+        live, gate = self._live, self._gate
+        if live is None or gate is None or self.record.config.tools == ():
+            return
+        wanted = set(surface(self.record.config.toolsets, self._defs))
+        before = set(gate.surface)
+        gate.surface.intersection_update(wanted)
+        for name in sorted(before - wanted):
+            await live.client.toggle_mcp_server(name, enabled=False)
+        for name in sorted(wanted - before):
+            await live.client.toggle_mcp_server(name, enabled=True)
+        gate.surface.update(wanted)
 
     async def quote(self, new: ChatConfig) -> Quote:
         """The steps, the warning and the counts `apply` will hold the chat to. The harness has
@@ -1139,6 +1165,9 @@ class Chat:
             for server in status["mcpServers"]:
                 if server["name"] in vetted and server["status"] == "disabled":
                     await live.client.toggle_mcp_server(server["name"], enabled=True)
+            if self._gate is not None:
+                for name in sorted((self._gate.qmx_servers - self._gate.surface) & servers.keys()):
+                    await live.client.toggle_mcp_server(name, enabled=False)
             settled, pending = await _settled(live.client, frozenset(vetted))
             gate.dropped_servers.update(pending)
             for name in pending:
@@ -1169,7 +1198,7 @@ class Chat:
     ) -> tuple[
         dict[str, McpServerConfig], GuardRules, Mapping[str, frozenset[str]], tuple[str, ...]
     ]:
-        """The `qmx` server, the vetted external servers (the operator's and the chat's own),
+        """The QMX toolset servers, the vetted external servers (the operator's and the chat's own),
         the guard's rules, each vetted server's tool names, and the allow rules for every QMX
         tool whose Effect does not ask (H20), so a READ or an allowed DOMAIN_WRITE never asks
         in any mode. A refused external server gets a `needs_you` block and is left out; the
@@ -1183,11 +1212,16 @@ class Chat:
             else functools.partial(deps.delegate, self.session_id)
         )
         defs = await tool_defs(
-            control=control, broker=deps.broker, domain=deps.domain, delegate=delegate
+            control=control,
+            broker=deps.broker,
+            domain=deps.domain,
+            delegate=delegate,
+            host=deps.host,
         )
+        self._defs = defs
         policy = domain_write_policy(await asyncio.to_thread(control.settings_get, "agents"))
         try:
-            qmx = build_server(
+            qmx = build_servers(
                 defs,
                 grants=self._grants,
                 domain_write=policy,
@@ -1213,12 +1247,14 @@ class Chat:
             external_unattended=external_unattended,
             workspace=self.record.config.workspace,
             rules=await asyncio.to_thread(control.settings_get, "rules"),
+            on=surface(self.record.config.toolsets, defs),
         )
         self._gate = gate
         if self.record.config.tools == ():
+            gate.surface.clear()
             return {}, gate, {}, ()
-        allow = tuple(PREFIX + tool.name for tool in defs if not asks(tool.effect, policy))
-        return {SERVER: qmx, **vetted.configs}, gate, vetted.tools, allow
+        allow = tuple(tool.full for tool in defs if not asks(tool.effect, policy))
+        return {**qmx, **vetted.configs}, gate, vetted.tools, allow
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile

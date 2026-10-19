@@ -288,7 +288,7 @@ def test_library_run_and_aggregate_doors_match(tmp_path: Path) -> None:
                         f"/api/library/{artifact_id}/links",
                         {"artifact_id": artifact_id},
                     ),
-                    ("aggregates_get", "/api/aggregates", {}),
+                    ("ops_aggregates", "/api/aggregates", {}),
                 ]
                 for name, url, args in cases:
                     assert (await mcp.call_tool(name, args)).data == rest.get(
@@ -301,9 +301,9 @@ def test_library_run_and_aggregate_doors_match(tmp_path: Path) -> None:
                 assert "event: aggregates" in stream.text
                 assert '"library_items": 1' in stream.text
                 service.record_work("runs", "r1", {"status": "completed"})
-                assert (await mcp.call_tool("runs_get", {"run_id": "r1"})).data == rest.get(
-                    "/api/runs/r1", headers=HEADERS
-                ).json()
+                assert (
+                    await mcp.call_tool("workflows_remote_get", {"run_id": "r1"})
+                ).data == rest.get("/api/runs/r1", headers=HEADERS).json()
                 assert rest.get("/api/runs/missing", headers=HEADERS).status_code == 404
 
     asyncio.run(exercise())

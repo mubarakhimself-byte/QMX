@@ -30,7 +30,7 @@ from qma.harness.project import PlanMeter, Reading
 from qma.harness.routes import chat_router, control_service
 from qma.harness.tools import Grants, args_digest
 
-PROPOSE = "mcp__qmx__propose_order"
+PROPOSE = "mcp__qmx_node__propose_order"
 ORDER = {"symbol": "EURUSD", "side": "buy", "volume": 0.01}
 RM_RULE = PermissionRuleValue("Bash", "rm:*")
 SUGGEST_RM = [PermissionUpdate("addRules", rules=[RM_RULE], behavior="allow")]
@@ -163,13 +163,13 @@ def test_allow_once_on_an_asking_qmx_tool_grants_its_exact_input_once(
     home: QmxHome, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     held: list[Grants] = []
-    real = qma.harness.chat.build_server
+    real = qma.harness.chat.build_servers
 
     def keep(defs: Any, *, grants: Grants, **kwargs: Any) -> Any:
         held.append(grants)
         return real(defs, grants=grants, **kwargs)
 
-    monkeypatch.setattr(qma.harness.chat, "build_server", keep)
+    monkeypatch.setattr(qma.harness.chat, "build_servers", keep)
 
     async def body(harness: Harness) -> None:
         chat, ask = await open_chat(harness)
@@ -276,13 +276,13 @@ def test_an_edited_input_goes_through_the_guard_and_the_grant_binds_it(
     home: QmxHome, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     held: list[Grants] = []
-    real = qma.harness.chat.build_server
+    real = qma.harness.chat.build_servers
 
     def keep(defs: Any, *, grants: Grants, **kwargs: Any) -> Any:
         held.append(grants)
         return real(defs, grants=grants, **kwargs)
 
-    monkeypatch.setattr(qma.harness.chat, "build_server", keep)
+    monkeypatch.setattr(qma.harness.chat, "build_servers", keep)
     to_keyring = {"command": "cmdkey /list"}
 
     async def body(harness: Harness) -> None:
