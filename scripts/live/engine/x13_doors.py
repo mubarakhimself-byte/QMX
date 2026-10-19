@@ -425,10 +425,11 @@ def menu(log: Log) -> None:
     with started(log, ["qma.serve"], plain, "qma-serve") as (client, process, _):
         serving = client.get("/api/health").json()["pid"]
         saved = client.put("/api/workflows/chain/draft", json=chain("chain")).json()
+        tree = {process.pid} | {child.pid for child in psutil.Process(process.pid).children()}
         log.check(
-            "lane 5: qma.serve forwards to qmx_host, which serves the workflow doors",
-            serving == process.pid and saved.get("state") == "validated",
-            (serving, process.pid, saved.get("state")),
+            "lane 5: qma.serve forwards to qmx_host in its own process, which serves the doors",
+            serving in tree and saved.get("state") == "validated",
+            (serving, sorted(tree), saved.get("state")),
         )
     home = throwaway_home(PR, "menu")
     with host(log, home) as (client, _, _):

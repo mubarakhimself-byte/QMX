@@ -11,9 +11,11 @@ home's files but the chat and the run themselves. Over REST the lane makes a hai
 it a long turn, and test-runs a workflow whose agent node does a long count; a test run's cheap
 role resolves to `claude/haiku` on the plan login (`roles.test_order`). Once the chat's turn and
 the agent node are both running, the host's whole process tree is killed and a new host starts on
-the same home. Pass when both ran at once, the chat's turn reads unknown after the restart, the
-run resumes from its ledger to `passed` without a second `run_created`, a second host on the home
-is refused in one line, and the ship home's `settings.toml` hashes the same before and after.
+the same home, and the run is resumed over REST (again after each retry backoff, which writes no
+wake row before BUG1). Pass when both ran at once, the chat's turn reads unknown after the
+restart, the run resumes from its ledger to `passed` without a second `run_created`, a second
+host on the home is refused in one line, and the ship home's `settings.toml` hashes the same
+before and after.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -50,7 +53,8 @@ ITEM: Final = "host-e54-count"
 START_S: Final = 120.0
 BOTH_S: Final = 180.0
 OVERLAP_S: Final = 5.0
-RUN_S: Final = 420.0
+RUN_S: Final = 600.0
+RESUMES: Final = 4
 CHAT_TURN: Final = (
     "Write every whole number from one to three hundred in English words, one per line. "
     "No other text."
@@ -179,9 +183,48 @@ def unknown_blocks(chat: str) -> list[dict[str, Any]]:
     ]
 
 
+def retry_at(run_id: str) -> datetime | None:
+    steps = [e for e in events(run_id) if e.kind == "ladder_step" and e.data.get("step") == "retry"]
+    at = steps[-1].data.get("resume_at") if steps else None
+    return datetime.fromisoformat(str(at)) if at else None
+
+
+def drive(log: Log, client: httpx.Client, run: str) -> dict[str, Any]:
+    """Resume the run over REST, as the operator would after a restart, until it ends. A retry
+    backoff writes no wake row before BUG1, so a run parked on one is resumed again here once its
+    `resume_at` is past."""
+    deadline = time.monotonic() + RUN_S
+    found: dict[str, Any] = {}
+    for n in range(1, RESUMES + 1):
+        resumed = client.post(f"/api/workflow-runs/{run}/resume").json()
+        log(f"resume {n}: {json.dumps(resumed)[:300]}")
+        while time.monotonic() < deadline:
+            found = client.get(f"/api/workflow-runs/{run}").json()
+            if found.get("status") in ("passed", "stopped"):
+                return found
+            if found.get("status") == "waiting" and not found.get("in_flight"):
+                break
+            time.sleep(2)
+        at = retry_at(run)
+        log(f"run parked {found.get('status')} ({found.get('reason')}); retry at {at}")
+        if found.get("reason") != "retry" or at is None:
+            return found
+        time.sleep(max(0.0, (at - datetime.now(UTC)).total_seconds()) + 1)
+    return found
+
+
+def cancel_leftovers(log: Log, client: httpx.Client) -> None:
+    """End this lane's runs an earlier attempt left unended on the ship home."""
+    for run in client.get("/api/workflow-runs", params={"workflow_id": ITEM}).json():
+        if run.get("status") not in ("passed", "stopped"):
+            ended = client.post(f"/api/workflow-runs/{run['run_id']}/cancel").json()
+            log(f"cancelled leftover run {run['run_id']}: {ended.get('status')}")
+
+
 def lane(log: Log) -> None:
     bearer = secrets.token_urlsafe(32)
     with served(log, bearer, "host1") as (client, first):
+        cancel_leftovers(log, client)
         saved = client.put(f"/api/workflows/{ITEM}/draft", json=workflow()).json()
         log(f"draft {ITEM}: {saved.get('state')} revision {saved.get('revision')}")
         workspace = live.SCRATCH / "host-e54-ws"
@@ -231,7 +274,8 @@ def lane(log: Log) -> None:
         first.wait(30)
         log(f"tester saw: {json.dumps(tested.get('reply'))[:200]}")
 
-    with served(log, bearer, "host2") as (client, second):
+    with served(log, bearer, "host2") as (client, _):
+        serving = client.get("/api/health").json()["pid"]
         record = client.get(f"/api/chats/{chat}").json()
         blocks = unknown_blocks(chat)
         log(f"chat after restart: turn {record.get('turn')}; unknown blocks {blocks}")
@@ -252,17 +296,10 @@ def lane(log: Log) -> None:
         log(f"second host: exit {refused.returncode} {said}")
         log.check(
             "a second host on the ship home is refused in one line",
-            refused.returncode == 1 and len(said) == 1 and f"PID {second.pid}" in said[0],
+            refused.returncode == 1 and len(said) == 1 and f"PID {serving}" in said[0],
             said,
         )
-        resumed = client.post(f"/api/workflow-runs/{run}/resume").json()
-        log(f"resume: {json.dumps(resumed)[:300]}")
-
-        def ended() -> dict[str, Any] | None:
-            found = client.get(f"/api/workflow-runs/{run}").json()
-            return found if found.get("status") in ("passed", "stopped") else None
-
-        final = until(ended, RUN_S, every=2) or client.get(f"/api/workflow-runs/{run}").json()
+        final = drive(log, client, run)
     found = events(run)
     for event in found:
         if event.data.get("node_id") or event.kind.startswith("run_"):
