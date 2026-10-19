@@ -133,7 +133,7 @@ else:
     except Exception as error:
         day["events"] = []
         missing.append(f"calendar: {type(error).__name__}")
-    from qmx_engine.workers.zones import home_of  # noqa: PLC0415
+    from qmx_engine.workers.zones import home_of
 
     home = home_of(Path(os.environ["QMX_WORK_SHARED"]))
     results = latest_results(home, (now - timedelta(hours=FRESH_HOURS)).isoformat())
