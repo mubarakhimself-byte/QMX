@@ -6,8 +6,10 @@ reader), the `Harness` (which starts the model relay on its own thread), the eng
 scheduler, and the control app with the chat, engine and control routes behind the principal
 door. The host is the one writer of the home's Library store `<home>/library/` (Library AD-5): it
 opens the store with the engine's one redaction (AD-37) and the engine reads and writes it through
-`EngineLibraryAdapter`. The control's own `library.db` stays `ControlService.library` until the
-old Libraries are imported, and the apps supervisor is `ControlService.app_runtime()`. The
+`EngineLibraryAdapter`. The control's own `library.db` stays `ControlService.library`, the truth
+until the cut-over, and every `library_save` and `library_link` also writes the store through the
+dual write (MIGRATION step 5) attached as soon as the store opens. The apps supervisor is
+`ControlService.app_runtime()`. The
 engine's permission policy and hook sink are registered on the harness, both named `engine`, before
 the engine resumes any run, so a chat reloaded after a restart finds them. On stop the engine
 drains, the Library store closes, then the harness closes, which stops the relay.
@@ -65,6 +67,7 @@ from qmx_engine.ports.library import JsonObject
 from qmx_engine.runner import Engine
 from qmx_engine.service.rest import engine_router
 from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.migrate.from_library_b import DualWrite
 from qmx_library.store import Store
 
 from qmx_host.door import PrincipalDoor
@@ -171,6 +174,7 @@ async def serve(
     )
     try:
         with Store.open(home / LIBRARY, redactor=redact) as store:
+            control.attach_library_mirror(DualWrite(store))
             async with EngineDoor.open(
                 control, harness=HarnessAdapter(harness), library=EngineLibraryAdapter(store)
             ) as engine:

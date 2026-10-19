@@ -7,7 +7,8 @@ Lanes are `regression import dual diff alias collision real secrets processes`; 
 `D:/QMX-worktrees/qma-ship/build/evidence/libm`, prefix `owner-` for the builder, `check-` for
 the coordinator) and the script exits 1 if any lane failed. No model, no key, no ship home, no
 lane lock. The operator's home (`LIBM_REAL_HOME`, default `~/.qmx`) is only ever copied: every
-lane runs on a copy under `D:/QMX-worktrees/qma-ship/build/homes/libm-<lane>`, and `real` hashes
+lane runs on a copy under `D:/QMX-worktrees/qma-ship/build/homes/<LIBM_HOME_PREFIX><lane>`
+(default prefix `libm-`), and `real` hashes
 his `library.db` and blobs against the hashes `import` recorded before it copied them.
 
 His home holds no registry room and no app artifacts, so `import` adds both to the copy as named
@@ -19,7 +20,8 @@ its definition folder.
   fails nothing the parent passes.
 - `import` (lanes 2 and 8): steps 0 to 4 into the dry store; `verify` prints step 0's counts
   beside the store's, equal, with every blob hash checked; the import time per 1,000 items.
-- `dual` (lane 3): `library_save` on the copy with the dual write attached; both stores hold it.
+- `dual` (lane 3): `qmx_host` serves the copy with a lane bearer and `POST /api/library` saves an
+  item; once the host stops, `library.db`, the save event's `mirror` and the store all hold it.
 - `diff` (lane 4): `lib-dual-run-diff` test-run by the engine on the copy's store; it passes and
   the store holds its `test-report`; then one save made without the mirror turns the diff unclean.
 - `alias` (lane 5): an old `artifacts/<sha>` ref resolves to the imported object.
@@ -44,6 +46,9 @@ from types import SimpleNamespace
 from typing import Any, Final, TypeVar
 
 import psutil
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
+
 from qmb.registryread import AsOfSet, DatedPointer, PassiveHub, RegistryReadPort, SupersedesRef
 from qmf.core.chrono import Instant, WriterId
 from qmf.core.refusal import Result, is_ok
@@ -57,17 +62,19 @@ from qmx_engine.service.context import OPERATOR as CALLER
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.migrate import OPERATOR, MigrationAlarm, open_target, pre
 from qmx_library.migrate.from_apps import import_apps
-from qmx_library.migrate.from_library_b import DualWrite, import_library_b, resolve_alias
+from qmx_library.migrate.from_library_b import import_library_b, resolve_alias
 from qmx_library.migrate.from_registry import import_registry
 from qmx_library.migrate.snapshot import snapshot
 from qmx_library.migrate.verify import verify
 from qmx_library.store import Store
+from x13_doors import host
 
 BUILD: Final = Path("D:/QMX-worktrees/qma-ship/build")
 EVIDENCE: Final = Path(os.environ.get("LIBM_EVIDENCE", str(BUILD / "evidence" / "libm")))
 PREFIX: Final = os.environ.get("LIBM_LOG_PREFIX", "owner-")
 REAL: Final = Path(os.environ.get("LIBM_REAL_HOME", str(Path.home() / ".qmx")))
-PARENT: Final = os.environ.get("LIBM_PARENT", "74b783f8fe152c9b71f5356c7dcee3c625a4e476")
+HOMES: Final = os.environ.get("LIBM_HOME_PREFIX", "libm-")
+PARENT: Final = os.environ.get("LIBM_PARENT", "7a3696add5a30b2eb5d450c17cba4350615f862e")
 ROOT: Final = Path(__file__).resolve().parents[3]
 LIB: Final = ROOT / "qmx-agents" / "packages" / "qmx-library"
 TEMPLATE: Final = LIB / "src" / "qmx_library" / "migrate" / "lib-dual-run-diff"
@@ -76,6 +83,7 @@ HASHES: Final = EVIDENCE / f"{PREFIX}libm-real-before.json"
 SUITES: Final = ("qmx-library", "qmx-control")
 UV: Final = shutil.which("uv") or "uv"
 GIT: Final = shutil.which("git") or "git"
+SAVED: Final = {"title": "LIBM dual lane", "kind": "article", "content": {"lane": 3}}
 T = TypeVar("T")
 
 
@@ -120,7 +128,7 @@ def writable(remove: Callable[[str], object], path: str, _: BaseException) -> No
 
 def copy_home(slug: str) -> Path:
     """A fresh copy of his Library B files; his own are only read."""
-    root = BUILD / "homes" / f"libm-{slug}"
+    root = BUILD / "homes" / f"{HOMES}{slug}"
     if root.exists():
         shutil.rmtree(root, onexc=writable)
     root.mkdir(parents=True)
@@ -210,18 +218,22 @@ def dual_home(log: Log) -> Path:
 
 
 def lane_dual() -> bool:
+    """Through a running `qmx_host`, so the proof is the host's own attach, not the lane's."""
     log = Log("dual")
     home = dual_home(log)
+    with host(log, home, "dual-host") as (client, _, _):
+        answer = client.post("/api/library", json=SAVED)
+        log(f"POST /api/library through qmx_host: http {answer.status_code}")
+        saved = answer.json()
+    item_id = str(saved["id"])
     service = ControlService(home)
+    old = service.library_get(item_id)
+    mirror = [e["data"].get("mirror") for e in service.events("library", subject=item_id)]
     with Store.open(home / "library", redactor=redact) as store:
-        service.attach_library_mirror(DualWrite(store))
-        saved = service.library_save(
-            LibraryInput(title="LIBM dual lane", kind="article", content={"lane": 3})
-        )
-        found = resolve_alias(store, str(saved["id"]))
+        found = resolve_alias(store, item_id)
         view = store.get(OPERATOR, found) if found else None
-    old = service.library_get(str(saved["id"]))
-    log.check("library.db holds the save", old["content"] == {"lane": 3}, old["id"])
+    log.check("library.db holds the save", old["content"] == {"lane": 3}, item_id)
+    log.check("the save event records the mirror wrote it", mirror == ["ok"], mirror)
     log.check("the store holds the save", view is not None, found)
     if view is not None:
         log.check("as the mapped kind", view.kind == "source", view.kind)
