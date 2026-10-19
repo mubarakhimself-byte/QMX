@@ -1,12 +1,12 @@
-"""The `llm` node (AD-13, SOLUTION-DESIGN 2.3): one turn on a tool-less brief in a harness
-Background chat, its final text validated against the node's JSON schema.
+"""The `llm` node (AD-13, SOLUTION-DESIGN 2.3): one turn in a harness Background chat born with no
+tool at all (H2, B-70), its final text validated against the node's JSON schema.
 
 The runner resolves the candidate at dispatch and passes it as `NodeJob.resolved_model`. The brief
 puts the static prompt first and the input last, so a second chat with the same prompt can reuse
 its cache (EP0 FINDINGS). An answer that fails the schema gets one repair turn in the same chat,
 then the attempt fails `bad_output`, retryable, with a message that does not quote the answer, so
 two failures in a row share a signature and reach the doctor. Tokens, cache reads and cache writes
-come from the chat's journal rows and land on the ending event, which the span reads.
+come from the turn's result and land on the ending event, which the span reads.
 
 An `llm` node has no run timeout (AD-40). While its turn runs a model request is in flight, which
 the stuck detector counts as progress; a request that never yields a first token is the router's
@@ -156,6 +156,7 @@ async def call(
             model=candidate.model,
             effort=candidate.effort,
             workspace=workspace,
+            tools=(),
         )
     except Refusal as refusal:
         return failed("unavailable", redact(str(refusal)), retryable=False)

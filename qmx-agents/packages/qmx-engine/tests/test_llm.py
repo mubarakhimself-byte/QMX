@@ -67,7 +67,15 @@ def test_an_invalid_answer_gets_one_repair_turn_in_the_same_chat(tmp_path: Path)
     )
     assert (result.span["turns"], result.span["repaired"]) == (2, True)
     assert result.span["tokens"] == {"in": 20, "out": 10, "cache_read": 200, "cache_write": 0}
-    assert port.chats == [{"title": "r1:capital:0:-:1", "profile": "claude", "model": "haiku"}]
+    assert port.chats == [
+        {
+            "title": "r1:capital:0:-:1",
+            "profile": "claude",
+            "model": "haiku",
+            "tools": (),
+            "compact_at": None,
+        }
+    ]
 
 
 def test_a_second_invalid_answer_fails_bad_output_with_a_stable_message(tmp_path: Path) -> None:

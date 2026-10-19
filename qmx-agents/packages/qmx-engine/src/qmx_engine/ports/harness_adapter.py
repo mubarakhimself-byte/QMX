@@ -1,22 +1,15 @@
-"""`HarnessPort` (SOLUTION-DESIGN 8.4): the engine's one door to model chats, over the harness's
-public names only.
+"""`HarnessPort` (SOLUTION-DESIGN 27.2): the engine's one door to model chats, over the harness's
+turn call (AD-53).
 
-Every engine chat is a Background chat titled with its attempt's idempotency key, in the workflow's
-workspace `workspaces/wf-<id>/`. Every prompt goes as `InjectedText`, never as operator text. A
-turn ends when the chat record reads `turn == "idle"` (EP0 FINDINGS: the harness writes the turn's
-`model_call` row before that, so the tokens are already in the journal). While a turn runs, every
-permission ask is rejected at once with "unattended run" (ruling 57). A lost CLI or a refused
-plugin also ends the turn idle, with a `needs_you` block saying why.
+Every engine chat is a Background chat titled with its attempt's idempotency key. It is born with
+exactly the built-in tools its node declares (`()` is none, H2), the `engine` permission policy,
+which answers its asks in-process, and the `engine` hook sink. All three and `compact_at` are on
+the chat record, so a chat reloaded after a host restart keeps them (H19). Every prompt goes as
+`InjectedText`. A turn ends when its handle's `result()` resolves: nothing polls.
 
-An agent chat also passes `compact_at` and per-chat `ChatHooks` (H15, H16). The harness refuses
-both when it builds the `NewChat`, before any launch, and that refusal is `CompactRefused`, so the
-caller can fall back. A turn reports the tool calls and compactions its session blocks show, which
-the caller reconciles against what the hooks reported.
-
-`activity` is what the stuck detector reads while a turn runs: the tool calls the session blocks
-show since the latest send, with their arguments and results, whether the turn still runs, and the
-chat's CLI process, whose children run its tools. `queued` tells it a send that waits for a slot
-in the harness slot table, so that wait is never judged idle.
+While a turn runs, its events feed `activity`, which the stuck detector reads: the tool calls so
+far with their results, whether the turn still runs, and the chat's CLI process, whose children run
+its tools. `queued` tells it a send that waits for a slot, so that wait is never judged idle.
 """
 
 from __future__ import annotations
@@ -24,37 +17,35 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal, Protocol, cast
 
 from pydantic import JsonValue
 from qma.harness import (
-    AskId,
     Background,
-    ChatHooks,
+    ChatPermissions,
     Harness,
     InjectedText,
     LaunchRefused,
     NewChat,
-    Reject,
+    Projected,
     SessionId,
+    ToolFinished,
+    ToolStarted,
+    TurnHandle,
+    TurnResult,
 )
 from qma.launcher import pid_path, read_pid_record
 
+from qmx_engine.policy import engine_policy
 from qmx_engine.roles import PLAN
+from qmx_engine.sink import ENGINE, EngineSink, Listener
 
-POLL_SECONDS: Final = 0.05
-REJECTION: Final = "unattended run"
-TOKEN_FIELDS: Final = {
-    "input_tokens": "in",
-    "output_tokens": "out",
-    "cache_read_tokens": "cache_read",
-    "cache_write_tokens": "cache_write",
-}
 CONTEXT_FIELDS: Final = ("input_tokens", "cache_read_tokens", "cache_write_tokens")
+DENIED: Final = frozenset({"rejected", "denied", "expired"})
+LOST: Final = "the chat's process ended before the turn's result"
 
 type JsonObject = dict[str, JsonValue]
 type Effort = Literal["low", "medium", "high", "xhigh", "max"]
@@ -64,10 +55,6 @@ class Refusal(Exception):
     """The harness refused a launch or a send; the message is its reason."""
 
 
-class CompactRefused(Refusal):
-    """The harness refused the chat's `compact_at` or `hooks`; nothing was launched."""
-
-
 @dataclass(frozen=True, slots=True)
 class PlanUse:
     """The plan account's use, from `Harness.usage()`."""
@@ -75,7 +62,6 @@ class PlanUse:
     five_hour: float | None
     """The last five-hour reading, a fraction from 0 to 1; None when there is none."""
     resets_at: str | None
-    """When the five-hour window resets."""
     blocked_until: str | None
     """When a used-up (rejected) plan window resets."""
     stopped: str | None
@@ -92,25 +78,22 @@ class ToolCall:
 @dataclass(frozen=True, slots=True)
 class Turn:
     text: str | None
-    """The turn's last text block."""
     tokens: dict[str, int] = field(default_factory=dict[str, int])
     cost_usd: float | None = None
     asks_rejected: int = 0
     needs_you: str | None = None
     """Why the turn failed, when it did."""
     timed_out: bool = False
-    idle: bool = False
-    """The turn was interrupted because no block arrived for the idle limit."""
     tools: tuple[ToolCall, ...] = ()
     compactions: tuple[str, ...] = ()
-    """The trigger of each compaction the session recorded during the turn."""
+    """The trigger of each compaction during the turn."""
     context: int | None = None
-    """The context the turn's last model call read: input plus cache read and cache write."""
+    """The context the turn's last model reply read: input plus cache read and cache write."""
 
 
 @dataclass(frozen=True, slots=True)
 class ToolStep:
-    """One tool call the session shows: `result` is None while the call is open."""
+    """One tool call of the running turn: `result` is None while the call is open."""
 
     id: str
     name: str
@@ -122,10 +105,9 @@ class ToolStep:
 @dataclass(frozen=True, slots=True)
 class Activity:
     blocks: int
-    """Blocks the session wrote since the latest send."""
+    """Blocks the turn wrote so far."""
     steps: tuple[ToolStep, ...] = ()
     running: bool = False
-    """The turn has not ended."""
     cli: int | None = None
     """The chat's CLI process id, when it runs."""
 
@@ -151,42 +133,76 @@ class HarnessPort(Protocol):
         model: str,
         effort: str | None,
         workspace: Path,
+        tools: tuple[str, ...] = (),
         compact_at: float | None = None,
-        hooks: ChatHooks | None = None,
     ) -> str: ...
 
+    def listen(self, chat: str, listener: Listener | None) -> None:
+        """Hand the chat's hook events to `listener` from now on; None stops them."""
+        ...
+
     async def send(self, chat: str, text: str, *, priority: int = 0) -> None:
-        """Returns once the prompt is sent. A send waits in the harness slot table, the only
-        chat-slot counter, served by `priority` and then age (AD-58)."""
+        """Returns once the prompt reached the chat or waits for a slot in the harness slot
+        table, the only chat-slot counter, served by `priority` and then age (AD-58)."""
         ...
 
-    def queued(self, chat: str) -> bool:
-        """Whether the chat's send waits for a slot: a recorded wait, never an idle attempt."""
-        ...
+    def queued(self, chat: str) -> bool: ...
 
-    async def wait_turn(
-        self, chat: str, *, timeout: float | None = None, idle: float | None = None
-    ) -> Turn:
-        """The turn once it ends. `timeout` and `idle` interrupt it; an engine attempt passes
-        neither, since the stuck detector decides when an attempt stopped moving."""
+    async def wait_turn(self, chat: str, *, timeout: float | None = None) -> Turn:
+        """The turn `send` opened, once it ends. `timeout` interrupts it; an engine attempt
+        passes none, since the stuck detector decides when an attempt stopped moving."""
         ...
 
     async def interrupt(self, chat: str) -> None: ...
 
     def context(self, chat: str) -> int | None:
-        """The context the chat's latest model call read, as `Turn.context`."""
+        """The context the chat's latest journaled model call read."""
         ...
 
-    def activity(self, chat: str) -> Activity:
-        """What the chat shows since the latest send, while its turn runs."""
+    def activity(self, chat: str) -> Activity: ...
+
+    def holds_task(self, chat: str) -> bool:
+        """Whether the chat's transcript holds a prompt, so a resumed attempt need not resend
+        its task (B-69)."""
         ...
+
+
+@dataclass
+class Running:
+    """One chat's turn in flight: its handle, what its events showed so far, and the journal's
+    length before the send, so the turn's cost is the rows after it."""
+
+    handle: TurnHandle
+    rows: int
+    blocks: int = 0
+    steps: dict[str, ToolStep] = field(default_factory=dict[str, ToolStep])
+    reader: asyncio.Task[None] | None = None
+
+    async def read(self) -> None:
+        async for event in self.handle.events():
+            match event:
+                case Projected():
+                    self.blocks += 1
+                case ToolStarted(id=tool_id, name=name, arguments=arguments):
+                    self.steps[tool_id] = ToolStep(tool_id, name, cast(JsonValue, arguments))
+                case ToolFinished(id=tool_id, name=name, arguments=arguments, result=result):
+                    self.steps[tool_id] = ToolStep(
+                        tool_id, name, cast(JsonValue, arguments), result, event.error
+                    )
+                case _:
+                    pass
 
 
 class HarnessAdapter:
     def __init__(self, harness: Harness) -> None:
+        """Registers the `engine` sink and policy on `harness`, so build the adapter before any
+        engine chat launches or reloads."""
         self.harness = harness
-        self.marks: dict[str, tuple[int, int]] = {}
-        """Each chat's last session event id and journal line count before its latest send."""
+        self.sink = EngineSink()
+        harness.register_sink(ENGINE, self.sink)
+        harness.register_policy(ENGINE, engine_policy)
+        self.running: dict[str, Running] = {}
+        """Each chat's turn in flight, dropped when `wait_turn` returns it."""
 
     def profiles(self) -> frozenset[str]:
         rows = self.harness.control.settings_get("providers")
@@ -224,8 +240,8 @@ class HarnessAdapter:
         model: str,
         effort: str | None,
         workspace: Path,
+        tools: tuple[str, ...] = (),
         compact_at: float | None = None,
-        hooks: ChatHooks | None = None,
     ) -> str:
         workspace.mkdir(parents=True, exist_ok=True)
         try:
@@ -237,129 +253,79 @@ class HarnessAdapter:
                 profile=profile,
                 kind=Background(),
                 compact_at=compact_at,
-                hooks=hooks,
+                tools=tools,
+                hook_sink=ENGINE,
+                permissions=ChatPermissions(policy=ENGINE),
+                policy_args={"tools": list(tools)},
             )
-        except LaunchRefused as refused:
-            raise CompactRefused(str(refused)) from None
-        try:
             return str(await self.harness.start_chat(spec))
         except LaunchRefused as refused:
             raise Refusal(str(refused)) from None
 
+    def listen(self, chat: str, listener: Listener | None) -> None:
+        self.sink.listen(chat, listener)
+
     async def send(self, chat: str, text: str, *, priority: int = 0) -> None:
-        self.marks[chat] = (self._last_event(chat), len(self._journal(chat)))
+        rows = len(self._journal(chat))
         try:
-            await self.harness.send(SessionId(chat), InjectedText(text), priority=priority)
+            handle = await self.harness.run_turn(
+                SessionId(chat), InjectedText(text), priority=priority
+            )
         except LaunchRefused as refused:
             raise Refusal(str(refused)) from None
+        running = self.running[chat] = Running(handle, rows)
+        running.reader = asyncio.create_task(running.read())
 
     def queued(self, chat: str) -> bool:
         return SessionId(chat) in self.harness.slot_table().waiting
 
-    async def wait_turn(
-        self, chat: str, *, timeout: float | None = None, idle: float | None = None
-    ) -> Turn:
-        after, rows = self.marks.get(chat, (0, 0))
-        answered: set[int] = set()
-        deadline = None if timeout is None else time.monotonic() + timeout
-        seen, quiet_since = 0, time.monotonic()
-        while True:
-            blocks = self._blocks(chat, after)
-            for block in blocks:
-                content = block.get("content")
-                if (
-                    block.get("type") == "permission"
-                    and isinstance(content, dict)
-                    and content.get("state") == "asking"
-                    and isinstance(seq := block.get("seq"), int)
-                    and seq not in answered
-                ):
-                    self.harness.answer(AskId(SessionId(chat), seq), Reject(REJECTION))
-                    answered.add(seq)
-            now = time.monotonic()
-            if len(blocks) > seen:
-                seen, quiet_since = len(blocks), now
-            idled = idle is not None and now - quiet_since > idle
-            done = self._turn(chat) == "idle"
-            if done or (deadline is not None and now > deadline) or idled:
-                break
-            await asyncio.sleep(POLL_SECONDS)
-        if not done:
+    async def wait_turn(self, chat: str, *, timeout: float | None = None) -> Turn:
+        running = self.running[chat]
+        timed_out = False
+        try:
+            result = await asyncio.wait_for(running.handle.result(), timeout)
+        except TimeoutError:
+            timed_out = True
             await self.harness.interrupt(SessionId(chat))
-        blocks = self._blocks(chat, after)
-        contents = [(b.get("type"), b.get("content")) for b in blocks]
-        texts = [c for kind, c in contents if kind == "text" and isinstance(c, dict)]
-        text = texts[-1].get("text") if texts else None
-        needs = [c for kind, c in contents if kind == "needs_you" and isinstance(c, dict)]
-        reason = needs[-1].get("reason") if needs else None
-        journal = self._journal(chat)[rows:]
-        tokens, cost = spent(journal)
-        return Turn(
-            text=text if isinstance(text, str) else None,
-            tokens=tokens,
-            cost_usd=cost,
-            asks_rejected=len(answered),
-            needs_you=reason if isinstance(reason, str) else None,
-            timed_out=not done,
-            idle=not done and idled,
-            tools=tool_calls(blocks),
-            compactions=tuple(
-                str(c.get("trigger"))
-                for kind, c in contents
-                if kind == "changed" and isinstance(c, dict) and c.get("kind") == "compacted"
-            ),
-            context=context_of(journal),
-        )
+            result = await running.handle.result()
+        finally:
+            if running.reader is not None:
+                await running.reader
+            if self.running.get(chat) is running:
+                del self.running[chat]
+        cost = spent(self._journal(chat)[running.rows :])
+        return turn_of(result, cost, timed_out=timed_out)
 
     async def interrupt(self, chat: str) -> None:
         await self.harness.interrupt(SessionId(chat))
 
     def context(self, chat: str) -> int | None:
-        return context_of(self._journal(chat))
+        calls = model_calls(self._journal(chat))
+        if not calls:
+            return None
+        return sum(n for name in CONTEXT_FIELDS if isinstance(n := calls[-1].get(name), int))
 
     def activity(self, chat: str) -> Activity:
-        after, _ = self.marks.get(chat, (0, 0))
-        blocks = self._blocks(chat, after)
+        running = self.running.get(chat)
+        if running is None:
+            return Activity(0)
         record = read_pid_record(pid_path(self.harness.home.procs_dir, chat))
         return Activity(
-            len(blocks),
-            tool_steps(blocks),
-            self._turn(chat) != "idle",
+            running.blocks,
+            tuple(running.steps.values()),
+            not running.handle.done,
             None if record is None else record.cli_pid,
         )
 
-    def _turn(self, chat: str) -> str | None:
-        path = self.harness.home.chats_dir / f"{chat}.json"
-        try:
-            found = json.loads(path.read_text(encoding="utf-8")).get("turn")
-        except OSError, ValueError:
-            return None
-        return found if isinstance(found, str) else None
-
-    def _blocks(self, chat: str, after: int) -> list[JsonObject]:
-        found: list[JsonObject] = []
-        while True:
-            page = self.harness.control.events("sessions", after, chat, 1000)
-            for event in page:
-                data = event.get("data")
-                if isinstance(data, dict) and data.get("type") == "block":
-                    block = data.get("block")
-                    if isinstance(block, dict):
-                        found.append(block)
-            if len(page) < 1000:
-                return found
-            last = page[-1].get("id")
-            after = last if isinstance(last, int) else after + len(page)
-
-    def _last_event(self, chat: str) -> int:
-        last, after = 0, 0
-        while True:
-            page = self.harness.control.events("sessions", after, chat, 1000)
-            if page:
-                found = page[-1].get("id")
-                last = after = found if isinstance(found, int) else last
-            if len(page) < 1000:
-                return last
+    def holds_task(self, chat: str) -> bool:
+        projects = self.harness.home.plan_dir / "projects"
+        for path in projects.glob(f"*/{chat}.jsonl"):
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                with contextlib.suppress(ValueError):
+                    row: JsonValue = json.loads(line)
+                    if isinstance(row, dict) and row.get("type") == "user":
+                        return True
+        return False
 
     def _journal(self, chat: str) -> list[str]:
         path = self.harness.home.root / "runs" / chat / "journal.jsonl"
@@ -369,44 +335,42 @@ class HarnessAdapter:
             return []
 
 
-def tool_calls(blocks: list[JsonObject]) -> tuple[ToolCall, ...]:
-    """Each tool call the `tool` blocks show, in the order it started. A started block names the
-    call; a later block with the same id says whether it ended in an error."""
-    names: dict[str, str] = {}
-    errors: dict[str, str] = {}
-    for block in blocks:
-        content = block.get("content")
-        if block.get("type") != "tool" or not isinstance(content, dict):
-            continue
-        tool_id, name, state = content.get("id"), content.get("name"), content.get("state")
-        if not isinstance(tool_id, str):
-            continue
-        if state == "started" and isinstance(name, str):
-            names.setdefault(tool_id, name)
-        elif state == "error":
-            errors[tool_id] = str(content.get("result", ""))[:200]
-    return tuple(ToolCall(i, n, errors.get(i)) for i, n in names.items())
-
-
-def tool_steps(blocks: list[JsonObject]) -> tuple[ToolStep, ...]:
-    """Each tool call the `tool` blocks show, in the order it started, with its result once a
-    later block with the same id ended it."""
-    started: dict[str, ToolStep] = {}
-    for block in blocks:
-        content = block.get("content")
-        if block.get("type") != "tool" or not isinstance(content, dict):
-            continue
-        tool_id, state = content.get("id"), content.get("state")
-        if not isinstance(tool_id, str):
-            continue
-        name = content.get("name")
-        if state == "started" and isinstance(name, str):
-            started.setdefault(tool_id, ToolStep(tool_id, name, content.get("arguments")))
-        elif state in ("finished", "error") and tool_id in started:
-            result = content.get("result")
-            text = result if isinstance(result, str) else json.dumps(result)
-            started[tool_id] = replace(started[tool_id], result=text, error=state == "error")
-    return tuple(started.values())
+def turn_of(result: TurnResult, cost: float | None, *, timed_out: bool = False) -> Turn:
+    usage = result.usage
+    asks = [
+        dict(b.content) for b in result.blocks if b.type == "permission" and "ask" in b.content
+    ]
+    needs = [str(b.content.get("reason")) for b in result.blocks if b.type == "needs_you"]
+    match result.status:
+        case _ if timed_out:
+            reason = None
+        case "ok":
+            reason = needs[-1] if needs else None
+        case "unknown":
+            reason = needs[-1] if needs else LOST
+        case "failed":
+            reason = result.text or result.terminal_reason or "the turn failed"
+        case "interrupted":
+            reason = f"the turn was interrupted ({result.terminal_reason})"
+    return Turn(
+        text=result.text if result.status == "ok" else None,
+        tokens={
+            "in": usage.input_tokens,
+            "out": usage.output_tokens,
+            "cache_read": usage.cache_read_tokens,
+            "cache_write": usage.cache_write_tokens,
+        },
+        cost_usd=cost,
+        asks_rejected=sum(1 for ask in asks if ask.get("state") in DENIED),
+        needs_you=reason,
+        timed_out=timed_out,
+        tools=tuple(
+            ToolCall(c.id, c.name, (c.result or "")[:200] if c.error else None)
+            for c in result.tools
+        ),
+        compactions=result.compactions,
+        context=result.context,
+    )
 
 
 def model_calls(lines: list[str]) -> list[JsonObject]:
@@ -423,25 +387,13 @@ def model_calls(lines: list[str]) -> list[JsonObject]:
     return found
 
 
-def context_of(lines: list[str]) -> int | None:
-    calls = model_calls(lines)
-    if not calls:
-        return None
-    return sum(n for name in CONTEXT_FIELDS if isinstance(n := calls[-1].get(name), int))
-
-
-def spent(lines: list[str]) -> tuple[dict[str, int], float | None]:
-    """Tokens and the plan's cost estimate summed over a chat's `model_call` journal rows. A key
-    row reports no cost, and some routes report no cache write (EP0 FINDINGS)."""
-    tokens = dict.fromkeys(TOKEN_FIELDS.values(), 0)
+def spent(lines: list[str]) -> float | None:
+    """The plan's cost estimate summed over a chat's `model_call` journal rows. A key row reports
+    no cost (EP0 FINDINGS)."""
     cost: float | None = None
     for payload in model_calls(lines):
-        for source, name in TOKEN_FIELDS.items():
-            count = payload.get(source)
-            if isinstance(count, int):
-                tokens[name] += count
         metadata = payload.get("metadata")
         found = metadata.get("cost") if isinstance(metadata, dict) else None
         if isinstance(found, int | float):
             cost = (cost or 0.0) + float(found)
-    return tokens, cost
+    return cost

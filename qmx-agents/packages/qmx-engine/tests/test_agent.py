@@ -1,7 +1,7 @@
-"""The `agent` node over a fake harness port: every chat gets `compact_at` and hooks, hook and
-block tool calls become child spans, a refused `compact_at` falls back to a summary and a fresh
-chat, the chat of an attempt the engine died in is picked up again, and the modes that need H11
-are refused."""
+"""The `agent` node over a fake harness port: every chat gets exactly its declared tools and
+`compact_at`, hook and turn tool calls become child spans, the chat of an attempt the engine died
+in is picked up again and gets its whole task when it never had it (B-69), and the modes that need
+H11 are refused."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from flows import edge, folder, node
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.store import Ledger, Reader
-from qmx_engine.nodes.agent import RESUMED, STUCK_SUMMARY, SUMMARISE
+from qmx_engine.nodes.agent import RESUMED, STUCK_SUMMARY
 from qmx_engine.ports.harness_adapter import Activity, ToolCall, ToolStep, Turn
 from qmx_engine.ports.inbox import InboxPort
 from qmx_engine.runner import Engine
@@ -33,14 +33,12 @@ def one_agent(root: Path, **parameters: object) -> Path:
     return agent_files(built)
 
 
-def test_a_chat_gets_compact_at_and_hooks_and_every_tool_call_becomes_a_child_span(
+def test_a_chat_gets_its_declared_tools_and_every_tool_call_becomes_a_child_span(
     tmp_path: Path,
 ) -> None:
     async def turn(port: FakePort, chat: str) -> Turn:
-        hooks = port.hooks[chat]
-        assert hooks.post_tool_use is not None and hooks.pre_compact is not None
-        await hooks.post_tool_use({"tool_use_id": "t1", "tool_name": "Read", "duration_ms": 12})  # type: ignore[arg-type]
-        await hooks.pre_compact({"trigger": "auto"})  # type: ignore[arg-type]
+        await port.hook(chat, "PostToolUse", tool_use_id="t1", tool_name="Read", duration_ms=12)
+        await port.hook(chat, "PreCompact", trigger="auto")
         return Turn(CARD, tools=(ToolCall("t1", "Read"), ToolCall("t2", "Grep", "no match")))
 
     port = FakePort(turn)
@@ -55,7 +53,7 @@ def test_a_chat_gets_compact_at_and_hooks_and_every_tool_call_becomes_a_child_sp
     )
     order = [e.kind for e in events if e.kind in ("memory_written", "compacted")]
     assert outcome.status == "passed"
-    assert port.chats[0]["compact_at"] == 0.4 and port.chats[0]["hooks"] is True
+    assert (port.chats[0]["tools"], port.chats[0]["compact_at"]) == (("Read", "Grep"), 0.4)
     assert tools == [
         ("Grep", None, "no match", attempt.span_id),
         ("Read", 12, None, attempt.span_id),
@@ -64,36 +62,12 @@ def test_a_chat_gets_compact_at_and_hooks_and_every_tool_call_becomes_a_child_sp
     assert attempt.events == [{"compacted": {"trigger": "auto", "at_fraction": None}}]
 
 
-def test_a_refused_compact_at_restarts_the_attempt_in_a_chat_seeded_with_its_summary(
-    tmp_path: Path,
-) -> None:
-    port = FakePort(
-        Turn("not json", context=180_000),
-        Turn("I counted a and b; nothing is left."),
-        CARD,
-        refuse_compact=True,
-    )
-
-    outcome = asyncio.run(drive(one_agent(tmp_path / "wf"), tmp_path / "home", port))
-    events = events_of(tmp_path / "home", outcome.run_id)
-
-    compacted = [e.data for e in events if e.kind == "compacted"]
-    lines = [e.data for e in events if e.kind == "log" and e.data.get("fallback") == "restart"]
-    assert outcome.status == "passed"
-    assert [c.get("compact_at") for c in port.chats] == [None, None]
-    assert [(chat, text == SUMMARISE) for chat, text in port.sent] == [
-        ("chat-1", False),
-        ("chat-1", True),
-        ("chat-2", False),
-    ]
-    assert "~~~~\nI counted a and b; nothing is left.\n~~~~" in port.sent[2][1]
-    assert [(c["trigger"], c["at_fraction"]) for c in compacted] == [("restart", 0.9)]
-    assert [e.kind for e in events].count("memory_written") == 1
-    assert len(lines) == 1 and lines[0]["level"] == "info"
+TASK_START = "Skills to apply: paper-question-battery.\n\nCount the items you are given."
 
 
+@pytest.mark.parametrize("held", [True, False])
 def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbox_item(
-    tmp_path: Path,
+    tmp_path: Path, held: bool
 ) -> None:
     home, root = tmp_path / "home", one_agent(tmp_path / "wf")
     found = checked(root)
@@ -111,7 +85,7 @@ def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbo
                 await asyncio.wait_for(run, 1)
 
     asyncio.run(die())
-    port = FakePort(CARD)
+    port = FakePort(CARD, holds_task=held)
 
     async def again() -> str:
         with Ledger.open(home) as ledger:
@@ -132,7 +106,12 @@ def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbo
     info = [e.data for e in events if e.kind == "log" and e.data.get("level") == "info"]
     assert ended == "passed 0"
     assert chats == [(1, "chat-1"), (2, "chat-1")]
-    assert (port.chats, port.sent) == ([], [("chat-1", RESUMED)])
+    [(chat, sent)] = port.sent
+    assert (port.chats, chat) == ([], "chat-1")
+    if held:
+        assert sent == RESUMED
+    else:
+        assert sent.startswith(TASK_START) and sent.endswith('Input:\n{"in": null}')
     assert [(u["code"], u["effect_state"]) for u in unknown] == [("interrupted", "unknown")]
     assert len(info) == 1 and info[0]["idempotency_key"] == "run-died:read:0:1"
     assert "run-died:read:0:1" in str(info[0]["line"])
@@ -178,11 +157,9 @@ def test_a_looping_agent_is_stopped_and_parks_stalled_loop_with_its_summary(
 
 def test_an_agent_making_progress_runs_on_past_hundreds_of_tool_calls(tmp_path: Path) -> None:
     async def pages(port: FakePort, chat: str) -> Turn:
-        hook = port.hooks[chat].post_tool_use
-        assert hook is not None
         for n in range(300):
             port.activities[chat] = Activity(n, read_steps(n, same=False), running=True)
-            await hook({"tool_use_id": f"t{n}", "tool_name": "Read"})  # type: ignore[arg-type]
+            await port.hook(chat, "PostToolUse", tool_use_id=f"t{n}", tool_name="Read")
             await asyncio.sleep(0.001)
         return Turn(CARD)
 

@@ -1,31 +1,27 @@
 """The `agent` node (AD-25, AD-34, SOLUTION-DESIGN 2.3): one harness Background chat per chunk,
 which reads, uses tools and answers with one JSON document validated like an `llm` node's.
 
-The prompt states the node's brief, its skills, its tool list and its write zone, static part
-first so every chunk of the node reads it from the cache (`prompts`). Every ask is rejected, so an
-agent node writes nothing on the host until the sandbox packet (L6). An agent has no turn,
-tool-call or run-time ceiling (AD-40): the runner's stuck detector (AD-16) reads `look` every tick
-and calls `stop` when the attempt stopped moving, loops or does not converge. A stopped chat is
-interrupted; a looping or flailing one then gets one summary turn and ends `stalled` with that
-summary.
+The chat gets exactly the built-in tools the node declares (H2, B-51), and the `engine` policy
+answers its asks: in its read-only form it denies every write and every undeclared tool with a
+reason the agent reads (AD-60). An agent has no turn, tool-call or run-time ceiling (AD-40): the
+runner's stuck detector (AD-16) reads `look` every tick and calls `stop` when the attempt stopped
+moving, loops or does not converge. A stopped chat is interrupted; a looping or flailing one then
+gets one summary turn and ends `stalled` with that summary.
 
 The warm-first gate is the runner's, at dispatch (AD-9): `hold` returns the event a chunk waits on
 before it starts, so a held chunk writes no `node_started` and is never an idle attempt. The first
 chunk of a node's iteration sets it when its first turn ends, so the others read its prompt cache.
-Each chat's slot comes from the harness slot table, the only chat-slot counter (AD-58): a send
-waits there, served by the run's priority, and `look` reports that wait as a recorded wait.
+Each chat's slot comes from the harness slot table, the only chat-slot counter (AD-58).
 
-Each chat starts with `compact_at` and per-chat hooks (H15, H16). PostToolUse records each tool
+The chat compacts in place at `compact_at` (AD-34), which its record keeps across a restart (H19).
+The `engine` hook sink hands the attempt its chat's hook events: PostToolUse records each tool
 call as a child span as it happens, PreCompact writes the working state with `memory_note` and
-records the compaction, and Stop and SubagentStop are logged. At each turn end the session's
-`tool` blocks are reconciled: a call no hook reported still gets its span. The harness keeps
-`compact_at` and hooks in memory only, so a refused option or a chat picked up after a restart runs
-without them, and AD-34's fallback stands in: when the context passes `compact_at` plus 0.05 with
-no compaction, the agent writes a summary, it is noted as memory, and the same attempt goes on in a
-fresh chat seeded with it.
+records the compaction, and Stop and SubagentStop are logged. At each turn end the turn's tool
+calls are reconciled, so a call no hook reported still gets its span.
 
 The chat's session id is recorded on the attempt's first heartbeat, since `node_started` is written
-before the chat exists. When the engine died mid-attempt, the next attempt picks that chat up again.
+before the chat exists. When the engine died mid-attempt, the next attempt picks that chat up again
+and resends the whole task when the chat never got it (B-69).
 """
 
 from __future__ import annotations
@@ -38,7 +34,7 @@ from pathlib import Path
 from typing import Final
 
 from pydantic import JsonValue
-from qma.harness import ChatHooks, StuckCall, stuck_call
+from qma.harness import StuckCall, stuck_call
 
 from qmx_engine.admission import Admission, setting
 from qmx_engine.definition.lint import redact
@@ -56,27 +52,16 @@ from qmx_engine.nodes.llm import (
     repair,
 )
 from qmx_engine.nodes.script import failed
-from qmx_engine.ports.harness_adapter import (
-    CompactRefused,
-    HarnessPort,
-    Refusal,
-    ToolCall,
-    Turn,
-)
+from qmx_engine.ports.harness_adapter import HarnessPort, Refusal, ToolCall, Turn
 from qmx_engine.ports.memory import MemoryPort
 from qmx_engine.prompts import Prompt, payload, static
 from qmx_engine.roles import DEFAULT_WINDOW, Candidate
+from qmx_engine.sink import HookData
 
 LATER_MODES: Final = frozenset({"cli_inside", "host_harness"})
-MARGIN: Final = 0.05
-"""How far past `compact_at` the context may get with no compaction before the fallback."""
 RESUMED: Final = (
     "The engine restarted while your last turn ran. Finish the task and reply with the final JSON "
     "document only."
-)
-SUMMARISE: Final = (
-    "Your context is nearly full and this chat will be replaced. Write down your working state: "
-    "what you read, what you found, and what is left to do. Reply with that summary only."
 )
 STALLED: Final = "stalled"
 IDLE: Final = "the agent showed no progress past its idle timeout"
@@ -87,15 +72,6 @@ STUCK_SUMMARY: Final = (
 
 type JsonObject = dict[str, JsonValue]
 type Record = Callable[[EventKind, JsonObject], None]
-
-
-def rules(tools: list[str], zone: str) -> list[str]:
-    offer = f"Use only these tools: {', '.join(tools)}." if tools else "Use no tools."
-    return [
-        offer,
-        "Every request to write or edit a file or to run a command is rejected in this run: read "
-        f"and answer only. Your write zone is {zone}, and it stays empty for now.",
-    ]
 
 
 def names(parameters: JsonObject, key: str) -> list[str]:
@@ -175,13 +151,9 @@ class Agent:
         held = await self.admission.check(candidate)
         if held is not None:
             return held
-        text = static(
-            brief,
-            rules(names(parameters, "tools"), job.workspace or str(self.workspace)),
-            schema,
-            names(parameters, "skills"),
-        )
-        attempt = Attempt(self, job, candidate, text, schema, warming)
+        text = static(brief, [], schema, names(parameters, "skills"))
+        tools = tuple(names(parameters, "tools"))
+        attempt = Attempt(self, job, candidate, text, schema, tools, warming)
         self.attempts[job.idempotency_key] = attempt
         try:
             return await attempt.run()
@@ -190,10 +162,13 @@ class Agent:
                 with contextlib.suppress(Exception):
                     await self.harness.interrupt(attempt.chat)
             raise
+        finally:
+            if attempt.chat:
+                self.harness.listen(attempt.chat, None)
 
 
 class Attempt:
-    """One attempt of an agent node: its chat, the tool calls the hooks and the blocks reported,
+    """One attempt of an agent node: its chat, the tool calls the hooks and the turns reported,
     and its compactions."""
 
     def __init__(
@@ -203,6 +178,7 @@ class Attempt:
         candidate: Candidate,
         text: str,
         schema: JsonObject,
+        tools: tuple[str, ...],
         warming: asyncio.Event | None = None,
     ) -> None:
         self.agent = agent
@@ -211,6 +187,7 @@ class Attempt:
         self.candidate = candidate
         self.static = text
         self.schema = schema
+        self.declared = tools
         self.compact_at = setting(agent.settings, "agent.compact_at", 0.4)
         self.window = candidate.context_window or DEFAULT_WINDOW
         self.usage = Usage()
@@ -220,11 +197,6 @@ class Attempt:
         self.hooked = 0
         """Compactions the PreCompact hook recorded during the current turn."""
         self.compactions = 0
-        self.compacted = False
-        """The last turn compacted, so its context reading is after the compaction."""
-        self.context: int | None = None
-        self.fallback: str | None = None
-        """Why the chat runs without `compact_at` and hooks, when it does."""
         self.halted: str | None = None
         """Why the stuck detector stopped the attempt, once it did."""
         self.calls: dict[str, StuckCall] = {}
@@ -244,28 +216,26 @@ class Attempt:
         }
         self.agent.record(kind, keys | data)
 
-    def prompt(self, seed: str | None = None) -> str:
+    def prompt(self) -> str:
         hint = (self.job.resolved_model or {}).get("hint")
-        found = payload(self.job.inputs, hint=hint if isinstance(hint, str) else None, seed=seed)
+        found = payload(self.job.inputs, hint=hint if isinstance(hint, str) else None)
         return Prompt(self.static, found).text
 
     async def run(self) -> NodeResult:
+        harness = self.agent.harness
         if self.job.session is not None:
-            self.chat, self.fallback = self.job.session, "the chat was picked up after a restart"
-            self.usage.chat = self.chat
-            self.write("heartbeat", {"note": "chat resumed", "session_id": self.chat})
-            text = RESUMED
+            self.chat = self.usage.chat = self.job.session
+            harness.listen(self.chat, self.on_hook)
+            got = harness.holds_task(self.chat)
+            note = "chat resumed" if got else "chat resumed; its task never arrived and is resent"
+            self.write("heartbeat", {"note": note, "session_id": self.chat})
+            text = RESUMED if got else self.prompt()
         else:
             refused = await self.start()
             if refused is not None:
                 return refused
             text = self.prompt()
         for _ in range(2):
-            if self.over():
-                found = await self.restart()
-                if not isinstance(found, str):
-                    return found
-                text = found
             turn = await self.turn(text)
             if not isinstance(turn, Turn):
                 return turn
@@ -321,8 +291,7 @@ class Attempt:
         return self.ended(replace(result, span={"stalled": why, "output": summary}))
 
     def span(self) -> JsonObject:
-        found = self.usage.span() | {"tool_calls": len(self.tools), "compactions": self.compactions}
-        return found | ({"fallback": self.fallback} if self.fallback is not None else {})
+        return self.usage.span() | {"tool_calls": len(self.tools), "compactions": self.compactions}
 
     def ended(self, result: NodeResult) -> NodeResult:
         if isinstance(result, Failed | Waiting):
@@ -331,34 +300,21 @@ class Attempt:
 
     async def start(self) -> NodeResult | None:
         harness, candidate = self.agent.harness, self.candidate
-        title, workspace = self.job.idempotency_key, self.agent.workspace
         try:
-            if self.fallback is None:
-                try:
-                    self.chat = await harness.start_chat(
-                        title=title,
-                        profile=candidate.profile,
-                        model=candidate.model,
-                        effort=candidate.effort,
-                        workspace=workspace,
-                        compact_at=self.compact_at,
-                        hooks=self.hooks(),
-                    )
-                except CompactRefused as refused:
-                    self.fallback = f"the harness refused compact_at: {redact(str(refused))}"
-            if self.fallback is not None:
-                self.chat = await harness.start_chat(
-                    title=title,
-                    profile=candidate.profile,
-                    model=candidate.model,
-                    effort=candidate.effort,
-                    workspace=workspace,
-                )
+            self.chat = await harness.start_chat(
+                title=self.job.idempotency_key,
+                profile=candidate.profile,
+                model=candidate.model,
+                effort=candidate.effort,
+                workspace=self.agent.workspace,
+                tools=self.declared,
+                compact_at=self.compact_at,
+            )
         except Refusal as refusal:
             return failed("unavailable", redact(str(refusal)), retryable=False)
+        harness.listen(self.chat, self.on_hook)
         self.usage.chat = self.chat
-        found: JsonObject = {"note": "chat started", "session_id": self.chat}
-        self.write("heartbeat", found | ({"fallback": self.fallback} if self.fallback else {}))
+        self.write("heartbeat", {"note": "chat started", "session_id": self.chat})
         return None
 
     async def turn(self, text: str) -> Turn | NodeResult:
@@ -378,38 +334,8 @@ class Attempt:
         for trigger in turn.compactions[self.hooked :]:
             self.compactions += 1
             self.write("compacted", {"trigger": compaction(trigger), "at_fraction": None})
-        self.compacted, self.hooked = bool(turn.compactions), 0
-        self.context = turn.context
+        self.hooked = 0
         return turn
-
-    def fraction(self, context: int | None) -> float | None:
-        return None if context is None else round(context / self.window, 4)
-
-    def over(self) -> bool:
-        found = self.fraction(self.context)
-        return not self.compacted and found is not None and found > self.compact_at + MARGIN
-
-    async def restart(self) -> str | NodeResult:
-        """AD-34's fallback: a summary, noted as memory, seeds a fresh chat for this attempt."""
-        at = self.fraction(self.context)
-        found = await self.turn(SUMMARISE)
-        if not isinstance(found, Turn):
-            return found
-        summary = (found.text or "").strip() or "The agent wrote no summary."
-        self.note(summary)
-        self.compactions += 1
-        self.write("compacted", {"trigger": "restart", "at_fraction": at})
-        self.fallback = self.fallback or "the context passed compact_at with no compaction"
-        line = (
-            f"{self.job.node_id}: compaction fallback, {self.fallback}; the attempt goes on in a "
-            "fresh chat seeded with its summary"
-        )
-        self.write("log", {"level": "info", "digest": True, "line": line, "fallback": "restart"})
-        refused = await self.start()
-        if refused is not None:
-            return refused
-        self.context = None
-        return self.prompt(seed=summary)
 
     def note(self, content: str) -> None:
         job = self.job
@@ -424,14 +350,6 @@ class Attempt:
         row_id = self.agent.memory.note(job.run_id, row)
         self.write("memory_written", {"scope": "run", "rows_added": 1, "row_id": row_id})
 
-    def hooks(self) -> ChatHooks:
-        return ChatHooks(
-            post_tool_use=self.on_tool,
-            pre_compact=self.on_compact,
-            stop=self.on_stop,
-            subagent_stop=self.on_stop,
-        )
-
     def called(self, call: ToolCall, duration_ms: int | None, source: str) -> None:
         self.tools[call.id] = call.name
         found: JsonObject = {
@@ -444,14 +362,29 @@ class Attempt:
         }
         self.write("tool_called", {"tool": found})
 
-    async def on_tool(self, data: Mapping[str, object]) -> None:
+    async def on_hook(self, data: HookData) -> None:
+        match data.get("hook_event_name"):
+            case "PostToolUse":
+                self.on_tool(data)
+            case "PreCompact":
+                self.on_compact(data)
+            case "Stop" | "SubagentStop" as event:
+                hook = str(event)
+                found: JsonObject = {"level": "debug", "hook": hook, "line": f"{hook} hook"}
+                if isinstance(kind := data.get("agent_type"), str):
+                    found["agent_type"] = kind
+                self.write("log", found)
+            case _:
+                pass
+
+    def on_tool(self, data: HookData) -> None:
         tool_id, duration = data.get("tool_use_id"), data.get("duration_ms")
         if not isinstance(tool_id, str) or tool_id in self.tools:
             return
         took = duration if isinstance(duration, int) else None
         self.called(ToolCall(tool_id, str(data.get("tool_name"))), took, "hook")
 
-    async def on_compact(self, data: Mapping[str, object]) -> None:
+    def on_compact(self, data: HookData) -> None:
         trigger = compaction(data.get("trigger"))
         used = sorted(set(self.tools.values()))
         self.note(
@@ -460,15 +393,9 @@ class Attempt:
         )
         self.hooked += 1
         self.compactions += 1
-        at = self.fraction(self.agent.harness.context(self.chat))
+        context = self.agent.harness.context(self.chat)
+        at = None if context is None else round(context / self.window, 4)
         self.write("compacted", {"trigger": trigger, "at_fraction": at})
-
-    async def on_stop(self, data: Mapping[str, object]) -> None:
-        event = str(data.get("hook_event_name"))
-        found: JsonObject = {"level": "debug", "hook": event, "line": f"{event} hook"}
-        if isinstance(kind := data.get("agent_type"), str):
-            found["agent_type"] = kind
-        self.write("log", found)
 
 
 def compaction(trigger: object) -> str:
