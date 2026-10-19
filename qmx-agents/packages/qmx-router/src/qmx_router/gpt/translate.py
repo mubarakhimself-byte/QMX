@@ -1,7 +1,7 @@
 """Anthropic Messages <-> OpenAI Responses, for the Sign in with ChatGPT route. Pure.
 
 The CLI believes it talks to an Anthropic-compatible host. These functions are the whole format
-knowledge; the GPT lane of `qmx_router.relay` is the HTTP shell around them. Rules come from
+knowledge; the GPT lane of `qma.harness.relay` is the HTTP shell around them. Rules come from
 02b section D and HP2's measurements on this route (scripts/probes/qma/FINDINGS.md, HP2).
 
 Request direction (`to_responses`). The body is built from scratch, so a field the route bars
