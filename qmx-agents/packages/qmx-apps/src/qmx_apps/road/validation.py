@@ -21,6 +21,9 @@ if TYPE_CHECKING:
     from qmx_apps.manifest import Definition
     from qmx_apps.supervisor import Supervisor
 
+OWN_TESTS_SECONDS = 300
+"""A probe bound on the tests stage's own-test run, not a usage cap on the app."""
+
 
 def validate(owner: Supervisor, image: Definition, stage: Stage) -> tuple[Document, Document]:
     from qmx_apps.supervisor import Instance  # noqa: PLC0415
@@ -56,7 +59,7 @@ def validate(owner: Supervisor, image: Definition, stage: Stage) -> tuple[Docume
                         env=transport.env,
                         cwd=transport.cwd,
                         capture_output=True,
-                        timeout=min(300, image.manifest.budget.cpu_seconds + 45),
+                        timeout=OWN_TESTS_SECONDS,
                         check=False,
                         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
                     )

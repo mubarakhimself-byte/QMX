@@ -36,6 +36,7 @@ from qmx_control.service import ControlService
 from qmx_engine.definition.lint import redact
 from qmx_engine.ledger.inbox_table import InboxRefused
 from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
+from qmx_engine.nodes.app_op import AppOp
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
@@ -261,6 +262,7 @@ class EngineDoor:
             settings=settings or ControlSettings(control),
             harness=harness,
             clock=clock,
+            executors={"app_op": AppOp(control.app_job)},
         ) as svc:
             scheduler = Scheduler(
                 svc.ctx, credentials=configured_refs(control), skills=shipped_skills()

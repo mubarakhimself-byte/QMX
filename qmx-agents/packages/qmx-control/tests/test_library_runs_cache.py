@@ -226,7 +226,7 @@ def append(path: Path, run_id: str, seq: int, event: str, payload: dict[str, Any
 
 
 def test_run_projection_validates_journal_and_updates_events(tmp_path: Path) -> None:
-    path = tmp_path / "runs" / "r1.jsonl"
+    path = tmp_path / "journals" / "remote-r1.jsonl"
     append(path, "r1", 1, "run_start", {"kind": "workflow", "target": "laptop", "node": "local"})
     append(
         path,
@@ -307,3 +307,20 @@ def test_library_run_and_aggregate_doors_match(tmp_path: Path) -> None:
                 assert rest.get("/api/runs/missing", headers=HEADERS).status_code == 404
 
     asyncio.run(exercise())
+
+
+def test_the_run_index_never_lists_a_chat_journal(tmp_path: Path) -> None:
+    chat = tmp_path / "runs" / "chat-1" / "journal.jsonl"
+    append(chat, "chat-1", 1, "run_start", {"kind": "agent", "session_id": "chat-1"})
+    remote = tmp_path / "journals" / "remote-r2.jsonl"
+    append(remote, "r2", 1, "run_start", {"kind": "job", "target": "contabo"})
+    with closing(sqlite3.connect(tmp_path / "runs.db")) as db, db:
+        db.execute("CREATE TABLE runs(id TEXT PRIMARY KEY,data TEXT NOT NULL)")
+        db.execute(
+            "INSERT INTO runs VALUES(?,?)",
+            ("chat-0", json.dumps({"id": "chat-0", "journal": str(chat.with_name("old.jsonl"))})),
+        )
+    service = ControlService(tmp_path)
+    assert [run["id"] for run in service.runs_list()] == ["r2"]
+    with pytest.raises(ControlError, match="Unknown run id"):
+        service.runs_get("chat-1")

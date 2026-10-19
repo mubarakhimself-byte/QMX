@@ -43,8 +43,8 @@ def test_saved_archive_html_and_valid_daily_schedule() -> None:
     definition = Definition.load(APP)
     assert definition.manifest.kind == "headless"
     assert definition.manifest.entrypoints.jobs == ["jobs/daily.py"]
-    assert definition.manifest.schedule is not None
-    assert definition.manifest.schedule.interval_seconds == 86400
+    assert definition.manifest.suggested_trigger is not None
+    assert definition.manifest.suggested_trigger.seconds == 86400
     with pytest.raises(ValueError, match="article root"):
         parse_article("<html>login page</html>", article_url(623))
 

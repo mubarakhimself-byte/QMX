@@ -19,7 +19,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, Final, TypeVar, cast
 
 import keyring
 import psutil
@@ -38,6 +38,9 @@ from qmx_apps.windows_job import WindowsJob
 
 T = TypeVar("T")
 type EventSink = Callable[[str, Document], None]
+JOB_QUEUE: Final = "data/jobs"
+"""Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
+JOB_POLL_SECONDS: Final = 0.25
 
 
 @dataclass
@@ -83,7 +86,7 @@ class Instance:
             "metrics": {
                 "runs": self.runs + self.job_runs,
                 "errors": self.errors + self.job_errors,
-                "budget_used": {"runs": self.runs + self.job_runs, "cpu_seconds": self.cpu},
+                "cpu_seconds": self.cpu,
                 "memory_bytes": self.memory,
             },
             "heartbeat_age_seconds": max(0, time.monotonic() - self.heartbeat)
@@ -365,6 +368,8 @@ class Supervisor:
             lease = VolumeLease(self.home, app_id)
             try:
                 volume.create(agents=bool(definition.manifest.entrypoints.agents))
+                # A request an earlier instance never answered has no caller left waiting.
+                shutil.rmtree(volume.root / JOB_QUEUE, ignore_errors=True)
                 migrations = definition.root / "migrations"
                 if migrations.is_dir():
                     # The host finishes migrations before handing the writer to the instance.
@@ -427,15 +432,11 @@ class Supervisor:
             "volume": str(instance.volume.root),
             "mcp": manifest.entrypoints.mcp,
             "jobs": [] if self.proof_mode else list(manifest.entrypoints.jobs),
-            "interval_seconds": manifest.schedule.interval_seconds
-            if manifest.schedule and not self.proof_mode
-            else 0,
             "instance_id": instance.id,
             "job_name": job_name,
             "env_names": list(environment),
             "secret_names": list(manifest.capabilities.secrets),
             "memory_mb": manifest.budget.memory_mb,
-            "cpu_seconds": manifest.budget.cpu_seconds,
             "recorded": self.proof_mode in {"tests", "sandbox"},
         }
 
@@ -452,9 +453,8 @@ class Supervisor:
             else:
                 instance.limits = {
                     "memory_mb": manifest.budget.memory_mb,
-                    "cpu_seconds": manifest.budget.cpu_seconds,
                     "cpu_percent": None,
-                    "fallback": "RLIMIT_AS/RLIMIT_CPU and psutil",
+                    "fallback": "RLIMIT_AS and psutil",
                 }
             config = self.configuration(instance, job_name, environment)
             transport = self.transport(instance, config, environment)
@@ -586,10 +586,6 @@ class Supervisor:
     @staticmethod
     def _breach(instance: Instance) -> str:
         manifest = instance.definition.manifest
-        if instance.runs + instance.job_runs > manifest.budget.runs:
-            return "run_budget"
-        if instance.cpu > manifest.budget.cpu_seconds:
-            return "cpu_budget"
         if instance.errors + instance.job_errors >= manifest.breaker.max_errors:
             return "error_limit"
         if time.monotonic() - instance.heartbeat > manifest.breaker.heartbeat_timeout:
@@ -660,9 +656,6 @@ class Supervisor:
     async def _call(self, instance: Instance, tool: str, arguments: Document) -> Document:
         if instance.client is None or instance.state != "running":
             raise AppError("not_running", "Start the app before calling it.", 409)
-        if instance.runs + instance.job_runs >= instance.definition.manifest.budget.runs:
-            self._trip(instance, "run_budget")
-            raise AppError("budget_exceeded", "The app's run budget is exhausted.", 409)
         instance.runs += 1
         try:
             resolved = next((item for item in instance.tools if item["name"] == tool), None)
@@ -724,6 +717,44 @@ class Supervisor:
             raise AppError(
                 "tool_timeout", "The tool did not complete within its timeout.", 504
             ) from error
+
+    def run_job(self, app_id: str, job: str) -> Document:
+        """Run one job entrypoint in the app's supervised process, after the jobs queued before
+        it: the app's own queue is the only capacity a job takes (engine AD-58). The engine's
+        `app_op` node calls this when a trigger fires; the supervisor schedules nothing itself.
+        It waits as long as the job runs and fails with the supervisor's reason when the app
+        stops first."""
+        with self._lock:
+            instance = self._instances.get(app_id)
+        if instance is None or instance.state != "running":
+            raise self._not_running(app_id)
+        if job not in instance.definition.manifest.entrypoints.jobs:
+            raise AppError("job_not_found", f"The app declares no job {job}.", 404)
+        queue = instance.volume.root / JOB_QUEUE
+        queue.mkdir(parents=True, exist_ok=True)
+        name = f"{time.time_ns():020d}-{uuid.uuid4().hex}"
+        request, done = queue / f"{name}.request.json", queue / f"{name}.done.json"
+        staged = queue / f"{name}.tmp"
+        staged.write_text(json.dumps({"job": job}), encoding="utf-8")
+        staged.replace(request)
+        while not done.exists():
+            if instance.state != "running":
+                request.unlink(missing_ok=True)
+                raise self._not_running(app_id)
+            time.sleep(JOB_POLL_SECONDS)
+        result = cast(Document, json.loads(done.read_text(encoding="utf-8")))
+        done.unlink()
+        self._log(app_id, "job_completed", {"job": job, "ok": result.get("ok") is True})
+        if result.get("ok") is not True:
+            raise AppError("job_failed", f"Job {job} raised {result.get('error')}.", 422)
+        return {"app_id": app_id, "instance_id": instance.id, "job": job}
+
+    def _not_running(self, app_id: str) -> AppError:
+        status = self.status(app_id)
+        breaker = status.get("breaker")
+        reason = breaker.get("reason") if isinstance(breaker, dict) else None
+        why = f" ({reason})" if reason else ""
+        return AppError("not_running", f"The app is {status.get('status')}{why}.", 409)
 
     async def _resource(self, instance: Instance, uri: str) -> list[Document]:
         if instance.client is None:

@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from qmx_apps.errors import AppError, Document
 
@@ -65,11 +66,24 @@ class Capabilities(StrictModel):
     data_reads: list[str] = Field(default_factory=list)
 
 
+LEGACY_BUDGET: Final = frozenset({"runs", "cpu_seconds"})
+"""Usage budgets retired by engine AD-57 and ruling 106. The example apps still carry them until
+they migrate (APP2a), so a manifest naming them loads and they are dropped."""
+
+
 class Budget(StrictModel):
-    runs: int = Field(default=1000, gt=0)
-    cpu_seconds: float = Field(default=300, gt=0)
-    memory_mb: int = Field(default=1024, gt=0, le=16384)
-    cpu_percent: int = Field(default=50, ge=1, le=100)
+    """Machine isolation he may set per app (a Job object or container limit). Unset, the app
+    runs unlimited; neither value is a breaker that stops an app on usage."""
+
+    memory_mb: int | None = Field(default=None, gt=0, le=16384)
+    cpu_percent: int | None = Field(default=None, ge=1, le=100)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_usage(cls, data: object) -> object:
+        if isinstance(data, dict):
+            return {key: value for key, value in data.items() if key not in LEGACY_BUDGET}
+        return data
 
 
 class Breaker(StrictModel):
@@ -77,8 +91,23 @@ class Breaker(StrictModel):
     heartbeat_timeout: float = Field(default=10, ge=1)
 
 
-class Schedule(StrictModel):
-    interval_seconds: float = Field(gt=0)
+class SuggestedTrigger(StrictModel):
+    """The trigger his enable creates on the app's `app_op` workflow (engine AD-57), in the
+    engine's trigger shape. `job` names the job entrypoint it runs, the first one when unset."""
+
+    kind: Literal["interval", "cron"] = "interval"
+    seconds: int | None = Field(default=None, gt=0)
+    expr: str | None = None
+    zone: str = "UTC"
+    job: str | None = None
+
+    @model_validator(mode="after")
+    def _one_schedule(self) -> SuggestedTrigger:
+        if (self.kind == "interval") != (self.seconds is not None) or (
+            (self.kind == "cron") != (self.expr is not None)
+        ):
+            raise ValueError("An interval trigger takes seconds; a cron trigger takes expr.")
+        return self
 
 
 class AppDefinition(StrictModel):
@@ -92,11 +121,26 @@ class AppDefinition(StrictModel):
     startup_timeout_seconds: float = Field(default=90, gt=0)
     entrypoints: Entrypoints
     capabilities: Capabilities = Field(default_factory=Capabilities)
-    schedule: Schedule | None = None
+    suggested_trigger: SuggestedTrigger | None = None
     budget: Budget = Field(default_factory=Budget)
     breaker: Breaker = Field(default_factory=Breaker)
     provides: dict[str, Document] = Field(default_factory=dict)
     feeds: dict[str, Document] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _legacy_schedule(cls, data: object) -> object:
+        """`[schedule] interval_seconds` is read as an interval `suggested_trigger` until the
+        example apps migrate (APP2a)."""
+        if isinstance(data, dict) and "schedule" in data:
+            data = dict(data)
+            schedule = data.pop("schedule")
+            if isinstance(schedule, dict) and "suggested_trigger" not in data:
+                seconds = schedule.get("interval_seconds")
+                if isinstance(seconds, int | float) and not isinstance(seconds, bool):
+                    seconds = max(1, math.ceil(seconds))
+                data["suggested_trigger"] = {"kind": "interval", "seconds": seconds}
+        return data
 
 
 def _local_schema(value: JsonValue) -> None:
@@ -162,8 +206,11 @@ class Definition:
                 not item.endswith(".py") for item in entries.jobs
             ):
                 raise ValueError("MCP and job entrypoints are Python script paths.")
-            if manifest.schedule and not entries.jobs:
-                raise ValueError("An interval schedule requires job entrypoints.")
+            suggested = manifest.suggested_trigger
+            if suggested and suggested.job not in {None, *entries.jobs}:
+                raise ValueError("A suggested trigger runs one of the app's job entrypoints.")
+            if suggested and not entries.jobs:
+                raise ValueError("A suggested trigger requires job entrypoints.")
             if entries.ui:
                 ui = (root / entries.ui).resolve()
                 if not ui.is_relative_to(root) or not ui.is_dir():

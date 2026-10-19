@@ -90,7 +90,7 @@ BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
                 unavailable_modes=frozenset({"llm"}),
             ),
             Kind("monitor", IN, ("changed", "silent"), "none", available=True),
-            Kind("app_op", IN, MAIN, "irreversible"),
+            Kind("app_op", IN, MAIN, "irreversible", available=True),
             Kind("library", IN, MAIN, "compensable"),
             Kind("claude_workflow", IN, MAIN, "irreversible"),
         )
@@ -111,7 +111,7 @@ class Registry:
 
     def with_operations(self, types: Mapping[str, Effect]) -> Registry:
         """Add a node type per catalog row, from `qmx_control.catalog.node_types`."""
-        base = self.kinds["app_op"]
+        base = replace(self.kinds["app_op"], available=False)
         found = {name: replace(base, name=name, effect=effect) for name, effect in types.items()}
         bad = sorted(name for name in found if not PACK_TYPE.fullmatch(name))
         if bad:

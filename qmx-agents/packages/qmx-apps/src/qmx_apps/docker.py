@@ -20,7 +20,7 @@ import keyring
 from fastmcp.client.transports import StdioTransport
 
 from qmx_apps.errors import AppError
-from qmx_apps.manifest import Definition, image_files
+from qmx_apps.manifest import Budget, Definition, image_files
 from qmx_apps.supervisor import EventSink, Instance, Supervisor
 from qmx_apps.volume import Volume, VolumeLease
 
@@ -30,6 +30,16 @@ BASE = (
 )
 UBUNTU = "ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55"
 PROXY_IMAGE = "qmx-egress:squid-ubuntu24.04"
+
+
+def isolation(budget: Budget) -> list[str]:
+    """The container limits he set; none when he set none."""
+    found: list[str] = []
+    if budget.memory_mb is not None:
+        found += ["--memory", f"{budget.memory_mb}m", "--memory-swap", f"{budget.memory_mb}m"]
+    if budget.cpu_percent is not None:
+        found += ["--cpus", str(budget.cpu_percent / 100)]
+    return found
 
 
 def docker(*args: str, env: dict[str, str] | None = None, required: bool = True) -> str:
@@ -245,12 +255,7 @@ class DockerSupervisor(Supervisor):
             f"{uid}:{gid}",
             "--pids-limit",
             "128",
-            "--memory",
-            f"{manifest.budget.memory_mb}m",
-            "--memory-swap",
-            f"{manifest.budget.memory_mb}m",
-            "--cpus",
-            str(manifest.budget.cpu_percent / 100),
+            *isolation(manifest.budget),
             "--mount",
             f"type=bind,src={instance.volume.root},dst=/volume",
             # Native app code must not rewrite the host's publication authority.
@@ -308,7 +313,6 @@ class DockerSupervisor(Supervisor):
         instance.limits = {
             "memory_mb": manifest.budget.memory_mb,
             "cpu_percent": manifest.budget.cpu_percent,
-            "cpu_seconds": manifest.budget.cpu_seconds,
             "network": "isolated bridge + Squid" if network != "none" else "none",
         }
         executable = shutil.which("docker")
