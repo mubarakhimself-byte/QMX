@@ -370,8 +370,9 @@ class Catalog:
         found: dict[str, str] = {}
         for start in range(0, len(object_ids), 900):
             chunk = object_ids[start : start + 900]
+            marks = ", ".join("?" * len(chunk))
             rows = self.db.execute(
-                f"SELECT object_id, text FROM search WHERE object_id IN ({', '.join('?' * len(chunk))})",  # noqa: S608
+                f"SELECT object_id, text FROM search WHERE object_id IN ({marks})",  # noqa: S608
                 chunk,
             )
             found.update((str(o), str(t)) for o, t in rows)
