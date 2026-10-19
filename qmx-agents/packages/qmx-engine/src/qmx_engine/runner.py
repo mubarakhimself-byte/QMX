@@ -3,9 +3,13 @@
 `Run.drive` folds the run's events, carries out the commands the core returns, and folds again.
 Every event goes through the one `Ledger` writer before the next fold, so a worker's result is in
 the ledger before the core sees it. The runner writes what SOLUTION-DESIGN 3.2 gives the core:
-`node_scheduled`, a hold's `node_waiting`, a memo's `node_finished`, `ladder_step`, the doctor's
-`doctor_verdict`, `run_paused` and `run_finished`. The worker writes `node_started` and
-heartbeats, and the runner writes each attempt's ending from the result the worker returns.
+`node_scheduled` (with the attempt's input hash), a hold's `node_waiting`, a memo's
+`node_finished`, `ladder_step`, the doctor's `doctor_verdict`, `run_paused` and `run_finished`.
+Every node event carries its attempt key (AD-15). The worker writes `node_started` and heartbeats,
+and the runner writes each attempt's ending from the result the worker returns. The runner reaches
+the worker only through `WorkerPort.run(job, emit)`; it serves the worker its executor table while
+it drives the run, so no executor crosses the port (AD-20). A partition that fails after a join
+reading it fired leaves a digest line (B-23).
 
 Every event that ruling 77 sends to the operator raises its inbox item as it is written: a provider
 failure, a system fault, or an irreversible external step of unknown outcome. While attempts run,
@@ -46,6 +50,8 @@ way (AD-10), so only the ticker resumes it on time.
 A run's settings are read from the port as it opens and kept for the pass (B-42), with a trigger's
 role and effort pins over them. `Engine.cancel` stops a run and every live run under it: each
 records `run_cancelled`, its attempts are cancelled and it ends `stopped` (AD-5, B-66).
+A `subworkflow` child that ends `waiting` leaves its parent's node waiting on it; when that child
+later ends, it resumes the parent, whose next attempt takes the child up again (B-27).
 """
 
 from __future__ import annotations
