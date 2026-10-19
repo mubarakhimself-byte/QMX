@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from qma.harness.chat import unexpected_extensions
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import Background, ChatKind, Child, Home, Interactive, SubAgent
 from qma.harness.surface import (
@@ -138,7 +139,7 @@ def test_a_background_chat_also_loses_the_worktree_tools(home: QmxHome) -> None:
         "builtins_added": [],
         "skills_left_out": ["loop", "schedule"],
         "slots": ["rules", "pack_layers", "skills_index"],
-        "hooks": ("PreToolUse", "PreToolUse", "PostToolUse", "PreCompact", "Stop", "SubagentStop"),
+        "hooks": ("PreToolUse", "PostToolUse", "PreCompact", "Stop", "SubagentStop"),
         "env": {"CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "40"},
     }
 
@@ -258,3 +259,9 @@ def test_a_child_kind_loses_the_agent_tool_even_when_declared(home: QmxHome) -> 
     found = surface(home, Child(PARENT, unattended=True), Declaration(builtins=("Task", "Read")))
     assert found.builtins == ("Read",)
     assert "delegate" not in found.toolsets
+
+
+def test_the_chats_own_slots_plugin_is_not_an_unexpected_extension() -> None:
+    info = {"commands": [{"name": "qmx-slots:methodology"}, {"name": "planted:go"}]}
+    found = unexpected_extensions(info, {"mcpServers": []}, frozenset())  # pyright: ignore[reportArgumentType]
+    assert found == ["command planted:go"]

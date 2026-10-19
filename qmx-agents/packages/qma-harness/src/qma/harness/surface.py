@@ -585,7 +585,9 @@ def build(
         plugins=plugins,
         slots=tuple(slots),
         spills=MappingProxyType(spills),
-        hooks=("PreToolUse", *(CHAT_HOOK_EVENTS.values() if wanted.observed else ())),
+        hooks=tuple(
+            dict.fromkeys(("PreToolUse", *(CHAT_HOOK_EVENTS.values() if wanted.observed else ())))
+        ),
         env=MappingProxyType(
             {}
             if wanted.compact_at is None

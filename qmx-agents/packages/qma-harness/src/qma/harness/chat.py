@@ -634,13 +634,14 @@ def unexpected_extensions(
 ) -> list[str]:
     """What the CLI loaded besides its built-ins, the QMX plugin and the MCP `servers` QMA
     passed. The server info lists no plugins, so a plugin shows as its `<plugin>:` commands
-    and agents."""
+    and agents. The chat's own `qmx-slots` plugin holds only skills, which list as commands."""
     commands = cast("list[dict[str, Any]]", (info or {}).get("commands", []))
     agents = cast("list[dict[str, Any]]", (info or {}).get("agents", []))
+    ours = (f"{PLUGIN}:", f"{SLOTS_PLUGIN}:")
     found = [
         f"command {command['name']}"
         for command in commands
-        if not command.get("builtin") and not str(command["name"]).startswith(f"{PLUGIN}:")
+        if not command.get("builtin") and not str(command["name"]).startswith(ours)
     ]
     found += [
         f"agent {agent['name']}"
