@@ -13,7 +13,7 @@ reading it fired leaves a digest line (B-23).
 
 Every event that ruling 77 sends to the operator raises its inbox item as it is written: a provider
 failure, a system fault, or an irreversible external step of unknown outcome. His answer comes back
-through `Engine.answer` as the run's `gate_resolved`, which the core folds. While attempts run,
+through `Engine.answer` as the run's next event, which the core folds. While attempts run,
 the runner wakes every `scheduler.tick` for the stuck detector (`watchdog`, AD-16), which reads what
 each attempt shows and warns, interrupts, ends a stalled attempt, or stops a looping agent. There
 is no runaway guard and no run timeout (AD-40). A ledger write error stops the engine claiming

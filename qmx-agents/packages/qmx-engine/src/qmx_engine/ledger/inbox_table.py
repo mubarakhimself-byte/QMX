@@ -6,7 +6,7 @@ engine is the only process that writes it. The category column is checked agains
 so no other kind of item can be stored. An item's title, cause and what was tried pass the one
 redaction (AD-37) before they are stored, so a provider message that echoes a key never lands here.
 An engine that raises on the table also takes its answers: `resolve` records the answer, then hands
-it to `answers`, which writes `gate_resolved` through the ledger writer and wakes the run (B-32).
+it to `answers`, which writes it through the ledger writer and wakes the run (B-32).
 """
 
 from __future__ import annotations
