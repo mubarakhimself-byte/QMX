@@ -592,7 +592,8 @@ class ControlService:
         }
         for name, side in sides.items():
             field[name] = {
-                key: side.get(key) for key in ("model", "run_id", "status", "passed", "total")
+                key: side.get(key)
+                for key in ("model", "run_id", "status", "fell_back", "passed", "total")
             }
         before, after = sides["baseline"]["surface_digest"], sides["candidate"]["surface_digest"]
         digest: Document = {"from": before, "to": after, "changed": before != after}
