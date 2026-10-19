@@ -50,10 +50,12 @@ if TYPE_CHECKING:
         HookEvent,
         HookInput,
         HookJSONOutput,
+        SystemPromptPreset,
     )
 
     from qma.harness.home import QmxHome, SessionId
     from qma.harness.relay import RelayGrant
+    from qma.harness.surface import Surface
 
 type PermissionMode = Literal[
     "default", "acceptEdits", "plan", "bypassPermissions", "dontAsk", "auto"
@@ -205,13 +207,15 @@ class ChatConfig:
     compact_at: float | None = None
     hooks: ChatHooks | None = None
     tools: tuple[str, ...] | None = None
-    """None is the `claude_code` preset. A tuple is exactly those built-in tools, and `()` is no
-    tool at all: no built-in and no MCP server."""
+    """The built-in tools this chat declares. None is the `claude_code` preset less what its
+    kind loses (`surface.denied_builtins`). `()` with no declared toolsets is no tool at all."""
     home: Home = Home()
     packs: tuple[str, ...] = ()
     toolsets: tuple[str, ...] | None = None
-    """QMX toolsets on this chat's surface. None is every core toolset (a copilot); an engine
-    node passes the toolsets it declares."""
+    """QMX toolsets this chat declares. None is its home's preset, or its parent's for a Child;
+    an engine node passes the toolsets it declares. The Surface decides the rest."""
+    skills: tuple[str, ...] | None = None
+    """The skills filter this chat declares. None is every skill it loads."""
     agents: Mapping[str, SubAgent] = MappingProxyType({})
     mcp_servers: Mapping[str, JsonMap] = MappingProxyType({})
     """Extra MCP servers for this chat alone, vetted like the operator's."""
@@ -402,6 +406,18 @@ GATE_TIMEOUT_S: Final = 10.0
 """Explicit `HookMatcher.timeout` for the guard. A PreToolUse SDK callback that exceeds
 its timeout blocks the tool call."""
 
+PROMPT_OPTIONS: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "type": "preset",
+        "preset": "claude_code",
+        "exclude_dynamic_sections": True,
+        "snapshot": False,
+    }
+)
+"""Every chat's `system_prompt`. The dynamic sections move to the first user message, so chats
+in two folders share a cached prefix, and no snapshot is kept, so a changed slot reaches the
+model at the next relaunch by resume (H53, probes P-SET and P-SYS)."""
+
 COMPACT_PCT_ENV: Final = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"
 """The CLI's auto-compact trigger as a percentage (1-100) of its auto-compact window. Not
 `CLAUDE_CODE_AUTO_COMPACT_WINDOW`, which is a window size in tokens from 100,000 up and cannot
@@ -427,10 +443,6 @@ def chat_options_refusal(config: ChatConfig) -> str | None:
     if compact_at is not None and not 0.01 <= compact_at <= 1:
         return f"compact_at is a share of the context window from 0.01 to 1, not {compact_at}"
     return None
-
-
-def compact_env(compact_at: float | None) -> dict[str, str]:
-    return {} if compact_at is None else {COMPACT_PCT_ENV: str(round(compact_at * 100))}
 
 
 def _observer(hook: ChatHook) -> HookCallback:
@@ -512,24 +524,6 @@ def assert_scrubbed(environ: Mapping[str, str]) -> None:
         raise LaunchRefused(f"the host environment holds {', '.join(found)}; restart qma.serve")
 
 
-def instructions(home: QmxHome, workspace: Path) -> str:
-    """The QMX-wide rules, then the workspace root's CLAUDE.md and AGENTS.md, for the preset's
-    `append`. A missing file adds nothing. `@import` lines stay raw text."""
-    sources = (home.plugin_dir / "QMX.md", workspace / "CLAUDE.md", workspace / "AGENTS.md")
-    return "\n\n".join(
-        f"Contents of {path.as_posix()}:\n\n{path.read_text(encoding='utf-8').strip()}"
-        for path in sources
-        if path.is_file()
-    )
-
-
-def system_text(home: QmxHome, config: ChatConfig) -> str:
-    """What the chat's system text file holds: `instructions`, then the chat's own
-    `append_system_prompt`."""
-    parts = (instructions(home, config.workspace), config.append_system_prompt or "")
-    return "\n\n".join(part for part in parts if part)
-
-
 ARGV_BUDGET: Final = 30_000
 """Characters for the whole CLI command line after Windows quoting. Windows caps a command
 line at 32,767. The MCP config and deny rules ride in it; settings and system text go by file."""
@@ -570,11 +564,11 @@ def assert_argv_fits(options: ClaudeAgentOptions) -> None:
 
 def build_options(
     config: ChatConfig,
+    surface: Surface,
     *,
     session_id: SessionId,
     transcript_exists: bool,
     env: Mapping[str, str],
-    home: QmxHome,
     settings_file: Path,
     system_file: Path,
     launcher: Path,
@@ -585,17 +579,16 @@ def build_options(
     sink: HookSink | None = None,
     test: TestMode | None = None,
 ) -> ClaudeAgentOptions:
-    """One chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
-    `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The guard
-    runs first as a PreToolUse callback on every tool, with an explicit timeout, and the deny
-    rules ride in `disallowed_tools`; `test` switches either off for a layer check. The chat's
-    own observe-only hooks and its named `sink` are appended after the guard, and `compact_at`
-    becomes the CLI's auto-compact percentage for this chat alone.
+    """One chat's `ClaudeAgentOptions`. The built-ins, skills filter, plugins, sub-agents, env
+    quirks and prompt options come from the chat's `surface` (AD-62). Resume is keyed on the
+    JSONL on disk, never on `ChatRecord.started`. `mcp_servers` is the QMX toolset servers plus
+    the vetted external servers. The guard runs first as a PreToolUse callback on every tool,
+    with an explicit timeout, and the deny rules ride in `disallowed_tools`; `test` switches
+    either off for a layer check. The chat's own observe-only hooks and its named `sink` are
+    appended after the guard.
 
     Claude settings and the system text go by file path (probes P-SET and P-SYS), so neither
-    grows the command line. The preset drops its dynamic sections, so two chats in two folders
-    share a cached prefix, and keeps no snapshot, so a changed system text reaches the model at
-    the next relaunch by resume (H53)."""
+    grows the command line."""
     bounded = not isinstance(config.kind, Interactive)
     gate_hook = test is None or test.gate_hook
     rules_on = test is None or test.deny_rules
@@ -615,15 +608,8 @@ def build_options(
                 hooks.setdefault(event, []).append(matcher)
     return ClaudeAgentOptions(
         cli_path=launcher,
-        tools={"type": "preset", "preset": "claude_code"}
-        if config.tools is None
-        else list(config.tools),
-        system_prompt={
-            "type": "preset",
-            "preset": "claude_code",
-            "exclude_dynamic_sections": True,
-            "snapshot": False,
-        },
+        tools=list(surface.builtins),
+        system_prompt=cast("SystemPromptPreset", dict(PROMPT_OPTIONS)),
         agents={
             name: AgentDefinition(
                 description=agent.description,
@@ -631,17 +617,18 @@ def build_options(
                 tools=None if agent.tools is None else list(agent.tools),
                 model=agent.model,
             )
-            for name, agent in config.agents.items()
+            for name, agent in surface.agents.items()
         }
         or None,
+        skills=list(surface.skills),
         permission_mode=config.mode,
         model=config.model,
         effort=config.effort,
         cwd=config.workspace,
-        env={**env, **compact_env(config.compact_at)},
+        env={**env, **surface.env},
         setting_sources=[],
         settings=str(settings_file),
-        plugins=[{"type": "local", "path": str(home.plugin_dir)}],
+        plugins=[{"type": "local", "path": str(path)} for path in surface.plugins],
         strict_mcp_config=True,
         mcp_servers=dict(mcp_servers),
         hooks=hooks or None,

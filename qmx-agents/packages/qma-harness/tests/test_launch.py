@@ -26,7 +26,6 @@ from qma.harness.launch import (
     assert_argv_fits,
     assert_scrubbed,
     build_options,
-    instructions,
     launch_env,
     unattended,
     verbatim,
@@ -42,6 +41,7 @@ from qma.harness.profiles import (
     TierMap,
 )
 from qma.harness.relay import GrantSecret, RelayGrant
+from qma.harness.surface import HomeSlots, Supply, Surface, build, declaration
 
 GATE = guard.GuardRules(
     mandatory_asks=frozenset(),
@@ -120,12 +120,10 @@ def test_a_plan_launch_sets_only_the_plan_home_and_the_launcher_inputs(home: Qmx
     }
 
 
-def test_instructions_read_qmx_rules_then_the_workspace_root_files(
-    home: QmxHome, workspace: Path
-) -> None:
-    assert instructions(home, workspace) == (
-        f"Contents of {(home.plugin_dir / 'QMX.md').as_posix()}:\n\nMoney is read-only.\n\n"
-        f"Contents of {(workspace / 'CLAUDE.md').as_posix()}:\n\nUse uv.\n@docs/more.md"
+def surface_of(config: ChatConfig, home: QmxHome) -> Surface:
+    supply = Supply((), HomeSlots(home), {}, (home.plugin_dir,), FILES / "qmx-slots" / "skills")
+    return build(
+        config.kind, config.home, (), declaration(config), supply, workspace=config.workspace
     )
 
 
@@ -139,12 +137,13 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         kind=Interactive(),
     )
     launcher = Path("D:/venv/Scripts/qma-cli-launcher.exe")
+    surface = surface_of(config, home)
     options = build_options(
         config,
+        surface,
         session_id=CHAT,
         transcript_exists=False,
         env={"CLAUDE_CONFIG_DIR": "D:/qmx/claude"},
-        home=home,
         settings_file=FILES / "settings.json",
         system_file=FILES / "system.md",
         launcher=launcher,
@@ -157,7 +156,8 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
     assert (matcher.matcher, matcher.timeout, len(matcher.hooks)) == (None, GATE_TIMEOUT_S, 1)
     assert options == ClaudeAgentOptions(
         cli_path=launcher,
-        tools={"type": "preset", "preset": "claude_code"},
+        tools=list(surface.builtins),
+        skills=list(surface.skills),
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
@@ -191,10 +191,10 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
     )
     resumed = build_options(
         ChatConfig(PLAN, "haiku", "high", "plan", workspace, Background()),
+        surface_of(ChatConfig(PLAN, "haiku", "high", "plan", workspace, Background()), home),
         session_id=CHAT,
         transcript_exists=True,
         env={},
-        home=home,
         settings_file=FILES / "settings.json",
         system_file=FILES / "system.md",
         launcher=launcher,
@@ -216,10 +216,10 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
     big: dict[str, Any] = {"big": {"type": "stdio", "command": "x" * 31_000}}
     options = build_options(
         ChatConfig(PLAN, "haiku", None, "default", workspace, Interactive()),
+        surface_of(ChatConfig(PLAN, "haiku", None, "default", workspace, Interactive()), home),
         session_id=CHAT,
         transcript_exists=False,
         env={},
-        home=home,
         settings_file=FILES / "settings.json",
         system_file=FILES / "system.md",
         launcher=Path(sys.executable),
@@ -234,10 +234,10 @@ def test_a_launch_past_the_argv_budget_is_refused_naming_the_largest_part(
     assert_argv_fits(
         build_options(
             ChatConfig(PLAN, "haiku", None, "default", workspace, Interactive()),
+            surface_of(ChatConfig(PLAN, "haiku", None, "default", workspace, Interactive()), home),
             session_id=CHAT,
             transcript_exists=False,
             env={},
-            home=home,
             settings_file=FILES / "settings.json",
             system_file=FILES / "system.md",
             launcher=Path(sys.executable),

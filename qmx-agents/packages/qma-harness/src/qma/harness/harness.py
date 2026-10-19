@@ -129,6 +129,7 @@ from qma.harness.profiles import (
 )
 from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
+from qma.harness.surface import child_scope
 from qma.harness.tools import DelegateRefused
 from qma.harness.turns import TurnHandle, watch_turn
 from qma.harness.usage import (
@@ -184,9 +185,13 @@ class NewChat:
     """None is `general`, or the parent's home for a Child."""
     packs: tuple[str, ...] = ()
     toolsets: tuple[str, ...] | None = None
-    """QMX toolsets on the chat's surface; None is every core toolset."""
+    """QMX toolsets the chat declares; None is its home's preset, or its parent's for a Child.
+    The Surface cuts them to what the host serves (AD-62)."""
     tools: tuple[str, ...] | None = None
-    """None is the `claude_code` preset; `()` is no tool at all."""
+    """Built-in tools the chat declares; None is the `claude_code` preset less what its kind
+    loses; `()` with no declared toolsets is no tool at all."""
+    skills: tuple[str, ...] | None = None
+    """The skills filter the chat declares; None is every skill it loads."""
     agents: Mapping[str, SubAgent] = field(default_factory=dict[str, SubAgent])
     mcp_servers: Mapping[str, JsonMap] = field(default_factory=dict[str, JsonMap])
     append_system_prompt: str | None = None
@@ -209,6 +214,7 @@ class NewChat:
             home=home,
             packs=self.packs,
             toolsets=self.toolsets,
+            skills=self.skills,
             agents=MappingProxyType(dict(self.agents)),
             mcp_servers=MappingProxyType(dict(self.mcp_servers)),
             append_system_prompt=self.append_system_prompt,
@@ -653,7 +659,9 @@ class Harness:
         """Backs `mcp__qmx_delegate__run`. Refuses a profile outside `Profiles.delegate_targets`.
         Starts a Child chat (a qmx-control child session with `parent_id`, verbatim, `unattended`
         copied from the parent, its own relay grant, any [budgets] turn and spend limits the
-        operator wrote) on the parent's model tier, workspace and mode. Sends the prompt as
+        operator wrote) on the parent's model tier, workspace and mode, declaring the toolsets,
+        built-ins and skills of the parent's current surface, so the helper is never wider than
+        its parent (AD-62); its own Surface then cuts what a Child loses. Sends the prompt as
         `InjectedText`, because a model wrote it, and returns the turn's final text. The parent
         is blocked on this tool call, so the child uses the parent's slot. The overage stop
         refuses through `send`. The turn runs under the stuck rules (H45): a loop, a fixer that
@@ -663,7 +671,8 @@ class Harness:
         refusal = profiles.delegate_refusal(profile)
         if refusal is not None:
             raise DelegateRefused(refusal)
-        origin = self._chat(parent).record.config
+        caller = self._chat(parent)
+        origin, cut = caller.record.config, caller.surface
         try:
             target = profiles.get(profile)
             child = await self.start_chat(
@@ -674,6 +683,15 @@ class Harness:
                     workspace=origin.workspace,
                     profile=profile,
                     kind=Child(parent, unattended=unattended(origin.kind)),
+                    **(
+                        {
+                            "toolsets": origin.toolsets,
+                            "tools": origin.tools,
+                            "skills": origin.skills,
+                        }
+                        if cut is None
+                        else child_scope(cut)
+                    ),
                 )
             )
         except (ProfileError, LaunchRefused) as refused:

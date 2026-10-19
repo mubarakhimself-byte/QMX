@@ -61,6 +61,7 @@ from qma.harness.launch import (
     launch_env,
 )
 from qma.harness.profiles import PLAN, ProfileName, parse_profiles
+from qma.harness.surface import SLOTS_PLUGIN, HomeSlots, Supply, build, declaration
 from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, guard_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
@@ -677,6 +678,8 @@ class ChatRecord:
     config: ChatConfig
     started: bool
     turn: TurnState
+    digests: tuple[str, ...] = ()
+    """The surface digest of each launch whose surface differed from the one before (AD-62)."""
 
 
 def _kind_document(kind: ChatKind) -> dict[str, object]:
@@ -718,6 +721,7 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
             "home": {"kind": config.home.kind, "project_id": config.home.project_id},
             "packs": list(config.packs),
             "toolsets": None if config.toolsets is None else list(config.toolsets),
+            "skills": None if config.skills is None else list(config.skills),
             "agents": {
                 name: {
                     "description": agent.description,
@@ -740,6 +744,7 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
         },
         "started": record.started,
         "turn": record.turn,
+        "digests": list(record.digests),
     }
 
 
@@ -766,6 +771,7 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
             home=Home(home.get("kind", "general"), home.get("project_id")),
             packs=tuple(config.get("packs", ())),
             toolsets=None if config.get("toolsets") is None else tuple(config["toolsets"]),
+            skills=None if config.get("skills") is None else tuple(config["skills"]),
             agents=MappingProxyType(
                 {
                     name: SubAgent(
@@ -790,6 +796,7 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
         ),
         started=bool(document["started"]),
         turn=document["turn"],
+        digests=tuple(document.get("digests", ())),
     )
 
 
@@ -972,12 +979,14 @@ DOCTOR_CHAT: Final = session_id("00000000-0000-4000-8000-000000000000")
 
 def _argv_line(home: QmxHome, workspace: Path, launcher: Path) -> DoctorLine:
     files = home.launch_dir(DOCTOR_CHAT)
+    config = ChatConfig(PLAN, "opus", None, "default", workspace, Interactive())
+    supply = Supply((), HomeSlots(home), {}, (home.plugin_dir,), files / SLOTS_PLUGIN / "skills")
     options = build_options(
-        ChatConfig(PLAN, "opus", None, "default", workspace, Interactive()),
+        config,
+        build(config.kind, config.home, (), declaration(config), supply, workspace=workspace),
         session_id=DOCTOR_CHAT,
         transcript_exists=False,
         env=launch_env(PlanLaunch(), home=home, session_id=DOCTOR_CHAT, cap=""),
-        home=home,
         settings_file=files / "settings.json",
         system_file=files / "system.md",
         launcher=launcher,
