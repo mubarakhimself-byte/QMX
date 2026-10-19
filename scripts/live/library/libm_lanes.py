@@ -8,8 +8,8 @@ Lanes are `regression import dual diff alias collision real secrets processes`; 
 the coordinator) and the script exits 1 if any lane failed. No model, no key, no ship home, no
 lane lock. The operator's home (`LIBM_REAL_HOME`, default `~/.qmx`) is only ever copied: every
 lane runs on a copy under `D:/QMX-worktrees/qma-ship/build/homes/<LIBM_HOME_PREFIX><lane>`
-(default prefix `libm-`), and `real` hashes
-his `library.db` and blobs against the hashes `import` recorded before it copied them.
+(default prefix `libm-`), and `real` hashes his `library.db` and blobs against the hashes
+`import` recorded before it copied them. Only `dual` starts a `qmx_host`, on its own copy.
 
 His home holds no registry room and no app artifacts, so `import` adds both to the copy as named
 fixtures: three registry records read through QMB's real as-of port, and one app artifact with
