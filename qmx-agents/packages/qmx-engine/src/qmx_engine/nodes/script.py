@@ -2,7 +2,7 @@
 
 A trusted script runs as `python -I` in a subprocess, from the run's hash-checked `code/` copy.
 Its cwd is the attempt's overlay (AD-51), its inputs arrive as JSON on stdin, and its stdout,
-parsed as JSON, is its output on `main`. Its environment is built from an allow-list with
+parsed as JSON, is its output on `main`; a first line starting `[QMX_FAILURE]` fails it instead. Its environment is built from an allow-list with
 `qma.boot`'s banned fragments, so no provider key, no `CLAUDE_CONFIG_DIR`, no plan path and no
 home path reaches it, plus the run context (`QMX_RUN_ID`, `QMX_MODE`, `QMX_FAKE`, `QMX_NOW`,
 `QMX_WORK`, `QMX_WORK_SHARED`, `QMX_CODE` and the rest) and the value of each `qmx/tool/<name>`
@@ -52,6 +52,8 @@ KEEP_NAMES: Final = frozenset(
 IDEMPOTENCY_ENV: Final = "QMX_IDEMPOTENCY_KEY"
 TOOL_ENV: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 MESSAGE_LIMIT: Final = 300
+FAILURE: Final = "[QMX_FAILURE]"
+"""A first stdout line starting with this declares the script failed, with the rest as why."""
 
 type Resolve = Callable[[str], str | None]
 
@@ -276,6 +278,9 @@ class HostScript:
             tail = done.stderr.decode("utf-8", "replace").strip()
             return failed("script_exit", f"exit {done.code}: {tail}", retryable=True)
         text = done.stdout.decode("utf-8", "replace").strip()
+        if text.startswith(FAILURE):
+            why = text.partition("\n")[0].removeprefix(FAILURE).strip()
+            return failed("qmx_failure", why or "the script declared failure", retryable=False)
         try:
             return json.loads(text) if text else None
         except json.JSONDecodeError:

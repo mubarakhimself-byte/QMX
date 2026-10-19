@@ -1,4 +1,6 @@
-"""`runs.explain`: one document per run, read from the ledger alone (AD-15, AD-16).
+"""`runs.explain`: one document per run, read from the ledger alone (AD-15, AD-16). And
+`explain_trigger`: why a trigger did or did not fire (AD-10), for the UI, the copilot and the
+doctor.
 
 For each node, in the order it first appears: its attempts (from the node events), its spans, its
 ladder steps, its waits and its cost so far. For the run: its status and reason from SOLUTION-DESIGN
@@ -10,19 +12,27 @@ covers a ledger written before the seam, since a failure message is quoted verba
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Final, cast
 
 from pydantic import JsonValue
 
 from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.inbox_table import Incident
 from qmx_engine.ledger.redact import redact_json
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ports.library import JsonObject
 from qmx_engine.service.runs import status_of
 from qmx_engine.trace_export import totals
+from qmx_engine.triggers import rows
+from qmx_engine.triggers.cron import instant, stamp
+from qmx_engine.triggers.preflight import MARKET_OPEN, market_shut_until
 
 ENDINGS: Final = {"node_finished": "ok", "node_failed": "failed", "node_waiting": "waiting"}
+STALE_TICKS: Final = 3
+"""Ticks without a heartbeat before `explain_trigger` calls the ticker stalled."""
 FAILURE_KEYS: Final = ("code", "message", "signature", "retryable", "effect_state")
 LADDER_KEYS: Final = ("attempt", "step", "reason", "candidate", "resume_at", "skipped")
 WAIT_KEYS: Final = ("attempt", "reason", "resume_at", "event", "idempotency_key")
@@ -122,6 +132,101 @@ def explain(events: list[Event], spans: list[Span]) -> JsonObject:
         "nodes": [cast(JsonValue, asdict(node)) for node in nodes.values()],
     }
     return cast(JsonObject, redact_json(document)[0])
+
+
+@dataclass(frozen=True, slots=True)
+class TriggerFacts:
+    """What `explain_trigger` reads beside the ledger: the moment, this engine's home and pause
+    flag, the pinned version's state, the open incident, and the settings it judges by."""
+
+    now: datetime
+    home: str
+    paused: bool
+    version_state: str
+    incident: Incident | None
+    tick_seconds: float
+    holidays: tuple[str, ...]
+
+
+def explain_trigger(
+    connection: sqlite3.Connection, trigger_id: str, facts: TriggerFacts
+) -> JsonObject:
+    """Why a trigger did or did not fire (AD-10): the ticker's heartbeat age, whether its version
+    is enabled, its next fire, its last ten fires with their reasons and its open incident, and a
+    `verdict` in one sentence, the first reason that holds."""
+    (trigger,) = rows.triggers(connection, "WHERE id = ?", trigger_id)
+    recent = rows.fires(connection, trigger_id)[-10:]
+    beat = connection.execute("SELECT value FROM meta WHERE key = 'ticker_heartbeat'").fetchone()
+    age = None if beat is None else (facts.now - instant(str(beat[0]))).total_seconds()
+    held = next((f for f in recent if f.status == "held"), None)
+    shut = None
+    if trigger.precheck_ref == MARKET_OPEN:
+        shut = market_shut_until(facts.now, trigger.zone, facts.holidays)
+    incident = facts.incident
+    document: JsonObject = {
+        "trigger_id": trigger.id,
+        "kind": trigger.kind,
+        "enabled": trigger.enabled,
+        "home_engine": trigger.home_engine,
+        "paused": facts.paused,
+        "version_state": facts.version_state,
+        "next_fire_at": trigger.next_fire_at,
+        "hold_until": trigger.quota_hold_until,
+        "priority": trigger.priority,
+        "ready_by": trigger.ready_by,
+        "last_status": trigger.last_status,
+        "failure_streak": trigger.failure_streak,
+        "ticker_heartbeat_age_s": None if age is None else round(age, 1),
+        "incident": None if incident is None else cast(JsonObject, asdict(incident)),
+        "fires": [
+            {
+                "fire_id": f.id,
+                "occurrence_at": f.occurrence_at,
+                "status": f.status,
+                "detail": f.detail,
+                "run_id": f.run_id,
+                "delivery": f.delivery,
+                "rerun": f.rerun,
+            }
+            for f in reversed(recent)
+        ],
+    }
+    document["verdict"] = verdict(trigger, facts, age, held, shut)
+    return cast(JsonObject, redact_json(document)[0])
+
+
+def verdict(
+    trigger: rows.Trigger,
+    facts: TriggerFacts,
+    age: float | None,
+    held: rows.Fire | None,
+    shut: datetime | None,
+) -> str:
+    if facts.paused:
+        return "paused: autonomy.paused is set, so no fire is claimed on this host until cleared"
+    if not trigger.enabled:
+        return "the trigger is disabled"
+    if trigger.home_engine != facts.home:
+        return f"the trigger runs on {trigger.home_engine}, not on this engine ({facts.home})"
+    if facts.version_state != "enabled":
+        return f"the pinned version is {facts.version_state}"
+    if held is not None:
+        return f"held: {held.detail}"
+    if age is None or age > STALE_TICKS * facts.tick_seconds:
+        return "the ticker has not ticked recently, so nothing is claimed"
+    if shut is not None:
+        return f"the market is shut in {trigger.zone} until {stamp(shut)}"
+    match trigger.spec:
+        case rows.Webhook():
+            return "it fires once for each new webhook delivery"
+        case rows.Manual() | rows.After():
+            return f"it fires when asked ({trigger.kind}), never on a clock"
+        case rows.Event():
+            return "event triggers do not match yet (TRG2b)"
+        case rows.Session():
+            return "session triggers wait for copilot loops"
+        case _:
+            return f"it fires next at {trigger.next_fire_at}"
 
 
 def cost(summed: JsonObject) -> JsonObject:

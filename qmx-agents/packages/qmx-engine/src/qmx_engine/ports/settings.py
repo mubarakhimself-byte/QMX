@@ -2,7 +2,8 @@
 `[roles]` sections over them, read through `ControlService.settings_get`. It never writes.
 
 `[engine]` holds any `settings.DEFAULTS` key, as a dotted key or as nested tables
-(`[engine.retry] backoff = [...]` is `retry.backoff`); a key the engine does not know is ignored.
+(`[engine.retry] backoff = [...]` is `retry.backoff`); a key the engine does not know is ignored,
+and `true` or `false` reads as 1 or 0 (`[engine.autonomy] paused = true`).
 `[roles]` maps a role name to its candidate list, so the operator may add a role. Nothing here
 reads chat slots, which the harness slot table alone counts (AD-58), or a background share or a
 budget, since QMX sets no usage limit (ruling 106).
@@ -64,5 +65,5 @@ def setting(value: JsonValue) -> Setting:
             return tuple(cast(list[int], value))
         return None
     if isinstance(value, bool):
-        return None
+        return int(value)
     return value if isinstance(value, int | float | str) else None

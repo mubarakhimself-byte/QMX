@@ -197,8 +197,9 @@ async def run_bundle(
     fake: bool = False,
     run_id: str | None = None,
     pins: JsonObject | None = None,
+    priority: int = 0,
 ) -> tuple[Outcome, Stored]:
-    """`pins` are the firing trigger's role and effort pins (B-60)."""
+    """`pins` are the firing trigger's role and effort pins (B-60); `priority` is its fire's."""
     run_id = run_id or new_run_id(ctx.clock.now())
     if subgraph is not None:
         bundle = induced(bundle, subgraph)
@@ -210,7 +211,14 @@ async def run_bundle(
         raise Refused("not_runnable", "; ".join([f"the workflow does not run: {codes}", *needs]))
     try:
         outcome = await ctx.engine.start(
-            root, found[1], mode=mode, inputs=inputs, run_id=run_id, fake=fake, pins=pins
+            root,
+            found[1],
+            mode=mode,
+            inputs=inputs,
+            run_id=run_id,
+            fake=fake,
+            pins=pins,
+            priority=priority,
         )
     except EngineRefused as refused:
         raise Refused("engine_refused", str(refused)) from refused

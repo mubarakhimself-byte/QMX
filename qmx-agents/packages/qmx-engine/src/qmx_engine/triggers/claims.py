@@ -30,6 +30,7 @@ from qmx_engine.triggers.rows import (
     COLUMNS,
     ENDINGS,
     FIRE_COLUMNS,
+    Delivered,
     Fire,
     FireStatus,
     HomeEngine,
@@ -129,7 +130,7 @@ def _pending(db: sqlite3.Connection, lease: Lease, home: HomeEngine) -> list[Cla
     rows = db.execute(
         f"SELECT {JOINED}, f.id"  # noqa: S608
         " FROM fires f JOIN triggers t ON t.id = f.trigger_id WHERE f.status = 'pending'"
-        " AND t.home_engine = ? AND t.enabled = 1 ORDER BY f.occurrence_at, f.id",
+        " AND t.home_engine = ? AND t.enabled = 1 ORDER BY t.priority DESC, f.occurrence_at, f.id",
         (home,),
     ).fetchall()
     claimed: list[Claimed] = []
@@ -299,19 +300,52 @@ def start(fire_id: str, run_id: str) -> Operation[None]:
     return operation
 
 
-def hold(fire: Fire, until: str) -> Operation[None]:
-    """Park a fire into a closed usage window; later occurrences merge into it."""
+def hold(fire: Fire, until: str, why: str = "quota hold") -> Operation[None]:
+    """Park a fire until `until`, into a closed usage window or a shut market; later occurrences
+    merge into it."""
 
     def operation(txn: Transaction) -> None:
         db = txn.connection
         db.execute(
             "UPDATE fires SET status = 'held', claimed_by = NULL, lease_until = NULL,"
             " detail = ? WHERE id = ?",
-            (f"quota hold until {until}", fire.id),
+            (f"{why} until {until}", fire.id),
         )
         db.execute(
             "UPDATE triggers SET quota_hold_until = ? WHERE id = ?", (until, fire.trigger_id)
         )
+
+    return operation
+
+
+def rerun(fire: Fire, until: str) -> Operation[bool]:
+    """Hold a spend-neutral re-run of a failed fire until `until`, with its payload, unless the
+    trigger already holds a fire, which then covers it."""
+
+    def operation(txn: Transaction) -> bool:
+        db = txn.connection
+        if _held(db, fire.trigger_id) is not None:
+            return False
+        count = fire.rerun + 1
+        cursor = db.execute(
+            "INSERT OR IGNORE INTO fires (id, trigger_id, occurrence_at, status, detail, merged,"
+            " payload, rerun, rerun_of) VALUES (?, ?, ?, 'held', ?, 0, ?, ?, ?)",
+            (
+                new_fire_id(),
+                fire.trigger_id,
+                until,
+                f"re-run {count} until {until}",
+                None if fire.payload is None else json.dumps(fire.payload),
+                count,
+                fire.rerun_of or fire.id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            return False
+        db.execute(
+            "UPDATE triggers SET quota_hold_until = ? WHERE id = ?", (until, fire.trigger_id)
+        )
+        return True
 
     return operation
 
@@ -324,19 +358,24 @@ def settle(
     detail: str | None = None,
     digest: str | None = None,
     outputs: JsonObject | None = None,
+    delivery: Delivered | None = None,
 ) -> Operation[None]:
     """End a fire, and carry its ending to the trigger: `last_status`, the failure streak, and
-    the outputs `continuity` injects next time."""
+    the outputs `continuity` injects next time. A failed delivery reads `delivery_failed`."""
 
     def operation(txn: Transaction) -> None:
         db = txn.connection
         cursor = db.execute(
             "UPDATE fires SET status = ?, detail = coalesce(?, detail), digest = ?,"  # noqa: S608
-            f" ended_at = ?, lease_until = NULL WHERE id = ? AND status NOT IN ({ENDED})",
-            (status, detail, digest, at, fire.id),
+            " delivery = coalesce(?, delivery), ended_at = ?, lease_until = NULL"
+            f" WHERE id = ? AND status NOT IN ({ENDED})",
+            (status, detail, digest, delivery, at, fire.id),
         )
         if cursor.rowcount:
-            _carry(db, fire.trigger_id, status, outputs)
+            last: LastStatus | None = (
+                "delivery_failed" if delivery == "failed" else LAST.get(status)
+            )
+            _carry(db, fire.trigger_id, last, outputs)
 
     return operation
 
@@ -361,18 +400,17 @@ def settle_run(
             " AND status IN ('waiting', 'claimed', 'running')",
             (status, at, run_id),
         )
-        _carry(db, str(row[0]), status, outputs)
+        _carry(db, str(row[0]), LAST.get(status), outputs)
 
     return operation
 
 
 def _carry(
-    db: sqlite3.Connection, trigger_id: str, status: FireStatus, outputs: JsonObject | None
+    db: sqlite3.Connection, trigger_id: str, last: LastStatus | None, outputs: JsonObject | None
 ) -> None:
-    last = LAST.get(status)
     if last is None:
         return
-    failing = last in ("failed", "blocked_config", "unknown")
+    failing = last in ("failed", "blocked_config", "unknown", "delivery_failed")
     db.execute(
         "UPDATE triggers SET last_status = ?,"
         " failure_streak = CASE WHEN ? THEN failure_streak + 1 ELSE 0 END,"
