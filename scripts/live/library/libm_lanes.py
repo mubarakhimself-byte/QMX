@@ -340,6 +340,7 @@ def run_suites(checkout: Path, log: Log, label: str) -> dict[str, set[str]]:
         lines = done.stdout.splitlines()
         failing[suite] = {line.split()[1] for line in lines if line.startswith("FAILED ")}
         log(f"{label} {suite}: {lines[-1] if lines else done.stderr[-200:]}")
+        log(f"{label} {suite} failing: {sorted(failing[suite])}")
     return failing
 
 
@@ -382,13 +383,14 @@ def lane_secrets() -> bool:
 def lane_processes() -> bool:
     log = Log("processes")
     found: list[str] = []
+    me = {os.getpid(), *(p.pid for p in psutil.Process().parents())}
     for process in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             line = " ".join(process.info["cmdline"] or [])
             name = str(process.info["name"] or "").lower()
         except psutil.Error:
             continue
-        mine = "libm" in line and process.pid != os.getpid()
+        mine = "libm" in line and process.pid not in me
         if mine and (name.startswith(("python", "claude", "qma-cli-launcher"))):
             found.append(f"{process.info['pid']} {name} {line[:160]}")
     for row in found:
