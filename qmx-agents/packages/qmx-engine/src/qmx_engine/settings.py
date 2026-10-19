@@ -64,9 +64,9 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "crash_loop.restarts": 3,  # Claude's default, UI-editable
         "subworkflow.max_depth": 3,  # Claude's default, UI-editable
         "inline_limit_bytes": 65_536,  # Claude's default, UI-editable
-        "placement.pc.cpu_slots": None,  # Claude's default (cores minus one), UI-editable
+        "placement.pc.cpu_slots": None,  # Claude's default, UI-editable; unset is cores minus one
         "placement.pc.container_slots": 3,  # Claude's default, UI-editable
-        "placement.pc.gpu_slots": None,  # Claude's default (no GPU on the PC), UI-editable
+        "placement.pc.gpu_slots": None,  # Claude's default, UI-editable; unset is no GPU
         "context_window": 200_000,  # Claude's default, UI-editable
         "roles.triage": _CHEAP,  # Claude's default, UI-editable
         "roles.clarifier": _CHEAP,  # Claude's default, UI-editable
