@@ -414,34 +414,57 @@ def config_change_hook(launcher: Path) -> dict[str, object]:
 
 
 def code_settings(
-    user: ClaudeSettings, *, launcher: Path, workspace: Path, memory_dir: Path
+    user: ClaudeSettings,
+    *,
+    launcher: Path,
+    workspace: Path,
+    memory_dir: Path,
+    allow: Sequence[str] = (),
+    deny: Sequence[str] = (),
+    claude_hooks: Mapping[str, object] = MappingProxyType({}),
+    auto_memory: bool = True,
 ) -> str:
-    """The one inline JSON string for the SDK `settings` option, rendered per launch. Pure.
-    The operator's keys, the workspace's remembered rules, then the fixed values, which win."""
+    """The settings document of one launch, as JSON, rendered per launch. Pure.
+    The operator's keys, the workspace's remembered rules and the chat's own `allow`, `deny`
+    and `claude_hooks`, then the fixed values, which win."""
     document: dict[str, Any] = {
         key: value
         for key, value in json.loads(json.dumps(user.raw)).items()
         if key not in QMX_ONLY_KEYS
     }
-    remembered = user.remembered(workspace)
-    if remembered:
-        permissions: dict[str, Any] = document.setdefault("permissions", {})
-        allow: list[str] = permissions.setdefault("allow", [])
-        allow.extend(rule for rule in remembered if rule not in allow)
+    for name, rules in (("allow", [*user.remembered(workspace), *allow]), ("deny", deny)):
+        if rules:
+            permissions: dict[str, Any] = document.setdefault("permissions", {})
+            listed: list[str] = permissions.setdefault(name, [])
+            listed.extend(rule for rule in rules if rule not in listed)
     document["env"] = {
         "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": SPAWN_DEPTH_DEFAULT,
         **document.get("env", {}),
     }
-    document["hooks"] = {
-        **document.get("hooks", {}),
-        "ConfigChange": [config_change_hook(launcher)],
+    hooks: dict[str, list[Any]] = {
+        event: list(groups) for event, groups in document.get("hooks", {}).items()
     }
+    for event, groups in json.loads(json.dumps(dict(claude_hooks))).items():
+        hooks.setdefault(event, []).extend(groups)
+    document["hooks"] = {**hooks, "ConfigChange": [config_change_hook(launcher)]}
     document |= {
         "forceLoginMethod": "claudeai",
         "cleanupPeriodDays": CLEANUP_PERIOD_DAYS,
         "autoMemoryDirectory": memory_dir.as_posix(),
     }
+    if not auto_memory:
+        document["autoMemoryEnabled"] = False
     return json.dumps(document, sort_keys=True, separators=(",", ":"))
+
+
+def check_hooks(value: Mapping[str, object]) -> None:
+    """Refuse hooks outside the settings `hooks` shape or with a key `HOOK_KEYS` does not list."""
+    _hooks(dict(value))
+
+
+def check_rules(rules: Sequence[str], key: str) -> None:
+    """Refuse an entry that is not a permission rule."""
+    _strings(list(rules), key, _RULE)
 
 
 def claude_section(raw: Mapping[str, object], current: Mapping[str, object]) -> dict[str, object]:

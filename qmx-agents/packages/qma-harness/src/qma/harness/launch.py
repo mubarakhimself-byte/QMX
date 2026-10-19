@@ -6,9 +6,9 @@ Everything not set here is the vanilla CLI default, which is the operator's floo
   by removing tools: the gate callback and the deny rules (`money`) run on every call.
 - `permission_mode` is always passed. Omitting it can start the session in `auto`.
 - Settings in code. `setting_sources=[]`, so the CLI loads no settings file from any home, and
-  every Claude setting arrives as one inline JSON string through `settings`
-  (`home.code_settings`). Plugins arrive only through `plugins`, MCP servers only through
-  `mcp_servers` with `strict_mcp_config=True`.
+  every Claude setting arrives through one per-chat file QMX writes at each launch
+  (`home.code_settings`), passed by path. Plugins arrive only through `plugins`, MCP servers
+  only through `mcp_servers` with `strict_mcp_config=True`.
 - `qma.boot` reduced this process's env to an allow-list at startup, and `assert_scrubbed`
   re-checks the banned fragments at every launch. `launch_env` sets exactly the names a launch
   needs; nothing inherited is left to blank out.
@@ -30,10 +30,11 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 import psutil
-from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
+from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from qma.boot import banned_fragment
@@ -127,6 +128,18 @@ class ChatHooks:
     subagent_stop: ChatHook | None = None
 
 
+type HookSink = Callable[[SessionId, HookInput], Awaitable[None]]
+"""Observes the hook events of every chat that names it in `hook_sink`, told which chat each
+came from. Registered by name on the harness, so a chat reloaded after a restart finds it."""
+
+
+def sink_hooks(sink: HookSink, chat: SessionId) -> ChatHooks:
+    async def observe(hook_input: HookInput) -> None:
+        await sink(chat, hook_input)
+
+    return ChatHooks(observe, observe, observe, observe, observe)
+
+
 CHAT_HOOK_EVENTS: Final[Mapping[str, HookEvent]] = {
     "pre_tool_use": "PreToolUse",
     "post_tool_use": "PostToolUse",
@@ -140,11 +153,48 @@ OBSERVER_TIMEOUT_S: Final = 5.0
 block the call."""
 
 
+type HomeKind = Literal["general", "lab", "portfolio", "library", "app", "agent"]
+
+
+@dataclass(frozen=True)
+class Home:
+    """Where a session was born (engine AD-35). Fixed at birth; a Child copies its parent's."""
+
+    kind: HomeKind = "general"
+    project_id: str | None = None
+    """The Library item id of the subject, pod, app or agent the session was born on."""
+
+
+@dataclass(frozen=True)
+class SubAgent:
+    """One native sub-agent definition for the SDK `agents` option."""
+
+    description: str
+    prompt: str
+    tools: tuple[str, ...] | None = None
+    model: str | None = None
+
+
+@dataclass(frozen=True)
+class ChatPermissions:
+    """`policy` names a policy the host registered on the harness; it answers the asks of a
+    Background or Child chat in-process. `allow` and `deny` are CLI permission rules for this
+    chat alone, written into its settings file."""
+
+    policy: str | None = None
+    allow: tuple[str, ...] = ()
+    deny: tuple[str, ...] = ()
+
+
+type JsonMap = Mapping[str, Any]
+
+
 @dataclass(frozen=True)
 class ChatConfig:
     """Everything that decides how a chat's CLI process is launched. A change is a new config.
-    `compact_at`, `hooks` and `tools` live only in this process: the chat record on disk does
-    not hold them, so a chat read back from disk after a restart launches without them."""
+    Every field but `hooks` is on the chat record, so a chat read back after a restart launches
+    as it was started. `hooks` holds callables and lives only in this process (H16, until the
+    engine moves to a named `hook_sink`)."""
 
     profile: ProfileName
     model: str
@@ -154,8 +204,25 @@ class ChatConfig:
     kind: ChatKind
     compact_at: float | None = None
     hooks: ChatHooks | None = None
-    tools: bool = True
-    """False launches with no built-in tool and no MCP server, for the plan meter's turn."""
+    tools: tuple[str, ...] | None = None
+    """None is the `claude_code` preset. A tuple is exactly those built-in tools, and `()` is no
+    tool at all: no built-in and no MCP server."""
+    home: Home = Home()
+    packs: tuple[str, ...] = ()
+    agents: Mapping[str, SubAgent] = MappingProxyType({})
+    mcp_servers: Mapping[str, JsonMap] = MappingProxyType({})
+    """Extra MCP servers for this chat alone, vetted like the operator's."""
+    append_system_prompt: str | None = None
+    """Background and Child only: after the harness's own system text."""
+    hook_sink: str | None = None
+    """Background and Child only: the name of a sink the host registered, which observes this
+    chat's hook events after the money gate."""
+    permissions: ChatPermissions = ChatPermissions()
+    policy_args: JsonMap = MappingProxyType({})
+    """Handed to the named policy with every ask."""
+    claude_hooks: JsonMap = MappingProxyType({})
+    """Claude Code hooks for this chat alone, in the settings `hooks` shape, checked by
+    `HOOK_KEYS` and written into its settings file."""
 
 
 @dataclass(frozen=True)
@@ -323,15 +390,22 @@ COMPACT_PCT_ENV: Final = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"
 express a share; a key row's window quirk still applies underneath this percentage."""
 
 
-def chat_options_refusal(
-    kind: ChatKind, compact_at: float | None, hooks: ChatHooks | None
-) -> str | None:
-    """Why `compact_at` or `hooks` cannot go on a chat of this kind, or None."""
-    if isinstance(kind, Interactive) and (compact_at is not None or hooks is not None):
+def chat_options_refusal(config: ChatConfig) -> str | None:
+    """Why an option cannot go on a chat of this kind, or None."""
+    unattended_only = {
+        "compact_at": config.compact_at is not None,
+        "hooks": config.hooks is not None,
+        "hook_sink": config.hook_sink is not None,
+        "append_system_prompt": config.append_system_prompt is not None,
+        "a permission policy": config.permissions.policy is not None,
+    }
+    named = [name for name, given in unattended_only.items() if given]
+    if isinstance(config.kind, Interactive) and named:
         return (
-            "compact_at and hooks are for Background and Child chats only; an Interactive "
-            "chat compacts and runs hooks as Claude Code does"
+            f"{', '.join(named)} are for Background and Child chats only; an Interactive "
+            "chat compacts, runs hooks and asks as Claude Code does"
         )
+    compact_at = config.compact_at
     if compact_at is not None and not 0.01 <= compact_at <= 1:
         return f"compact_at is a share of the context window from 0.01 to 1, not {compact_at}"
     return None
@@ -348,7 +422,7 @@ def _observer(hook: ChatHook) -> HookCallback:
         del tool_use_id, context
         try:
             await asyncio.wait_for(hook(hook_input), OBSERVER_TIMEOUT_S)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             log.exception("a chat hook failed; the chat goes on")
         return {}
 
@@ -431,13 +505,20 @@ def instructions(home: QmxHome, workspace: Path) -> str:
     )
 
 
+def system_text(home: QmxHome, config: ChatConfig) -> str:
+    """What the chat's system text file holds: `instructions`, then the chat's own
+    `append_system_prompt`."""
+    parts = (instructions(home, config.workspace), config.append_system_prompt or "")
+    return "\n\n".join(part for part in parts if part)
+
+
 ARGV_BUDGET: Final = 30_000
 """Characters for the whole CLI command line after Windows quoting. Windows caps a command
 line at 32,767, and the settings, MCP config, `append` text and deny rules all ride in it."""
 
 ARGV_PARTS: Final[Mapping[str, str]] = {
-    "--settings": "the [claude] settings",
-    "--append-system-prompt": "QMX.md and the workspace CLAUDE.md and AGENTS.md",
+    "--settings": "the settings file path",
+    "--append-system-prompt-file": "the system text file path",
     "--mcp-config": "the MCP config",
     "--disallowedTools": "the deny rules",
 }
@@ -476,20 +557,27 @@ def build_options(
     transcript_exists: bool,
     env: Mapping[str, str],
     home: QmxHome,
-    settings_json: str,
+    settings_file: Path,
+    system_file: Path,
     launcher: Path,
     can_use_tool: CanUseTool,
     mcp_servers: Mapping[str, McpServerConfig],
     gate: money.GateRules,
     budgets: Budgets,
+    sink: HookSink | None = None,
     test: TestMode | None = None,
 ) -> ClaudeAgentOptions:
     """One chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
     `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The money
     gate runs as a PreToolUse callback on every tool, with an explicit timeout, and the deny
     rules ride in `disallowed_tools`; `test` switches either off for a layer check. The chat's
-    own observe-only hooks are appended after the gate, and `compact_at` becomes the CLI's
-    auto-compact percentage for this chat alone."""
+    own observe-only hooks and its named `sink` are appended after the gate, and `compact_at`
+    becomes the CLI's auto-compact percentage for this chat alone.
+
+    Claude settings and the system text go by file path (probes P-SET and P-SYS), so neither
+    grows the command line. The preset drops its dynamic sections, so two chats in two folders
+    share a cached prefix, and keeps no snapshot, so a changed system text reaches the model at
+    the next relaunch by resume (H53)."""
     bounded = not isinstance(config.kind, Interactive)
     gate_hook = test is None or test.gate_hook
     rules_on = test is None or test.deny_rules
@@ -502,24 +590,39 @@ def build_options(
         if gate_hook
         else {}
     )
-    if config.hooks is not None:
-        for event, matcher in chat_hook_matchers(config.hooks).items():
-            hooks.setdefault(event, []).append(matcher)
+    observers = [config.hooks, None if sink is None else sink_hooks(sink, session_id)]
+    for observer in observers:
+        if observer is not None:
+            for event, matcher in chat_hook_matchers(observer).items():
+                hooks.setdefault(event, []).append(matcher)
     return ClaudeAgentOptions(
         cli_path=launcher,
-        tools={"type": "preset", "preset": "claude_code"} if config.tools else [],
+        tools={"type": "preset", "preset": "claude_code"}
+        if config.tools is None
+        else list(config.tools),
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
-            "append": instructions(home, config.workspace),
+            "exclude_dynamic_sections": True,
+            "snapshot": False,
         },
+        agents={
+            name: AgentDefinition(
+                description=agent.description,
+                prompt=agent.prompt,
+                tools=None if agent.tools is None else list(agent.tools),
+                model=agent.model,
+            )
+            for name, agent in config.agents.items()
+        }
+        or None,
         permission_mode=config.mode,
         model=config.model,
         effort=config.effort,
         cwd=config.workspace,
         env={**env, **compact_env(config.compact_at)},
         setting_sources=[],
-        settings=settings_json,
+        settings=str(settings_file),
         plugins=[{"type": "local", "path": str(home.plugin_dir)}],
         strict_mcp_config=True,
         mcp_servers=dict(mcp_servers),
@@ -533,7 +636,10 @@ def build_options(
         resume=session_id if transcript_exists else None,
         include_partial_messages=True,
         enable_file_checkpointing=True,
-        extra_args={"replay-user-messages": None},
+        extra_args={
+            "replay-user-messages": None,
+            "append-system-prompt-file": system_file.as_posix(),
+        },
         verbatim_prompts=verbatim(config.kind),
         max_turns=budgets.max_turns if bounded else None,
         max_budget_usd=budgets.max_budget_usd if bounded else None,
