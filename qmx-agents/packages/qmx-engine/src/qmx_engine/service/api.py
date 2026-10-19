@@ -66,6 +66,7 @@ class EngineService:
             inbox = stack.enter_context(InboxTable.open(home))
             if library is None:
                 library = stack.enter_context(LibraryFake.open(home, wall=clock.now))
+            memory = MemoryStub(library)
             engine = Engine(
                 home,
                 ledger,
@@ -75,10 +76,11 @@ class EngineService:
                 doctor=doctor,
                 inbox=inbox,
                 harness=harness,
+                memory=memory,
             )
             engine.doctor = engine.doctor or LlmDoctor.of(engine)
             ctx = Context(home, library, inbox, settings, clock, engine)
-            yield cls(ctx, MemoryStub(library))
+            yield cls(ctx, memory)
 
     def explain(self, run_id: str) -> JsonObject:
         return explain_run(self.ctx.home, run_id)

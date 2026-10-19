@@ -84,9 +84,10 @@ class EngineLibraryAdapter:
         ref, principal, at = self.store.placement(object_id) or ("", "", "")
         slot = MAIN_BLOB.get(view.kind)
         blob = view.blobs[slot].blob_id if slot and slot in view.blobs else None
-        return Stored(
-            object_id, cast(Kind, view.kind), view.item, ref, view.fields, principal, at, blob
-        )
+        fields = view.fields
+        if "semver" in view.annotations:
+            fields = {**fields, "semver": view.annotations["semver"]}
+        return Stored(object_id, cast(Kind, view.kind), view.item, ref, fields, principal, at, blob)
 
     def _put(
         self,
@@ -105,8 +106,6 @@ class EngineLibraryAdapter:
         head = None if found is None else found[0]
         draft = port.Draft(kind, item, title, "", fields, blobs or {}, parents=parents)
         return self.store.put(who, draft, on=ref, expected_head=head).object_id
-
-    # -- reads --------------------------------------------------------------------------------
 
     def get(self, object_id: str) -> Stored:
         with _engine_codes():
@@ -179,8 +178,6 @@ class EngineLibraryAdapter:
         with _engine_codes():
             return self.store.get(self.store.engine, object_id).annotations.get(key)
 
-    # -- writes -------------------------------------------------------------------------------
-
     def put_draft(
         self,
         item: str | None,
@@ -212,12 +209,28 @@ class EngineLibraryAdapter:
             parents = [base[0]] if base else []
             values: JsonObject = {**(fields or {}), "content_hash": digest}
             if may_advance(who, ref, "put", store=self.store.name):
-                self._put("workflow", item, ref, values, principal, title=title, blobs=blobs,
-                          parents=parents)  # fmt: skip
+                self._put(
+                    "workflow",
+                    item,
+                    ref,
+                    values,
+                    principal,
+                    title=title,
+                    blobs=blobs,
+                    parents=parents,
+                )
             else:
                 own = self._own_ref(who, item, ref)
-                self._put("workflow", item, own, values, principal, title=title, blobs=blobs,
-                          parents=parents)  # fmt: skip
+                self._put(
+                    "workflow",
+                    item,
+                    own,
+                    values,
+                    principal,
+                    title=title,
+                    blobs=blobs,
+                    parents=parents,
+                )
                 mover = self.store.engine if who.who == "run" else who
                 merged = self.store.merge(mover, item, from_ref=own, into=ref, strategy="ff-only")
                 if merged.outcome == "conflict":
@@ -291,9 +304,14 @@ class EngineLibraryAdapter:
         with _engine_codes():
             fields: JsonObject = {"type": type_, "metadata": metadata}
             object_id = self._put(
-                "artifact", str(uuid.uuid7()), runs_ref(run_id), fields, principal,
-                title=type_, blobs={"content": data},
-            )  # fmt: skip
+                "artifact",
+                str(uuid.uuid7()),
+                runs_ref(run_id),
+                fields,
+                principal,
+                title=type_,
+                blobs={"content": data},
+            )
             if intent_key is not None:
                 self.store.annotate(
                     Principal.parse(principal), object_id, {"intent_key": intent_key}
@@ -304,9 +322,13 @@ class EngineLibraryAdapter:
         with _engine_codes():
             fields = cast(JsonObject, asdict(summary))
             object_id = self._put(
-                "workflow-run", summary.run_id, runs_ref(summary.run_id), fields, principal,
+                "workflow-run",
+                summary.run_id,
+                runs_ref(summary.run_id),
+                fields,
+                principal,
                 title=f"Run {summary.run_id} of {summary.workflow_item}",
-            )  # fmt: skip
+            )
             self._land(summary)
             return self._stored(object_id)
 

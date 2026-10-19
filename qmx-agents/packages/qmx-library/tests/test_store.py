@@ -51,11 +51,19 @@ def test_each_agent_writes_only_its_own_ref(store: Store) -> None:
         expected_head=None,
     )
     with pytest.raises(LibraryRefused, match=r"^ref_not_owned:"):
-        store.put(BOB, workflow("Brief, Bob's", "brief"), on="refs/agents/alice/brief",
-                  expected_head=alice.object_id)  # fmt: skip
+        store.put(
+            BOB,
+            workflow("Brief, Bob's", "brief"),
+            on="refs/agents/alice/brief",
+            expected_head=alice.object_id,
+        )
     with pytest.raises(LibraryRefused, match=r"^ref_not_owned:"):
-        store.put(BOB, workflow("Brief, Bob's", "brief"), on="refs/drafts/brief",
-                  expected_head=base.object_id)  # fmt: skip
+        store.put(
+            BOB,
+            workflow("Brief, Bob's", "brief"),
+            on="refs/drafts/brief",
+            expected_head=base.object_id,
+        )
     with pytest.raises(LibraryRefused, match=r"^ref_not_owned:"):
         store.put(RUN, note("a result"), on="main", expected_head=None)
     merged = store.merge(
@@ -129,8 +137,12 @@ def test_every_put_is_redacted_and_a_binary_secret_is_refused(store: Store) -> N
     )
     redact.register("lane", "binary-" + "e5" * 16)
     with pytest.raises(LibraryRefused, match=r"^secret_in_blob:"):
-        store.put(RUN, Draft("artifact", "a2", blobs={"content": b"\xff\x00binary-" + b"e5" * 16}),
-                  on="refs/runs/r1", expected_head=None)  # fmt: skip
+        store.put(
+            RUN,
+            Draft("artifact", "a2", blobs={"content": b"\xff\x00binary-" + b"e5" * 16}),
+            on="refs/runs/r1",
+            expected_head=None,
+        )
 
     assert PLANTED not in json.dumps(view.fields) + view.title
     assert PLANTED.encode() not in view.data["content"]
@@ -155,21 +167,38 @@ def test_there_is_no_delete_and_archive_only_hides(store: Store) -> None:
 
 def test_a_three_way_merge_takes_both_sides_and_a_clash_becomes_a_conflict(store: Store) -> None:
     base = store.put(
-        OPERATOR, Draft("note", "n", title="t", fields={"a": 1, "b": 1}), on="main",
+        OPERATOR,
+        Draft("note", "n", title="t", fields={"a": 1, "b": 1}),
+        on="main",
         expected_head=None,
-    )  # fmt: skip
+    )
     store.branch(OPERATOR, "n", from_ref="main", name="refs/variants/v")
-    store.put(OPERATOR, Draft("note", "n", title="t", fields={"a": 2, "b": 1}), on="main",
-              expected_head=base.object_id)  # fmt: skip
-    theirs = store.put(OPERATOR, Draft("note", "n", title="t", fields={"a": 1, "b": 3}),
-                       on="refs/variants/v", expected_head=base.object_id)  # fmt: skip
+    store.put(
+        OPERATOR,
+        Draft("note", "n", title="t", fields={"a": 2, "b": 1}),
+        on="main",
+        expected_head=base.object_id,
+    )
+    theirs = store.put(
+        OPERATOR,
+        Draft("note", "n", title="t", fields={"a": 1, "b": 3}),
+        on="refs/variants/v",
+        expected_head=base.object_id,
+    )
     merged = store.merge(OPERATOR, "n", from_ref="refs/variants/v", into="main")
     view = store.get(OPERATOR, merged.object_id)
-    store.put(OPERATOR, Draft("note", "n", title="t", fields={"a": 9, "b": 3},
-              parents=[theirs.object_id]), on="refs/variants/v",
-              expected_head=theirs.object_id)  # fmt: skip
-    store.put(OPERATOR, Draft("note", "n", title="t", fields={"a": 7, "b": 3}), on="main",
-              expected_head=merged.object_id)  # fmt: skip
+    store.put(
+        OPERATOR,
+        Draft("note", "n", title="t", fields={"a": 9, "b": 3}, parents=[theirs.object_id]),
+        on="refs/variants/v",
+        expected_head=theirs.object_id,
+    )
+    store.put(
+        OPERATOR,
+        Draft("note", "n", title="t", fields={"a": 7, "b": 3}),
+        on="main",
+        expected_head=merged.object_id,
+    )
     clash = store.merge(OPERATOR, "n", from_ref="refs/variants/v", into="main")
     conflict = store.get(OPERATOR, clash.object_id)
 
@@ -237,7 +266,11 @@ def test_a_kind_is_data_and_an_unknown_or_retired_kind_is_refused(store: Store) 
 def test_a_blob_ref_reuses_stored_bytes(store: Store) -> None:
     first = store.put(OPERATOR, note("shared body", "a"), on="main", expected_head=None)
     blob = store.get(OPERATOR, first.object_id).blobs["body.md"].blob_id
-    second = store.put(OPERATOR, Draft("note", "b", blobs={"body.md": BlobRef(blob)}), on="main",
-                       expected_head=None)  # fmt: skip
+    second = store.put(
+        OPERATOR,
+        Draft("note", "b", blobs={"body.md": BlobRef(blob)}),
+        on="main",
+        expected_head=None,
+    )
 
     assert store.get(OPERATOR, second.object_id, blobs="fetch").data["body.md"] == b"shared body"

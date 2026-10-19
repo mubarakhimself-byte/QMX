@@ -211,8 +211,6 @@ class Store:
         self.catalog.close()
         self._handle.close()
 
-    # -- evidence paths --------------------------------------------------------------------
-
     @property
     def ref_log(self) -> Path:
         return self.root / "refs" / "log.jsonl"
@@ -238,8 +236,6 @@ class Store:
         logs = [*sorted((self.root / "edges").glob("*.jsonl")), self.ref_log, self.annotation_log]
         sizes = {str(p.relative_to(self.root)): p.stat().st_size for p in logs if p.exists()}
         return json.dumps(sizes, sort_keys=True)
-
-    # -- index -------------------------------------------------------------------------------
 
     def rebuild_indexes(self) -> None:
         """Drop `catalog.db` and replay the evidence into a new one (AD-5, FM-9)."""
@@ -270,8 +266,6 @@ class Store:
                     texts.append(path.read_bytes().decode("utf-8"))
         klass = kind(str(manifest["kind"])).klass
         self.catalog.index_object(object_id, manifest, klass, " ".join(texts))
-
-    # -- write helpers -----------------------------------------------------------------------
 
     def _now(self) -> str:
         return self.wall().astimezone(UTC).isoformat().replace("+00:00", "Z")
@@ -391,8 +385,6 @@ class Store:
                 values["tags"] = self.redactor.redact_json(list(draft.tags))[0]
             self._annotate(who, object_id, values)
         return object_id, spec
-
-    # -- the port's writes -------------------------------------------------------------------
 
     def put(
         self, who: Principal, draft: Draft, *, on: str, expected_head: ObjectId | None
@@ -676,8 +668,6 @@ class Store:
             self.annotate(who, done.object_id, {"tags": [f"commit: {message}"]})
         return done
 
-    # -- the port's reads --------------------------------------------------------------------
-
     def resolve(self, who: Principal, item: str, ref: str = MAIN) -> ObjectId:
         found = self.catalog.head(item, ref)
         if found is None:
@@ -813,8 +803,6 @@ class Store:
                 (json.dumps(intent_key),),
             )
             return [str(object_id) for (object_id,) in rows]
-
-    # -- reads the engine adapter needs beside the port --------------------------------------
 
     def head(self, item: str, ref: str) -> tuple[ObjectId, int] | None:
         """The head of `ref` for `item` and how many times it has moved."""

@@ -97,7 +97,10 @@ def test_publish_moves_the_tested_draft_to_main_once(library: LibraryPort) -> No
 
     published = library.get(version)
     assert (again, published.ref, published.kind) == (version, MAIN, "workflow")
-    assert published.fields["content_hash"] == draft.content_hash
+    assert (published.fields["content_hash"], published.fields["semver"]) == (
+        draft.content_hash,
+        "1.0.0",
+    )
     assert [e.to_id for e in library.edges(version, "tested-by")] == [run.object_id]
     assert [v.object_id for v in library.objects(draft.item, "workflow", MAIN)] == [version]
     assert library.annotation(version, "state") == "enabled"
