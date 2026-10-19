@@ -131,12 +131,16 @@ def caller_of(principal: str) -> Caller:
     return Caller("agent", own) if kind == "agent" else Caller("user")
 
 
-def beat(at: str) -> Operation[None]:
+def beat(lease: Lease, fire_ids: list[str], run_ids: list[str]) -> Operation[None]:
+    """Renew this claimant's leases and record the ticker's heartbeat, in one write."""
+    renew = heartbeat(lease, fire_ids, run_ids)
+
     def operation(txn: Transaction) -> None:
+        renew(txn)
         txn.connection.execute(
             "INSERT INTO meta (key, value) VALUES (?, ?)"
             " ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-            (HEARTBEAT, at),
+            (HEARTBEAT, lease.at),
         )
 
     return operation
@@ -215,8 +219,7 @@ class Scheduler:
             return Tick((), ())
         ledger = self.engine.ledger
         lease = self.lease()
-        ledger.write(heartbeat(lease, list(self.fires), list(self.waking)))
-        ledger.write(beat(lease.at))
+        ledger.write(beat(lease, list(self.fires), list(self.waking)))
         if self.engine.paused:
             return Tick((), ())
         woken = ledger.write(claim_wakes(lease, set(self.waking)))
