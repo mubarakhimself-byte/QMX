@@ -134,6 +134,9 @@ class HeartbeatLog:
         """Every kept row at or after `since`, oldest first."""
         found: list[Heartbeat] = []
         for path in sorted(logs_dir(self.home).glob("heartbeat-????-??-??.jsonl")):
+            day = date.fromisoformat(path.stem.removeprefix("heartbeat-"))
+            if since is not None and day < since.date():
+                continue
             for line in path.read_text(encoding="utf-8").splitlines():
                 row = Heartbeat.model_validate_json(line)
                 if since is None or _when(row.at) >= since:

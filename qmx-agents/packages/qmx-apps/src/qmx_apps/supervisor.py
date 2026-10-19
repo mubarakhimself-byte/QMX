@@ -66,6 +66,7 @@ class Instance:
     cpu: float = 0
     memory: int = 0
     heartbeat: float = 0
+    started: float = field(default_factory=time.monotonic)
     secrets: list[str] = field(default_factory=list[str])
     limits: Document = field(default_factory=dict[str, JsonValue])
     node: str = "laptop"
@@ -557,6 +558,24 @@ class Supervisor:
             keep_alive=False,
             log_file=instance.volume.root / f"logs/{instance.id}.stderr.log",
         )
+
+    def heartbeats(self) -> list[Document]:
+        """One row per running app in the host heartbeat's schema (AD-65), less the facts the
+        host adds: `qmx_version`, `kinds_digest` and `paused`."""
+        at = datetime.now(UTC).isoformat()
+        with self._lock:
+            running = [i for i in self._instances.values() if i.state == "running"]
+        return [
+            {
+                "subject": "app",
+                "id": instance.definition.manifest.id,
+                "at": at,
+                "cpu_seconds": instance.cpu,
+                "rss_bytes": instance.memory,
+                "machine_minutes": (time.monotonic() - instance.started) / 60,
+            }
+            for instance in running
+        ]
 
     def _heartbeat(self, instance: Instance) -> None:
         path = instance.volume.root / f"data/heartbeat-{instance.id}.json"

@@ -14,6 +14,11 @@ which costs a digest line; only a missing key is a provider failure, which raise
 `market_open` is a precheck a trigger names by that word: the market is shut on Saturdays,
 Sundays and every `market.holidays` date, each read in the trigger's IANA zone, and a fire while
 it is shut is held until the next open day begins (Claude's default calendar).
+
+A placement is checked against the kinds its host's newest heartbeat names (AD-20, AD-65): a
+node whose kind that host's code does not know waits `placement` with `node needs update`, and
+the fire is held until a newer heartbeat lists the kind. A placement no heartbeat has named yet
+is not checked here.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ from qmx_control.service import ControlService
 
 from qmx_engine.definition.lint import TOOL_KEY
 from qmx_engine.definition.model import Workflow
+from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.signature import signature
 from qmx_engine.roles import order, resolve
 
@@ -110,6 +116,21 @@ def preflight(
                 if str(skill) not in skills:  # pyright: ignore[reportUnknownArgumentType]
                     message = f"{node.name}: skill {skill} is not installed"
                     return Blocked("config", "skill_missing", message)
+    return None
+
+
+def placement_wait(workflow: Workflow, kinds: Mapping[str, Collection[str]]) -> str | None:
+    """Why the first node whose host lacks its kind waits, or None. `kinds` is each host's
+    node kinds by placement name."""
+    for node in workflow.nodes:
+        if node.disabled:
+            continue
+        found = REGISTRY.kind(node.type)
+        kind = node.type if found is None else found.name
+        for placement in [node.runs_on] if isinstance(node.runs_on, str) else node.runs_on:
+            known = kinds.get(placement)
+            if known is not None and kind not in known:
+                return f"placement: node needs update ({node.name}: {placement} lacks {kind})"
     return None
 
 

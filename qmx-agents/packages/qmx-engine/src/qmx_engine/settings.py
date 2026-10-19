@@ -49,6 +49,8 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "scheduler.lease_seconds": 300,  # Claude's default, UI-editable
         "scheduler.heartbeat": 60,  # Claude's default, UI-editable
         "scheduler.grace": 900,  # Claude's default, UI-editable
+        "heartbeat.interval": 30,  # Claude's default, UI-editable; seconds between rows
+        "heartbeat.window_days": 7,  # Claude's default, UI-editable; the PC's rolling log window
         "autonomy.paused": 0,  # Claude's default, UI-editable; 1 or true pauses every fire
         "triggers.rerun_delays": (300, 900, 1_800),  # Claude's default, UI-editable
         "triggers.ready_by_window": 3_600,  # Claude's default, UI-editable

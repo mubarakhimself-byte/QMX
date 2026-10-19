@@ -12,6 +12,11 @@ The same file holds a trigger's incidents (AD-10, Hermes): every failed fire of 
 one masked signature (`ledger.signature`) is one incident that counts its repeats and keeps its
 first and last time. A newer signature closes the open incident and opens its own. An incident he
 acknowledged stays quiet while the signature holds, and a passing fire resolves it.
+
+App incidents (AD-65) are filed the same way on an app, one per masked signature, in one of the
+closed classes `grant | workflow | view | dependency | host`. A consumer that refuses a producer's
+output by its schema files a `dependency` incident on the producer, since the producer is what
+has to change.
 """
 
 from __future__ import annotations
@@ -22,9 +27,10 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from types import TracebackType
-from typing import Final, Self, cast
+from typing import Final, Literal, Self, cast, get_args
 
 from qmx_engine.ledger.redact import redact
+from qmx_engine.ledger.signature import signature as masked
 from qmx_engine.ports.inbox import (
     ACTIONS,
     SEVERITY,
@@ -59,6 +65,19 @@ INCIDENTS: Final = (
     " title TEXT NOT NULL, cause TEXT NOT NULL, count INTEGER NOT NULL,"
     " first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, acknowledged_at TEXT, resolved_at TEXT)"
 )
+type AppClass = Literal["grant", "workflow", "view", "dependency", "host"]
+APP_CLASSES: Final = ", ".join(f"'{c}'" for c in get_args(AppClass.__value__))
+APP_INCIDENTS: Final = (
+    "CREATE TABLE IF NOT EXISTS app_incidents ("
+    " id TEXT PRIMARY KEY, app_id TEXT NOT NULL,"
+    f" class TEXT NOT NULL CHECK (class IN ({APP_CLASSES})), signature TEXT NOT NULL,"
+    " title TEXT NOT NULL, cause TEXT NOT NULL, count INTEGER NOT NULL,"
+    " first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, resolved_at TEXT,"
+    " UNIQUE (app_id, signature))"
+)
+APP_INCIDENT_COLUMNS: Final = (
+    "id, app_id, class, signature, title, cause, count, first_seen, last_seen, resolved_at"
+)
 INCIDENT_COLUMNS: Final = (
     "id, trigger_id, signature, title, cause, count, first_seen, last_seen, acknowledged_at,"
     " resolved_at"
@@ -76,6 +95,20 @@ class Incident:
     first_seen: str
     last_seen: str
     acknowledged_at: str | None
+    resolved_at: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class AppIncident:
+    id: str
+    app_id: str
+    kind: AppClass
+    signature: str
+    title: str
+    cause: str
+    count: int
+    first_seen: str
+    last_seen: str
     resolved_at: str | None
 
 
@@ -100,6 +133,7 @@ class InboxTable:
         self.connection.execute("PRAGMA journal_mode = WAL")
         self.connection.execute(SCHEMA)
         self.connection.execute(INCIDENTS)
+        self.connection.execute(APP_INCIDENTS)
 
     @classmethod
     def open(cls, home: Path) -> InboxTable:
@@ -225,6 +259,46 @@ class InboxTable:
             "UPDATE incidents SET resolved_at = ? WHERE trigger_id = ? AND resolved_at IS NULL",
             (at, trigger_id),
         )
+
+
+    def app_incident(
+        self, app_id: str, kind: AppClass, signature: str, title: str, cause: str, *, at: str
+    ) -> str:
+        """Count one more on the app's incident for this signature, or open it; returns its
+        id. A repeat after it was resolved reopens it."""
+        digest = sha256(f"{app_id}\n{signature}".encode()).hexdigest()
+        found = f"app-incident-{digest[:16]}"
+        self.connection.execute(
+            f"INSERT INTO app_incidents ({APP_INCIDENT_COLUMNS})"  # noqa: S608
+            " VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)"
+            " ON CONFLICT (app_id, signature) DO UPDATE SET count = count + 1,"
+            " last_seen = excluded.last_seen, cause = excluded.cause, resolved_at = NULL",
+            (found, app_id, kind, signature, redact(title), redact(cause), at, at),
+        )
+        return found
+
+    def refused_output(
+        self, consumer: str, producer: str, output: str, message: str, *, at: str
+    ) -> str:
+        """`consumer` refused `producer`'s `output` by its schema: a `dependency` incident on
+        the producer."""
+        return self.app_incident(
+            producer,
+            "dependency",
+            masked("schema_refused", f"{consumer} {output}: {message}"),
+            f"{consumer} refused {producer}'s {output}",
+            message,
+            at=at,
+        )
+
+    def app_incidents(self, app_id: str | None = None) -> list[AppIncident]:
+        where, args = ("", ()) if app_id is None else (" WHERE app_id = ?", (app_id,))
+        rows = self.connection.execute(
+            f"SELECT {APP_INCIDENT_COLUMNS} FROM app_incidents{where}"  # noqa: S608
+            " ORDER BY first_seen, id",
+            args,
+        ).fetchall()
+        return [AppIncident(*row) for row in rows]
 
 
 def _item(row: tuple[object, ...]) -> Item:

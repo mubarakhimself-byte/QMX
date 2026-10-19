@@ -130,7 +130,7 @@ from qma.harness.profiles import (
 from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
 from qma.harness.surface import Declaration, child_scope
-from qma.harness.tools import DelegateRefused
+from qma.harness.tools import DelegateRefused, HostRead
 from qma.harness.turns import TurnHandle, watch_turn
 from qma.harness.usage import (
     ReadingView,
@@ -295,11 +295,12 @@ class PlanWatch:
 
 
 class Harness:
-    def __init__(self, deps: ChatDeps, watch: PlanWatch) -> None:
+    def __init__(
+        self, deps: ChatDeps, watch: PlanWatch, host_reads: Mapping[str, HostRead] | None = None
+    ) -> None:
+        own = {"slot_table": self._slots_read, "journal": self._journal_read}
         self._deps = replace(
-            deps,
-            delegate=self._delegate,
-            host=MappingProxyType({"slot_table": self._slots_read, "journal": self._journal_read}),
+            deps, delegate=self._delegate, host=MappingProxyType({**(host_reads or {}), **own})
         )
         self._chats = watch.chats
         """The one table of chats, Cold and Live. Only the harness writes it."""
@@ -347,7 +348,12 @@ class Harness:
 
     @classmethod
     async def open(
-        cls, home: QmxHome, *, control: ControlService, test: TestMode | None = None
+        cls,
+        home: QmxHome,
+        *,
+        control: ControlService,
+        test: TestMode | None = None,
+        host_reads: Mapping[str, HostRead] | None = None,
     ) -> Harness:
         """Convergent startup, safe to run after any crash. Assumes `qma.boot` already
         scrubbed this process. `test` is None except in check scripts.
@@ -359,7 +365,9 @@ class Harness:
            file a crash left on its run journal goes; running this twice changes nothing.
         5. Start the relay on 127.0.0.1:0 with no grants.
         6. Open the relay's GPT lane only if a `ProbePassed` is stored for this translator
-           version and a ChatGPT sign-in is stored."""
+           version and a ChatGPT sign-in is stored.
+        `host_reads` are reads the hosting process serves to `agent_tool` catalog rows by
+        target, beside the harness's own."""
         assert_scrubbed(os.environ)
         limit = control.settings_get("budgets").get("agent_memory_mb")
         with contextlib.suppress(LaunchRefused):
@@ -417,7 +425,7 @@ class Harness:
             on_plan_limits=watch,
             test=test,
         )
-        return cls(deps, watch)
+        return cls(deps, watch, host_reads)
 
     async def start_chat(self, spec: NewChat) -> SessionId:
         """A qmx-control session, then a chat record with `started=False` holding every
