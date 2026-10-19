@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 import pytest
@@ -30,7 +32,14 @@ from qma.harness import (
     SubAgent,
     money,
 )
-from qma.harness.home import QmxHome, SessionId, read_record
+from qma.harness.home import (
+    ChatRecord,
+    QmxHome,
+    SessionId,
+    read_record,
+    record_path,
+    write_record,
+)
 from qma.harness.launch import COMPACT_PCT_ENV as COMPACT
 from qma.harness.launch import Budgets, ChatConfig, ChatKind, build_options
 from qma.harness.profiles import PLAN
@@ -368,3 +377,37 @@ def test_a_meter_turn_that_brings_no_reading_runs_no_other_inside_the_cooldown(
         FakeClient.made[0].go.set()
 
     run(body, home)
+
+
+PLANTED = "sk-or-v1-" + "f00d" * 8
+
+
+@pytest.mark.parametrize(
+    "option",
+    [
+        {"mcp_servers": {"search": {"command": "search-mcp", "env": {"SEARCH_KEY": PLANTED}}}},
+        {"mcp_servers": {"search": {"command": "search-mcp", "env": {"API_TOKEN": "plain"}}}},
+        {"mcp_servers": {"search": {"url": "https://h", "headers": {"Authorization": "x"}}}},
+        {"policy_args": {"note": f"use {PLANTED}"}},
+        {"claude_hooks": {"Stop": [{"hooks": [{"type": "command", "command": PLANTED}]}]}},
+    ],
+)
+def test_a_literal_secret_in_a_chat_option_is_refused_and_never_stored(
+    home: QmxHome, option: dict[str, Any]
+) -> None:
+    with pytest.raises(LaunchRefused, match="would store a secret on the chat record"):
+        NewChat(title="leaky", kind=Background(), **option)
+    referenced = NewChat(
+        title="by reference",
+        kind=Background(),
+        mcp_servers={"search": {"command": "search-mcp", "env": {"SEARCH_KEY": "qmx/search"}}},
+    )
+    config = referenced.config(PLAN, home.root, Home())
+    leaked = replace(config, policy_args=MappingProxyType({"note": PLANTED}))
+    write_record(home, ChatRecord(CHAT, leaked, started=False, turn="idle"))
+    stored = record_path(home, CHAT).read_text(encoding="utf-8")
+    assert PLANTED not in stored
+    assert json.loads(stored)["config"]["policy_args"] == {"note": "[redacted]"}
+    assert json.loads(stored)["config"]["mcp_servers"]["search"]["env"] == {
+        "SEARCH_KEY": "qmx/search"
+    }

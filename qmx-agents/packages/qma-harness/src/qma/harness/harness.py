@@ -71,6 +71,7 @@ from qma.harness.home import (
     SessionId,
     check_hooks,
     check_rules,
+    check_secrets,
     cli_version,
     ensure_homes,
     list_records,
@@ -234,6 +235,7 @@ class NewChat:
             check_hooks(self.claude_hooks)
             check_rules(self.permissions.allow, "permissions.allow")
             check_rules(self.permissions.deny, "permissions.deny")
+            check_secrets(self.mcp_servers, self.policy_args, self.claude_hooks)
             json.dumps([dict(self.mcp_servers), dict(self.policy_args)])
         except (LaunchRefused, TypeError, ValueError) as error:
             raise LaunchRefused(f"a chat option cannot be stored: {error}") from None

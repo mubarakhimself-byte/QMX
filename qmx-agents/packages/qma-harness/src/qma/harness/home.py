@@ -32,7 +32,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
@@ -476,6 +476,103 @@ def check_rules(rules: Sequence[str], key: str) -> None:
     _strings(list(rules), key, _RULE)
 
 
+SECRET_SHAPES: Final = re.compile(
+    "|".join(
+        (
+            r"sk-(?:or-v1|ant|proj|svcacct|admin)-[A-Za-z0-9_-]{16,}",
+            r"AKIA[0-9A-Z]{16}",
+            r"gh[pousr]_[A-Za-z0-9]{36,}",
+            r"github_pat_[A-Za-z0-9_]{22,}",
+            r"xox[abposr]-[0-9A-Za-z-]{10,}",
+            r"AIza[0-9A-Za-z_-]{35}",
+            r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*",
+            r"-----BEGIN[A-Z ]*PRIVATE KEY-----",
+            r"(?<![A-Za-z0-9_-])sk-(?=[A-Za-z_-]*[0-9])[A-Za-z0-9_-]{20,}",
+            r"(?<![0-9a-f])[0-9a-f]{32}\.[A-Za-z0-9]{16}(?![A-Za-z0-9])",
+        )
+    )
+)
+"""The key shapes of SEC1A's one redaction seam (`qmx_engine.ledger.redact.SHAPES`), held here
+because the engine imports the harness, not the other way round."""
+CREDENTIAL_NAME: Final = re.compile(r"(?i)key|token|secret|passw|auth|credential|bearer|cookie")
+"""A name under which a value is a credential, so the value must be a keyring reference."""
+KEYRING_REF: Final = re.compile(r"qmx/[A-Za-z0-9._/-]+")
+MASK: Final = "[redacted]"
+
+
+def _secret_paths(value: object, path: str) -> Iterator[str]:
+    """Where in `value` a string, key or value, has a key's shape."""
+    match value:
+        case str() if SECRET_SHAPES.search(value):
+            yield path
+        case Mapping():
+            for key, item in cast("Mapping[object, object]", value).items():
+                yield from _secret_paths(str(key), path)
+                yield from _secret_paths(item, f"{path}.{key}")
+        case list() | tuple():
+            for n, item in enumerate(cast("Sequence[object]", value)):
+                yield from _secret_paths(item, f"{path}[{n}]")
+        case _:
+            return
+
+
+def _literal_credentials(table: object, path: str) -> Iterator[str]:
+    """Credential-named entries of `table` whose value is not a `qmx/*` keyring reference."""
+    if not isinstance(table, Mapping):
+        return
+    for name, value in cast("Mapping[object, object]", table).items():
+        if CREDENTIAL_NAME.search(str(name)) and not (
+            isinstance(value, str) and KEYRING_REF.fullmatch(value)
+        ):
+            yield f"{path}.{name}"
+
+
+def check_secrets(
+    mcp_servers: Mapping[str, object],
+    policy_args: Mapping[str, object],
+    claude_hooks: Mapping[str, object],
+) -> None:
+    """Refuse chat options that would put a literal secret on the chat record: any string with
+    a key's shape, and any credential-named server `env` or `headers` entry, server
+    `credential_ref` or policy argument that is not a `qmx/*` keyring reference."""
+    found = [
+        *_secret_paths(dict(mcp_servers), "mcp_servers"),
+        *_secret_paths(dict(policy_args), "policy_args"),
+        *_secret_paths(dict(claude_hooks), "claude_hooks"),
+        *_literal_credentials(policy_args, "policy_args"),
+    ]
+    for name, row in mcp_servers.items():
+        if isinstance(row, Mapping):
+            server = cast("Mapping[str, object]", row)
+            for table in ("env", "headers"):
+                found += _literal_credentials(server.get(table), f"mcp_servers.{name}.{table}")
+            if "credential_ref" in server:
+                found += _literal_credentials(
+                    {"credential_ref": server["credential_ref"]}, f"mcp_servers.{name}"
+                )
+    if found:
+        raise LaunchRefused(
+            f"{', '.join(sorted(set(found)))} would store a secret on the chat record; name a "
+            "qmx/* keyring reference instead"
+        )
+
+
+def _masked(value: Any) -> Any:
+    """`value` with every key-shaped string masked, the record's second guard."""
+    match value:
+        case str():
+            return SECRET_SHAPES.sub(MASK, value)
+        case Mapping():
+            return {
+                _masked(str(key)): _masked(item)
+                for key, item in cast("Mapping[object, object]", value).items()
+            }
+        case list() | tuple():
+            return [_masked(item) for item in cast("Sequence[object]", value)]
+        case _:
+            return value
+
+
 def claude_section(raw: Mapping[str, object], current: Mapping[str, object]) -> dict[str, object]:
     """Parse a whole-section write. A write that does not name `remembered` keeps the stored
     rules, so saving permissions never drops an "always allow"."""
@@ -640,22 +737,22 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
             "agents": {
                 name: {
                     "description": agent.description,
-                    "prompt": agent.prompt,
+                    "prompt": _masked(agent.prompt),
                     "tools": None if agent.tools is None else list(agent.tools),
                     "model": agent.model,
                 }
                 for name, agent in config.agents.items()
             },
-            "mcp_servers": dict(config.mcp_servers),
-            "append_system_prompt": config.append_system_prompt,
+            "mcp_servers": _masked(config.mcp_servers),
+            "append_system_prompt": _masked(config.append_system_prompt),
             "hook_sink": config.hook_sink,
             "permissions": {
                 "policy": permissions.policy,
                 "allow": list(permissions.allow),
                 "deny": list(permissions.deny),
             },
-            "policy_args": dict(config.policy_args),
-            "claude_hooks": dict(config.claude_hooks),
+            "policy_args": _masked(config.policy_args),
+            "claude_hooks": _masked(config.claude_hooks),
         },
         "started": record.started,
         "turn": record.turn,
