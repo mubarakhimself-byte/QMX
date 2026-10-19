@@ -23,16 +23,20 @@ SEED = """
     print(json.dumps(json.load(sys.stdin)["in"]))
 """
 WORK = """
-    import json, sys
+    import json, os, sys
     from pathlib import Path
     counter = Path(json.load(sys.stdin)["in"])
     tries = int(counter.read_text()) + 1 if counter.exists() else 1
     counter.write_text(str(tries))
+    shared = Path(os.environ["QMX_WORK_SHARED"])
     if tries == 1:
         Path("half.txt").write_text("left by the failed attempt")
         Path("seed.txt").write_text("v2")
         sys.exit(1)
-    print(json.dumps({"half": Path("half.txt").exists(), "seed": Path("seed.txt").read_text()}))
+    print(json.dumps({
+        "half": Path("half.txt").exists() or (shared / "half.txt").exists(),
+        "seed": (shared / "seed.txt").read_text(),
+    }))
 """
 POST = """
     import time
@@ -51,13 +55,17 @@ def resume(home: Path, run_id: str) -> str:
     return asyncio.run(go())
 
 
-def test_a_retry_starts_from_the_zone_as_it_was_before_the_failed_attempt(tmp_path: Path) -> None:
+def test_a_retry_sees_only_committed_files_and_nothing_the_failed_attempt_wrote(
+    tmp_path: Path,
+) -> None:
     home = tmp_path / "home"
+    seed = node("seed", "script", script="scripts/seed.py")
+    seed["outputs"] = {"files": [{"path": "seed.txt"}]}
     work = node("work", "script", script="scripts/work.py")
     work["retry"] = {"backoff_seconds": [0]}
     root = folder(
         tmp_path / "wf",
-        [START, node("seed", "script", script="scripts/seed.py"), work],
+        [START, seed, work],
         {"start": {"main": [edge("seed")]}, "seed": {"main": [edge("work")]}},
         {"seed": SEED, "work": WORK},
     )

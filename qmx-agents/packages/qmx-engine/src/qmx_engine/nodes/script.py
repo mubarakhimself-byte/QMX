@@ -1,23 +1,25 @@
 """The `script` node, and the host-tier process the script family shares (AD-24).
 
-A trusted script from the workflow folder runs as `python -I` in a subprocess. Its environment is
-built from an allow-list with `qma.boot`'s banned fragments, so no provider key, no
-`CLAUDE_CONFIG_DIR` and no plan path reaches it. Its cwd is the run's write zone, its inputs
-arrive as JSON on stdin, and its stdout, parsed as JSON, is its output on `main`. The process tree
-is killed on cancel. A node script has no run timeout (AD-40): the stuck detector reads its
-process through `look` and stops it only after `timeout.script.idle` with no CPU and no IO, so a
-long backtest runs on. A trigger's own check script keeps a timeout. A node that declares
-credentials is refused: resolving a `qmx/*` ref into a host script is not built yet.
+A trusted script runs as `python -I` in a subprocess, from the run's hash-checked `code/` copy.
+Its cwd is the attempt's overlay (AD-51), its inputs arrive as JSON on stdin, and its stdout,
+parsed as JSON, is its output on `main`. Its environment is built from an allow-list with
+`qma.boot`'s banned fragments, so no provider key, no `CLAUDE_CONFIG_DIR`, no plan path and no
+home path reaches it, plus the run context (`QMX_RUN_ID`, `QMX_MODE`, `QMX_FAKE`, `QMX_NOW`,
+`QMX_WORK`, `QMX_WORK_SHARED`, `QMX_CODE` and the rest) and the value of each `qmx/tool/<name>`
+key the node declares, registered with the redactor first (AD-37).
+
+The process joins the engine's Job object, so it dies with the engine, and its tree is killed on
+cancel. A node script has no run timeout (AD-40): the stuck detector reads its process through
+`look` and stops it only after `timeout.script.idle` with no CPU and no IO, so a long backtest
+runs on. A trigger's own check script keeps a timeout.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
 from collections.abc import Callable, Collection, Mapping
@@ -25,12 +27,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
+import keyring
 from pydantic import JsonValue
 
-from qmx_engine.ledger.redact import redact
+from qmx_engine.definition.lint import TOOL_KEY
+from qmx_engine.ledger.redact import redact, register
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
 from qmx_engine.workers.effects import idempotency_key
+from qmx_engine.workers.local import contain, forget, kill_tree, record
+from qmx_engine.workers.zones import RunZone, digest
 
 BANNED_FRAGMENTS: Final = ("PROXY", "ANTHROPIC", "OPENAI", "AWS", "NODE_", "SSL_", "CLAUDE")
 """`qma.boot.BANNED_FRAGMENTS`; `tests/test_script.py` holds the two equal."""
@@ -44,7 +50,10 @@ KEEP_NAMES: Final = frozenset(
     }
 )  # fmt: skip
 IDEMPOTENCY_ENV: Final = "QMX_IDEMPOTENCY_KEY"
+TOOL_ENV: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 MESSAGE_LIMIT: Final = 300
+
+type Resolve = Callable[[str], str | None]
 
 
 def canonical(path: str) -> str:
@@ -67,9 +76,9 @@ def script_env(
     environ: Mapping[str, str], banned_values: Collection[str], key: str | None = None
 ) -> dict[str, str]:
     """The allow-listed names from `environ`, minus any name with a banned fragment and any value
-    that points at or under one of `banned_values` (the plan login's folder), plus the
-    idempotency key. Paths are compared in one spelling, so a forward-slash or doubled-separator
-    form of a banned path is caught too."""
+    that points at or under one of `banned_values` (the home and the plan login's folder), plus
+    the idempotency key. Paths are compared in one spelling, so a forward-slash or
+    doubled-separator form of a banned path is caught too."""
     banned = [canonical(path) for path in banned_values if path.strip()]
     env: dict[str, str] = {}
     for name, value in environ.items():
@@ -84,16 +93,8 @@ def script_env(
     return env
 
 
-def kill_tree(pid: int) -> None:
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/F", "/T", "/PID", str(pid)],  # noqa: S607
-            capture_output=True,
-            check=False,
-        )
-    else:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(pid, signal.SIGKILL)
+def keyring_secret(ref: str) -> str | None:
+    return keyring.get_password(ref, ref.removeprefix("qmx/"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +115,7 @@ async def run_process(
     started: Callable[[int], None] | None = None,
 ) -> Done:
     """Run to exit, or kill the whole tree at `timeout` or when the awaiting task is cancelled.
-    `started` is told the process id once it runs."""
+    The process joins the engine's Job object, then `started` is told its id."""
     windows = sys.platform == "win32"
     process = await asyncio.create_subprocess_exec(
         *argv,
@@ -126,6 +127,7 @@ async def run_process(
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if windows else 0,
         start_new_session=not windows,
     )
+    contain(process.pid)
     if started is not None:
         started(process.pid)
     try:
@@ -151,12 +153,17 @@ def failed(
 
 @dataclass(frozen=True, slots=True)
 class HostScript:
-    """What every script-family executor of one run shares: the workflow folder its scripts come
-    from, its timeout (None for a node's script) and the values no script may see."""
+    """What every script-family executor of one run shares: the folder its scripts come from
+    (the run's `code/` copy, hashed in `manifest`), its timeout (None for a node's script), the
+    values no script's environment may point at, whether the run is fake, and how a tool key
+    is read from the keyring."""
 
     folder: Path
     timeout_seconds: float | None
     banned_values: tuple[str, ...]
+    fake: bool = False
+    manifest: Mapping[str, str] | None = None
+    resolve: Resolve = keyring_secret
     processes: dict[str, int] = field(default_factory=dict[str, int])
     """The running script's process id, by attempt idempotency key."""
 
@@ -177,31 +184,87 @@ class HostScript:
             return failed(
                 "script_missing", "the script is not a file in the folder", retryable=False
             )
+        if self.manifest is not None:
+            relative = path.relative_to(root).as_posix()
+            if self.manifest.get(relative) != digest(path):
+                return failed(
+                    "code_changed", "the script no longer matches the run's copy", retryable=False
+                )
         return path
+
+    def tool_keys(self, job: NodeJob) -> dict[str, str] | Failed:
+        """Each declared `qmx/tool/<name>` key under the name the node gives it, registered
+        with the redactor before the script can print it."""
+        declared = job.node_definition.get("credentials")
+        found: dict[str, str] = {}
+        for name, ref in declared.items() if isinstance(declared, dict) else ():
+            if (
+                not isinstance(ref, str)
+                or not TOOL_KEY.fullmatch(ref)
+                or not TOOL_ENV.fullmatch(name)
+                or name.startswith("QMX_")
+                or any(f in name for f in BANNED_FRAGMENTS)
+            ):
+                return failed(
+                    "credential_refused",
+                    f"{name} is not a tool key a script may hold",
+                    retryable=False,
+                )
+            value = self.resolve(ref)
+            if not value:
+                return failed("credential_missing", f"{ref} is not in the keyring", retryable=False)
+            try:
+                register(ref, value)
+            except ValueError:
+                return failed("credential_short", f"{ref} is too short to redact", retryable=False)
+            found[name] = value
+        return found
+
+    def context(self, job: NodeJob, zone: RunZone) -> dict[str, str]:
+        return {
+            "QMX_RUN_ID": job.run_id,
+            "QMX_NODE_ID": job.node_id,
+            "QMX_ATTEMPT": str(job.attempt),
+            "QMX_MODE": job.mode,
+            "QMX_FAKE": "1" if self.fake else "0",
+            "QMX_NOW": job.now or "",
+            "QMX_WORK": str(zone.overlay(job)),
+            "QMX_WORK_SHARED": str(zone.work),
+            "QMX_CODE": str(self.folder),
+        }
 
     async def run(self, job: NodeJob, parameter: str) -> JsonValue | Failed:
         """The script's stdout as JSON, or why it failed."""
-        if job.node_definition.get("credentials"):
-            return failed(
-                "credentials_unsupported", "a host script gets no credentials yet", retryable=False
-            )
         path = self.path(job, parameter)
         if isinstance(path, Failed):
             return path
         if job.workspace is None:
             return failed("no_workspace", "the job names no write zone", retryable=False)
+        keys = self.tool_keys(job)
+        if isinstance(keys, Failed):
+            return keys
+        zone = RunZone(Path(job.workspace))
+        cwd = zone.overlay(job)
+        cwd.mkdir(parents=True, exist_ok=True)
+        env = script_env(os.environ, self.banned_values, idempotency_key(job))
         key = job.idempotency_key
+
+        def started(pid: int) -> None:
+            self.processes[key] = pid
+            record(zone, job, pid)
+
         try:
             done = await run_process(
                 [sys.executable, "-I", str(path)],
-                cwd=Path(job.workspace),
-                env=script_env(os.environ, self.banned_values, idempotency_key(job)),
+                cwd=cwd,
+                env=env | self.context(job, zone) | keys,
                 stdin=json.dumps(job.inputs).encode(),
                 timeout=self.timeout_seconds,
-                started=lambda pid: self.processes.__setitem__(key, pid),
+                started=started,
             )
         finally:
             self.processes.pop(key, None)
+            forget(zone, job)
         if done.code is None:
             return failed(
                 "timeout",
@@ -220,9 +283,10 @@ class HostScript:
 
 
 class Script:
-    """`parameters.artifacts` may list files the script leaves in the zone; they are returned as
-    the attempt's artifacts, and a missing one fails it. An entry ending in `/` names a folder:
-    every file under it is an artifact, so a script can leave one file per card."""
+    """`parameters.artifacts` may list files the script leaves in its overlay; they are
+    returned as the attempt's artifacts and committed to `work/` with its declared outputs, and a
+    missing one fails it. An entry ending in `/` names a folder: every file under it is an
+    artifact, so a script can leave one file per card."""
 
     def __init__(self, host: HostScript) -> None:
         self.host = host
@@ -236,14 +300,14 @@ class Script:
         artifacts = (
             tuple(a for a in listed if isinstance(a, str)) if isinstance(listed, list) else ()
         )
-        zone = Path(job.workspace or ".").resolve()
+        overlay = RunZone(Path(job.workspace or ".")).overlay(job).resolve()
         files: list[str] = []
         for artifact in artifacts:
-            path = (zone / artifact).resolve()
-            inside = path.is_relative_to(zone)
+            path = (overlay / artifact).resolve()
+            inside = path.is_relative_to(overlay)
             if inside and artifact.endswith("/") and path.is_dir():
                 under = sorted(p for p in path.rglob("*") if p.is_file())
-                files += [p.relative_to(zone).as_posix() for p in under]
+                files += [p.relative_to(overlay).as_posix() for p in under]
             elif inside and path.is_file():
                 files.append(artifact)
             else:

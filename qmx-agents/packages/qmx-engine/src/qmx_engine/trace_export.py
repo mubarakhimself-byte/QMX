@@ -30,7 +30,7 @@ from qmx_engine.ledger.redact import redact_json
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.library import JsonObject, LibraryPort, Mode, RunStatus, RunSummary, Stored
-from qmx_engine.runner import workspace
+from qmx_engine.workers.zones import RunZone
 
 PLACEMENT: JsonObject = {"name": "pc", "kind": "local"}
 
@@ -115,8 +115,7 @@ def run_files(home: Path, run_id: str, events: list[Event], library: LibraryPort
         for edge in library.edges(earlier.object_id, "produced-by", reverse=True)
         if isinstance(meta := library.get(edge.from_id).fields.get("metadata"), dict)
     }
-    workflow_id = str(events[0].data.get("workflow_id"))
-    zone = workspace(home, workflow_id) / "runs" / run_id
+    zone = RunZone.of(home, run_id).work
     stored: list[Stored] = []
     for event in events:
         listed = event.data.get("artifacts") if event.kind == "node_finished" else None

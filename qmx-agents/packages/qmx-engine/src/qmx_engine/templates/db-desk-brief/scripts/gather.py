@@ -10,11 +10,12 @@ test runs are never read. Account, cushion, positions, unit states and session c
 facts: they read `could not check: trading node` until the trading node's read model exists.
 
 A run started with `{"fixture": "busy"}` or `{"fixture": "quiet"}` replays the matching synthetic
-day in `fixtures/`. The run's write zone is `<home>/workspaces/wf-<id>/runs/<run_id>`, so the home
-is three folders above it.
+day in `fixtures/`. The home is found from the run's shared zone (`QMX_WORK_SHARED`), the one
+place a script learns where its run lives.
 """
 
 import json
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -132,7 +133,9 @@ else:
     except Exception as error:
         day["events"] = []
         missing.append(f"calendar: {type(error).__name__}")
-    home = Path.cwd().parents[3]
+    from qmx_engine.workers.zones import home_of  # noqa: PLC0415
+
+    home = home_of(Path(os.environ["QMX_WORK_SHARED"]))
     results = latest_results(home, (now - timedelta(hours=FRESH_HOURS)).isoformat())
     desk_run, desk = results.get("t4-research-desk-overnight", (None, {}))
     day["desk"] = [

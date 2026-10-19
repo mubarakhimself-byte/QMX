@@ -172,6 +172,14 @@
       "title": "Memory",
       "type": "object"
     },
+    "Merge": {
+      "enum": [
+        "replace",
+        "append",
+        "keyed"
+      ],
+      "type": "string"
+    },
     "Meta": {
       "additionalProperties": true,
       "description": "Layout and authorship, outside the content hash. Any other key is kept as written.",
@@ -256,6 +264,17 @@
           ],
           "default": null,
           "title": "Notes"
+        },
+        "outputs": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Outputs"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "parameters": {
           "$ref": "#/$defs/JsonObject"
@@ -347,6 +366,44 @@
         "typeVersion"
       ],
       "title": "Node",
+      "type": "object"
+    },
+    "OutputFile": {
+      "additionalProperties": false,
+      "description": "A path an attempt commits from its overlay into the run's shared zone `work/` (AD-51).\n`path` is a glob relative to `work/`, and `<partition>` in it stands for the attempt's\npartition. `append` adds the attempt's bytes to the shared file and `keyed` merges a JSON\nobject into it, so concurrent writers may share the path. `delete` is a tombstone: the\nmatching shared files are removed at commit.",
+      "properties": {
+        "delete": {
+          "default": false,
+          "title": "Delete",
+          "type": "boolean"
+        },
+        "merge": {
+          "$ref": "#/$defs/Merge",
+          "default": "replace"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "OutputFile",
+      "type": "object"
+    },
+    "Outputs": {
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "items": {
+            "$ref": "#/$defs/OutputFile"
+          },
+          "title": "Files",
+          "type": "array"
+        }
+      },
+      "title": "Outputs",
       "type": "object"
     },
     "Patch": {
