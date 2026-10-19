@@ -292,7 +292,8 @@ def lane_processes() -> bool:
         except psutil.Error:
             continue
         mine = "lib1-" in line
-        if mine and ("qmx_host" in line or name.startswith(("claude", "qma-cli-launcher"))):
+        host = name.startswith("python") and "qmx_host" in line
+        if mine and (host or name.startswith(("claude", "qma-cli-launcher"))):
             found.append(f"{process.info['pid']} {name} {line[:160]}")
     for row in found:
         log(f"  {row}")
