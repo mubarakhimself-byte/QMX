@@ -17,7 +17,9 @@ the script exits 1 if any lane failed. No model, no key, no ship home, no lane l
   same.
 - `governed` (lane 6): a passed live run's `book` waits on `refs/drafts/<item>`; `main` is empty.
 - `secrets` (lane 9): `tools/secret_scan.py` is clean.
-- `processes` (lane 10): no `qmx_host`, `claude` or `qma-cli-launcher` process and no lane lock.
+- `processes` (lane 10): no `qmx_host`, `claude` or `qma-cli-launcher` process on a LIB1 lane
+  home (the operator's own Claude app and other builders' hosts are not this PR's) and no lane
+  lock.
 - `perf`: `put` and `get` p95 in ms on a store seeded with 1,000 objects of each of ten kinds,
   against `library_fake.py` on the same calls. It records numbers and fails nothing.
 """
@@ -289,7 +291,8 @@ def lane_processes() -> bool:
             name = str(process.info["name"] or "").lower()
         except psutil.Error:
             continue
-        if "qmx_host" in line or name.startswith(("claude", "qma-cli-launcher")):
+        mine = "lib1-" in line
+        if mine and ("qmx_host" in line or name.startswith(("claude", "qma-cli-launcher"))):
             found.append(f"{process.info['pid']} {name} {line[:160]}")
     for row in found:
         log(f"  {row}")
