@@ -5,9 +5,10 @@ claimant that comes to the same occurrence finds the row and skips it. A claimed
 lease that its claimant's heartbeat renews every tick. A fire whose lease ran out belongs to a
 claimant that died; the next claimant takes it over and resumes its run if one started.
 
-A trigger on a quota hold merges every occurrence into its one held fire, and the held fire is
-claimed once the hold ends. A trigger already running `max_concurrent` fires stays due, so its
-next occurrence fires once one ends.
+A trigger on a hold (a closed usage window, a shut market or a spend-neutral re-run) merges every
+occurrence into its one held fire, and the held fire is claimed once the hold ends. A trigger
+already running `max_concurrent` fires stays due, so its next occurrence fires once one ends.
+Pending fires are claimed in priority order, then oldest first.
 
 A fire ends once: `settle` never writes over an ending, and `settle_run` ends the fire of a run a
 wake finished whether that fire still reads `waiting` or its own task has not yet written it, so a

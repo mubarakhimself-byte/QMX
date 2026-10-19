@@ -1,5 +1,6 @@
 """The engine's REST routes that `qmx_control.server.OPERATIONS` does not hold (SOLUTION-DESIGN 13):
-resolving an inbox item, which is the operator's alone, and a run's ledger events as SSE.
+resolving an inbox item, which is the operator's alone, a run's ledger events as SSE, and
+`explain_trigger`, why a trigger did or did not fire.
 
 The router is never added to `OPERATIONS`, so no agent tool reaches it (the harness checks that
 list against its own tool table). `create_app(..., extra_routers=[engine_router(door)])` puts the
@@ -44,5 +45,9 @@ def engine_router(door: EngineDoor) -> APIRouter:
         async for event in door.events(run_id, max(after, last_event_id), max_events):
             yield ServerSentEvent(data=event, event=str(event["kind"]), id=str(event["seq"]))
 
-    _ = resolve, events
+    @router.get("/api/triggers/{trigger_id}/explain")
+    def explain_trigger(trigger_id: str) -> Document:
+        return door.workflow_triggers_explain(trigger_id)
+
+    _ = resolve, events, explain_trigger
     return router

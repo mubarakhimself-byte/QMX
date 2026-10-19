@@ -3,9 +3,9 @@
 Step N moves the schema from version N-1 to N. Step 3 rebuilds `triggers` for the wider kind
 check (SQLite cannot alter a CHECK) and adds a trigger's `priority` and `ready_by`, and a fire's
 webhook `delivery_id`, its `delivery` outcome and its re-run count. A file whose version is newer
-than this code knows is refused, never downgraded. The SQLite library version is recorded in `meta` at every writer
-open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can corrupt a WAL database,
-which is why only the writer thread ever checkpoints, whatever the version.
+than this code knows is refused, never downgraded. The SQLite library version is recorded in
+`meta` at every writer open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can
+corrupt a WAL database, which is why only the writer thread ever checkpoints, whatever the version.
 """
 
 from __future__ import annotations

@@ -2,11 +2,12 @@
 
 A trusted script runs as `python -I` in a subprocess, from the run's hash-checked `code/` copy.
 Its cwd is the attempt's overlay (AD-51), its inputs arrive as JSON on stdin, and its stdout,
-parsed as JSON, is its output on `main`; a first line starting `[QMX_FAILURE]` fails it instead. Its environment is built from an allow-list with
-`qma.boot`'s banned fragments, so no provider key, no `CLAUDE_CONFIG_DIR`, no plan path and no
-home path reaches it, plus the run context (`QMX_RUN_ID`, `QMX_MODE`, `QMX_FAKE`, `QMX_NOW`,
-`QMX_WORK`, `QMX_WORK_SHARED`, `QMX_CODE` and the rest) and the value of each `qmx/tool/<name>`
-key the node declares, registered with the redactor first (AD-37).
+parsed as JSON, is its output on `main`; a first line starting `[QMX_FAILURE]` fails it instead.
+Its environment is built from an allow-list with `qma.boot`'s banned fragments, so no provider
+key, no `CLAUDE_CONFIG_DIR`, no plan path and no home path reaches it, plus the run context
+(`QMX_RUN_ID`, `QMX_MODE`, `QMX_FAKE`, `QMX_NOW`, `QMX_WORK`, `QMX_WORK_SHARED`, `QMX_CODE` and the
+rest) and the value of each `qmx/tool/<name>` key the node declares, registered with the redactor
+first (AD-37).
 
 The process joins the engine's Job object, so it dies with the engine, and its tree is killed on
 cancel. A node script has no run timeout (AD-40): the stuck detector reads its process through

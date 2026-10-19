@@ -1,5 +1,5 @@
 """The composition (SOLUTION-DESIGN 27.1): one process per home serves the copilot's chats, the
-workflow engine and the control doors on one port behind one bearer.
+workflow engine, the control doors and the webhook door on one port behind one bearer.
 
 `serve` builds, in order: the home's single-instance lock, `ControlService` (the one settings
 reader), the `Harness` (which starts the model relay on its own thread), the engine with its
@@ -34,12 +34,15 @@ import httpx
 import psutil
 import qmx_control.server
 import uvicorn
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException, Request
+from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, chat_routes, control_service
+from qmx_control.models import Document
 from qmx_control.service import ControlService
 from qmx_engine.control_door import EngineDoor
 from qmx_engine.ledger import redact
 from qmx_engine.ports.harness_adapter import HarnessAdapter
+from qmx_engine.ports.library import JsonObject
 from qmx_engine.service.rest import engine_router
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.store import Store
@@ -53,6 +56,7 @@ LIBRARY: Final = "library"
 STATE: Final = "control-process.json"
 """The running host's pid, port and start time, for `status`, `stop` and the refusal line."""
 START_S: Final = 30.0
+DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 
 
 class HostRunning(Exception):
@@ -165,11 +169,41 @@ def compose(
     """The one REST app: control, chat and engine routes behind one bearer and the principal
     door. `ui_origin` is the one origin CORS allows, none when empty."""
     app = qmx_control.server.create_app(
-        control, bearer, ui_origin, extra_routers=[*harness_api, engine_router(engine)]
+        control,
+        bearer,
+        ui_origin,
+        extra_routers=[*harness_api, engine_router(engine), webhook_door(engine)],
     )
     routes = [route for api in harness_api for route in api.routes]
     app.add_middleware(PrincipalDoor, chat_routes=routes)
     return app
+
+
+def webhook_door(engine: EngineDoor) -> APIRouter:
+    """`POST /api/hooks/<trigger_id>`: one webhook delivery, fired once per delivery id (AD-10).
+    The id is the first of `DELIVERY_HEADERS` the sender set; a delivery without one is refused,
+    since nothing else could dedupe it. The body is the run's `webhook.body` input."""
+    router = APIRouter()
+
+    @router.post("/api/hooks/{trigger_id}")
+    async def deliver(trigger_id: str, request: Request) -> Document:
+        delivery_id = next(
+            (found for name in DELIVERY_HEADERS if (found := request.headers.get(name))), None
+        )
+        if delivery_id is None:
+            raise HTTPException(400, f"a webhook needs one of {', '.join(DELIVERY_HEADERS)}")
+        raw = await request.body()
+        try:
+            body: JsonValue = json.loads(raw) if raw else None
+        except ValueError:
+            body = raw.decode("utf-8", "replace")
+        payload: JsonObject = body if isinstance(body, dict) else {"value": body}
+        return await asyncio.to_thread(
+            engine.workflow_triggers_deliver, trigger_id, delivery_id, payload
+        )
+
+    _ = deliver
+    return router
 
 
 def health(port: int) -> int | None:

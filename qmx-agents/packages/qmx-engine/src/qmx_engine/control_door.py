@@ -40,7 +40,7 @@ from qmx_engine.nodes.app_op import AppOp
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
-from qmx_engine.ports.library import Bundle, Draft, LibraryPort, LibraryRefused
+from qmx_engine.ports.library import Bundle, Draft, JsonObject, LibraryPort, LibraryRefused
 from qmx_engine.ports.settings import ControlSettings, SettingsPort
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.runner import new_run_id
@@ -122,6 +122,11 @@ def bundle_of(graph: Mapping[str, JsonValue]) -> Bundle:
     return Bundle(dict(definition), {ref: text.encode() for ref, text in texts.items()})
 
 
+def webhook_home(settings: Mapping[str, object]) -> rows.HomeEngine:
+    """Where a new webhook trigger lives: `triggers.webhook_home`, `pc` until the server exists."""
+    return "contabo" if settings.get("triggers.webhook_home") == "contabo" else "pc"
+
+
 def card(act: str, title: str, method: str, path: str, body: Document) -> Document:
     """What a non-`user` caller gets for a `user` act: the button the UI shows him, which makes
     the same call over REST with his bearer."""
@@ -194,12 +199,16 @@ class PublishIn(BaseModel):
 
 class TriggerIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: Literal["cron", "interval", "manual", "after"]
+    kind: Literal["cron", "interval", "manual", "after", "webhook", "event", "session"]
     expr: str | None = None
     zone: str = "UTC"
     seconds: int | None = None
     workflow_item: str | None = None
     """The upstream workflow of an `after` trigger."""
+    filter: dict[str, JsonValue] | None = None
+    """An `event` trigger's `kind`, `output`, `producer` and `coalesce` (AD-64)."""
+    priority: int | Literal["normal", "high"] = "normal"
+    ready_by: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     object_id: str | None = None
     """The version to pin; the workflow's latest when left out."""
     follow_champion: bool = False
@@ -219,8 +228,26 @@ class TriggerIn(BaseModel):
                 return rows.After(self.workflow_item)
             case "manual":
                 return rows.Manual()
+            case "webhook":
+                return rows.Webhook()
+            case "session":
+                return rows.Session()
+            case "event" if self.filter is not None:
+                return rows.Event(self.filter)
             case _:
-                raise ValueError(f"a {self.kind} trigger needs expr, seconds or workflow_item")
+                raise ValueError(
+                    f"a {self.kind} trigger needs expr, seconds, workflow_item or filter"
+                )
+
+    @property
+    def rank(self) -> int:
+        match self.priority:
+            case "normal":
+                return 0
+            case "high":
+                return rows.HIGH
+            case int():
+                return self.priority
 
 
 class EngineDoor:
@@ -627,6 +654,11 @@ class EngineDoor:
                 continuity=wanted.continuity,
                 catch_up=wanted.catch_up,
                 max_concurrent=wanted.max_concurrent,
+                priority=wanted.rank,
+                ready_by=wanted.ready_by,
+                home_engine=webhook_home(self.svc.ctx.engine.settings)
+                if wanted.kind == "webhook"
+                else rows.HERE,
             )
             ledger.write(set_enabled(made.id, False))
             return self._trigger_view(self._trigger_row(made.id))
@@ -678,6 +710,19 @@ class EngineDoor:
             return await self.scheduler.run_now(trigger_id)
 
         return cast(Document, plain(self._call(fire)))
+
+    def workflow_triggers_deliver(
+        self, trigger_id: str, delivery_id: str, payload: JsonObject
+    ) -> Document:
+        """One webhook delivery through the host's door: fired once per delivery id."""
+
+        async def fire() -> object:
+            return await self.scheduler.deliver(trigger_id, delivery_id, payload)
+
+        return cast(Document, plain(self._call(fire)))
+
+    def workflow_triggers_explain(self, trigger_id: str) -> Document:
+        return self._serve(lambda: self.scheduler.explain(trigger_id))
 
     def workflow_inbox_list(self) -> list[Document]:
         return self._serve_all(self.svc.inbox.list)

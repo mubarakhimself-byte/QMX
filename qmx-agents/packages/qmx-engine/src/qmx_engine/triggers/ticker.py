@@ -20,9 +20,9 @@ fire and no wake, so clearing the flag gives each clocked trigger at most one ca
 
 A failed fire always delivers: it ends with a `[QMX_FAILURE]` digest line and counts on the
 trigger's incident for its masked signature (`InboxTable.incident`); a passing fire resolves the
-incident. A failure that spent nothing, with no model tokens and no finished node, is re-run as a
-held fire at each `triggers.rerun_delays` after the first failure. A passed run with an empty
-payload fails its delivery closed. The ticker writes its heartbeat to the ledger's `meta` row
+incident. A failure that spent nothing, no model tokens and no finished node with an effect, is
+re-run as a held fire at each `triggers.rerun_delays` after the first failure. A passed run with an
+empty payload fails its delivery closed. The ticker writes its heartbeat to the ledger's `meta` row
 `ticker_heartbeat` every tick, which `explain_trigger` reads.
 
 A trigger's own check script runs in a zone outside the home, as a run's scripts do (AD-24), and
@@ -38,11 +38,12 @@ import secrets
 from collections.abc import Collection, Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Final
+from typing import Final, cast
 
 from pydantic import ValidationError
 
 from qmx_engine.definition.model import Workflow
+from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Operation, Reader, Transaction
@@ -379,7 +380,8 @@ class Scheduler:
 
     def _holidays(self) -> tuple[str, ...]:
         found = self.engine.settings.get("market.holidays")
-        return tuple(str(day) for day in found) if isinstance(found, tuple | list) else ()
+        days = cast(tuple[object, ...], found) if isinstance(found, tuple) else ()
+        return tuple(str(day) for day in days)
 
     def _blocked(self, fire: Fire, trigger: Trigger, blocked: Blocked) -> None:
         at = self.ctx.at()
@@ -419,21 +421,35 @@ class Scheduler:
             at=at,
         )
         ledger.write(mark_incident(trigger.id, incident))
-        delays = self.engine.settings.get("triggers.rerun_delays")
-        if not isinstance(delays, tuple) or fire.rerun >= len(delays) or not self._neutral(run_id):
+        found = self.engine.settings.get("triggers.rerun_delays")
+        listed = cast(tuple[object, ...], found) if isinstance(found, tuple) else ()
+        delays = [float(d) for d in listed if isinstance(d, int | float)]
+        if fire.rerun >= len(delays) or not self._neutral(run_id):
             return
         first = self._first_failure(fire) or self.ctx.clock.now()
-        until = first + timedelta(seconds=float(delays[fire.rerun]))
+        until = first + timedelta(seconds=delays[fire.rerun])
         ledger.write(rerun(fire, stamp(until)))
 
     def _neutral(self, run_id: str | None) -> bool:
-        """Whether a failed fire's run spent nothing: no model tokens and no finished node."""
+        """Whether a failed fire's run spent nothing: no model tokens, and no node with an effect
+        finished, so a re-run repeats no outside act (41 M5)."""
         if run_id is None:
             return True
+        try:
+            events, _, workflow = self.engine.load(run_id)
+        except EngineRefused:
+            return False
         with Reader.open(self.ctx.home) as reader:
-            events, spans = reader.events(run_id), reader.spans(run_id)
-        finished = any(e.kind == "node_finished" and e.data.get("memo") is not True for e in events)
-        return not finished and not any(sum(s.tokens.values()) for s in spans)
+            spans = reader.spans(run_id)
+        kinds = {n.id: REGISTRY.kind(n.type) for n in workflow.nodes}
+        acted = {
+            str(e.data.get("node_id"))
+            for e in events
+            if e.kind == "node_finished" and e.data.get("memo") is not True
+        }
+        effects = [kind.effect for n in acted if (kind := kinds.get(n)) is not None]
+        spent = any(sum(s.tokens.values()) for s in spans)
+        return not spent and all(effect == "none" for effect in effects)
 
     def _first_failure(self, fire: Fire) -> datetime | None:
         with Reader.open(self.ctx.home) as reader:

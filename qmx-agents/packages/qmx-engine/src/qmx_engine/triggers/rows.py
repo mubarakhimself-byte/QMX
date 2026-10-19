@@ -13,7 +13,7 @@ exclusive. A wake is a paused run's `resume_at`, which the ticker honours (AD-9)
 fire's priority rises towards `HIGH` (`priority_at`).
 
 `role_pins` and `effort_pin` override role resolution for the runs a trigger fires (B-60).
-`source` and `incident_id` are stored as 4.1 names them; nothing reads them yet.
+`source` is stored as 4.1 names it; nothing reads it yet. `incident_id` names the open incident.
 """
 
 from __future__ import annotations
