@@ -34,6 +34,7 @@ from qma.harness.home import QmxHome, SessionId, read_record
 from qma.harness.launch import COMPACT_PCT_ENV as COMPACT
 from qma.harness.launch import Budgets, ChatConfig, ChatKind, build_options
 from qma.harness.profiles import PLAN
+from qma.harness.routes import control_service
 
 home = test_chat.home
 
@@ -311,11 +312,14 @@ def test_a_named_policy_answers_a_background_ask_in_process(home: QmxHome) -> No
         allowed = await ask("Write", {"file_path": "D:/overlay/a"}, context)
         assert denied == PermissionResultDeny(message="not declared")
         assert allowed == PermissionResultAllow(updated_input=None)
+        publish = await ask("mcp__qmx__workflows_put", {"id": "w"}, context)
+        assert publish == PermissionResultDeny(message="the operator did not answer in time")
         assert [(c.session_id, c.tool, dict(c.args)) for c in calls] == [
             (chat, "Bash", {"overlay": "D:/overlay"}),
             (chat, "Write", {"overlay": "D:/overlay"}),
         ]
 
+    control_service(home).settings_put("budgets", {"unattended_ask_seconds": 0.1})
     run(body, home)
 
 

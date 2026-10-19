@@ -514,7 +514,7 @@ def system_text(home: QmxHome, config: ChatConfig) -> str:
 
 ARGV_BUDGET: Final = 30_000
 """Characters for the whole CLI command line after Windows quoting. Windows caps a command
-line at 32,767, and the settings, MCP config, `append` text and deny rules all ride in it."""
+line at 32,767. The MCP config and deny rules ride in it; settings and system text go by file."""
 
 ARGV_PARTS: Final[Mapping[str, str]] = {
     "--settings": "the settings file path",

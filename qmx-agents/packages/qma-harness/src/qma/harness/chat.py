@@ -1387,7 +1387,7 @@ class Chat:
             content["workspace"] = str(self.record.config.workspace)
         if self._deps.redaction:
             content = redacted(content)
-        policy = self._policy()
+        policy = None if asking_qmx else self._policy()
         if policy is not None:
             content["policy"] = self.record.config.permissions.policy
         block = SessionBlock.model_validate({"type": kind, "content": content})
@@ -1420,9 +1420,10 @@ class Chat:
         return await self._resolve(n, ask, kind, resolved)
 
     def _policy(self) -> Policy | None:
-        """The named policy of a Background or Child chat. The launch refused an unregistered
-        name, so a missing one here means the host dropped it since: the ask then waits as an
-        unattended ask does."""
+        """The named policy of a Background or Child chat. It never answers an asking QMX tool
+        (MANAGE and `propose_order`), which still waits for the operator. The launch refused an
+        unregistered name, so a missing one here means the host dropped it since: the ask then
+        waits as an unattended ask does."""
         name = self.record.config.permissions.policy
         if name is None or isinstance(self.record.config.kind, Interactive):
             return None
