@@ -413,11 +413,11 @@ class OrderToolRefused(RuntimeError):
     """An external MCP server offers a tool whose name spells an order act."""
 
 
-def rule_rows(rows_: object) -> tuple[Rule, ...]:
+def rule_rows(table: object) -> tuple[Rule, ...]:
     """His list as `Rule`s: each row a `{pattern, ...}` table or a bare pattern string, as
     `ControlService` stores `[rules]`. A row that does not parse is skipped."""
     found: list[Rule] = []
-    for row in cast("list[object]", rows_) if isinstance(rows_, list) else []:
+    for row in cast("list[object]", table) if isinstance(table, list) else []:
         text = cast("Mapping[str, object]", row).get("pattern") if isinstance(row, Mapping) else row
         if isinstance(text, str):
             with contextlib.suppress(ValueError):
