@@ -23,11 +23,15 @@ called `asyncio.sleep` while the turn ran. Records the milliseconds from the CLI
 
 h19: a child host process starts the chat and its turn; the parent kills it once the sink has
 seen a PostToolUse. A second child host opens the same home, registers the sink again and sends
-the next turn. PASS when the resumed CLI holds the 40 % compaction setting, the resumed turn
-compacts, and PostToolUse events from the second host arrive.
+the next turn. haiku's plan window is 1M tokens, so the lane names a 200,000-token window for
+its own chats (`LANE_WINDOW`). PASS when the resumed CLI holds the 40 % compaction setting, the
+resumed turn compacts with the CLI's first `pre_tokens` from 72,000 (0.40 of the 180,000-token
+effective window) to under 105,000, and PostToolUse events from the second host arrive.
 
-cache: PASS when chat B's cache read minus chat A's is at least 70 % of A's cache write, with a
-fresh nonce in both chats' system text so no earlier run warmed it (P-SET's rule).
+cache: P-SET's rule (B's read minus A's at least 70 % of A's write), adjusted for the folder's
+own first message, which B must write: PASS when B's read minus A's is at least 70 % of the part
+of A's write that B did not write again, and a control chat in A's folder writes under 5 % of
+what B wrote. A fresh nonce in every chat's system text means no earlier run warmed it.
 """
 
 from __future__ import annotations
@@ -127,14 +131,18 @@ def tap_results() -> dict[str, float]:
 
 
 def files_to_read(where: Path, count: int, lines: int) -> list[str]:
+    """`count` files of `lines` lines. Line `lines // 2 + n` of file n holds the word KEY-n, so
+    only a whole read finds it."""
     names = []
     for n in range(1, count + 1):
         name = f"f{n:02d}.txt"
         body = "".join(
-            f"file {n:02d} line {i:04d}: the tide turns and the harbour fills with boats\n"
+            f"file {n:02d} line {i:04d}: "
+            + (f"KEY-{n:02d}" if i == lines // 2 + n else "the tide turns, boats fill the harbour")
+            + "\n"
             for i in range(lines)
         )
-        (where / name).write_text(body + f"the word for file {n:02d} is W{n:02d}\n", "utf-8")
+        (where / name).write_text(body, "utf-8")
         names.append(name)
     return names
 
@@ -231,19 +239,49 @@ async def sink_to(path: Path) -> Any:
 
 
 H19_FIRST = (
-    "Use the Read tool on f01.txt, then f02.txt, then f03.txt, then f04.txt, then f05.txt, in "
-    "the working folder, one call at a time. Then reply with the five words the files end with."
+    "Use the Read tool on each of f01.txt to f07.txt in the working folder, one file per call, "
+    "one call at a time, each file whole with no offset and no limit. One line of each file "
+    "holds a word starting with KEY-. Reply with the seven KEY- words."
 )
 H19_NEXT = (
-    "Your last turn was cut off. Use the Read tool on each of f01.txt to f05.txt again, one "
-    "call at a time, then reply with the five words the files end with."
+    "Your last turn was cut off. Use the Read tool on each of f01.txt to f07.txt again, one "
+    "file per call, one call at a time, each file whole with no offset and no limit. Reply with "
+    "the seven KEY- words."
 )
+
+
+LANE_WINDOW = "200000"
+"""Lane only. haiku's window on the plan is 1M (the CLI reports an effective 980,000 tokens), so
+0.40 of it is about 392,000 tokens. The lane names a 200,000-token window so 0.40 is reached by
+seven file reads."""
+
+
+def lane_window() -> None:
+    from qma.harness import launch  # noqa: PLC0415
+
+    launch.CONSTANT_ENV = {**launch.CONSTANT_ENV, "CLAUDE_CODE_AUTO_COMPACT_WINDOW": LANE_WINDOW}
+
+
+def tap_boundaries(path: Path) -> None:
+    import claude_agent_sdk._internal.message_parser as parser  # noqa: PLC0415
+
+    original = parser.parse_message
+
+    def logged(data: dict[str, Any]) -> Any:
+        if data.get("subtype") == "compact_boundary":
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(data.get("compact_metadata", {})) + "\n")
+        return original(data)
+
+    parser.parse_message = logged
 
 
 async def h19_child(stage: str, state: Path) -> None:
     """One host process: `start` makes the chat and starts its turn, `resume` sends the next."""
     from qma.harness import Background, ChatPermissions, InjectedText, NewChat  # noqa: PLC0415
 
+    lane_window()
+    tap_boundaries(state / "boundaries.jsonl")
     harness, home = await ship_harness()
     events = state / "events.jsonl"
     harness.register_sink("lane-spans", await sink_to(events))
@@ -256,6 +294,7 @@ async def h19_child(stage: str, state: Path) -> None:
                     workspace=folder("h19"),
                     kind=Background(),
                     compact_at=0.4,
+                    tools=("Read",),
                     hook_sink="lane-spans",
                     permissions=ChatPermissions("lane"),
                 )
@@ -273,6 +312,7 @@ async def h19_child(stage: str, state: Path) -> None:
                 {
                     "pid": os.getpid(),
                     "compact_env": env.get(COMPACT),
+                    "compact_window": env.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW"),
                     "status": done.status,
                     "text": done.text,
                     "compactions": list(done.compactions),
@@ -307,7 +347,7 @@ async def h19(log: Log) -> None:
 
     state = SCRATCH / f"turn-h-h19-state-{uuid.uuid4().hex[:8]}"
     state.mkdir(parents=True)
-    files_to_read(folder("h19"), 5, 1000)
+    files_to_read(folder("h19"), 7, 700)
     first = child("start", state)
     deadline = time.monotonic() + TURN_S
     while not any(r["event"] == "PostToolUse" for r in rows(state / "events.jsonl")):
@@ -350,25 +390,37 @@ async def h19(log: Log) -> None:
         resumed["compact_env"] == "40",
         resumed["compact_env"],
     )
-    log.check("the resumed turn compacted", bool(resumed["compactions"]), resumed["compactions"])
+    boundaries = rows(state / "boundaries.jsonl")
+    log(f"compact boundaries the resumed CLI sent: {boundaries}")
+    first = boundaries[0].get("pre_tokens", 0) if boundaries else 0
+    log.check(
+        "the resumed turn compacted at 0.40 of the 200,000-token lane window",
+        bool(resumed["compactions"]) and 0.4 * 180_000 <= first < 0.4 * 200_000 + 25_000,
+        {"turn compactions": resumed["compactions"], "first pre_tokens": first},
+    )
     posts = [r for r in late if r["event"] == "PostToolUse" and r["chat"] == chat]
     log.check("PostToolUse events from the resumed host arrived", len(posts) >= 1, len(posts))
 
 
 async def cache(log: Log) -> None:
+    """Chat a in one folder, chat b in another, then chat a2 in a's folder as the control. With
+    `exclude_dynamic_sections` the folder's own sections move into the first user message,
+    which sits after the cached system prefix, so b writes that message and nothing else; a2,
+    whose first message matches a's, writes almost nothing."""
     from qma.harness import Background, InjectedText, NewChat  # noqa: PLC0415
 
     nonce = uuid.uuid4().hex
     brief = f"Run brief {nonce}. " + "Keep every answer short and plain. " * 400
     harness, _ = await ship_harness()
     usages = {}
+    folders = {"a": "a", "b": "b", "a2": "a"}
     try:
-        for name in ("a", "b"):
+        for name, where in folders.items():
             chat = await harness.start_chat(
                 NewChat(
                     title=f"turn-h cache {name}",
                     model=MODEL,
-                    workspace=folder(f"cache-{name}-{nonce[:6]}"),
+                    workspace=folder(f"cache-{where}-{nonce[:6]}"),
                     kind=Background(),
                     append_system_prompt=brief,
                 )
@@ -380,17 +432,25 @@ async def cache(log: Log) -> None:
             await harness.close_chat(chat)
     finally:
         await harness.close()
-    a, b = usages["a"], usages["b"]
-    gained = b.cache_read_tokens - a.cache_read_tokens
+    a, b, a2 = usages["a"], usages["b"], usages["a2"]
+    shared = a.cache_write_tokens - b.cache_write_tokens
+    seen = {
+        "a_write": a.cache_write_tokens,
+        "a_read": a.cache_read_tokens,
+        "b_read": b.cache_read_tokens,
+        "b_write": b.cache_write_tokens,
+        "a2_write": a2.cache_write_tokens,
+        "shared_prefix_a_wrote": shared,
+    }
     log.check(
-        "the second chat read the system prefix from cache",
-        gained >= 0.7 * a.cache_write_tokens and a.cache_write_tokens > 0,
-        {
-            "a_write": a.cache_write_tokens,
-            "a_read": a.cache_read_tokens,
-            "b_read": b.cache_read_tokens,
-            "b_write": b.cache_write_tokens,
-        },
+        "the second folder's chat read the whole prefix a wrote except its own first message",
+        shared > 0 and b.cache_read_tokens - a.cache_read_tokens >= 0.7 * shared,
+        seen,
+    )
+    log.check(
+        "the control chat in a's folder wrote under 5 % of what b wrote",
+        a2.cache_write_tokens < 0.05 * b.cache_write_tokens,
+        seen,
     )
 
 
