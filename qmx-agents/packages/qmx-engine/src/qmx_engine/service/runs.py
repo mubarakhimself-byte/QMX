@@ -77,7 +77,7 @@ def status_of(events: list[Event], live: Container[str] | None = None) -> RunSta
         match event.kind:
             case "run_resumed":
                 ended = paused = None
-                answered = False
+                answered = data.get("reason") == "answer"
                 slots = {s: p for s, p in slots.items() if p.reason in ("gate", "skipped")}
             case "run_finished":
                 ended = RunState("passed")
@@ -404,18 +404,35 @@ class Runs:
         return self.get(outcome.run_id)
 
     def get(self, run_id: str) -> RunView:
+        [view] = self.views([run_id])
+        return view
+
+    def views(self, run_ids: list[str]) -> list[RunView]:
+        """Each run's view, its status folded from its events now, all read through one reader."""
         if not ledger_path(self.ctx.home).exists():
-            raise Refused("unknown_run", f"no run {run_id}")
+            raise Refused("unknown_run", f"no run {run_ids[0] if run_ids else ''}")
+        live = live_attempts(self.ctx.engine)
         with Reader.open(self.ctx.home) as reader:
-            events = reader.events(run_id)
-        if not events or events[0].kind != "run_created":
-            raise Refused("unknown_run", f"no run {run_id}")
-        state = status_of(events, live_attempts(self.ctx.engine))
-        mode: Mode = "live" if events[0].data.get("mode") == "live" else "test"
-        summaries = self.ctx.library.objects(run_id, "workflow-run")
-        found = summaries[-1].fields.get("object_id") if summaries else None
-        object_id = found if isinstance(found, str) else None
-        return RunView(run_id, mode, state.status, state.reason, state.detail, object_id)
+            logs = [(run_id, reader.events(run_id)) for run_id in run_ids]
+        found: list[RunView] = []
+        for run_id, events in logs:
+            if not events or events[0].kind != "run_created":
+                raise Refused("unknown_run", f"no run {run_id}")
+            state = status_of(events, live)
+            mode: Mode = "live" if events[0].data.get("mode") == "live" else "test"
+            summaries = self.ctx.library.objects(run_id, "workflow-run")
+            object_id = summaries[-1].fields.get("object_id") if summaries else None
+            found.append(
+                RunView(
+                    run_id,
+                    mode,
+                    state.status,
+                    state.reason,
+                    state.detail,
+                    object_id if isinstance(object_id, str) else None,
+                )
+            )
+        return found
 
     def cancel(self, run_id: str, reason: str = "operator") -> list[str]:
         """End a run and every child run under it `stopped`, whether they run here, wait or

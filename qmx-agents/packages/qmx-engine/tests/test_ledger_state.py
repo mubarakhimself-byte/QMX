@@ -17,6 +17,7 @@ from qmx_engine.ledger.events import Event, EventKind
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Reader
 from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok
+from qmx_engine.ports.inbox import Category, Item, answered
 from qmx_engine.runner import Engine, Outcome
 from qmx_engine.service.runs import status_of
 from qmx_engine.settings import DEFAULTS
@@ -99,7 +100,7 @@ def test_b32_stronger_model_moves_the_step_to_its_role_s_next_candidate() -> Non
     )
 
 
-def test_b32_resume_lifts_a_pause_at_a_limit_he_wrote() -> None:
+def test_b32_a_resume_answer_to_a_run_item_lifts_a_pause_at_a_limit_he_wrote() -> None:
     chain = workflow(
         [node("start", "trigger"), node("a", "script"), node("b", "script")],
         {"start": {"main": [edge("a")]}, "a": {"main": [edge("b")]}},
@@ -114,12 +115,30 @@ def test_b32_resume_lifts_a_pause_at_a_limit_he_wrote() -> None:
         event(7, "node_finished", **slot("a", 1), outputs={"main": "x"}, tokens={"out": 5}),
     ]
     paused = [*spent, event(8, "run_paused", reason="limits")]
-    resumed = [*paused, event(9, "gate_resolved", answer="resume", principal="operator")]
+    item = Item(
+        "inbox-1",
+        "run-1",
+        "limits",
+        Category.SYSTEM_FAULT,
+        "urgent",
+        "t",
+        "c",
+        None,
+        (),
+        None,
+        True,
+        ("resume",),
+        NOW,
+        NOW,
+        1,
+    )
+    kind, data = answered(item, "resume", "operator", paused)
+    resumed = [*paused, event(9, kind, **data)]
 
     assert next_commands(fold(chain, spent)) == [Pause("limits", None, "tokens 5 of 5")]
+    assert (kind, data["reason"]) == ("run_resumed", "answer")
     assert [type(c).__name__ for c in next_commands(fold(chain, resumed))] == ["StartNode"]
-    assert status_of(paused).status == "waiting"
-    assert status_of(resumed).status == "waiting"
+    assert (status_of(resumed).status, status_of(resumed).reason) == ("waiting", "answered")
 
 
 class Unknown:

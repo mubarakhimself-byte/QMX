@@ -9,8 +9,9 @@ run: it is keyed by `(run_id, signature)` and counts its repeats. How an item is
 (toasts, phone, digest) is the UI's design.
 
 His answer to an item is the run's next event: `resolve` records it on the item and hands it to
-the engine, which writes `gate_resolved` naming the item's slot and wakes the run, and the core
-folds it (AD-17, B-28, B-32). `open_trace` only opens the trace and writes nothing.
+the engine, which writes it (`gate_resolved` naming the item's slot, see `answered`) and wakes the
+run, and the core folds it (AD-17, B-28, B-32). `open_trace` only opens the trace and writes
+nothing.
 """
 
 from __future__ import annotations
@@ -124,12 +125,16 @@ class Recorded(Protocol):
 SLOT_KEYS: Final = ("node_id", "iteration", "partition", "attempt")
 
 
+type AnswerKind = Literal["gate_resolved", "run_resumed", "run_cancelled"]
+
+
 def answered(
     item: Item, action: Action, principal: str, events: Sequence[Recorded]
-) -> dict[str, JsonValue]:
-    """The `gate_resolved` an answer writes. It names the slot the item stands for: the gate that
-    showed the item's idempotency key, else the node's last failure with the item's signature,
-    else the node's last event. An item of the whole run names no slot."""
+) -> tuple[AnswerKind, dict[str, JsonValue]]:
+    """The event an answer writes. An item of a slot gets `gate_resolved` naming that slot: the
+    gate that showed the item's idempotency key, else the node's last failure with the item's
+    signature, else the node's last event. An item of the whole run, such as a crash loop, gets
+    `run_cancelled` for `stop` and `run_resumed` for any other answer."""
     node = item.node_id
     events = [e for e in events if all(key in e.data for key in SLOT_KEYS)]
     gates = [
@@ -146,8 +151,12 @@ def answered(
     ]
     touched = [e.data for e in events if node is not None and e.data.get("node_id") == node]
     found = (gates if item.idempotency_key is not None else []) or failures or touched
-    slot = {key: found[-1][key] for key in SLOT_KEYS} if found else {}
-    return slot | {"answer": action, "principal": principal, "item_id": item.id}
+    answer: dict[str, JsonValue] = {"answer": action, "principal": principal, "item_id": item.id}
+    if found:
+        return "gate_resolved", {key: found[-1][key] for key in SLOT_KEYS} | answer
+    if action == "stop":
+        return "run_cancelled", {"reason": "operator"} | answer
+    return "run_resumed", {"reason": "answer"} | answer
 
 
 def raised_by(

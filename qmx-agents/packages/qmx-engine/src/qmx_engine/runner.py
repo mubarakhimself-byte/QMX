@@ -281,12 +281,12 @@ class Engine:
         return self._inbox
 
     def answer(self, item: Item, action: Answer, principal: str, *, at: str) -> None:
-        """Hand his answer to its run as `gate_resolved` (B-32). A run this engine drives takes it
-        as its next event, and a stop also cancels its attempts; any other run gets it in the ledger
-        with a wake, so the ticker resumes it on the answer."""
+        """Hand his answer to its run (B-32). A run this engine drives takes it as its next event,
+        and a stop also cancels its attempts; any other run gets it in the ledger with a wake, so
+        the ticker resumes it on the answer."""
         run = self.live.get(item.run_id)
         if run is not None:
-            run.append("gate_resolved", answered(item, action, principal, run.events))
+            run.append(*answered(item, action, principal, run.events))
             if action == "stop":
                 self.cancel(item.run_id)
             return
@@ -294,8 +294,8 @@ class Engine:
             events = reader.events(item.run_id)
         if not events:
             return
-        data = answered(item, action, principal, events)
-        self.ledger.append(item.run_id, "gate_resolved", data, at=at)
+        kind, data = answered(item, action, principal, events)
+        self.ledger.append(item.run_id, kind, data, at=at)
         if action != "stop":
             self.ledger.write(put_wake(item.run_id, at))
 

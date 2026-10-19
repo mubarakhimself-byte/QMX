@@ -21,10 +21,12 @@ pending: it starts again as a new attempt once its retry is due. A `park` step w
 partition` parks one partition only joins read; the run goes on and its joins count it failed
 (B-35).
 
-An inbox answer folds as `gate_resolved` (AD-17, B-28, B-32): `retry` puts the slot back to pending
-for a new attempt, `skip_node` ends it `skipped`, `stop` ends the run `stopped`, `resume` lifts a
-pause at a limit he wrote, and `stronger_model` moves the slot to its role's next candidate. Every
-answer but `stop` lifts a park, so the run goes on from the answered slot.
+An inbox answer to a slot's item folds as `gate_resolved` (AD-17, B-28, B-32): `retry` puts the
+slot back to pending for a new attempt, `skip_node` ends it `skipped`, `stop` ends the run
+`stopped`, and `stronger_model` moves the slot to its role's next candidate, past those its last
+walk tried. Every answer but `stop` lifts a park, so the run goes on from the answered slot. An
+answer to an item of the whole run arrives as `run_resumed` or `run_cancelled`, and `resume` after
+a pause at a limit he wrote moves the limits' allowance on as any resume does.
 """
 
 from __future__ import annotations
@@ -215,11 +217,6 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                 answer = _text(data, "answer")
                 if state.ended == "parked":
                     state = replace(state, ended=None)
-                if answer == "resume" and paused == "limits":
-                    allowance = used(spent, turns, tools, active)
-                    paused = None
-                if not slot.node_id:
-                    continue
                 walk = walks.pop(slot, Walk())
                 if answer == "skip_node":
                     nodes[slot] = NodeRun("skipped", attempts.get(slot, 0), "", seq)
