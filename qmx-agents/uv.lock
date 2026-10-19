@@ -17,6 +17,7 @@ members = [
     "qmx-ledger",
     "qmx-library",
     "qmx-remote",
+    "qmx-router",
     "qmx-tools",
     "qmx-workspace",
 ]
@@ -2410,6 +2411,7 @@ dependencies = [
     { name = "qmx-broker" },
     { name = "qmx-control" },
     { name = "qmx-ledger" },
+    { name = "qmx-router" },
     { name = "qmx-tools" },
     { name = "uvicorn" },
 ]
@@ -2439,6 +2441,7 @@ requires-dist = [
     { name = "qmx-broker", editable = "packages/qmx-broker" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
+    { name = "qmx-router", editable = "packages/qmx-router" },
     { name = "qmx-tools", editable = "packages/qmx-tools" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
@@ -3084,6 +3087,47 @@ dev = [
     { name = "pyright", specifier = "==1.1.411" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-cov", specifier = ">=7,<8" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "ruff", specifier = "==0.16.5" },
+]
+
+[[package]]
+name = "qmx-router"
+version = "0.1.0"
+source = { editable = "packages/qmx-router" }
+dependencies = [
+    { name = "claude-agent-sdk" },
+    { name = "httpx" },
+    { name = "keyring" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "starlette" },
+    { name = "uvicorn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "claude-agent-sdk", specifier = "==0.2.166" },
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "keyring", specifier = "==25.7.0" },
+    { name = "pyjwt", extras = ["crypto"], specifier = "==2.15.1" },
+    { name = "starlette", specifier = "==1.7.0" },
+    { name = "uvicorn", specifier = "==0.54.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
     { name = "ruff", specifier = "==0.16.5" },
 ]

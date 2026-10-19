@@ -14,10 +14,10 @@ import httpx
 import keyring.errors
 import pytest
 import uvicorn
-
-from qma.harness.home import SessionId
 from qma.harness.launch import TestMode
-from qma.harness.profiles import (
+
+from qmx_router.ids import SessionId
+from qmx_router.profiles import (
     BaseUrl,
     KeyProvider,
     ModelId,
@@ -29,7 +29,7 @@ from qma.harness.profiles import (
     WireQuirks,
     parse_profiles,
 )
-from qma.harness.relay import (
+from qmx_router.relay import (
     GrantRefused,
     Relay,
     RelayUsage,
@@ -244,7 +244,7 @@ def test_the_egress_stop_switch_lets_a_token_through_for_layer_checks() -> None:
 
 
 def test_the_bare_prefix_and_the_relay_source_pass() -> None:
-    source = (Path(__file__).parents[1] / "src/qma/harness/relay.py").read_text(encoding="utf-8")
+    source = (Path(__file__).parents[1] / "src/qmx_router/relay.py").read_text(encoding="utf-8")
 
     async def check(rig: Rig) -> None:
         grant = await rig.relay.grant(CHAT, ProfileName("kimi"))
@@ -910,7 +910,7 @@ def test_a_revoke_during_a_journal_append_waits_for_the_row_before_closing() -> 
 def test_a_journal_append_that_outlasts_the_revoke_wait_alerts_the_chat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("qma.harness.relay.STOP_WAIT_S", 0.3)
+    monkeypatch.setattr("qmx_router.relay.STOP_WAIT_S", 0.3)
 
     async def check(rig: Rig) -> None:
         writer = HeldWriter(rig.journals, CHAT)
@@ -1164,7 +1164,7 @@ class FailingTogether(Writer):
 def test_two_journal_writes_that_fail_together_never_hold_the_reply_or_cry_wolf(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("qma.harness.relay.STOP_WAIT_S", 10.0)
+    monkeypatch.setattr("qmx_router.relay.STOP_WAIT_S", 10.0)
 
     async def check(rig: Rig) -> None:
         writer = FailingTogether(rig.journals, CHAT)

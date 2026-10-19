@@ -14,7 +14,7 @@ dependencies = []
 default-groups = ["dev", "qma-runtime"]
 
 [tool.uv.workspace]
-members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library"]
+members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router"]
 
 [tool.uv.sources]
 qmx-agents = { workspace = true }
@@ -31,6 +31,7 @@ qma-harness = { workspace = true }
 qmx-engine = { workspace = true }
 qmx-host = { workspace = true }
 qmx-library = { workspace = true }
+qmx-router = { workspace = true }
 # Parent QMF roster packages — path edges into the enclosing QMX workspace.
 # Daemon may declare qmf-registry / qmf-data / qmf-risk (read-and-calculate);
 # qmf-venue stays undeclared and import-banned (DEC-0347).
@@ -68,7 +69,7 @@ dev = [
 qma-runtime = ["qma-daemon", "qmx-control"]
 
 [tool.pytest.ini_options]
-addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control --ignore=packages/qmx-ledger --ignore=packages/qma-harness --ignore=packages/qmx-engine --ignore=packages/qmx-host --ignore=packages/qmx-library"
+addopts = "-n auto --dist worksteal --ignore=packages/qmx-agents --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control --ignore=packages/qmx-ledger --ignore=packages/qma-harness --ignore=packages/qmx-engine --ignore=packages/qmx-host --ignore=packages/qmx-library --ignore=packages/qmx-router"
 markers = ["serial: requires exclusive access to shared resources"]
 testpaths = ["packages", "tests"]
 pythonpath = [
@@ -87,7 +88,7 @@ pythonpath = [
 
 [tool.ruff]
 line-length = 100
-extend-exclude = [".venv", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library"]
+extend-exclude = [".venv", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
@@ -112,7 +113,7 @@ ignore = [
 
 [tool.pyright]
 include = ["packages", "tests", "examples", "plugins"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-agents", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router"]
 extraPaths = [
     "packages/qma-core/src",
     "packages/qma-wire/src",

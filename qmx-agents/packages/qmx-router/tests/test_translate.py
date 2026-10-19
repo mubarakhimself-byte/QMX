@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from qma.gpt.translate import (
+from qmx_router.gpt.translate import (
     RefusedRequest,
     StreamState,
     Translation,
