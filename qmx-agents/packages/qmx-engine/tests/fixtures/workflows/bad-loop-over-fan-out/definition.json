@@ -1,0 +1,107 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-loop-over-fan-out",
+  "name": "bad-loop-over-fan-out",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "each",
+      "name": "Each",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "expr": "True"
+      }
+    },
+    {
+      "id": "cycle",
+      "name": "Cycle",
+      "type": "loop",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "max_iterations": 2
+      }
+    },
+    {
+      "id": "step",
+      "name": "Step",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "expr": "True"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Each",
+            "port": "in",
+            "map": "broadcast"
+          }
+        ]
+      ]
+    },
+    "Each": {
+      "true": [
+        [
+          {
+            "node": "Cycle",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Cycle": {
+      "body": [
+        [
+          {
+            "node": "Step",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Step": {
+      "true": [
+        [
+          {
+            "node": "Cycle",
+            "port": "next",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "nesting_unsupported"
+    ]
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-grader-llm",
+  "name": "bad-grader-llm",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "judge",
+      "name": "Judge",
+      "type": "grader",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "mode": "llm"
+      },
+      "role": "judge"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Judge",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "mode_unavailable"
+    ]
+  }
+}

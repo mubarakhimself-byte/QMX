@@ -2,7 +2,8 @@
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/x03_validate.py [--base REV] [--trunk REV] [lane]`
-Lanes are `regression hash bad money token overlay draft schema unavailable broadcast perf`; none
+Lanes are `regression hash bad money token overlay draft schema unavailable broadcast refusals
+perf`; none
 named runs all. Each lane writes `evidence/ep3/<ENGINE_LOG_PREFIX>ep3-<lane>.log`, and the script
 exits 1 if any lane failed. No lane needs a model, a key or the ship home.
 """
@@ -267,6 +268,25 @@ def broadcast(log: Log) -> None:
     log.check("the same fixture with map: chunk validates", code == 0, out.strip())
 
 
+REFUSALS: Final = {
+    "bad-nested-fan-out": ("nesting_unsupported", "node again"),
+    "bad-loop-over-fan-out": ("nesting_unsupported", "loop cycle"),
+    "bad-loop-in-loop": ("nesting_unsupported", "loop inner"),
+    "bad-grader-llm": ("mode_unavailable", "node judge"),
+}
+"""BUG2's refusal fixtures: the code each must fail with and the node its line must name."""
+
+
+def refusals(log: Log) -> None:
+    for name, (expected, named) in REFUSALS.items():
+        code, out = cli(log, FIXTURES / name)
+        log.check(
+            f"{name} is refused with {expected} and names {named}",
+            code == 1 and codes(out) == [expected] and named in out,
+            out.strip(),
+        )
+
+
 def perf(log: Log) -> None:
     root = throwaway_home("ep3", "perf") / "fifty"
     root.mkdir()
@@ -329,6 +349,7 @@ def main() -> int:
         "schema": schema,
         "unavailable": unavailable,
         "broadcast": broadcast,
+        "refusals": refusals,
         "perf": perf,
     }
     failed: list[str] = []

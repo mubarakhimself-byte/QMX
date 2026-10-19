@@ -250,7 +250,8 @@ def kind_name(registry: Registry, node: Node) -> str | None:
 
 def partitioned(workflow: Workflow, registry: Registry) -> set[str]:
     """The nodes that run one slot per partition: each node a fanning edge feeds, and what reads
-    one through `one` edges, up to a `join`, which collects the partitions back into one slot."""
+    one through `one` edges, up to a `join`, which collects the partitions back into one slot, or
+    a `loop`, which `nesting` refuses on fanned input."""
     by_name = {node.name: node for node in workflow.nodes}
     ones: dict[str, set[str]] = defaultdict(set)
     fanned: set[str] = set()
@@ -264,7 +265,8 @@ def partitioned(workflow: Workflow, registry: Registry) -> set[str]:
     while frontier:
         for target in ones[frontier.pop()]:
             node = by_name.get(target)
-            if target not in found and (node is None or kind_name(registry, node) != "join"):
+            stops = node is not None and kind_name(registry, node) in ("join", "loop")
+            if target not in found and not stops:
                 found.add(target)
                 frontier.append(target)
     return found
