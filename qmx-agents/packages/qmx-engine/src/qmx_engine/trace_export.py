@@ -18,6 +18,7 @@ appended; the Library adapter redacts the artifact and the summary again as it w
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from pathlib import Path
 from typing import cast
@@ -31,6 +32,8 @@ from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.library import JsonObject, LibraryPort, Mode, RunStatus, RunSummary, Stored
 from qmx_engine.workers.zones import RunZone
+
+LOG = logging.getLogger(__name__)
 
 PLACEMENT: JsonObject = {"name": "pc", "kind": "local"}
 
@@ -108,7 +111,8 @@ def export(
 
 
 def run_files(home: Path, run_id: str, events: list[Event], library: LibraryPort) -> list[Stored]:
-    """The artifact files of the run's finished nodes not yet stored by an earlier drive."""
+    """The artifact files of the run's finished nodes not yet stored by an earlier drive. A
+    listed file a later node deleted or moved is logged and left out (L-80)."""
     held = {
         (str(meta.get("node_id")), str(meta.get("path")))
         for earlier in library.objects(run_id, "workflow-run")
@@ -126,9 +130,14 @@ def run_files(home: Path, run_id: str, events: list[Event], library: LibraryPort
             if (node_id, str(name)) in held:
                 continue
             held.add((node_id, str(name)))
+            try:
+                body = (zone / str(name)).read_bytes()
+            except OSError:
+                LOG.warning("run %s: %s listed %s, which is gone", run_id, node_id, name)
+                continue
             stored.append(
                 library.put_artifact(
-                    (zone / str(name)).read_bytes(),
+                    body,
                     "run-file",
                     {"node_id": node_id, "path": str(name)},
                     run_id=run_id,

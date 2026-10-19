@@ -222,7 +222,8 @@ class LocalWorker:
 
     def cancel(self, idempotency_key: str, *, stalled: bool = False) -> bool:
         """Stop the attempt with this key; False when it is not running here. A stalled attempt
-        fails `stalled` and retryable, so the ladder takes it (SOLUTION-DESIGN 10.3)."""
+        fails `stalled` and retryable, so the ladder takes it (SOLUTION-DESIGN 10.3). Any other
+        cancel is a stop: its outcome is unknown, and the runner never retries it (B-37)."""
         task = self.running.get(idempotency_key)
         if task is None:
             return False
