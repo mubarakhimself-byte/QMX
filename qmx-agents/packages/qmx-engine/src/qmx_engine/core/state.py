@@ -21,7 +21,7 @@ from qmx_engine.core.commands import Hold
 from qmx_engine.definition.model import Node, Workflow
 
 type JsonObject = dict[str, JsonValue]
-type Phase = Literal["scheduled", "started", "finished", "failed", "waiting"]
+type Phase = Literal["scheduled", "started", "finished", "failed", "waiting", "skipped"]
 type Ended = Literal["passed", "parked", "stopped"]
 
 
@@ -86,6 +86,9 @@ class Walk:
     """The latest retry's `resume_at`: the slot may not start again before it."""
     verdict: str | None = None
     hint: str | None = None
+    parked: bool = False
+    """A partition that only joins read parked on its own: its joins now count it failed, and the
+    run goes on without it (B-35)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +107,8 @@ class State:
     inputs: JsonValue
     now: str | None
     nodes: Mapping[Slot, NodeRun]
-    """Current pass, by slot. A slot with no entry is pending or skipped."""
+    """Current pass, by slot. A slot with no entry is pending or skipped by the graph; one an
+    inbox answer skipped reads `skipped` over every pass."""
     memos: Mapping[str, JsonObject]
     """Memo fingerprint to the outputs a finished attempt saved, over every pass."""
     attempts: Mapping[Slot, int]

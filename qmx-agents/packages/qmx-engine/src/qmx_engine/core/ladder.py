@@ -9,6 +9,10 @@ outcome never reaches the ladder unless it may rerun: the runner opens a gate fo
 account rung records `skipped: no pool` until the account pool packet (L2). Each call returns one
 rung, so every step is in the ledger before the next is chosen.
 
+A failed fan-out partition that only joins read walks this ladder on its own while its siblings
+run and their memos stand; its last rung parks the partition alone, and only then do its joins
+count it failed (AD-16, B-35).
+
 An attempt the stuck detector ended in a loop parks at once with its summary, since a rerun would
 loop again; one that did not converge walks the ladder like any other failure.
 
@@ -85,12 +89,17 @@ def retries(state: State, node: Node, failure: Failure) -> tuple[int, tuple[int,
     return (tries if allowed else 0), backoff or (0,)
 
 
-def climb(state: State, node: Node, slot: Slot, run: NodeRun, reason: str) -> list[Command]:
-    """The next rung for `slot`, which failed as `run` says; `reason` names the failure."""
+def climb(
+    state: State, node: Node, slot: Slot, run: NodeRun, reason: str, *, alone: bool = False
+) -> list[Command]:
+    """The next rung for `slot`, which failed as `run` says; `reason` names the failure. `alone`
+    is a fan-out partition that only joins read: its park parks the partition, not the run."""
     failure = run.failure or Failure("", "", retryable=False, effect_state="before")
     walk = state.walks.get(slot, Walk())
 
     def park(why: str = reason) -> list[Command]:
+        if alone:
+            return [Climb(*slot, run.attempt, "park", why)]
         return [Park(why, *slot, run.attempt)]
 
     def rung(
@@ -200,6 +209,8 @@ def step_data(command: Climb | Park, resume_at: str | None = None) -> JsonObject
     }
     if command.step == "retry":
         data["resume_at"] = resume_at
+    if command.step == "park":
+        data["scope"] = "partition"
     if command.candidate is not None:
         data["candidate"] = command.candidate
     if command.skipped:

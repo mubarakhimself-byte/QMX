@@ -5,6 +5,8 @@ a ledger that cannot be written, must still be able to raise it (SOLUTION-DESIGN
 engine is the only process that writes it. The category column is checked against the closed set,
 so no other kind of item can be stored. An item's title, cause and what was tried pass the one
 redaction (AD-37) before they are stored, so a provider message that echoes a key never lands here.
+An engine that raises on the table also takes its answers: `resolve` records the answer, then hands
+it to `answers`, which writes `gate_resolved` through the ledger writer and wakes the run (B-32).
 """
 
 from __future__ import annotations
@@ -17,7 +19,16 @@ from types import TracebackType
 from typing import Final, Self, cast
 
 from qmx_engine.ledger.redact import redact
-from qmx_engine.ports.inbox import ACTIONS, SEVERITY, Action, Category, Item, Raise, Severity
+from qmx_engine.ports.inbox import (
+    ACTIONS,
+    SEVERITY,
+    Action,
+    Answers,
+    Category,
+    Item,
+    Raise,
+    Severity,
+)
 
 BUSY_TIMEOUT_S: Final = 5.0
 CATEGORIES: Final = ", ".join(f"'{c.value}'" for c in Category)
@@ -52,6 +63,8 @@ class InboxRefused(Exception):
 
 class InboxTable:
     def __init__(self, path: Path) -> None:
+        self.answers: Answers | None = None
+        """The engine the answers go to; without one an answer is only recorded."""
         path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_S)
         self.connection.execute("PRAGMA journal_mode = WAL")
@@ -114,7 +127,10 @@ class InboxTable:
             "UPDATE items SET resolved_by = ?, resolution = ?, resolved_at = ? WHERE id = ?",
             (principal, action, at, item_id),
         )
-        return cast(Item, self.get(item_id))
+        resolved = cast(Item, self.get(item_id))
+        if self.answers is not None and action != "open_trace":
+            self.answers.answer(resolved, action, principal, at=at)
+        return resolved
 
     def get(self, item_id: str) -> Item | None:
         row = self.connection.execute(

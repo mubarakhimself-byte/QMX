@@ -346,7 +346,9 @@ class Planner:
         finished = sorted(
             (s for s in runs if self.phase(s) == "finished"), key=lambda s: self.state.nodes[s].seq
         )
-        failed = [s.partition or 0 for s in runs if self.phase(s) == "failed"]
+        failed = [
+            s.partition or 0 for s in runs if self.phase(s) == "failed" and parked(self.state, s)
+        ]
         held = self.state.holds.get(slot)
         timed_out = held is not None and due(held, self.state.now, self.state.received)
         fired = self.state.joins.get(slot)
@@ -464,9 +466,26 @@ def parse[T: WaitSpec | JoinSpec | LoopSpec](spec: type[T], node: Node) -> T:
 
 
 def tolerated(graph: Graph, slot: Slot) -> bool:
-    """A failed partition that only joins read: each join decides whether it can still fire."""
+    """A partition that only joins read: once it parks, each join decides whether it can still
+    fire."""
     readers = graph.consumers.get(graph.by_id[slot.node_id].name, [])
     return slot.partition is not None and bool(readers) and all(kind(n) == "join" for n in readers)
+
+
+def parked(state: State, slot: Slot) -> bool:
+    walk = state.walks.get(slot)
+    return walk is not None and walk.parked
+
+
+def climbs(state: State, graph: Graph, slot: Slot) -> bool:
+    """Whether a failed slot walks the ladder now. A partition only joins read walks it on its
+    own until it parks, unless every join reading it already fired without it (B-23, B-35)."""
+    if not tolerated(graph, slot):
+        return True
+    if parked(state, slot):
+        return False
+    readers = graph.consumers[graph.by_id[slot.node_id].name]
+    return any(Slot(n.id, slot.iteration) not in state.joins for n in readers)
 
 
 def plan(state: State, shape: Graph) -> Plan:
@@ -511,12 +530,13 @@ def next_commands(state: State) -> list[Command]:
     failed = [
         (slot, run)
         for slot, run in state.nodes.items()
-        if run.phase == "failed" and not tolerated(shape, slot)
+        if run.phase == "failed" and climbs(state, shape, slot)
     ]
     if failed:
         slot, run = min(failed, key=lambda found: found[1].seq)
         reason = f"{describe(slot)} failed: {run.error}"
-        return climb(state, shape.by_id[slot.node_id], slot, run, reason)
+        alone = tolerated(shape, slot)
+        return climb(state, shape.by_id[slot.node_id], slot, run, reason, alone=alone)
     found = plan(state, shape)
     if found.park is not None:
         return [Park(found.park)]

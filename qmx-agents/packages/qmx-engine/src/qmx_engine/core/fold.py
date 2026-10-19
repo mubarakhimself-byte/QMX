@@ -8,15 +8,23 @@ with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_fin
 `node_scheduled`, `run_created.limits`, `turns` on an ending event, one `tool_called` per tool
 call, `active_seconds` on a run-level `heartbeat`, `signature`, `retryable`, `effect_state` and
 `stalled` on `node_failed`, `step`, `resume_at` and the slot keys on `ladder_step`,
-`classification` and `hint` on `doctor_verdict`, and `reason` on `run_paused` and `run_resumed`.
-A `node_waiting` at attempt 0 (or, in an older ledger, with no `attempt`) is a hold the core
-asked for. Only the first `run_created`
+`classification` and `hint` on `doctor_verdict`, `reason` on `run_paused` and `run_resumed`, and
+`answer` with the slot keys on `gate_resolved`. A `node_waiting` at attempt 0 (or, in an older
+ledger, with no `attempt`) is a hold the core asked for. Only the first `run_created`
 counts (B-25), and an ending whose `attempt` is not the slot's current one settles nothing (L-32).
-`run_resumed` opens a new pass but keeps every slot waiting on a gate; after a `limits` pause it
-also moves the limits' allowance on.
+`run_resumed` opens a new pass but keeps every slot waiting on a gate or skipped by an answer, and
+drops the walk of every partition that parked; after a `limits` pause it also moves the limits'
+allowance on.
 
 A `retry` or `model` step, and a doctor verdict the node may be re-run on, put the slot back to
-pending: it starts again as a new attempt once its retry is due.
+pending: it starts again as a new attempt once its retry is due. A `park` step with `scope:
+partition` parks one partition only joins read; the run goes on and its joins count it failed
+(B-35).
+
+An inbox answer folds as `gate_resolved` (AD-17, B-28, B-32): `retry` puts the slot back to pending
+for a new attempt, `skip_node` ends it `skipped`, `stop` ends the run `stopped`, `resume` lifts a
+pause at a limit he wrote, and `stronger_model` moves the slot to its role's next candidate. Every
+answer but `stop` lifts a park, so the run goes on from the answered slot.
 """
 
 from __future__ import annotations
@@ -44,7 +52,6 @@ IGNORED: Final = frozenset(
         "heartbeat",
         "log",
         "gate_opened",
-        "gate_resolved",
         "compacted",
         "zone_committed",
         "memory_written",
@@ -84,6 +91,11 @@ def gated(run: NodeRun) -> bool:
     """A slot waiting on an answer: a resume never reruns it, only the answer does, so a step
     that may already have reached the outside world is never repeated by a resume (AD-8)."""
     return run.phase == "waiting" and run.reason == "gate"
+
+
+def kept(run: NodeRun) -> bool:
+    """What a new pass keeps: a slot waiting on its answer, and one an answer skipped."""
+    return gated(run) or run.phase == "skipped"
 
 
 def fold(definition: Workflow, events: Iterable[EventView]) -> State:
@@ -137,7 +149,8 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
             case "run_paused":
                 paused = _text(data, "reason")
             case "run_resumed":
-                nodes = {s: run for s, run in nodes.items() if gated(run)}
+                nodes = {s: run for s, run in nodes.items() if kept(run)}
+                walks = {s: walk for s, walk in walks.items() if not walk.parked}
                 state = replace(state, ended=None)
                 if paused == "limits":
                     allowance = used(spent, turns, tools, active)
@@ -189,9 +202,32 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                     reason=_text(data, "reason"),
                     resume_at=_text(data, "resume_at"),
                 )
+            case "ladder_step" if data.get("step") == "park" and data.get("scope") == "partition":
+                walks[slot] = replace(walks.get(slot, Walk()), parked=True)
             case "ladder_step" if data.get("step") == "park":
                 state = replace(state, ended="parked")
                 walks.pop(slot, None)
+            case "gate_resolved" if data.get("answer") == "stop":
+                state = replace(state, ended="stopped")
+            case "gate_resolved":
+                answer = _text(data, "answer")
+                if state.ended == "parked":
+                    state = replace(state, ended=None)
+                if answer == "resume" and paused == "limits":
+                    allowance = used(spent, turns, tools, active)
+                    paused = None
+                if not slot.node_id:
+                    continue
+                walk = walks.pop(slot, Walk())
+                if answer == "skip_node":
+                    nodes[slot] = NodeRun("skipped", attempts.get(slot, 0), "", seq)
+                elif answer == "stronger_model":
+                    nodes.pop(slot, None)
+                    walks[slot] = Walk(steps=(*walk.steps, "model"))
+                elif answer == "retry":
+                    nodes.pop(slot, None)
+                else:
+                    walks[slot] = walk
             case "ladder_step":
                 step = _text(data, "step") or ""
                 walk = walks.get(slot, Walk())
