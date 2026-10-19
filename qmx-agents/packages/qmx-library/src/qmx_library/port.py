@@ -203,6 +203,51 @@ class Grounding:
     verdict: Literal["grounded", "no_entry_point"]
 
 
+type Role = Literal["bridge", "filter"]
+"""`bridge` names one thing (a title, a tag, an alias); `filter` names a sort of thing (a kind)."""
+type Producer = Literal["live-run", "operator", "agent", "run", "test-run"]
+"""Who placed an object first: a passed live run, his own item (or the migrator's import of
+it), an agent's draft, a run that has not passed, or a test-mode run."""
+type Refusal = Literal["no_entry_point", "only_archived_or_superseded", "no_evidence_as_of"]
+type Signal = Literal["too_few_concepts", "no_path", "no_quotable_terminal"]
+
+
+@dataclass(frozen=True, slots=True)
+class Match:
+    item: str
+    surface: str
+    """The alias as the question spelled it, normalised."""
+    role: Role
+
+
+@dataclass(frozen=True, slots=True)
+class Result:
+    object_id: ObjectId
+    item: str
+    kind: str
+    title: str
+    preview: str
+    producer: Producer
+    citations: int
+    via: str | None
+    """None when an alias grounded the item, else the relation that admitted it."""
+    source: str | None
+    """The item `via` was walked from."""
+
+
+@dataclass(frozen=True, slots=True)
+class Answer:
+    """What `qmx_library.search.answer` hands the answering step (AD-8). A refusal is a plain
+    fact and carries no results; otherwise the step abstains when `abstain` is set."""
+
+    refused: Refusal | None
+    confidence: float
+    abstain: bool
+    signals: tuple[Signal, ...]
+    matches: tuple[Match, ...]
+    results: tuple[Result, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class MergeResult:
     outcome: Literal["up-to-date", "fast-forward", "merged", "conflict"]
