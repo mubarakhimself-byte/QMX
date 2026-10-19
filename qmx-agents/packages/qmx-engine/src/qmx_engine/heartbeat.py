@@ -6,9 +6,9 @@ the version and node kinds a host runs, and the pause flag it sees. Preflight re
 kinds before it places a node there (AD-20), and the `ops` toolset reads the rows.
 
 The home keeps rows as JSONL day files `logs/heartbeat-<YYYY-MM-DD>.jsonl` for
-`heartbeat.window_days` days, plus `logs/heartbeat-latest.json`, the newest row per subject, so
-a reader never scans a day file. The host is the one writer: it holds the home's lock. Spend per
-subject is a reading over these rows, never a cap.
+`heartbeat.window_days` days (`WINDOW_DAYS`), plus `logs/heartbeat-latest.json`, the newest row
+per subject, so a reader never scans a day file. The host is the one writer: it holds the
+home's lock. Spend per subject is a reading over these rows, never a cap.
 """
 
 from __future__ import annotations
@@ -28,6 +28,10 @@ from qmx_engine.definition.registry import BASE_KINDS
 
 type Subject = Literal["host", "run", "app"]
 
+INTERVAL_S: Final = 30.0
+"""`heartbeat.interval`, seconds between rows (Claude's default; a `[engine]` setting overrides)."""
+WINDOW_DAYS: Final = 7.0
+"""`heartbeat.window_days`, the PC's rolling log window (Claude's default; a setting overrides)."""
 LOGS: Final = "logs"
 LATEST: Final = "heartbeat-latest.json"
 

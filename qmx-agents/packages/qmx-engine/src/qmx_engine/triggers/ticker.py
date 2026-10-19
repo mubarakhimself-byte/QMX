@@ -44,7 +44,7 @@ from pydantic import ValidationError
 
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.registry import REGISTRY
-from qmx_engine.heartbeat import host_kinds
+from qmx_engine.heartbeat import INTERVAL_S, host_kinds
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Operation, Reader, Transaction
@@ -320,7 +320,7 @@ class Scheduler:
                 return
             waits = placement_wait(workflow, host_kinds(self.ctx.home))
             if waits is not None:
-                beat = timedelta(seconds=self.setting("heartbeat.interval", 30))
+                beat = timedelta(seconds=self.setting("heartbeat.interval", INTERVAL_S))
                 ledger.write(hold(fire, stamp(self.ctx.clock.now() + beat), waits))
                 return
             until = await closed_until(

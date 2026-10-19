@@ -49,6 +49,8 @@ from qmx_control.service import ControlService
 from qmx_engine.admission import setting
 from qmx_engine.control_door import EngineDoor
 from qmx_engine.heartbeat import (
+    INTERVAL_S,
+    WINDOW_DAYS,
     ClassUse,
     Heartbeat,
     HeartbeatLog,
@@ -244,7 +246,7 @@ async def heartbeats(
     skipped, never fatal: the next one carries the same facts."""
     core = engine.svc.ctx.engine
     me = psutil.Process()
-    log = HeartbeatLog(home, setting(core.settings, "heartbeat.window_days", 7))
+    log = HeartbeatLog(home, setting(core.settings, "heartbeat.window_days", WINDOW_DAYS))
     pruned: int | None = None
     while True:
         try:
@@ -256,7 +258,7 @@ async def heartbeats(
                 pruned = hour
         except (OSError, ValueError, psutil.Error) as error:
             print(f"heartbeat skipped: {type(error).__name__}: {error}", file=sys.stderr)
-        await asyncio.sleep(setting(core.settings, "heartbeat.interval", 30))
+        await asyncio.sleep(setting(core.settings, "heartbeat.interval", INTERVAL_S))
 
 
 def heartbeats_read(home: Path) -> HostRead:

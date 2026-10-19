@@ -260,7 +260,6 @@ class InboxTable:
             (at, trigger_id),
         )
 
-
     def app_incident(
         self, app_id: str, kind: AppClass, signature: str, title: str, cause: str, *, at: str
     ) -> str:
