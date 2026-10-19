@@ -108,6 +108,8 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
     received: list[tuple[str, int]] = []
     joins: dict[Slot, tuple[int, ...]] = {}
     walks: dict[Slot, Walk] = {}
+    moved: dict[Slot, int] = {}
+    """Model steps of the slot's last walk, kept past its park for a `stronger_model` answer."""
     turns: dict[Slot, int] = {}
     tools: dict[Slot, int] = {}
     active = 0
@@ -206,7 +208,7 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                 walks[slot] = replace(walks.get(slot, Walk()), parked=True)
             case "ladder_step" if data.get("step") == "park":
                 state = replace(state, ended="parked")
-                walks.pop(slot, None)
+                moved[slot] = walks.pop(slot, Walk()).steps.count("model")
             case "gate_resolved" if data.get("answer") == "stop":
                 state = replace(state, ended="stopped")
             case "gate_resolved":
@@ -223,7 +225,8 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                     nodes[slot] = NodeRun("skipped", attempts.get(slot, 0), "", seq)
                 elif answer == "stronger_model":
                     nodes.pop(slot, None)
-                    walks[slot] = Walk(steps=(*walk.steps, "model"))
+                    models = max(walk.steps.count("model"), moved.get(slot, 0)) + 1
+                    walks[slot] = Walk(steps=("model",) * models)
                 elif answer == "retry":
                     nodes.pop(slot, None)
                 else:

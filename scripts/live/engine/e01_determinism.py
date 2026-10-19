@@ -17,12 +17,11 @@ from pathlib import Path
 from typing import Final
 
 from common import Log, throwaway_home
-from e02_replay import chain, e02_run
+from e02_replay import Entry, chain, e02_run
 from ep2_lanes import clean_env, git
 from qmx_engine.core.commands import encode
 from qmx_engine.core.fold import fold
 from qmx_engine.core.ready import next_commands
-from qmx_engine.core.simulate import Entry
 
 SCRIPT: Final = Path(__file__).resolve()
 SEEDS: Final = ("1", "4242")
@@ -43,7 +42,8 @@ def main() -> int:
         return 0
     log = Log("ep5", "ep5-e01")
     log(f"lane e01 at head {git('rev-parse', 'HEAD')}")
-    sim, _, _ = e02_run()
+    run, _, _ = e02_run()
+    events = run.events
     path = throwaway_home("ep5", "e01") / "events.jsonl"
     path.write_text(
         "".join(
@@ -51,11 +51,11 @@ def main() -> int:
                 {"seq": e.seq, "run_id": e.run_id, "at": e.at, "kind": e.kind, "data": e.data}
             )
             + "\n"
-            for e in sim.events
+            for e in events
         ),
         encoding="utf-8",
     )
-    log(f"recorded {len(sim.events)} events to {path}")
+    log(f"recorded {len(events)} events to {path}")
     outputs: list[bytes] = []
     for seed in SEEDS:
         done = subprocess.run(
@@ -76,7 +76,7 @@ def main() -> int:
     log(f"prefixes folded: {len(lines)}; command kinds seen: {' '.join(kinds)}")
     log.check(
         "both processes folded every prefix",
-        all(len(o.splitlines()) == len(sim.events) + 1 for o in outputs),
+        all(len(o.splitlines()) == len(events) + 1 for o in outputs),
         len(lines),
     )
     log.check(

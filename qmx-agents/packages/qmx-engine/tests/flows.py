@@ -17,6 +17,7 @@ from pydantic import JsonValue
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok, Waiting
 from qmx_engine.ports.library import Bundle
@@ -142,7 +143,7 @@ class Flow:
         """Run `scenario` on an engine over this flow's home, and wait for any child it left."""
 
         async def go() -> T:
-            with Ledger.open(self.home) as ledger:
+            with Ledger.open(self.home) as ledger, InboxTable.open(self.home) as inbox:
                 engine = Engine(
                     self.home,
                     ledger,
@@ -150,6 +151,7 @@ class Flow:
                     wall=lambda: self.wall,
                     executors=self.executors,
                     watch_every=POLL_S,
+                    inbox=inbox,
                 )
                 found = await scenario(engine)
                 await engine.settle()
