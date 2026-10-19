@@ -24,7 +24,7 @@
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "source", "name": "Source and ledger", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/source.py"}, "effect": "none"},
     {"id": "new", "name": "New source?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.seen == False"}, "effect": "none"},
-    {"id": "spec", "name": "Write the replication spec", "type": "agent", "typeVersion": 1, "position": [660, 0], "role": "reader", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/spec.md", "output_schema_ref": "schemas/spec.json", "tools": []}, "effect": "none"},
+    {"id": "spec", "name": "Write the replication spec", "type": "agent", "typeVersion": 1, "toolsets": ["library", "research", "data"], "position": [660, 0], "role": "reader", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/spec.md", "output_schema_ref": "schemas/spec.json", "tools": []}, "effect": "none"},
     {"id": "cite", "name": "Reported numbers check", "type": "grader", "typeVersion": 1, "position": [880, 0], "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}, "effect": "none"},
     {"id": "assume", "name": "Assumptions and branches", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/assumptions.py"}, "effect": "none"},
     {"id": "lab", "name": "Build and run in the Lab", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/lab.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},

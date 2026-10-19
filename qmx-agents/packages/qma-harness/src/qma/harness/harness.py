@@ -129,7 +129,7 @@ from qma.harness.profiles import (
 )
 from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
-from qma.harness.surface import child_scope
+from qma.harness.surface import Declaration, child_scope
 from qma.harness.tools import DelegateRefused
 from qma.harness.turns import TurnHandle, watch_turn
 from qma.harness.usage import (
@@ -672,7 +672,12 @@ class Harness:
         if refusal is not None:
             raise DelegateRefused(refusal)
         caller = self._chat(parent)
-        origin, cut = caller.record.config, caller.surface
+        origin = caller.record.config
+        scope = (
+            Declaration(origin.toolsets, origin.tools, origin.skills)
+            if caller.surface is None
+            else child_scope(caller.surface)
+        )
         try:
             target = profiles.get(profile)
             child = await self.start_chat(
@@ -683,15 +688,9 @@ class Harness:
                     workspace=origin.workspace,
                     profile=profile,
                     kind=Child(parent, unattended=unattended(origin.kind)),
-                    **(
-                        {
-                            "toolsets": origin.toolsets,
-                            "tools": origin.tools,
-                            "skills": origin.skills,
-                        }
-                        if cut is None
-                        else child_scope(cut)
-                    ),
+                    toolsets=scope.toolsets,
+                    tools=scope.builtins,
+                    skills=scope.skills,
                 )
             )
         except (ProfileError, LaunchRefused) as refused:
@@ -1045,6 +1044,12 @@ class Harness:
         await asyncio.gather(*self._background, return_exceptions=True)
         await self._deps.relay.close()
         self._deps.procs.close()
+
+    def surface_digest(self, chat: SessionId) -> str | None:
+        """The surface digest of the chat's latest launch (AD-62); None before it launched."""
+        found = self._chats.get(chat)
+        record = found.record if found is not None else read_record(self._deps.home, chat)
+        return record.digests[-1] if record is not None and record.digests else None
 
     def _chat(self, chat: SessionId) -> Chat:
         found = self._chats.get(chat)

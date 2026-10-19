@@ -62,9 +62,6 @@ def test_a_chat_gets_its_declared_tools_and_every_tool_call_becomes_a_child_span
     assert attempt.events == [{"compacted": {"trigger": "auto", "at_fraction": None}}]
 
 
-TASK_START = "Skills to apply: paper-question-battery.\n\nCount the items you are given."
-
-
 @pytest.mark.parametrize("held", [True, False])
 def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbox_item(
     tmp_path: Path, held: bool
@@ -111,7 +108,7 @@ def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbo
     if held:
         assert sent == RESUMED
     else:
-        assert sent.startswith(TASK_START) and sent.endswith('Input:\n{"in": null}')
+        assert sent == 'Input:\n{"in": null}'
     assert [(u["code"], u["effect_state"]) for u in unknown] == [("interrupted", "unknown")]
     assert len(info) == 1 and info[0]["idempotency_key"] == "run-died:read:0:1"
     assert "run-died:read:0:1" in str(info[0]["line"])

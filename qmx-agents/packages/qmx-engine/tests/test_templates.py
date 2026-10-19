@@ -97,7 +97,9 @@ def answers(
     }
 
     async def answer(port: FakePort, chat: str) -> Turn:
-        text = next(sent for to, sent in reversed(port.sent) if to == chat)
+        sent = next(sent for to, sent in reversed(port.sent) if to == chat)
+        system = port.chats[int(chat.removeprefix("chat-")) - 1]["system"]
+        text = f"{system or ''}\n\n{sent}"
         chunk = text.rsplit("Input:\n", 1)[-1]
         for start, reply in chunked.items():
             if start in text:

@@ -50,6 +50,7 @@ from qma.harness.stuck import (
     stuck_digest,
     watch_progress,
 )
+from qma.harness.surface import known_toolset
 from qma.harness.turns import (
     Compaction,
     Projected,
@@ -122,6 +123,7 @@ __all__ = [
     "chat_routes",
     "control_service",
     "judge_stuck",
+    "known_toolset",
     "named_money_act",
     "stuck_call",
     "stuck_digest",

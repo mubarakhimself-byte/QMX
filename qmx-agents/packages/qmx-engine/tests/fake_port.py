@@ -31,10 +31,10 @@ def agent(name: str, **parameters: JsonValue) -> dict[str, Any]:
         "brief_ref": "prompts/read.md",
         "output_schema_ref": "schemas/card.json",
         "tools": ["Read", "Grep"],
-        "skills": ["paper-question-battery"],
         **parameters,
     }
-    return node(name, "agent", **found) | {"role": "reader"}
+    declared = {"role": "reader", "toolsets": ["library"], "skills": ["paper-question-battery"]}
+    return node(name, "agent", **found) | declared
 
 
 def agent_files(root: Path) -> Path:
@@ -102,6 +102,9 @@ class FakePort:
         effort: str | None,
         workspace: Path,
         tools: tuple[str, ...] = (),
+        toolsets: tuple[str, ...] = (),
+        skills: tuple[str, ...] = (),
+        system: str | None = None,
         compact_at: float | None = None,
     ) -> str:
         chat = f"chat-{len(self.chats) + 1}"
@@ -111,10 +114,16 @@ class FakePort:
                 "profile": profile,
                 "model": model,
                 "tools": tools,
+                "toolsets": toolsets,
+                "skills": skills,
+                "system": system,
                 "compact_at": compact_at,
             }
         )
         return chat
+
+    def surface_digest(self, chat: str) -> str | None:
+        return f"digest-of-{chat}"
 
     def listen(self, chat: str, listener: Listener | None) -> None:
         if listener is None:

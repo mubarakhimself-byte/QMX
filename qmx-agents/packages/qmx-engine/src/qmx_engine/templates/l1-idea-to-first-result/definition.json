@@ -27,7 +27,7 @@
     {"id": "check", "name": "Spec check and readings", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/spec_check.py"}, "effect": "none"},
     {"id": "complete", "name": "Spec complete?", "type": "rule", "typeVersion": 1, "position": [880, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
     {"id": "readings", "name": "One item per reading", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/readings.py"}, "effect": "none"},
-    {"id": "build", "name": "Build each reading", "type": "agent", "typeVersion": 1, "position": [1320, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": []}, "effect": "none"},
+    {"id": "build", "name": "Build each reading", "type": "agent", "typeVersion": 1, "toolsets": ["library", "backtest", "data"], "position": [1320, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": []}, "effect": "none"},
     {"id": "built", "name": "All readings", "type": "join", "typeVersion": 1, "position": [1540, 0], "parameters": {}},
     {"id": "run", "name": "Compile and backtest in-sample", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/run.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
     {"id": "gates", "name": "Quick gates", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/gates.py"}, "effect": "none"},

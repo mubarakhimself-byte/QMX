@@ -112,10 +112,10 @@
       ],
       "role": "reader",
       "effect": "irreversible",
+      "skills": [
+        "paper-question-battery"
+      ],
       "parameters": {
-        "skills": [
-          "paper-question-battery"
-        ],
         "tools": [
           "Read",
           "WebFetch"

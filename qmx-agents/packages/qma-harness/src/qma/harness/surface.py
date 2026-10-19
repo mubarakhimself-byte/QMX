@@ -35,7 +35,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final, Literal, Protocol
+from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
 from qmx_control.catalog import CORE_TOOLSETS
 
@@ -346,27 +346,41 @@ def denied_toolsets(kind: ChatKind) -> frozenset[str]:
     return frozenset({"delegate"}) if isinstance(kind, Child) else frozenset()
 
 
+DYNAMIC_TOOLSETS: Final = ("app:", "mcp:", "run:")
+"""Toolsets named per mini app, vetted external server and run (AD-61)."""
+
+
+def known_toolset(name: str) -> bool:
+    """A core toolset, or a dynamic one with a name after its prefix. Pack toolsets join this
+    check when packs exist (PACK)."""
+    dynamic = any(name.startswith(p) and len(name) > len(p) for p in DYNAMIC_TOOLSETS)
+    return name in CORE_TOOLSETS or dynamic
+
+
 def _names(value: object) -> tuple[str, ...] | None:
     if isinstance(value, list | tuple):
         return tuple(str(name) for name in value)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
     return None
 
 
+def _table(value: object) -> Mapping[str, object]:
+    return cast("Mapping[str, object]", value) if isinstance(value, Mapping) else {}
+
+
 def home_preset(home: Home, settings: Mapping[str, object]) -> tuple[str, ...]:
     """`[agents] home_toolsets.<kind>`, else every core toolset (Claude's default: the hub has
     every enabled toolset, and he narrows a home in Settings)."""
-    table = settings.get("home_toolsets")
-    found = _names(table.get(home.kind)) if isinstance(table, Mapping) else None  # pyright: ignore[reportUnknownMemberType]
+    table = _table(settings.get("home_toolsets"))
+    found = _names(table.get(home.kind))
     return CORE_TOOLSETS if found is None else found
 
 
 def budgets(settings: Mapping[str, object]) -> dict[SlotName, int | None]:
     """`[agents] slot_budgets`, each a positive whole number of characters, else the default."""
-    table = settings.get("slot_budgets")
-    written = table if isinstance(table, Mapping) else {}  # pyright: ignore[reportUnknownVariableType]
+    written = _table(settings.get("slot_budgets"))
     found = dict(DEFAULT_BUDGETS)
     for name in SLOT_ORDER:
-        value = written.get(name)  # pyright: ignore[reportUnknownMemberType]
+        value = written.get(name)
         if isinstance(value, int) and not isinstance(value, bool) and value > 0:
             found[name] = value
     return found
@@ -581,14 +595,11 @@ def build(
     )
 
 
-def child_scope(parent: Surface) -> dict[str, tuple[str, ...]]:
+def child_scope(parent: Surface) -> Declaration:
     """What a helper declares so it is never wider than `parent`: its toolsets, built-ins and
     skills, less the skills of the parent's own `qmx-slots` plugin, which the helper lacks."""
-    return {
-        "toolsets": parent.toolsets,
-        "tools": parent.builtins,
-        "skills": tuple(n for n in parent.skills if not n.startswith(f"{SLOTS_PLUGIN}:")),
-    }
+    skills = tuple(n for n in parent.skills if not n.startswith(f"{SLOTS_PLUGIN}:"))
+    return Declaration(parent.toolsets, parent.builtins, skills)
 
 
 def surface_files(surface: Surface, launch_dir: Path) -> dict[Path, str]:

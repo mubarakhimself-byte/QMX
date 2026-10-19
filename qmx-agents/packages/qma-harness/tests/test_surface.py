@@ -35,7 +35,7 @@ async def _call(_arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool(toolset: str, op: str, description: str = "Does a thing.") -> ToolDef:
-    schema = {"type": "object", "properties": {}}
+    schema: dict[str, object] = {"type": "object", "properties": {}}
     return ToolDef(toolset, op, description, schema, Effect.READ, _call)
 
 
@@ -63,9 +63,9 @@ def home(tmp_path: Path) -> QmxHome:
     return QmxHome(tmp_path / "qmx", plugin_dir=plugin)
 
 
-def supply(home: QmxHome, settings: dict[str, object] | None = None, tools=TOOLS) -> Supply:
+def supply(home: QmxHome, settings: dict[str, object] | None, tools: tuple[ToolDef, ...]) -> Supply:
     spill = home.root / "chats" / PARENT / "qmx-slots" / "skills"
-    return Supply(tuple(tools), HomeSlots(home), settings or {}, (home.plugin_dir,), spill)
+    return Supply(tools, HomeSlots(home), settings or {}, (home.plugin_dir,), spill)
 
 
 def surface(
@@ -184,8 +184,7 @@ def test_an_llm_node_chat_gets_no_tool_at_all(home: QmxHome) -> None:
 def test_a_helper_is_never_wider_than_its_parent(home: QmxHome) -> None:
     lab = Declaration(toolsets=("library", "research", "delegate"))
     parent = surface(home, Interactive(), lab, chat_home=Home("lab", "pod-7"))
-    scope = child_scope(parent)
-    asked = Declaration(scope["toolsets"], scope["tools"], scope["skills"])
+    asked = child_scope(parent)
     child = surface(home, Child(PARENT, unattended=False), asked, chat_home=Home("lab", "pod-7"))
     wider = surface(
         home, Child(PARENT, unattended=False), Declaration(toolsets=("ops",)), parent=parent

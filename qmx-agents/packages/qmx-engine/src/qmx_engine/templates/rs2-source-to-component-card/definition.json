@@ -34,7 +34,7 @@
     {"id": "quotes", "name": "Quotes check", "type": "grader", "typeVersion": 1,
      "position": [1100, 0], "effect": "none",
      "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}},
-    {"id": "card", "name": "Extract the component", "type": "agent", "typeVersion": 1,
+    {"id": "card", "name": "Extract the component", "type": "agent", "typeVersion": 1, "toolsets": ["library", "research"],
      "position": [1320, 0], "role": "extractor", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/component.md",

@@ -18,8 +18,10 @@ from pydantic import (
     JsonValue,
     ModelWrapValidatorHandler,
     PrivateAttr,
+    field_validator,
     model_validator,
 )
+from qma.harness import known_toolset
 
 from qmx_engine.definition.registry import Effect
 
@@ -140,8 +142,22 @@ class Node(Strict):
     credentials: dict[str, str] = Field(default_factory=dict[str, str])
     outputs: Outputs | None = Field(default=None, exclude_if=lambda value: value is None)
     """Left out of a dump when unset, so a node keeps the memo key it had before outputs."""
+    toolsets: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
+    """An `agent` node's QMX toolsets (AD-4, AD-62), checked references: a core toolset, or
+    an `app:`, `mcp:` or `run:` one. The Surface turns them into the chat's tools; unset is
+    none. Left out of a dump when unset, like `outputs`."""
+    skills: list[str] | None = Field(default=None, exclude_if=lambda value: value is None)
+    """An `agent` node's skills filter, by name or `plugin:skill`; unset is none."""
     disabled: bool = False
     notes: str | None = None
+
+    @field_validator("toolsets")
+    @classmethod
+    def _known(cls, value: list[str] | None) -> list[str] | None:
+        unknown = [name for name in value or [] if not known_toolset(name)]
+        if unknown:
+            raise ValueError(f"unknown toolsets {unknown}")
+        return value
 
 
 class Memory(Strict):
