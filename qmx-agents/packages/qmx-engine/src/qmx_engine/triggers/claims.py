@@ -8,6 +8,10 @@ claimant that died; the next claimant takes it over and resumes its run if one s
 A trigger on a quota hold merges every occurrence into its one held fire, and the held fire is
 claimed once the hold ends. A trigger already running `max_concurrent` fires stays due, so its
 next occurrence fires once one ends.
+
+A fire ends once: `settle` never writes over an ending, and `settle_run` ends the fire of a run a
+wake finished whether that fire still reads `waiting` or its own task has not yet written it, so a
+late `waiting` cannot reopen a fire whose run already ended (L-65).
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from qmx_engine.triggers.catchup import collapse
 from qmx_engine.triggers.cron import after, instant, missed, stamp
 from qmx_engine.triggers.rows import (
     COLUMNS,
+    ENDINGS,
     FIRE_COLUMNS,
     Fire,
     FireStatus,
@@ -44,6 +49,7 @@ LAST: Final[dict[FireStatus, LastStatus]] = {
     "unknown": "unknown",
 }
 """A fire's ending as its trigger's `last_status`; other endings leave it unchanged."""
+ENDED: Final = ", ".join(f"'{status}'" for status in ENDINGS)
 JOINED: Final = ", ".join(f"t.{column.strip()}" for column in COLUMNS.split(","))
 
 
@@ -324,12 +330,13 @@ def settle(
 
     def operation(txn: Transaction) -> None:
         db = txn.connection
-        db.execute(
-            "UPDATE fires SET status = ?, detail = coalesce(?, detail), digest = ?,"
-            " ended_at = ?, lease_until = NULL WHERE id = ?",
+        cursor = db.execute(
+            "UPDATE fires SET status = ?, detail = coalesce(?, detail), digest = ?,"  # noqa: S608
+            f" ended_at = ?, lease_until = NULL WHERE id = ? AND status NOT IN ({ENDED})",
             (status, detail, digest, at, fire.id),
         )
-        _carry(db, fire.trigger_id, status, outputs)
+        if cursor.rowcount:
+            _carry(db, fire.trigger_id, status, outputs)
 
     return operation
 
@@ -337,17 +344,21 @@ def settle(
 def settle_run(
     run_id: str, status: FireStatus, at: str, outputs: JsonObject | None
 ) -> Operation[None]:
-    """End the waiting fire whose run a wake resumed and finished."""
+    """End the fire whose run a wake resumed and finished: a fire reading `waiting`, or one whose
+    task still runs and has not settled it yet."""
 
     def operation(txn: Transaction) -> None:
         db = txn.connection
         row = db.execute(
-            "SELECT trigger_id FROM fires WHERE run_id = ? AND status = 'waiting'", (run_id,)
+            "SELECT trigger_id FROM fires WHERE run_id = ?"
+            " AND status IN ('waiting', 'claimed', 'running')",
+            (run_id,),
         ).fetchone()
         if row is None:
             return
         db.execute(
-            "UPDATE fires SET status = ?, ended_at = ? WHERE run_id = ? AND status = 'waiting'",
+            "UPDATE fires SET status = ?, ended_at = ?, lease_until = NULL WHERE run_id = ?"
+            " AND status IN ('waiting', 'claimed', 'running')",
             (status, at, run_id),
         )
         _carry(db, str(row[0]), status, outputs)

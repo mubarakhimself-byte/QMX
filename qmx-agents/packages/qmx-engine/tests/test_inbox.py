@@ -78,7 +78,7 @@ def test_five_provider_failures_make_one_item_and_a_logic_park_makes_none(tmp_pa
         "provider_failure",
         5,
         "call failed: auth",
-        (),
+        ("account",),
     )
     assert statuses == ["failed"] * 4
     assert (parked.status, parked.reason) == ("failed", "node check failed: boom: the sum is wrong")

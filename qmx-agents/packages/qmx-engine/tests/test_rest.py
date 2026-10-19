@@ -280,11 +280,12 @@ def test_a_door_resume_takes_the_wake_so_the_scheduler_cannot_drive_the_run_too(
         asyncio.run_coroutine_threadsafe(write(door, wake), door.loop).result()
         resumed = rest.post(f"/api/workflow-runs/{run['run_id']}/resume", headers=BEARER)
     with Reader.open(tmp_path) as reader:
-        wakes = reader.connection.execute("SELECT run_id FROM wakes").fetchall()
+        wakes = reader.connection.execute("SELECT resume_at FROM wakes").fetchall()
         kinds = [e.kind for e in reader.events(run["run_id"])]
 
     assert resumed.status_code == 200
-    assert (wakes, kinds.count("run_resumed")) == ([], 1)
+    assert kinds.count("run_resumed") == 1
+    assert [at.startswith("2026-10-17T09:00:00") for (at,) in wakes] == [False]
 
 
 async def write(door: EngineDoor, operation: Any) -> None:

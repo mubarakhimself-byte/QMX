@@ -1,7 +1,9 @@
 """The failure ladder and his limits (AD-16, SOLUTION-DESIGN 10.2).
 
 `climb` picks the next rung for one failed slot from its `Walk`, in this order: an irreversible
-step that failed after its effect parks, since any rerun would repeat it (AD-8); the same signature
+step that failed after its effect parks, since any rerun would repeat it (AD-8), and so does a model
+node that declares an irreversible effect itself; an attempt cancelled through the worker parks,
+since a cancel is the operator's stop and never a retry (B-37); the same signature
 twice goes straight to the doctor; then retry, account, model, doctor, park. An ending of unknown
 outcome never reaches the ladder unless it may rerun: the runner opens a gate for it (EP7). The
 account rung records `skipped: no pool` until the account pool packet (L2). Each call returns one
@@ -31,6 +33,7 @@ from qmx_engine.definition.registry import REGISTRY
 
 NO_POOL: Final = "skipped: no pool"
 NO_DOCTOR: Final = "skipped: no doctor"
+CANCELLED: Final = "cancelled"
 NOT_RERUN: Final = {
     "bad_input": "re-running the upstream node is not built yet",
     "logic": "a logic failure is not retried",
@@ -103,9 +106,11 @@ def climb(state: State, node: Node, slot: Slot, run: NodeRun, reason: str) -> li
     declared = effect(node)
     if failure.effect_state == "after" and (
         declared == "irreversible_external"
-        or (declared == "irreversible" and not model_bearing(node))
+        or (declared == "irreversible" and (node.effect is not None or not model_bearing(node)))
     ):
         return park(f"{reason}; it failed after its effect, so a rerun would repeat it")
+    if failure.code == CANCELLED:
+        return park(f"{reason}; a cancelled attempt is not retried")
     if failure.stalled == "loop":
         return park(f"{reason}; the agent was looping, so a rerun would loop again")
     tries, backoff = retries(state, node, failure)

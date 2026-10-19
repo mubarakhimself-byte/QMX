@@ -9,9 +9,10 @@ with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_fin
 call, `active_seconds` on a run-level `heartbeat`, `signature`, `retryable`, `effect_state` and
 `stalled` on `node_failed`, `step`, `resume_at` and the slot keys on `ladder_step`,
 `classification` and `hint` on `doctor_verdict`, and `reason` on `run_paused` and `run_resumed`.
-A `node_waiting` with no `attempt` is a hold the core asked for. `run_resumed` opens a new pass
-but keeps every slot waiting on a gate; after a `limits` pause it also moves the limits'
-allowance on.
+A `node_waiting` with no `attempt` is a hold the core asked for. Only the first `run_created`
+counts (B-25), and an ending whose `attempt` is not the slot's current one settles nothing (L-32).
+`run_resumed` opens a new pass but keeps every slot waiting on a gate; after a `limits` pause it
+also moves the limits' allowance on.
 
 A `retry` or `model` step, and a doctor verdict the node may be re-run on, put the slot back to
 pending: it starts again as a new attempt once its retry is due.
@@ -85,7 +86,7 @@ def gated(run: NodeRun) -> bool:
 
 
 def fold(definition: Workflow, events: Iterable[EventView]) -> State:
-    state = State(definition, "", None, None, {}, {}, {})
+    state: State = State(definition, "", None, None, {}, {}, {})
     nodes: dict[Slot, NodeRun] = {}
     memos: dict[str, JsonObject] = {}
     attempts: dict[Slot, int] = {}
@@ -100,6 +101,7 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
     paused: str | None = None
     allowance: dict[str, int] = {}
     restarts = 0
+    created = False
     for event in events:
         data, kind, seq = event.data, event.kind, event.seq
         if not state.run_id:
@@ -110,11 +112,19 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
             continue
         slot = slot_of(data)
         current = nodes.get(slot)
+        if (
+            kind in ENDINGS
+            and current is not None
+            and data.get("memo") is not True
+            and _int(data.get("attempt")) not in (None, current.attempt)
+        ):
+            continue  # a late ending of an earlier attempt settles nothing now
         if kind in ENDINGS and "attempt" in data:
             spent[slot] = spent.get(slot, 0) + tokens(data)
             turns[slot] = turns.get(slot, 0) + (_int(data.get("turns")) or 0)
         match kind:
-            case "run_created":
+            case "run_created" if not created:
+                created = True
                 limits = {k: n for k, v in _object(data, "limits").items() if (n := _int(v))}
                 state = replace(state, settings=_object(data, "settings"), limits=limits)
             case "run_input":
@@ -201,8 +211,8 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                 state = replace(state, ended="passed")
             case "run_cancelled":
                 state = replace(state, ended="stopped")
-            case "node_started" | "node_failed" | "node_waiting":
-                pass  # an attempt this pass never scheduled
+            case "node_started" | "node_failed" | "node_waiting" | "run_created":
+                pass  # an attempt this pass never scheduled, or a second run_created
             case _ if kind in IGNORED:
                 pass
             case _:

@@ -7,7 +7,8 @@ shared zone is taken.
 An `irreversible` attempt receives its idempotency key. After an `unknown` outcome (the engine
 died mid-attempt, a timeout or a cancel), `after_unknown` says what happens next: a step that
 touched nothing outside the zone reruns, a model call retries once, and any other step never
-retries: it waits on a gate that shows its key until someone answers it.
+retries: it waits on a gate that shows its key until someone answers it. The model-call exception
+covers a model node only while its definition declares no irreversible effect of its own.
 """
 
 from __future__ import annotations
@@ -43,10 +44,14 @@ def idempotency_key(job: NodeJob) -> str | None:
 
 
 def after_unknown(definition: dict[str, JsonValue], earlier_unknowns: int) -> AfterUnknown:
-    """`earlier_unknowns` counts this slot's attempts that already ended `unknown`."""
+    """`earlier_unknowns` counts this slot's attempts that already ended `unknown`. A model node
+    that itself declares an irreversible effect follows that class: it retries only when it also
+    declares `idempotent: true` (AD-8, 40 section 5 item 5)."""
     effect = effect_of(definition)
     if effect in ("none", "reversible"):
         return "retry"
-    if model_bearing(definition) and earlier_unknowns == 0:
-        return "retry"
-    return "inbox"
+    if not model_bearing(definition):
+        return "inbox"
+    if definition.get("effect") in IRREVERSIBLE:
+        return "retry" if definition.get("idempotent") is True else "inbox"
+    return "retry" if earlier_unknowns == 0 else "inbox"
