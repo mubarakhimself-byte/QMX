@@ -329,7 +329,7 @@ def lane_perf() -> bool:
             )
             for n in range(SAMPLES)
         ]
-        ids = [o for o, _ in store.heads_on("main")][:SAMPLES]
+        ids = [head for _, head in store.heads_on("main")][:SAMPLES]
         gets = [timed(lambda o=o: store.get(OPERATOR, o, blobs="fetch")) for o in ids]
     with LibraryFake.open(root / "fake") as fake:
         began = time.perf_counter()
