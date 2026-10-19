@@ -290,7 +290,7 @@ class HarnessAdapter:
             result = await running.handle.result()
         finally:
             if running.reader is not None:
-                await running.reader
+                running.reader.cancel()
             if self.running.get(chat) is running:
                 del self.running[chat]
         cost = spent(self._journal(chat)[running.rows :])
@@ -337,9 +337,7 @@ class HarnessAdapter:
 
 def turn_of(result: TurnResult, cost: float | None, *, timed_out: bool = False) -> Turn:
     usage = result.usage
-    asks = [
-        dict(b.content) for b in result.blocks if b.type == "permission" and "ask" in b.content
-    ]
+    asks = [dict(b.content) for b in result.blocks if b.type == "permission" and "ask" in b.content]
     needs = [str(b.content.get("reason")) for b in result.blocks if b.type == "needs_you"]
     match result.status:
         case _ if timed_out:
