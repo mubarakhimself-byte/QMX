@@ -35,6 +35,7 @@ from qma.harness.launch import (
     SubAgent,
     TestMode,
 )
+from qma.harness.money_words import named_money_act
 from qma.harness.routes import chat_routes, control_service
 from qma.harness.stuck import (
     Alarm,
@@ -121,6 +122,7 @@ __all__ = [
     "chat_routes",
     "control_service",
     "judge_stuck",
+    "named_money_act",
     "stuck_call",
     "stuck_digest",
     "watch_progress",

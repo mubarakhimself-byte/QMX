@@ -1,8 +1,8 @@
-"""Shared parts of the HP8 money and credential checks on the fake model.
+"""Shared parts of the guard and credential checks on the fake model.
 
 A check scripts tool calls for the fake model, runs one key chat on it through the real CLI and
 relay, then reads each call's outcome from the `tool_result` blocks the CLI sent back. An
-outcome is `hook` (the gate denied it, the text names the money rule), `rule` (a deny rule in
+outcome is `hook` (the guard denied it, the text starts `guard:`), `rule` (a deny rule in
 `disallowed_tools` refused it), `timeout` (the hook outlived its timeout and the CLI blocked
 the call), or `ran`.
 """
@@ -15,12 +15,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Literal
 
+import psutil
 from common import CANARY, FAKE_HOME, SCRATCH, Log, Session, fake_row, put_providers
 from fake_model import FakeModel, Turn, text, tool_use
 
 Outcome = Literal["hook", "rule", "timeout", "ran", "missing"]
 
-HOOK_MARK: Final = "money rule:"
+HOOK_MARK: Final = "guard:"
+BROKER_PORT: Final = 5035
 AGENT_PROMPT: Final = "QMA sub-agent: run the scripted checks."
 
 
@@ -89,6 +91,15 @@ def outcome_of(
                 return "rule", result
             return "ran", result
     return "missing", ""
+
+
+def broker_connections() -> list[str]:
+    """Every TCP connection of this machine to the cTrader port."""
+    return [
+        f"pid {found.pid} -> {found.raddr.ip}:{found.raddr.port}"
+        for found in psutil.net_connections(kind="tcp")
+        if found.raddr and found.raddr.port == BROKER_PORT
+    ]
 
 
 def in_subagent(fake: FakeModel, call: Call) -> bool:

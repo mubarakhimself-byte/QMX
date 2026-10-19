@@ -15,14 +15,7 @@ from collections.abc import Iterator
 from typing import Final
 
 from pydantic import JsonValue
-from qma.core.barriers.money_path import (
-    MONEY_PATH_COMPOUND_NOUNS,
-    MONEY_PATH_FAMILY_NOUNS,
-    MONEY_PATH_MONEY_VERBS,
-    MONEY_PATH_MUTATING_VERBS,
-    MONEY_PATH_NON_MONEY_OBJECTS,
-    match_money_path_act,
-)
+from qma.harness import named_money_act
 
 from qmx_engine.definition.folder import Problem
 from qmx_engine.definition.model import Limits, Workflow, edges
@@ -39,7 +32,6 @@ TOOL_KEY: Final = re.compile(r"qmx/tool/[a-z0-9][a-z0-9_-]{0,39}")
 """The only credential a node may name: a tool key a Settings `[credentials.tools]` row declares
 (AD-24). Provider keys stay relay-only (AD-28) and broker keys never reach a node."""
 SEGMENTS: Final = re.compile(r"__|[.:]")
-CAMEL: Final = re.compile(r"([a-z0-9])([A-Z])")
 BARE_NOUNS: Final = frozenset(
     {"order", "position", "protection", "sizing", "binding", "mode", "control", "size"}
 )
@@ -170,29 +162,6 @@ def money_act(text: str) -> str | None:
     for candidate in candidates(text):
         if candidate.strip().casefold() in BARE_NOUNS:
             continue
-        if act := match_money_path_act(candidate) or word_act(candidate):
+        if act := named_money_act(candidate):
             return act
-    return None
-
-
-def word_act(text: str) -> str | None:
-    """An identifier (no spaces) holding a money verb (`paper_buy`), or a mutating verb with an
-    order, position or protection noun (`closeAllPositions`, `update_stop_loss`). The deny-list's
-    exact match misses these, and prose is left alone so a prompt can talk about markets."""
-    if re.search(r"\s", text.strip()):
-        return None
-    raw = [w for w in re.split(r"[^a-z0-9]+", CAMEL.sub(r"\1_\2", text).casefold()) if w]
-    words: list[str] = []
-    for word in raw:
-        if words and (compound := MONEY_PATH_COMPOUND_NOUNS.get((words[-1], word))):
-            words[-1] = compound
-        else:
-            singular = word.removesuffix("s")
-            words.append(singular if singular in MONEY_PATH_FAMILY_NOUNS else word)
-    if money := next((w for w in words if w in MONEY_PATH_MONEY_VERBS), None):
-        return money
-    verb = next((w for w in words if w in MONEY_PATH_MUTATING_VERBS), None)
-    noun = next((w for w in words if w in MONEY_PATH_FAMILY_NOUNS), None)
-    if verb and noun and not MONEY_PATH_NON_MONEY_OBJECTS & set(words):
-        return f"{verb}_{noun}"
     return None

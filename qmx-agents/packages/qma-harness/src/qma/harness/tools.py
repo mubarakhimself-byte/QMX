@@ -7,12 +7,13 @@ them, not new code. In-process means the CLI never receives the qmx-control bear
 
 One list. `tool_defs` is the only place a QMX tool joins the agent surface. Every tool
 declares an `Effect` in an explicit table; a function missing from its table does not join.
-Which tools ask, the proposal exemption and the grant check all derive from that one field.
+Which tools ask and the grant check derive from that one field.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import re
@@ -26,18 +27,10 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
-from qma.core.barriers.descriptors import description_money_act
 from qmx_broker.service import BrokerService
 
-from qma.harness.money import (
-    DELEGATE_TOOL,
-    NON_BROKER_REFS,
-    QMX_SERVER,
-    GateRules,
-    MoneySurfaceError,
-    check_tool_surface,
-    normalize_path,
-)
+from qma.harness.guard import DELEGATE_TOOL, QMX_SERVER, GuardRules, Rule, normalize_path
+from qma.harness.money_words import named_money_act
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpSdkServerConfig, McpServerConfig
@@ -54,8 +47,8 @@ PREFIX: Final = f"mcp__{SERVER}__"
 
 
 class Effect(Enum):
-    """What a QMX tool does to the world. Closed. There is no member for moving money, so no
-    tool can be registered as a money act: the type has no slot for it.
+    """What a QMX tool does to the world. Closed. There is no member for moving money: agents
+    have no path to money (ruling 116).
 
     READ           reads QMX or broker state. Runs without asking.
     DOMAIN_WRITE   writes QMX research state (library, backtests, run results). Asks or not
@@ -111,7 +104,7 @@ class ToolDef:
     metadata: Mapping[str, object] = field(default_factory=dict[str, object])
     """The MCP annotations and `_meta`, for the surface check."""
     target: object = None
-    """The function the tool runs. The proposal exemption is granted by its identity."""
+    """The function the tool runs. PROPOSE_MONEY is accepted by its identity."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.effect, Effect):  # pyright: ignore[reportUnnecessaryIsInstance]
@@ -187,7 +180,8 @@ AGENT_OPERATIONS: Final[Mapping[str, Effect]] = MappingProxyType(
     }
 )
 """Names from `qmx_control.server.OPERATIONS` the agent may call, each with its effect. An
-explicit allow-list; `OPERATIONS_LEFT_OUT` says why each other row stays out."""
+explicit allow-list; `OPERATIONS_LEFT_OUT` says why each other row stays out. A unit test holds
+that no row names an order act (`money_words`)."""
 
 OPERATIONS_LEFT_OUT: Final[Mapping[str, str]] = MappingProxyType(
     {
@@ -198,10 +192,6 @@ OPERATIONS_LEFT_OUT: Final[Mapping[str, str]] = MappingProxyType(
         "sessions_stream": "a live event stream, not a tool",
     }
 )
-
-DISPATCH_TARGETS: Final[Mapping[str, str]] = MappingProxyType({"apps_call": "tool"})
-"""Operations that run another tool, and the argument naming it. The gate name-checks that
-tool. `workflows_run` and `run_job` name a workflow id and a compute target, not a tool."""
 
 FORCED_ARGUMENTS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
     {"apps_test": MappingProxyType({"auto_publish": False})}
@@ -246,8 +236,8 @@ BROKER_EFFECTS: Final[Mapping[str, Effect]] = MappingProxyType(
     }
 )
 
-BROKER_HOSTS: Final[frozenset[str]] = frozenset({"ctraderapi.com", "ctrader.com", "spotware.com"})
-"""The cTrader Open API hosts (`qmx_broker.ctrader_transport`) and Spotware's sign-in host."""
+NON_BROKER_REFS: Final[frozenset[str]] = frozenset({"qmx/chatgpt", "qmx/control-token"})
+"""Fixed `qmx/*` entries every chat's guard refuses by name, besides the settings.toml ones."""
 
 
 ArgsDigest = NewType("ArgsDigest", str)
@@ -419,6 +409,22 @@ class ToolSurfaceError(RuntimeError):
     """The `qmx` server cannot be built from these defs."""
 
 
+class OrderToolRefused(RuntimeError):
+    """An external MCP server offers a tool whose name spells an order act."""
+
+
+def rule_rows(rows: object) -> tuple[Rule, ...]:
+    """His list as `Rule`s: each row a `{pattern, ...}` table or a bare pattern string, as
+    `ControlService` stores `[rules]`. A row that does not parse is skipped."""
+    found: list[Rule] = []
+    for row in cast("list[object]", rows) if isinstance(rows, list) else []:
+        text = cast("Mapping[str, object]", row).get("pattern") if isinstance(row, Mapping) else row
+        if isinstance(text, str):
+            with contextlib.suppress(ValueError):
+                found.append(Rule.parse(text))
+    return tuple(found)
+
+
 def is_proposal_writer(target: object) -> bool:
     return getattr(target, "__func__", None) is BrokerService.propose_order
 
@@ -430,10 +436,10 @@ def build_server(
     domain_write: DomainWritePolicy,
     enforce_grants: bool = True,
 ) -> McpSdkServerConfig:
-    """`create_sdk_mcp_server(name="qmx", ...)`. Refuses to build on a duplicate name, a
-    name or metadata the surface check flags, and PROPOSE_MONEY on anything but the broker's
-    `propose_order` (identity, not name). Every asking tool's handler first consumes a grant
-    for its exact arguments and returns an error naming the rule without one.
+    """`create_sdk_mcp_server(name="qmx", ...)`. Refuses to build on a duplicate name and on
+    PROPOSE_MONEY on anything but the broker's `propose_order` (identity, not name). Every
+    asking tool's handler first consumes a grant for its exact arguments and returns an error
+    naming the rule without one.
     `enforce_grants=False` exists for one live check only (`TestMode.grants`)."""
     names = [tool.name for tool in defs]
     duplicates = sorted({name for name in names if names.count(name) > 1})
@@ -441,11 +447,9 @@ def build_server(
         raise ToolSurfaceError(f"duplicate QMX tool names: {', '.join(duplicates)}")
     for tool in defs:
         if tool.effect is Effect.PROPOSE_MONEY and not is_proposal_writer(tool.target):
-            raise MoneySurfaceError(
+            raise ToolSurfaceError(
                 f"{tool.name} is not the broker's propose_order and cannot propose money"
             )
-    exempt = frozenset(tool.name for tool in defs if tool.effect is Effect.PROPOSE_MONEY)
-    check_tool_surface(names, {tool.name: tool.metadata for tool in defs}, exempt)
     return create_sdk_mcp_server(
         SERVER, tools=sdk_tools(defs, grants, domain_write, enforce_grants=enforce_grants)
     )
@@ -540,7 +544,11 @@ def secret_files(home: QmxHome) -> list[Path]:
     ] + [Path.home() / ".claude.json", home.root / "settings.toml", home.root / "rclone.conf"]
 
 
-def gate_rules(
+STORE_FILES: Final = ("control.db", "portfolio.db", "library.db", "memory.db", "runs.db")
+"""The QMX home's SQLite stores, each with its `-wal`, `-shm` and `-journal` files."""
+
+
+def guard_rules(
     defs: list[ToolDef],
     *,
     domain_write: DomainWritePolicy,
@@ -549,11 +557,13 @@ def gate_rules(
     keyring_names: frozenset[str],
     unattended: bool,
     external_unattended: frozenset[str],
-    broker_hosts: frozenset[str] = BROKER_HOSTS,
-) -> GateRules:
-    """Derive `GateRules` from the same defs: proposal_tools are the PROPOSE_MONEY names,
-    mandatory_asks the names where `asks(effect, domain_write)`, each prefixed
-    `mcp__qmx__`. Paths come from `home` and the OS user's home."""
+    workspace: Path | None = None,
+    rules: Mapping[str, object] | None = None,
+) -> GuardRules:
+    """Derive `GuardRules` from the same defs: `mandatory_asks` are the names where
+    `asks(effect, domain_write)`, each prefixed `mcp__qmx__`. Paths come from `home`, the OS
+    user's home and this Python's environment. `workspace` is where a recursive delete runs
+    without asking; `rules` is `settings.toml [rules]`, his two lists."""
     personal = Path.home() / ".claude"
     protected = [
         home.plan_dir,
@@ -562,35 +572,29 @@ def gate_rules(
         home.procs_dir,
         home.state_dir,
         home.plugin_dir,
+        home.root / "engine",
         *(
             home.root / f"{name}{suffix}"
-            for name in ("control.db", "portfolio.db")
+            for name in STORE_FILES
             for suffix in ("", "-wal", "-shm", "-journal")
         ),
         home.root / "settings.toml",
     ]
-    secrets = secret_files(home)
-    return GateRules(
-        proposal_tools=frozenset(
-            PREFIX + tool.name for tool in defs if tool.effect is Effect.PROPOSE_MONEY
-        ),
+    lists = rules or {}
+    return GuardRules(
         mandatory_asks=frozenset(
             PREFIX + tool.name for tool in defs if asks(tool.effect, domain_write)
-        ),
-        dispatch_targets=MappingProxyType(
-            {
-                PREFIX + tool.name: DISPATCH_TARGETS[tool.name]
-                for tool in defs
-                if tool.name in DISPATCH_TARGETS
-            }
         ),
         protected_paths=_both(protected),
         qmx_homes=_both([home.root]),
         writable_paths=_both([home.workspaces_dir, home.agent_memory_dir]),
-        secret_paths=_both(secrets),
+        install_paths=_both([Path(sys.prefix)]),
+        secret_paths=_both(secret_files(home)),
         personal_homes=_both([personal]),
         keyring_names=frozenset(name.casefold() for name in keyring_names),
-        broker_hosts=frozenset(host.casefold() for host in broker_hosts),
+        delete_zones=() if workspace is None else _both([workspace]),
+        never=rule_rows(lists.get("never_allow")),
+        always=rule_rows(lists.get("always_allow")),
         variables=MappingProxyType(
             {
                 "HOME": _posix(Path.home()),
@@ -707,38 +711,27 @@ class VettedServer:
 
 async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> VettedServer:
     """Start one declared server with the Python MCP client, list every page of its tools and
-    run the surface check on their names, metadata and descriptions. A config already in
-    `cache` is not started again. Raises ValueError or MoneySurfaceError."""
+    refuse it when a tool name spells an order act (`money_words`, H58). A config already in
+    `cache` is not started again. Raises ValueError or OrderToolRefused."""
     config = server_config(name, row)
     digest = config_digest(config)
     cached = cache.get(digest)
     if cached is not None:
         return VettedServer(config, cached)
     listed = await asyncio.wait_for(_list_tools(config), VET_TIMEOUT_S)
-    metadata = {
-        tool.name: {
-            "annotations": tool.annotations.model_dump(exclude_none=True)
-            if tool.annotations
-            else {},
-            "_meta": dict(tool.meta or {}),
-        }
-        for tool in listed
-    }
-    check_tool_surface(list(metadata), metadata, frozenset())
-    for tool in listed:
-        act = description_money_act(tool.description or "")
+    tools = frozenset(str(tool.name) for tool in listed)
+    for name in sorted(tools):
+        act = named_money_act(name)
         if act is not None:
-            raise MoneySurfaceError(f"the description of {tool.name} names a money act ({act})")
-    tools = frozenset(metadata)
+            raise OrderToolRefused(f"{name} is {act}")
     cache.put(digest, tools)
     return VettedServer(config, tools)
 
 
 async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> VettedServers:
     """Before any launch uses them: vet every enabled server in settings.toml [mcp_servers],
-    all at once. A server that exposes a money act, or that cannot be listed, is refused and
-    never launched (A8, B10). A tool that a server adds later is still denied by name in the
-    gate, and one the CLI loads that vetting never saw refuses the launch."""
+    all at once. A server that offers an order-shaped tool, or that cannot be listed, is refused
+    and never launched (H58). A tool the CLI loads that vetting never saw refuses the launch."""
     rows = {
         name: cast("Mapping[str, object]", row)
         for name, row in declared.items()
@@ -754,8 +747,8 @@ async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> Ve
         match result:
             case VettedServer():
                 configs[name], tools[name] = result.config, result.tools
-            case MoneySurfaceError():
-                refused[name] = f"it exposes a money act ({result})"
+            case OrderToolRefused():
+                refused[name] = f"it offers an order tool ({result})"
             case Exception():
                 refused[name] = f"it could not be vetted ({type(result).__name__}: {result})"
             case _:

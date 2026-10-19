@@ -41,7 +41,7 @@ from common import (
 )
 from fake_model import Turn, text, tool_use
 from money_lane import results
-from s06_money import broker_connections
+from money_lane import broker_connections
 from s29_approvals import ORDER_A, PROPOSE, propose, put_brokers, rows
 
 WRITE_TOOLS = {"Write", "Edit"}

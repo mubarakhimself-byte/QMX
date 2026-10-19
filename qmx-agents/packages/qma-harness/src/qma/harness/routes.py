@@ -25,17 +25,14 @@ Routes:
     POST /api/approvals/{ask_id}        AnswerIn -> {status}; ask_id is
                                                  `<sid>.<seq of the permission or question block>`
     GET  /api/usage                              the usage page: plan windows, readings, token
-                                                 sums per profile, cap, overage stop, money
-                                                 posture and the stored exposure report
+                                                 sums per profile, cap and overage stop
     POST /api/usage/meter                        one haiku plan turn when no five-hour reading
                                                  is live, then the page
     POST /api/gpt/login                 {sign_in} -> GptStatus; the stored ChatGPT sign-in,
                                                  or OpenAI's page when `sign_in`, then the GPT
                                                  probe unless a pass is stored, then the lane
     POST /api/gpt/consent               {consent} -> GptStatus; background use of the plan
-    GET  /api/doctor                             DoctorLine list from stored results; never
-                                                 runs the exposure probe
-    POST /api/doctor/probe                       runs the exposure probe, then the list
+    GET  /api/doctor                             DoctorLine list from stored results
     GET  /api/claude-settings                    settings.toml [claude]
     PUT  /api/claude-settings                    `home.parse_claude_settings`, then
                                                  `ControlService.settings_put`
@@ -398,26 +395,19 @@ def router(
     *,
     scrubbed: Sequence[str],
     keep: Sequence[str],
-    harness_lines: Callable[[bool], Awaitable[list[DoctorLine]]] | None = None,
+    harness_lines: Callable[[], Awaitable[list[DoctorLine]]] | None = None,
 ) -> APIRouter:
-    """`harness_lines(probe)` adds `Harness.doctor`'s lines; only the POST probes."""
+    """`harness_lines()` adds `Harness.doctor`'s lines."""
     api = APIRouter()
 
-    async def lines(*, probe: bool) -> dict[str, list[dict[str, object]]]:
+    @api.get("/api/doctor")
+    async def read_doctor() -> dict[str, list[dict[str, object]]]:
         found = await asyncio.to_thread(
             doctor, home, control, scrubbed=scrubbed, keep=keep, launcher=LAUNCHER
         )
         if harness_lines is not None:
-            found += await harness_lines(probe)
+            found += await harness_lines()
         return {"lines": [asdict(line) for line in found]}
-
-    @api.get("/api/doctor")
-    async def read_doctor() -> dict[str, list[dict[str, object]]]:
-        return await lines(probe=False)
-
-    @api.post("/api/doctor/probe")
-    async def run_probe() -> dict[str, list[dict[str, object]]]:
-        return await lines(probe=True)
 
     @api.get("/api/claude-settings")
     async def read_claude_settings() -> Document:
@@ -427,7 +417,7 @@ def router(
     async def write_claude_settings(values: Document) -> Document:
         return await asyncio.to_thread(control.settings_put, "claude", values)
 
-    _ = read_doctor, run_probe, read_claude_settings, write_claude_settings
+    _ = read_doctor, read_claude_settings, write_claude_settings
     return api
 
 
@@ -441,6 +431,6 @@ def chat_routes(
         harness.control,
         scrubbed=scrubbed,
         keep=keep,
-        harness_lines=lambda probe: harness.doctor(probe=probe),
+        harness_lines=harness.doctor,
     )
     return [doctor_routes, chat_router(harness)]

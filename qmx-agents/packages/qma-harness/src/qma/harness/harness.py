@@ -67,7 +67,6 @@ from qma.harness.chat import (
     transcript,
 )
 from qma.harness.home import (
-    DOCTOR_CHAT,
     ChatRecord,
     DoctorLine,
     QmxHome,
@@ -75,7 +74,6 @@ from qma.harness.home import (
     check_hooks,
     check_rules,
     check_secrets,
-    cli_version,
     ensure_homes,
     list_records,
     read_record,
@@ -100,7 +98,6 @@ from qma.harness.launch import (
     JsonMap,
     LaunchRefused,
     PermissionMode,
-    PlanLaunch,
     RelayedLaunch,
     SubAgent,
     TestMode,
@@ -112,19 +109,6 @@ from qma.harness.launch import (
     machine_ram_mb,
     parse_budgets,
     unattended,
-)
-from qma.harness.money import (
-    NON_BROKER_REFS,
-    ExposureReport,
-    exposure_targets,
-    keyring_inventory,
-    load_exposure,
-    load_scope_proofs,
-    money_posture,
-    run_exposure_probe,
-    save_exposure,
-    store_names,
-    unproven,
 )
 from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import (
@@ -144,10 +128,9 @@ from qma.harness.profiles import (
 )
 from qma.harness.project import redact
 from qma.harness.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
-from qma.harness.tools import DelegateRefused, keyring_refs, secret_files
+from qma.harness.tools import DelegateRefused
 from qma.harness.turns import TurnHandle, watch_turn
 from qma.harness.usage import (
-    PostureView,
     ReadingView,
     UsageLedger,
     UsagePage,
@@ -328,8 +311,6 @@ class Harness:
         self._metered: float | None = None
         """When the last meter turn ran, on the loop clock."""
         self._reaper = asyncio.create_task(self._reap())
-        self.control_port: int | None = None
-        """The qmx-control port, set by the server, so the exposure probe can try it."""
 
     @property
     def home(self) -> QmxHome:
@@ -834,21 +815,15 @@ class Harness:
 
     async def usage(self) -> UsagePage:
         tokens = await asyncio.to_thread(token_sums, self._deps.home.root / "runs")
-        money = await asyncio.to_thread(posture_view, self._deps.home, self._deps.control)
-        return usage_page(self._ledger, tokens, money)
+        return usage_page(self._ledger, tokens)
 
-    async def doctor(self, *, probe: bool = False) -> list[DoctorLine]:
-        """The overage and extra-usage lines, the money posture and the stored exposure report,
-        the relay's grant count and refusal counters, and the process cap report. `probe=True`
-        (the operator asked) runs a fresh exposure probe first; a plain read never does."""
-        if probe:
-            await self.probe_exposure()
-        money = await asyncio.to_thread(posture_view, self._deps.home, self._deps.control)
+    async def doctor(self) -> list[DoctorLine]:
+        """The overage and extra-usage lines, the GPT lane, the relay's grant count and refusal
+        counters, and the process cap report."""
         relay, cap = self._deps.relay, self._deps.procs.report()
         counts = relay.counters
         return [
             *usage_lines(self._ledger),
-            *money.lines(),
             await asyncio.to_thread(gpt_line, relay, self._deps.home),
             DoctorLine(
                 "relay",
@@ -865,22 +840,6 @@ class Harness:
                 f"{len(cap.chats)}; last killed {cap.last_killed or 'none'}",
             ),
         ]
-
-    async def probe_exposure(self) -> ExposureReport:
-        """Runs the exposure probe with the plan launch environment and stores its report."""
-        home, control = self._deps.home, self._deps.control
-        inventory = (await asyncio.to_thread(broker_inventory, control))[0]
-        targets = exposure_targets(
-            home.root, inventory, self.control_port, secret_files(home), Path.home() / ".claude"
-        )
-        env = {
-            **os.environ,
-            **launch_env(PlanLaunch(), home=home, session_id=DOCTOR_CHAT, cap=""),
-        }
-        version = await asyncio.to_thread(cli_version)
-        report = await run_exposure_probe(env, targets, cli_version=version or "unknown")
-        await asyncio.to_thread(save_exposure, home.state_dir, report)
-        return report
 
     async def meter(self) -> ReadingView | None:
         """The live five-hour reading. With none in the ledger, one tool-less haiku Background
@@ -1126,29 +1085,6 @@ def gpt_line(relay: Relay, home: QmxHome) -> DoctorLine:
         case None:
             why = f"no GPT probe has passed for translator {version}; type /login chatgpt"
     return DoctorLine("gpt lane", False, f"closed: {why}")
-
-
-def broker_inventory(control: ControlService) -> tuple[frozenset[str], frozenset[str]]:
-    """The keyring inventory, by name, and the entries known not to be broker credentials:
-    the fixed ones and every provider row's `credential_ref`."""
-    profiles = parse_profiles(control.settings_get("providers"))
-    keys = {
-        str(profile.credential).casefold()
-        for profile in profiles.by_name.values()
-        if isinstance(profile, KeyProvider)
-    }
-    return keyring_inventory(keyring_refs(control), store_names()), NON_BROKER_REFS | keys
-
-
-def posture_view(home: QmxHome, control: ControlService) -> PostureView:
-    """Reads names, the stored S27 proofs and the stored exposure report; runs no probe."""
-    inventory, non_broker = broker_inventory(control)
-    proofs = load_scope_proofs(home.state_dir)
-    return PostureView(
-        posture=money_posture(inventory, non_broker, proofs),
-        unproven=unproven(inventory, non_broker, proofs),
-        exposure=load_exposure(home.state_dir),
-    )
 
 
 @dataclass(frozen=True)

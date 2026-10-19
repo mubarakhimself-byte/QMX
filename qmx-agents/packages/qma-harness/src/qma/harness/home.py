@@ -9,7 +9,7 @@ Layout under the QMX home, never under the operator's `~/.claude`:
                              still resumes the same transcript.
     chats/<session>.json     One `ChatRecord` per chat. Each chat writes only its own.
     procs/<session>.json     Pid file, written only by that chat's launcher.
-    state/                   Correctness records such as the exposure report.
+    state/                   Correctness records such as the GPT probe result.
     workspaces/              Default working folders, outside any dev repo.
     agent-memory/<ws>/       Auto memory per workspace (`autoMemoryDirectory`).
 
@@ -60,7 +60,8 @@ from qma.harness.launch import (
     launch_env,
 )
 from qma.harness.profiles import PLAN, ProfileName, parse_profiles
-from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, gate_rules
+from qma.harness.guard import SECRET_SHAPES
+from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, guard_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 
 if TYPE_CHECKING:
@@ -231,7 +232,7 @@ CLAUDE_SETTING_KEYS: Final[frozenset[str]] = frozenset(
 `model`. `remembered` is QMX's, never passed through as is: per-workspace "always allow"
 rules merged into `permissions.allow` only for launches in that workspace.
 `external_tools_unattended` is QMX's too: the `server/tool` and `server/*` entries whose
-external MCP tools may run in an unattended chat or mode (`money.GateRules`). Neither reaches
+external MCP tools may run in an unattended chat or mode (`guard.GuardRules`). Neither reaches
 the CLI."""
 
 QMX_ONLY_KEYS: Final = frozenset({"remembered", "external_tools_unattended"})
@@ -476,24 +477,6 @@ def check_rules(rules: Sequence[str], key: str) -> None:
     _strings(list(rules), key, _RULE)
 
 
-SECRET_SHAPES: Final = re.compile(
-    "|".join(
-        (
-            r"sk-(?:or-v1|ant|proj|svcacct|admin)-[A-Za-z0-9_-]{16,}",
-            r"AKIA[0-9A-Z]{16}",
-            r"gh[pousr]_[A-Za-z0-9]{36,}",
-            r"github_pat_[A-Za-z0-9_]{22,}",
-            r"xox[abposr]-[0-9A-Za-z-]{10,}",
-            r"AIza[0-9A-Za-z_-]{35}",
-            r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*",
-            r"-----BEGIN[A-Z ]*PRIVATE KEY-----",
-            r"(?<![A-Za-z0-9_-])sk-(?=[A-Za-z_-]*[0-9])[A-Za-z0-9_-]{20,}",
-            r"(?<![0-9a-f])[0-9a-f]{32}\.[A-Za-z0-9]{16}(?![A-Za-z0-9])",
-        )
-    )
-)
-"""The key shapes of SEC1A's one redaction seam (`qmx_engine.ledger.redact.SHAPES`), held here
-because the engine imports the harness, not the other way round."""
 CREDENTIAL_NAME: Final = re.compile(r"(?i)key|token|secret|passw|auth|credential|bearer|cookie")
 """A name under which a value is a credential, so the value must be a keyring reference."""
 KEYRING_REF: Final = re.compile(r"qmx/[A-Za-z0-9._/-]+")
@@ -999,7 +982,7 @@ def _argv_line(home: QmxHome, workspace: Path, launcher: Path) -> DoctorLine:
         can_use_tool=_no_tools,
         mcp_servers={},
         budgets=Budgets(),
-        gate=gate_rules(
+        gate=guard_rules(
             [],
             domain_write=DEFAULT_DOMAIN_WRITE,
             home=home,

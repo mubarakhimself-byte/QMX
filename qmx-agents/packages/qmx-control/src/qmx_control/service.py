@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 import threading
 import tomllib
@@ -50,6 +51,7 @@ type SettingsSection = Literal[
     "agents",
     "engine",
     "roles",
+    "rules",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -90,6 +92,39 @@ class SessionBlock(BaseModel):
 
 def _document(value: str) -> Document:
     return cast(Document, json.loads(value))
+
+
+RULE_LISTS = ("always_allow", "never_allow")
+RULE_SOURCES = frozenset({"you", "imported", "suggested"})
+RULE_PATTERN = re.compile(r"\s*[^\s()]+\s*(?:\(.*\))?\s*", re.DOTALL)
+"""`Tool` or `Tool(glob)`, the shape the harness guard reads (engine AD-43, AD-54)."""
+
+
+def _rule_lists(values: Document) -> Document:
+    """`[rules]`: his always-allow and never-allow lists. Each row is a pattern string or a
+    `{pattern, source, added_at}` table, stored as the table; `source` defaults to `you`. The
+    guard lets no row lift its floor, so a row is checked for shape only."""
+    unknown = set(values) - set(RULE_LISTS)
+    if unknown:
+        raise ControlError("invalid_rules", f"Rules hold only {', '.join(RULE_LISTS)}.")
+    stored: Document = {}
+    for name in RULE_LISTS:
+        rows = values.get(name, [])
+        if not isinstance(rows, list):
+            raise ControlError("invalid_rules", f"{name} must be a list.")
+        kept: list[JsonValue] = []
+        for row in rows:
+            table = {"pattern": row} if isinstance(row, str) else row
+            if not isinstance(table, dict) or set(table) - {"pattern", "source", "added_at"}:
+                raise ControlError("invalid_rules", "A rule is a pattern, source and added_at.")
+            pattern, source = table.get("pattern"), table.get("source", "you")
+            if not isinstance(pattern, str) or not RULE_PATTERN.fullmatch(pattern):
+                raise ControlError("invalid_rules", f"{pattern!r} is not Tool or Tool(pattern).")
+            if source not in RULE_SOURCES:
+                raise ControlError("invalid_rules", "A rule's source is you, imported or suggested.")
+            kept.append({**table, "pattern": pattern.strip(), "source": source})
+        stored[name] = kept
+    return stored
 
 
 def _no_secrets(value: JsonValue) -> None:
@@ -259,6 +294,8 @@ class ControlService:
                     "invalid_settings", f"The {section} section is written only by the QMA host."
                 )
             values = parser(values, self.settings_get(section))
+        if section == "rules":
+            values = _rule_lists(values)
         if section == "remote":
             try:
                 RemoteSettings.model_validate(values)

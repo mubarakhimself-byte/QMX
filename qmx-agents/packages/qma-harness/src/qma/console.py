@@ -19,8 +19,7 @@ Commands, mirroring Claude Code where a twin exists:
     /provider [name]       same flow for a provider switch; with no name, pick from a list.
     /mode <mode>           permission mode; applies at once.
     /effort <level>        quote and apply (a relaunch with resume).
-    /usage  /doctor        read-only pages. `/usage refresh` reads the plan meter first,
-                           `/doctor probe` runs the exposure probe.
+    /usage  /doctor        read-only pages. `/usage refresh` reads the plan meter first.
     /status /resume /new /export /rewind /stop /help /exit
 Anything else, including any other text starting with "/", is sent as text, so CLI built-ins
 such as /compact and /context and QMX plugin commands work as they do in Claude Code.
@@ -125,7 +124,7 @@ HELP: Final[dict[str, str]] = {
     "mode": "/mode <default|acceptEdits|plan|bypassPermissions>",
     "effort": "/effort <low|medium|high|xhigh|max>",
     "usage": "plan windows, tokens, background cap; /usage refresh reads the plan meter",
-    "doctor": "setup checks; /doctor probe also runs the exposure probe",
+    "doctor": "setup checks",
     "resume": "pick an earlier chat",
     "new": "start a new chat on the next message",
     "export": "write this chat's redacted transcript, asks and usage to a folder",
@@ -356,8 +355,6 @@ def usage_lines(page: dict[str, Any], chat: dict[str, Any] | None = None) -> lis
                 )
     if page.get("hard_stop"):
         lines.append(f"  ! plan use stopped: {page['hard_stop']}")
-    money = cast("dict[str, Any]", page.get("money") or {})
-    lines.append(f"  money posture {money.get('posture')}: {money.get('note', '')}")
     return lines
 
 
@@ -644,10 +641,8 @@ class Console:
             self.say(line)
 
     def do_doctor(self, arg: str) -> None:
-        if arg == "probe":
-            found = self.call("POST", "/api/doctor/probe")
-        else:
-            found = self.call("GET", "/api/doctor")
+        del arg
+        found = self.call("GET", "/api/doctor")
         for item in cast("list[dict[str, Any]]", found["lines"]):
             mark = "ok" if item.get("ok") else "!!"
             self.say(f"  [{mark}] {item.get('name')}: {one_line(str(item.get('detail')), 160)}")
