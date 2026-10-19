@@ -13,6 +13,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 from qmx_apps.errors import AppError
 from qmx_apps.manifest import AppDefinition
+from qmx_control.catalog import control_rows
 from qmx_control.models import Document
 from qmx_control.service import ControlError, ControlService, SessionBlock
 
@@ -25,6 +26,8 @@ class AppHooksMiddleware(AgentMiddleware[Any, RunContext]):
     ) -> None:
         self.service = service
         self.explicit_publish = explicit_publish
+        # The control door names a tool by its catalog row; the hooks reason about the operation.
+        targets = {row.name: row.target for row in control_rows()}
         self.names = {
             name: operation
             for name in names
@@ -35,7 +38,7 @@ class AppHooksMiddleware(AgentMiddleware[Any, RunContext]):
                 "apps_update",
                 "apps_test",
             )
-            if name == operation or name.endswith("_" + operation)
+            if (target := targets.get(name, name)) == operation or target.endswith("_" + operation)
         }
 
     def _test(self, app_id: str, expected_hash: str | None = None) -> Document:

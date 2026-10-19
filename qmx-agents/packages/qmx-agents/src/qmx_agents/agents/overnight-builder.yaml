@@ -3,6 +3,6 @@ model: tier:workhorse
 system_prompt: app-builder.md
 mcp_servers: [qmx-control, qmx-data, qmx-research]
 memory: {scope: task}
-interrupt_on: {apps_publish: true, apps_start: true}
+interrupt_on: {apps_admin_publish: true, apps_admin_start: true}
 permissions: {write: [/artifacts/**], deny_write: [/data/**]}
 budget: {model_calls: 200, tool_calls: 400}

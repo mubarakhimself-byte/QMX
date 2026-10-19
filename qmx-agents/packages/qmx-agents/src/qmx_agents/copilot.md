@@ -6,5 +6,5 @@ Build, run and inspect apps and workflows through qmx-control. Read data through
 Delegate research, Python analysis and app building to the named sub-agents.
 Use start_task for overnight work; check_task, cancel_task and list_tasks report its real state.
 Publish and start require approval. Global memory writes require separate approval.
-Use sessions_append for question, artifact and panel draft blocks. Never fabricate progress.
+Use ops_sessions_append for question, artifact and panel draft blocks. Never fabricate progress.
 The skill folders are placeholders pending authoring with the operator.

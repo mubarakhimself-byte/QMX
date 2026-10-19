@@ -240,14 +240,15 @@ def test_mcp_structured_version_result_triggers_tests(tmp_path: Path, config: Ro
         service = FakeApps(tmp_path / "home")
         async with MCPAdapter(create_mcp(service)) as adapter:
             tools = await adapter.list_tools()
-            create = next(item for item in tools if item.name == "apps_create")
+            create = next(item for item in tools if item.name == "apps_admin_create")
         graph = cast(
             "Runnable[Any, dict[str, Any]]",
             await build_agent(
                 write_spec(tmp_path, "tools: [create]"),
                 BuildContext(
                     ModelRouter(
-                        config, fake_models(fake(call("apps_create", {"path": "fixture"}), "done"))
+                        config,
+                        fake_models(fake(call("apps_admin_create", {"path": "fixture"}), "done")),
                     ),
                     tools={"create": create},
                     control=service,

@@ -89,11 +89,17 @@ def test_copilot_build_tests_publish_interrupt_and_session_sse(
     session_id = str(service.sessions_create(SessionInput(title="Macro"))["id"])
     scripted = fake(
         call("write_todos", {"todos": [{"content": "Build macro app", "status": "in_progress"}]}),
-        call("apps_create", {"path": str(candidate), "trust": "reviewed"}),
-        call("apps_test", {"app_id": "macro-daily-bias", "stage": "sandbox", "auto_publish": True}),
-        call("apps_test", {"app_id": "macro-daily-bias", "stage": "shadow", "auto_publish": True}),
+        call("apps_admin_create", {"path": str(candidate), "trust": "reviewed"}),
         call(
-            "sessions_append",
+            "apps_admin_test",
+            {"app_id": "macro-daily-bias", "stage": "sandbox", "auto_publish": True},
+        ),
+        call(
+            "apps_admin_test",
+            {"app_id": "macro-daily-bias", "stage": "shadow", "auto_publish": True},
+        ),
+        call(
+            "ops_sessions_append",
             {
                 "session_id": session_id,
                 "block": {
@@ -103,7 +109,7 @@ def test_copilot_build_tests_publish_interrupt_and_session_sse(
             },
         ),
         call(
-            "sessions_append",
+            "ops_sessions_append",
             {
                 "session_id": session_id,
                 "block": {
@@ -117,7 +123,7 @@ def test_copilot_build_tests_publish_interrupt_and_session_sse(
             },
         ),
         call(
-            "sessions_append",
+            "ops_sessions_append",
             {
                 "session_id": session_id,
                 "block": {
@@ -126,7 +132,7 @@ def test_copilot_build_tests_publish_interrupt_and_session_sse(
                 },
             },
         ),
-        call("apps_publish", {"app_id": "macro-daily-bias", "expected_hash": image.hash}),
+        call("apps_admin_publish", {"app_id": "macro-daily-bias", "expected_hash": image.hash}),
         "Macro daily bias is live.",
     )
 
@@ -149,7 +155,8 @@ def test_copilot_build_tests_publish_interrupt_and_session_sse(
             }
             state = await graph.aget_state({"configurable": {"thread_id": session_id}})
             assert (
-                state.tasks[0].interrupts[0].value["action_requests"][0]["name"] == "apps_publish"
+                state.tasks[0].interrupts[0].value["action_requests"][0]["name"]
+                == "apps_admin_publish"
             )
             await stream_turn(
                 graph,
@@ -303,7 +310,7 @@ def test_paused_background_run_cancels_through_its_control_owner(
 
     async def run() -> None:
         ctx = BuildContext(
-            models(config, fake(call("apps_start", {"app_id": "not-installed"}), "done")),
+            models(config, fake(call("apps_admin_start", {"app_id": "not-installed"}), "done")),
             run=RunContext(session_id=session_id),
             control=service,
             qmx_home=tmp_path,
