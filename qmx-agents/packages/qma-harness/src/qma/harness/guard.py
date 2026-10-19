@@ -14,6 +14,7 @@ forms; the OS user boundary stays the known gap (engine AD-22).
 from __future__ import annotations
 
 import fnmatch
+import functools
 import itertools
 import json
 import os
@@ -172,6 +173,11 @@ class Rule:
     def __str__(self) -> str:
         return self.tool if self.pattern is None else f"{self.tool}({self.pattern})"
 
+    def names(self, tool_name: str, case_insensitive: bool) -> bool:
+        if case_insensitive:
+            return fnmatch.fnmatchcase(tool_name.casefold(), self.tool.casefold())
+        return fnmatch.fnmatchcase(tool_name, self.tool)
+
 
 @dataclass(frozen=True)
 class GuardRules:
@@ -214,6 +220,11 @@ class GuardRules:
     dropped_servers: set[str] = field(default_factory=set[str])
     """External MCP servers the chat left out after launch. The only field that changes once
     the chat runs."""
+
+    @functools.cached_property
+    def folded(self) -> _Folded:
+        """The paths in the form `guard` compares, built once per chat, not per call."""
+        return _Folded.of(self)
 
 
 @dataclass(frozen=True)
@@ -292,10 +303,15 @@ def normalize_path(
     if drive:
         text = f"/{drive.group(1).lower()}/{text[3:]}"
     elif not text.startswith("/"):
-        base = normalize_path(cwd, cwd="/", home=home, case_insensitive=False)
-        text = f"{base}/{text}"
+        text = f"{_base(cwd, home)}/{text}"
     text = posixpath.normpath(re.sub(r"^/+", "/", text))
     return text.casefold() if case_insensitive else text
+
+
+@functools.lru_cache(maxsize=256)
+def _base(cwd: str, home: str) -> str:
+    """`cwd` normalised once: every relative word of a call resolves against the same few."""
+    return normalize_path(cwd, cwd="/", home=home, case_insensitive=False)
 
 
 def within(path: str, base: str) -> bool:
@@ -425,7 +441,7 @@ def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:
 def _file_tool(
     tool_name: str, tool_input: Mapping[str, object], rules: GuardRules, cwd: str
 ) -> Deny | None:
-    folded = _Folded.of(rules)
+    folded = rules.folded
     folder = tool_name in {"Grep", "Glob"}
     raw = [tool_input.get(field) for field in PATH_FIELDS[tool_name]]
     paths = [value for value in raw if isinstance(value, str) and value] or (
@@ -558,6 +574,16 @@ _PREFIX_WORDS: Final = frozenset({"sudo", "command", "exec", "nohup", "call", "&
 DELETE_COMMANDS: Final = frozenset(
     {"rm", "rmdir", "rd", "del", "erase", "remove-item", "ri", "rimraf", "rmtree"}
 )
+
+
+def _words_hint(names: frozenset[str]) -> re.Pattern[str]:
+    """Any of `names` as a whole word in casefolded text: a cheap test before tokenising."""
+    alternation = "|".join(sorted(map(re.escape, names), key=len, reverse=True))
+    return re.compile(rf"(?<![\w-])(?:{alternation})(?![\w-])")
+
+
+_DELETE_HINT = _words_hint(DELETE_COMMANDS | {"-delete"})
+_FLOOR_HINT = _words_hint(DISK_AND_REGISTRY)
 _RECURSIVE = re.compile(r"-[fivdI]*[rR][fivdIR]*|--recursive|(?i:-rec(?:u(?:r(?:se?)?)?)?|/s)")
 """`-r`, `-rf`, `-fR`, `--recursive`, PowerShell's `-Recurse` and its prefixes, `rd /s`. Not
 `-Force`, which only looks like a cluster."""
@@ -570,20 +596,24 @@ def _program(token: str) -> str:
     return name.removesuffix(".exe")
 
 
-def segments(text: str) -> Iterator[list[str]]:
-    """The simple commands of `text` as token lists, separators dropped; a quoted token holding
-    a whole command (`bash -c '...'`, `powershell -Command "..."`) is read as one more."""
+@functools.lru_cache(maxsize=256)
+def segments(text: str) -> tuple[tuple[str, ...], ...]:
+    """The simple commands of `text` as token tuples, separators dropped; a quoted token
+    holding a whole command (`bash -c '...'`, `powershell -Command "..."`) is read as one more.
+    Pure, so a call's several readers share one split."""
+    found: list[tuple[str, ...]] = []
     for part in _SEPARATORS.split(text):
-        tokens = _TOKEN.findall(part)
+        tokens = tuple(_TOKEN.findall(part))
         if not tokens:
             continue
-        yield tokens
+        found.append(tokens)
         for token in tokens:
             if token[:1] in "'\"" and " " in token:
-                yield from segments(token[1:-1])
+                found += segments(token[1:-1])
+    return tuple(found)
 
 
-def _command_tokens(tokens: list[str]) -> list[str]:
+def _command_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
     """`tokens` without leading prefixes (`sudo`, `env X=1`, `&`)."""
     start = 0
     while start < len(tokens) and (
@@ -594,7 +624,7 @@ def _command_tokens(tokens: list[str]) -> list[str]:
     return tokens[start:]
 
 
-def _delete_targets(tokens: list[str]) -> list[str] | None:
+def _delete_targets(tokens: tuple[str, ...]) -> list[str] | None:
     """The target words of a recursive delete in one simple command, or None when it is not
     one. `[]` means the targets come from elsewhere (`xargs rm -rf`)."""
     programs = [_program(token) for token in tokens]
@@ -612,44 +642,62 @@ def _delete_targets(tokens: list[str]) -> list[str] | None:
     return [token.strip("'\"") for token in rest if not _FLAG.fullmatch(token)]
 
 
-def _delete_outside(text: str, *, cwd: str, rules: GuardRules, folded: _Folded) -> str | None:
+def _outside_zone(word: str, base: str, rules: GuardRules, folded: _Folded) -> bool:
+    """`word` resolved against `base` leaves the zones as written, or, when it exists and stays
+    in as written, as the OS resolves it (a junction in the chat's folder pointing out). A
+    target that does not exist deletes nothing, so it is not resolved."""
+    literal = normalize_path(
+        word,
+        cwd=base,
+        home=rules.variables.get("HOME", "/"),
+        case_insensitive=False,
+        variables=rules.variables,
+    )
+    if not folded.in_zone(folded.fold(literal)):
+        return True
+    drive = _POSIX_DRIVE.match(literal)
+    native = f"{drive.group(1)}:/{literal[3:]}" if os.name == "nt" and drive else literal
+    return os.path.lexists(native) and not folded.in_zone(folded.fold(canonical(literal)))
+
+
+def _delete_outside(
+    text: str, parts: tuple[tuple[str, ...], ...], *, cwd: str, rules: GuardRules, folded: _Folded
+) -> str | None:
     """The first recursive-delete target outside `delete_zones`, or a note when the targets
     cannot be read. A target left with an unknown `$NAME` counts as outside."""
-    bases = _bases(text, cwd=cwd, rules=rules, home_after_cd=False)
-    for tokens in segments(text):
+    bases: list[str] | None = None
+    for tokens in parts:
         targets = _delete_targets(tokens)
         if targets is None:
             continue
         if not targets:
             return "targets the guard cannot see"
+        bases = bases or _bases(text, cwd=cwd, rules=rules, home_after_cd=False)
         for target in targets:
             glob = GLOB.search(target)
             word = posixpath.dirname(target[: glob.start()].replace("\\", "/")) if glob else target
             if re.search(r"[$%`]", word):
                 return target
-            for base in bases:
-                forms = _forms(word or ".", cwd=base, rules=rules, folded=folded)
-                if not all(folded.in_zone(form) for form in forms):
-                    return target
+            if any(_outside_zone(word or ".", base, rules, folded) for base in bases):
+                return target
     return None
 
 
-def _floor_command(text: str) -> Deny | None:
-    """Disk, format and registry programs at command position, and registry paths."""
-    for tokens in segments(text):
+def _floor_command(parts: tuple[tuple[str, ...], ...]) -> Deny | None:
+    """Disk, format and registry programs at command position."""
+    for tokens in parts:
         command = _command_tokens(tokens)
         if command and _program(command[0]) in DISK_AND_REGISTRY:
             name = _program(command[0])
             if name != "reg" or (len(command) > 1 and command[1].casefold() != "query"):
                 return _deny(f"agents cannot run disk, format or registry tools ({name})")
-    found = REGISTRY_PATH.search(text.casefold())
-    if found:
-        return _deny(f"agents cannot touch the registry ({found.group(0)})")
     return None
 
 
 def invisible(text: str) -> str | None:
     """The first invisible or bidirectional character in `text`, as `U+XXXX`, or None."""
+    if text.isascii():
+        return None
     for character in text:
         if unicodedata.category(character) in INVISIBLE_CATEGORIES:
             return f"U+{ord(character):04X}"
@@ -683,10 +731,14 @@ def _shell(tool_input: Mapping[str, object], rules: GuardRules, cwd: str) -> Den
     for name in rules.keyring_names:
         if name in lowered:
             return _deny(f"agents cannot name a QMX credential ({name})")
-    floor = _floor_command(expanded)
+    parts = segments(expanded)
+    floor = _floor_command(parts) if _FLOOR_HINT.search(lowered) else None
     if floor is not None:
         return floor
-    folded = _Folded.of(rules)
+    registry = REGISTRY_PATH.search(lowered)
+    if registry:
+        return _deny(f"agents cannot touch the registry ({registry.group(0)})")
+    folded = rules.folded
     sweep = SWEEP.search(f" {lowered}") is not None
     bases = _bases(expanded, cwd=cwd, rules=rules)
     if len(bases) > MAX_SHELL_BASES:
@@ -705,7 +757,11 @@ def _shell(tool_input: Mapping[str, object], rules: GuardRules, cwd: str) -> Den
             found = _word(word, base=base, rules=rules, folded=folded, sweep=sweep)
             if found is not None:
                 return found
-    outside = _delete_outside(expanded, cwd=cwd, rules=rules, folded=folded)
+    outside = (
+        _delete_outside(expanded, parts, cwd=cwd, rules=rules, folded=folded)
+        if _DELETE_HINT.search(lowered)
+        else None
+    )
     if outside is None:
         return None
     reason = f"a recursive delete outside this chat's folder ({outside})"
@@ -744,12 +800,9 @@ def _pattern(pattern: str, rules: GuardRules, cwd: str) -> str:
     return pattern
 
 
-def _matches(
-    rule: Rule, tool_name: str, found: list[str], rules: GuardRules, cwd: str, *, every: bool
-) -> bool:
+def _matches(rule: Rule, found: list[str], rules: GuardRules, cwd: str, *, every: bool) -> bool:
+    """`rule`, whose tool part already names the call, matches its candidates."""
     fold: Callable[[str], str] = str.casefold if rules.case_insensitive else str
-    if not fnmatch.fnmatchcase(fold(tool_name), fold(rule.tool)):
-        return False
     if rule.pattern is None:
         return True
     pattern = fold(_pattern(rule.pattern, rules, cwd))
@@ -794,16 +847,22 @@ def guard(
         found = _deny("agents cannot put a key into a URL")
     if isinstance(found, Deny):
         return found
-    words, every = candidates(tool_name, tool_input, rules, cwd)
-    for rule in rules.never:
-        if _matches(rule, tool_name, words, rules, cwd, every=False):
+    never = [rule for rule in rules.never if rule.names(tool_name, rules.case_insensitive)]
+    always = [rule for rule in rules.always if rule.names(tool_name, rules.case_insensitive)]
+    words, every = (
+        candidates(tool_name, tool_input, rules, cwd)
+        if any(rule.pattern is not None for rule in (*never, *always))
+        else ([], False)
+    )
+    for rule in never:
+        if _matches(rule, words, rules, cwd, every=False):
             return _deny(f"your never-allow list refuses this ({rule})")
     if found is not None:
         return found
     if tool_name in rules.mandatory_asks:
         return Ask(f"{tool_name} always asks you")
-    for rule in rules.always:
-        if _matches(rule, tool_name, words, rules, cwd, every=every):
+    for rule in always:
+        if _matches(rule, words, rules, cwd, every=every):
             return Allow(f"your always-allow list allows this ({rule})")
     return Pass()
 

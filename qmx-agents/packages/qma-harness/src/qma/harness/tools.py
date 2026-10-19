@@ -236,7 +236,7 @@ BROKER_EFFECTS: Final[Mapping[str, Effect]] = MappingProxyType(
     }
 )
 
-NON_BROKER_REFS: Final[frozenset[str]] = frozenset({"qmx/chatgpt", "qmx/control-token"})
+FIXED_REFS: Final[frozenset[str]] = frozenset({"qmx/chatgpt", "qmx/control-token"})
 """Fixed `qmx/*` entries every chat's guard refuses by name, besides the settings.toml ones."""
 
 
@@ -497,7 +497,7 @@ def _guarded(tool: ToolDef, grants: Grants) -> ToolCall:
 def keyring_refs(control: ControlService) -> frozenset[str]:
     """Every `qmx/*` reference named in settings.toml [providers], [brokers] and
     [mcp_servers], plus the fixed entries, casefolded. Names only; nothing is read."""
-    found: set[str] = set(NON_BROKER_REFS)
+    found: set[str] = set(FIXED_REFS)
 
     def walk(value: object) -> None:
         if isinstance(value, str) and value.casefold().startswith("qmx/"):
