@@ -63,7 +63,7 @@ DOCS = "https://help.ctrader.com/open-api/"
 NEVER = "Bash(git push*)"
 FAKE_KEY = "sk-" + "or-v1-" + "E56FAKEKEY" * 3
 """A fake key in a real key's shape, built at run time so the secret scan never sees it."""
-BIDI = "echo safe‮txt.exe"
+BIDI = "echo safe" + chr(0x202E) + "txt.exe"
 UNC = "dir \\\\e56-fileserver\\share"
 
 
@@ -148,7 +148,7 @@ async def fake_lane(log: Log) -> None:
         "shell write into control.db": "e56 > ",
         "UNC path": "e56-fileserver",
         "key in a curl body": "curl -s -d",
-        "bidirectional character": "‮",
+        "bidirectional character": chr(0x202E),
         "never-list git push": "git push",
         "WebFetch of a broker docs page": DOCS,
         "Write in workspaces": note.as_posix(),
@@ -215,7 +215,11 @@ async def fake_lane(log: Log) -> None:
         asked = [ask for ask in answerer.asks if ask["tool"] == PROPOSE]
         log.check("propose_order asked", len(asked) == 1, [a.get("reason") for a in asked])
         bash_asks = [a["input"] for a in answerer.asks if a["tool"] == "Bash"]
-        log.check("no Bash call asked: Bash(*) allowed the rest, the floor refused", not bash_asks, bash_asks)
+        log.check(
+            "no Bash call asked: Bash(*) allowed the rest, the floor refused",
+            not bash_asks,
+            bash_asks,
+        )
         log.check("control.db unchanged", (root / "control.db").read_bytes() == before, "compared")
     finally:
         await session.harness.close()
@@ -447,7 +451,12 @@ def main() -> int:
         asyncio.run(haiku_lane(log, args.home))
         return log.verdict()
     use_fake_key()
-    lanes = {"fake": fake_lane, "delete": delete_lane, "external": external_lane, "store": store_lane}
+    lanes = {
+        "fake": fake_lane,
+        "delete": delete_lane,
+        "external": external_lane,
+        "store": store_lane,
+    }
     asyncio.run(lanes[args.lane](log))
     return log.verdict()
 

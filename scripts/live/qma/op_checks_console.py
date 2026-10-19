@@ -719,9 +719,11 @@ async def fake_host_lane(
 def lane_5(log: Log) -> None:
     from common import use_fake_key  # noqa: PLC0415
     from fake_model import Turn, text, tool_use  # noqa: PLC0415
-    from money_lane import results  # noqa: PLC0415
+    from money_lane import (  # noqa: PLC0415
+        broker_connections,
+        results,
+    )
     from op_checks_3_to_5 import PLACE_DIRECTLY, POSITIONS_SKIPPED  # noqa: PLC0415
-    from money_lane import broker_connections  # noqa: PLC0415
     from s29_approvals import ORDER_A, propose, put_brokers, rows  # noqa: PLC0415
 
     use_fake_key()

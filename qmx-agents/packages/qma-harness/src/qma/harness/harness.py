@@ -177,7 +177,7 @@ class NewChat:
     """Background and Child only: auto-compact at this share of the context window. None
     keeps the CLI's default."""
     hooks: ChatHooks | None = None
-    """Background and Child only: observe-only callbacks after the money gate, held in this
+    """Background and Child only: observe-only callbacks after the guard, held in this
     process only. A program that must keep its hooks across a restart names a `hook_sink`."""
     home: Home | None = None
     """None is `general`, or the parent's home for a Child."""

@@ -71,6 +71,7 @@ from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 
+from qma.harness.guard import Deny, guard
 from qma.harness.home import (
     ChatRecord,
     QmxHome,
@@ -107,7 +108,6 @@ from qma.harness.launch import (
     unattended,
     verbatim,
 )
-from qma.harness.guard import Deny, guard
 from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,

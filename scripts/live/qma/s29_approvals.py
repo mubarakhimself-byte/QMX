@@ -37,8 +37,7 @@ from approval_lane import (
 )
 from common import SCRATCH, Log, boot, put_claude, use_fake_home, use_fake_key
 from fake_model import Turn, text, tool_use
-from money_lane import results
-from money_lane import broker_connections
+from money_lane import broker_connections, results
 
 PROPOSE = "mcp__qmx__propose_order"
 TOOLS = ["Read"]

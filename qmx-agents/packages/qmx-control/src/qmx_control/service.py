@@ -121,7 +121,7 @@ def _rule_lists(values: Document) -> Document:
             if not isinstance(pattern, str) or not RULE_PATTERN.fullmatch(pattern):
                 raise ControlError("invalid_rules", f"{pattern!r} is not Tool or Tool(pattern).")
             if source not in RULE_SOURCES:
-                raise ControlError("invalid_rules", "A rule's source is you, imported or suggested.")
+                raise ControlError("invalid_rules", "A source is you, imported or suggested.")
             kept.append({**table, "pattern": pattern.strip(), "source": source})
         stored[name] = kept
     return stored

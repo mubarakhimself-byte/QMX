@@ -11,7 +11,6 @@ a check that exits 3 is blocked on a missing login and counts as FAIL. OpenRoute
 one spend ledger, `<evidence>/openrouter-spend.tsv`, under `--spend-budget`.
 
 Rows that are not run show SKIP with the reason:
-- S27 reads a broker credential, so only the operator runs it (SIGNOFF.md says how);
 - `--gpt-parked` skips S16, for a build where HP16 is parked;
 - `--no-login` skips every row that needs the plan login, a provider key, the ChatGPT sign-in
   or this PC's keyring (the Linux container lane);
@@ -90,9 +89,9 @@ CHECKS: Final[tuple[Check, ...]] = (
     check("S3", "s03_tools.py", needs=[PLAN]),
     check("S4", "s04_vanilla.py", "check2", needs=[PLAN]),
     check("S5", "s05_permissions.py"),
-    check("S6", "s06_money.py", "bypass", needs=[PLAN]),
-    check("S6", "s06_money.py", "agent", needs=[PLAN]),
-    check("S6", "s06_money.py", "neg", needs=[PLAN]),
+    check("E56", "e56_guard.py", "fake"),
+    check("E56", "e56_guard.py", "delete"),
+    check("E56", "e56_guard.py", "haiku", needs=[PLAN]),
     check("S6a", "s06a_gate_alone.py"),
     check("S6a", "s06a_gate_alone.py", "agent"),
     check("S6b", "s06b_rules_alone.py"),
@@ -149,10 +148,6 @@ CHECKS: Final[tuple[Check, ...]] = (
     check("S24", "s24_usage_once.py", label="S24 key"),
     check("S24", "s24_usage_plan.py", needs=[PLAN], label="S24 plan"),
     check("S25", "s25_untrusted.py", needs=[PLAN]),
-    check("S26", "s26_posture.py", "unknown", needs=[KEYS]),
-    check("S26", "s26_posture.py", "unreachable", needs=[KEYS]),
-    check("S26", "s26_posture.py", "proven", needs=[KEYS]),
-    check("S27", "s27_broker_scope.py", needs=[Need.OPERATOR]),
     check("S28", "s28_effects.py"),
     check("S29", "s29_approvals.py"),
     check("S29a", "s29a_grants_alone.py"),

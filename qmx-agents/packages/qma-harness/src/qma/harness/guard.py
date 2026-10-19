@@ -522,9 +522,7 @@ def _bases(expanded: str, *, cwd: str, rules: GuardRules, home_after_cd: bool = 
     return bases
 
 
-def _word(
-    word: str, *, base: str, rules: GuardRules, folded: _Folded, sweep: bool
-) -> Deny | None:
+def _word(word: str, *, base: str, rules: GuardRules, folded: _Folded, sweep: bool) -> Deny | None:
     glob = GLOB.search(word)
     if glob is not None:
         folder = posixpath.dirname(word[: glob.start()].replace("\\", "/")) or "."
@@ -560,7 +558,7 @@ _PREFIX_WORDS: Final = frozenset({"sudo", "command", "exec", "nohup", "call", "&
 DELETE_COMMANDS: Final = frozenset(
     {"rm", "rmdir", "rd", "del", "erase", "remove-item", "ri", "rimraf", "rmtree"}
 )
-_RECURSIVE = re.compile(r"-[a-z]{0,3}r[a-z]{0,3}|--recursive|-rec(?:u(?:r(?:se?)?)?)?|/s", re.I)
+_RECURSIVE = re.compile(r"-[fivdI]*[rR][fivdIR]*|--recursive|(?i:-rec(?:u(?:r(?:se?)?)?)?|/s)")
 """`-r`, `-rf`, `-fR`, `--recursive`, PowerShell's `-Recurse` and its prefixes, `rd /s`. Not
 `-Force`, which only looks like a cluster."""
 _FLAG = re.compile(r"-.*|/[A-Za-z?]{1,2}")
@@ -658,9 +656,7 @@ def invisible(text: str) -> str | None:
     return None
 
 
-def _shell(
-    tool_input: Mapping[str, object], rules: GuardRules, cwd: str
-) -> Deny | Ask | None:
+def _shell(tool_input: Mapping[str, object], rules: GuardRules, cwd: str) -> Deny | Ask | None:
     text = " ".join(
         str(value) for key, value in tool_input.items() if key != "description" and value
     )
@@ -733,10 +729,7 @@ def candidates(
         home = rules.variables.get("HOME", "/")
         return [
             *found,
-            *(
-                normalize_path(value, cwd=cwd, home=home, case_insensitive=False)
-                for value in found
-            ),
+            *(normalize_path(value, cwd=cwd, home=home, case_insensitive=False) for value in found),
         ], False
     if tool_name == "WebFetch":
         return [str(tool_input.get("url", ""))], False

@@ -12,14 +12,14 @@ import test_chat
 from claude_agent_sdk import Message
 from pydantic import JsonValue
 from test_chat import STOP_RULE_2, FakeClient, blocks, rate_limit, result, run, settle, turn_of
-from test_money import RULES
+from test_guard import RULES
 from test_table import read_plan
 
 import qma.harness.chat
 from qma.harness import Harness, InjectedText, NewChat, OperatorText, QmxHome, SessionId
+from qma.harness.guard import Deny, Pass, guard
 from qma.harness.home import read_record
 from qma.harness.launch import Background, ChatKind, Child, Interactive
-from qma.harness.money import Deny, Pass, gate
 from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import ProfileName, parse_profiles
 from qma.harness.routes import control_service
@@ -287,12 +287,12 @@ def test_a_delegate_cancelled_mid_turn_still_stops_the_child_process(
         (
             "mcp__qmx__delegate",
             "a1b2",
-            Deny("money rule: a sub-agent cannot start a helper chat (mcp__qmx__delegate)"),
+            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx__delegate)"),
         ),
         (
             "mcp__QMX__Delegate",
             "a1b2",
-            Deny("money rule: a sub-agent cannot start a helper chat (mcp__qmx__delegate)"),
+            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx__delegate)"),
         ),
         ("mcp__qmx__delegate", None, Pass()),
         ("mcp__qmx__delegate", "", Pass()),
@@ -302,7 +302,7 @@ def test_a_delegate_cancelled_mid_turn_still_stops_the_child_process(
 def test_the_gate_denies_delegate_only_inside_a_sub_agent(
     tool: str, agent_id: str | None, verdict: Deny | Pass
 ) -> None:
-    found = gate(
+    found = guard(
         tool,
         {"profile": "kimi", "prompt": "x"},
         RULES,

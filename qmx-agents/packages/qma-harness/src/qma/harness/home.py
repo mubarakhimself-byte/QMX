@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 from claude_agent_sdk import PermissionResultDeny
 
 from qma.boot import banned_fragment
+from qma.harness.guard import SECRET_SHAPES
 from qma.harness.launch import (
     ARGV_BUDGET,
     Background,
@@ -60,7 +61,6 @@ from qma.harness.launch import (
     launch_env,
 )
 from qma.harness.profiles import PLAN, ProfileName, parse_profiles
-from qma.harness.guard import SECRET_SHAPES
 from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, guard_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id
 

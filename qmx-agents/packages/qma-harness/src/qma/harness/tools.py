@@ -720,10 +720,10 @@ async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> V
         return VettedServer(config, cached)
     listed = await asyncio.wait_for(_list_tools(config), VET_TIMEOUT_S)
     tools = frozenset(str(tool.name) for tool in listed)
-    for name in sorted(tools):
-        act = named_money_act(name)
+    for tool in sorted(tools):
+        act = named_money_act(tool)
         if act is not None:
-            raise OrderToolRefused(f"{name} is {act}")
+            raise OrderToolRefused(f"{tool} is {act}")
     cache.put(digest, tools)
     return VettedServer(config, tools)
 

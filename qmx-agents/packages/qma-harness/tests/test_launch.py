@@ -9,7 +9,7 @@ import pytest
 from claude_agent_sdk import ClaudeAgentOptions, PermissionResultDeny
 from claude_agent_sdk.types import ToolPermissionContext
 
-from qma.harness import money
+from qma.harness import guard
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import (
     CONSTANT_ENV,
@@ -43,17 +43,16 @@ from qma.harness.profiles import (
 )
 from qma.harness.relay import GrantSecret, RelayGrant
 
-GATE = money.GateRules(
-    proposal_tools=frozenset(),
+GATE = guard.GuardRules(
     mandatory_asks=frozenset(),
-    dispatch_targets={},
     protected_paths=("/d/qmx/settings.toml",),
     qmx_homes=(),
     writable_paths=(),
+    install_paths=(),
     secret_paths=(),
     personal_homes=("/c/Users/Op/.claude",),
     keyring_names=frozenset(),
-    broker_hosts=frozenset(),
+    delete_zones=(),
     variables={},
     case_insensitive=True,
     unattended=False,
@@ -176,7 +175,7 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
         strict_mcp_config=True,
         mcp_servers={},
         hooks=options.hooks,
-        disallowed_tools=money.deny_rules(GATE),
+        disallowed_tools=guard.deny_rules(GATE),
         can_use_tool=refuse,
         session_id=CHAT,
         resume=None,
