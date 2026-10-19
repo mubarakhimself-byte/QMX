@@ -206,11 +206,12 @@ def answer(
     ranked: list[tuple[tuple[int, int, int, int, int], Result]] = []
     candidates = [(item, head, None, None) for item, head in entries.items()]
     candidates += [(item, oid, via, source) for item, (oid, via, source) in reached.items()]
+    texts = catalog.texts([object_id for _, object_id, _, _ in candidates])
     for item, object_id, via, source in candidates:
         row = catalog.row(object_id)
         if row is None:
             continue
-        indexed = catalog.text_of(object_id)
+        indexed = texts.get(object_id, "")
         preview = indexed if preview_chars is None else indexed[:preview_chars]
         producer = catalog.producer(object_id)
         cited = catalog.citations(item)

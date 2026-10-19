@@ -11,7 +11,7 @@ import json
 import re
 import sqlite3
 import unicodedata
-from collections.abc import Collection, Generator, Iterable, Mapping
+from collections.abc import Collection, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Final, cast
@@ -364,10 +364,18 @@ class Catalog:
         ).fetchone()
         return int(count)
 
-    def text_of(self, object_id: str) -> str:
-        row = self.db.execute("SELECT text FROM search WHERE object_id = ?", (object_id,))
-        found = row.fetchone()
-        return "" if found is None else str(found[0])
+    def texts(self, object_ids: Sequence[str]) -> dict[str, str]:
+        """Indexed text by object, in one pass: `object_id` is an unindexed FTS5 column, so each
+        lookup scans the table."""
+        found: dict[str, str] = {}
+        for start in range(0, len(object_ids), 900):
+            chunk = object_ids[start : start + 900]
+            rows = self.db.execute(
+                f"SELECT object_id, text FROM search WHERE object_id IN ({', '.join('?' * len(chunk))})",  # noqa: S608
+                chunk,
+            )
+            found.update((str(o), str(t)) for o, t in rows)
+        return found
 
     def placed_seq(self, object_id: str) -> int:
         """The ref-log position of the latest move onto the object, 0 if none."""
