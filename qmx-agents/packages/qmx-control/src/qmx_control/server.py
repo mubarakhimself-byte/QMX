@@ -22,80 +22,8 @@ from qmx_apps.errors import AppError
 from qmx_remote.models import RemoteError
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from qmx_control.catalog import control_rows, rest_routes
 from qmx_control.service import ControlError, ControlService, EventTopic
-
-# These descriptors wire both doors; there is no second implementation to drift.
-OPERATIONS = (
-    ("apps_list", "GET", "/api/apps", False),
-    ("apps_registry", "GET", "/api/apps/registry", False),
-    ("apps_get", "GET", "/api/apps/{app_id}", False),
-    ("apps_create", "POST", "/api/apps", True),
-    ("apps_update", "PUT", "/api/apps/{app_id}", True),
-    ("apps_versions", "GET", "/api/apps/{app_id}/versions", False),
-    ("apps_test", "POST", "/api/apps/{app_id}/test", False),
-    ("apps_publish", "POST", "/api/apps/{app_id}/publish", True),
-    ("apps_rollback", "POST", "/api/apps/{app_id}/rollback", True),
-    ("apps_start", "POST", "/api/apps/{app_id}/start", True),
-    ("apps_stop", "POST", "/api/apps/{app_id}/stop", True),
-    ("apps_restart", "POST", "/api/apps/{app_id}/restart", True),
-    ("apps_call", "POST", "/api/apps/{app_id}/tools/{tool}", True),
-    ("apps_resource", "GET", "/api/apps/{app_id}/resources", False),
-    ("apps_logs", "GET", "/api/apps/{app_id}/logs", False),
-    ("apps_evidence", "GET", "/api/apps/{app_id}/evidence", False),
-    ("apps_backup", "POST", "/api/apps/{app_id}/backup", False),
-    ("apps_restore", "POST", "/api/apps/{app_id}/restore", True),
-    ("apps_archive", "POST", "/api/apps/{app_id}/archive", True),
-    ("workflows_get", "GET", "/api/workflows/{workflow_id}", False),
-    ("workflows_put", "PUT", "/api/workflows/{workflow_id}", True),
-    ("workflows_validate", "POST", "/api/workflows/validate", False),
-    ("workflows_run", "POST", "/api/workflows/{workflow_id}/run", True),
-    ("workflow_drafts_get", "GET", "/api/workflows/{workflow_id}/draft", False),
-    ("workflow_drafts_put", "PUT", "/api/workflows/{workflow_id}/draft", False),
-    ("workflow_tests_run", "POST", "/api/workflows/{workflow_id}/test", False),
-    ("workflow_versions_list", "GET", "/api/workflows/{workflow_id}/versions", False),
-    ("workflow_versions_archive", "POST", "/api/workflows/{workflow_id}/archive", True),
-    ("workflow_runs_list", "GET", "/api/workflow-runs", False),
-    ("workflow_runs_get", "GET", "/api/workflow-runs/{run_id}", False),
-    ("workflow_runs_explain", "GET", "/api/workflow-runs/{run_id}/explain", False),
-    ("workflow_runs_cancel", "POST", "/api/workflow-runs/{run_id}/cancel", True),
-    ("workflow_runs_resume", "POST", "/api/workflow-runs/{run_id}/resume", True),
-    ("workflow_triggers_list", "GET", "/api/triggers", False),
-    ("workflow_triggers_create", "POST", "/api/triggers", True),
-    ("workflow_triggers_enable", "POST", "/api/triggers/{trigger_id}/enable", True),
-    ("workflow_triggers_disable", "POST", "/api/triggers/{trigger_id}/disable", True),
-    ("workflow_triggers_run_now", "POST", "/api/triggers/{trigger_id}/run-now", True),
-    ("workflow_inbox_list", "GET", "/api/inbox", False),
-    ("runs_list", "GET", "/api/runs", False),
-    ("runs_start_remote", "POST", "/api/runs/remote", True),
-    ("runs_status", "GET", "/api/runs/{run_id}/status", False),
-    ("runs_logs", "GET", "/api/runs/{run_id}/logs", False),
-    ("runs_fetch", "POST", "/api/runs/{run_id}/fetch", False),
-    ("runs_resume", "POST", "/api/runs/{run_id}/resume", True),
-    ("runs_stop", "POST", "/api/runs/{run_id}/stop", True),
-    ("run_job", "POST", "/api/jobs/remote", True),
-    ("job_status", "GET", "/api/jobs/{run_id}/status", False),
-    ("job_logs", "GET", "/api/jobs/{run_id}/logs", False),
-    ("job_fetch", "POST", "/api/jobs/{run_id}/fetch", False),
-    ("runs_get", "GET", "/api/runs/{run_id}", False),
-    ("runs_cancel", "POST", "/api/runs/{run_id}/cancel", True),
-    ("jobs_list", "GET", "/api/jobs", False),
-    ("jobs_cancel", "POST", "/api/jobs/{job_id}/cancel", True),
-    ("library_search", "GET", "/api/library", False),
-    ("library_save", "POST", "/api/library", False),
-    ("library_get", "GET", "/api/library/{artifact_id}", False),
-    ("library_versions", "GET", "/api/library/{artifact_id}/versions", False),
-    ("library_links", "GET", "/api/library/{artifact_id}/links", False),
-    ("library_link", "POST", "/api/library/links", False),
-    ("aggregates_get", "GET", "/api/aggregates", False),
-    ("backup_weekly", "POST", "/api/backup/weekly", True),
-    ("settings_get", "GET", "/api/settings/{section}", False),
-    ("settings_put", "PUT", "/api/settings/{section}", True),
-    ("portfolio_proposals", "GET", "/api/portfolio/proposals", False),
-    ("sessions_create", "POST", "/api/sessions", False),
-    ("sessions_list", "GET", "/api/sessions", False),
-    ("sessions_append", "POST", "/api/sessions/{session_id}/blocks", False),
-    ("sessions_stream", "GET", "/api/sessions/{session_id}/events", False),
-)
 
 
 def local_token() -> str:
@@ -137,12 +65,14 @@ class BearerGate:
 def create_mcp(service: ControlService) -> FastMCP:
     """In-process and stdio callers are trusted; HTTP is protected by BearerGate."""
     mcp = FastMCP("qmx-control")
-    for name, method, _, destructive in OPERATIONS:
+    for row in control_rows():
+        asks = row.approval in ("manage", "propose_money")
         mcp.tool(
-            name=name,
-            annotations={"readOnlyHint": method == "GET", "destructiveHint": destructive},
-            meta={"interrupt_on": destructive},
-        )(_mcp_method(getattr(service, name)))
+            name=row.name,
+            description=row.description or None,
+            annotations={"readOnlyHint": row.approval == "read", "destructiveHint": asks},
+            meta={"interrupt_on": asks},
+        )(_mcp_method(getattr(service, row.target)))
     return mcp
 
 
@@ -224,12 +154,12 @@ def create_app(
     ) -> JSONResponse:
         return JSONResponse(error.document(), status_code=error.status)
 
-    for name, method, path, _ in OPERATIONS:
+    for row, rest in rest_routes(control_rows()):
         app.add_api_route(
-            path,
-            getattr(service, name),
-            methods=[method],
-            operation_id=name,
+            rest.path,
+            getattr(service, row.target),
+            methods=[rest.verb],
+            operation_id=row.name,
             dependencies=[Depends(authenticate)],
         )
 
