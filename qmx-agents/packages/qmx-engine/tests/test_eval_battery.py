@@ -188,7 +188,7 @@ def test_a_side_whose_tries_ran_on_another_model_reports_no_pass3(tmp_path: Path
     values = {**DEFAULTS, "roles.test_only": ("kimi/k3", KIMI)}
     tasks = [t for t in SEEDS if t["id"] == "quant-basis-points"]
     with EngineService.open(tmp_path, settings=StaticSettings(values), harness=answering()) as svc:
-        result = asyncio.run(
+        result: Any = asyncio.run(
             battery.run(
                 svc,
                 tasks,

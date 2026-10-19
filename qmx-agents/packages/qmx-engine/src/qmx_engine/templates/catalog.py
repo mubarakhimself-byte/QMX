@@ -156,6 +156,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "EVAL",
         folder="ev-copilot-eval-battery",
         test_inputs={"fixture": True},
+        test_cost="EVAL lane 2: 4 haiku spans (3 tries and the judge); 40 s",
     ),
     Template(
         "DM",
