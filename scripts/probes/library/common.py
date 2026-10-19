@@ -96,9 +96,9 @@ def copy_read_only(sources: Iterable[Path], into: Path) -> dict[Path, str]:
 
 
 KEY_SHAPES: Final = re.compile(
-    r"sk-[A-Za-z0-9_-]{16,}|sk-ant-[A-Za-z0-9_-]{16,}|sk-or-[A-Za-z0-9_-]{16,}"
+    r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{16,}"
     r"|gh[pousr]_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,}"
-    r"|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"
+    r"|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})"
 )
 
 

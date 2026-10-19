@@ -14,6 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import common
 import p_mem
 import p_nest
 import p_ops
@@ -106,6 +107,19 @@ def test_mem_fails_on_quality_naming_the_types_behind() -> None:
     assert result.fallback == p_mem.FALLBACK_QUALITY
 
 
+def test_mem_reports_every_failed_line_with_its_fallback() -> None:
+    behind = scores(2.0, 2.0)
+    behind["hindsight"]["lab-to-hub"] = 1.0
+    result = p_mem.judge(behind, memory_mb=2223, retain_s=42.0)
+    assert result.reason == (
+        "FAIL on RAM; FAIL on quality: Hindsight is behind FTS5 on lab-to-hub; "
+        "FAIL on retain time: the digest retain did not finish within 30 s"
+    )
+    assert result.fallback == " ".join(
+        (p_mem.FALLBACK_RAM, p_mem.FALLBACK_QUALITY, p_mem.FALLBACK_RETAIN)
+    )
+
+
 def test_mem_relevance_needs_every_joined_phrase() -> None:
     question = p_mem.Question("decided", "q", ("hindsight & ruling 119",))
     hits = ["Hindsight, ruling 119", "Hindsight only", "ruling 119 only"]
@@ -153,3 +167,9 @@ def test_srch_fails_below_the_line_and_on_a_one_item_store() -> None:
     perfect = p_srch.score([p_srch.Answer(("a",), 1.0)], [["a"]])
     single = p_srch.verdict(perfect, True, True, distinct_items=1)
     assert (single.outcome, single.fallback) == ("FAIL", p_srch.FALLBACK)
+
+
+def test_redact_hides_a_key_but_keeps_a_word_that_holds_sk() -> None:
+    fake = "sk-" + "a1" * 12
+    text = f"key {fake} in plan/risk-sizing-session-outcome"
+    assert common.redact(text) == "key [redacted] in plan/risk-sizing-session-outcome"

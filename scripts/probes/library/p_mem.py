@@ -76,7 +76,10 @@ FALLBACK_RAM: Final = (
     "Hindsight stays on the PC and the server's runs recall through FTS5 over the same rows "
     "until the server grows."
 )
-FALLBACK_QUALITY: Final = "recorded and tuned; the choice of Hindsight stands (ruling 119)."
+FALLBACK_QUALITY: Final = (
+    "Quality is recorded and tuned; the choice of Hindsight stands (ruling 119)."
+)
+FALLBACK_RETAIN: Final = "The plan names no fallback for retain time; the coordinator reports it."
 STOP: Final = frozenset(
     [
         "the",
@@ -350,16 +353,20 @@ def judge(
     }
     numbers["memory_mb"] = round(memory_mb)
     numbers["retain_s"] = "none" if retain_s is None else round(retain_s, 1)
+    failed: list[tuple[str, str]] = []
     if memory_mb > RSS_LIMIT_MB:
-        return Verdict("P-MEM", "FAIL", numbers, "FAIL on RAM", FALLBACK_RAM)
+        failed.append(("FAIL on RAM", FALLBACK_RAM))
     behind = [k for k in TYPES if scores["hindsight"][k] < scores["fts5"][k]]
     if behind:
         reason = f"FAIL on quality: Hindsight is behind FTS5 on {', '.join(behind)}"
-        return Verdict("P-MEM", "FAIL", numbers, reason, FALLBACK_QUALITY)
+        failed.append((reason, FALLBACK_QUALITY))
     if retain_s is None or retain_s > RETAIN_LIMIT_S:
         reason = "FAIL on retain time: the digest retain did not finish within 30 s"
-        return Verdict("P-MEM", "FAIL", numbers, reason, FALLBACK_QUALITY)
-    return Verdict("P-MEM", "PASS", numbers, "Hindsight matches or beats FTS5 on every type")
+        failed.append((reason, FALLBACK_RETAIN))
+    if not failed:
+        return Verdict("P-MEM", "PASS", numbers, "Hindsight matches or beats FTS5 on every type")
+    reasons, fallbacks = zip(*failed, strict=True)
+    return Verdict("P-MEM", "FAIL", numbers, "; ".join(reasons), " ".join(fallbacks))
 
 
 class Peak:
