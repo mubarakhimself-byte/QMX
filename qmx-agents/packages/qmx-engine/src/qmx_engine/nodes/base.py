@@ -2,22 +2,18 @@
 `NodeResult`.
 
 The span of 5.1's results is not a field here: the ledger derives it from `node_started` and the
-ending event (EP4). `step` turns a set of executors into the worker half of a driver, so
-`core.simulate` can run them without the core importing an executor.
+ending event (EP4).
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from pydantic import JsonValue
 from qma.harness import StuckCall
 from qmx_ledger.journal import fingerprint
-
-from qmx_engine.core.commands import StartNode
-from qmx_engine.ledger.signature import signature
 
 type JsonObject = dict[str, JsonValue]
 type Mode = Literal["live", "test"]
@@ -113,8 +109,7 @@ class Executor(Protocol):
 
 
 class AsyncExecutor(Protocol):
-    """An executor that waits on a process or another run. Only the runner's worker awaits it;
-    `step` runs plain `Executor`s."""
+    """An executor that waits on a process or another run; the runner's worker awaits it."""
 
     async def run(self, job: NodeJob) -> NodeResult: ...
 
@@ -151,42 +146,3 @@ def ending(result: NodeResult) -> list[tuple[str, JsonObject]]:
                 ("gate_opened", {"ask": result.ask, "options": list(result.options)}),
                 ("node_waiting", {"reason": "gate", "resume_at": None}),
             ]
-
-
-def step(
-    executors: Mapping[str, Executor], *, mode: Mode = "test"
-) -> Callable[[StartNode], list[tuple[str, JsonObject]]]:
-    """Run each `StartNode` on the executor registered for its node's `type`."""
-
-    def run(command: StartNode) -> list[tuple[str, JsonObject]]:
-        attempt: JsonObject = {
-            "node_id": command.node_id,
-            "iteration": command.iteration,
-            "partition": command.partition,
-            "attempt": command.attempt,
-        }
-        job = NodeJob(
-            run_id=command.run_id,
-            node_id=command.node_id,
-            iteration=command.iteration,
-            partition=command.partition,
-            attempt=command.attempt,
-            memo_key=command.memo_key,
-            idempotency_key=command.idempotency_key,
-            node_definition=command.node_definition,
-            inputs=command.inputs,
-            now=command.now,
-            mode=mode,
-        )
-        executor = executors.get(str(command.node_definition.get("type")))
-        started = ("node_started", attempt | {"idempotency_key": command.idempotency_key})
-        if executor is None:
-            message = f"no executor for node type {command.node_definition.get('type')!r}"
-            result: NodeResult = Failed(
-                "no_executor", message, signature("no_executor", message), retryable=False
-            )
-        else:
-            result = executor.run(job)
-        return [started, *((kind, attempt | data) for kind, data in ending(result))]
-
-    return run

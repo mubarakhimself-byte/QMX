@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from itertools import pairwise
 from pathlib import Path
-from typing import cast
+
+from flows import Flow
+from pydantic import JsonValue
 
 from qmx_engine.core.commands import Finish, Park, StartNode, encode
 from qmx_engine.core.fold import fold
 from qmx_engine.core.ready import next_commands
-from qmx_engine.core.simulate import Entry, Simulation
 from qmx_engine.definition.model import Workflow
-from qmx_engine.ledger.events import EventKind, JsonObject
+from qmx_engine.ledger.events import Event, JsonObject
 from qmx_engine.ledger.memo import MemoKey
 from qmx_engine.ledger.store import Ledger, Reader
-from qmx_engine.nodes.base import NodeJob, NodeResult, Ok, step
-from qmx_engine.nodes.trigger import Trigger
+from qmx_engine.nodes.base import NodeJob, NodeResult, Ok
 
 NOW = "2026-10-17T09:00:00+00:00"
 TRIGGER: JsonObject = {
@@ -38,6 +39,16 @@ TRIGGER: JsonObject = {
 class Echo:
     def run(self, job: NodeJob) -> NodeResult:
         return Ok({"main": {"node": job.node_id, "upstream": job.inputs}})
+
+
+@dataclass(frozen=True, slots=True)
+class Seen:
+    """An event as the core reads it, of a kind the ledger would refuse to store."""
+
+    seq: int
+    run_id: str
+    kind: str
+    data: JsonObject = field(default_factory=dict[str, JsonValue])
 
 
 def chain(length: int) -> Workflow:
@@ -63,15 +74,14 @@ def chain(length: int) -> Workflow:
     )
 
 
-def finished_run(length: int = 3) -> Simulation:
-    simulation = Simulation(chain(length), "run-1", step({"trigger": Trigger(), "script": Echo()}))
-    simulation.start({"topic": "q-fin"}, NOW)
-    return simulation
+def finished_run(tmp: Path, length: int = 3) -> list[Event]:
+    flow = Flow(tmp, chain(length), {"script": Echo()})
+    assert flow.start({"topic": "q-fin"}).status == "passed"
+    return flow.events
 
 
-def test_folding_one_event_list_twice_gives_equal_commands_at_every_prefix() -> None:
-    simulation = finished_run()
-    events = simulation.events
+def test_folding_one_event_list_twice_gives_equal_commands_at_every_prefix(tmp_path: Path) -> None:
+    events = finished_run(tmp_path)
     definition = chain(3)
 
     first = [encode(next_commands(fold(definition, events[:k]))) for k in range(len(events) + 1)]
@@ -94,15 +104,14 @@ def test_folding_one_event_list_twice_gives_equal_commands_at_every_prefix() -> 
     ]
 
 
-def test_a_chain_finishes_with_the_sink_outputs_and_then_says_nothing() -> None:
-    simulation = finished_run()
-    kinds = [e.kind for e in simulation.events]
+def test_a_chain_finishes_with_the_sink_outputs_and_then_says_nothing(tmp_path: Path) -> None:
+    events = finished_run(tmp_path)
+    kinds = [e.kind for e in events]
 
     assert kinds.count("node_started") == 3
     assert kinds[-1] == "run_finished"
-    assert next_commands(simulation.state()) == []
-    before_finish = fold(chain(3), simulation.events[:-1])
-    assert next_commands(before_finish) == [
+    assert next_commands(fold(chain(3), events)) == []
+    assert next_commands(fold(chain(3), events[:-1])) == [
         Finish(
             {
                 "n3": {
@@ -117,27 +126,25 @@ def test_a_chain_finishes_with_the_sink_outputs_and_then_says_nothing() -> None:
 
 
 def test_an_event_kind_the_core_does_not_know_parks_the_run_naming_it() -> None:
-    simulation = Simulation(chain(3), "run-1", step({"trigger": Trigger(), "script": Echo()}))
-    simulation.now = NOW
-    simulation.append("run_input", {"inputs": {}})
-    simulation.append("clock_tick", {"now": NOW})
-    simulation.append("node_teleported", {"node_id": "n1"})
+    events = [
+        Seen(1, "run-1", "run_input", {"inputs": {}}),
+        Seen(2, "run-1", "clock_tick", {"now": NOW}),
+        Seen(3, "run-1", "node_teleported", {"node_id": "n1"}),
+    ]
+    parked = Seen(4, "run-1", "ladder_step", {"step": "park", "reason": "unfoldable"})
 
-    assert next_commands(simulation.state()) == [
+    assert next_commands(fold(chain(3), events)) == [
         Park("this core cannot fold event kind 'node_teleported' at seq 3")
     ]
-    assert simulation.drive() == Park("this core cannot fold event kind 'node_teleported' at seq 3")
-    assert [e.kind for e in simulation.events][-1] == "ladder_step"
-    assert next_commands(simulation.state()) == []
+    assert next_commands(fold(chain(3), [*events, parked])) == []
 
 
 def test_events_read_back_from_the_ledger_fold_to_the_same_commands(tmp_path: Path) -> None:
-    simulation = finished_run()
-    halfway: list[Entry] = simulation.events[:6]
-    with Ledger.open(tmp_path) as ledger:
-        for entry in halfway:
-            ledger.append("run-1", cast(EventKind, entry.kind), entry.data, at=entry.at)
-    with Reader.open(tmp_path) as reader:
+    halfway = finished_run(tmp_path / "run")[:6]
+    with Ledger.open(tmp_path / "copy") as ledger:
+        for event in halfway:
+            ledger.append("run-1", event.kind, event.data, at=event.at)
+    with Reader.open(tmp_path / "copy") as reader:
         stored = reader.events("run-1")
 
     assert encode(next_commands(fold(chain(3), stored))) == encode(

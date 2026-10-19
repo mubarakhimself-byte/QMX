@@ -3,11 +3,12 @@ matched key."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
-from flows import NOW, Script, edge, node, of, simulation, workflow
+from flows import Flow, Script, edge, node, of, workflow
 from pydantic import JsonValue
 
-from qmx_engine.core.commands import Finish
 from qmx_engine.core.edges import FanError, Part, fan
 from qmx_engine.definition.model import Target
 from qmx_engine.nodes.base import NodeJob
@@ -57,7 +58,9 @@ def pick(job: NodeJob, value: JsonValue) -> JsonValue:
     return value[job.node_id] if isinstance(value, dict) else value
 
 
-def test_a_cartesian_edge_of_3_by_4_runs_12_partitions_in_row_major_order() -> None:
+def test_a_cartesian_edge_of_3_by_4_runs_12_partitions_in_row_major_order(
+    tmp_path: Path,
+) -> None:
     definition = workflow(
         [
             node("start", "trigger"),
@@ -73,10 +76,10 @@ def test_a_cartesian_edge_of_3_by_4_runs_12_partitions_in_row_major_order() -> N
             "pair": {"main": [edge("gather")]},
         },
     )
-    sim = simulation(definition, Script(pick))
+    flow = Flow(tmp_path, definition, {"script": Script(pick)})
 
-    ended = sim.start({"rows": [1, 2, 3], "cols": ["a", "b", "c", "d"]}, NOW)
+    ended = flow.start({"rows": [1, 2, 3], "cols": ["a", "b", "c", "d"]})
 
-    assert len(of(sim.events, "node_started", "pair")) == 12
+    assert len(of(flow.events, "node_started", "pair")) == 12
     pairs: list[JsonValue] = [[r, c] for r in (1, 2, 3) for c in "abcd"]
-    assert ended == Finish({"gather": {"main": pairs}})
+    assert ended.outputs == {"gather": {"main": pairs}}

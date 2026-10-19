@@ -350,7 +350,13 @@ class Planner:
             s.partition or 0 for s in runs if self.phase(s) == "failed" and parked(self.state, s)
         ]
         held = self.state.holds.get(slot)
-        timed_out = held is not None and due(held, self.state.now, self.state.received)
+        # A pass starts with every partition pending; the timeout waits until each has settled
+        # from its memo or started again, so a resume never counts a saved arrival as missing.
+        timed_out = (
+            held is not None
+            and due(held, self.state.now, self.state.received)
+            and all(self.phase(s) != "pending" for s in runs)
+        )
         fired = self.state.joins.get(slot)
         if fired is not None:
             if any(p not in ids or self.phase(ids[p]) != "finished" for p in fired):

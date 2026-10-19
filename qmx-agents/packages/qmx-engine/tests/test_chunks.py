@@ -3,10 +3,11 @@ stable ids and a memo per chunk, so a failed chunk reruns alone."""
 
 from __future__ import annotations
 
-from flows import LATER, NOW, Script, edge, node, of, simulation, workflow
+from pathlib import Path
+
+from flows import LATER, Flow, Script, edge, node, of, started_slots, workflow
 from pydantic import JsonValue
 
-from qmx_engine.core.commands import Finish, Park
 from qmx_engine.core.partitions import Span, chunks
 from qmx_engine.definition.model import Chunk, Workflow
 
@@ -53,36 +54,36 @@ def chunked() -> Workflow:
     )
 
 
-def test_two_failed_chunks_rerun_alone_and_the_join_keeps_partition_order() -> None:
+def test_two_failed_chunks_rerun_alone_and_the_join_keeps_partition_order(tmp_path: Path) -> None:
     script = Script(
         lambda job, chunk: [job.partition, len(chunk) if isinstance(chunk, list) else 0],
         failing={("read", 0, 1), ("read", 0, 4)},
     )
-    sim = simulation(chunked(), script)
+    flow = Flow(tmp_path, chunked(), {"script": script})
 
-    first = sim.start(list(range(60)), NOW)
-    mark = len(sim.events)
-    ended = sim.resume(LATER)
+    first = flow.start(list(range(60)))
+    mark = len(flow.events)
+    ended = flow.resume(LATER)
 
-    assert isinstance(first, Park)
-    assert (
-        first.reason
-        == "join gather join_failed: all join has 4 of 6 needed partitions; 2 of 6 failed"
+    assert (first.status, first.reason) == (
+        "failed",
+        "join gather join_failed: all join has 4 of 6 needed partitions; 2 of 6 failed",
     )
-    assert [c for c in script.calls if c[0] == "read"][:6] == [("read", 0, p) for p in range(6)]
+    assert sorted(c for c in script.calls[:6] if c[0] == "read") == [
+        ("read", 0, p) for p in range(6)
+    ]
     assert [c for c in script.calls[6:] if c[0] == "read"] == [("read", 0, 1), ("read", 0, 4)]
-    resumed = of(sim.events[mark:], "node_started", "read")
-    assert [(e["partition"], e["attempt"]) for e in resumed] == [(1, 2), (4, 2)]
-    assert ended == Finish({"gather": {"main": [[p, 10] for p in range(6)]}})
+    assert started_slots(flow.events[mark:], "read") == [(1, 2), (4, 2)]
+    assert ended.outputs == {"gather": {"main": [[p, 10] for p in range(6)]}}
 
 
-def test_partition_ids_and_chunk_plans_are_the_same_for_the_same_item_list() -> None:
+def test_partition_ids_and_chunk_plans_are_the_same_for_the_same_item_list(tmp_path: Path) -> None:
     plans: list[list[tuple[JsonValue, JsonValue]]] = []
     for run_id in ("run-a", "run-b"):
-        sim = simulation(chunked(), Script(), run_id=run_id)
-        sim.start(list(range(25)), NOW)
+        flow = Flow(tmp_path, chunked(), {"script": Script()}, run_id=run_id)
+        flow.start(list(range(25)))
         plans.append(
-            [(e["partition"], e["plan"]) for e in of(sim.events, "node_scheduled", "read")]
+            [(e["partition"], e["plan"]) for e in of(flow.events, "node_scheduled", "read")]
         )
 
     assert plans[0] == plans[1]

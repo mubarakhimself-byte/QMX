@@ -3,10 +3,11 @@ named event arrives, and never starts before."""
 
 from __future__ import annotations
 
-from flows import NOW, Script, edge, node, of, simulation, workflow
+from pathlib import Path
+
+from flows import Flow, Script, edge, node, of, workflow
 from pydantic import JsonValue
 
-from qmx_engine.core.commands import Finish, Wait
 from qmx_engine.definition.model import Workflow
 
 
@@ -17,26 +18,31 @@ def waiting(**spec: JsonValue) -> Workflow:
     )
 
 
-def test_a_30_second_wait_resumes_on_the_first_tick_past_resume_at_and_not_before() -> None:
-    sim = simulation(waiting(seconds=30), Script())
+def test_a_30_second_wait_resumes_on_the_first_tick_past_resume_at_and_not_before(
+    tmp_path: Path,
+) -> None:
+    flow = Flow(tmp_path, waiting(seconds=30), {"script": Script()})
 
-    first = sim.start({"topic": "q-fin"}, NOW)
-    early = sim.tick("2026-10-17T09:00:29+00:00")
-    started_early = of(sim.events, "node_started", "pause")
-    late = sim.tick("2026-10-17T09:00:31+00:00")
+    first = flow.start({"topic": "q-fin"})
+    early = flow.tick("2026-10-17T09:00:29+00:00")
+    started_early = of(flow.events, "node_started", "pause")
+    late = flow.tick("2026-10-17T09:00:31+00:00")
 
-    assert first == Wait(("pause",), "2026-10-17T09:00:30+00:00")
-    assert early == Wait(("pause",), "2026-10-17T09:00:30+00:00")
+    assert (first.status, first.reason) == ("waiting", "waiting on pause")
+    assert [e["resume_at"] for e in of(flow.events, "node_waiting", "pause")] == [
+        "2026-10-17T09:00:30+00:00"
+    ]
+    assert (early.status, early.reason) == ("waiting", "waiting on pause")
     assert started_early == []
-    assert late == Finish({"after": {"main": {"topic": "q-fin"}}})
+    assert (late.status, late.outputs) == ("passed", {"after": {"main": {"topic": "q-fin"}}})
 
 
-def test_an_event_wait_resumes_only_on_its_named_event() -> None:
-    sim = simulation(waiting(event="paper.published"), Script())
-    sim.start({"topic": "q-fin"}, NOW)
+def test_an_event_wait_resumes_only_on_its_named_event(tmp_path: Path) -> None:
+    flow = Flow(tmp_path, waiting(event="paper.published"), {"script": Script()})
+    flow.start({"topic": "q-fin"})
 
-    other = sim.receive("paper.withdrawn")
-    named = sim.receive("paper.published")
+    other = flow.receive("paper.withdrawn")
+    named = flow.receive("paper.published")
 
-    assert other == Wait(("pause",), None)
-    assert named == Finish({"after": {"main": {"topic": "q-fin"}}})
+    assert (other.status, other.reason) == ("waiting", "waiting on pause")
+    assert (named.status, named.outputs) == ("passed", {"after": {"main": {"topic": "q-fin"}}})
