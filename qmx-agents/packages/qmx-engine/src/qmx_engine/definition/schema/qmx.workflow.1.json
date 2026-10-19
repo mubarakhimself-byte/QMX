@@ -682,6 +682,11 @@
         "port": {
           "title": "Port",
           "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
         }
       },
       "required": [

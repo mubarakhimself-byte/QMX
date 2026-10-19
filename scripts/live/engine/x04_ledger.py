@@ -375,7 +375,9 @@ def memo_lane(log: Log) -> None:
         memo.record(ledger, key, {"main": ["card"]})
     with Reader.open(home) as reader:
         log.check(
-            "the memo under that key is valid", memo.valid(reader, key), key.fingerprint == keys[0]
+            "the memo under that key holds its outputs",
+            memo.has(reader, key) and memo.outputs(reader, key) == {"main": ["card"]},
+            key.fingerprint == keys[0],
         )
 
 

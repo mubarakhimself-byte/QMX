@@ -145,6 +145,12 @@ def text(document: JsonObject) -> list[str]:
         for attempt in tried:
             why = f" {attempt.get('code')}: {attempt.get('message')}" if "code" in attempt else ""
             lines.append(f"  attempt {attempt.get('attempt')} {attempt.get('status')}{why}")
+        for span in node["spans"]:
+            where = "" if span.get("partition") is None else f" partition {span.get('partition')}"
+            lines.append(
+                f"  span {span.get('attempt')}{where} {span.get('status')}"
+                f" model {span.get('model')} tokens {span.get('tokens')}"
+            )
         for step in node["ladder"]:
             extra = " (skipped)" if step.get("skipped") else ""
             lines.append(f"  ladder {step.get('step')}{extra}: {step.get('reason')}")

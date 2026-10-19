@@ -1,7 +1,9 @@
 """`versions.publish`, `versions.list`, enable, disable and archive (SOLUTION-DESIGN 6.1, 13): the
 version half of the AD-11 lifecycle.
 
-Publishing merges a tested draft into `main` with its semver; the Library copies `tested-by` when
+Publishing merges a tested draft into `main` with its semver; a variant draft saved in overlay form
+is first saved as the resolved snapshot its tested mark was read from, so the state and the act
+agree (L-54); the Library copies `tested-by` when
 the content hash is unchanged, and a second publish of one hash creates nothing. Enabling needs a
 passing run for the version's content hash, whatever the merge did. A version's state after
 publish is its latest `state` annotation; nothing is removed, so an archived version keeps its runs
@@ -13,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from qmx_engine.definition.validate import needs_line, validate
-from qmx_engine.ports.library import MAIN, Stored, drafts_ref
+from qmx_engine.ports.library import MAIN, JsonObject, Stored, drafts_ref
 from qmx_engine.service.context import Act, Caller, Context, Refused, State, require
 from qmx_engine.service.drafts import Drafts
 from qmx_engine.service.runs import Runs
@@ -47,10 +49,16 @@ class Versions:
         library = self.ctx.library
         require(self.drafts.state(item), "publish", f"draft {item}")
         draft = self.drafts.get(item)
-        problems = validate(draft.bundle.folder(), roles=self.ctx.roles(), publish=True)
+        bundle, variant_of = self.drafts.resolved(draft.bundle)
+        problems = validate(bundle.folder(), roles=self.ctx.roles(), publish=True)
         if problems:
             codes = " ".join(sorted({p.code for p in problems}))
             raise Refused("invalid", f"draft {item} cannot publish: {codes}")
+        if variant_of is not None:
+            fields: JsonObject = {"caller_kind": caller.kind, "variant_of": variant_of}
+            draft = library.put_draft(
+                item, bundle, draft.revision, principal=caller.principal, fields=fields
+            )
         object_id = library.publish(item, drafts_ref(item), semver, principal=caller.principal)
         parent = library.get(draft.object_id).fields.get("variant_of")
         if isinstance(parent, dict):

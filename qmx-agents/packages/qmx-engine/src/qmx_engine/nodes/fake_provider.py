@@ -1,9 +1,13 @@
-"""The fake provider (SOLUTION-DESIGN 6.2, 9): an `llm` executor that calls no model, for a
-no-spend dry run. It runs only when a run is started with the explicit `fake` switch; `mode: test`
-alone never selects it (ruling 51).
+"""The fake provider (SOLUTION-DESIGN 6.2, 9): the `llm` and `agent` executor that calls no model,
+for a no-spend dry run (B-77). It runs only when a run is started with the explicit `fake` switch;
+`mode: test` alone never selects it (ruling 51).
 
 It answers with the node's pinned data when the test run has some, else the recorded answer file
-`parameters.recording_ref`, else a canned document built from the node's schema.
+`parameters.recording_ref`, else a canned document built from the node's schema (`schema_ref`, or
+an agent's `output_schema_ref`). A chunk of a `chunk` edge gets the recorded answer cut to its own
+items, as a real model answers only what it was given (B-85): each list in the answer keeps the
+entries whose `*_id` field names an `id` of an item in the chunk, and an answer whose entries name
+no item id is kept whole.
 """
 
 from __future__ import annotations
@@ -65,10 +69,39 @@ class FakeProvider:
         recorded = read_ref(self.root, parameters, "recording_ref")
         if recorded is not None:
             try:
-                return Ok({"main": json.loads(recorded)}, span={"fake": "recorded"})
+                answer: JsonValue = json.loads(recorded)
             except ValueError:
                 return failed("bad_definition", "recording_ref is not JSON", retryable=False)
-        schema = node_schema(self.root, parameters)
+            if job.partition is not None:
+                answer = own_items(answer, job.inputs)
+            return Ok({"main": answer}, span={"fake": "recorded"})
+        schema = node_schema(self.root, parameters) or node_schema(
+            self.root, parameters, "output_schema_ref"
+        )
         if schema is None:
-            return failed("bad_definition", "an llm node needs a JSON schema_ref", retryable=False)
+            return failed("bad_definition", "a model node needs a JSON schema", retryable=False)
         return Ok({"main": canned(schema)}, span={"fake": "canned"})
+
+
+def own_items(answer: JsonValue, inputs: JsonValue) -> JsonValue:
+    """The answer with each top-level list cut to the entries that name an item of this chunk."""
+    given = inputs.get("in") if isinstance(inputs, dict) else None
+    items = given if isinstance(given, list) else []
+    ids = {
+        found
+        for item in items
+        if isinstance(item, dict) and isinstance(found := item.get("id"), str)
+    }
+    if not ids or not isinstance(answer, dict):
+        return answer
+    cut: JsonObject = {}
+    for key, value in answer.items():
+        if isinstance(value, list) and any(isinstance(e, dict) and refs(e) for e in value):
+            cut[key] = [e for e in value if not isinstance(e, dict) or refs(e) & ids]
+        else:
+            cut[key] = value
+    return cut
+
+
+def refs(entry: JsonObject) -> set[str]:
+    return {v for k, v in entry.items() if k.endswith("_id") and isinstance(v, str)}

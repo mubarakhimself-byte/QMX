@@ -1,10 +1,11 @@
 """`tests.run` (SOLUTION-DESIGN 6.2, 13): a draft run in test mode, its `test-report` bound to the
 draft's content hash, on the run's own branch.
 
-A variant is first saved as its resolved snapshot, a new draft revision that remembers its parent,
-so what is tested is what will publish. A full test that passes links the draft `tested-by` the
-run; a selected-subgraph test writes its report but tests only that part, so it marks nothing, and
-so does a run on the fake provider, which proves nothing about a real model (ruling 51).
+A variant runs as its resolved snapshot, so what is tested is what will publish. Only a full test
+that passes saves that snapshot as a new draft revision that remembers its parent, and links it
+`tested-by` the run; a failed test leaves the variant draft as it was (L-55). A selected-subgraph
+test writes its report but tests only that part, so it marks nothing, and so does a run on the fake
+provider, which proves nothing about a real model (ruling 51).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from qmx_engine.definition.validate import needs_line
 from qmx_engine.ports.library import JsonObject, RunStatus
 from qmx_engine.service.context import Caller, Context, Refused
 from qmx_engine.service.drafts import Drafts
-from qmx_engine.service.runs import run_bundle
+from qmx_engine.service.runs import report, run_bundle
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +53,7 @@ class Tests:
         """`fake` answers model nodes with the fake provider, for a run that spends nothing."""
         library = self.ctx.library
         draft = self.drafts.get(item)
-        problems = self.drafts.problems(draft.bundle)
+        problems = self.drafts.problems(draft.bundle, needs=False)
         if problems:
             codes = " ".join(sorted({p.code for p in problems}))
             raise Refused("invalid", f"draft {item} does not validate: {codes}")
@@ -60,11 +61,6 @@ class Tests:
         if bundle.needs():
             raise Refused(
                 "needs_unmet", f"draft {item} cannot be tested; {needs_line(bundle.needs())}"
-            )
-        if variant_of is not None:
-            fields: JsonObject = {"caller_kind": caller.kind, "variant_of": variant_of}
-            draft = library.put_draft(
-                item, bundle, draft.revision, principal=caller.principal, fields=fields
             )
         content_hash = str(bundle.content_hash())
         outcome, summary = await run_bundle(
@@ -79,20 +75,19 @@ class Tests:
             fake=fake,
             run_id=run_id,
         )
-        principal = f"run:{outcome.run_id}"
-        report: JsonObject = {
+        if variant_of is not None and outcome.status == "passed" and subgraph is None and not fake:
+            fields: JsonObject = {"caller_kind": caller.kind, "variant_of": variant_of}
+            draft = library.put_draft(
+                item, bundle, draft.revision, principal=caller.principal, fields=fields
+            )
+        written: JsonObject = {
             "workflow_item": item,
-            "run_id": outcome.run_id,
             "draft_object_id": draft.object_id,
-            "status": outcome.status,
-            "reason": summary.fields.get("reason"),
             "subgraph": list[JsonValue](subgraph) if subgraph is not None else None,
             "caller_kind": caller.kind,
             "fake": fake,
         }
-        stored = library.put_test_report(content_hash, report, principal=principal)
-        if outcome.status == "passed" and subgraph is None and not fake:
-            library.link(draft.object_id, "tested-by", summary.object_id, principal=principal)
+        stored = report(self.ctx, outcome, summary, content_hash, written)
         return self.read(stored.object_id, content_hash)
 
     def report(self, item: str) -> TestReport | None:

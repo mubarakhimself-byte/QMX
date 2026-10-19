@@ -1,13 +1,15 @@
 """The `subworkflow` node (SOLUTION-DESIGN 3.5): one nested run with its own `run_id`, its
 `parent_run_id` and `call_depth`.
 
-`parameters.workflow` names the child's folder inside the parent's folder. With `wait` (the
-default) the node ends with the child: its outputs on `main` when it passed, a failure otherwise.
-With `wait: false` the node hands on `{"run_id": ...}` at once and the child runs beside the
-parent. The child's `settings.caller_policy` is checked here, at dispatch: `none` refuses every
-caller, and `any` and `workflows_only` both admit a parent workflow. A child deeper than the
-`subworkflow.max_depth` setting is refused. The child's run id is the attempt's idempotency key,
-so a rerun of one attempt can never start a second child.
+`parameters.workflow` names the child's block folder inside the parent's folder, which the
+parent's bundle carries and hashes (AD-5, B-76). With `wait` (the default) the node ends with the
+child: its outputs on `main` when it passed, `waiting(child)` while the child waits, and a failure
+otherwise (B-27). With `wait: false` the node hands on `{"run_id": ...}` at once and the child runs
+beside the parent. The child's `settings.caller_policy` is checked at validation and again here,
+at dispatch: `none` refuses every caller, and `any` and `workflows_only` both admit a parent
+workflow. A child deeper than the `subworkflow.max_depth` setting is refused. The child's run id is
+the attempt's idempotency key, so a rerun of one attempt can never start a second child; an attempt
+after one that waited on its child takes that child up again (`waited`).
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pydantic import JsonValue
 
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.validate import checked
-from qmx_engine.nodes.base import NodeJob, NodeResult, Ok
+from qmx_engine.nodes.base import NodeJob, NodeResult, Ok, Waiting
 from qmx_engine.nodes.script import failed
 
 if TYPE_CHECKING:
@@ -42,14 +44,17 @@ class Subworkflow:
         max_depth: int,
         launch: Launch,
         spawn: Callable[[Awaitable[Outcome]], None],
+        waited: Callable[[NodeJob], str | None] = lambda _: None,
     ) -> None:
         """`depth` is the calling run's `call_depth`; `spawn` keeps a child the node does not wait
-        for running until the root run ends."""
+        for running until the root run ends; `waited` names the child an earlier attempt of the
+        same slot waited on. `launch` takes that child up when its run id already exists."""
         self.folder = folder
         self.depth = depth
         self.max_depth = max_depth
         self.launch = launch
         self.spawn = spawn
+        self.waited = waited
 
     async def run(self, job: NodeJob) -> NodeResult:
         parameters = job.node_definition.get("parameters")
@@ -81,12 +86,14 @@ class Subworkflow:
                 "caller_refused", "the child's caller_policy admits no caller", retryable=False
             )
         inputs: JsonValue = job.inputs.get("in") if isinstance(job.inputs, dict) else None
-        run_id = job.idempotency_key.replace(":", ".")
+        run_id = self.waited(job) or job.idempotency_key.replace(":", ".")
         outcome = self.launch(child, workflow, inputs, run_id)
         if parameters.get("wait") is False:
             self.spawn(outcome)
             return Ok({"main": {"run_id": run_id}})
         ended = await outcome
+        if ended.status == "waiting":
+            return Waiting("child", span={"child_run_id": run_id})
         if ended.status != "passed":
             return failed(
                 "subworkflow_failed",

@@ -44,6 +44,8 @@ class Target(Strict):
     key: str | None = None
     explicit: bool = False
     chunk: Chunk | None = None
+    required: bool = False
+    """The target runs only when this edge carried output (AD-5 readiness, B-87)."""
 
 
 type Connections = dict[str, dict[str, list[list[Target]]]]

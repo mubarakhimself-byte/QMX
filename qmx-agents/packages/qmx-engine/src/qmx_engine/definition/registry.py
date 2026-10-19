@@ -35,6 +35,8 @@ class Kind:
     versions: frozenset[int] = frozenset({1})
     available: bool = False
     model_bearing: bool = False
+    unavailable_modes: frozenset[str] = frozenset()
+    """Values of `parameters.mode` whose executor is not built yet; validation refuses them."""
 
 
 IN: Final = ("in",)
@@ -76,7 +78,15 @@ BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
             ),
             Kind("rlm", IN, MAIN, "irreversible"),
             Kind("subworkflow", IN, MAIN, "irreversible", available=True),
-            Kind("grader", IN, ("pass", "fail"), "none", RoleRule.LLM_MODE, available=True),
+            Kind(
+                "grader",
+                IN,
+                ("pass", "fail"),
+                "none",
+                RoleRule.LLM_MODE,
+                available=True,
+                unavailable_modes=frozenset({"llm"}),
+            ),
             Kind("monitor", IN, ("changed", "silent"), "none", available=True),
             Kind("app_op", IN, MAIN, "irreversible"),
             Kind("library", IN, MAIN, "compensable"),

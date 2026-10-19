@@ -215,8 +215,7 @@
           {
             "node": "Citations check",
             "port": "in",
-            "map": "keyed-join",
-            "key": "paper_id"
+            "map": "one"
           }
         ]
       ]

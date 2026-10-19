@@ -9,7 +9,8 @@ with `attempt` on node events, `memo_key` on `node_scheduled` and on a `node_fin
 call, `active_seconds` on a run-level `heartbeat`, `signature`, `retryable`, `effect_state` and
 `stalled` on `node_failed`, `step`, `resume_at` and the slot keys on `ladder_step`,
 `classification` and `hint` on `doctor_verdict`, and `reason` on `run_paused` and `run_resumed`.
-A `node_waiting` with no `attempt` is a hold the core asked for. Only the first `run_created`
+A `node_waiting` at attempt 0 (or, in an older ledger, with no `attempt`) is a hold the core
+asked for. Only the first `run_created`
 counts (B-25), and an ending whose `attempt` is not the slot's current one settles nothing (L-32).
 `run_resumed` opens a new pass but keeps every slot waiting on a gate; after a `limits` pause it
 also moves the limits' allowance on.
@@ -178,7 +179,7 @@ def fold(definition: Workflow, events: Iterable[EventView]) -> State:
                 )
                 walk = walks.get(slot, Walk())
                 walks[slot] = replace(walk, signatures=(*walk.signatures, failure.signature))
-            case "node_waiting" if "attempt" not in data:
+            case "node_waiting" if not _int(data.get("attempt")):
                 holds.setdefault(slot, Held(_text(data, "resume_at"), _text(data, "event"), seq))
             case "node_waiting" if current is not None:
                 nodes[slot] = replace(
