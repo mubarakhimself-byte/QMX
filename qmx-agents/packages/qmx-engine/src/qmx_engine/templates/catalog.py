@@ -1,10 +1,10 @@
-"""The template pack's catalogue: the 31 templates and their needs, as ENGINE-PLAN Appendix I
-lists them.
+"""The template pack's catalogue: the 31 templates ENGINE-PLAN Appendix I lists, with their needs,
+and the copilot eval battery (engine AD-66).
 
-Each row names its plain name (ruling 35), the cards in research files 15, 16 or 17 it was built
-from, what it waits for, and its folder. Since TP4 every row has one. A row with `needs` gets a
-definition naming the same `meta.needs` and installs as a validated draft; any other row is tested
-on real models and published disabled.
+Each row names its plain name (ruling 35), the cards in research files 15, 16, 17 or 44 it was
+built from, what it waits for, and its folder. Since TP4 every row has one. A row with `needs`
+gets a definition naming the same `meta.needs` and installs as a validated draft; any other row is
+tested on real models and published disabled.
 `test_cost` is what the row's test run cost when its PR measured it on the cheapest test
 candidates.
 """
@@ -20,7 +20,7 @@ from pydantic import JsonValue
 from qmx_engine.definition.model import Need
 from qmx_engine.triggers.cron import Cron
 
-type CardFile = Literal["15", "16", "17"]
+type CardFile = Literal["15", "16", "17", "44"]
 
 PACK: Final = Path(__file__).resolve().parent
 SHARED: Final = PACK / "_shared"
@@ -29,8 +29,8 @@ SHARED: Final = PACK / "_shared"
 @dataclass(frozen=True, slots=True)
 class Card:
     file: CardFile
-    """`15-templates-researcher.md`, `16-templates-trader-risk.md` or `17-templates-dev-pm-lab.md`
-    under `tracker/qma-v2/research/methodology/`."""
+    """`15-templates-researcher.md`, `16-templates-trader-risk.md`, `17-templates-dev-pm-lab.md` or
+    `44-agentic-engineering-foundations.md` under `tracker/qma-v2/research/methodology/`."""
     card: str
     """The card's id in that file's headings, such as `R1` (file 16 reuses `R1` for a risk card)."""
 
@@ -148,6 +148,14 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("0 3 * * 0-4", "Europe/London"),),
         test_inputs={"fixture": True},
         test_cost="TP4 lane 2: 4 haiku spans; 0k in, 12k out, 66k cache read; 50 s",
+    ),
+    Template(
+        "EV",
+        "Copilot eval battery",
+        card("44", "DC-10"),
+        "EVAL",
+        folder="ev-copilot-eval-battery",
+        test_inputs={"fixture": True},
     ),
     Template(
         "DM",

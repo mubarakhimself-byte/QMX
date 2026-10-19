@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "verdict", "why"],
+        "properties": {
+          "key": {"type": "string"},
+          "verdict": {"enum": ["pass", "fail"]},
+          "why": {"type": "string"}
+        }
+      }
+    }
+  }
+}

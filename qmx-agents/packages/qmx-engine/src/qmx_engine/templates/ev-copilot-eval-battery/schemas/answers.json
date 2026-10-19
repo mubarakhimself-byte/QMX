@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["answers"],
+  "properties": {
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "answer"],
+        "properties": {"id": {"type": "string"}, "answer": {"type": "string"}}
+      }
+    }
+  }
+}
