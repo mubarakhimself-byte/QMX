@@ -105,18 +105,20 @@ def app_workflow_id(app_id: str) -> str:
 def app_workflow(item: str, app_id: str, job: str) -> Document:
     """A trigger and one `app_op` node that runs `job` in the app's supervised process."""
 
-    def node(node_id: str, name: str, kind: str, x: int) -> Document:
+    def node(node_id: str, name: str, kind: str, x: int) -> JsonValue:
         return {"id": node_id, "name": name, "type": kind, "typeVersion": 1, "position": [x, 0]}
 
+    run: Document = {"parameters": {"app": app_id, "job": job}}
+    edge: JsonValue = {"node": "Run job", "port": "in", "map": "one"}
     return {
         "schema": "qmx.workflow/1",
         "id": item,
         "name": f"{app_id} schedule",
         "nodes": [
             node("t", "Start", "trigger", 0),
-            node("a", "Run job", "app_op", 200) | {"parameters": {"app": app_id, "job": job}},
+            cast(Document, node("a", "Run job", "app_op", 200)) | run,
         ],
-        "connections": {"Start": {"main": [[{"node": "Run job", "port": "in", "map": "one"}]]}},
+        "connections": {"Start": {"main": [[edge]]}},
     }
 
 

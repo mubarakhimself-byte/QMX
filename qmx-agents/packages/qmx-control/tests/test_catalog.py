@@ -100,6 +100,7 @@ def test_no_row_names_an_order_act() -> None:
 def test_rest_only_rows_stay_off_the_agent_surface() -> None:
     assert sorted(found.name for found in rows() if not found.agent) == [
         "apps_admin_call",
+        "apps_admin_enable",
         "ops_backup_weekly",
         "ops_sessions_append",
         "ops_sessions_create",

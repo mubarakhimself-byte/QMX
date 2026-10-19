@@ -8,7 +8,7 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -82,7 +82,8 @@ class Budget(StrictModel):
     @classmethod
     def _drop_usage(cls, data: object) -> object:
         if isinstance(data, dict):
-            return {key: value for key, value in data.items() if key not in LEGACY_BUDGET}
+            table = cast(dict[str, object], data)
+            return {key: value for key, value in table.items() if key not in LEGACY_BUDGET}
         return data
 
 
@@ -132,15 +133,18 @@ class AppDefinition(StrictModel):
     def _legacy_schedule(cls, data: object) -> object:
         """`[schedule] interval_seconds` is read as an interval `suggested_trigger` until the
         example apps migrate (APP2a)."""
-        if isinstance(data, dict) and "schedule" in data:
-            data = dict(data)
-            schedule = data.pop("schedule")
-            if isinstance(schedule, dict) and "suggested_trigger" not in data:
-                seconds = schedule.get("interval_seconds")
-                if isinstance(seconds, int | float) and not isinstance(seconds, bool):
-                    seconds = max(1, math.ceil(seconds))
-                data["suggested_trigger"] = {"kind": "interval", "seconds": seconds}
-        return data
+        if not isinstance(data, dict):
+            return data
+        table = dict(cast(dict[str, object], data))
+        if "schedule" not in table:
+            return table
+        schedule = table.pop("schedule")
+        if isinstance(schedule, dict) and "suggested_trigger" not in table:
+            seconds = cast(dict[str, object], schedule).get("interval_seconds")
+            if isinstance(seconds, int | float) and not isinstance(seconds, bool):
+                seconds = max(1, math.ceil(seconds))
+            table["suggested_trigger"] = {"kind": "interval", "seconds": seconds}
+        return table
 
 
 def _local_schema(value: JsonValue) -> None:
