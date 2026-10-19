@@ -147,6 +147,14 @@ def main() -> int:
             ["tests"],
         )
     )
+    suites.append(
+        (
+            "qmx-library",
+            ROOT / "qmx-agents/packages/qmx-library",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
+    )
     top_level = sorted(qa.glob("test_*.py"))
     if top_level:
         paths = [str(path.relative_to(ROOT)) for path in top_level]

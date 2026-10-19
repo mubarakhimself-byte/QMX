@@ -1,0 +1,56 @@
+{
+  "kind": "pod-block",
+  "schema_version": 1,
+  "class": "definition",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "slot": {
+        "type": "string"
+      },
+      "form": {
+        "type": "string"
+      }
+    }
+  },
+  "blobs": {
+    "code": {
+      "media_type": "text/x-python"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "semver"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "code",
+      "renderer": "code",
+      "source": "blobs.code"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

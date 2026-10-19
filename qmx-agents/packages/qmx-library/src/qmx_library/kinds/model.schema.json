@@ -1,0 +1,56 @@
+{
+  "kind": "model",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {}
+  },
+  "blobs": {
+    "weights": {
+      "media_type": "application/octet-stream"
+    },
+    "card": {
+      "media_type": "application/json"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "weights",
+      "renderer": "text",
+      "source": "blobs.weights"
+    },
+    {
+      "tab": "card",
+      "renderer": "json",
+      "source": "blobs.card"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

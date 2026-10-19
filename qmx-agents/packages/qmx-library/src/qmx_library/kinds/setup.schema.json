@@ -1,0 +1,48 @@
+{
+  "kind": "setup",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {}
+  },
+  "blobs": {
+    "spec": {
+      "media_type": "application/json"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "spec",
+      "renderer": "json",
+      "source": "blobs.spec"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

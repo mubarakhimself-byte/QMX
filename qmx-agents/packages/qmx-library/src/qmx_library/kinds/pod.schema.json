@@ -1,0 +1,44 @@
+{
+  "kind": "pod",
+  "schema_version": 1,
+  "class": "definition",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "slots": {
+        "type": "object"
+      }
+    }
+  },
+  "blobs": {},
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "semver"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

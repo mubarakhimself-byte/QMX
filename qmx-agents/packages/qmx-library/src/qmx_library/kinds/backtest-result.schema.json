@@ -1,0 +1,67 @@
+{
+  "kind": "backtest-result",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "memo_key": {
+        "type": "string"
+      },
+      "world": {
+        "type": "string"
+      },
+      "claim_class": {
+        "type": "string"
+      },
+      "role": {
+        "type": "string"
+      },
+      "fidelity": {
+        "type": "string"
+      },
+      "provenance": {
+        "type": "object"
+      }
+    }
+  },
+  "blobs": {
+    "report": {
+      "media_type": "application/octet-stream"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "report",
+      "renderer": "text",
+      "source": "blobs.report"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

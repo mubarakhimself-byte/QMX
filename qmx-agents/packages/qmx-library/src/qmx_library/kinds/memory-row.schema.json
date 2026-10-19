@@ -1,0 +1,68 @@
+{
+  "kind": "memory-row",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "scope": {
+        "type": "string"
+      },
+      "tag": {
+        "type": "string"
+      },
+      "intent_key": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "when_to_use": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string"
+      },
+      "refs": {
+        "type": "array"
+      }
+    }
+  },
+  "blobs": {},
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "keywords",
+    "confidence",
+    "f",
+    "u",
+    "source_run_ids",
+    "learned_at",
+    "occurred_at"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "kind": "workflow-run",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "run_id": {
+        "type": "string"
+      },
+      "workflow_item": {
+        "type": "string"
+      },
+      "object_id": {
+        "type": "string"
+      },
+      "mode": {
+        "enum": [
+          "live",
+          "test"
+        ]
+      },
+      "status": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting",
+          "passed",
+          "failed",
+          "stopped",
+          "interrupted"
+        ]
+      },
+      "placement": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "run_id",
+      "mode",
+      "status"
+    ]
+  },
+  "blobs": {
+    "summary": {
+      "media_type": "application/json"
+    },
+    "trace": {
+      "media_type": "application/octet-stream"
+    },
+    "logs/*": {
+      "media_type": "text/plain"
+    },
+    "transcripts/*": {
+      "media_type": "application/x-ndjson"
+    },
+    "checkpoints/*": {
+      "media_type": "application/octet-stream",
+      "class": "transient"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "summary",
+      "renderer": "json",
+      "source": "blobs.summary"
+    },
+    {
+      "tab": "trace",
+      "renderer": "text",
+      "source": "blobs.trace"
+    },
+    {
+      "tab": "logs/*",
+      "renderer": "text",
+      "source": "blobs.logs/*"
+    },
+    {
+      "tab": "transcripts/*",
+      "renderer": "json",
+      "source": "blobs.transcripts/*"
+    },
+    {
+      "tab": "checkpoints/*",
+      "renderer": "text",
+      "source": "blobs.checkpoints/*"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

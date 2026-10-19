@@ -1,0 +1,56 @@
+{
+  "kind": "bot",
+  "schema_version": 1,
+  "class": "governed",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {}
+  },
+  "blobs": {
+    "logic.py": {
+      "media_type": "text/x-python"
+    },
+    "card.json": {
+      "media_type": "application/json"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "logic.py",
+      "renderer": "code",
+      "source": "blobs.logic.py"
+    },
+    {
+      "tab": "card.json",
+      "renderer": "json",
+      "source": "blobs.card.json"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

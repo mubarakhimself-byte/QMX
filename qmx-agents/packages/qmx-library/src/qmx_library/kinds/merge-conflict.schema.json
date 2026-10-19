@@ -1,0 +1,64 @@
+{
+  "kind": "merge-conflict",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "base": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "ours": {
+        "type": "string"
+      },
+      "theirs": {
+        "type": "string"
+      },
+      "into": {
+        "type": "string"
+      },
+      "entries": {
+        "type": "array"
+      }
+    },
+    "required": [
+      "ours",
+      "theirs",
+      "into",
+      "entries"
+    ]
+  },
+  "blobs": {},
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}
