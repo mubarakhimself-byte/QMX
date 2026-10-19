@@ -227,7 +227,10 @@ class ControlService:
             if legacy_catalog:
                 db.execute("DROP TABLE library")
             for work_id, raw in db.execute("SELECT id,data FROM work WHERE kind='runs'").fetchall():
-                self.run_index.record(work_id, _document(raw))
+                if self.run_index.is_chat(work_id, _document(raw)):
+                    db.execute("DELETE FROM work WHERE kind='runs' AND id=?", (work_id,))
+                else:
+                    self.run_index.record(work_id, _document(raw))
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:

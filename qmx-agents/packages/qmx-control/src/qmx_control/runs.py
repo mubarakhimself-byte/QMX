@@ -27,14 +27,21 @@ class RunIndex:
                 CREATE TABLE IF NOT EXISTS journals(path TEXT PRIMARY KEY,digest TEXT NOT NULL,
                     size INTEGER NOT NULL);
             """)
-            chats = home / "runs"
             for run_id, raw in db.execute("SELECT id,data FROM runs").fetchall():
-                journal = json.loads(raw).get("journal")
-                if isinstance(journal, str) and Path(journal).is_relative_to(chats):
+                data = cast(Document, json.loads(raw))
+                if self.is_chat(run_id, data):
                     db.execute("DELETE FROM runs WHERE id=?", (run_id,))
-            for (path,) in db.execute("SELECT path FROM journals").fetchall():
-                if Path(path).is_relative_to(chats):
-                    db.execute("DELETE FROM journals WHERE path=?", (path,))
+                    db.execute("DELETE FROM journals WHERE path=?", (data["journal"],))
+
+    def is_chat(self, run_id: str, data: Document) -> bool:
+        """A chat journal under `runs/` is keyed by its own session. A background run's journal
+        lives there too, but its owner published it with a separate child session."""
+        journal = data.get("journal")
+        return (
+            isinstance(journal, str)
+            and Path(journal).is_relative_to(self.home / "runs")
+            and data.get("session_id") in (None, run_id)
+        )
 
     def record(self, run_id: str, data: Document) -> Document:
         with closing(sqlite3.connect(self.home / "runs.db", timeout=5)) as db, db:
@@ -62,10 +69,19 @@ class RunIndex:
         return result
 
     def refresh(self) -> list[Document]:
-        """Project the remote runs' journals. Chat journals under `runs/` are not runs (B-67):
-        every unit of work QMX starts is an engine run, listed by the engine (engine AD-57)."""
+        """Project the remote runs' journals, and the journals of runs an owner published under
+        `runs/<id>/` (background runs). Chat journals there are not runs (B-67): every unit of
+        work QMX starts is an engine run, listed by the engine (engine AD-57)."""
         changed: list[Document] = []
-        for path in sorted(self.home.glob("journals/**/*.jsonl")):
+        with closing(sqlite3.connect(self.home / "runs.db", timeout=5)) as db:
+            owned = {row[0] for row in db.execute("SELECT id FROM runs")}
+        paths = sorted(
+            {
+                *self.home.glob("journals/**/*.jsonl"),
+                *(self.home / "runs" / run_id / "journal.jsonl" for run_id in owned),
+            }
+        )
+        for path in (path for path in paths if path.is_file()):
             body = path.read_bytes()
             # A live writer may be between write() calls; only project complete records.
             complete = body[: body.rfind(b"\n") + 1]
