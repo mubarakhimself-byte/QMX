@@ -202,18 +202,22 @@ def _text(result: Any) -> str:
     return "".join(block.text for block in result.content if getattr(block, "type", None) == "text")
 
 
-def _paged(row: OperationSpec, result: Any, arguments: Mapping[str, object], limit: int) -> str:
-    """A list answer as one page and the offset of the next, or the answer's own text."""
+def _paged(
+    row: OperationSpec, result: Any, arguments: Mapping[str, object], limit: int
+) -> tuple[str, dict[str, object]]:
+    """A list answer as one page with the offset of the next, and that cursor alone; or the
+    answer's own text and no cursor."""
     structured = cast("Mapping[str, object] | None", getattr(result, "structured_content", None))
     data = (structured or {}).get("result")
     if not row.cursor or not isinstance(data, list):
-        return _text(result)
+        return _text(result), {}
     items = cast("list[object]", data)
     offset = arguments.get("offset", 0)
     start = offset if isinstance(offset, int) else 0
     wanted = arguments.get("limit", limit)
     full = len(items) >= (wanted if isinstance(wanted, int) else limit)
-    return json.dumps({"items": items, "next_offset": start + len(items) if full else None})
+    cursor: dict[str, object] = {"next_offset": start + len(items) if full else None}
+    return json.dumps({"items": items, **cursor}), cursor
 
 
 def wrap(row: OperationSpec, tool: Tool, save: Callable[..., Any]) -> ToolDef:
@@ -233,8 +237,8 @@ def wrap(row: OperationSpec, tool: Tool, save: Callable[..., Any]) -> ToolDef:
             result = await tool.run({**arguments, **forced})
         except Exception as error:
             return _failure_of(error)
-        text = _paged(row, result, arguments, int(limit_default))
-        answer = await asyncio.to_thread(spill, text, row, save)
+        text, cursor = _paged(row, result, arguments, int(limit_default))
+        answer = await asyncio.to_thread(spill, text, row, save, cursor)
         return {"content": [{"type": "text", "text": answer}]}
 
     metadata: dict[str, object] = {"_meta": dict(tool.meta or {})}

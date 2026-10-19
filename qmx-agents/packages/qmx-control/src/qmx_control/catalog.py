@@ -309,9 +309,15 @@ def node_types(found: Iterable[OperationSpec]) -> Mapping[str, Reversibility]:
     return MappingProxyType({row.id: row.reversibility for row in found if "code" in row.callers})
 
 
-def spill(text: str, row: OperationSpec, save: Callable[[LibraryInput], Document]) -> str:
+def spill(
+    text: str,
+    row: OperationSpec,
+    save: Callable[[LibraryInput], Document],
+    keep: Mapping[str, object] = MappingProxyType({}),
+) -> str:
     """`text` when it fits `row.max_chars`; else the whole answer saved as a Library artifact
-    (the control `library.db` until the Library store lands) and its head, tail and id."""
+    (the control `library.db` until the Library store lands) and its head, tail and id, with
+    `keep` (a list's cursor) beside them."""
     if len(text) <= row.max_chars:
         return text
     saved = save(
@@ -320,7 +326,6 @@ def spill(text: str, row: OperationSpec, save: Callable[[LibraryInput], Document
             kind="artifact",
             content={"operation": row.id, "text": text},
             tags=["tool-answer", row.name],
-            extracted_text=text,
         )
     )
     return json.dumps(
@@ -331,5 +336,6 @@ def spill(text: str, row: OperationSpec, save: Callable[[LibraryInput], Document
             "head": text[:SPILL_EDGE],
             "tail": text[-SPILL_EDGE:],
             "next_step": f"call library_get with artifact_id {saved['id']} for the whole answer",
+            **keep,
         }
     )

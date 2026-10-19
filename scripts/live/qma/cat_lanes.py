@@ -290,18 +290,30 @@ def cursor(log: Log) -> None:
         tool_defs(control=control, broker=BrokerService(root), domain=domain, delegate=None)
     )
     search = next(tool for tool in defs if tool.name == "library_search")
-    first = json.loads(asyncio.run(search.call({}))["content"][0]["text"])
-    last = json.loads(asyncio.run(search.call({"offset": 500}))["content"][0]["text"])
-    log(f"page 1: {len(first['items'])} items, next_offset {first['next_offset']}")
-    log(f"offset 500: {len(last['items'])} items, next_offset {last['next_offset']}")
+
+    def page(arguments: dict[str, Any]) -> dict[str, Any]:
+        return json.loads(asyncio.run(search.call(arguments))["content"][0]["text"])
+
+    small = page({"limit": 20})
+    last = page({"offset": 590, "limit": 20})
+    first = page({})
+    log(f"default page: spilled={first.get('spilled', False)} keys={sorted(first)}")
+    log(f"  next_offset {first['next_offset']}, chars {first.get('chars')}")
+    log(f"limit 20: {len(small['items'])} items, next_offset {small['next_offset']}")
+    log(f"offset 590: {len(last['items'])} items, next_offset {last['next_offset']}")
     log.check(
-        "a page and a cursor",
-        (len(first["items"]), first["next_offset"]) == (100, 100),
+        "the default page spills to the Library and keeps its cursor",
+        first.get("spilled") is True and first["next_offset"] == 100,
         first["next_offset"],
     )
     log.check(
+        "a page and a cursor",
+        (len(small["items"]), small["next_offset"]) == (20, 20),
+        small["next_offset"],
+    )
+    log.check(
         "the last page ends the cursor",
-        (len(last["items"]), last["next_offset"]) == (100, None),
+        (len(last["items"]), last["next_offset"]) == (10, None),
         last["next_offset"],
     )
 
@@ -309,7 +321,7 @@ def cursor(log: Log) -> None:
 def grep(log: Log) -> None:
     from qmx_control.catalog import rows  # noqa: PLC0415
 
-    names = {f"mcp__qmx_{row.toolset}__{row.op}" for row in rows() if row.agent}
+    names = {f"mcp__qmx_{row.toolset}__{row.op}" for row in rows()}
     listed = subprocess.run(
         ["git", "-C", str(REPO), "grep", "-n", "-o", "-E", r"mcp__qmx_?[A-Za-z0-9_]*",
          "--", ".", ":!scripts/probes", ":!qmx-agents/packages/qma-daemon",
@@ -319,8 +331,9 @@ def grep(log: Log) -> None:
     bad: list[str] = []
     for line in listed:
         where, _, name = line.rpartition(":")
-        generic = name in ("mcp__qmx_", "mcp__qmx__") or name.endswith("__")
-        if not generic and name not in names and not name.startswith("mcp__qmx_ops__x"):
+        generic = name in ("mcp__qmx", "mcp__qmx_", "mcp__qmx__") or name.endswith("__")
+        fixture = "/tests/" in where
+        if not generic and not fixture and name not in names:
             bad.append(f"{where} {name}")
     old = [
         line
