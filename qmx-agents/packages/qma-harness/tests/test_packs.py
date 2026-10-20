@@ -78,9 +78,10 @@ def test_the_shipped_plugin_manifest_is_what_the_code_generates() -> None:
 
 
 def test_the_builder_skill_names_only_catalog_tools_that_exist() -> None:
+    from qmx_control.catalog import rows
+
     from qma.harness.home import PLUGIN_DIR
     from qma.harness.tools import tool_name
-    from qmx_control.catalog import rows
 
     text = (PLUGIN_DIR / "skills" / "build-workflow" / "SKILL.md").read_text(encoding="utf-8")
     header = {
