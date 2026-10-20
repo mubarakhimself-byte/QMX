@@ -37,8 +37,8 @@ No lane touches the plan login or the ship home.
 - `gw` (TP3 lane 9, no model): GW validates and holds no model-bearing node.
 - `t4-fake` (TP3 lane 10) and `db-fake`: the template on the fake switch with no harness at all, so
   no provider can be called. Pass when the run passes with only fake spans.
-- `all` (TP4 lane 2, lane 8 and the perf block): the 9 runnable templates test-run on real models
-  with their catalogue inputs. Pass when 9 of 9 pass; logs each wall time, the pack's total, and
+- `all` (TP4 lane 2, lane 8 and the perf block): the runnable templates test-run on real models
+  with their catalogue inputs. Pass when every one passes; logs each wall time, the pack's total, and
   the pack's model spans and tokens. `all-recorded` runs the same on the recorded answers.
 - `install-recorded` (TP4 lane 3 on recorded answers, no spend): the pack installed, read back
   through the engine host's workflow doors, and `templates list` grabbed as `tp4-install.png`.
@@ -82,6 +82,7 @@ os.environ.setdefault("QMA_LIVE_SCRATCH", str(ENGINE_STORE / "homes" / "tp1-scra
 
 from jsonschema import Draft202012Validator
 from llm_lanes import OPENROUTER_ROW, harnessed, relay_usd
+
 from qmx_engine.__main__ import install_templates, list_templates
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.registry import REGISTRY
@@ -412,15 +413,13 @@ def install(log: Log, home: Path) -> None:
             log(f"triggers: {before[2]}")
             published = [line for line in listed if "published, disabled 0.1.0" in line]
             waiting = [line for line in listed if "validated draft, needs: " in line]
-            rest = 31 - len(built) - len(drafts)
             log.check(
-                f"the first install publishes {len(built)} disabled at 0.1.0, saves "
-                f"{len(drafts)} drafts each with its need, and {rest} are not yet built",
+                f"the first install publishes {len(built)} disabled at 0.1.0 and saves"
+                f" {len(drafts)} drafts each with its need",
                 code == 0
                 and [line.split()[0] for line in published] == built
                 and [line.split()[0] for line in waiting] == drafts
-                and sum(line.endswith("not yet built") for line in listed) == rest
-                and listed[-1] == "31 templates",
+                and listed[-1] == f"{len(CATALOG)} templates",
                 (code, [line.split()[0] for line in published], len(waiting), listed[-1:]),
             )
             log.check(
@@ -754,7 +753,7 @@ def install_lane(mode: Models, log: Log, home: Path) -> None:
         log(f"install: {found.template.id} {found.action}: {found.detail[:160]}")
     actions = [(f.template.id, f.action) for f in done]
     log.check(
-        "the install publishes the 9 runnable templates and saves the 22 others as drafts",
+        "the install publishes the runnable templates and saves the others as drafts",
         actions == [(t.id, "saved draft" if t.needs else "published") for t in CATALOG],
         actions,
     )
@@ -780,10 +779,12 @@ def install_lane(mode: Models, log: Log, home: Path) -> None:
     for line in listed:
         log(f"list: {line}")
     log.check(
-        "templates list shows 31 rows: 9 published and disabled, 22 drafts with their need",
-        listed[-1] == "31 templates"
-        and sum("published, disabled 0.1.0" in line for line in listed) == 9
-        and sum("validated draft, needs: " in line for line in listed) == 22,
+        "templates list shows every catalogue row: the runnable ones published and disabled, the"
+        " drafts with their need",
+        listed[-1] == f"{len(CATALOG)} templates"
+        and sum("published, disabled 0.1.0" in line for line in listed) == len(RUNNABLE)
+        and sum("validated draft, needs: " in line for line in listed)
+        == len(CATALOG) - len(RUNNABLE),
         listed[-1:],
     )
     png = "tp4-install" if mode == "recorded" else f"tp4-install-{mode}"

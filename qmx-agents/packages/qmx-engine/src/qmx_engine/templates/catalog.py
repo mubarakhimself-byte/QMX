@@ -71,7 +71,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rs1-paper-scout",
         triggers=(Cron("0 */6 * * *", "UTC"),),
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 5 haiku spans, cache read 71k, out 10k, fresh in 0; 47 s",
+        test_cost="TPL1 lane 2: 5 haiku turns, tokens in 10, out 20, cache read 21615; 63 s",
     ),
     Template(
         "news-and-macro-calendar-watch",
@@ -81,7 +81,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="t3-news-calendar-watch",
         triggers=(Cron("5 0 * * *", "UTC"),),
         test_inputs={"fixture": "surprise"},
-        test_cost="TP4 lane 2, surprise day: 1 haiku span, cache read 15k, out 1k, fresh in 0; 7 s",
+        test_cost="TPL1 lane 2: 1 haiku turn, tokens in 2, out 5, cache read 4207; 13 s",
     ),
     Template(
         "rough-idea-to-test-plan",
@@ -90,7 +90,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="rs0-idea-grill",
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 2 haiku spans, cache read 33k, out 10k, fresh in 0; 53 s",
+        test_cost="TPL1 lane 2: 2 haiku turns, tokens in 4, out 9, cache read 5696; 54 s",
     ),
     Template(
         "source-to-component-card",
@@ -99,7 +99,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="rs2-source-to-component-card",
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 5 haiku spans, cache read 92k, out 4k, fresh in 0; 29 s",
+        test_cost="TPL1 lane 2: 5 haiku turns, tokens in 10, out 16, cache read 15564; 42 s",
     ),
     Template(
         "literature-review-on-a-topic",
@@ -108,7 +108,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="rs4-literature-review",
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 9 haiku spans, cache read 163k, out 25k, fresh in 0; 129 s",
+        test_cost="TPL1 lane 2: 9 haiku turns, tokens in 18, out 34, cache read 27515; 150 s",
     ),
     Template(
         "video-to-strategy-ideas",
@@ -117,7 +117,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP2",
         folder="a-fill-the-library",
         test_inputs={"fixture": "one-video"},
-        test_cost="TP4 lane 2: 7 haiku spans, cache read 127k, out 8k, fresh in 0; 54 s",
+        test_cost="TPL1 lane 2: 8 haiku turns, tokens in 16, out 24, cache read 22218; 76 s",
     ),
     Template(
         "weekly-review",
@@ -127,7 +127,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rv-weekly-review",
         triggers=(Cron("0 6 * * 1", "UTC"),),
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 2 haiku spans, cache read 33k, out 1k, fresh in 0; 17 s",
+        test_cost="TPL1 lane 2: 2 haiku turns, tokens in 4, out 6, cache read 4590; 26 s",
     ),
     Template(
         "morning-market-brief",
@@ -141,7 +141,7 @@ CATALOG: Final[tuple[Template, ...]] = (
             Cron("5 17 * * 1-5", "America/New_York"),
         ),
         test_inputs={"fixture": "busy"},
-        test_cost="TP4 lane 2: 1 haiku span, cache read 15k, out 2k, fresh in 0; 13 s",
+        test_cost="TPL1 lane 2: 1 haiku turn, tokens in 2, out 4, cache read 2295; 23 s",
     ),
     Template(
         "research-desk-overnight",
@@ -151,7 +151,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="t4-research-desk-overnight",
         triggers=(Cron("0 3 * * 0-4", "Europe/London"),),
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 4 haiku spans, cache read 66k, out 12k, fresh in 0; 50 s",
+        test_cost="TPL1 lane 2: 4 haiku turns, tokens in 8, out 17, cache read 9180; 40 s",
     ),
     Template(
         "copilot-eval-battery",
@@ -160,7 +160,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "EVAL",
         folder="ev-copilot-eval-battery",
         test_inputs={"fixture": True},
-        test_cost="EVAL lane 2: 4 haiku spans (3 tries and the judge), 40 s",
+        test_cost="TPL1 lane 2: 4 haiku turns, tokens in 8, out 13, cache read 9180; 41 s",
     ),
     Template(
         "demo-trades-fill-quality",

@@ -35,6 +35,8 @@ STORE: Final = Path("D:/QMX-worktrees/qma-ship/build")
 EVIDENCE: Final = STORE / "evidence" / "tpl1"
 HOMES: Final = STORE / "homes"
 HAIKU: Final = ("claude/haiku",)
+BOUND_S: Final = 420.0
+"""One template's test run is bounded, so one stuck turn cannot stall the whole lane."""
 ORDER_KEYS: Final = frozenset({"roles.test_only", "roles.test_order", "roles.live_order"})
 
 
@@ -102,15 +104,16 @@ def plan_settings(control: Any) -> StaticSettings:
     )
 
 
-async def pack(log: Log, root: Path) -> None:
+async def pack(log: Log, root: Path, only: tuple[str, ...] = ()) -> None:
     """Every catalogue row through a test run on haiku, or its declared need's refusal."""
     ran, refused, turns, failures = [], [], 0, []
     wall = 0.0
+    wanted = [t for t in CATALOG if not only or t.id in only]
     async with plan_harness(log) as opened:
         settings = plan_settings(opened.control)
         adapter = HarnessAdapter(opened.harness)
         with EngineService.open(root, settings=settings, harness=adapter) as svc:
-            for template in CATALOG:
+            for template in wanted:
                 folder = PACK / template.folder
                 current = current_draft(svc, folder.name)
                 svc.drafts.put(
@@ -123,7 +126,13 @@ async def pack(log: Log, root: Path) -> None:
                 started = time.monotonic()
                 if template.needs:
                     try:
-                        await svc.tests.run(folder.name, caller=OPERATOR)
+                        await asyncio.wait_for(
+                            svc.tests.run(folder.name, caller=OPERATOR), timeout=BOUND_S
+                        )
+                    except TimeoutError:
+                        failures.append(template.id)
+                        log(f"{template.id} hung past {BOUND_S:.0f} s with no report")
+                        continue
                     except Refused as why:
                         seconds = time.monotonic() - started
                         wall += seconds
@@ -139,7 +148,15 @@ async def pack(log: Log, root: Path) -> None:
                     failures.append(template.id)
                     log(f"{template.id} ran a test it had to be refused")
                     continue
-                report = await svc.tests.run(folder.name, caller=OPERATOR)
+                try:
+                    report = await asyncio.wait_for(
+                        svc.tests.run(folder.name, caller=OPERATOR, inputs=template.test_inputs),
+                        timeout=BOUND_S,
+                    )
+                except TimeoutError:
+                    failures.append(template.id)
+                    log(f"{template.id} hung past {BOUND_S:.0f} s with no report")
+                    continue
                 seconds = time.monotonic() - started
                 wall += seconds
                 spans = spans_of(root, report.run_id)
@@ -154,16 +171,16 @@ async def pack(log: Log, root: Path) -> None:
                 )
                 if report.status != "passed" or errors:
                     failures.append(template.id)
+    runnable = sum(1 for t in wanted if not t.needs)
     log.check(
-        f"{len(ran)} of {sum(1 for t in CATALOG if not t.needs)} runnable templates pass a real"
-        " haiku test run",
-        len(ran) == sum(1 for t in CATALOG if not t.needs) and not failures,
+        f"{len(ran)} of {runnable} runnable templates pass a real haiku test run",
+        len(ran) == runnable and not failures,
         {"ran": len(ran), "failed": failures},
     )
     log.check(
-        f"{len(refused)} of {sum(1 for t in CATALOG if t.needs)} drafts are refused by the name of"
+        f"{len(refused)} of {sum(1 for t in wanted if t.needs)} drafts are refused by the name of"
         " the need they wait for",
-        len(refused) == sum(1 for t in CATALOG if t.needs),
+        len(refused) == sum(1 for t in wanted if t.needs),
         {"refused": len(refused), "failed": failures},
     )
     log(
@@ -245,13 +262,17 @@ def intake(log: Log) -> None:
         for e in events
         if e.kind == "node_scheduled" and e.data.get("node_id") == "triage"
     ]
-    chunks = plans[0].get("chunk", {}).get("items") if plans else None
-    covers = sorted({index for plan in plans for index in plan.get("chunk", {}).get("items", [])})
-    log(f"triage plans: {len(plans)}, over {plans[0].get('of') if plans else None}, cover {covers}")
+    spans_of_items = [plan.get("chunk", {}).get("items") for plan in plans]
+    log(
+        f"triage plans: {len(plans)}, over {plans[0].get('of') if plans else None},"
+        f" spans {spans_of_items[:3]}...{spans_of_items[-1:]}"
+    )
     log.check(
         "the chunked triage edge fans out over all 20 expanded items",
-        bool(plans) and all(plan.get("of") == 20 for plan in plans) and covers == list(range(20)),
-        {"plans": len(plans), "chunks": chunks, "covers": covers},
+        len(plans) == 20
+        and all(plan.get("of") == 20 for plan in plans)
+        and spans_of_items == [[index, index + 1] for index in range(20)],
+        {"plans": len(plans), "last": spans_of_items[-1:]},
     )
 
 
@@ -294,6 +315,7 @@ def main() -> int:
     parser.add_argument(
         "--lane", choices=("pack", "renamed", "intake", "alias", "cost"), default="pack"
     )
+    parser.add_argument("--only", default="", help="comma-separated catalogue ids for this run")
     args = parser.parse_args()
     boot()
     if args.lane == "renamed":
@@ -314,7 +336,7 @@ def main() -> int:
         return log.verdict()
     log = Log("tpl1-e48")
     renamed_ids(log)
-    asyncio.run(pack(log, home("e48")))
+    asyncio.run(pack(log, home("e48"), tuple(found for found in args.only.split(",") if found)))
     return log.verdict()
 
 

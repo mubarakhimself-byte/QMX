@@ -15,20 +15,20 @@ Every template's title says in plain words what it does, and its id is a plain p
 
 ## The 32 templates
 
-Status is what `templates install` leaves on a fresh home. Test cost is what the template's last test run cost on real models. At TP4 that is the plan login with every role on `claude/haiku` (`t_templates.py all-plan`). Triggers are the ways a run can start: a cron trigger is installed disabled, and manual means he or the copilot starts it.
+Status is what `templates install` leaves on a fresh home. Test cost is what the template's last test run cost on real models. TPL1 measured these on the plan login with every role on `claude/haiku` (`e48_templates.py`); TP4's numbers stood before that. Triggers are the ways a run can start: a cron trigger is installed disabled, and manual means he or the copilot starts it.
 
 | Id | Template | Status | Test cost | Triggers | Needs |
 |---|---|---|---|---|---|
-| paper-scout-to-research-note | Paper scout to research note | published, disabled | TP4 lane 2: 5 haiku spans, cache read 71k, out 10k, fresh in 0; 47 s | cron `0 */6 * * *` UTC, manual | none |
-| news-and-macro-calendar-watch | News and macro calendar watch | published, disabled | TP4 lane 2, surprise day: 1 haiku span, cache read 15k, out 1k, fresh in 0; 7 s | cron `5 0 * * *` UTC, manual | none |
-| rough-idea-to-test-plan | Question a rough idea until it is a clear test plan | published, disabled | TP4 lane 2: 2 haiku spans, cache read 33k, out 10k, fresh in 0; 53 s | manual | none |
-| source-to-component-card | Source to component card | published, disabled | TP4 lane 2: 5 haiku spans, cache read 92k, out 4k, fresh in 0; 29 s | manual | none |
-| literature-review-on-a-topic | Literature review on a topic | published, disabled | TP4 lane 2: 9 haiku spans, cache read 163k, out 25k, fresh in 0; 129 s | manual | none |
-| video-to-strategy-ideas | Turn a video, a playlist or saved posts into strategy ideas | published, disabled | TP4 lane 2: 7 haiku spans, cache read 127k, out 8k, fresh in 0; 54 s | manual | none |
-| weekly-review | Weekly review | published, disabled | TP4 lane 2: 2 haiku spans, cache read 33k, out 1k, fresh in 0; 17 s | cron `0 6 * * 1` UTC, manual | none |
-| morning-market-brief | Morning market brief before each session | published, disabled | TP4 lane 2: 1 haiku span, cache read 15k, out 2k, fresh in 0; 13 s | cron `0 6 * * 1-5` Europe/London, cron `30 7 * * 1-5` America/New_York, cron `5 17 * * 1-5` America/New_York, manual | none |
-| research-desk-overnight | Research desk overnight | published, disabled | TP4 lane 2: 4 haiku spans, cache read 66k, out 12k, fresh in 0; 50 s | cron `0 3 * * 0-4` Europe/London, manual | none |
-| copilot-eval-battery | Copilot eval battery | published, disabled | EVAL lane 2: 4 haiku spans (3 tries and the judge), 40 s | manual | none |
+| paper-scout-to-research-note | Paper scout to research note | published, disabled | TPL1 lane 2: 5 haiku turns, tokens in 10, out 20, cache read 21615; 63 s | cron `0 */6 * * *` UTC, manual | none |
+| news-and-macro-calendar-watch | News and macro calendar watch | published, disabled | TPL1 lane 2: 1 haiku turn, tokens in 2, out 5, cache read 4207; 13 s | cron `5 0 * * *` UTC, manual | none |
+| rough-idea-to-test-plan | Question a rough idea until it is a clear test plan | published, disabled | TPL1 lane 2: 2 haiku turns, tokens in 4, out 9, cache read 5696; 54 s | manual | none |
+| source-to-component-card | Source to component card | published, disabled | TPL1 lane 2: 5 haiku turns, tokens in 10, out 16, cache read 15564; 42 s | manual | none |
+| literature-review-on-a-topic | Literature review on a topic | published, disabled | TPL1 lane 2: 9 haiku turns, tokens in 18, out 34, cache read 27515; 150 s | manual | none |
+| video-to-strategy-ideas | Turn a video, a playlist or saved posts into strategy ideas | published, disabled | TPL1 lane 2: 8 haiku turns, tokens in 16, out 24, cache read 22218; 76 s | manual | none |
+| weekly-review | Weekly review | published, disabled | TPL1 lane 2: 2 haiku turns, tokens in 4, out 6, cache read 4590; 26 s | cron `0 6 * * 1` UTC, manual | none |
+| morning-market-brief | Morning market brief before each session | published, disabled | TPL1 lane 2: 1 haiku turn, tokens in 2, out 4, cache read 2295; 23 s | cron `0 6 * * 1-5` Europe/London, cron `30 7 * * 1-5` America/New_York, cron `5 17 * * 1-5` America/New_York, manual | none |
+| research-desk-overnight | Research desk overnight | published, disabled | TPL1 lane 2: 4 haiku turns, tokens in 8, out 17, cache read 9180; 40 s | cron `0 3 * * 0-4` Europe/London, manual | none |
+| copilot-eval-battery | Copilot eval battery | published, disabled | TPL1 lane 2: 4 haiku turns, tokens in 8, out 13, cache read 9180; 41 s | manual | none |
 | demo-trades-fill-quality | Watch demo trades and check fill quality | draft | none until it can run | cron (schedule not set yet), manual | `trading-node` |
 | trade-journal-in-risk-units | Review my trade journal in risk units | draft | none until it can run | cron (schedule not set yet), manual | `trading-node` |
 | trading-guards-alive | Check that the trading guards are alive | draft | none until it can run | cron (schedule not set yet), manual | `trading-node` |
