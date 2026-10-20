@@ -50,7 +50,11 @@ def defs(monkeypatch: pytest.MonkeyPatch) -> list[list[ToolDef]]:
 @pytest.fixture
 def keys(monkeypatch: pytest.MonkeyPatch) -> None:
     """A keyring read answers, so a key profile's grant needs no real credential."""
-    monkeypatch.setattr(qma.harness.harness, "keyring_secret", lambda _: "test-value")
+
+    def granted(_reference: str) -> str:
+        return "test-value"
+
+    monkeypatch.setattr(qma.harness.harness, "keyring_secret", granted)
 
 
 def settings(home: QmxHome, *, targets: list[str], **written: JsonValue) -> None:
@@ -133,7 +137,7 @@ def test_a_helper_returns_its_handle_before_it_answers(
         await settle(lambda: control_service(home).delegate_completions_all(parent) != [])
         [stored] = control_service(home).delegate_completions_all(parent).__iter__()
         assert (stored["handle"], stored["state"]) == (handle, "done")
-        assert "the folder holds 3 files" in stored["summary"]
+        assert "the folder holds 3 files" in str(stored["summary"])
         assert stored["delivered_at"] is None
 
     run(body, home)
@@ -226,7 +230,8 @@ def test_a_helper_surface_is_inside_its_parents(home: QmxHome, defs: list[list[T
         assert judged_surface.toolsets == ()
         assert set(plain_surface.tools) <= set(parent_surface.tools)
         assert "Agent" not in plain_surface.builtins
-        assert "qmx_delegate" not in set(plain.options.mcp_servers)
+        servers = plain.options.mcp_servers
+        assert isinstance(servers, dict) and "qmx_delegate" not in servers
         assert {name for name, on in judged.toggled if not on} == {
             f"qmx_{name}" for name in set(parent_surface.toolsets) - {"delegate"}
         }
