@@ -208,11 +208,6 @@ async def serve(
         with suppress(asyncio.CancelledError):
             await supervising
         await router.close()
-    finally:
-        supervising.cancel()
-        with suppress(asyncio.CancelledError):
-            await supervising
-        await router.close()
 
 
 def capacity(engine: Engine, harness: Harness) -> dict[str, ClassUse]:
