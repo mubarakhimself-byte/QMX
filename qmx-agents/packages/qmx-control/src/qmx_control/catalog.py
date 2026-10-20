@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
+from qma.core.barriers.money_path import match_money_path_act
+
 from qmx_control.models import LibraryInput
 
 if TYPE_CHECKING:
@@ -381,19 +383,25 @@ def app_rows(
     that there is no union of permissions across apps (AD-64, DC-7)."""
     found: list[OperationSpec] = []
     for op, declared in operations.items():
-        approval = declared.get("approval", "read")
+        act = match_money_path_act(op)
+        if act is not None:
+            raise CatalogError(
+                f"{app_id}.{op} names the order act {act} and cannot reach a model (ruling 116)"
+            )
+        approval = str(declared.get("approval", "read"))
         if approval not in DEFAULT_REVERSIBILITY:
             raise CatalogError(f"{app_id} {op} declares no approval this catalog serves")
+        served = cast(Approval, approval)
         found.append(
             OperationSpec(
                 toolset=app_toolset(app_id),
                 op=op,
                 binds="app_server",
                 target=op,
-                approval=cast(Approval, approval),
+                approval=served,
                 description=str(declared.get("description") or ""),
                 reversibility=cast(
-                    Reversibility, declared.get("reversibility") or DEFAULT_REVERSIBILITY[approval]
+                    Reversibility, declared.get("reversibility") or DEFAULT_REVERSIBILITY[served]
                 ),
                 version=version,
                 owner=app_id,

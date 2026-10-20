@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from typing import cast
 
+from qmx_apps.errors import AppError
 from qmx_control.models import ControlError, Document
 
 from qmx_engine.ledger.signature import signature
@@ -45,9 +47,10 @@ def _pin(value: object) -> Document | None:
         return None
     if not isinstance(value, dict):
         raise ValueError("parameters.pin is a table of pack and version")
+    declared = cast("dict[str, object]", value)
     table: Document = {}
     for key in ("pack", "version"):
-        found = value.get(key)
+        found = declared.get(key)
         if not isinstance(found, str):
             raise ValueError(f"parameters.pin.{key} is a string")
         table[key] = found
@@ -73,13 +76,11 @@ class AppOp:
             ran = await asyncio.to_thread(self._run, app, name, pin, profile)
         except ValueError as error:
             return _failed("app_op_refused", str(error))
-        except ControlError as error:
+        except (ControlError, AppError) as error:
             return _failed(error.code, str(error))
         return Ok({"main": ran})
 
-    def _run(
-        self, app: str, name: str, pin: Document | None, profile: str | None
-    ) -> Document:
+    def _run(self, app: str, name: str, pin: Document | None, profile: str | None) -> Document:
         if pin is None and profile is None:
             return self.run_job(app, name)
         if self.dispatch is None:

@@ -138,9 +138,9 @@ class Operation(StrictModel):
     input_schema: Document = Field(default_factory=dict)
     output_schema: Document = Field(default_factory=dict)
     approval: Literal["read", "domain_write", "manage"] = "read"
-    reversibility: Literal[
-        "none", "reversible", "compensable", "irreversible", "irreversible_external"
-    ] | None = None
+    reversibility: (
+        Literal["none", "reversible", "compensable", "irreversible", "irreversible_external"] | None
+    ) = None
     state: Literal["none", "instance"] = "none"
     returns: Literal["value", "artifact", "run"] = "value"
 
@@ -158,11 +158,12 @@ class Contract(StrictModel):
     @model_validator(mode="before")
     @classmethod
     def _bare_schema(cls, data: object) -> object:
-        if isinstance(data, dict):
-            table = cast(dict[str, object], data)
-            if "schema" not in table or set(table) - {"schema", "stale_after"}:
-                return {"schema": table}
-        return data
+        if not isinstance(data, dict):
+            return data
+        table = dict(cast(dict[str, object], data))
+        if "schema" not in table or set(table) - {"schema", "stale_after"}:
+            return {"schema": table}
+        return table
 
 
 class AppDefinition(StrictModel):

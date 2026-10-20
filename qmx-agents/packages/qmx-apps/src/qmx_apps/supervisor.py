@@ -405,7 +405,7 @@ class Supervisor:
             if existing:
                 return existing.document()
             definition = self._definition(app_id)
-            self._check_profile(definition, profile)
+            self.check_profile(definition, profile)
             if definition_hash is None and not self.proof_mode:
                 from qmx_apps.road.history import history, project  # noqa: PLC0415
 
@@ -453,7 +453,7 @@ class Supervisor:
             ) from error
         return self.status(app_id)
 
-    def _check_profile(self, definition: Definition, profile: str | None) -> None:
+    def check_profile(self, definition: Definition, profile: str | None) -> None:
         """A profile exists only where the app declares a `[profiles]` schema, and its id is a
         folder name: a word of letters, digits and hyphens."""
         declared = definition.manifest.profiles is not None
@@ -824,8 +824,8 @@ class Supervisor:
             instance = self._instances.get(app_id)
         if instance is None:
             raise AppError("not_running", "Start the app before calling it.", 409)
-        self._revalidate(instance, pinned)
-        self._bounded(depth)
+        self.revalidate(instance, pinned)
+        self.bounded(depth)
         try:
             return self._submit(self._call(instance, tool, arguments)).result(timeout=30)
         except concurrent.futures.TimeoutError as error:
@@ -834,7 +834,7 @@ class Supervisor:
                 "tool_timeout", "The tool did not complete within its timeout.", 504
             ) from error
 
-    def _revalidate(self, instance: Instance, pin: Pin | None) -> None:
+    def revalidate(self, instance: Instance, pin: Pin | None) -> None:
         if pin is None:
             return
         active = instance.definition.manifest
@@ -846,7 +846,7 @@ class Supervisor:
             409,
         )
 
-    def _bounded(self, depth: int) -> None:
+    def bounded(self, depth: int) -> None:
         if depth < 0:
             raise AppError("invalid_depth", "An ask's depth is never negative.")
         if self.call_depth is not None and depth > self.call_depth:
@@ -875,13 +875,16 @@ class Supervisor:
             instance = self._instances.get(app_id)
         if instance is None or instance.state != "running":
             raise self._not_running(app_id)
-        self._revalidate(instance, pinned)
-        if profile is not None and profile != instance.profile:
-            raise AppError(
-                "profile_mismatch",
-                f"{app_id} runs profile {instance.profile}; restart it on {profile} to run there",
-                409,
-            )
+        self.revalidate(instance, pinned)
+        if profile is not None:
+            self.check_profile(instance.definition, profile)
+            if profile != instance.profile:
+                raise AppError(
+                    "profile_mismatch",
+                    f"{app_id} runs profile {instance.profile}; restart it on {profile} to run "
+                    "there",
+                    409,
+                )
         if job not in instance.definition.manifest.entrypoints.jobs:
             raise AppError("job_not_found", f"The app declares no job {job}.", 404)
         queue = instance.volume.root / JOB_QUEUE
@@ -917,20 +920,17 @@ class Supervisor:
             raise AppError("unknown_output", f"{app_id} has not landed {output}.", 404)
         return found
 
-    def contract_problems(self, definition: Definition) -> dict[str, list[str]]:
+    def contract_problems(
+        self, definition: Definition, previous: Definition | None = None
+    ) -> dict[str, list[str]]:
         """Every installed consumer that this image's changed `provides` would break, by output
-        name. The publish gate calls this before it activates the version."""
+        name, against the image `previous` it replaces. The publish gate calls this before it
+        activates the version."""
         with closing(sqlite3.connect(self.catalog)) as db:
             installed = [str(row[0]) for row in db.execute("SELECT id FROM selected ORDER BY id")]
         consumers = [
-            self._definition(app_id)
-            for app_id in installed
-            if app_id != definition.manifest.id
+            self._definition(app_id) for app_id in installed if app_id != definition.manifest.id
         ]
-        try:
-            previous = self._definition(definition.manifest.id)
-        except AppError:
-            previous = None
         return contract_problems(definition, consumers, previous)
 
     def _not_running(self, app_id: str) -> AppError:

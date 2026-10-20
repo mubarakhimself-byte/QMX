@@ -81,6 +81,7 @@ class Artifacts:
         self.home = home
         self.index = home / "artifacts.db"
         self.library = library
+        home.mkdir(parents=True, exist_ok=True)
         with closing(sqlite3.connect(self.index)) as db, db:
             db.executescript(
                 "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS artifacts "
@@ -89,7 +90,7 @@ class Artifacts:
             columns = {row[1] for row in db.execute("PRAGMA table_info(artifacts)").fetchall()}
             for name in ("landed_at", "library_id", "stale_after"):
                 if name not in columns:
-                    db.execute(f"ALTER TABLE artifacts ADD COLUMN {name}")  # noqa: S608
+                    db.execute(f"ALTER TABLE artifacts ADD COLUMN {name}")
 
     def attach(self, library: LibrarySink | None) -> None:
         self.library = library
@@ -118,6 +119,7 @@ class Artifacts:
         ).encode()
         sha = hashlib.sha256(encoded).hexdigest()
         volume = Volume(self.home, definition.manifest.id)
+        volume.check_write("blobs").mkdir(parents=True, exist_ok=True)
         target = volume.check_write(f"blobs/{sha}.json")
         temporary = volume.check_write(f"blobs/{sha}.tmp")
         temporary.write_bytes(encoded)
@@ -147,10 +149,7 @@ class Artifacts:
                 "(ref, schema, landed_at, library_id, stale_after) VALUES(?,?,?,?,?)",
                 (self._key(ref), json.dumps(schema), at, library_id, stale_after),
             )
-        document = cast(Document, ref.model_dump(mode="json"))
-        if library_id is not None:
-            document["library_id"] = library_id
-        return document
+        return cast(Document, ref.model_dump(mode="json"))
 
     def accept(self, consumer: Definition, feed: str, value: JsonValue) -> Document:
         declared = consumer.manifest.feeds.get(feed)
@@ -179,14 +178,11 @@ class Artifacts:
         temporary = target.with_suffix(".tmp")
         temporary.write_bytes(encoded)
         temporary.replace(target)
-        accepted = cast(
-            Document,
-            {
-                **cast(Document, ref.model_dump(mode="json")),
-                "path": target.relative_to(volume.root).as_posix(),
-                "landed_at": row.landed_at,
-            },
-        )
+        accepted: Document = {
+            **cast(Document, ref.model_dump(mode="json")),
+            "path": target.relative_to(volume.root).as_posix(),
+            "landed_at": row.landed_at,
+        }
         if row.library_id is not None:
             accepted["library_id"] = row.library_id
         return accepted
@@ -267,7 +263,9 @@ class Artifacts:
                 raise AppError("artifact_corrupt", "The artifact content hash changed.", 409)
             data = cast(JsonValue, json.loads(encoded))
         except (OSError, ValueError) as error:
-            raise AppError("artifact_corrupt", "The artifact content is unreadable.", 409) from error
+            raise AppError(
+                "artifact_corrupt", "The artifact content is unreadable.", 409
+            ) from error
         return Artifacts._Found(
             ref=ref,
             data=data,
@@ -294,7 +292,9 @@ def _typed(schema: Mapping[str, object]) -> str | None:
 
 
 def _strings(value: object) -> list[str]:
-    return [str(item) for item in value] if isinstance(value, list) else []
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in cast("list[object]", value)]
 
 
 def compatible(provider: Mapping[str, object], consumer: Mapping[str, object]) -> list[str]:
