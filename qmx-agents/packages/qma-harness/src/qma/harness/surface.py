@@ -362,6 +362,7 @@ class Supply:
     plan_lane: bool = False
     roles: Mapping[str, Sequence[str]] | None = None
     pins: Mapping[str, Sequence[str]] | None = None
+    """None reads `[agents] subagent_pins` from `settings`."""
 
 
 @dataclass(frozen=True)
@@ -469,6 +470,18 @@ def budgets(settings: Mapping[str, object]) -> dict[SlotName, int | None]:
         value = written.get(name)
         if isinstance(value, int) and not isinstance(value, bool) and value > 0:
             found[name] = value
+    return found
+
+
+def pinned(settings: Mapping[str, object]) -> Mapping[str, tuple[str, ...]]:
+    """`[agents] subagent_pins`: the models he pinned for a role, by role, which add one
+    definition each beside the role's own (AD-38, H38). A list of anything but model ids is
+    skipped rather than read as a name."""
+    found: dict[str, tuple[str, ...]] = {}
+    for role, rows in _table(settings.get("subagent_pins")).items():
+        names = _names(rows)
+        if names is not None:
+            found[str(role)] = names
     return found
 
 
@@ -698,7 +711,7 @@ def _agents(
         AgentMain(ProfileName(wanted.profile), wanted.model),
         plan_lane=supply.plan_lane,
         roles=supply.roles,
-        pins=supply.pins,
+        pins=supply.pins if supply.pins is not None else pinned(supply.settings),
     )
     found = {
         name: SubAgent(item.description, item.prompt, None, item.model)
