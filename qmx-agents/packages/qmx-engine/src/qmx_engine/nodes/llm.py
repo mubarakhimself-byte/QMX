@@ -158,7 +158,6 @@ async def completed(
         reply = await port.complete(
             f"{candidate.profile}/{candidate.model}",
             [{"role": "user", "content": [{"type": "text", "text": text}]}],
-            schema=schema,
             session=affinity,
             system=system,
         )
@@ -322,7 +321,7 @@ class Llm:
                 self.admission,
                 candidate,
                 job,
-                system="\n\n".join([prompt.strip(), TOOL_LESS]),
+                system=static(prompt, [TOOL_LESS], schema),
                 text=payload(job.inputs, hint=hint if isinstance(hint, str) else None),
                 schema=schema,
             )

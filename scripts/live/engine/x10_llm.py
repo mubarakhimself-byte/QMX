@@ -65,6 +65,13 @@ DEEPSEEK_SETTINGS: dict[str, Any] = {
     "roles.triage": (DEEPSEEK,),
     "roles.test_only": (DEEPSEEK,),
 }
+PERF_ROW: Final = "openrouter/moonshotai/kimi-k2.5"
+"""The perf fan-out's key row: the row the parent's CLI runs too, so both ends measure one shape."""
+PERF_SETTINGS: dict[str, Any] = {
+    **DEFAULTS,
+    "roles.triage": (PERF_ROW,),
+    "roles.test_only": (PERF_ROW,),
+}
 
 
 def adopt_relay(harness: Any) -> Any:
@@ -383,12 +390,15 @@ async def fanout(log: Log, home: Path, harness: Any) -> None:
     watcher = threading.Thread(target=sample, daemon=True)
     watcher.start()
     try:
-        outcome, _, spans, _ = await run(
+        outcome, events, spans, _ = await run(
             throwaway_home(PR, "perf-engine"),
             folder("perf", nodes=20),
             harness,
-            DEEPSEEK_SETTINGS,
+            PERF_SETTINGS,
         )
+        for event in events:
+            if event.kind in ("node_failed", "node_waiting"):
+                log(f"{event.kind} {event.data}")
     finally:
         stop.set()
         watcher.join()
@@ -399,7 +409,7 @@ async def fanout(log: Log, home: Path, harness: Any) -> None:
     turns = model_spans(spans)
     log(
         f"PERF peak RSS {peak[0] / 1e6:.0f} MB (pid {os.getpid()}) over {len(turns)} llm calls on "
-        f"{DEEPSEEK}; router {'on' if port is not None else 'off, one CLI per call'}"
+        f"{PERF_ROW}; router {'on' if port is not None else 'off, one CLI per call'}"
     )
     log.check(
         "20 llm calls answered on the key row",

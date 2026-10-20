@@ -4,7 +4,7 @@ chat compacts at 0.40 at 512k and above and 0.75 below."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from pydantic import JsonValue
 
 from qmx_engine.core.partitions import chunks, estimate
 from qmx_engine.definition.model import Chunk
@@ -15,7 +15,7 @@ from qmx_engine.settings import DEFAULTS
 BIG = Row("kimi/k3", "kimi", "k3", "strong", 1_000_000)
 SMALL = Row("deepseek/deepseek-v4", "deepseek", "deepseek-v4", "strong", 200_000)
 COUNTED = Row("claude/opus", "claude", "opus", "strong", 1_000_000, 3.0, True)
-ABSTRACTS = [{"id": i, "text": "w" * 20_000} for i in range(50)]
+ABSTRACTS: list[JsonValue] = [{"id": i, "text": "w" * 20_000} for i in range(50)]
 SPEC = Chunk(by="tokens", fill=0.3)
 
 

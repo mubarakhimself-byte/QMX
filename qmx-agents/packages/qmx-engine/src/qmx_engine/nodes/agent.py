@@ -196,8 +196,8 @@ SMALL_POINT: Final = 0.75
 def compact_at(settings: Mapping[str, object], window: int) -> float:
     """The point a chat of this window compacts at: `agent.compact_at` (Claude's default 0.40) at
     512k and above, 0.75 below, because a small window compacted at 40 % loses most of it. Below
-    512k the point moves only when a registry answered the window; without one, as in a fake-provider
-    test, the setting stands."""
+    512k the point moves only when a registry answered the window; without one the setting
+    stands."""
     point = setting(settings, "agent.compact_at", 0.4)
     if window >= LARGE_WINDOW or adopted() is None:
         return point

@@ -18,7 +18,7 @@ import qmx_engine.admission
 from qmx_engine.admission import Admission, Capacity, Slots
 from qmx_engine.nodes.base import Failed, Waiting
 from qmx_engine.ports.harness_adapter import PlanUse
-from qmx_engine.ports.router import Reply, Refused, Row, adopt
+from qmx_engine.ports.router import Refused, Reply, Row, adopt
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.roles import Candidate
 from qmx_engine.settings import DEFAULTS
