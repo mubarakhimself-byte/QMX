@@ -200,19 +200,14 @@ class LibraryReads(Protocol):
 
     def head(self, item: str, ref: str = "main") -> str | None: ...
     def state(self, item: str) -> str | None: ...
-
     """`active`, `archived`, or None for an item the store never held."""
-
     def get(self, object_id: str, slots: Sequence[str] = ()) -> LibraryObject: ...
     def search(
         self, text: str, *, kind: str | None = None, limit: int = 20
     ) -> list[LibraryHit]: ...
     def produced(self, producer: str) -> list[str]: ...
-
     """The artifacts a run object produced, oldest first."""
-
     def outputs(self, producer: str, name: str) -> list[str]: ...
-
     """The artifacts an app item landed under its `provides` name, oldest first."""
 
 
