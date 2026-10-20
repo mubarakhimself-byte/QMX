@@ -234,6 +234,14 @@ class Road:
                     "stage_refused", "Current tests, sandbox and shadow evidence are required.", 409
                 )
             image = definition(self.owner.home, app_id, target)
+            broken = self.owner.contract_problems(image)
+            if broken:
+                raise AppError(
+                    "contract_changed",
+                    "A provides schema changed and a consumer cannot read it: "
+                    + "; ".join(f"{name} breaks {', '.join(rows)}" for name, rows in broken.items()),
+                    409,
+                )
             if image.manifest.risk == "money":
                 signed = self.sign(app_id, target, current, rollback=rollback)
                 if (

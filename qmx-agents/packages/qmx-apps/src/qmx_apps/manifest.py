@@ -1,12 +1,19 @@
-"""Validate and hash the immutable app image, independently of an instance."""
+"""Validate and hash the immutable app image, independently of an instance.
+
+An app declares three things beyond its entrypoints: its `[operations]` (the only way another app
+or a chat reaches it), the contracts it keeps (`[provides]` out, `[feeds]` in, `[profiles]` for a
+profile document), and how it wants to be run (`[suggested_trigger]`, `[isolation]`). There is no
+event list: an app's landing is a Library artifact and the event is the Library ref log (AD-64).
+`emits` and `accepts` are retired and refused by name.
+"""
 
 from __future__ import annotations
 
 import hashlib
-import math
 import re
 import tomllib
 from dataclasses import dataclass
+from math import ceil
 from pathlib import Path
 from typing import Final, Literal, cast
 
@@ -46,6 +53,11 @@ SYSTEM_ENV = frozenset(
         "QMX_STAGE",
     }
 )
+OPERATION_NAME: Final = re.compile(r"\A[a-z][a-z0-9_]*\Z")
+"""An operation is a snake_case word. It is the second half of the tool's wire name, so it stays
+inside `[a-zA-Z0-9_-]` and its own name can never carry a dash or a dot."""
+RETIRED: Final = frozenset({"emits", "accepts"})
+"""`app.<id>.<event>` and webhook routes are gone: the app's landing is the event (AD-64)."""
 
 
 class StrictModel(BaseModel):
@@ -67,13 +79,15 @@ class Capabilities(StrictModel):
 
 
 LEGACY_BUDGET: Final = frozenset({"runs", "cpu_seconds"})
-"""Usage budgets retired by engine AD-57 and ruling 106. The example apps still carry them until
-they migrate (APP2a), so a manifest naming them loads and they are dropped."""
+"""Usage budgets retired by engine AD-57 and ruling 106. They are dropped on load, and nothing
+stops an app on usage."""
 
 
-class Budget(StrictModel):
-    """Machine isolation he may set per app (a Job object or container limit). Unset, the app
-    runs unlimited; neither value is a breaker that stops an app on usage."""
+class Isolation(StrictModel):
+    """Machine isolation he may set per app (a Job object or a container limit). Unset, the app
+    runs unlimited; neither value is a breaker that stops an app on usage, and neither is set by
+    default. `[isolation]` is the table's name; `[budget]` still loads for an app that has not
+    migrated yet, its two usage keys dropped."""
 
     memory_mb: int | None = Field(default=None, gt=0, le=16384)
     cpu_percent: int | None = Field(default=None, ge=1, le=100)
@@ -85,6 +99,10 @@ class Budget(StrictModel):
             table = cast(dict[str, object], data)
             return {key: value for key, value in table.items() if key not in LEGACY_BUDGET}
         return data
+
+
+Budget = Isolation
+"""The old name of the isolation table, kept for the modules that read `manifest.budget`."""
 
 
 class Breaker(StrictModel):
@@ -111,6 +129,42 @@ class SuggestedTrigger(StrictModel):
         return self
 
 
+class Operation(StrictModel):
+    """One thing another app or a chat may ask this app to do (AD-61, AD-64). The catalog builds
+    the row from this table and nothing else, so a tool the app's server serves but does not
+    declare here is never reachable."""
+
+    description: str = ""
+    input_schema: Document = Field(default_factory=dict)
+    output_schema: Document = Field(default_factory=dict)
+    approval: Literal["read", "domain_write", "manage"] = "read"
+    reversibility: Literal[
+        "none", "reversible", "compensable", "irreversible", "irreversible_external"
+    ] | None = None
+    state: Literal["none", "instance"] = "none"
+    returns: Literal["value", "artifact", "run"] = "value"
+
+
+class Contract(StrictModel):
+    """A schema an app declares at a seam, and how long an output under it stays fresh. Written
+    as `[provides.<name>] schema = { ... }` with an optional `stale_after` in seconds; the bare
+    form `[provides.<name>] type = "object" ...` is the same contract without a `stale_after`."""
+
+    schema_: Document = Field(alias="schema")
+    stale_after: float | None = Field(default=None, gt=0)
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False, populate_by_name=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _bare_schema(cls, data: object) -> object:
+        if isinstance(data, dict):
+            table = cast(dict[str, object], data)
+            if "schema" not in table or set(table) - {"schema", "stale_after"}:
+                return {"schema": table}
+        return data
+
+
 class AppDefinition(StrictModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$", max_length=80)
     name: str = Field(min_length=1, max_length=200)
@@ -123,27 +177,37 @@ class AppDefinition(StrictModel):
     entrypoints: Entrypoints
     capabilities: Capabilities = Field(default_factory=Capabilities)
     suggested_trigger: SuggestedTrigger | None = None
-    budget: Budget = Field(default_factory=Budget)
+    isolation: Isolation = Field(default_factory=Isolation)
     breaker: Breaker = Field(default_factory=Breaker)
-    provides: dict[str, Document] = Field(default_factory=dict)
-    feeds: dict[str, Document] = Field(default_factory=dict)
+    operations: dict[str, Operation] = Field(default_factory=dict)
+    provides: dict[str, Contract] = Field(default_factory=dict)
+    feeds: dict[str, Contract] = Field(default_factory=dict)
+    profiles: Contract | None = None
+
+    @property
+    def budget(self) -> Isolation:
+        return self.isolation
 
     @model_validator(mode="before")
     @classmethod
-    def _legacy_schedule(cls, data: object) -> object:
-        """`[schedule] interval_seconds` is read as an interval `suggested_trigger` until the
-        example apps migrate (APP2a)."""
+    def _tables(cls, data: object) -> object:
+        """`[budget]` is the isolation table's old spelling, `[schedule] interval_seconds` reads
+        as an interval `[suggested_trigger]`, and a retired key is named."""
         if not isinstance(data, dict):
             return data
         table = dict(cast(dict[str, object], data))
-        if "schedule" not in table:
-            return table
-        schedule = table.pop("schedule")
+        for retired in sorted(RETIRED & set(table)):
+            raise ValueError(
+                f"{retired} is retired: an app lands a Library artifact under a provides name, "
+                "and the Library ref log is the event"
+            )
+        if "budget" in table and "isolation" not in table:
+            table["isolation"] = table.pop("budget")
+        schedule = table.pop("schedule", None)
         if isinstance(schedule, dict) and "suggested_trigger" not in table:
             seconds = cast(dict[str, object], schedule).get("interval_seconds")
             if isinstance(seconds, int | float) and not isinstance(seconds, bool):
-                seconds = max(1, math.ceil(seconds))
-            table["suggested_trigger"] = {"kind": "interval", "seconds": seconds}
+                table["suggested_trigger"] = {"kind": "interval", "seconds": max(1, ceil(seconds))}
         return table
 
 
@@ -160,6 +224,20 @@ def _local_schema(value: JsonValue) -> None:
     elif isinstance(value, list):
         for item in value:
             _local_schema(item)
+
+
+def schemas(manifest: AppDefinition) -> list[tuple[str, Document]]:
+    """Every JSON Schema the definition declares, by the name it is declared under."""
+    found = [(f"provides.{name}", it.schema_) for name, it in manifest.provides.items()]
+    found += [(f"feeds.{name}", it.schema_) for name, it in manifest.feeds.items()]
+    for name, operation in manifest.operations.items():
+        found += [
+            (f"operations.{name}.input_schema", operation.input_schema),
+            (f"operations.{name}.output_schema", operation.output_schema),
+        ]
+    if manifest.profiles is not None:
+        found.append(("profiles", manifest.profiles.schema_))
+    return [(name, schema) for name, schema in found if schema]
 
 
 def image_files(root: Path) -> list[Path]:
@@ -185,6 +263,14 @@ def image_hash(root: Path) -> str:
         digest.update(len(content).to_bytes(8, "big"))
         digest.update(content)
     return digest.hexdigest()
+
+
+def _checked(manifest: AppDefinition, name: str, schema: Document) -> None:
+    try:
+        _local_schema(schema)
+        Draft202012Validator.check_schema(schema)
+    except (ValueError, SchemaError) as error:
+        raise ValueError(f"{name} is not a self-contained JSON Schema: {error}") from error
 
 
 @dataclass(frozen=True)
@@ -228,9 +314,18 @@ class Definition:
                     )
                 if not re.fullmatch(r"qmx/[a-zA-Z0-9_-]+", service):
                     raise ValueError("Secrets must reference qmx/* Credential Manager services.")
-            for schema in [*manifest.provides.values(), *manifest.feeds.values()]:
-                _local_schema(schema)
-                Draft202012Validator.check_schema(schema)
+            for name, operation in manifest.operations.items():
+                if not OPERATION_NAME.fullmatch(name):
+                    raise ValueError(
+                        f"operations.{name} is not a snake_case word of letters, digits and "
+                        "underscores"
+                    )
+                if operation.state == "instance" and operation.approval == "read":
+                    raise ValueError(
+                        f"operations.{name} keeps instance state, so it cannot be a read"
+                    )
+            for name, schema in schemas(manifest):
+                _checked(manifest, name, schema)
             for name in ("pyproject.toml", "uv.lock"):
                 if not (root / name).is_file():
                     raise ValueError(f"The definition requires {name}.")
