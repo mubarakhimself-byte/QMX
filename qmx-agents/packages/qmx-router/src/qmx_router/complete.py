@@ -122,9 +122,16 @@ def responses_request(row: ModelRow, ask: Ask, model: str) -> bytes:
 
 
 def anthropic_request(row: ModelRow, ask: Ask, model: str) -> bytes:
-    """The `/v1/messages` body for a key row on the Anthropic wire, with no stream."""
+    """The `/v1/messages` body for a key row on the Anthropic wire, with no stream.
+
+    Thinking is off wherever the row lets the request say so: a completion's caller reads only
+    the answer, and a reasoning row that spends its whole answer inside a thinking block returns
+    no text (measured on OpenRouter's DeepSeek V4.1 Flash row, 2026-10-20). A row whose thinking
+    is forced keeps it, because the route refuses a request that turns it off."""
     document = json.loads(normalise(row, _dumps(ask_body(ask, model)), {}).body)
     document["stream"] = False
+    if row.thinking != "forced":
+        document["thinking"] = {"type": "disabled"}
     return _dumps(cast("dict[str, Any]", document))
 
 

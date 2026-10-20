@@ -433,15 +433,10 @@ class _Upstream:
             await self.response.aclose()
         status = self.journal_status or self.response.status_code
         await self.relay.write_row(
-            self.held,
-            self.path,
-            status,
-            self.served,
-            self.usage,
-            self.provider,
-            account="" if self.lease is None else self.lease.account.id,
+            self.held, self.path, status, self.served, self.usage, self.provider
         )
         await self.relay.settle_lease(self)
+
 
 @dataclass
 class Relay:
@@ -1661,10 +1656,9 @@ class Relay:
         model: str,
         usage: Mapping[str, Any],
         provider: ProfileName | None = None,
-        account: str = "",
     ) -> None:
         """One journal row for one upstream request, naming the provider that served it rather
-        than the chat's main, and the pool account it went to."""
+        than the chat's main."""
 
         def count(name: str) -> int:
             value = usage.get(name)
@@ -1682,7 +1676,6 @@ class Relay:
                 cache_read_tokens=count("cache_read_input_tokens"),
                 cache_write_tokens=count("cache_creation_input_tokens"),
                 agent_id=held.agent_id,
-                account=account,
             )
         )
 
@@ -1785,7 +1778,7 @@ class Relay:
                 refusals.append(complete.plan_refusal(row.provider))
                 continue
             affinity = f"{session}:{row.provider}" if session else None
-            for _attempt in range(max(1, len(self.accounts().accounts))):
+            for _attempt in range(max(3, len(self.accounts().accounts))):
                 try:
                     lease = self.accounts().lease(
                         provider=row.provider, model=row.native, affinity=affinity
@@ -1893,6 +1886,10 @@ class Relay:
         notice = self.accounts().settle(lease, None)
         if notice is not None:
             await self._alert(journal, notice.text)
+        if not answer.text.strip():
+            # A reply with no text block is not an answer: the caller gets one more ask, which
+            # the request shape above makes rare.
+            return _RefusedCandidate(f"{row.qmx_id}: the provider answered with no text", True)
         text, data = complete.answer_text(answer, ask)
         ms = round((time.perf_counter() - started) * 1000)
         await self.record_usage(

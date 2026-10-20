@@ -168,8 +168,11 @@ async def p7() -> None:
         log(f"  second request key={upstream.seen[-1]} status={second.status_code}")
         verdict(second.status_code == 200 and upstream.seen[-1] == "key-two",
                 "the next request took key 2")
-        verdict(journals.rows[0].status == 429 and journals.rows[-1].account == "kimi#2",
-                "the journal names key 1's 429 and key 2's answer")
+        verdict(
+            [row.status for row in journals.rows] == [429, 200]
+            and journals.rows[-1].model == MODEL,
+            "the journal holds key 1's 429 and key 2's answer",
+        )
 
         time.sleep(COOLDOWN_S + 1)
         third = await ask(relay, grant.secret)
