@@ -472,7 +472,7 @@ class Harness:
         entries = tuple(refs)
         found = self._chats.get(chat)
         if found is not None:
-            found._write(attached=entries)  # noqa: SLF001 - the harness owns every chat
+            found._write(attached=entries)  # pyright: ignore[reportPrivateUsage] - owns every chat
             return
         record = read_record(self._deps.home, chat)
         if record is None:

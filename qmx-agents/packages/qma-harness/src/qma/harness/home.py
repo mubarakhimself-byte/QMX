@@ -802,9 +802,7 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
         started=bool(document["started"]),
         turn=document["turn"],
         digests=tuple(document.get("digests", ())),
-        attached=tuple(
-            AttachedRef.from_document(page) for page in document.get("attached") or ()
-        ),
+        attached=tuple(AttachedRef.from_document(page) for page in document.get("attached") or ()),
     )
 
 

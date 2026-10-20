@@ -26,9 +26,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Final, Literal, Protocol
+from typing import Final, Literal, Protocol, cast
 
 type Pin = Literal["version", "follow"]
 type Status = Literal["ready", "pending", "archived", "not_cached"]
@@ -63,8 +63,9 @@ LATER: Final[Mapping[str, str]] = MappingProxyType(
 NEWER: Final = "newer version exists"
 """What a pinned item whose `main` has moved reads (Library AD-22, AD-63)."""
 
-PINNED_KINDS: Final[frozenset[str]] = frozenset({"pod", "unit", "bot", "session", "run", "library"})
-"""Kinds that resolve one Library item by id, or by search for `library`."""
+PINNED_KINDS: Final[frozenset[str]] = frozenset({"pod", "unit", "bot", "session"})
+"""Kinds that name one Library item by id. `library` names one by search; `run` and `app` read a
+landed output, which their own resolvers do."""
 
 TEXT_SLOTS: Final[tuple[str, ...]] = ("content", "body.md")
 """The blob slots an excerpt may be read from, asked for every kind: a store answers the slots the
@@ -114,7 +115,8 @@ class AttachedRef:
         """A record written before a field existed reads its default."""
         if not isinstance(page, Mapping):
             raise ContextRefused("invalid_arguments", f"{page!r} is not a reference entry")
-        values = {k: v for k, v in page.items() if v is not None}
+        table = cast("Mapping[str, object]", page)
+        values = {key: value for key, value in table.items() if value is not None}
         return cls(
             ref=str(values["ref"]),
             item_id=str(values["item_id"]),
@@ -158,7 +160,8 @@ def parse(ref: str) -> tuple[str, str]:
     kind, target = text[1:].split(":", 1)
     if kind not in KINDS:
         raise ContextRefused(
-            "invalid_arguments", f"@{kind} is not a reference kind; the kinds are {', '.join(KINDS)}"
+            "invalid_arguments",
+            f"@{kind} is not a reference kind; the kinds are {', '.join(KINDS)}",
         )
     if (later := LATER.get(kind)) is not None:
         raise ContextRefused("not_yet", later)
@@ -197,12 +200,21 @@ class LibraryReads(Protocol):
 
     def resolve(self, item: str, ref: str = "main") -> str | None: ...
     def head(self, item: str, ref: str = "main") -> str | None: ...
+    def state(self, item: str) -> str | None: ...
+
+    """`active`, `archived`, or None for an item the store never held."""
+
     def get(self, object_id: str, slots: Sequence[str] = ()) -> LibraryObject: ...
-    def search(self, text: str, *, kind: str | None = None, limit: int = 20) -> list[LibraryHit]: ...
+    def search(
+        self, text: str, *, kind: str | None = None, limit: int = 20
+    ) -> list[LibraryHit]: ...
     def versions(self, item: str, kind: str) -> list[str]: ...
     def produced(self, producer: str) -> list[str]: ...
+
     """The artifacts a run object produced, oldest first."""
+
     def outputs(self, producer: str, name: str) -> list[str]: ...
+
     """The artifacts an app item landed under its `provides` name, oldest first."""
 
 
@@ -223,16 +235,19 @@ class Budget:
         if self.hard_chars < self.soft_chars:
             raise ContextRefused("invalid_arguments", "an excerpt's hard limit is under its soft")
 
+    def capped(self, text: str) -> str:
+        """The soft share of `text`: what an attachment adds to a turn unasked."""
+        return text if len(text) <= self.soft_chars else text[: self.soft_chars]
 
-def cut(text: str, limit: int, why: str = "") -> str:
+
+def cut(text: str, limit: int) -> str:
     """`text` when it fits, else its head and a pointer saying what was left out."""
     if len(text) <= limit:
         return text
-    pointer = (
-        f"\n\n[cut at {limit:,} of {len(text):,} characters; read the rest with context_read"
-        f"{f' or {why}' if why else ''}.]"
-    )
-    return text[: max(0, limit - len(pointer))].rstrip() + pointer
+    pointer = f"[cut at {limit:,} of {len(text):,} characters; context_read has the rest.]"
+    if len(pointer) >= limit:
+        return pointer
+    return text[: limit - len(pointer) - 2].rstrip() + "\n\n" + pointer
 
 
 class Resolvers:
@@ -255,33 +270,46 @@ class Resolvers:
 
     def refresh(self, attached: AttachedRef) -> AttachedRef:
         """Re-resolve an entry against the Library now. A pinned entry keeps its version and
-        gains the "newer version exists" note when `main` moved; a following one moves."""
+        gains the "newer version exists" note when `main` moved, and picks up the output a
+        `pending` one was waiting for; a following one moves."""
         kind, target = parse(attached.ref)
         if attached.pin == "follow":
             return replace(self._resolve(kind, target), pin="follow", version_id=None)
         current = self._resolve(kind, target)
-        moved = current.object_id != attached.object_id and current.status == "ready"
-        return replace(attached, status=current.status, note=NEWER if moved else "")
+        moved = current.version_id is not None and current.version_id != attached.version_id
+        return replace(
+            attached,
+            artifact_id=current.artifact_id or attached.artifact_id,
+            status=current.status,
+            note=NEWER if moved else "",
+        )
 
     def read(self, attached: AttachedRef, span: str | None = None) -> str:
         """The handle and an excerpt, capped at the hard budget. `span` is `a-b` in characters."""
-        found = self.reads.get(attached.object_id, TEXT_SLOTS)
+        found = self.reads.get(self._object_id(attached), TEXT_SLOTS)
         text = self._text(found)
         if span is not None:
             text = _span(text, span)
-        body = cut(text, self.budget.hard_chars, "for another range")
+        body = cut(text, self.budget.hard_chars)
         return f"{attached.described()}\n{found.title}\n\n{body}".strip()
 
     def excerpt(self, attached: AttachedRef) -> str:
         """What `context_add` returns: the handle and a soft-capped excerpt."""
-        found = self.reads.get(attached.object_id, TEXT_SLOTS)
+        found = self.reads.get(self._object_id(attached), TEXT_SLOTS)
         head = cut(self._text(found), self.budget.soft_chars)
         return f"{attached.described()}\n{found.title}\n\n{head}"
+
+    def _object_id(self, attached: AttachedRef) -> str:
+        """A following entry reads `main` now, not the object the chat was born on."""
+        if attached.pin == "follow":
+            kind, target = parse(attached.ref)
+            return self._resolve(kind, target).object_id
+        return attached.object_id
 
     # -- one resolver per kind ----------------------------------------------------------
 
     def _resolve(self, kind: str, target: str) -> AttachedRef:
-        if kind in PINNED_KINDS:
+        if kind in PINNED_KINDS or kind == "library":
             return self._pinned(kind, target)
         if kind == "run":
             return self._run(target)
@@ -313,8 +341,16 @@ class Resolvers:
         newest = self.reads.head(item)
         moved = newest is not None and newest != head
         return AttachedRef(
-            ref=ref, item_id=item, version_id=head, status="ready", note=NEWER if moved else ""
+            ref=ref,
+            item_id=item,
+            version_id=head,
+            status=self._status(item),
+            note=NEWER if moved else "",
         )
+
+    def _status(self, item: str) -> Status:
+        """An archived item stays readable and says so (AD-63, AD-6)."""
+        return "archived" if self.reads.state(item) == "archived" else "ready"
 
     def _run(self, target: str) -> AttachedRef:
         """`@run:<id>` pins the run; `@run:<id>/<output>` pins the artifact it landed, and reads
@@ -333,7 +369,7 @@ class Resolvers:
                     item_id=run_id,
                     version_id=head,
                     artifact_id=artifact,
-                    status="ready",
+                    status=self._status(run_id),
                 )
         return AttachedRef(
             ref=f"@run:{run_id}/{output}",
@@ -366,7 +402,7 @@ class Resolvers:
             item_id=app_id,
             version_id=head,
             artifact_id=landed[-1],
-            status="ready",
+            status=self._status(app_id),
         )
 
     # -- reading ------------------------------------------------------------------------
@@ -388,7 +424,9 @@ def _names_output(found: LibraryObject, name: str) -> bool:
     if found.fields.get("type") == name:
         return True
     metadata = found.fields.get("metadata")
-    return isinstance(metadata, Mapping) and metadata.get("output") == name
+    if not isinstance(metadata, Mapping):
+        return False
+    return cast("Mapping[str, object]", metadata).get("output") == name
 
 
 def _span(text: str, span: str) -> str:
@@ -420,11 +458,12 @@ class Listing:
 def listing(entries: Sequence[AttachedRef], resolvers: Resolvers) -> Listing:
     """Each entry as the Library reads it now: `pending` clears itself when the output lands, and
     a pinned item whose main moved says so (Library AD-22)."""
-    refreshed = []
+    refreshed: list[AttachedRef] = []
     for entry in entries:
         try:
             refreshed.append(resolvers.refresh(entry))
         except ContextRefused as refused:
             refreshed.append(replace(entry, status="not_cached", note=refused.message))
     ready = sum(1 for entry in refreshed if entry.status == "ready")
-    return Listing(tuple(refreshed), ready, len(refreshed) - ready)
+    waiting = sum(1 for entry in refreshed if entry.status == "pending")
+    return Listing(tuple(refreshed), ready, waiting)

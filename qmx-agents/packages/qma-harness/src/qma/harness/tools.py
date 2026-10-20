@@ -290,12 +290,12 @@ type HostRead = Callable[[dict[str, Any]], Awaitable[Mapping[str, object]]]
 or one the hosting process passes to `Harness.open`, such as its heartbeats."""
 
 NO_ARGUMENTS: Final[Mapping[str, object]] = MappingProxyType({"type": "object", "properties": {}})
-_REF: Final[Mapping[str, object]] = MappingProxyType(
-    {
-        "type": "string",
-        "description": "A reference as written, for example @pod:pod-7 or @run:<id>/bias",
-    }
-)
+_REF: Final[dict[str, object]] = {
+    "type": "string",
+    "description": "A reference as written, for example @pod:pod-7 or @run:<id>/bias",
+}
+"""A plain dict, never a mapping proxy: this one sits *inside* another schema, and the CLI
+serialises the whole tool list at connect."""
 HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
     {
         "slot_table": {"type": "object", "properties": {}},

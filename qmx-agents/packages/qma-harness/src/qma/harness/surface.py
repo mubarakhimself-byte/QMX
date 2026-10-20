@@ -38,6 +38,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
 from qmx_control.catalog import CORE_TOOLSETS
+from qmx_control.context import Budget
 
 from qma.harness.launch import (
     CHAT_HOOK_EVENTS,
@@ -115,25 +116,11 @@ CHARS_PER_TOKEN: Final = 4
 has, so that is what the budget is kept in."""
 
 
-@dataclass(frozen=True)
-class ExcerptBudget:
-    """What a reference's excerpt may carry, in characters (AD-63)."""
-
-    soft_chars: int
-    hard_chars: int
-    folder_entries: int = MAX_FOLDER_ENTRIES
-
-    def capped(self, text: str) -> str:
-        """The soft share of `text`: what an attachment adds to a turn unasked."""
-        return text if len(text) <= self.soft_chars else text[: self.soft_chars]
-
-
-def excerpt_budget(
-    settings: Mapping[str, object], window_tokens: int | None = None
-) -> ExcerptBudget:
+def excerpt_budget(settings: Mapping[str, object], window_tokens: int | None = None) -> Budget:
     """`[agents] excerpt` over the defaults: `soft` and `hard` shares of the window, the
     window itself in tokens, and `folder_entries`. A written value that is not a positive
-    number is skipped rather than read as zero."""
+    number is skipped rather than read as zero. The budget itself is the context module's, so
+    one value caps a reference wherever it is read."""
     written = _table(_table(settings.get("excerpt")))
     soft = _share(written.get("soft"), EXCERPT_SOFT)
     hard = _share(written.get("hard"), EXCERPT_HARD)
@@ -148,7 +135,7 @@ def excerpt_budget(
         window = window_tokens
     entries = written.get("folder_entries")
     count = entries if isinstance(entries, int) and entries > 0 else MAX_FOLDER_ENTRIES
-    return ExcerptBudget(
+    return Budget(
         soft_chars=int(window * CHARS_PER_TOKEN * soft),
         hard_chars=int(window * CHARS_PER_TOKEN * hard),
         folder_entries=count,
@@ -159,6 +146,7 @@ def _share(value: object, default: float) -> float:
     if isinstance(value, int | float) and not isinstance(value, bool) and 0 < value <= 1:
         return float(value)
     return default
+
 
 CLI_BUILTINS: Final[tuple[str, ...]] = (
     "Task",

@@ -48,7 +48,7 @@ from qmx_control.context import (
     listing,
 )
 from qmx_library.port import Draft, JsonObject, LibraryRefused, ObjectView
-from qmx_library.principal import MAIN, sessions_ref
+from qmx_library.principal import MAIN, sessions_ref, state_ref
 from qmx_library.store import Store
 
 if TYPE_CHECKING:
@@ -99,6 +99,11 @@ class StoreReads:
         found = self.store.head(item, ref)
         return None if found is None else found[0]
 
+    def state(self, item: str) -> str | None:
+        """An item's state is a move on its own state ref (Library AD-6), so no private read."""
+        found = self.store.head(item, state_ref(item))
+        return None if found is None else found[0]
+
     def get(self, object_id: str, slots: Sequence[str] = ()) -> LibraryObject:
         try:
             found = self.store.get(self.store.engine, object_id)
@@ -125,26 +130,36 @@ class StoreReads:
 
     def outputs(self, producer: str, name: str) -> list[str]:
         """The artifacts the app `producer` landed under `name`, oldest first. An output names
-        itself by the artifact's `type` (or its `metadata.output`, the shape
-        `qmx_apps.artifacts.ArtifactRef` already uses), and the app by a `producer_app` key or a
-        `produced-by` edge from one of the app's versions."""
-        produced: set[str] = set()
-        for version in self.versions(producer, "mini-app"):
-            produced.update(self.produced(version))
-        found: list[str] = []
-        for object_id in self.store.with_field("artifact", "type", name):
-            view = self.store.get(self.store.engine, object_id)
-            metadata = view.fields.get("metadata")
-            named = isinstance(metadata, dict) and metadata.get("producer_app") in (producer, None)
-            if object_id in produced or (named and metadata.get("producer_app") == producer):
+        itself by the artifact's `type` or the `output` of `qmx_apps.artifacts.ArtifactRef`, and
+        the app owns it by a `produced-by` edge from one of its versions or by the reference's
+        `producer_app`."""
+        produced = {
+            edge
+            for version in self.versions(producer, "mini-app")
+            for edge in self.produced(version)
+        }
+        found = [
+            object_id
+            for object_id in self.store.with_field("artifact", "type", name)
+            if object_id in produced
+            or _by_app(self.store.get(self.store.engine, object_id), producer)
+        ]
+        for object_id in sorted(produced - set(found)):
+            if _named(self.store.get(self.store.engine, object_id), name):
                 found.append(object_id)
-        for object_id in sorted(produced):
-            view = self.store.get(self.store.engine, object_id)
-            metadata = view.fields.get("metadata")
-            if isinstance(metadata, dict) and metadata.get("output") == name:
-                if object_id not in found:
-                    found.append(object_id)
         return found
+
+
+def _named(found: ObjectView, name: str) -> bool:
+    if found.fields.get("type") == name:
+        return True
+    metadata = found.fields.get("metadata")
+    return isinstance(metadata, dict) and metadata.get("output") == name
+
+
+def _by_app(found: ObjectView, producer: str) -> bool:
+    metadata = found.fields.get("metadata")
+    return isinstance(metadata, dict) and metadata.get("producer_app") == producer
 
 
 def _library_object(found: ObjectView, data: Mapping[str, bytes]) -> LibraryObject:
@@ -167,16 +182,12 @@ def _refusal(error: ContextRefused) -> Exception:
     return (KeyError if error.code == "not_found" else ValueError)(error.message)
 
 
-def chat_reads(
-    harness: RecordedHarness, store: Store, chat: SessionId
-) -> Mapping[str, HostRead]:
+def chat_reads(harness: RecordedHarness, store: Store, chat: SessionId) -> Mapping[str, HostRead]:
     """The five `context` reads for one chat (AD-63), over the store the host owns. Each one
     reads the chat record's list, acts through `Harness.set_attached`, and returns what the tool
     hands the model."""
 
-    resolvers = Resolvers(
-        StoreReads(store), excerpt_budget(harness.control.settings_get("agents"))
-    )
+    resolvers = Resolvers(StoreReads(store), excerpt_budget(harness.control.settings_get("agents")))
 
     def entries() -> tuple[AttachedRef, ...]:
         record = harness.record(chat)
@@ -229,9 +240,9 @@ def chat_reads(
 
     async def read(arguments: dict[str, object]) -> Mapping[str, object]:
         ref = str(arguments.get("ref", ""))
-        current = entry(ref)
         span = arguments.get("range")
         try:
+            current = await asyncio.to_thread(resolvers.refresh, entry(ref))
             text = await asyncio.to_thread(
                 resolvers.read, current, span if isinstance(span, str) else None
             )
@@ -251,7 +262,6 @@ def chat_reads(
 
 
 class SessionRecorder:
-
     def __init__(self, store: Store, clock: Callable[[], datetime] | None = None) -> None:
         self.store = store
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -317,7 +327,7 @@ class SessionRecorder:
                 tags.append(tag)
             with contextlib.suppress(LibraryRefused):
                 self.store.relate(self.store.engine, head, MENTIONS, item.object_id)
-        self.store.annotate(self.store.engine, head, {"tags": sorted(tags)})
+        self.store.annotate(self.store.engine, head, cast("JsonObject", {"tags": sorted(tags)}))
         return head
 
     def exported(self, chat: str, transcript: bytes) -> str:
