@@ -108,10 +108,13 @@ class FakeUpstream:
             self.requests.append(time.monotonic())
             scenario = self.scenarios[min(len(self.requests), len(self.scenarios)) - 1]
             await asyncio.sleep(scenario.delay_s)
-            if scenario.status == 200:
-                await _stream(writer)
-            else:
-                await _fail(writer, scenario.status, scenario.body)
+            # The relay closes some cases as soon as it has what it needs, so a write to it can
+            # raise. That is the client's choice, not a failure of this fake.
+            with contextlib.suppress(ConnectionError):
+                if scenario.status == 200:
+                    await _stream(writer)
+                else:
+                    await _fail(writer, scenario.status, scenario.body)
         finally:
             writer.close()
             with contextlib.suppress(Exception):
