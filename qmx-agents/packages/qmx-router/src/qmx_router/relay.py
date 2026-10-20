@@ -362,6 +362,8 @@ class _Upstream:
     response: httpx.Response
     served: str
     row: ModelRow | None = None
+    provider: ProfileName | None = None
+    """The provider the request went to, which differs from the main on a mixed chat."""
     start_wait: float = START_WAIT_S
     """The row's no-progress bound on the first event, or the Claude default when no row
     describes the target (AD-50 (8), Appendix H)."""
@@ -383,7 +385,9 @@ class _Upstream:
         with contextlib.suppress(Exception):
             await self.response.aclose()
         status = self.journal_status or self.response.status_code
-        await self.relay.write_row(self.held, self.path, status, self.served, self.usage)
+        await self.relay.write_row(
+            self.held, self.path, status, self.served, self.usage, self.provider
+        )
 
 
 @dataclass
@@ -952,7 +956,7 @@ class Relay:
         except asyncio.CancelledError:
             await self.tee(held, path, CLIENT_GONE, pinned, {})
             raise
-        upstream = _Upstream(self, held, path, response, pinned)
+        upstream = _Upstream(self, held, path, response, pinned, provider=held.profile.name)
         state = translate.StreamState(translation, pinned)
         try:
             if response.status_code != 200:
@@ -1093,10 +1097,10 @@ class Relay:
         try:
             response = await self._client.send(request, stream=True)
         except httpx.HTTPError as error:
-            await self.tee(held, path, 502, model, {})
+            await self.tee(held, path, 502, model, {}, profile.name)
             return _error(502, "api_error", f"the provider did not answer: {type(error).__name__}")
         except asyncio.CancelledError:
-            await self.tee(held, path, CLIENT_GONE, model, {})
+            await self.tee(held, path, CLIENT_GONE, model, {}, profile.name)
             raise
         upstream = _Upstream(
             self,
@@ -1105,6 +1109,7 @@ class Relay:
             response,
             model,
             row,
+            provider=profile.name,
             start_wait=(
                 START_WAIT_S if row is None else row.first_token_timeout(_prompt_tokens(row, body))
             ),
@@ -1240,9 +1245,17 @@ class Relay:
             await self.alert(session_id, reason)
 
     async def tee(
-        self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]
+        self,
+        held: RelayGrant,
+        path: str,
+        status: int,
+        model: str,
+        usage: Mapping[str, Any],
+        provider: ProfileName | None = None,
     ) -> None:
-        await self.settle(held.session_id, self.write_row(held, path, status, model, usage))
+        await self.settle(
+            held.session_id, self.write_row(held, path, status, model, usage, provider)
+        )
 
     async def settle(self, session_id: SessionId, work: Coroutine[Any, Any, None]) -> None:
         """Runs `work` to the end even when the caller is cancelled, and lets `_close_journal`
@@ -1253,10 +1266,17 @@ class Relay:
         await asyncio.shield(task)
 
     async def write_row(
-        self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]
+        self,
+        held: RelayGrant,
+        path: str,
+        status: int,
+        model: str,
+        usage: Mapping[str, Any],
+        provider: ProfileName | None = None,
     ) -> None:
-        """One journal row for one upstream request. A failure alerts the chat and drops the
-        writer, so the next request opens a fresh one."""
+        """One journal row for one upstream request, naming the provider that served it rather
+        than the chat's main. A failure alerts the chat and drops the writer, so the next request
+        opens a fresh one."""
 
         def count(name: str) -> int:
             value = usage.get(name)
@@ -1264,7 +1284,7 @@ class Relay:
 
         row = RelayUsage(
             session_id=held.session_id,
-            profile=held.profile.name,
+            profile=provider or held.profile.name,
             path=path,
             status=status,
             model=model,
