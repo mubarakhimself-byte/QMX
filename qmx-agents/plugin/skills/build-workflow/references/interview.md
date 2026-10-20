@@ -1,5 +1,9 @@
 # The interview
 
+The long form, for whoever edits the skill. A build never reads this file: a chat cannot open a
+file beside the plugin without asking him, so `SKILL.md` holds the questions the copilot needs.
+Keep the two in step.
+
 Three things, three questions at most, each with the answer you recommend. He answers "yes" and
 you have all of them. Never send this list whole; pick the two or three that his line leaves
 open, and leave out anything it already answers.

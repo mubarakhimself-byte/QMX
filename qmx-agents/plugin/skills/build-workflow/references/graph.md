@@ -1,5 +1,9 @@
 # The workflow graph
 
+The long form, for whoever edits the skill. A build never reads this file: a chat cannot open a
+file beside the plugin without asking him, and nothing in a build may ask, so `SKILL.md` carries
+what the copilot needs. Keep the two in step when the definition format changes.
+
 A draft is the document below plus its folder's text files. Save both in one
 `workflows_drafts_put` call, `{"definition": {...}, "files": {"scripts/pull.py": "..."}}`.
 
