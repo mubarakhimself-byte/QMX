@@ -29,7 +29,9 @@ from typing import Any, Final
 
 from common import SHIP_HOME, Log, Session, boot, capture_launches, chat_args, require_login
 
-FIXTURES: Final = Path(__file__).resolve().parents[3] / "scripts" / "probes" / "harness" / "fixtures"
+FIXTURES: Final = (
+    Path(__file__).resolve().parents[3] / "scripts" / "probes" / "harness" / "fixtures"
+)
 LOCK: Final = Path("D:/QMX-worktrees/.engine-lane-lock")
 PACKS: Final = ("pack-alpha", "pack-beta")
 FIVE: Final = ("pack-one", "pack-two", "pack-three", "pack-four", "pack-five")
@@ -100,23 +102,28 @@ async def lane_two(say: Log, root: Path) -> dict[str, Any]:
     session = await Session.start(
         SHIP_HOME, model="haiku", workspace=root / "ws", title="pack-ppl", tools=["Agent", "Skill"]
     )
-    await session.harness.set_packs(session.chat, PACKS)
-    _, command = await session.turn(say, "/pack-beta:beta-cmd")
-    _, skill = await session.turn(say, SKILL_ASK)
-    _, agent = await session.turn(say, AGENT_ASK)
-    surface = session.harness.surface(session.chat)
-    assert surface is not None
-    return {
-        "command": reply(command),
-        "skill": reply(skill),
-        "skill_calls": tool_uses(skill),
-        "agent": reply(agent),
-        "agent_calls": tool_uses(agent),
-        "views": [view.name for view in surface.views],
-        "skills": list(surface.skills),
-        "plugins": [path.name for path in surface.plugins],
-        "external": [name for name in surface.toolsets if name.startswith("mcp:")],
-    }
+    try:
+        await session.harness.set_packs(session.chat, PACKS)
+        _, command = await session.turn(say, "/pack-beta:beta-cmd")
+        _, skill = await session.turn(say, SKILL_ASK)
+        _, agent = await session.turn(say, AGENT_ASK)
+        surface = session.harness.surface(session.chat)
+        if surface is None:  # a launch always leaves one
+            raise RuntimeError("the chat launched with no Surface")
+        return {
+            "command": reply(command),
+            "skill": reply(skill),
+            "skill_calls": tool_uses(skill),
+            "agent": reply(agent),
+            "agent_calls": tool_uses(agent),
+            "agents": [block["content"] for block in agent if block["type"] == "agents"],
+            "views": [view.name for view in surface.views],
+            "skills": list(surface.skills),
+            "plugins": [path.name for path in surface.plugins],
+            "external": [name for name in surface.toolsets if name.startswith("mcp:")],
+        }
+    finally:
+        await session.harness.close()
 
 
 async def lane_three(say: Log, root: Path) -> dict[str, Any]:
@@ -129,29 +136,35 @@ async def lane_three(say: Log, root: Path) -> dict[str, Any]:
     session = await Session.start(
         SHIP_HOME, model="haiku", workspace=root / "ws", title="pack-mid", tools=["Agent", "Skill"]
     )
-    await session.harness.set_packs(session.chat, ("pack-alpha",))
-    _, first = await session.turn(say, f"Remember the word {word}. Reply with the single word OK.")
-    before = len(launched)
-    await session.harness.set_packs(session.chat, PACKS)
-    after_set = len(launched)
-    _, second = await session.turn(
-        say, "What word did I ask you to remember? Reply with only that word."
-    )
-    _, joined = await session.turn(say, "/pack-beta:beta-cmd")
-    after_turn = len(launched)
-    surface = session.harness.surface(session.chat)
-    assert surface is not None
-    return {
-        "word": word,
-        "first": reply(first),
-        "recall": reply(second),
-        "command": reply(joined),
-        "launches_before_set": before,
-        "launches_right_after_set": after_set,
-        "launches_after_next_turn": after_turn,
-        "views": [view.name for view in surface.views],
-        "skills": list(surface.skills),
-    }
+    try:
+        await session.harness.set_packs(session.chat, ("pack-alpha",))
+        _, first = await session.turn(
+            say, f"Remember the word {word}. Reply with the single word OK."
+        )
+        before = len(launched)
+        await session.harness.set_packs(session.chat, PACKS)
+        after_set = len(launched)
+        _, second = await session.turn(
+            say, "What word did I ask you to remember? Reply with only that word."
+        )
+        _, joined = await session.turn(say, "/pack-beta:beta-cmd")
+        after_turn = len(launched)
+        surface = session.harness.surface(session.chat)
+        if surface is None:  # a launch always leaves one
+            raise RuntimeError("the chat launched with no Surface")
+        return {
+            "word": word,
+            "first": reply(first),
+            "recall": reply(second),
+            "command": reply(joined),
+            "launches_before_set": before,
+            "launches_right_after_set": after_set,
+            "launches_after_next_turn": after_turn,
+            "views": [view.name for view in surface.views],
+            "skills": list(surface.skills),
+        }
+    finally:
+        await session.harness.close()
 
 
 async def lane_four(say: Log, root: Path) -> dict[str, Any]:
@@ -176,17 +189,21 @@ async def lane_four(say: Log, root: Path) -> dict[str, Any]:
     session = await Session.start(
         SHIP_HOME, model="haiku", workspace=root / "ws", title="pack-tamper", tools=["Skill"]
     )
-    await session.harness.set_packs(session.chat, PACKS)
-    surface = session.harness.surface(session.chat)
-    assert surface is not None
-    return {
-        "loaded": [view.name for view in survey.views],
-        "refused": [name for name, _ in survey.refusals],
-        "refusal": survey.refusals[0][1] if survey.refusals else "",
-        "doctor_named": named,
-        "surface_views": [view.name for view in surface.views],
-        "alpha_skill_listed": "pack-alpha:alpha-skill" in surface.skills,
-    }
+    try:
+        await session.harness.set_packs(session.chat, PACKS)
+        surface = session.harness.surface(session.chat)
+        if surface is None:  # a launch always leaves one
+            raise RuntimeError("the chat launched with no Surface")
+        return {
+            "loaded": [view.name for view in survey.views],
+            "refused": [name for name, _ in survey.refusals],
+            "refusal": survey.refusals[0][1] if survey.refusals else "",
+            "doctor_named": named,
+            "surface_views": [view.name for view in surface.views],
+            "alpha_skill_listed": "pack-alpha:alpha-skill" in surface.skills,
+        }
+    finally:
+        await session.harness.close()
 
 
 async def perf(say: Log, root: Path) -> dict[str, Any]:
@@ -197,16 +214,19 @@ async def perf(say: Log, root: Path) -> dict[str, Any]:
     session = await Session.start(
         SHIP_HOME, model="haiku", workspace=root / "ws", title="pack-perf", tools=["Read"]
     )
-    await session.harness.set_packs(session.chat, FIVE)
-    timings: list[float] = []
-    seen = None
-    for _ in range(LAUNCHES):
-        await session.harness.close_chat(session.chat)
-        started = time.perf_counter()
-        await session.harness.send(session.chat, OperatorText("Reply with OK."))
-        seen = session.harness.surface(session.chat) or seen
-        await session.harness.close_chat(session.chat)
-        timings.append(round((time.perf_counter() - started) * 1000, 1))
+    try:
+        await session.harness.set_packs(session.chat, FIVE)
+        timings: list[float] = []
+        seen = None
+        for _ in range(LAUNCHES):
+            await session.harness.close_chat(session.chat)
+            started = time.perf_counter()
+            await session.harness.send(session.chat, OperatorText("Reply with OK."))
+            seen = session.harness.surface(session.chat) or seen
+            await session.harness.close_chat(session.chat)
+            timings.append(round((time.perf_counter() - started) * 1000, 1))
+    finally:
+        await session.harness.close()
     return {
         "launches_ms": timings,
         "median_ms": statistics.median(timings),
@@ -237,8 +257,12 @@ def verdict(say: Log, observation: dict[str, Any]) -> None:
             use["input"].get("subagent_type") == "pack-alpha:alpha-agent"
             for use in two["agent_calls"]
         )
-        and "ALPHA-AGENT-OK" in two["agent"],
-        {"calls": two["agent_calls"], "reply": two["agent"][-200:]},
+        and any(state.get("name") == "pack-alpha:alpha-agent" for state in two["agents"]),
+        {
+            "calls": two["agent_calls"],
+            "agents": two["agents"],
+            "reply": two["agent"][-160:],
+        },
     )
     say.check("lane 2, a pack command runs", "BETA-CMD-OK" in two["command"], two["command"])
     say.check(
@@ -281,7 +305,9 @@ def verdict(say: Log, observation: dict[str, Any]) -> None:
         },
     )
     say.check(
-        "lane 4, the doctor names the tampered pack", bool(four["doctor_named"]), four["doctor_named"]
+        "lane 4, the doctor names the tampered pack",
+        bool(four["doctor_named"]),
+        four["doctor_named"],
     )
     say(
         f"PERF launch ms with five packs, {LAUNCHES} launches: {measured['launches_ms']} "
@@ -292,7 +318,7 @@ def verdict(say: Log, observation: dict[str, Any]) -> None:
 
 def main() -> int:
     args = chat_args(__doc__).parse_args()
-    say = Log("pack-lanes")
+    say = Log("owner-pack-lanes")
     removed = boot()
     say(f"scrubbed {len(removed)} names from the process env (names only)")
     if not LOCK.is_dir():
