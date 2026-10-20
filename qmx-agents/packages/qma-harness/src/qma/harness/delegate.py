@@ -29,6 +29,7 @@ import asyncio
 import contextlib
 import functools
 import json
+import os
 import time
 import uuid
 from collections.abc import Mapping, Sequence
@@ -601,14 +602,14 @@ class Helpers:
             raise DelegateRefused("the cli helper has no command to run")
         solution = await asyncio.create_subprocess_exec(
             *spawn.argv,
-            env=dict(spawn.env),
+            env={**os.environ, **spawn.env},
             cwd=spawn.cwd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stderr=asyncio.subprocess.PIPE,
         )
         helper.process = solution
-        if solution.stdin is None or solution.stdout is None:
+        if solution.stdin is None or solution.stdout is None or solution.stderr is None:
             raise DelegateRefused("the cli helper's pipes did not open")
         solution.stdin.write(start.task.encode())
         with contextlib.suppress(BrokenPipeError, ConnectionResetError):
@@ -618,6 +619,8 @@ class Helpers:
             await asyncio.wait_for(solution.stdin.wait_closed(), 5)
         quiet, progress, clock, kept = Quiet(), 0, time.monotonic(), 0
         chunks: list[str] = []
+        errors: list[str] = []
+        drain = asyncio.create_task(_drain(solution.stderr, errors))
         while True:
             try:
                 line = await asyncio.wait_for(solution.stdout.readline(), CLI_POLL_S)
@@ -647,14 +650,15 @@ class Helpers:
                 await self._finish(helper, "stalled", "the stuck rules stopped it: no progress")
                 return
         text = "".join(chunks).strip()
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(drain, 5)
         if helper.stopping is not None:
             await self._finish(helper, "stopped", helper.stopping)
             return
         if solution.returncode != 0:
+            last = errors[-1] if errors else text[-SUMMARY_HEAD:]
             await self._finish(
-                helper,
-                "failed",
-                f"the cli helper ended {solution.returncode}: {text[-SUMMARY_HEAD:]}",
+                helper, "failed", f"the cli helper ended {solution.returncode}: {last}"
             )
             return
         summary, valid = await self._schema(helper, start, text)
@@ -804,6 +808,16 @@ def _kill(helper: Helper) -> None:
     if process is not None and process.returncode is None:
         with contextlib.suppress(ProcessLookupError, OSError):
             process.kill()
+
+
+async def _drain(stream: asyncio.StreamReader, into: list[str]) -> None:
+    """Keep a `cli` helper's last error lines, apart from its answer on stdout."""
+    while True:
+        line = await stream.readline()
+        if not line:
+            return
+        into.append(line.decode("utf-8", "replace").strip())
+        del into[:-20]
 
 
 def _helper_folder(parent_workspace: Path, handle: str, worktree: bool) -> Path:
