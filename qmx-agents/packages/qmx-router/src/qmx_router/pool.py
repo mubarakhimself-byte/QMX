@@ -225,6 +225,12 @@ class AccountPool:
         if held is not None:
             self.release(held)
 
+    def release_prefix(self, prefix: str) -> None:
+        """Give back every affinity whose key starts with `prefix`: a chat that ended holds one
+        per provider it reached."""
+        for key in [key for key in self._affinity if key.startswith(prefix)]:
+            self.release_affinity(key)
+
     def settle(
         self,
         lease: Lease,

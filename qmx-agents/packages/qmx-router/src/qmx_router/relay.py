@@ -68,6 +68,7 @@ import json
 import re
 import secrets
 import socket
+import time
 from collections.abc import (
     AsyncGenerator,
     Awaitable,
@@ -76,6 +77,7 @@ from collections.abc import (
     Generator,
     Iterator,
     Mapping,
+    Sequence,
 )
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, NewType, Protocol, cast
@@ -85,13 +87,16 @@ import httpx
 import keyring
 import uvicorn
 
-from qmx_router import chat_lane
+from qmx_router import chat_lane, complete
+from qmx_router.classify import Classification, classify
 from qmx_router.gpt import translate
 from qmx_router.gpt.probe import ProbePassed, ProbeRun, stored_result, translator_version
 from qmx_router.gpt.siwc import SignInError, SiwcSession
 from qmx_router.ids import SessionId
-from qmx_router.normalise import classify, normalise, refuse_retry
+from qmx_router.normalise import normalise, refuse_retry
+from qmx_router.pool import AccountPool, AccountSpec, Lease, NoAccount
 from qmx_router.profiles import (
+    ClaudePlan,
     GptPlan,
     KeyProvider,
     ModelId,
@@ -122,6 +127,10 @@ CHAT: Final = "/v1/chat/completions"
 """The chat lane's upstream path under the provider's base URL. That holds for a host whose one
 base serves both routes, as OpenRouter's does; a profile whose chat route sits elsewhere has no way
 to say so yet (BACKLOG, RTR3)."""
+COMPLETE_PATH: Final = "/complete"
+"""The journal path a `complete` row carries: not a CLI request, so not `MESSAGES`."""
+ROUTER_SESSION: Final = "router"
+"""The journal session a `complete` with no session writes its one row under."""
 PATHS: Final = frozenset({MESSAGES, "/v1/messages/count_tokens"})
 HOP_BY_HOP: Final = frozenset(
     {
@@ -233,6 +242,8 @@ class RelayUsage:
     cache_write_tokens: int = 0
     agent_id: str = ""
     """The launching agent (H36), empty when the launcher names none."""
+    account: str = ""
+    """The pool account that served it (AD-12), empty on a plan or pre-pool row."""
 
 
 class EgressTest(Protocol):
@@ -363,11 +374,13 @@ class _Server(uvicorn.Server):
 
 @dataclass(frozen=True)
 class _Sent:
-    """An upstream request whose response headers arrived inside the row's bound."""
+    """An upstream request whose response headers arrived inside the row's bound. `lease` is the
+    account it was sent on, settled when the request ends."""
 
     response: httpx.Response
     wait: float
     deadline: float
+    lease: Lease
 
 
 @dataclass
@@ -380,6 +393,11 @@ class _Upstream:
     row: ModelRow | None = None
     provider: ProfileName | None = None
     """The provider the request went to, which differs from the main on a mixed chat."""
+    lease: Lease | None = None
+    """The account this request holds, settled once at `finish`."""
+    error: Classification | None = None
+    """The provider's refusal, read once by the classifier. Its class cools or benches the
+    account; a success leaves it None and lifts a stale cooldown."""
     start_wait: float = START_WAIT_S
     """The row's no-progress bound on the first event, or the Claude default when no row
     describes the target (AD-50 (8), Appendix H)."""
@@ -408,6 +426,7 @@ class _Upstream:
         await self.relay.write_row(
             self.held, self.path, status, self.served, self.usage, self.provider
         )
+        await self.relay.settle_lease(self)
 
 
 @dataclass
@@ -429,6 +448,10 @@ class Relay:
     """Tests only: an in-process upstream."""
     counters: Counters = field(default_factory=Counters)
     base_url: str = ""
+    pool: AccountPool | None = None
+    """The host's pool (AD-12). A host passes its own, with the accounts and overrides the
+    settings hold; a relay with none keeps one built from the profiles it serves, so every key
+    and GPT request still takes a lease."""
     gpt: GptLane | None = None
     siwc: SiwcSession | None = None
     probe_state: Path | None = None
@@ -457,6 +480,8 @@ class Relay:
     _loop: asyncio.AbstractEventLoop | None = None
     """The loop that serves this relay. Its own thread's loop when the host runs one
     (`qmx_router.server`); the caller's loop otherwise. Every mutation happens on it."""
+    _built_pool: AccountPool | None = None
+    """The pool this relay built from its profiles when the host passed none."""
 
     @property
     def egress_stop(self) -> bool:
@@ -610,6 +635,44 @@ class Relay:
             names = {main.name}
         return frozenset(names)
 
+    def accounts(self) -> AccountPool:
+        """The pool this relay leases accounts from. A host passes its own; a relay with none
+        keeps one built from the profiles it serves, re-read with each call so a settings change
+        lands, and keeps every cooldown it already learned."""
+        if self.pool is not None:
+            return self.pool
+        if self._built_pool is None:
+            self._built_pool = AccountPool()
+        self._built_pool.sync(_account_specs(self.profiles()))
+        return self._built_pool
+
+    def _lease_affinity(self, session_id: SessionId, provider: ProfileName) -> str:
+        """One account per chat per provider, so a running chat keeps its account (AD-12)."""
+        return f"{session_id}:{provider}"
+
+    async def _lease(self, held: RelayGrant, provider: ProfileName, model: str) -> Lease | Reply:
+        """One account for one request, or the error the CLI gets when every one is out."""
+        try:
+            return self.accounts().lease(
+                provider=provider,
+                model=model,
+                affinity=self._lease_affinity(held.session_id, provider),
+            )
+        except NoAccount as error:
+            if error.alert:
+                await self._alert(held.session_id, str(error))
+            return _error(503, "api_error", str(error))
+
+    async def settle_lease(self, upstream: _Upstream) -> None:
+        """Record one request's outcome on its account: a success lifts a stale cooldown, a
+        refusal closes the account as its class says. One alert per account bench."""
+        lease = upstream.lease
+        if lease is None:
+            return
+        notice = self.accounts().settle(lease, upstream.error)
+        if notice is not None:
+            await self._alert(upstream.held.session_id, notice.text)
+
     async def probe_grant(
         self, run: ProbeRun, session: SiwcSession, profile: GptPlan
     ) -> RelayGrant:
@@ -663,6 +726,9 @@ class Relay:
         if self._grants.get(grant.secret) == grant:
             del self._grants[grant.secret]
             self._probes.pop(grant.secret, None)
+        pool = self.pool if self.pool is not None else self._built_pool
+        if pool is not None:
+            pool.release_prefix(f"{grant.session_id}:")
         await self._stop([task for task, held in self._streams.items() if held == grant])
         if all(held.session_id != grant.session_id for held in self._grants.values()):
             await self._close_journal(grant.session_id)
@@ -955,9 +1021,13 @@ class Relay:
             translation = translate.to_responses(document, model=pinned)
         except translate.RefusedRequest as error:
             return _error(400, "invalid_request_error", str(error))
+        leased = await self._lease(held, held.profile.name, pinned)
+        if isinstance(leased, Reply):
+            return leased
         try:
             token = await route.session.access_token()
         except SignInError as error:
+            self.accounts().release(leased)
             await self._alert(held.session_id, f"ChatGPT sign-in: {error}")
             return _error(401, "authentication_error", f"ChatGPT sign-in: {error}")
         if self._client is None:
@@ -977,12 +1047,16 @@ class Relay:
         try:
             response = await self._client.send(request, stream=True)
         except httpx.HTTPError as error:
+            await self._settle_now(leased, classify(502, {}), held.session_id)
             await self.tee(held, path, 502, pinned, {})
             return _error(502, "api_error", f"ChatGPT did not answer: {type(error).__name__}")
         except asyncio.CancelledError:
             await self.tee(held, path, CLIENT_GONE, pinned, {})
+            self.accounts().release(leased)
             raise
-        upstream = _Upstream(self, held, path, response, pinned, provider=held.profile.name)
+        upstream = _Upstream(
+            self, held, path, response, pinned, provider=held.profile.name, lease=leased
+        )
         state = translate.StreamState(translation, pinned)
         try:
             if response.status_code != 200:
@@ -992,6 +1066,9 @@ class Relay:
                 error = body.get("error")
                 found = cast("dict[str, Any]", error) if isinstance(error, dict) else {}
                 status, kind, message = translate.map_error(response.status_code, found)
+                upstream.error = classify(
+                    response.status_code, found or body, dict(response.headers)
+                )
                 await upstream.finish()
                 return _error(status, kind, message)
             events = self._gpt_events(upstream, state)
@@ -1073,6 +1150,7 @@ class Relay:
             upstream.usage = dict(state.usage)
             if state.error is not None:
                 upstream.journal_status = state.error[0]
+                upstream.error = classify(state.error[0], {"message": state.error[2]})
 
     async def _token_bearer(self) -> Reply:
         self.counters.egress += 1
@@ -1105,6 +1183,9 @@ class Relay:
         else:
             normalised = normalise(row, body, headers)
             egress, out_headers = normalised.body, normalised.headers
+        leased = await self._lease(held, profile.name, model)
+        if isinstance(leased, Reply):
+            return leased
         sent = await self._send(
             held,
             profile,
@@ -1116,6 +1197,7 @@ class Relay:
             row,
             _prompt_tokens(row, body) if row is not None else 0,
             streamed,
+            leased,
         )
         if isinstance(sent, Reply):
             return sent
@@ -1127,6 +1209,7 @@ class Relay:
             model,
             row,
             provider=profile.name,
+            lease=sent.lease,
             start_wait=sent.wait,
             deadline=sent.deadline,
             keepalive=bool(row is not None and row.keepalive),
@@ -1152,18 +1235,24 @@ class Relay:
         row: ModelRow | None,
         prompt_tokens: int,
         streamed: bool,
+        lease: Lease,
         target: str | None = None,
     ) -> _Sent | Reply:
         """One upstream request up to its response headers, under the row's no-progress bound
         (AD-50 (8)). Both key-lane paths share it, so the bound and the 504 reply are one.
         `target` is the upstream path when it is not the CLI's own, and the journal keeps the
-        CLI's either way."""
+        CLI's either way. Every failure on this leg settles the lease itself, because nothing
+        downstream will see it."""
         if self._client is None:
             raise RuntimeError("the relay is not started")
+        credential = lease.account.credential or profile.credential
         try:
-            key = await asyncio.to_thread(self.secrets, profile.credential)
+            key = await asyncio.to_thread(self.secrets, credential)
         except Exception as error:
-            reason = _keyring_refusal(profile.credential, error)
+            # A local keyring miss is not a provider answer, so nothing is learned about the
+            # account: the lease goes back and the chat is told.
+            self.accounts().release(lease)
+            reason = _keyring_refusal(credential, error)
             await self._alert(held.session_id, reason)
             return _error(401, "authentication_error", reason)
         request = self._client.build_request(
@@ -1181,14 +1270,25 @@ class Relay:
             async with asyncio.timeout_at(deadline):
                 response = await self._client.send(request, stream=True)
         except TimeoutError:
+            await self._settle_now(lease, classify(504, {}), held.session_id)
             return await self._late(held, path, model, profile, wait, streamed)
         except httpx.HTTPError as error:
+            await self._settle_now(lease, classify(502, {}), held.session_id)
             await self.tee(held, path, 502, model, {}, profile.name)
             return _error(502, "api_error", f"the provider did not answer: {type(error).__name__}")
         except asyncio.CancelledError:
             await self.tee(held, path, CLIENT_GONE, model, {}, profile.name)
+            self.accounts().release(lease)
             raise
-        return _Sent(response, wait, deadline)
+        return _Sent(response, wait, deadline, lease)
+
+    async def _settle_now(
+        self, lease: Lease, error: Classification | None, session_id: SessionId | None = None
+    ) -> None:
+        """Settle a lease on a request leg that built no upstream object."""
+        notice = self.accounts().settle(lease, error)
+        if notice is not None and session_id is not None:
+            await self._alert(session_id, notice.text)
 
     async def _chat(
         self,
@@ -1214,6 +1314,9 @@ class Relay:
             translation = chat_lane.to_chat(document, model=pinned)
         except chat_lane.RefusedRequest as error:
             return _error(400, "invalid_request_error", str(error))
+        leased = await self._lease(held, profile.name, pinned)
+        if isinstance(leased, Reply):
+            return leased
         sent = await self._send(
             held,
             profile,
@@ -1225,6 +1328,7 @@ class Relay:
             row,
             _prompt_tokens(row, normalised.body),
             streamed,
+            leased,
             target=CHAT,
         )
         if isinstance(sent, Reply):
@@ -1237,6 +1341,7 @@ class Relay:
             pinned,
             row,
             provider=profile.name,
+            lease=sent.lease,
             start_wait=sent.wait,
             deadline=sent.deadline,
         )
@@ -1277,6 +1382,9 @@ class Relay:
         error = document.get("error")
         table = cast("dict[str, Any]", error) if isinstance(error, dict) else document
         status, kind, message = chat_lane.map_error(upstream.response.status_code, table)
+        upstream.error = classify(
+            upstream.response.status_code, table, dict(upstream.response.headers)
+        )
         await upstream.finish()
         reply = _error(status, kind, message)
         refused = list(refuse_retry(upstream.response.status_code, data).items())
@@ -1324,7 +1432,8 @@ class Relay:
                         yield event.encode()
                     if state.error is not None:
                         status, _, message = state.error
-                        upstream.error_class = classify(status, {"message": message})
+                        upstream.error = classify(status, {"message": message})
+                        upstream.error_class = upstream.error.kind
                         upstream.journal_status = status
                         await self._alert(
                             upstream.held.session_id,
@@ -1343,7 +1452,8 @@ class Relay:
                     yield event.encode()
                 if state.error is not None:
                     status, _, message = state.error
-                    upstream.error_class = classify(status, {"message": message})
+                    upstream.error = classify(status, {"message": message})
+                    upstream.error_class = upstream.error.kind
                     upstream.journal_status = status
                     await self._alert(
                         upstream.held.session_id,
@@ -1400,6 +1510,9 @@ class Relay:
         usage = document.get("usage")
         upstream.usage = cast("dict[str, Any]", usage) if isinstance(usage, dict) else {}
         if not response.is_success:
+            upstream.error = classify(
+                response.status_code, document or data, dict(response.headers)
+            )
             kept += list(refuse_retry(response.status_code, document or data).items())
         if path == MESSAGES and response.is_success:
             served = document.get("model")
@@ -1462,7 +1575,8 @@ class Relay:
                         held += event
                         if kind == "error":
                             errors += event
-                            upstream.error_class = classify(500, data)
+                            upstream.error = classify(500, data)
+                            upstream.error_class = upstream.error.kind
                     else:
                         reason = f"the provider sent {kind} before message_start"
                         yield await self._stop_stream(upstream, reason)
@@ -1528,36 +1642,41 @@ class Relay:
         provider: ProfileName | None = None,
     ) -> None:
         """One journal row for one upstream request, naming the provider that served it rather
-        than the chat's main. A failure alerts the chat and drops the writer, so the next request
-        opens a fresh one."""
+        than the chat's main."""
 
         def count(name: str) -> int:
             value = usage.get(name)
             return value if isinstance(value, int) else 0
 
-        row = RelayUsage(
-            session_id=held.session_id,
-            profile=provider or held.profile.name,
-            path=path,
-            status=status,
-            model=model,
-            input_tokens=count("input_tokens"),
-            output_tokens=count("output_tokens"),
-            cache_read_tokens=count("cache_read_input_tokens"),
-            cache_write_tokens=count("cache_creation_input_tokens"),
-            agent_id=held.agent_id,
+        await self.record_usage(
+            RelayUsage(
+                session_id=held.session_id,
+                profile=provider or held.profile.name,
+                path=path,
+                status=status,
+                model=model,
+                input_tokens=count("input_tokens"),
+                output_tokens=count("output_tokens"),
+                cache_read_tokens=count("cache_read_input_tokens"),
+                cache_write_tokens=count("cache_creation_input_tokens"),
+                agent_id=held.agent_id,
+            )
         )
+
+    async def record_usage(self, row: RelayUsage) -> None:
+        """Write one row through the session's writer. A failure alerts the session and drops
+        the writer, so the next request opens a fresh one."""
         try:
             async with self._opening:
-                journal = self._journals.get(held.session_id)
+                journal = self._journals.get(row.session_id)
                 if journal is None:
-                    journal = await asyncio.to_thread(self.journal, held.session_id)
-                    self._journals[held.session_id] = journal
+                    journal = await asyncio.to_thread(self.journal, row.session_id)
+                    self._journals[row.session_id] = journal
             await asyncio.to_thread(journal.append, row)
         except Exception as error:
-            await self._drop_journal(held.session_id)
+            await self._drop_journal(row.session_id)
             await self._alert(
-                held.session_id,
+                row.session_id,
                 f"usage journal: {type(error).__name__}: {error}; "
                 "this request's usage was not recorded",
             )
@@ -1579,6 +1698,202 @@ class Relay:
         if journal is not None:
             with contextlib.suppress(Exception):
                 await asyncio.to_thread(journal.close)
+
+    async def complete(
+        self,
+        role_or_model: str,
+        messages: Sequence[Mapping[str, object]],
+        *,
+        schema: Mapping[str, object] | None = None,
+        session: str | None = None,
+        system: str = "",
+        max_tokens: int = 4096,
+        roles: Mapping[str, Sequence[str]] | None = None,
+    ) -> complete.Completion:
+        """One answer from a key or GPT row, with no CLI process (AD-56): one request through
+        the same normaliser, lease, classifier and journal row as a chat request.
+
+        `role_or_model` is a model id the registry holds, or a role name found in `roles`, whose
+        candidates are tried in order. A plan row is refused: only the CLI holds that sign-in.
+        `session` names the journal row's session and the lease's affinity, so a run's calls
+        land together; `complete` alone writes a `router` journal.
+        """
+        return await self._on_loop(
+            self._complete(
+                role_or_model,
+                messages,
+                schema=schema,
+                session=session,
+                system=system,
+                max_tokens=max_tokens,
+                roles=roles,
+            )
+        )
+
+    async def _complete(
+        self,
+        role_or_model: str,
+        messages: Sequence[Mapping[str, object]],
+        *,
+        schema: Mapping[str, object] | None,
+        session: str | None,
+        system: str,
+        max_tokens: int,
+        roles: Mapping[str, Sequence[str]] | None,
+    ) -> complete.Completion:
+        """The candidates in order, the first that answers wins. A candidate that cannot serve
+        the row at all is named and the next is tried, which is the ladder AD-13 describes."""
+        ask = complete.Ask(messages, system, max_tokens, schema)
+        candidates = list(roles.get(role_or_model, ())) if roles else []
+        refusals: list[str] = []
+        for name in candidates or [role_or_model]:
+            row = self._registry_row(name)
+            if row is None:
+                refusals.append(f"{name!r} is not a model row the registry holds")
+                continue
+            try:
+                profile = self.profiles().get(row.provider)
+            except ProfileError as error:
+                refusals.append(str(error))
+                continue
+            if isinstance(profile, ClaudePlan):
+                refusals.append(complete.plan_refusal(row.provider))
+                continue
+            affinity = f"{session}:{row.provider}" if session else None
+            try:
+                lease = self.accounts().lease(
+                    provider=row.provider, model=row.native, affinity=affinity
+                )
+            except NoAccount as error:
+                refusals.append(str(error))
+                continue
+            served = await self._complete_on(profile, row, lease, ask, session)
+            if isinstance(served, complete.Completion):
+                return served
+            refusals.append(served)
+        raise complete.Refused(
+            "; ".join(refusals) or f"complete has no candidate for {role_or_model!r}"
+        )
+
+    async def _complete_on(
+        self,
+        profile: KeyProvider | GptPlan,
+        row: ModelRow,
+        lease: Lease,
+        ask: complete.Ask,
+        session: str | None,
+    ) -> complete.Completion | str:
+        """One candidate's request. A refusal is a sentence for the caller, with the lease
+        already settled so the pool has cooled or released the account."""
+        started = time.perf_counter()
+        journal = SessionId(session or ROUTER_SESSION)
+        headers: dict[str, str]
+        if isinstance(profile, KeyProvider):
+            credential = lease.account.credential or profile.credential
+            try:
+                key = await asyncio.to_thread(self.secrets, credential)
+            except Exception as error:
+                self.accounts().release(lease)
+                return _keyring_refusal(credential, error)
+            headers = swap_auth(
+                {"content-type": "application/json"}, key, profile.quirks.wire.auth_header
+            )
+            del key
+            base = profile.base_url
+        else:
+            sign_in = self.gpt.route.session if self.gpt is not None else self.siwc
+            if sign_in is None:
+                self.accounts().release(lease)
+                return "the GPT lane is closed: no ChatGPT sign-in is loaded; type /login chatgpt"
+            try:
+                api_key = await sign_in.access_token()
+            except SignInError as error:
+                self.accounts().release(lease)
+                return f"ChatGPT sign-in: {error}"
+            headers = {
+                "authorization": f"Bearer {api_key}",
+                "content-type": "application/json",
+                "accept": "text/event-stream",
+            }
+            del api_key
+            base = sign_in.api
+        if row.wire == "anthropic":
+            url, body = f"{base}{MESSAGES}", complete.anthropic_request(row, ask, row.native)
+        elif row.wire == "openai_chat":
+            url, body = f"{base}{CHAT}", complete.chat_request(row, ask, row.native)
+        else:
+            url, body = f"{base}/responses", complete.responses_request(row, ask, row.native)
+        if self._client is None:
+            raise RuntimeError("the relay is not started")
+        request = self._client.build_request(
+            "POST",
+            url,
+            headers={**headers, "accept": headers.get("accept", "application/json")},
+            content=body,
+        )
+        try:
+            response = await self._client.send(request, stream=True)
+        except httpx.HTTPError as error:
+            await self._settle_now(lease, classify(502, {}), journal)
+            return f"{row.qmx_id}: the provider did not answer ({type(error).__name__})"
+        try:
+            if not response.is_success:
+                data = await response.aread()
+                found = classify(response.status_code, data, dict(response.headers))
+                await self._settle_now(lease, found, journal)
+                return f"{row.qmx_id}: {found.kind}: {found.message[:200]}"
+            if row.wire == "anthropic":
+                payload = _json(await response.aread())
+                answer = complete.anthropic_answer(
+                    cast("dict[str, Any]", payload) if isinstance(payload, dict) else {}
+                )
+            else:
+                answer = complete.streamed_answer(
+                    [line async for line in response.aiter_lines()], row, row.native
+                )
+        finally:
+            with contextlib.suppress(Exception):
+                await response.aclose()
+        notice = self.accounts().settle(lease, None)
+        if notice is not None:
+            await self._alert(journal, notice.text)
+        text, data = complete.answer_text(answer, ask)
+        ms = round((time.perf_counter() - started) * 1000)
+        await self.record_usage(
+            RelayUsage(
+                session_id=journal,
+                profile=profile.name,
+                path=COMPLETE_PATH,
+                status=200,
+                model=answer.model or row.native,
+                input_tokens=int(answer.usage.get("input_tokens", 0)),
+                output_tokens=int(answer.usage.get("output_tokens", 0)),
+                cache_read_tokens=int(answer.usage.get("cache_read_input_tokens", 0)),
+                account=lease.account.id,
+            )
+        )
+        return complete.Completion(
+            text=text,
+            qmx_id=row.qmx_id,
+            model=answer.model or row.native,
+            account=lease.account.id,
+            usage=answer.usage,
+            data=data,
+            ms=ms,
+        )
+
+    def _complete_refusal(self, name: str) -> str | None:
+        """Why `complete` cannot serve this model id, or None when it can."""
+        row = self._registry_row(name)
+        if row is None:
+            return f"{name!r} is not a model row the registry holds"
+        try:
+            profile = self.profiles().get(row.provider)
+        except ProfileError as error:
+            return str(error)
+        if isinstance(profile, ClaudePlan):
+            return complete.plan_refusal(row.provider)
+        return None
 
 
 async def _end_revoked(send: Send, *, started: bool) -> None:
@@ -1602,6 +1917,21 @@ def _keyring_refusal(reference: str, error: Exception) -> str:
     if isinstance(error, KeyError):
         return f"the keyring holds no {reference} entry"
     return f"the keyring could not read {reference}: {type(error).__name__}"
+
+
+def _account_specs(profiles: Profiles) -> list[AccountSpec]:
+    """One account per profile: its own credential on a key row, its one sign-in home on the GPT
+    row, and the plan. A host that sets extra accounts on a provider passes its own pool."""
+    found: list[AccountSpec] = []
+    for name, profile in profiles.by_name.items():
+        match profile:
+            case KeyProvider(credential=credential):
+                found.append(AccountSpec(str(name), name, "key", credential=credential))
+            case GptPlan():
+                found.append(AccountSpec(str(name), name, "gpt"))
+            case ClaudePlan():
+                found.append(AccountSpec(str(name), name, "plan"))
+    return found
 
 
 def _unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
