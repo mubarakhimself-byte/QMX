@@ -237,6 +237,25 @@ HOST_ROWS: Final = (
         "the host's last ten rows.",
     ),
     _row(
+        "ops",
+        "providers",
+        "agent_tool",
+        "provider_rows",
+        "read",
+        "Read the provider profiles and their model rows: wire, window, output limit, "
+        "capabilities, class and first-token timeout. Keys show as keyring references only.",
+    ),
+    _row(
+        "ops",
+        "provider_test",
+        "agent_tool",
+        "provider_test",
+        "domain_write",
+        "Test one model row by its qmx_id with a one-token request through its stored key. A "
+        "row whose key is missing spends nothing and says so.",
+        reversibility="irreversible_external",
+    ),
+    _row(
         "library",
         "mark",
         "agent_tool",
@@ -256,7 +275,9 @@ HOST_ROWS: Final = (
         "helper starts fresh: put the whole task in the prompt. It cannot start helpers.",
     ),
 )
-"""Rows the harness serves itself (the chat-slot table, the relay journal and `delegate`),
+"""Rows the harness serves itself (the chat-slot table, the relay journal and `delegate`), the
+provider rows and their one-token Test from `qmx_router.registry` (a chat sees them only once
+its host passes those two reads),
 `heartbeats`, which the host serves through the harness from its heartbeat log (AD-65), and
 `library_mark`, which the host serves from the Library store as the operator once he approves
 (Library AD-22: only the operator marks)."""

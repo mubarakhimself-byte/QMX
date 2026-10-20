@@ -7,7 +7,7 @@ one key at a time, and a `[[models]]` entry merges into the bundled row with the
 normaliser fields of AD-50. Every default below is Claude's, and every one is UI-editable
 (Appendix H).
 
-`test_row` is the one-token Test: it spends one output token on one row, only through a key that
+`one_token_test` is the Test: it spends one output token on one row, only through a key that
 exists, and says plainly when it spent nothing.
 """
 
@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import os
+import re
 import time
 import tomllib
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -180,6 +182,42 @@ class Registry:
         )
 
 
+def describe(registry: Registry) -> dict[str, object]:
+    """Every provider and its rows as plain JSON values, with credentials as references only."""
+
+    def plain(value: object) -> object:
+        if isinstance(value, frozenset):
+            return sorted(cast("frozenset[str]", value))
+        return value
+
+    providers = [
+        {
+            "name": provider.name,
+            "kind": provider.kind,
+            "base_url": provider.url,
+            "regions": dict(provider.base_url),
+            "auth": provider.auth,
+            "credentials": list(provider.credentials),
+            "use": provider.use,
+            "terms_note": provider.terms_note,
+            "cheap_aux": provider.cheap_aux,
+            "source": provider.source,
+            "models": [
+                {
+                    ("class" if item.name == "class_" else item.name): plain(
+                        getattr(row, item.name)
+                    )
+                    for item in fields(row)
+                    if item.name != "provider"
+                }
+                for row in provider.models
+            ],
+        }
+        for provider in registry.providers.values()
+    ]
+    return {"providers": providers, "errors": dict(registry.errors)}
+
+
 PROVIDER_KEYS: Final = frozenset(
     {
         "name",
@@ -235,7 +273,10 @@ def load(user_dir: Path | None = None) -> Registry:
     errors: dict[str, str] = {}
     for entry in BUNDLED.iterdir():
         if entry.name.endswith(".toml"):
-            documents[entry.name.removesuffix(".toml")] = (tomllib.loads(entry.read_text()), "bundled")
+            documents[entry.name.removesuffix(".toml")] = (
+                tomllib.loads(entry.read_text()),
+                "bundled",
+            )
     for path in sorted(user_dir.glob("*.toml")) if user_dir and user_dir.is_dir() else ():
         name = path.stem
         try:
@@ -265,7 +306,7 @@ def parse_provider(name: str, document: Mapping[str, Any]) -> Provider:
     if not ROW_NAME.fullmatch(name) or document.get("name", name) != name:
         raise RegistryError("needs a lowercase name equal to its file name")
     _no_unknown(document, PROVIDER_KEYS, "the profile")
-    kind = _choice(document.get("kind", "key"), ("plan", "gpt", "key"), "kind")
+    kind = _choice(document.get("kind", "key"), get_args(Kind.__value__), "kind")
     base_url = _str_map(document.get("base_url", {}), "base_url")
     if kind == "key" and not base_url:
         raise RegistryError("base_url needs at least one region")
@@ -399,7 +440,7 @@ type TestStatus = Literal["ok", "no_key", "failed", "not_run"]
 
 
 @dataclass(frozen=True)
-class TestResult:
+class RowTestResult:
     qmx_id: str
     status: TestStatus
     detail: str
@@ -410,21 +451,22 @@ class TestResult:
 
 
 type SecretLookup = Callable[[str], str]
-type PlanTurn = Callable[[ModelRow], Awaitable[TestResult]]
+type PlanTurn = Callable[[ModelRow], Awaitable[RowTestResult]]
 """Runs the plan row's one-turn Test through a plan login. The hosting process supplies it."""
 
 TEST_PROMPT: Final = "Reply with the single word OK."
 ANTHROPIC_VERSION: Final = "2023-06-01"
+HTTP_OK: Final = 200
 
 
-async def test_row(
+async def one_token_test(
     registry: Registry,
     qmx_id: str,
     *,
     secrets: SecretLookup | None = None,
     plan_turn: PlanTurn | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
-) -> TestResult:
+) -> RowTestResult:
     """One request with `max_tokens` 1 on one row. A key row with no stored key, a lane that
     has not landed, or a plan row with no plan turn spends nothing and says why."""
     row = registry.model(qmx_id)
@@ -432,14 +474,62 @@ async def test_row(
     match provider.kind:
         case "plan":
             if plan_turn is None:
-                return TestResult(qmx_id, "not_run", "the plan row tests through a plan login")
+                return RowTestResult(qmx_id, "not_run", "the plan row tests through a plan login")
             return await plan_turn(row)
         case "gpt":
-            return TestResult(qmx_id, "not_run", "GPT rows test through the GPT lane (RTR4)")
+            return RowTestResult(qmx_id, "not_run", "GPT rows test through the GPT lane (RTR4)")
         case "key":
             if row.wire != "anthropic":
-                return TestResult(qmx_id, "not_run", f"the {row.wire} lane has not landed (RTR3)")
+                return RowTestResult(
+                    qmx_id, "not_run", f"the {row.wire} lane has not landed (RTR3)"
+                )
             return await _key_test(provider, row, secrets or _keyring, transport)
+
+
+ROUTING_ENV: Final = re.compile(
+    r"^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CONFIG_DIR|\w*API_KEY\w*)$"
+)
+
+
+def plan_test(plan_dir: Path, cwd: Path) -> PlanTurn:
+    """A one-turn Test of a plan row through the plan login in `plan_dir`, with no tools and no
+    settings file. Refuses to start while this process carries a routing name, because the SDK
+    hands its own environment to the CLI."""
+
+    async def turn(row: ModelRow) -> RowTestResult:
+        inherited = sorted(name for name in os.environ if ROUTING_ENV.match(name))
+        if inherited:
+            return RowTestResult(row.qmx_id, "not_run", f"unset {', '.join(inherited)} first")
+        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query  # noqa: PLC0415
+
+        options = ClaudeAgentOptions(
+            model=row.native,
+            tools=[],
+            setting_sources=[],
+            max_turns=1,
+            cwd=str(cwd),
+            env={"CLAUDE_CONFIG_DIR": str(plan_dir)},
+        )
+        started = time.perf_counter()
+        result: ResultMessage | None = None
+        async for message in query(prompt=TEST_PROMPT, options=options):
+            if isinstance(message, ResultMessage):
+                result = message
+        ms = round((time.perf_counter() - started) * 1000)
+        if result is None or result.is_error:
+            detail = "no result" if result is None else f"error: {(result.result or '')[:200]}"
+            return RowTestResult(row.qmx_id, "failed", detail, ms=ms, spent=result is not None)
+        tokens = (result.usage or {}).get("output_tokens")
+        return RowTestResult(
+            row.qmx_id,
+            "ok",
+            f"answered {(result.result or '').strip()[:40]!r}",
+            output_tokens=tokens if isinstance(tokens, int) else None,
+            ms=ms,
+            spent=True,
+        )
+
+    return turn
 
 
 def _keyring(reference: str) -> str:
@@ -453,18 +543,22 @@ async def _key_test(
     row: ModelRow,
     secrets: SecretLookup,
     transport: httpx.AsyncBaseTransport | None,
-) -> TestResult:
+) -> RowTestResult:
     if not provider.credentials:
-        return TestResult(row.qmx_id, "no_key", f"{provider.name} names no credential")
+        return RowTestResult(row.qmx_id, "no_key", f"{provider.name} names no credential")
     reference = provider.credentials[0]
     try:
         key = await asyncio.to_thread(secrets, reference)
-    except Exception:  # noqa: BLE001  (keyring backends raise their own types)
-        return TestResult(row.qmx_id, "no_key", f"the key {reference} is missing; nothing spent")
+    except Exception:  # keyring backends raise their own types
+        return RowTestResult(row.qmx_id, "no_key", f"the key {reference} is missing; nothing spent")
     headers = {
         "anthropic-version": ANTHROPIC_VERSION,
         "content-type": "application/json",
-        **({"x-api-key": key} if provider.auth == "x-api-key" else {"authorization": f"Bearer {key}"}),
+        **(
+            {"x-api-key": key}
+            if provider.auth == "x-api-key"
+            else {"authorization": f"Bearer {key}"}
+        ),
     }
     body = {
         "model": row.native,
@@ -476,21 +570,21 @@ async def _key_test(
         async with httpx.AsyncClient(transport=transport, timeout=60.0) as client:
             answer = await client.post(f"{provider.url}/v1/messages", headers=headers, json=body)
     except httpx.HTTPError as error:
-        return TestResult(row.qmx_id, "failed", f"transport: {type(error).__name__}", spent=True)
+        return RowTestResult(row.qmx_id, "failed", f"transport: {type(error).__name__}", spent=True)
     ms = round((time.perf_counter() - started) * 1000)
     text = answer.text.replace(key, "[key]")
-    if answer.status_code != httpx.codes.OK:
-        return TestResult(
+    if answer.status_code != HTTP_OK:
+        return RowTestResult(
             row.qmx_id, "failed", f"HTTP {answer.status_code}: {text[:200]}", ms=ms, spent=True
         )
     document = cast("dict[str, Any]", answer.json())
     served = str(document.get("model", ""))
     refusal = family_refusal(served) if served else None
     if refusal:
-        return TestResult(row.qmx_id, "failed", f"served {refusal}", ms=ms, spent=True)
+        return RowTestResult(row.qmx_id, "failed", f"served {refusal}", ms=ms, spent=True)
     usage = cast("dict[str, Any]", document.get("usage") or {})
     tokens = usage.get("output_tokens")
-    return TestResult(
+    return RowTestResult(
         row.qmx_id,
         "ok",
         f"served {served or row.native}",
