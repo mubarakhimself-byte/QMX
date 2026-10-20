@@ -1,0 +1,31 @@
+# The operator's Claude plan through the CLI's own /login. The plan lane owns the route, so
+# there is no base URL and no credential here.
+kind = "plan"
+cheap_aux = "claude/haiku"
+
+[defaults]
+wire = "anthropic"
+window = 200_000
+max_output = 32_000
+vision = true
+pdf = true
+tool_search = "native"
+prompt_cache = "explicit"
+cache_ttl = "1h"
+count_tokens = true
+plan_main_native = "proven"
+
+[[models]]
+qmx_id = "claude/opus"
+native = "opus"
+class = "strong"
+
+[[models]]
+qmx_id = "claude/sonnet"
+native = "sonnet"
+class = "mid"
+
+[[models]]
+qmx_id = "claude/haiku"
+native = "haiku"
+class = "cheap"

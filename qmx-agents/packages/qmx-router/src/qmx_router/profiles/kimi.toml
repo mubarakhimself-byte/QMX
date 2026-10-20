@@ -1,0 +1,25 @@
+# Moonshot's Kimi API. Block cache markers are ignored, so the relay adds one top-level marker.
+# Direct rows keep tool search off until probe P3 (AD-50).
+aliases = ["moonshot"]
+base_url = { intl = "https://api.moonshot.ai/anthropic" }
+auth = "bearer"
+credentials = ["qmx/kimi"]
+cheap_aux = "kimi/k2.7-code"
+
+[defaults]
+prompt_cache = "top_level_only"
+count_tokens = true
+
+[[models]]
+qmx_id = "kimi/k3"
+native = "kimi-k3"
+window = 1_000_000
+vision = true
+class = "strong"
+
+[[models]]
+qmx_id = "kimi/k2.7-code"
+native = "kimi-k2.7-code"
+window = 256_000
+thinking = "forced"
+class = "cheap"

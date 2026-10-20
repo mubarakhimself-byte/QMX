@@ -1,0 +1,14 @@
+# Meta Muse. The vendor's documented rejections, not yet probed with a key.
+aliases = ["muse"]
+base_url = { global = "https://api.meta.ai" }
+auth = "bearer"
+credentials = ["qmx/meta"]
+cli_env = { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS = "1" }
+
+[defaults]
+strip_fields = ["stop_sequences", "top_k", "container", "inference_geo", "context_management"]
+
+[[models]]
+qmx_id = "meta/muse-wonder-1.0"
+native = "muse-wonder-1.0"
+class = "strong"

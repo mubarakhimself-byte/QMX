@@ -1,0 +1,15 @@
+# GPT through the operator's ChatGPT sign-in, on the relay's GPT lane (Responses wire).
+kind = "gpt"
+
+[defaults]
+wire = "responses"
+window = 400_000
+max_output = 32_000
+vision = true
+tool_search = "none"
+prompt_cache = "automatic"
+
+[[models]]
+qmx_id = "gpt/gpt-6.1-sol"
+native = "gpt-6.1-sol"
+class = "strong"

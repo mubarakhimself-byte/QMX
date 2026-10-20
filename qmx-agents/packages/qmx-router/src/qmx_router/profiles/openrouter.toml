@@ -1,0 +1,35 @@
+# OpenRouter, for provider-proof lanes only. Tool search stays off: with it on, OpenRouter answers
+# 400 "Deferred custom tools are only supported on Anthropic models" for Kimi K2.5 (HP12 check 8)
+# and DeepSeek (HP1); with it off, Kimi K2.5 ran a Bash call and DeepSeek V4.1 Flash answered.
+base_url = { global = "https://openrouter.ai/api" }
+auth = "bearer"
+credentials = ["qmx/openrouter"]
+use = "test_only"
+cheap_aux = "openrouter/deepseek/deepseek-v4.1-flash"
+
+[defaults]
+tool_search = "none"
+
+[[models]]
+qmx_id = "openrouter/moonshotai/kimi-k2.5"
+native = "moonshotai/kimi-k2.5"
+window = 256_000
+class = "strong"
+
+[[models]]
+qmx_id = "openrouter/deepseek/deepseek-v4.1-flash"
+native = "deepseek/deepseek-v4.1-flash"
+window = 1_000_000
+class = "cheap"
+
+[[models]]
+qmx_id = "openrouter/z-ai/glm-5.3"
+native = "z-ai/glm-5.3"
+window = 1_000_000
+class = "mid"
+
+[[models]]
+qmx_id = "openrouter/qwen/qwen3.6-plus"
+native = "qwen/qwen3.6-plus"
+window = 1_000_000
+class = "mid"

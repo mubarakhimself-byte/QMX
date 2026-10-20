@@ -1,0 +1,20 @@
+# MiniMax, global and China Anthropic routes.
+base_url = { global = "https://api.minimax.io/anthropic", cn = "https://api.minimaxi.com/anthropic" }
+auth = "bearer"
+credentials = ["qmx/minimax"]
+cheap_aux = "minimax/MiniMax-M2.7-highspeed"
+
+[[models]]
+qmx_id = "minimax/MiniMax-M3"
+native = "MiniMax-M3"
+class = "strong"
+
+[[models]]
+qmx_id = "minimax/MiniMax-M2.7"
+native = "MiniMax-M2.7"
+class = "mid"
+
+[[models]]
+qmx_id = "minimax/MiniMax-M2.7-highspeed"
+native = "MiniMax-M2.7-highspeed"
+class = "cheap"

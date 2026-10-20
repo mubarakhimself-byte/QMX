@@ -1,0 +1,21 @@
+# Z.ai GLM. Thinking and tool fields are unconfirmed until probe P3.
+aliases = ["zai", "zhipu"]
+base_url = { intl = "https://api.z.ai/api/anthropic" }
+auth = "bearer"
+credentials = ["qmx/glm"]
+cheap_aux = "glm/glm-5.3-flash"
+terms_note = "The GLM Coding Plan may only be used within officially supported tools."
+
+[defaults]
+window = 1_000_000
+prompt_cache = "automatic"
+
+[[models]]
+qmx_id = "glm/glm-5.3"
+native = "glm-5.3"
+class = "mid"
+
+[[models]]
+qmx_id = "glm/glm-5.3-flash"
+native = "glm-5.3-flash"
+class = "cheap"

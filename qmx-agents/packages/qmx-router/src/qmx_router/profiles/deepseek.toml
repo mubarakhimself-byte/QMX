@@ -1,0 +1,20 @@
+# DeepSeek's Anthropic route. Caching is automatic and block markers are ignored; an unknown
+# non-claude id answers 400.
+base_url = { intl = "https://api.deepseek.com/anthropic" }
+auth = "bearer"
+credentials = ["qmx/deepseek"]
+cheap_aux = "deepseek/deepseek-flash"
+
+[defaults]
+window = 1_000_000
+prompt_cache = "automatic"
+
+[[models]]
+qmx_id = "deepseek/deepseek-v4-pro"
+native = "deepseek-v4-pro"
+class = "strong"
+
+[[models]]
+qmx_id = "deepseek/deepseek-flash"
+native = "deepseek-flash"
+class = "cheap"
