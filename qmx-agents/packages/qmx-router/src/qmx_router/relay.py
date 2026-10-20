@@ -1,4 +1,4 @@
-"""The loopback relay for non-plan traffic: key providers and the GPT lane.
+"""The loopback relay for non-plan traffic: key providers, the GPT lane and the chat lane.
 
 A key or GPT chat's CLI gets `ANTHROPIC_BASE_URL` = this relay and `ANTHROPIC_AUTH_TOKEN` = its
 grant's per-launch secret. The relay checks the secret and stops any request that carries a
@@ -6,7 +6,9 @@ Claude token. Key lane: it runs the family and tier guards on the requested and 
 model, swaps in the real key from the OS keyring, applies the provider's wire quirks and
 forwards the stream. GPT lane: it pins the tier, translates the request to OpenAI Responses
 with `qmx_router.gpt.translate`, sends it with the ChatGPT sign-in's access token, checks the served
-model is a GPT model, and translates the stream back.
+model is a GPT model, and translates the stream back. Chat lane: a row whose `wire` is
+`openai_chat` goes through `qmx_router.chat_lane`, key only, with the same normaliser first and a
+header set of its own, so no Anthropic-only field leaves.
 
 The GPT lane opens only through `open_gpt_lane(ProbePassed, ...)`. Before a pass exists, probes
 P2 to P7 reach it through `probe_grant(ProbeRun, ...)`, a grant bound to one probe run and
@@ -117,8 +119,9 @@ this file, API docs or an `.env.example` holds only the bare prefix and keeps wo
 
 MESSAGES: Final = "/v1/messages"
 CHAT: Final = "/v1/chat/completions"
-"""The chat lane's upstream path. Chat-completions rows on one provider share its base URL with
-its Anthropic route, as OpenRouter's and Ollama's do."""
+"""The chat lane's upstream path under the provider's base URL. That holds for a host whose one
+base serves both routes, as OpenRouter's does; a profile whose chat route sits elsewhere has no way
+to say so yet (BACKLOG, RTR3)."""
 PATHS: Final = frozenset({MESSAGES, "/v1/messages/count_tokens"})
 HOP_BY_HOP: Final = frozenset(
     {

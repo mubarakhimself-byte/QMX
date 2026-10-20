@@ -545,8 +545,7 @@ def _block(block: Json) -> Json:
             return {
                 "type": "thinking",
                 "thinking": block["thinking"],
-                "signature": block.get("signature")
-                or thinking_signature(str(block["thinking"])),
+                "signature": block.get("signature") or thinking_signature(str(block["thinking"])),
             }
         case _:
             return {
