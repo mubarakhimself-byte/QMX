@@ -699,9 +699,7 @@ def build(
     )
 
 
-def _agents(
-    wanted: Declaration, supply: Supply, allowed: set[str]
-) -> dict[str, SubAgent]:
+def _agents(wanted: Declaration, supply: Supply, allowed: set[str]) -> dict[str, SubAgent]:
     """The native sub-agent definitions this launch offers the Agent tool: the caller's own, then
     the registry-generated set for this chat's lanes (AD-38, H38). A declared name wins because it
     is the caller's explicit choice. A declared definition's tools are cut to what this chat

@@ -595,18 +595,15 @@ def agent_options(surface: Surface) -> dict[str, AgentDefinition] | None:
     ride the initialize request and not the command line, so `assert_argv_fits` never counts
     them, and every relaunch sends the set the Surface built for that launch, which is how a
     definition the chat can no longer reach leaves and one it can reach joins."""
-    return (
-        {
-            name: AgentDefinition(
-                description=agent.description,
-                prompt=agent.prompt,
-                tools=None if agent.tools is None else list(agent.tools),
-                model=agent.model,
-            )
-            for name, agent in surface.agents.items()
-        }
-        or None
-    )
+    return {
+        name: AgentDefinition(
+            description=agent.description,
+            prompt=agent.prompt,
+            tools=None if agent.tools is None else list(agent.tools),
+            model=agent.model,
+        )
+        for name, agent in surface.agents.items()
+    } or None
 
 
 def build_options(

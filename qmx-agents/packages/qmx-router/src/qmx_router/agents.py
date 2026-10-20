@@ -19,7 +19,7 @@ cannot reach now is left out and one it can join at the next relaunch by resumin
 
 | The chat's main | plan rows | GPT rows | key rows |
 | --- | --- | --- | --- |
-| plan | all | only with the plan lane on and the row `plan_main_native: proven` (P4) | same as GPT |
+| plan | all | only with the plan lane on and the row `proven` (P4) | the same |
 | GPT | none | all | only when probe P1k passed for a GPT main |
 | key | none | none | all |
 
@@ -172,11 +172,7 @@ def generated(registry: Registry) -> Mapping[str, tuple[str, ...]]:
     found: dict[str, tuple[str, ...]] = {}
     for role, tier in ROLE_TIERS.items():
         chosen = sorted(
-            (
-                row
-                for row in registry.rows()
-                if row.class_ == tier and _ordinary(registry, row)
-            ),
+            (row for row in registry.rows() if row.class_ == tier and _ordinary(registry, row)),
             key=_lane,
         )
         found[role] = tuple(dict.fromkeys(row.qmx_id for row in chosen))
@@ -198,11 +194,13 @@ def definitions(
     while P0 fails)."""
     try:
         lane = _Lanes(
-            kind=registry.provider(main.profile).kind, plan_lane=plan_lane, gpt_key_lane=gpt_key_lane
+            kind=registry.provider(main.profile).kind,
+            plan_lane=plan_lane,
+            gpt_key_lane=gpt_key_lane,
         )
     except UnknownModel:
         return {}
-    rows = {row.qmx_id: row for row in registry.rows()}
+    rows: dict[str, ModelRow] = {str(row.qmx_id): row for row in registry.rows()}
     found: dict[str, Definition] = {}
     for role, wanted in (roles if roles is not None else generated(registry)).items():
         text = ROLE_TEXT.get(role)
@@ -242,8 +240,10 @@ class _Lanes:
             case "gpt":
                 return self.kind == "gpt" or self._plan(row)
             case _:
-                return self.kind == "key" or self._plan(row) or (
-                    self.kind == "gpt" and self.gpt_key_lane
+                return (
+                    self.kind == "key"
+                    or self._plan(row)
+                    or (self.kind == "gpt" and self.gpt_key_lane)
                 )
 
     def _plan(self, row: ModelRow) -> bool:

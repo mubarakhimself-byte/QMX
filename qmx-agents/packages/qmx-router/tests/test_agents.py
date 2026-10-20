@@ -75,7 +75,8 @@ def test_a_provider_proof_row_reaches_only_its_own_main() -> None:
     pinned = {"reviewer": ["openrouter/deepseek/deepseek-v4.1-flash"]}
     assert "openrouter-reviewer" not in definitions(bundled(), KIMI, pins=pinned)
     assert "openrouter-reviewer" in definitions(bundled(), OPENROUTER, pins=pinned)
-    assert all("openrouter/" not in qmx_id for role in generated(bundled()).values() for qmx_id in role)
+    roles = [qmx_id for wanted in generated(bundled()).values() for qmx_id in wanted]
+    assert not any(qmx_id.startswith("openrouter/") for qmx_id in roles)
 
 
 def test_a_gpt_main_lists_key_rows_only_when_p1k_passed() -> None:
