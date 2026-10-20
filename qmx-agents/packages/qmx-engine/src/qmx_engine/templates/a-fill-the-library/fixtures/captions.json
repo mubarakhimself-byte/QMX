@@ -20,7 +20,7 @@
       {
         "start": 75,
         "end": 120,
-        "text": "When price breaks the Asian high in the first hour of London and closes back inside the range, sell at the next candle open."
+        "text": "When price breaks the Asian high in the first hour of London, that is the first 60 minutes, and closes back inside the range, sell at the next candle open."
       },
       {
         "start": 130,
@@ -30,7 +30,7 @@
       {
         "start": 165,
         "end": 200,
-        "text": "I usually take profit somewhere around the middle of the range, it depends."
+        "text": "I usually take profit somewhere around the middle of the range, about 30 minutes later, it depends."
       },
       {
         "start": 200,
