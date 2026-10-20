@@ -1,0 +1,22 @@
+[
+  {"item_id": "r-01", "title": "momentum signal backtest on majors", "label": "method"},
+  {"item_id": "r-02", "title": "breakout entry backtest rules", "label": "method"},
+  {"item_id": "r-03", "title": "mean reversion signal study", "label": "method"},
+  {"item_id": "r-04", "title": "carry signal test plan", "label": "method"},
+  {"item_id": "r-05", "title": "volatility filter backtest", "label": "method"},
+  {"item_id": "r-06", "title": "tick dataset quality report", "label": "data"},
+  {"item_id": "r-07", "title": "bar dataset schema", "label": "data"},
+  {"item_id": "r-08", "title": "orderbook dataset gaps", "label": "data"},
+  {"item_id": "r-09", "title": "funding dataset provenance", "label": "data"},
+  {"item_id": "r-10", "title": "trade dataset columns", "label": "data"},
+  {"item_id": "r-11", "title": "survey of options papers", "label": "reference"},
+  {"item_id": "r-12", "title": "literature review on variance", "label": "reference"},
+  {"item_id": "r-13", "title": "paper summary on skew", "label": "reference"},
+  {"item_id": "r-14", "title": "citations list for vix", "label": "reference"},
+  {"item_id": "r-15", "title": "bibliography of hazard papers", "label": "reference"},
+  {"item_id": "r-16", "title": "desk note on flows", "label": "other"},
+  {"item_id": "r-17", "title": "weekly miscellaneous items", "label": "other"},
+  {"item_id": "r-18", "title": "podcast transcript digest", "label": "other"},
+  {"item_id": "r-19", "title": "slides from a talk", "label": "other"},
+  {"item_id": "r-20", "title": "meeting minutes recap", "label": "other"}
+]

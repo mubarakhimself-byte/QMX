@@ -22,7 +22,7 @@ from pydantic import JsonValue
 from qmx_engine.definition.model import Need
 from qmx_engine.triggers.cron import Cron
 
-type CardFile = Literal["15", "16", "17", "44"]
+type CardFile = Literal["15", "16", "17", "44", "46"]
 
 PACK: Final = Path(__file__).resolve().parent
 SHARED: Final = PACK / "_shared"
@@ -334,6 +334,47 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TP4",
         ("app-op",),
         folder="d9-mini-app-pipeline",
+    ),
+    Template(
+        "revolution-loop",
+        "Loop a subworkflow until the idea plateaus",
+        card("44", "DC-11"),
+        "TPL3",
+        folder="revolution-loop",
+        test_inputs={"fixture": "first-pass"},
+    ),
+    Template(
+        "ask-the-panel",
+        "Ask several model families and show the spread",
+        card("46", "K-11"),
+        "TPL3",
+        folder="ask-the-panel",
+        test_inputs={"fixture": "recorded"},
+    ),
+    Template(
+        "clippings-into-research",
+        "Turn new clippings into linked research",
+        card("46", "K-31"),
+        "TPL3",
+        folder="clippings-into-research",
+        test_inputs={"fixture": True},
+    ),
+    Template(
+        "morning-digest",
+        "Morning digest of everything since you last looked",
+        card("46", "K-32"),
+        "TPL3",
+        folder="morning-digest",
+        triggers=(Cron("0 7 * * *", "Europe/London"),),
+        test_inputs={"fixture": True},
+    ),
+    Template(
+        "crystallise-a-workflow",
+        "Replace a settled agent step with a script",
+        card("46", "K-19"),
+        "TPL3",
+        folder="crystallise-a-workflow",
+        test_inputs={"fixture": True},
     ),
 )
 

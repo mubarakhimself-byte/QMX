@@ -1,0 +1,48 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "revolution",
+  "name": "One revolution: draft, test and keep the failures",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "idea": {"type": "string"},
+      "fixture": {"type": "string"},
+      "score": {"type": "integer"},
+      "revolutions": {"type": "array"},
+      "negatives": {"type": "array"}
+    }
+  },
+  "outputs": {"type": "object", "description": "the kept candidate or the negative results of this revolution"},
+  "settings": {"on_error": "park", "caller_policy": "workflows_only", "memory": {"scopes": ["workflow"]}},
+  "nodes": [
+    {"id": "start", "name": "Start one revolution", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "tries", "name": "Each attempt", "type": "loop", "typeVersion": 1,
+     "position": [220, 0], "parameters": {"max_iterations": 3, "predicate": "items.passed"}},
+    {"id": "brief", "name": "Brief the drafter", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/brief.py"}},
+    {"id": "draft", "name": "Draft a candidate", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "builder", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/generate.md", "schema_ref": "schemas/candidate.json",
+                    "recording_ref": "fixtures/recorded/candidate.json"}},
+    {"id": "gate", "name": "Test it against the gates", "type": "script", "typeVersion": 1,
+     "position": [880, 0], "effect": "none", "parameters": {"script": "scripts/gate.py"}},
+    {"id": "record", "name": "Record the result", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/record.py"}},
+    {"id": "keep", "name": "Keep the revolution", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/keep.py"}}
+  ],
+  "connections": {
+    "Start one revolution": {"main": [[{"node": "Each attempt", "port": "in", "map": "one"}]]},
+    "Each attempt": {
+      "body": [[{"node": "Brief the drafter", "port": "in", "map": "one"}]],
+      "done": [[{"node": "Keep the revolution", "port": "in", "map": "one"}]]
+    },
+    "Brief the drafter": {"main": [[{"node": "Draft a candidate", "port": "in", "map": "one"},
+                                     {"node": "Test it against the gates", "port": "in",
+                                      "map": "one"}]]},
+    "Draft a candidate": {"main": [[{"node": "Test it against the gates", "port": "in", "map": "one"}]]},
+    "Test it against the gates": {"main": [[{"node": "Record the result", "port": "in", "map": "one"}]]},
+    "Record the result": {"main": [[{"node": "Each attempt", "port": "next", "map": "one"}]]}
+  }
+}

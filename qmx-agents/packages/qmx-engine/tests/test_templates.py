@@ -7,8 +7,10 @@ ids appear in its own chunk."""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import shutil
+import sqlite3
 import subprocess
 import sys
 from collections.abc import Callable
@@ -23,6 +25,7 @@ from qmx_engine.definition.validate import checked, validate
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle, drafts_ref
+from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import ALIASES, CATALOG, PACK, SHARED, find
@@ -40,6 +43,11 @@ RV = PACK / "rv-weekly-review"
 DB = PACK / "db-desk-brief"
 T4 = PACK / "t4-research-desk-overnight"
 EV = PACK / "ev-copilot-eval-battery"
+REVOLUTION = PACK / "revolution-loop"
+PANEL = PACK / "ask-the-panel"
+CLIPPINGS = PACK / "clippings-into-research"
+DIGEST = PACK / "morning-digest"
+CRYSTALLISE = PACK / "crystallise-a-workflow"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
 CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
 
@@ -149,6 +157,20 @@ def answers(
         "You are the coordinator of QMX's overnight": recorded(T4, "lines.json"),
         "You are the copilot under evaluation": recorded(EV, "answers.json"),
         "You grade answers in QMX's copilot eval battery": recorded(EV, "verdicts.json"),
+        "You draft one testable candidate": recorded(REVOLUTION / "revolution", "candidate.json"),
+        "You are one member of the panel, answering from the macro backdrop": recorded(
+            PANEL, "macro.json"
+        ),
+        "You are one member of the panel, answering from positioning": recorded(
+            PANEL, "positioning.json"
+        ),
+        "You are one member of the panel, answering from sentiment": recorded(
+            PANEL, "sentiment.json"
+        ),
+        "You judge the panel": recorded(PANEL, "judge.json"),
+        "Summarise every new clipping into a research note line": recorded(CLIPPINGS, "notes.json"),
+        "Write the morning digest from what ran": recorded(DIGEST, "digest.json"),
+        "Label the sampled items the way you would label": recorded(CRYSTALLISE, "sample.json"),
     } | (planted or {})
     chunked: dict[str, Callable[[str], str]] = {
         "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
@@ -209,12 +231,12 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_32_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_37_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 32
-    assert len(set(ids)) == 32
-    assert all(t.cards and all(c.file in ("15", "16", "17", "44") and c.card for c in t.cards)
+    assert len(ids) == 37
+    assert len(set(ids)) == 37
+    assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
         "paper-scout-to-research-note",
@@ -227,6 +249,11 @@ def test_the_catalogue_lists_32_templates_each_with_a_source_card_and_its_own_fo
         "morning-market-brief",
         "research-desk-overnight",
         "copilot-eval-battery",
+        "revolution-loop",
+        "ask-the-panel",
+        "clippings-into-research",
+        "morning-digest",
+        "crystallise-a-workflow",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
@@ -254,7 +281,14 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
     assert find("rs1-paper-scout") is find("paper-scout-to-research-note")
     assert find(" A ") is find("video-to-strategy-ideas")
     assert find("b-build-and-prove").id == "strategy-idea-to-paper-tested"
-    assert {template.id for template in CATALOG} == set(ALIASES.values())
+    assert set(ALIASES.values()) <= {template.id for template in CATALOG}
+    assert {template.id for template in CATALOG} - set(ALIASES.values()) == {
+        "revolution-loop",
+        "ask-the-panel",
+        "clippings-into-research",
+        "morning-digest",
+        "crystallise-a-workflow",
+    }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
     with pytest.raises(KeyError):
@@ -502,7 +536,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_15_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -514,27 +548,14 @@ def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_cha
     with Reader.open(tmp_path) as reader:
         triggers = rows.triggers(reader.connection)
 
-    built = [
-        "paper-scout-to-research-note", "news-and-macro-calendar-watch", "rough-idea-to-test-plan",
-        "source-to-component-card", "literature-review-on-a-topic", "video-to-strategy-ideas",
-        "weekly-review", "morning-market-brief", "research-desk-overnight", "copilot-eval-battery",
-    ]  # fmt: skip
-    drafts = [
-        "demo-trades-fill-quality", "trade-journal-in-risk-units", "trading-guards-alive",
-        "correlation-and-exposure-drift", "decay-and-limit-report", "stress-tests",
-        "incident-post-mortem", "portfolio-combination-study", "daily-book-report",
-        "change-bundle-for-approval", "strategy-idea-to-paper-tested", "source-to-a-lab-test",
-        "hypotheses-from-dead-ends", "question-over-a-large-table", "first-backtest-from-an-idea",
-        "overnight-lab-loop", "build-a-component-or-indicator",
-        "iterate-against-qmb-with-overfit-guards", "variant-generation-and-comparison",
-        "ml-training-run-with-a-holdout", "mini-app-lifecycle", "connect-mini-apps",
-    ]  # fmt: skip
-    assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built] + [
-        (t, "saved draft") for t in drafts
+    built = [template.id for template in CATALOG if not template.needs]
+    drafts = [template.id for template in CATALOG if template.needs]
+    assert [(i.template.id, i.action) for i in first] == [
+        (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 32
+    assert [i.action for i in second] == ["unchanged"] * 37
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 10
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 15
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -550,6 +571,7 @@ def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_cha
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
+        ("morning-digest", "cron", False),
         ("rs1-paper-scout", "cron", False),
         ("rv-weekly-review", "cron", False),
         ("t3-news-calendar-watch", "cron", False),
@@ -662,3 +684,101 @@ def test_no_template_names_a_money_act_or_holds_a_credential(folder: Path) -> No
     assert [p for p in validate(load(folder)) if p.code == "money_act"] == []
     assert [n["id"] for n in definition["nodes"] if n.get("credentials")] == []
     assert [t for t in texts if "qmn" in t or "qmx/ctrader" in t or "qmx/broker" in t] == []
+
+
+def test_revolution_loop_runs_a_child_that_holds_its_own_loop_and_keeps_the_negatives(
+    tmp_path: Path,
+) -> None:
+    candidate = json.loads(recorded(REVOLUTION / "revolution", "candidate.json"))
+    candidate["evidence"] = "a source nobody gave it"
+    port = answers(planted={"You draft one testable candidate": json.dumps(candidate)})
+    report, card = try_template(tmp_path, REVOLUTION, {"fixture": "plateau"}, port)
+    with Reader.open(tmp_path) as reader:
+        runs = {row[0] for row in reader.connection.execute("SELECT DISTINCT run_id FROM events")}
+
+    assert report.status == "passed"
+    assert (card["plateau"], card["kept"], card["figures"]["kept"]) == (True, None, 0)
+    assert (card["figures"]["revolutions"], card["figures"]["attempts"]) == (1, 3)
+    assert card["figures"]["negatives"] == 3
+    assert len(runs) == 2
+    assert all(negative["problem"] == "the evidence names no source this run was given"
+               for negative in card["negatives"])  # fmt: skip
+
+
+def test_the_panel_marks_an_absent_seat_and_labels_a_judge_of_the_same_family(
+    tmp_path: Path,
+) -> None:
+    folder = shutil.copytree(PANEL, tmp_path / "panel-two")
+    definition = json.loads((folder / "definition.json").read_text("utf-8"))
+    definition["nodes"] = [n for n in definition["nodes"] if n["id"] != "member_sentiment"]
+    connections = definition["connections"]
+    connections.pop("Sentiment member")
+    connections["Seat the panel"]["main"][0] = [
+        edge for edge in connections["Seat the panel"]["main"][0]
+        if edge["node"] != "Sentiment member"
+    ]
+    (folder / "definition.json").write_text(json.dumps(definition), "utf-8")
+    report, card = try_template(tmp_path / "run", folder, {"fixture": "recorded"})
+
+    assert report.status == "passed"
+    assert card["absent"] == ["sentiment"]
+    assert [(m["slot"], m["present"], m["stance"]) for m in card["members"]] == [
+        ("macro", True, "bullish"),
+        ("positioning", True, "bearish"),
+        ("sentiment", False, None),
+    ]
+    assert [line["slot"] for line in card["disagreement"]] == ["positioning"]
+    assert card["judge_same_family_as"] == ["macro", "positioning"]
+
+
+def test_a_clipping_already_held_runs_once_and_the_second_links_to_it(tmp_path: Path) -> None:
+    text = json.loads((CLIPPINGS / "fixtures" / "clippings.json").read_text("utf-8"))[0]["text"]
+    content = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    key = hashlib.sha256(f"clipping|{content}|fixture".encode()).hexdigest()
+    with LibraryFake.open(tmp_path) as library:
+        seeded = library.put_artifact(
+            b'{"seed": true}', "clipping", {"hash": content}, run_id="seed",
+            principal="run:seed", intent_key=key,
+        )  # fmt: skip
+    report, card = try_template(tmp_path, CLIPPINGS, {"fixture": True})
+
+    assert report.status == "passed"
+    assert (card["figures"]["new"], card["figures"]["seen"]) == (1, 1)
+    assert [item["name"] for item in card["new"]] == ["funding-basis.md"]
+    assert card["held"][0]["linked_to"] == [seeded.object_id]
+    assert card["held"][0]["intake_id"] != seeded.object_id
+
+
+def test_the_digest_reads_from_his_cursor_and_moves_it_after_the_digest_passes(
+    tmp_path: Path,
+) -> None:
+    with LibraryFake.open(tmp_path) as library:
+        seeded = library.put_artifact(
+            b'{"landed": true}', "clipping", {"title": "one"}, run_id="seed",
+            principal="run:seed", intent_key="landed-once",
+        )  # fmt: skip
+    report, card = try_template(tmp_path, DIGEST, {"fixture": True})
+    with sqlite3.connect(tmp_path / "control.db") as db:
+        (position,) = db.execute(
+            "SELECT position FROM operator_cursor WHERE name='last_look'"
+        ).fetchone()
+
+    assert report.status == "passed"
+    assert seeded.object_id in [item["object_id"] for item in card["landed"]]
+    assert card["read_from"] == 0
+    assert card["cursor_to"] == position > 0
+
+
+def test_crystallise_refuses_the_script_when_one_replay_disagrees(tmp_path: Path) -> None:
+    folder = shutil.copytree(CRYSTALLISE, tmp_path / "crystallise-one-wrong")
+    replays = json.loads((folder / "fixtures" / "replays.json").read_text("utf-8"))
+    replays[17]["title"] = "pod"
+    (folder / "fixtures" / "replays.json").write_text(json.dumps(replays), "utf-8")
+    report, card = try_template(tmp_path / "run", folder, {"fixture": True})
+
+    assert report.status == "passed"
+    assert (card["crystallised"], card["equivalent"], card["sampling"]) == (False, False, None)
+    assert [(wrong["item_id"], wrong["agent"], wrong["script"]) for wrong in card["wrong"]] == [
+        ("r-18", "other", None)
+    ]
+    assert card["figures"]["agreeing"] == 19

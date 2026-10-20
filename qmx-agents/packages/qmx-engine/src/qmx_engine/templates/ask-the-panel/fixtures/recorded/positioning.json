@@ -1,0 +1,9 @@
+{
+  "stance": "bearish",
+  "answer": "Positioning is the problem with the long: the crowd is already long the euro, so the marginal buyer is missing. Candidates are a flat book or a short into the week; the pick is flat, because a short against a supportive rate path is a crowded trade. The range is a pullback of one to two percent, at low coverage, and it is the disagreement that matters.",
+  "claims": [
+    {"text": "Positioning surveys show the crowd long the euro", "basis": "remembered"},
+    {"text": "A crowded long has no marginal buyer left", "basis": "inferred"},
+    {"text": "A short against a supportive rate path is crowded too", "basis": "inferred"}
+  ]
+}

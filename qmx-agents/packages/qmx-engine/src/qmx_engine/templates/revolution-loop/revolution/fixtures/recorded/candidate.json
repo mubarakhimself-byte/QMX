@@ -1,0 +1,9 @@
+{
+  "idea": "Buy the London breakout when the overnight range is tight",
+  "entry": "enter long when the London open crosses above the overnight high",
+  "exit": "leave when the close falls below the entry-day open",
+  "threshold": 0.35,
+  "metric": "expectancy",
+  "stop": "the attempt fails when the range is wider than the threshold before the open",
+  "evidence": "brief:idea"
+}

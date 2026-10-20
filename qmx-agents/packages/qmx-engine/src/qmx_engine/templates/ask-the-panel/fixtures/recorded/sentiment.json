@@ -1,0 +1,8 @@
+{
+  "stance": "neutral",
+  "answer": "Sentiment is mixed and gives no edge either way: the headline flow is quiet, and the surveys disagree with the price action. Candidates are to wait, or to take a small long on a pullback; the pick is to wait, because nothing in sentiment is stretched enough to act on. The range is no move beyond a percent either way, at moderate coverage.",
+  "claims": [
+    {"text": "Headline flow is quiet and surveys disagree with price", "basis": "retrieved"},
+    {"text": "Mixed sentiment is not an edge by itself", "basis": "inferred"}
+  ]
+}

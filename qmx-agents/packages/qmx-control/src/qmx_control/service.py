@@ -252,6 +252,8 @@ class ControlService:
                     parent_session TEXT NOT NULL, data TEXT NOT NULL, delivered_at TEXT);
                 CREATE INDEX IF NOT EXISTS delegate_pending
                     ON delegate_completions(parent_session, delivered_at);
+                CREATE TABLE IF NOT EXISTS operator_cursor (name TEXT PRIMARY KEY,
+                    position INTEGER NOT NULL, at TEXT NOT NULL);
             """)
             db.execute("BEGIN IMMEDIATE")
             legacy_catalog = db.execute(
@@ -326,6 +328,40 @@ class ControlService:
                 if max_events and count >= max_events:
                     return
             await asyncio.sleep(0.05)
+
+    def last_look(self) -> Document:
+        """The operator's "last look" cursor: the Library log position his last digest read to.
+
+        It is a position (the `seq` of a landing), never a clock, so a digest run reads exactly
+        the items that landed after the last one he saw (46 K-32). Zero until he looks once.
+        """
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT position, at FROM operator_cursor WHERE name='last_look'"
+            ).fetchone()
+        return {"name": "last_look", "position": 0 if row is None else int(row[0]),
+                "at": None if row is None else str(row[1])}
+
+    def mark_looked(self, position: int) -> Document:
+        """Move the cursor to `position`, and never back, then return the row as it stands.
+
+        The digest advances it only after the digest passed its own check, so a failed run shows
+        the same items again rather than hiding them.
+        """
+        if position < 0:
+            raise ControlError("invalid_cursor", "Use the Library log's seq, 0 or more.")
+        now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        with self._connect() as db:
+            db.execute(
+                "INSERT INTO operator_cursor(name,position,at) VALUES('last_look',?,?) "
+                "ON CONFLICT(name) DO UPDATE SET position=max(position, excluded.position), "
+                "at=CASE WHEN excluded.position>position THEN excluded.at ELSE at END",
+                (position, now),
+            )
+            row = db.execute(
+                "SELECT position, at FROM operator_cursor WHERE name='last_look'"
+            ).fetchone()
+        return {"name": "last_look", "position": int(row[0]), "at": str(row[1])}
 
     @operation("settings_read", "get", "read", rest=("GET", "/api/settings/{section}"))
     def settings_get(self, section: SettingsSection) -> Document:
