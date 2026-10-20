@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -32,12 +33,14 @@ def terms(query: str) -> list[str]:
 
 
 class FtsIndex:
-    """One SQLite file beside the home, holding the fallback index."""
+    """One SQLite file beside the home, holding the fallback index. The host writes and reads it
+    from worker threads, so one connection serves them all behind one lock."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
+        self.lock = threading.Lock()
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path)
+        self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute(SCHEMA)
 
     @classmethod
@@ -45,37 +48,43 @@ class FtsIndex:
         return cls(path)
 
     def close(self) -> None:
-        self.db.close()
+        with self.lock:
+            self.db.close()
 
     def index(self, rows: Iterable[MemoryRow]) -> int:
         """Add or replace each row by object id; returns how many were written."""
         found = list(rows)
-        for row in found:
-            self.forget([row.object_id])
-            self.db.execute(
-                "INSERT INTO memory_fts (row_id, item, text, tags) VALUES (?, ?, ?, ?)",
-                (row.object_id, row.item, row.indexed(), " ".join(row.tags())),
-            )
-        self.db.commit()
+        with self.lock:
+            for row in found:
+                self.db.execute("DELETE FROM memory_fts WHERE row_id = ?", (row.object_id,))
+                self.db.execute(
+                    "INSERT INTO memory_fts (row_id, item, text, tags) VALUES (?, ?, ?, ?)",
+                    (row.object_id, row.item, row.indexed(), " ".join(row.tags())),
+                )
+            self.db.commit()
         return len(found)
 
-    def forget(self, row_ids: Sequence[str]) -> int:
-        """Delete rows from the index. A forgotten row is gone until something retains it again."""
+    def forget(self, row_ids: Sequence[str], rows: Iterable[MemoryRow] = ()) -> int:
+        """Delete rows from the index. A forgotten row is gone until something retains it again.
+        `rows` is the adapter contract's re-index fallback; this index always deletes by id."""
+        del rows
         removed = 0
-        for row_id in row_ids:
-            cursor = self.db.execute("DELETE FROM memory_fts WHERE row_id = ?", (row_id,))
-            removed += cursor.rowcount if cursor.rowcount > 0 else 0
-        self.db.commit()
+        with self.lock:
+            for row_id in row_ids:
+                cursor = self.db.execute("DELETE FROM memory_fts WHERE row_id = ?", (row_id,))
+                removed += cursor.rowcount if cursor.rowcount > 0 else 0
+            self.db.commit()
         return removed
 
     def rebuild(self, rows: Iterable[MemoryRow]) -> int:
-        with self.db:
+        found = list(rows)
+        with self.lock:
             self.db.execute("DELETE FROM memory_fts")
-            found = list(rows)
             self.db.executemany(
                 "INSERT INTO memory_fts (row_id, item, text, tags) VALUES (?, ?, ?, ?)",
                 [(r.object_id, r.item, r.indexed(), " ".join(r.tags())) for r in found],
             )
+            self.db.commit()
         return len(found)
 
     def recall(
@@ -89,13 +98,15 @@ class FtsIndex:
         if not words:
             return []
         asked = " OR ".join(f'"{word}"' for word in words)
-        found = self.db.execute(
-            "SELECT row_id, bm25(memory_fts) AS rank FROM memory_fts WHERE memory_fts MATCH ? "
-            "ORDER BY rank, row_id LIMIT ?",
-            (asked, limit),
-        ).fetchall()
+        with self.lock:
+            found = self.db.execute(
+                "SELECT row_id, bm25(memory_fts) AS rank FROM memory_fts "
+                "WHERE memory_fts MATCH ? ORDER BY rank, row_id LIMIT ?",
+                (asked, limit),
+            ).fetchall()
         return [(str(row), 1.0 / (1.0 + abs(float(rank)))) for row, rank in found]
 
     def count(self) -> int:
-        (found,) = self.db.execute("SELECT count(*) FROM memory_fts").fetchone()
+        with self.lock:
+            (found,) = self.db.execute("SELECT count(*) FROM memory_fts").fetchone()
         return int(found)

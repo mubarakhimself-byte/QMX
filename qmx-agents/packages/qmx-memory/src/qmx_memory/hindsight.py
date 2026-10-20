@@ -22,7 +22,9 @@ import asyncio
 import importlib.util
 import json
 import os
-from collections.abc import Iterable, Sequence
+import threading
+from collections.abc import Callable, Iterable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, cast
@@ -41,6 +43,10 @@ TOP = 50
 """Rows a Hindsight read scores before the engine filters them."""
 
 RETAIN_MODE = "chunks"
+
+NO_MODEL = "http://127.0.0.1:9/v1"
+"""Where Hindsight points when no grant exists: a closed port on this machine, so a model call
+fails here instead of leaving the host."""
 """The extraction Hindsight does on a retain: chunk, embed and index the row QMX already wrote."""
 
 
@@ -123,6 +129,34 @@ class Server(Protocol):
     def url(self) -> str: ...
 
 
+class Loops:
+    """One event loop for Hindsight's client, used by one call at a time. The client's sync
+    wrappers run their coroutine on `asyncio.get_event_loop()` of the calling thread, and its
+    HTTP session binds to the first loop that used it, so every call sets this loop on its own
+    thread and holds `lock`: one session, one loop, caller by caller."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.new_event_loop()
+        self.lock = threading.Lock()
+        self.closed = False
+
+    def call(self, fn: Callable[..., object], *args: object, **kwargs: object) -> object:
+        with self.lock:
+            asyncio.set_event_loop(self.loop)
+            found = fn(*args, **kwargs)
+            if asyncio.iscoroutine(found):
+                return self.loop.run_until_complete(found)
+            return found
+
+    def close(self) -> None:
+        with self.lock:
+            self.closed = True
+            with suppress(Exception):
+                self.loop.run_until_complete(self.loop.shutdown_asyncgens())
+            with suppress(Exception):
+                self.loop.close()
+
+
 class HindsightIndex:
     """One Hindsight server and client, in this process, over the home's own folders."""
 
@@ -130,11 +164,13 @@ class HindsightIndex:
         self.config = config
         self.server: Server | None = None
         self.client: Client | None = None
+        self.loops = Loops()
+        self.closed = False
         self._banks: set[str] = set()
 
     def start(self) -> None:
         """Start the server (or take the URL it was given) and make the three banks."""
-        if self.client is not None:
+        if self.closed or self.client is not None:
             return
         from hindsight import HindsightClient, HindsightServer  # noqa: PLC0415
 
@@ -148,7 +184,7 @@ class HindsightIndex:
                     llm_provider="openai",
                     llm_api_key=self.config.grant or "none",
                     llm_model=self.config.model or "none",
-                    llm_base_url=self.config.base_url or None,
+                    llm_base_url=self.config.base_url or NO_MODEL,
                 ),
             )
             self.server = server
@@ -174,8 +210,11 @@ class HindsightIndex:
             return bank_id
         client = self._need()
         try:
-            client.create_bank(
-                bank_id=bank_id, retain_extraction_mode=RETAIN_MODE, enable_observations=False
+            self._call(
+                client.create_bank,
+                bank_id=bank_id,
+                retain_extraction_mode=RETAIN_MODE,
+                enable_observations=False,
             )
         except Exception as error:  # a bank that exists is what we wanted
             if "exist" not in str(error).lower():
@@ -184,16 +223,18 @@ class HindsightIndex:
         return bank_id
 
     def close(self) -> None:
+        """Stop the server this adapter started. The server stops its own database; a lane that
+        leaves pg0 behind stops it itself, so a second host is never refused by one."""
         client, server = self.client, self.server
         self.client, self.server, self._banks = None, None, set()
+        self.closed = True
         if client is not None:
-            closer = getattr(client, "close", None)
-            if closer is not None:
-                closer()
+            with suppress(Exception):
+                self._call(client.close)
+        self.loops.close()
         if server is not None:
-            stop = getattr(server, "stop", None)
-            if stop is not None:
-                stop()
+            with suppress(Exception):
+                server.stop()
 
     # -- the index interface ------------------------------------------------------------
 
@@ -201,6 +242,8 @@ class HindsightIndex:
         """Retain each row as one document in its writer's bank. Idempotent by object id."""
         found = list(rows)
         self.start()
+        if self.closed:
+            return 0
         for row in found:
             self._retain(row)
         return len(found)
@@ -208,7 +251,8 @@ class HindsightIndex:
     def _retain(self, row: MemoryRow) -> None:
         client = self._need()
         bank = self.bank(bank_of(row.scope))
-        client.retain(
+        self._call(
+            client.retain,
             bank_id=bank,
             content=row.indexed(),
             document_id=row.object_id,
@@ -216,27 +260,37 @@ class HindsightIndex:
             update_mode="replace",
         )
 
-    def forget(self, row_ids: Sequence[str]) -> int:
-        """Delete each row's document from every bank. A gone row is gone from recall."""
+    def forget(self, row_ids: Sequence[str], rows: Iterable[MemoryRow] = ()) -> int:
+        """Delete each row's document from every bank. A gone row is gone from recall.
+
+        A client that cannot delete one document (its HTTP layer wants a task this adapter does
+        not have) drops the banks and re-indexes the live rows instead, which leaves exactly the
+        same index: the forgotten row is archived in the Library, so it is not in `rows`."""
         self.start()
+        if self.closed:
+            return 0
         client = self._need()
         removed = 0
-        for row_id in row_ids:
-            for bank in dict.fromkeys(BANKS.values()):
-                if self._delete(client, bank, row_id):
-                    removed += 1
+        try:
+            for row_id in row_ids:
+                for bank in dict.fromkeys(BANKS.values()):
+                    if self._delete(client, bank, row_id):
+                        removed += 1
+        except Exception:
+            if not rows:
+                raise
+            self.rebuild(rows)
+            return len(row_ids)
         return removed
 
-    def _delete(self, client: object, bank: str, document_id: str) -> bool:
+    def _delete(self, client: Client, bank: str, document_id: str) -> bool:
         documents = getattr(client, "documents", None)
-        if documents is None:
-            return False
+        if callable(documents):
+            documents = documents()
         delete = getattr(documents, "delete_document", None)
         if delete is None:
             return False
-        found = delete(bank, document_id)
-        if asyncio.iscoroutine(found):
-            asyncio.run(found)
+        self._call(delete, bank, document_id)
         return True
 
     def rebuild(self, rows: Iterable[MemoryRow]) -> int:
@@ -244,10 +298,12 @@ class HindsightIndex:
         out of recall."""
         found = list(rows)
         self.start()
+        if self.closed:
+            return 0
         client = self._need()
         for bank in dict.fromkeys(BANKS.values()):
             try:
-                client.delete_bank(bank)
+                self._call(client.delete_bank, bank)
             except Exception as error:
                 if "exist" not in str(error).lower() and "found" not in str(error).lower():
                     raise
@@ -259,13 +315,23 @@ class HindsightIndex:
     ) -> list[tuple[str, float]]:
         """`(row_id, score)` best first, from Hindsight's own ranking."""
         self.start()
+        if self.closed:
+            return []
         client = self._need()
         found: dict[str, float] = {}
         for bank in dict.fromkeys(BANKS.values()):
             asked = list(tags) if tags else None
             try:
-                answer = client.recall(
-                    bank_id=bank, query=query, budget="mid", max_tokens=4096, tags=asked
+                answer = cast(
+                    "Recalled",
+                    self._call(
+                        client.recall,
+                        bank_id=bank,
+                        query=query,
+                        budget="mid",
+                        max_tokens=4096,
+                        tags=asked,
+                    ),
                 )
             except Exception as error:
                 if "exist" in str(error).lower():
@@ -285,9 +351,13 @@ class HindsightIndex:
         client = self._need()
         bank = self.bank(BANKS["operator"])
         asked = list(tags) if tags else None
-        answer: object = client.reflect(bank_id=bank, query=question, tags=asked)
+        answer = self._call(client.reflect, bank_id=bank, query=question, tags=asked)
         text = str(getattr(answer, "text", "") or getattr(answer, "answer", "") or "")
         return text, _citations(answer)
+
+    def _call(self, fn: Callable[..., object], *args: object, **kwargs: object) -> object:
+        """One client call on the adapter's loop, so its session stays on one loop."""
+        return self.loops.call(fn, *args, **kwargs)
 
     def _need(self) -> Client:
         client = self.client

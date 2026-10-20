@@ -353,7 +353,7 @@ def chat_reads(harness: RecordedHarness, store: Store, chat: SessionId) -> Mappi
     """The five `context` reads for one chat (AD-63), over the store the host owns. Each one
     reads the chat record's list, acts through `Harness.set_attached`, and returns what the tool
     hands the model. `@memory` resolves through the host's memory engine when one is installed."""
-    memory = harness.memory
+    memory = getattr(harness, "memory", None)
     resolvers = Resolvers(
         StoreReads(store),
         excerpt_budget(harness.control.settings_get("agents")),

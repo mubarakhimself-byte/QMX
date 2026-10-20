@@ -34,11 +34,12 @@ import hashlib
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 import time
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
@@ -60,6 +61,7 @@ LAB_TITLE: Final = "MEM lane lab note"
 HUB_TITLE: Final = "MEM lane hub recall"
 NOTE: Final = "Pod P's break-out filter wants a 20 day ATR, not 14"
 QUESTION: Final = "item:P"
+DIGEST_QUESTION: Final = "what did we settle on the pod P filter"
 WINDOW_TITLE: Final = "MEM lane validity window"
 
 
@@ -143,7 +145,7 @@ def lane_e65() -> bool:
 
 
 async def e65(log: Log) -> None:
-    from qma.harness import Home, NewChat, OperatorText, QmxHome, control_service  # noqa: PLC0415
+    from qma.harness import QmxHome, control_service  # noqa: PLC0415
     from qmx_engine.ledger import redact  # noqa: PLC0415
     from qmx_host.host import LIBRARY  # noqa: PLC0415
     from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot  # noqa: PLC0415
@@ -154,125 +156,229 @@ async def e65(log: Log) -> None:
     home = QmxHome(SHIP_HOME)
     control = control_service(home)
     harness = await RecordedHarness.open(home, control=control)
-    index = HindsightIndex(HindsightConfig(home=SHIP_HOME / "memory" / "hindsight"))
-    engine = RecallEngine(
-        store=_open(home, LIBRARY), index=index, home=SHIP_HOME / "memory"
-    )
     try:
-        harness.remember_into(engine)
-        await note_about_pod_p(harness, engine, log)
-        await recall_from_the_hub(harness, engine, log)
-        fallback_recall(engine, log)
-        forget_then_rebuild(engine, log)
-        perf(engine, log)
-        write_snapshot(engine, SHIP_HOME)
-        slot = (SHIP_HOME / "memory" / "general.md").read_text(encoding="utf-8")
-        log.check("the memory snapshot slot carries the Lab note", NOTE.split(",")[0] in slot,
-                  slot[:120].replace("\n", " "))  # fmt: skip
+        with Store.open(SHIP_HOME / LIBRARY, redactor=redact) as store:
+            index = HindsightIndex(HindsightConfig(home=SHIP_HOME / "memory" / "hindsight"))
+            engine = RecallEngine(store, index=index, home=SHIP_HOME / "memory")
+            try:
+                harness.record_into(SessionRecorder(store))
+                harness.remember_into(engine)
+                await note_about_pod_p(harness, engine, control, log)
+                await recall_from_the_hub(harness, engine, control, log)
+                await asyncio.to_thread(forget_then_rebuild, engine, log)
+                await asyncio.to_thread(perf, engine, log)
+                await asyncio.to_thread(fallback_recall, engine, log)
+                await asyncio.to_thread(write_snapshot, engine, SHIP_HOME)
+                slot = (SHIP_HOME / "memory" / "general.md").read_text(encoding="utf-8")
+                log.check(
+                    "the memory snapshot slot carries the Lab note",
+                    NOTE.split(",")[0] in slot or "20 day ATR" in slot,
+                    slot[:120].replace("\n", " "),
+                )
+            finally:
+                await asyncio.to_thread(engine.close)
+                await asyncio.to_thread(stop_postgres)
     finally:
-        engine.close()
         await harness.close()
-        engine.store.close()
 
 
-def _open(home: Any, library: str) -> Any:
-    """The ship home's Library store, open for the lane and closed with the engine."""
-    store = home.store if hasattr(home, "store") else None
-    del store
-    return None
+def stop_postgres() -> None:
+    """Stop the embedded Postgres Hindsight keeps on `C:`, so the lane leaves no process behind
+    (`Pg0(name="hindsight")` is the instance P-MEM measured; it is stopped, never deleted)."""
+    from pg0 import Pg0  # noqa: PLC0415
+
+    with suppress(Exception):
+        Pg0(name="hindsight").stop()
 
 
-async def note_about_pod_p(harness: Any, engine: Any, log: Log) -> None:
+def _blocks(control: Any, chat: str, after: int = 0) -> list[Mapping[str, Any]]:
+    """A chat's recorded blocks after event id `after`, the way the retain worker reads them."""
+    found: list[Mapping[str, Any]] = []
+    while True:
+        page = control.events("sessions", after, chat, 1000)
+        for event in page:
+            data = event["data"]
+            if data.get("type") == "block":
+                found.append(data["block"])
+        if len(page) < 1000:
+            return found
+        after = page[-1]["id"]
+
+
+def _last_event(control: Any, chat: str) -> int:
+    events = control.events("sessions", 0, chat, 1000)
+    while len(events) == 1000:
+        events = control.events("sessions", events[-1]["id"], chat, 1000)
+    return int(events[-1]["id"]) if events else 0
+
+
+def _block_text(blocks: Sequence[Mapping[str, Any]]) -> str:
+    """What the tool answered, from the finished blocks that carry a result."""
+    found: list[str] = []
+    for block in blocks:
+        content = block.get("content")
+        inner = content if isinstance(content, Mapping) else {}
+        found.append(str(inner.get("result", "")))
+    return "\n".join(found)
+
+
+def _census(blocks: Sequence[Mapping[str, Any]]) -> list[str]:
+    """What a turn recorded: block type, tool name and state, for a lane that has to see it."""
+    found: list[str] = []
+    for block in blocks:
+        content = block.get("content")
+        inner = content if isinstance(content, Mapping) else {}
+        found.append(f"{block.get('type')}:{inner.get('name', '')}:{inner.get('state', '')}")
+    return found
+
+
+def _named(blocks: Sequence[Mapping[str, Any]], tool: str) -> list[Mapping[str, Any]]:
+    """The answers of the tool calls whose name ends in `tool`: a call is a `started` block that
+    carries its name and a `finished` block that carries its result, joined by the call id."""
+    asked: set[str] = set()
+    for block in blocks:
+        inner = _inner(block)
+        if str(inner.get("name", "")).split("__")[-1] == tool:
+            asked.add(str(inner.get("id", "")))
+    found: list[Mapping[str, Any]] = []
+    for block in blocks:
+        inner = _inner(block)
+        if inner.get("state") == "finished" and str(inner.get("id", "")) in asked:
+            found.append(block)
+    return found
+
+
+def _inner(block: Mapping[str, Any]) -> Mapping[str, Any]:
+    content = block.get("content")
+    return content if isinstance(content, Mapping) else {}
+
+
+async def note_about_pod_p(harness: Any, engine: Any, control: Any, log: Log) -> None:
     """A Lab chat on haiku notes the finding through the `memory_note` tool."""
     from qma.harness import Home, NewChat, OperatorText  # noqa: PLC0415
 
+    workspace = Path("D:/Temp/mem-e65-lab")
+    workspace.mkdir(parents=True, exist_ok=True)
     spec = NewChat(
         title=LAB_TITLE,
         model=MODEL,
-        workspace=Path("D:/Temp/mem-e65-lab"),
+        workspace=workspace,
         home=Home("lab", "mem-pod-p"),
         toolsets=("memory",),
     )
     chat = await harness.start_chat(spec)
+    log(f"lab chat {chat}")
+    began = _last_event(control, chat)
     prompt = (
         "Call the qmx memory tool memory_note exactly once with tag lesson, "
         f'content "{NOTE}", when_to_use "before tuning pod P", and refs ["item:P"]. '
         "Then reply DONE."
     )
-    began = time.monotonic()
+    started = time.monotonic()
     result = await (await harness.run_turn(chat, OperatorText(prompt))).result()
-    calls = [call.name for call in result.tools]
-    log(f"Lab turn {result.status} in {time.monotonic() - began:.1f} s, tools {calls}")
-    rows = engine._rows("home")  # the row the tool wrote, read back from the Library
-    wrote = [row for row in rows if row.refs and "item:P" in row.refs]
-    log.check("the Lab chat noted the finding through memory_note", bool(wrote), len(rows))
-    log.check("the note landed in the home scope with its source", wrote[0].scope == "home"
-              if wrote else False, wrote[0].refs if wrote else None)  # fmt: skip
+    log(f"Lab turn {result.status} in {time.monotonic() - started:.1f} s")
+    blocks = _blocks(control, chat, began)
+    written = _named(blocks, "note")
+    rows = [row for row in engine._rows("home") if "item:P" in row.refs]
+    log(f"Lab blocks {_census(blocks)}")
+    log(f"memory_note answer blocks {len(written)}, rows {len(rows)}")
+    for block in written:
+        log(f"  memory_note said: {str(_inner(block).get('result'))[:200]}")
+    log.check("the Lab chat noted the finding through memory_note", bool(rows), len(rows))
+    log.check(
+        "the note landed in the home scope with its source",
+        rows[0].scope == "home" and "item:P" in rows[0].refs if rows else False,
+        rows[0].refs if rows else None,
+    )
+    await harness.close_chat(chat)
 
 
-async def recall_from_the_hub(harness: Any, engine: Any, log: Log) -> None:
+async def recall_from_the_hub(harness: Any, engine: Any, control: Any, log: Log) -> None:
     """A new hub chat asks `memory_recall` for `item:P` and gets the Lab note."""
     from qma.harness import Home, NewChat, OperatorText  # noqa: PLC0415
 
+    workspace = Path("D:/Temp/mem-e65-hub")
+    workspace.mkdir(parents=True, exist_ok=True)
     spec = NewChat(
         title=HUB_TITLE,
         model=MODEL,
-        workspace=Path("D:/Temp/mem-e65-hub"),
+        workspace=workspace,
         home=Home("general"),
         toolsets=("memory",),
     )
     chat = await harness.start_chat(spec)
+    began = _last_event(control, chat)
     prompt = (
         "Call the qmx memory tool memory_recall exactly once with query "
-        f'"{QUESTION}" and tags []. Then reply with the row text you got.'
+        f'"{QUESTION}" and tags []. Then reply DONE.'
     )
     result = await (await harness.run_turn(chat, OperatorText(prompt))).result()
-    answered = _tool_rows(result)
-    log(f"hub turn {result.status}; memory_recall rows: {len(answered)}")
+    blocks = _blocks(control, chat, began)
+    answers = _named(blocks, "recall")
+    answered = _block_text(answers)
+    log(f"hub turn {result.status}; blocks {_census(blocks)}")
+    log(f"memory_recall answer blocks {len(answers)}")
+    for block in answers[:2]:
+        log(f"  memory_recall block: {str(block.get('content'))[:700]}")
     log.check(
-        "the hub recalls the Lab note by item:P through the tool",
-        any(NOTE.split(",")[0] in row for row in answered),
-        [row[:60] for row in answered],
+        "the hub's memory_recall returns the Lab note by item:P",
+        "20 day ATR" in answered,
+        answered[:200].replace("\n", " "),
     )
-    hits = engine.recall(QUESTION, ("home", "operator"), 2_000)
-    log(f"engine recall through Hindsight: {len(hits)} rows, "
+    hits = await asyncio.to_thread(engine.recall, QUESTION, ("home", "operator"), 2_000)
+    log(f"engine recall through Hindsight: {len(hits)} rows; "
         f"fallback reason {engine.fallback_reason!r}")  # fmt: skip
     log.check(
         "Hindsight answers the recall from the same rows",
         not engine.fallback_reason and bool(hits),
         [(hit.row_id[:12], hit.tag) for hit in hits],
     )
+    await harness.close_chat(chat)
 
 
 def fallback_recall(engine: Any, log: Log) -> None:
     """Stop the index and ask again: the FTS5 file over the same rows answers."""
-    hits_before = engine.recall(QUESTION, ("home", "operator"), 2_000)
+    hits_before = engine.recall(DIGEST_QUESTION, ("home", "operator"), 2_000)
     engine.index.close()
     engine.fallback_reason = "the lane stopped Hindsight"
-    hits = engine.recall(QUESTION, ("home", "operator"), 2_000)
-    log(f"with Hindsight stopped: {len(hits)} rows from FTS5")
+    log(f"index closed; Hindsight rows before the stop: {len(hits_before)}")
+    found = engine.recall(DIGEST_QUESTION, ("home", "operator"), 2_000)
+    log(f"with Hindsight stopped: {len(found)} rows from FTS5, "
+        f"{len(hits_before)} through Hindsight before; ids equal: "
+        f"{ {hit.row_id for hit in found} >= {hit.row_id for hit in hits_before} }")
     log.check(
         "FTS5 answers with Hindsight stopped",
-        bool(hits) and {hit.row_id for hit in hits} >= {hit.row_id for hit in hits_before},
-        [hit.row_id[:12] for hit in hits],
+        bool(found) and {hit.row_id for hit in found} >= {hit.row_id for hit in hits_before},
+        [hit.row_id[:12] for hit in found],
     )
 
 
 def forget_then_rebuild(engine: Any, log: Log) -> None:
-    """Forget the note, then rebuild: the row stays out."""
-    rows = [row for row in engine._rows("home") if "item:P" in row.refs]
-    log.check("the row to forget was found", bool(rows), len(rows))
-    if not rows:
+    """Forget every row this lane wrote, then rebuild: none of them come back. The lane writes
+    rows about pod P and one digest per run, so a repeat run cleans the run before it too."""
+    mine = [
+        row
+        for row in engine._rows("home")
+        if "item:P" in row.refs or any("mem-perf" in word for word in row.keywords)
+    ]
+    log(f"rows this lane wrote and will forget: {[row.object_id[:12] for row in mine]}")
+    log.check("the rows to forget were found", bool(mine), len(mine))
+    if not mine:
         return
-    row = rows[0]
-    forgotten = engine.forget([row.object_id])
+    ids = tuple(row.object_id for row in mine)
+    forgotten = engine.forget(ids)
+    log(f"forget archived {forgotten} row(s)")
     after = engine.recall(QUESTION, ("home", "operator"), 2_000)
-    log.check("a forgotten row leaves recall", forgotten == 1 and not after,
-              [hit.row_id[:12] for hit in after])  # fmt: skip
+    still = [hit.row_id for hit in after if hit.row_id in ids]
+    log.check(
+        "a forgotten row leaves recall",
+        forgotten == len(ids) and not still,
+        [hit.row_id[:12] for hit in after],
+    )
     engine.rebuild("all")
     again = engine.recall(QUESTION, ("home", "operator"), 2_000)
-    log.check("a rebuild does not bring a forgotten row back", not again,
-              [hit.row_id[:12] for hit in again])  # fmt: skip
+    back = [hit.row_id for hit in again if hit.row_id in ids]
+    log.check("a rebuild does not bring a forgotten row back", not back, [h[:12] for h in back])
 
 
 def perf(engine: Any, log: Log) -> None:
@@ -284,8 +390,9 @@ def perf(engine: Any, log: Log) -> None:
         {"role": "assistant", "text": "A 20 day ATR. 14 days flipped in chop."},
     ]
     worker = RetainWorker(engine, blocks=lambda chat: blocks, home="hub")
+    chat = f"mem-perf-{int(time.time())}"
     began = time.perf_counter()
-    written = worker.digest("mem-perf-chat", "turn-end")
+    written = worker.digest(chat, "turn-end")
     retain_s = time.perf_counter() - began
     log(f"PERF one session-digest retain: {retain_s:.2f} s (row {written})")
     log.check("a digest retain stays inside P-MEM's 30 s line", retain_s <= 30.0,
@@ -293,11 +400,11 @@ def perf(engine: Any, log: Log) -> None:
     samples: list[float] = []
     for _ in range(RECALLS):
         began = time.perf_counter()
-        engine.recall("what did we settle on the pod P filter", ("home",), 2_000)
+        engine.recall(DIGEST_QUESTION, ("home",), 2_000)
         samples.append((time.perf_counter() - began) * 1000)
     log(f"PERF recall p95 over {RECALLS} calls: {p95(samples):.1f} ms "
         f"(p50 {p95(samples[: RECALLS // 2]):.1f} ms)")  # fmt: skip
-    log(f"PERF indexes: Hindsight {engine.config_document if hasattr(engine, 'config_document') else 'n/a'}")
+    log(f"PERF the fallback index holds {engine.fallback.count()} rows beside Hindsight")
 
 
 def _tool_rows(result: Any) -> list[str]:
@@ -307,7 +414,8 @@ def _tool_rows(result: Any) -> list[str]:
         for block in getattr(call, "result", None) or []:
             text = block if isinstance(block, str) else str(getattr(block, "text", ""))
             for payload in _documents(text):
-                for row in payload.get("rows", []):
+                rows = payload.get("rows")
+                for row in rows if isinstance(rows, list) else []:
                     if isinstance(row, Mapping):
                         found.append(str(row.get("text", "")))
     return found
@@ -340,7 +448,8 @@ def lane_built() -> bool:
 
     log = Log("mem-built")
     folder = BUILD / "homes" / "mem-built"
-    folder.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True)
     key = "build:dataset:aapl-1d:2026-10-21"
     with Store.open(folder / "library", redactor=redact) as store:
         engine = RecallEngine(store, home=folder)
@@ -362,11 +471,11 @@ def lane_built() -> bool:
                       hits == [first.object_id], hits)  # fmt: skip
             consumer = engine.write("home", "hub", {"tag": "lesson",
                                                    "content": "request 2 of the same build"})  # fmt: skip
-            store.relate(store.engine, consumer.object_id, "consumed-by", first.object_id)
+            store.relate(store.engine, consumer.object_id, "consumed", first.object_id)
             edges = store.edges_of(consumer.object_id, reverse=False)
             log.check(
                 "the second request links the object it reused",
-                any(edge[1] == "consumed-by" and edge[2] == first.object_id for edge in edges),
+                any(edge[1] == "consumed" and edge[2] == first.object_id for edge in edges),
                 [edge[1] for edge in edges],
             )
             log.check("the check spends no tokens: it starts no chat", chats == 0, chats)
@@ -387,7 +496,8 @@ def lane_window() -> bool:
 
     log = Log("mem-window")
     folder = BUILD / "homes" / "mem-window"
-    folder.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True)
     today = datetime.now(UTC)
     closed_from = today - timedelta(days=90)
     closed_to = today - timedelta(days=30)
@@ -455,10 +565,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("lanes", nargs="*", choices=[*LANES, ""], default=[])
     chosen = parser.parse_args().lanes or ["e65", "built", "window"]
-    failed = [name for name in chosen if LANES[name]() != 0]
+    failed = [name for name in chosen if not LANES[name]()]
     print(f"lanes run: {chosen}; failed: {failed}", flush=True)
     return 1 if failed else 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

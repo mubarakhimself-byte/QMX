@@ -73,7 +73,7 @@ class Index(Protocol):
     """What an index must answer. `FtsIndex` and `HindsightIndex` both do."""
 
     def index(self, rows: Iterable[MemoryRow]) -> int: ...
-    def forget(self, row_ids: Sequence[str]) -> int: ...
+    def forget(self, row_ids: Sequence[str], rows: Iterable[MemoryRow] = ()) -> int: ...
     def rebuild(self, rows: Iterable[MemoryRow]) -> int: ...
     def recall(
         self, query: str, tags: Sequence[str] = (), limit: int = TOP
@@ -286,7 +286,9 @@ class RecallEngine:
         return str(uuid.uuid7())
 
     def forget(self, row_ids: Sequence[str]) -> int:
-        """Archive each row's item and drop it from both indexes. Returns how many were archived."""
+        """Archive each row's item and drop it from both indexes. Returns how many were archived.
+        The index gets the live rows too, so an adapter that cannot delete one document can
+        re-index without the forgotten row instead of leaving it in recall."""
         forgotten = 0
         for row_id in row_ids:
             row = self._row(row_id)
@@ -297,8 +299,15 @@ class RecallEngine:
                 forgotten += 1
             self.fallback.forget([row_id])
             if self.index is not None:
-                self.index.forget([row_id])
+                try:
+                    self.index.forget([row_id], self._live())
+                except Exception as error:  # an index that will not delete is left to the rebuild
+                    self.fallback_reason = f"{type(error).__name__}: {error}"
         return forgotten
+
+    def _live(self) -> list[MemoryRow]:
+        """Every live row, for an index that has to re-index instead of deleting one."""
+        return [row for scope in SCOPES for row in self._rows(scope)]
 
     def rebuild(self, scope: str = "all") -> str:
         """Wipe the indexes and re-index the live rows of `scope` from the Library alone. An
@@ -349,10 +358,11 @@ class RecallEngine:
         once by `recall`, because a regime is what the read asks for, not what the index knows."""
         wanted = list(tags)
         found: list[tuple[str, float]] = []
-        if self.index is not None and not self.fallback_reason:
+        if self.index is not None:
             try:
                 found = self.index.recall(query, wanted, TOP)
-            except Exception as error:
+                self.fallback_reason = ""
+            except Exception as error:  # the fallback is the point of it
                 self.fallback_reason = f"{type(error).__name__}: {error}"
                 found = []
         if not found:
