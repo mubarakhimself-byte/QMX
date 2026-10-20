@@ -1,10 +1,13 @@
 {
   "plugin": "qmx",
   "generated": "uv run --no-sync python -c \"from qma.harness.home import PLUGIN_DIR; from qma.harness.packs import write_manifest; write_manifest(PLUGIN_DIR)\"",
-  "sha256": "f7609bea559d247cc95eb762707d739efeebd9bcefed3bc6c25262fb39672185",
+  "sha256": "71553bdab0332f20c32f7fb7b8520fdf423ca7763877b7460501021e0c1cf46f",
   "files": {
     ".claude-plugin/plugin.json": "sha256:30ec523f11f39f52ef395d93a798f1211fc968a5f48722089039fa7af2274223",
-    "QMX.md": "sha256:ec2b905f11343b7a9abd3dfa400f470bada8c549e937fd66b6af99af1b2cba7c",
+    "QMX.md": "sha256:74c3e84783f987c9c821a6085938524c08166d45a089f43b1608fb9465379244",
+    "skills/build-workflow/SKILL.md": "sha256:99d405abd42fb01615d1b02465c977671ae0654d7947b29ab13b8b81043f40e5",
+    "skills/build-workflow/references/graph.md": "sha256:f40167f6e026a715e606755ad0a5380aeb9ad60d20adaf81278f8a9baf2cb734",
+    "skills/build-workflow/references/interview.md": "sha256:663cfa75085199b3ad766ec5f9ece6cfd03983f27190e153edff9fd401601ba0",
     "skills/qmx-overview/SKILL.md": "sha256:27a5364b2087f1dd2a020bb2abd1cd05f81115dd76a24752a3a2ad216881d0fd"
   }
 }
