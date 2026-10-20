@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Final, Literal, get_args
+from typing import Final, Literal
 
 from qmx_router.classify import Classification
 from qmx_router.profiles import ProfileName, SecretRef
@@ -42,7 +42,6 @@ request's answer sets the new state. No synthetic probe request is ever made (AD
 
 type BackgroundPriority = Literal["normal", "last"]
 
-STRATEGIES: Final = get_args(Strategy.__value__)
 DEFAULT_STRATEGY: Final = "least_used"
 GENERIC_COOLDOWN_S: Final = 3600.0
 """An hour, for a generic 429's second strike and for a 402 (AD-12)."""
