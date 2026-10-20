@@ -482,11 +482,10 @@ def summary(log: Log, client: httpx.Client, chat: str, item: str) -> None:
     log(f"  files {files}")
     runs = runs_of(client, item)
     log(f"  runs {[(r.get('mode'), r.get('status')) for r in runs]}")
-    blocks = chat_blocks(chat)
     cards = [
         card
-        for call in tool_calls(blocks, "mcp__qmx_workflows__put")
-        for card in [card_in(answer_of(blocks, call))]
+        for call in tool_calls(chat_blocks(chat), "mcp__qmx_workflows__put")
+        for card in [card_in(answer_of(chat_blocks(chat), call))]
         if card
     ]
     log(f"  publish card {cards[-1] if cards else 'none'}")
