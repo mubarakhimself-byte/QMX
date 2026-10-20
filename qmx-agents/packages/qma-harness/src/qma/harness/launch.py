@@ -487,8 +487,6 @@ class RelayedLaunch:
 type Launch = PlanLaunch | RelayedLaunch
 
 LOOPBACK: Final = "127.0.0.1,localhost"
-ROUTER_PORT: Final = PORT_FILE
-"""The router's pinned port. Its presence is what says a routed launch has a router behind it."""
 MIN_API_TIMEOUT_S: Final = 780.0
 """Appendix H's floor. A 1M-token row waits 120 s plus 60 s per 100k before its first token."""
 API_MARGIN_S: Final = 60.0
@@ -522,7 +520,7 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
                 **{name: getattr(tiers, tier) for tier, name in TIER_ENV.items()},
                 "NO_PROXY": LOOPBACK,
             }
-            if (home.root / ROUTER_PORT).is_file():
+            if (home.root / PORT_FILE).is_file():
                 routing["API_TIMEOUT_MS"] = str(api_timeout_ms())
     return {
         **CONSTANT_ENV,

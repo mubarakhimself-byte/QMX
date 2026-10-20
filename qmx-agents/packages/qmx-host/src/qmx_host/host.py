@@ -5,17 +5,16 @@ workflow engine, the control doors and the webhook door on one port behind one b
 `ControlService` (the one settings reader), the `Harness` (whose relay adopts the router's loop),
 the engine with its scheduler, and the control app with the chat, engine and control routes behind
 the principal door. The host is the one writer of the home's Library store `<home>/library/`
-(Library AD-5): it
-opens the store with the engine's one redaction (AD-37) and the engine reads and writes it through
-`EngineLibraryAdapter`. The control's own `library.db` stays `ControlService.library`, the truth
-until the cut-over, and every `library_save` and `library_link` also writes the store through the
-dual write (MIGRATION step 5) attached as soon as the store opens. The apps supervisor is
-`ControlService.app_runtime()`. The
-engine's permission policy and hook sink are registered on the harness, both named `engine`, before
-the engine resumes any run, so a chat reloaded after a restart finds them. The harness is
-`RecordedHarness`: the session recorder writes every chat's `session` item into the store
-(Library AD-21) and exports idle chats once a day. On stop the engine drains, the Library store
-closes, then the harness closes, which stops the relay, and the router thread stops last.
+(Library AD-5): it opens the store with the engine's one redaction (AD-37) and the engine reads and
+writes it through `EngineLibraryAdapter`. The control's own `library.db` stays
+`ControlService.library`, the truth until the cut-over, and every `library_save` and `library_link`
+also writes the store through the dual write (MIGRATION step 5) attached as soon as the store
+opens. The apps supervisor is `ControlService.app_runtime()`. The engine's permission policy and
+hook sink are registered on the harness, both named `engine`, before the engine resumes any run, so
+a chat reloaded after a restart finds them. The harness is `RecordedHarness`: the session recorder
+writes every chat's `session` item into the store (Library AD-21) and exports idle chats once a
+day. On stop the engine drains, the Library store closes, then the harness closes, which stops the
+relay, and the router thread stops last.
 
 While it serves, the host writes one heartbeat row for itself and one per running app every
 `heartbeat.interval` (AD-65) into the home's heartbeat log, prunes the log to its window once an
