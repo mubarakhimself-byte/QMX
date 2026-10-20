@@ -502,15 +502,28 @@ class Relay:
         return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(work, loop))
 
     async def grant(
-        self, session_id: SessionId, profile: ProfileName, *, unattended: bool = False
+        self,
+        session_id: SessionId,
+        profile: ProfileName,
+        *,
+        unattended: bool = False,
+        agent_id: str = "",
     ) -> RelayGrant:
         """Mint a fresh secret bound to this session and the provider row as it is now. A
         second grant for the same session revokes the first. A GPT grant needs the GPT lane
-        open and, for an unattended chat, the sign-in's background consent."""
-        return await self._on_loop(self._grant(session_id, profile, unattended=unattended))
+        open and, for an unattended chat, the sign-in's background consent. `agent_id` is
+        journalled with every row this grant makes (H36)."""
+        return await self._on_loop(
+            self._grant(session_id, profile, unattended=unattended, agent_id=agent_id)
+        )
 
     async def _grant(
-        self, session_id: SessionId, profile: ProfileName, *, unattended: bool = False
+        self,
+        session_id: SessionId,
+        profile: ProfileName,
+        *,
+        unattended: bool = False,
+        agent_id: str = "",
     ) -> RelayGrant:
         try:
             found = self.profiles().get(profile)
@@ -537,7 +550,7 @@ class Relay:
                     )
             case _:
                 raise GrantRefused(f"{profile} is the plan; plan traffic never passes the relay")
-        return await self._mint(session_id, found)
+        return await self._mint(session_id, found, agent_id)
 
     async def _pass_holds(self, passed: ProbePassed) -> bool:
         version = translator_version()
@@ -547,7 +560,9 @@ class Relay:
             return True
         return await asyncio.to_thread(stored_result, self.probe_state, version) == passed
 
-    async def _mint(self, session_id: SessionId, profile: KeyProvider | GptPlan) -> RelayGrant:
+    async def _mint(
+        self, session_id: SessionId, profile: KeyProvider | GptPlan, agent_id: str = ""
+    ) -> RelayGrant:
         for older in [held for held in self._grants.values() if held.session_id == session_id]:
             await self.revoke(older)
         minted = RelayGrant(
@@ -556,6 +571,7 @@ class Relay:
             session_id,
             profile,
             self._scope(profile),
+            agent_id,
         )
         self._grants[minted.secret] = minted
         return minted

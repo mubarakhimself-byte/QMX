@@ -218,7 +218,6 @@ async def first_event(client: httpx.AsyncClient, base: str, bearer: str) -> tupl
             if first:
                 break
         delay = time.monotonic() - started
-        await answer.aread()
     return delay, first
 
 

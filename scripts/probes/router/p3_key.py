@@ -5,8 +5,9 @@
 
 The probe is the router's own client. It mints one grant per row on a loopback `Relay` and posts
 an Anthropic Messages request per turn, so the key stays inside the router's keyring read and this
-file never sees it. Each turn carries one `echo` tool and a thinking budget. Every `tool_use` is
-fed back as a `tool_result`, ten times, and each row ends with a PASS or FAIL plus its quirks.
+file never sees it. Each turn carries one `echo` tool, a thinking budget and `stream: true`. Every
+`tool_use` is fed back as a `tool_result`, ten times, and each row ends with a PASS or FAIL plus
+its quirks.
 
 A row FAILs when a turn errors, when ten turns finish without a tool call, or when a row that
 declares thinking returns no thinking block. Quirks are printed for the registry rows to carry;
@@ -24,6 +25,7 @@ import time
 from typing import Any, Final, cast
 
 import httpx
+
 from qmx_router.ids import SessionId
 from qmx_router.profiles import ProfileName, parse_profiles
 from qmx_router.registry import ModelRow, Registry, bundled
@@ -32,7 +34,8 @@ from qmx_router.relay import Relay, RelayUsage, keyring_secret
 PROFILE: Final = ProfileName("openrouter")
 TURNS: Final = 10
 BUDGET: Final = 1_024
-MAX_TOKENS: Final = 1_024
+MAX_TOKENS: Final = 2_048
+"""Above the thinking budget, because a provider refuses a ceiling at or below it."""
 TIMEOUT_S: Final = 240.0
 TOOL: Final[dict[str, Any]] = {
     "name": "echo",
@@ -75,8 +78,8 @@ async def alert(_session: SessionId, reason: str) -> None:
     log(f"  alert {reason}")
 
 
-def profile_row(registry: Registry) -> dict[str, Any]:
-    """The settings row a key main needs: the bundled profile's URL, credential and natives."""
+def settings_row(registry: Registry) -> dict[str, Any]:
+    """The key-main settings row: the bundled profile's URL, credential and pinned tiers."""
     provider = registry.provider(PROFILE)
     tiers = dict.fromkeys(("opus", "sonnet", "haiku", "fable"), provider.models[0].native)
     return {
@@ -98,6 +101,7 @@ async def turn(
     body: dict[str, Any] = {
         "model": row.qmx_id,
         "max_tokens": MAX_TOKENS,
+        "stream": True,
         "tools": [TOOL],
         "messages": [
             *history,
@@ -134,7 +138,9 @@ async def collect(answer: httpx.Response) -> tuple[list[Any], dict[str, int]]:
             continue
         if not line.startswith("data:"):
             continue
-        event = cast("dict[str, Any]", json.loads(line[5:]))
+        event = _event(line[5:])
+        if event is None:
+            continue
         match kind:
             case "message_start":
                 usage |= _counts(event)
@@ -170,6 +176,15 @@ async def collect(answer: httpx.Response) -> tuple[list[Any], dict[str, int]]:
     return [blocks[index] for index in sorted(blocks)], usage
 
 
+def _event(text: str) -> dict[str, Any] | None:
+    """One `data:` payload, or None for a keep-alive or terminator a vendor adds."""
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return None
+    return cast("dict[str, Any]", found) if isinstance(found, dict) else None
+
+
 def _json(text: str) -> dict[str, Any]:
     try:
         found = json.loads(text or "{}")
@@ -179,9 +194,8 @@ def _json(text: str) -> dict[str, Any]:
 
 
 def _counts(event: dict[str, Any]) -> dict[str, int]:
-    found = (
-        event.get("usage") or cast("dict[str, Any]", event.get("message", {})).get("usage") or {}
-    )
+    message = cast("dict[str, Any]", event.get("message", {}))
+    found = event.get("usage") or message.get("usage") or {}
     return {name: value for name, value in found.items() if isinstance(value, int)}
 
 
@@ -245,7 +259,7 @@ async def main(selected: list[str]) -> int:
     targets = [row for row in provider.models if not selected or row.qmx_id in selected]
     if not targets:
         raise SystemExit(f"no OpenRouter row matches {selected}")
-    profiles = parse_profiles({PROFILE: profile_row(registry)}, allow_loopback_http=True)
+    profiles = parse_profiles({PROFILE: settings_row(registry)}, allow_loopback_http=True)
     relay = await Relay(
         secrets=keyring_secret,
         journal=lambda _session: Journal(),
