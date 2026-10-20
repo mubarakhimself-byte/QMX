@@ -71,6 +71,7 @@ def normalise(row: ModelRow, body: bytes, headers: Mapping[str, str]) -> Egress:
     if not isinstance(parsed, dict):
         return Egress(body, kept)
     document = cast("dict[str, Any]", parsed)
+    before = _dumps(document)
     _identity(document)
     _output(row, document)
     tools = _tools(row, document, betas)
@@ -80,7 +81,8 @@ def normalise(row: ModelRow, body: bytes, headers: Mapping[str, str]) -> Egress:
     for field, beta in GATED_FIELDS.items():
         if beta not in betas:
             document.pop(field, None)
-    return Egress(_dumps(document), kept)
+    after = _dumps(document)
+    return Egress(body if after == before else after, kept)
 
 
 def _dumps(document: object) -> bytes:
@@ -153,7 +155,7 @@ def _messages(row: ModelRow, document: dict[str, Any]) -> None:
         message["content"] = _blocks(row, message.get("content"))
     system = document.get("system")
     if isinstance(system, list):
-        document["system"] = _blocks(row, system)
+        document["system"] = _blocks(row, cast("list[Any]", system))
 
 
 def _blocks(row: ModelRow, content: object) -> object:
@@ -209,7 +211,7 @@ def _cache_sites(values: list[object]) -> Iterator[tuple[dict[str, Any], str]]:
                 if key == "cache_control":
                     yield cast("dict[str, Any]", item), key
                 elif isinstance(value, dict | list):
-                    pending.append(value)
+                    pending.append(cast("object", value))
         elif isinstance(item, list):
             pending.extend(cast("list[Any]", item))
 

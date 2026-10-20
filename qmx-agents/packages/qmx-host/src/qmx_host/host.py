@@ -1,10 +1,11 @@
 """The composition (SOLUTION-DESIGN 27.1): one process per home serves the copilot's chats, the
 workflow engine, the control doors and the webhook door on one port behind one bearer.
 
-`serve` builds, in order: the home's single-instance lock, `ControlService` (the one settings
-reader), the `Harness` (which starts the model relay on its own thread), the engine with its
-scheduler, and the control app with the chat, engine and control routes behind the principal
-door. The host is the one writer of the home's Library store `<home>/library/` (Library AD-5): it
+`serve` builds, in order: the home's single-instance lock, the router's own thread and loop,
+`ControlService` (the one settings reader), the `Harness` (whose relay adopts the router's loop),
+the engine with its scheduler, and the control app with the chat, engine and control routes behind
+the principal door. The host is the one writer of the home's Library store `<home>/library/`
+(Library AD-5): it
 opens the store with the engine's one redaction (AD-37) and the engine reads and writes it through
 `EngineLibraryAdapter`. The control's own `library.db` stays `ControlService.library`, the truth
 until the cut-over, and every `library_save` and `library_link` also writes the store through the
@@ -13,8 +14,8 @@ dual write (MIGRATION step 5) attached as soon as the store opens. The apps supe
 engine's permission policy and hook sink are registered on the harness, both named `engine`, before
 the engine resumes any run, so a chat reloaded after a restart finds them. The harness is
 `RecordedHarness`: the session recorder writes every chat's `session` item into the store
-(Library AD-21) and exports idle chats once a day. On stop the engine
-drains, the Library store closes, then the harness closes, which stops the relay.
+(Library AD-21) and exports idle chats once a day. On stop the engine drains, the Library store
+closes, then the harness closes, which stops the relay, and the router thread stops last.
 
 While it serves, the host writes one heartbeat row for itself and one per running app every
 `heartbeat.interval` (AD-65) into the home's heartbeat log, prunes the log to its window once an
@@ -71,6 +72,7 @@ from qmx_engine.service.rest import engine_router
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.migrate.from_library_b import DualWrite
 from qmx_library.store import Store
+from qmx_router.server import RouterService
 
 from qmx_host.door import PrincipalDoor
 from qmx_host.sessions import RecordedHarness, SessionRecorder
@@ -172,32 +174,46 @@ async def serve(
     """Assumes the caller scrubbed the environment and holds the home's lock."""
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
-    harness = await RecordedHarness.open(
-        qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
-    )
+    router = await RouterService(home).start()
+    # Its own thread and loop, pinned in `<home>/router.port`; the harness's relay adopts it.
+    supervising = asyncio.create_task(router.supervise())
     try:
-        with Store.open(home / LIBRARY, redactor=redact) as store:
-            control.attach_library_mirror(DualWrite(store))
-            harness.record_into(SessionRecorder(store))
-            async with EngineDoor.open(
-                control, harness=HarnessAdapter(harness), library=EngineLibraryAdapter(store)
-            ) as engine:
-                harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
-                origin = ui_origin if role == "pc" else ""
-                bearer = qmx_control.server.local_token()
-                app = compose(control, engine, harness_api, bearer, origin)
-                server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
-                beating = asyncio.create_task(heartbeats(home, role, control, harness, engine))
-                exporting = asyncio.create_task(harness.idle_exports())
-                try:
-                    await server.serve()
-                finally:
-                    for task in (beating, exporting):
-                        task.cancel()
-                        with suppress(asyncio.CancelledError):
-                            await task
+        harness = await RecordedHarness.open(
+            qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
+        )
+        try:
+            with Store.open(home / LIBRARY, redactor=redact) as store:
+                control.attach_library_mirror(DualWrite(store))
+                harness.record_into(SessionRecorder(store))
+                async with EngineDoor.open(
+                    control, harness=HarnessAdapter(harness), library=EngineLibraryAdapter(store)
+                ) as engine:
+                    harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
+                    origin = ui_origin if role == "pc" else ""
+                    bearer = qmx_control.server.local_token()
+                    app = compose(control, engine, harness_api, bearer, origin)
+                    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
+                    beating = asyncio.create_task(heartbeats(home, role, control, harness, engine))
+                    exporting = asyncio.create_task(harness.idle_exports())
+                    try:
+                        await server.serve()
+                    finally:
+                        for task in (beating, exporting):
+                            task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await task
+        finally:
+            await harness.close()
     finally:
-        await harness.close()
+        supervising.cancel()
+        with suppress(asyncio.CancelledError):
+            await supervising
+        await router.close()
+    finally:
+        supervising.cancel()
+        with suppress(asyncio.CancelledError):
+            await supervising
+        await router.close()
 
 
 def capacity(engine: Engine, harness: Harness) -> dict[str, ClassUse]:
