@@ -249,6 +249,14 @@ EXPECTED_EVENTS: list[tuple[str, dict[str, Any]]] = [
             "delta": {"type": "thinking_delta", "thinking": "Let me think."},
         },
     ),
+    (
+        "content_block_delta",
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": thinking_signature("Let me think.")},
+        },
+    ),
     ("content_block_stop", {"type": "content_block_stop", "index": 0}),
     (
         "content_block_start",

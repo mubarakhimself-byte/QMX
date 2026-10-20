@@ -514,10 +514,20 @@ class StreamState:
         return _event({"type": "content_block_delta", "index": at, "delta": delta})
 
     def _close(self) -> list[SseEvent]:
+        """Close the open block. A thinking block takes its signature here, as a
+        `signature_delta`, because only now is its whole text known: that signature is what lets
+        the next request carry the text back as `reasoning_content`, and what marks the block as
+        this translator's own."""
         if self._open is None:
             return []
-        self._open = None
-        return [_event({"type": "content_block_stop", "index": self._open_at})]
+        at, self._open = self._open_at, None
+        out: list[SseEvent] = []
+        if self._blocks[at]["type"] == "thinking":
+            signature = thinking_signature(str(self._blocks[at]["thinking"]))
+            self._blocks[at]["signature"] = signature
+            out.append(self._delta_event(at, {"type": "signature_delta", "signature": signature}))
+        out.append(_event({"type": "content_block_stop", "index": at}))
+        return out
 
     def _fail(self, error: Json) -> list[SseEvent]:
         self.error = map_error(0, error)
@@ -535,7 +545,8 @@ def _block(block: Json) -> Json:
             return {
                 "type": "thinking",
                 "thinking": block["thinking"],
-                "signature": thinking_signature(str(block["thinking"])),
+                "signature": block.get("signature")
+                or thinking_signature(str(block["thinking"])),
             }
         case _:
             return {
