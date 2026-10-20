@@ -117,11 +117,10 @@ def test_a_written_excerpt_budget_wins_and_a_hard_share_never_goes_under_the_sof
     assert whole.folder_entries == MAX_FOLDER_ENTRIES
 
 
-def test_the_soft_budget_caps_an_attachment_unasked() -> None:
+def test_the_excerpt_budget_holds_its_three_numbers() -> None:
     found = excerpt_budget({"excerpt": {"window_tokens": 1_000}})
 
-    assert found.capped("x" * 500) == "x" * 500
-    assert found.capped("x" * 5_000) == "x" * 1_000
+    assert (found.soft_chars, found.hard_chars, found.folder_entries) == (1_000, 2_000, 200)
 
 
 def test_the_context_rows_carry_the_arguments_the_model_needs() -> None:

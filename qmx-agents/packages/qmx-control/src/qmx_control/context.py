@@ -195,31 +195,20 @@ class LibraryHit:
 
 
 class LibraryReads(Protocol):
-    """The Library reads a resolver needs, by id and by name. The host's adapter answers them
-    from the store; no policy lives here."""
+    """The Library reads a resolver needs. The host's adapter answers them from the store; no
+    policy lives here."""
 
-    def resolve(self, item: str, ref: str = "main") -> str | None: ...
     def head(self, item: str, ref: str = "main") -> str | None: ...
     def state(self, item: str) -> str | None: ...
-
     """`active`, `archived`, or None for an item the store never held."""
-
     def get(self, object_id: str, slots: Sequence[str] = ()) -> LibraryObject: ...
     def search(
         self, text: str, *, kind: str | None = None, limit: int = 20
     ) -> list[LibraryHit]: ...
-    def versions(self, item: str, kind: str) -> list[str]: ...
     def produced(self, producer: str) -> list[str]: ...
-
     """The artifacts a run object produced, oldest first."""
-
     def outputs(self, producer: str, name: str) -> list[str]: ...
-
     """The artifacts an app item landed under its `provides` name, oldest first."""
-
-
-EXCERPT_FLOOR: Final = 2_000
-"""The least an excerpt carries, so a tiny window still gives a usable head."""
 
 
 @dataclass(frozen=True)
@@ -234,10 +223,6 @@ class Budget:
     def __post_init__(self) -> None:
         if self.hard_chars < self.soft_chars:
             raise ContextRefused("invalid_arguments", "an excerpt's hard limit is under its soft")
-
-    def capped(self, text: str) -> str:
-        """The soft share of `text`: what an attachment adds to a turn unasked."""
-        return text if len(text) <= self.soft_chars else text[: self.soft_chars]
 
 
 def cut(text: str, limit: int) -> str:
@@ -257,8 +242,6 @@ class Resolvers:
     def __init__(self, reads: LibraryReads, budget: Budget) -> None:
         self.reads = reads
         self.budget = budget
-
-    # -- the five operations ------------------------------------------------------------
 
     def add(self, ref: str, pin: Pin = "version") -> AttachedRef:
         """Resolve `ref` into a pinned entry. `follow` leaves the version open."""
