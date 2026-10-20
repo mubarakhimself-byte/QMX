@@ -20,7 +20,8 @@ data_reads = []
 
 [capabilities.secrets]
 QMX_DATA_TOKEN = "qmx/control-token"
-QMX_MODEL_KEY = "qmx/cliproxy"
+# The model call is `llm_complete("writer")` through the chat's one `qmx` server: the router
+# leases an account and the app holds no provider key (AD-56, AD-61).
 
 [operations.bias]
 description = "Read the latest persisted daily bias as an artifact under the bias output."

@@ -373,6 +373,15 @@ class _Server(uvicorn.Server):
 
 
 @dataclass(frozen=True)
+class _RefusedCandidate:
+    """One `complete` candidate's refusal: the sentence the caller reads, and whether another
+    account of the same row could still serve it."""
+
+    reason: str
+    rotate: bool
+
+
+@dataclass(frozen=True)
 class _Sent:
     """An upstream request whose response headers arrived inside the row's bound. `lease` is the
     account it was sent on, settled when the request ends."""
@@ -424,10 +433,15 @@ class _Upstream:
             await self.response.aclose()
         status = self.journal_status or self.response.status_code
         await self.relay.write_row(
-            self.held, self.path, status, self.served, self.usage, self.provider
+            self.held,
+            self.path,
+            status,
+            self.served,
+            self.usage,
+            self.provider,
+            account="" if self.lease is None else self.lease.account.id,
         )
         await self.relay.settle_lease(self)
-
 
 @dataclass
 class Relay:
@@ -649,6 +663,13 @@ class Relay:
     def _lease_affinity(self, session_id: SessionId, provider: ProfileName) -> str:
         """One account per chat per provider, so a running chat keeps its account (AD-12)."""
         return f"{session_id}:{provider}"
+
+    def release_session(self, session: str) -> None:
+        """Give back every account a chat or a run held. Its revoke does this too; a `complete`
+        caller that ends a run without a grant calls this."""
+        pool = self.pool if self.pool is not None else self._built_pool
+        if pool is not None:
+            pool.release_prefix(f"{session}:")
 
     async def _lease(self, held: RelayGrant, provider: ProfileName, model: str) -> Lease | Reply:
         """One account for one request, or the error the CLI gets when every one is out."""
@@ -1640,9 +1661,10 @@ class Relay:
         model: str,
         usage: Mapping[str, Any],
         provider: ProfileName | None = None,
+        account: str = "",
     ) -> None:
         """One journal row for one upstream request, naming the provider that served it rather
-        than the chat's main."""
+        than the chat's main, and the pool account it went to."""
 
         def count(name: str) -> int:
             value = usage.get(name)
@@ -1660,6 +1682,7 @@ class Relay:
                 cache_read_tokens=count("cache_read_input_tokens"),
                 cache_write_tokens=count("cache_creation_input_tokens"),
                 agent_id=held.agent_id,
+                account=account,
             )
         )
 
@@ -1741,8 +1764,10 @@ class Relay:
         max_tokens: int,
         roles: Mapping[str, Sequence[str]] | None,
     ) -> complete.Completion:
-        """The candidates in order, the first that answers wins. A candidate that cannot serve
-        the row at all is named and the next is tried, which is the ladder AD-13 describes."""
+        """The candidates in order, the first that answers wins. A model the registry does not
+        hold, a plan row and a closed lane are named and the next candidate is tried. A refusal
+        that another account could survive (a 429, a 402, a refused key) rotates to the next
+        account of the same row first, because no CLI retries this request."""
         ask = complete.Ask(messages, system, max_tokens, schema)
         candidates = list(roles.get(role_or_model, ())) if roles else []
         refusals: list[str] = []
@@ -1760,17 +1785,20 @@ class Relay:
                 refusals.append(complete.plan_refusal(row.provider))
                 continue
             affinity = f"{session}:{row.provider}" if session else None
-            try:
-                lease = self.accounts().lease(
-                    provider=row.provider, model=row.native, affinity=affinity
-                )
-            except NoAccount as error:
-                refusals.append(str(error))
-                continue
-            served = await self._complete_on(profile, row, lease, ask, session)
-            if isinstance(served, complete.Completion):
-                return served
-            refusals.append(served)
+            for _attempt in range(max(1, len(self.accounts().accounts))):
+                try:
+                    lease = self.accounts().lease(
+                        provider=row.provider, model=row.native, affinity=affinity
+                    )
+                except NoAccount as error:
+                    refusals.append(str(error))
+                    break
+                served = await self._complete_on(profile, row, lease, ask, session)
+                if isinstance(served, complete.Completion):
+                    return served
+                refusals.append(served.reason)
+                if not served.rotate:
+                    break
         raise complete.Refused(
             "; ".join(refusals) or f"complete has no candidate for {role_or_model!r}"
         )
@@ -1782,7 +1810,7 @@ class Relay:
         lease: Lease,
         ask: complete.Ask,
         session: str | None,
-    ) -> complete.Completion | str:
+    ) -> complete.Completion | _RefusedCandidate:
         """One candidate's request. A refusal is a sentence for the caller, with the lease
         already settled so the pool has cooled or released the account."""
         started = time.perf_counter()
@@ -1794,7 +1822,7 @@ class Relay:
                 key = await asyncio.to_thread(self.secrets, credential)
             except Exception as error:
                 self.accounts().release(lease)
-                return _keyring_refusal(credential, error)
+                return _RefusedCandidate(_keyring_refusal(credential, error), rotate=True)
             headers = swap_auth(
                 {"content-type": "application/json"}, key, profile.quirks.wire.auth_header
             )
@@ -1804,12 +1832,15 @@ class Relay:
             sign_in = self.gpt.route.session if self.gpt is not None else self.siwc
             if sign_in is None:
                 self.accounts().release(lease)
-                return "the GPT lane is closed: no ChatGPT sign-in is loaded; type /login chatgpt"
+                return _RefusedCandidate(
+                    "the GPT lane is closed: no ChatGPT sign-in is loaded; type /login chatgpt",
+                    rotate=False,
+                )
             try:
                 api_key = await sign_in.access_token()
             except SignInError as error:
                 self.accounts().release(lease)
-                return f"ChatGPT sign-in: {error}"
+                return _RefusedCandidate(f"ChatGPT sign-in: {error}", rotate=True)
             headers = {
                 "authorization": f"Bearer {api_key}",
                 "content-type": "application/json",
@@ -1835,13 +1866,18 @@ class Relay:
             response = await self._client.send(request, stream=True)
         except httpx.HTTPError as error:
             await self._settle_now(lease, classify(502, {}), journal)
-            return f"{row.qmx_id}: the provider did not answer ({type(error).__name__})"
+            return _RefusedCandidate(
+                f"{row.qmx_id}: the provider did not answer ({type(error).__name__})", rotate=True
+            )
         try:
             if not response.is_success:
                 data = await response.aread()
                 found = classify(response.status_code, data, dict(response.headers))
                 await self._settle_now(lease, found, journal)
-                return f"{row.qmx_id}: {found.kind}: {found.message[:200]}"
+                return _RefusedCandidate(
+                    f"{row.qmx_id}: {found.kind}: {found.message[:200]}",
+                    rotate=found.kind != "content",
+                )
             if row.wire == "anthropic":
                 payload = _json(await response.aread())
                 answer = complete.anthropic_answer(

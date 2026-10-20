@@ -6,11 +6,13 @@ expected account and the expected cooldown are literals.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from qmx_router.classify import Classification, classify
+from qmx_router.gpt import siwc
 from qmx_router.pool import AccountPool, AccountSpec, NoAccount
 from qmx_router.profiles import ProfileName, SecretRef
 
@@ -66,14 +68,14 @@ def test_least_used_spreads_eight_chats_evenly_over_two_accounts() -> None:
         taken.append(lease.account.id)
         pool.settle(lease)
     assert taken == ["kimi", "kimi#2"] * 4
-    assert [view["leases"] for view in pool.accounts_view()] == [0, 0]
+    assert [view.leases for view in pool.accounts_view()] == [0, 0]
 
 
 def test_least_used_keeps_live_leases_even() -> None:
     pool, _ = two_keys()
     held = [pool.lease(provider=KIMI, model="kimi-k3") for _ in range(4)]
     assert [lease.account.id for lease in held] == ["kimi", "kimi#2", "kimi", "kimi#2"]
-    assert [view["leases"] for view in pool.accounts_view()] == [2, 2]
+    assert [view.leases for view in pool.accounts_view()] == [2, 2]
 
 
 def test_round_robin_takes_the_least_recently_served_and_fill_first_the_first() -> None:
@@ -260,3 +262,46 @@ def test_a_provider_with_no_account_is_a_plain_refusal() -> None:
         pool.lease(provider=OPENROUTER, model="openrouter/deepseek/deepseek-v4.1-flash")
     assert raised.value.alert is False
     assert str(raised.value) == "no account is configured for openrouter"
+
+
+def gpt_record(account: str, owner: str = "") -> str:
+    return json.dumps(
+        {
+            "client_id": "oaiapp_1",
+            "host_id": "urn:uuid:host",
+            "refresh_token": f"refresh-{account}",
+            "scopes": ["openid"],
+            "account": account,
+            "owner": owner,
+        }
+    )
+
+
+class _SlotVault:
+    """One sign-in slot of an in-memory store, in the shape a `Vault` has."""
+
+    def __init__(self, records: dict[int, str], slot: int) -> None:
+        self.records = records
+        self.slot = slot
+
+    def get(self) -> str | None:
+        return self.records.get(self.slot)
+
+    def set(self, value: str) -> None:
+        self.records[self.slot] = value
+
+
+def test_a_gpt_account_is_its_own_slot_owned_by_one_machine() -> None:
+    """Two sign-ins are two accounts; a sign-in whose owner is another machine is not this
+    machine's to use, because two logins of one account revoke each other (AD-12)."""
+    records = {0: gpt_record("acct-a", owner="pc"), 1: gpt_record("acct-b", owner="pc")}
+    vaults = {slot: _SlotVault(records, slot) for slot in range(siwc.SLOTS)}
+
+    loaded = siwc.load_all(machine="pc", vaults=vaults)
+    assert [(session.slot, session.account) for session in loaded] == [
+        (0, "acct-a"),
+        (1, "acct-b"),
+    ]
+    assert siwc.load_all(machine="contabo", vaults=vaults) == ()
+    assert siwc.owned_by("acct-b", machine="pc", vaults=vaults) == 1
+    assert siwc.owned_by("acct-b", machine="contabo", vaults=vaults) is None

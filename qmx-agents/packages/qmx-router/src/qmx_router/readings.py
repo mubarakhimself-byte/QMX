@@ -6,17 +6,23 @@ events and `/usage` text, which `qma.harness.project` reads into the facts below
 Many chats report the same account's windows. Each report is a timestamped fact and `record`
 keeps the newest per window, so the merge is commutative and idempotent. Everything runs on the
 harness's event loop, so there is no lock.
+
+Per account (AD-12, RTR4). `UsagePage.accounts` carries every pool account as the Accounts
+screen reads it: its state, the leases it holds now, the reading the provider last gave it and
+the models it is cooling for. A plan window belongs to one plan account; a key account has no
+window, so its reading is the provider's own or absent.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final, Literal, get_args
 
+from qmx_router.pool import AccountView
 from qmx_router.profiles import PLAN
 
 type LimitStatus = Literal["allowed", "allowed_warning", "rejected"]
@@ -305,6 +311,8 @@ class UsagePage:
     """Per profile: input, output, cache read and cache write tokens, and `calls`."""
     hard_stop: str | None
     extra_usage_on: bool | None
+    accounts: tuple[AccountView, ...] = ()
+    """Every pool account, by provider: its state, live leases and last reading (AD-12)."""
 
     def document(self) -> dict[str, Any]:
         return {
@@ -328,6 +336,7 @@ class UsagePage:
             "hard_stop": self.hard_stop,
             "extra_usage_on": self.extra_usage_on,
             "extra_usage_note": EXTRA_USAGE_ON if self.extra_usage_on else None,
+            "accounts": [view.document() for view in self.accounts],
         }
 
 
@@ -384,11 +393,14 @@ def _saved_limits(saved: dict[str, Any]) -> Limits:
 def usage_page(
     ledger: UsageLedger,
     tokens: Mapping[str, Mapping[str, int]],
+    accounts: Iterable[AccountView] = (),
 ) -> UsagePage:
+    """The page: the plan's windows and readings, the token sums, and every account's row."""
     return UsagePage(
         windows=ledger.windows(),
         readings=ledger.readings(),
         tokens=tokens,
         hard_stop=ledger.hard_stop(),
         extra_usage_on=ledger.extra_usage_on(),
+        accounts=tuple(accounts),
     )

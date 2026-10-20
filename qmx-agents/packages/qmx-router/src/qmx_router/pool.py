@@ -94,6 +94,41 @@ class Notice:
     text: str
 
 
+@dataclass(frozen=True)
+class AccountView:
+    """One account as the usage page and the Accounts screen read it (AD-12, RTR4). The reading
+    is the provider's own number, 0..1 where it reports one, and `None` where it reports none;
+    the leases are live, not a count of past work."""
+
+    id: str
+    provider: str
+    kind: Kind
+    state: State
+    until: datetime | None
+    reason: str
+    leases: int
+    reading: float | None
+    last_used: datetime | None
+    cooled_models: tuple[str, ...]
+    as_of: datetime
+
+    def document(self) -> dict[str, object]:
+        """The JSON the usage page carries. Times are RFC 3339, as every QMX door writes them."""
+        return {
+            "id": self.id,
+            "provider": self.provider,
+            "kind": self.kind,
+            "state": self.state,
+            "until": None if self.until is None else self.until.isoformat(),
+            "reason": self.reason,
+            "leases": self.leases,
+            "reading": self.reading,
+            "last_used": None if self.last_used is None else self.last_used.isoformat(),
+            "cooled_models": list(self.cooled_models),
+            "as_of": self.as_of.isoformat(),
+        }
+
+
 class NoAccount(RuntimeError):
     """No eligible account serves this request. `alert` asks the caller for one inbox item."""
 
@@ -144,6 +179,9 @@ class AccountPool:
         self.alert_after = alert_after
         self._accounts: dict[str, _Held] = {}
         self._affinity: dict[str, Lease] = {}
+        self._preferred: dict[str, str] = {}
+        """The account each affinity started on: it returns there when that account serves the
+        model again, which is what a chat's turn start does after a cooldown."""
         self._alerted = False
         self._served = 0
         self.sync(accounts)
@@ -188,28 +226,52 @@ class AccountPool:
     def lease(
         self, *, provider: ProfileName | str, model: str, affinity: str | None = None
     ) -> Lease:
-        """One account for one request. An affinity key gets the account it already holds while
-        that account still serves the model."""
+        """One account for one request.
+
+        An affinity key holds one account for as long as that chat or run lives. A refusal moves
+        it to another account, and it moves back to the account it started on at the next lease
+        once that account serves the model again (AD-12, "moves back at the next turn start when
+        the cooldown lifts")."""
         name = ProfileName(provider)
         if affinity is not None:
-            held = self._affinity.get(affinity)
-            if held is not None and held.account.provider == name:
-                if self._usable(held.account.id, model):
-                    return held
-                self._affinity.pop(affinity, None)
-                self.release(held)
+            return self._lease_affinity(name, model, affinity)
         chosen = self._choose(name, model)
         if chosen is None:
             raise self._no_account(name, model)
-        self._served += 1
-        self._accounts[chosen.id].leases += 1
-        self._accounts[chosen.id].served = self._served
-        self._accounts[chosen.id].last_used = self.clock()
-        if affinity is not None:
-            held_lease = Lease(chosen, name, model, affinity)
-            self._affinity[affinity] = held_lease
-            return held_lease
+        self._serve(chosen)
         return Lease(chosen, name, model)
+
+    def _lease_affinity(self, provider: ProfileName, model: str, affinity: str) -> Lease:
+        held = self._affinity.get(affinity)
+        if held is not None and held.account.provider != provider:
+            self.release(held)
+            held = None
+        preferred = self._preferred.get(affinity)
+        back = preferred is not None and self._usable(preferred, model)
+        if held is not None and (not back or held.account.id == preferred):
+            if self._usable(held.account.id, model):
+                return held
+            self.release(held)
+            held = None
+        if back and preferred is not None:
+            chosen = self._accounts[preferred].spec
+        else:
+            chosen = self._choose(provider, model)
+        if chosen is None:
+            raise self._no_account(provider, model)
+        self._serve(chosen)
+        self._preferred.setdefault(affinity, chosen.id)
+        minted = Lease(chosen, provider, model, affinity)
+        self._affinity[affinity] = minted
+        return minted
+
+    def _serve(self, spec: AccountSpec) -> None:
+        """One account takes one lease now: the count and the rotation clock move together."""
+        self._served += 1
+        held = self._accounts[spec.id]
+        held.leases += 1
+        held.served = self._served
+        held.last_used = self.clock()
 
     def release(self, lease: Lease) -> None:
         """Give the account back. Idempotent, and never below zero."""
@@ -222,6 +284,7 @@ class AccountPool:
     def release_affinity(self, affinity: str) -> None:
         """Give back whatever `affinity` holds, for a chat or a run that ended."""
         held = self._affinity.pop(affinity, None)
+        self._preferred.pop(affinity, None)
         if held is not None:
             self.release(held)
 
@@ -230,6 +293,8 @@ class AccountPool:
         per provider it reached."""
         for key in [key for key in self._affinity if key.startswith(prefix)]:
             self.release_affinity(key)
+        for key in [key for key in self._preferred if key.startswith(prefix)]:
+            self._preferred.pop(key, None)
 
     def settle(
         self,
@@ -257,30 +322,29 @@ class AccountPool:
         self._alerted = False
         return notice
 
-    def accounts_view(self) -> tuple[dict[str, object], ...]:
+    def accounts_view(self) -> tuple[AccountView, ...]:
         """Every account as the usage page and the Accounts screen read it."""
         return tuple(self._view(held) for held in self._accounts.values())
 
-    def _view(self, held: _Held) -> dict[str, object]:
+    def _view(self, held: _Held) -> AccountView:
         now = self.clock()
         state, until = self.state(held.spec.id)
         closed = held.closed.get(EVERY_MODEL)
-        reason = "" if closed is None else closed.reason
-        return {
-            "id": held.spec.id,
-            "provider": str(held.spec.provider),
-            "kind": held.spec.kind,
-            "state": state,
-            "until": None if until is None else until.isoformat(),
-            "reason": reason,
-            "leases": held.leases,
-            "reading": held.reading,
-            "last_used": None if held.last_used is None else held.last_used.isoformat(),
-            "cooled_models": sorted(
-                key for key, close in held.closed.items() if key and close.until is not None
+        return AccountView(
+            id=held.spec.id,
+            provider=str(held.spec.provider),
+            kind=held.spec.kind,
+            state=state,
+            until=until,
+            reason="" if closed is None else closed.reason,
+            leases=held.leases,
+            reading=held.reading,
+            last_used=held.last_used,
+            cooled_models=tuple(
+                sorted(key for key, close in held.closed.items() if key and close.until is not None)
             ),
-            "as_of": now.isoformat(),
-        }
+            as_of=now,
+        )
 
     def _usable(self, account_id: str, model: str) -> bool:
         state, _ = self.state(account_id, model)
