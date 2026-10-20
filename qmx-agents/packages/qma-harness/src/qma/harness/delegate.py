@@ -496,8 +496,7 @@ class Helpers:
         if helper.state in ("done", "failed", "stalled", "stopped"):
             return {"handle": handle, "state": helper.state}
         helper.stopping = reason.strip() or "stopped by the parent"
-        if helper.process is not None:
-            helper.process.kill()
+        _kill(helper)
         if helper.child is not None:
             with contextlib.suppress(Exception):
                 await self._host.interrupt(helper.child)
@@ -517,8 +516,7 @@ class Helpers:
         each helper stores what it had, so a restart loses nothing worth keeping."""
         for helper in list(self._by_handle.values()):
             helper.stopping = helper.stopping or "the host stopped"
-            if helper.process is not None:
-                helper.process.kill()
+            _kill(helper)
         for task in list(self._tasks):
             task.cancel()
         for task in list(self._tasks):
@@ -616,13 +614,15 @@ class Helpers:
         with contextlib.suppress(BrokenPipeError, ConnectionResetError):
             await solution.stdin.drain()
         solution.stdin.close()
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(solution.stdin.wait_closed(), 5)
         quiet, progress, clock, kept = Quiet(), 0, time.monotonic(), 0
         chunks: list[str] = []
         while True:
             try:
                 line = await asyncio.wait_for(solution.stdout.readline(), CLI_POLL_S)
             except TimeoutError:
-                line = b""
+                line = None
             if line:
                 progress += 1
                 kept += len(line)
@@ -632,6 +632,11 @@ class Helpers:
                     solution.kill()
                     await self._finish(helper, "stalled", "it printed more than the output bound")
                     return
+            elif line is not None:
+                await self._settle_cli(helper, solution)
+                if helper.state in _ENDED:
+                    return
+                break
             if solution.returncode is not None:
                 break
             now = time.monotonic()
@@ -654,6 +659,17 @@ class Helpers:
             return
         summary, valid = await self._schema(helper, start, text)
         await self._finish(helper, "done", summary, schema_valid=valid)
+
+    async def _settle_cli(self, helper: Helper, solution: asyncio.subprocess.Process) -> None:
+        """Wait for a `cli` helper whose output has closed. A process that keeps running with its
+        output closed is killed and reads stalled, so a stuck binary cannot hold a helper slot."""
+        try:
+            await asyncio.wait_for(solution.wait(), self._timeouts.idle)
+        except TimeoutError:
+            solution.kill()
+            await self._finish(
+                helper, "stalled", "its output closed and it did not exit; the handle killed it"
+            )
 
     async def _schema(self, helper: Helper, start: Start, text: str) -> tuple[str, bool]:
         """The answer to keep, and whether it holds to the schema the caller asked for. One
@@ -779,6 +795,15 @@ def report_text(rows: Sequence[Mapping[str, object]]) -> str:
         if row.get("schema_valid") is False:
             lines.append("  its answer never held to the output schema you asked for")
     return "\n".join(lines)
+
+
+def _kill(helper: Helper) -> None:
+    """Kill the helper's own process if it still runs. A process that already ended, or whose
+    pipe the host has closed, is not an error: the handle is dead either way."""
+    process = helper.process
+    if process is not None and process.returncode is None:
+        with contextlib.suppress(ProcessLookupError, OSError):
+            process.kill()
 
 
 def _helper_folder(parent_workspace: Path, handle: str, worktree: bool) -> Path:

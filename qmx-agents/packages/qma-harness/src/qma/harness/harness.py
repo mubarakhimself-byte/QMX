@@ -64,7 +64,14 @@ from qmx_router.profiles import (
     resolve_model,
 )
 from qmx_router.readings import ReadingView, UsageLedger, UsagePage, usage_page
-from qmx_router.relay import MESSAGES, Relay, RelayGrant, RelayUsage, keyring_secret
+from qmx_router.relay import (
+    MESSAGES,
+    GrantRefused,
+    Relay,
+    RelayGrant,
+    RelayUsage,
+    keyring_secret,
+)
 from qmx_tools.service import DomainContext
 
 from qma.harness.chat import (
@@ -810,9 +817,15 @@ class Harness:
         except OSError as error:
             raise DelegateRefused(f"the cli helper {binary} cannot be read: {error}") from None
         version = f"{binary.name} {info.st_size}-{int(info.st_mtime)}"
-        grant = await self._deps.relay.grant(
-            child, ProfileName(spec.profile), unattended=True, agent_id=spec.handle
-        )
+        try:
+            grant = await self._deps.relay.grant(
+                child, ProfileName(spec.profile), unattended=True, agent_id=spec.handle
+            )
+        except GrantRefused as refused:
+            raise DelegateRefused(
+                f"a cli helper on {spec.profile} needs a relay grant, and the relay refused it: "
+                f"{refused}"
+            ) from None
         env = launch_env(
             RelayedLaunch(grant),
             home=self._deps.home,
