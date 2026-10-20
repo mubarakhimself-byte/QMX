@@ -294,6 +294,9 @@ def _read(path: Path) -> str:
 
 FRONT_MATTER: Final = re.compile(r"\A---\n(.*?)\n---", re.DOTALL)
 
+MEMORY: Final = "memory"
+"""Where the host's memory engine writes the snapshot slot, one file per home kind (AD-18)."""
+
 
 def _description(skill_file: Path) -> str:
     found = FRONT_MATTER.match(skill_file.read_text(encoding="utf-8").replace("\r\n", "\n"))
@@ -307,8 +310,12 @@ def _description(skill_file: Path) -> str:
 class HomeSlots:
     """The rules come from the shipped plugin's `QMX.md`. The slots he edits live under
     `<qmx_home>/slots/`: `persona.md`, `methodology/<home kind>.md` and `packs/<pack>.md`,
-    because the plugin folder is locked by its hash. A missing file is an empty slot. No memory
-    snapshot exists before the memory packet."""
+    because the plugin folder is locked by its hash. A missing file is an empty slot.
+
+    The memory snapshot is `<qmx_home>/memory/<home kind>.md`, which the host's memory engine
+    renders from its rows after every retain, every forget and at start (AD-18): the slot is a
+    file because a launch reads its slots from the disk, and the engine is what knows the rows.
+    A host that installed no memory engine leaves it empty, as it was before the packet."""
 
     home: QmxHome
 
@@ -329,8 +336,7 @@ class HomeSlots:
         return _read(self.folder / "packs" / f"{pack}.md")
 
     def memory_snapshot(self, home: Home) -> str:
-        del home
-        return ""
+        return _read(self.home.root / MEMORY / f"{home.kind}.md")
 
     def workspace(self, workspace: Path) -> str:
         return _contents([workspace / "CLAUDE.md", workspace / "AGENTS.md"])

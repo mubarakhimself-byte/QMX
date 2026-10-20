@@ -89,6 +89,7 @@ def test_every_appendix_h_default_has_its_literal_value() -> None:
         "roles.searcher": MID,
         "roles.writer": MID,
         "roles.extractor": MID,
+        "roles.memory_extractor": MID,
         "roles.planner": STRONG,
         "roles.synthesiser": STRONG,
         "roles.builder": STRONG,
@@ -106,7 +107,7 @@ def test_role_lists_lead_with_a_chinese_key_row_and_never_name_fable() -> None:
 
     assert [r for r in every_row if "fable" in r] == []
     firsts = {k: str(v[0]).partition("/")[0] for k, v in roles.items() if isinstance(v, tuple)}
-    assert ({k for k, v in firsts.items() if v in CHINESE}, len(firsts)) == (set(roles), 13)
+    assert ({k for k, v in firsts.items() if v in CHINESE}, len(firsts)) == (set(roles), 14)
     assert DEFAULTS["roles.live_order"] == ("key", "gpt", "plan")
 
 

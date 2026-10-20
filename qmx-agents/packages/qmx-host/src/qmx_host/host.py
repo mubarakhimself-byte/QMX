@@ -46,7 +46,8 @@ import qmx_control.server
 import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import JsonValue
-from qma.harness import Harness, QmxHome, chat_routes, control_service
+from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_service
+from qma.harness.profiles import ProfileName
 from qma.harness.tools import HostRead
 from qmx_control.models import Document
 from qmx_control.service import ControlService
@@ -64,6 +65,7 @@ from qmx_engine.heartbeat import (
     qmx_version,
 )
 from qmx_engine.ledger import redact
+from qmx_engine.memory import install
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.library import JsonObject
 from qmx_engine.ports.router import Refused, Reply
@@ -73,14 +75,17 @@ from qmx_engine.runner import Engine
 from qmx_engine.service.rest import engine_router
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.migrate.from_library_b import DualWrite
+from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
+from qmx_memory.engine import RecallEngine
+from qmx_memory.hindsight import HindsightConfig, HindsightIndex
 from qmx_router import complete as router_complete
 from qmx_router.pool import NoAccount
 from qmx_router.relay import Relay
 from qmx_router.server import RouterService
 
 from qmx_host.door import PrincipalDoor
-from qmx_host.sessions import RecordedHarness, SessionRecorder
+from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 
 type Role = Literal["pc", "node"]
 
@@ -92,6 +97,10 @@ START_S: Final = 30.0
 HOST_HISTORY: Final = 10
 """The host rows `ops_heartbeats` returns beside the newest row per subject: five minutes at the
 default interval."""
+MEMORY_FOLDER: Final = "memory"
+"""The home's memory folder: the FTS5 file, Hindsight's own folders and the snapshot slot."""
+MEMORY_ROLE: Final = "memory_extractor"
+"""The grant Hindsight's extractor calls run on (SOLUTION-DESIGN 28.6, AD-18)."""
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 
 
@@ -247,6 +256,58 @@ def harness_relay(harness: Harness) -> Relay:
     return deps.relay
 
 
+def compose_memory(
+    harness: RecordedHarness, store: Store, home: Path, control: ControlService
+) -> RecallEngine:
+    """Build the home's memory engine and feed it to the port the engine reads and to the
+    harness's retain worker, then render the snapshot slot (AD-18).
+
+    Hindsight is the index and it starts lazily on the first read or retain, so a host that never
+    touches memory pays nothing. Its extractor calls go through the router's key lane on a
+    `memory_extractor` grant: Hindsight holds the grant, never a provider key. A grant the relay
+    refuses is reported and left out, and Hindsight then retains without a model call, because a
+    row is already QMX's own digest.
+    """
+    index = HindsightIndex(_hindsight(harness, home, control))
+    engine = RecallEngine(store, index=index, home=home / MEMORY_FOLDER)
+    install(engine)
+    harness.remember_into(engine)
+    try:
+        write_snapshot(engine, home)
+    except (OSError, LibraryRefused) as error:
+        print(f"memory: the snapshot slot was not written: {error}", file=sys.stderr)
+    return engine
+
+
+def _hindsight(harness: RecordedHarness, home: Path, control: ControlService) -> HindsightConfig:
+    """Hindsight's folders, the relay's address, and the grant minted for the extractor role."""
+    profile, model = _extractor(control)
+    grant, base = "", ""
+    if model:
+        try:
+            minted = asyncio.run(harness_relay(harness).grant(SessionId("memory"), profile))
+            base, grant = minted.base_url, str(minted.secret)
+        except Exception as error:  # no grant: retain stays local, reflect refuses
+            print(f"memory: no extractor grant: {type(error).__name__}: {error}", file=sys.stderr)
+    return HindsightConfig(
+        home=home / MEMORY_FOLDER / "hindsight",
+        base_url=f"{base}/v1" if base else "",
+        grant=grant,
+        model=model,
+    )
+
+
+def _extractor(control: ControlService) -> tuple[ProfileName, str]:
+    """The `memory_extractor` role's first candidate as `(profile, model)`. The role is his to
+    edit; the plan's default list is the mid tier (E/settings.py)."""
+    roles = control.settings_get("roles")
+    found = roles.get(MEMORY_ROLE)
+    for row in found if isinstance(found, list | tuple) else []:
+        profile, _, model = str(row).partition("/")
+        return ProfileName(profile), model or profile
+    return ProfileName(""), ""
+
+
 async def serve(
     home: Path, port: int, role: Role, ui_origin: str, scrubbed: Sequence[str], keep: Sequence[str]
 ) -> None:
@@ -264,6 +325,7 @@ async def serve(
             with Store.open(home / LIBRARY, redactor=redact) as store:
                 control.attach_library_mirror(DualWrite(store))
                 harness.record_into(SessionRecorder(store))
+                memory = await asyncio.to_thread(compose_memory, harness, store, home, control)
                 adopt_router(RelayRouter(harness_relay(harness)))
                 try:
                     async with EngineDoor.open(
@@ -289,6 +351,8 @@ async def serve(
                                     await task
                 finally:
                     adopt_router(None)
+                    install(None)
+                    await asyncio.to_thread(memory.close)
         finally:
             await harness.close()
     finally:

@@ -37,19 +37,23 @@ from qma.harness import Harness, NewChat, QmxHome, SessionId, TurnHandle, TurnRe
 from qma.harness.chat import ChatDeps, Prompt
 from qma.harness.harness import PlanWatch
 from qma.harness.home import ChatRecord, list_records, read_record
-from qma.harness.surface import excerpt_budget
+from qma.harness.surface import MEMORY, excerpt_budget
 from qma.harness.tools import HostRead
 from qmx_control.context import (
     AttachedRef,
     ContextRefused,
     LibraryHit,
     LibraryObject,
+    MemoryRowHit,
     Resolvers,
     listing,
 )
 from qmx_library.port import Draft, JsonObject, LibraryRefused, ObjectView
 from qmx_library.principal import MAIN, sessions_ref, state_ref
 from qmx_library.store import Store
+from qmx_memory.engine import RecallEngine
+from qmx_memory.retain import RetainWorker
+from qmx_memory.rows import SCOPES
 
 if TYPE_CHECKING:
     from qma.harness.launch import TestMode
@@ -62,6 +66,19 @@ IDLE_TICK_S: Final = 3600.0
 TRANSCRIPT: Final = "transcript.jsonl"
 MENTIONS: Final = "mentions"
 """The edge from a session item to each object it attached (Library AD-14's vocabulary)."""
+HUB_HOME: Final = "hub"
+"""The home scope the copilot's own digest rows land in (§11.1's `refs/memory/home/<home>`)."""
+PAGE: Final = 1000
+"""One page of the control service's session log, the harness's own read size."""
+_DIGESTS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "turn-end": "turn_ended",
+        "compaction": "compacted",
+        "idle": "idle",
+        "close": "closed",
+    }
+)
+"""The retain worker's verb for each trigger (§28.6's four)."""
 
 type Exporter = Callable[[SessionId], Awaitable[Path]]
 
@@ -80,6 +97,162 @@ def _list(value: JsonValue, add: str) -> list[JsonValue]:
 
 def _int(value: JsonValue) -> int:
     return value if isinstance(value, int) else 0
+
+
+class StoreMemory:
+    """`qmx_control.context.MemoryReads` over the host's memory engine (MEM): an `@memory`
+    question becomes a recall, and each row comes back with its tag and the objects it cites."""
+
+    def __init__(self, engine: RecallEngine) -> None:
+        self.engine = engine
+
+    def memory(self, question: str, limit: int = 10) -> list[MemoryRowHit]:
+        found = self.engine.recall(question, SCOPES, 4_000)
+        return [
+            MemoryRowHit(
+                hit.row_id,
+                hit.text,
+                hit.tag,
+                hit.refs,
+                str(hit.provenance.get("when_to_use", "")),
+                bool(hit.provenance.get("tainted")),
+            )
+            for hit in found[:limit]
+        ]
+
+
+def memory_reads(engine: RecallEngine, chat: SessionId) -> Mapping[str, HostRead]:
+    """The five `memory` reads for one chat (AD-18, AD-27). Each answers from the engine the host
+    installed, so a store the host cannot open serves none of them."""
+
+    async def recall(arguments: dict[str, object]) -> Mapping[str, object]:
+        query = str(arguments.get("query", "")).strip()
+        if not query:
+            raise ValueError("a recall needs a query")
+        now = _moment(arguments.get("as_of"))
+        found = await asyncio.to_thread(
+            engine.recall,
+            query,
+            SCOPES,
+            _whole(arguments.get("budget_tokens"), 2_000),
+            tuple(_strings(arguments.get("tags"))),
+            now=now,
+            regime=tuple(_strings(arguments.get("regime"))),
+        )
+        return {
+            "rows": [
+                {
+                    "row_id": hit.row_id,
+                    "tag": hit.tag,
+                    "text": hit.text,
+                    "score": round(hit.score, 4),
+                    "refs": list(hit.refs),
+                    **{k: v for k, v in hit.provenance.items() if k not in {"tag", "when_to_use"}},
+                }
+                for hit in found
+            ],
+            "count": len(found),
+        }
+
+    async def note(arguments: dict[str, object]) -> Mapping[str, object]:
+        row = {
+            key: arguments[key]
+            for key in ("tag", "content", "when_to_use", "refs", "intent_key", "regime", "valid_to")
+            if arguments.get(key) not in (None, "", [])
+        }
+        if "content" not in row:
+            raise ValueError("a note needs its content")
+        written = await asyncio.to_thread(engine.write, "home", "copilot", row)
+        await remember(engine, written)
+        return {"row_id": written.object_id, "tag": written.tag, "scope": written.scope}
+
+    async def check(arguments: dict[str, object]) -> Mapping[str, object]:
+        key = str(arguments.get("intent_key", "")).strip()
+        query = str(arguments.get("query", "")).strip()
+        if not key and not query:
+            raise ValueError("a check needs an intent_key or a query")
+        built = await asyncio.to_thread(engine.check_built, key) if key else []
+        dead = await asyncio.to_thread(engine.check_dead_end, key or query)
+        return {
+            "built": built,
+            "dead_ends": [
+                {"row_id": hit.row_id, "text": hit.text, "refs": list(hit.refs)} for hit in dead
+            ],
+        }
+
+    async def forget(arguments: dict[str, object]) -> Mapping[str, object]:
+        rows = tuple(_strings(arguments.get("row_ids")))
+        if not rows:
+            raise ValueError("forget needs the row ids recall returned")
+        forgotten = await asyncio.to_thread(engine.forget, rows)
+        return {"forgotten": forgotten, "rows": list(rows)}
+
+    async def rebuild(arguments: dict[str, object]) -> Mapping[str, object]:
+        scope = str(arguments.get("scope", "all"))
+        op = await asyncio.to_thread(engine.rebuild, scope)
+        return {"scope": scope, "operation": op}
+
+    _ = chat
+    return MappingProxyType(
+        {
+            "memory_recall": recall,
+            "memory_note": note,
+            "memory_check": check,
+            "memory_forget": forget,
+            "memory_rebuild": rebuild,
+        }
+    )
+
+
+async def remember(engine: RecallEngine, row: object) -> None:
+    """Re-render the memory snapshot slot after a write, so the next launch reads it (AD-18)."""
+    del row
+    await asyncio.to_thread(write_snapshot, engine)
+
+
+HOME_KINDS: Final[tuple[str, ...]] = ("general", "lab", "portfolio", "library", "app", "agent")
+"""Every home kind a chat can be born in (AD-35), so every launch finds its slot."""
+
+SNAPSHOT_TOKENS: Final = 4_000
+"""The snapshot's own bound, in tokens: `[agents] slot_budgets` leaves it unset because it is
+bounded where it is built (AD-18's sizes are lines; this is what a launch can afford)."""
+
+
+def write_snapshot(engine: RecallEngine, root: Path | None = None) -> list[Path]:
+    """Render the memory snapshot slot from the engine's rows, one file per home kind, at
+    `<home>/memory/<kind>.md`: the slot `qma.harness.surface.HomeSlots` reads (AD-18). Written
+    after every retain, every forget and at start, so a launch is at most one turn behind."""
+    frozen = engine.snapshot(("operator", "home"), SNAPSHOT_TOKENS)
+    folder = (root or engine.home) / MEMORY
+    folder.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for kind in HOME_KINDS:
+        path = folder / f"{kind}.md"
+        path.write_text(frozen.text + "\n" if frozen.text else "", encoding="utf-8")
+        written.append(path)
+    return written
+
+
+def _moment(value: object) -> datetime | None:
+    """An ISO date or instant, as `@memory` and `memory_recall` take one."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    found = datetime.fromisoformat(value.strip())
+    return found if found.tzinfo is not None else found.replace(tzinfo=UTC)
+
+
+def _table(value: object) -> Mapping[str, object]:
+    """A JSON document as a table, or an empty one: the control service answers `JsonValue`."""
+    return cast("Mapping[str, object]", value) if isinstance(value, Mapping) else {}
+
+
+def _whole(value: object, default: int) -> int:
+    return value if isinstance(value, int) and value > 0 else default
+
+
+def _strings(value: object) -> list[str]:
+    found = cast("Sequence[object]", value) if isinstance(value, list | tuple) else ()
+    return [str(one) for one in found]
 
 
 class StoreReads:
@@ -179,9 +352,13 @@ def _refusal(error: ContextRefused) -> Exception:
 def chat_reads(harness: RecordedHarness, store: Store, chat: SessionId) -> Mapping[str, HostRead]:
     """The five `context` reads for one chat (AD-63), over the store the host owns. Each one
     reads the chat record's list, acts through `Harness.set_attached`, and returns what the tool
-    hands the model."""
-
-    resolvers = Resolvers(StoreReads(store), excerpt_budget(harness.control.settings_get("agents")))
+    hands the model. `@memory` resolves through the host's memory engine when one is installed."""
+    memory = harness.memory
+    resolvers = Resolvers(
+        StoreReads(store),
+        excerpt_budget(harness.control.settings_get("agents")),
+        None if memory is None else StoreMemory(memory),
+    )
 
     def entries() -> tuple[AttachedRef, ...]:
         record = harness.record(chat)
@@ -373,8 +550,12 @@ class RecordedHarness(Harness):
     ) -> None:
         super().__init__(deps, watch, host_reads)
         self.recorder: SessionRecorder | None = None
+        self.memory: RecallEngine | None = None
+        self.retainer: RetainWorker | None = None
         self.turn_end_ms: list[float] = []
         """What the recorder added at each turn end, for the perf trail."""
+        self.memory_ms: list[float] = []
+        """What one digest cost at each turn end, for the perf block (P-MEM's 30 s line)."""
         self._titles: dict[SessionId, str] = {}
         self._watching: set[asyncio.Task[None]] = set()
 
@@ -394,6 +575,39 @@ class RecordedHarness(Harness):
     def record_into(self, recorder: SessionRecorder) -> None:
         self.recorder = recorder
 
+    def remember_into(self, engine: RecallEngine) -> None:
+        """The host's memory engine, and the retain worker that feeds it (AD-18, §28.6)."""
+        self.memory = engine
+        self.retainer = RetainWorker(
+            engine,
+            blocks=self._blocks,
+            session_item=self._session_item,
+            home=HUB_HOME,
+        )
+
+    def _blocks(self, chat: str) -> Sequence[Mapping[str, object]]:
+        """The chat's recorded blocks, oldest first, read from the control service's session log:
+        the same record `memory_note` writes into and the export holds at close."""
+        found: list[Mapping[str, object]] = []
+        after = 0
+        while True:
+            page = self.control.events("sessions", after, chat, PAGE)
+            for event in page:
+                record = _table(event)
+                data = _table(record.get("data"))
+                if data.get("type") != "block":
+                    continue
+                block = _table(data.get("block"))
+                if block:
+                    found.append(block)
+            if len(page) < PAGE:
+                return found
+            after = _whole(_table(page[-1]).get("id"), 0)
+
+    def _session_item(self, chat: str) -> str | None:
+        recorder = self.recorder
+        return None if recorder is None else recorder.head(chat)
+
     def _record(self, chat: SessionId) -> ChatRecord | None:
         found = self._chats.get(chat)
         return found.record if found is not None else read_record(self.home, chat)
@@ -404,11 +618,15 @@ class RecordedHarness(Harness):
 
     @override
     def context_reads(self, chat: SessionId) -> Mapping[str, HostRead]:
-        """The `context` toolset this host serves: the store's resolvers, bound to `chat`."""
+        """The `context` and `memory` toolsets this host serves, bound to `chat`."""
         recorder = self.recorder
         if recorder is None:
             return MappingProxyType({})
-        return chat_reads(self, recorder.store, chat)
+        found = dict(chat_reads(self, recorder.store, chat))
+        memory = self.memory
+        if memory is not None:
+            found.update(memory_reads(memory, chat))
+        return MappingProxyType(found)
 
     @override
     async def set_attached(self, chat: SessionId, refs: Sequence[AttachedRef]) -> None:
@@ -452,10 +670,25 @@ class RecordedHarness(Harness):
                 _skipped("turn end", error)
                 return
             self.turn_end_ms.append((time.perf_counter() - began) * 1000)
+            await self._retain(chat, began)
 
         task = asyncio.create_task(ended())
         self._watching.add(task)
         task.add_done_callback(self._watching.discard)
+
+    async def _retain(self, chat: SessionId, began: float, event: str = "turn-end") -> None:
+        """Feed the retain worker and re-render the snapshot slot. A memory write never fails a
+        chat: it is reported and the turn stands."""
+        retainer, engine = self.retainer, self.memory
+        if retainer is None or engine is None:
+            return
+        try:
+            await asyncio.to_thread(getattr(retainer, _DIGESTS[event]), chat)
+            await asyncio.to_thread(write_snapshot, engine)
+        except (OSError, ValueError, LibraryRefused) as error:
+            _skipped("digest", error)
+            return
+        self.memory_ms.append((time.perf_counter() - began) * 1000)
 
     @override
     async def run_turn(self, chat: SessionId, prompt: Prompt, *, priority: int = 0) -> TurnHandle:
@@ -477,6 +710,7 @@ class RecordedHarness(Harness):
                 await self.recorder.export(chat, self.export)
             except RECORDING_FAILED as error:
                 _skipped("export", error)
+        await self._retain(chat, time.perf_counter(), "close")
 
     async def export_idle(self) -> list[SessionId]:
         """Export every chat idle past `IDLE` since its last export; the chats exported."""

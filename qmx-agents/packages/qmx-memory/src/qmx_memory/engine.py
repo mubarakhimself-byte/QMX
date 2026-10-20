@@ -24,11 +24,12 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
+from pydantic import JsonValue
 from qmx_engine.ports.memory import Consolidated, Hit, Snapshot
+from qmx_library.port import Draft, JsonObject, LibraryRefused
 from qmx_library.principal import Principal, state_ref
-from qmx_library.port import Draft, JsonObject, LibraryRefused, ObjectView
 from qmx_library.store import Store
 
 from qmx_memory.fts import TOP as FTS_TOP
@@ -98,8 +99,8 @@ class RecallEngine:
         self.extractor = extractor or (
             getattr(index, "reflect", None) if index is not None else None
         )
-        folder = (home or store.root / "memory") if hasattr(store, "root") else Path(".")
-        self.fallback = FtsIndex.open(folder / FTS)
+        self.home = home or store.root / "memory"
+        self.fallback = FtsIndex.open(self.home / FTS)
         self.fallback_reason = "" if index is not None else "an index is not installed"
 
     # -- the port's reads ----------------------------------------------------------------
@@ -121,8 +122,7 @@ class RecallEngine:
         for question in questions:
             lines.append(f"? {question}")
         for scope in scopes:
-            taken = 0
-            for row in self._rows(scope):
+            for taken, row in enumerate(self._rows(scope)):
                 if not row.live_at(at) or taken >= SNAPSHOT_LINES.get(scope, 100):
                     break
                 spent += row.tokens()
@@ -130,7 +130,6 @@ class RecallEngine:
                     break
                 lines.append(rendered(row))
                 row_ids.append(row.object_id)
-                taken += 1
         version = hashlib.sha256("".join(row_ids).encode()).hexdigest()[:16] or "empty"
         return Snapshot("\n".join(lines), version, tuple(row_ids))
 
@@ -180,9 +179,10 @@ class RecallEngine:
     def check_dead_end(self, query: str) -> list[Hit]:
         """Dead ends for a key or a question: the exact rows first, then a recall."""
         exact = [
-            self._row(object_id)
+            row
             for object_id in self.check_built(query)
             if self._tagged_dead_end(object_id)
+            if (row := self._row(object_id)) is not None
         ]
         found = [self._hit(row, row.confidence) for row in exact]
         if found:
@@ -192,7 +192,7 @@ class RecallEngine:
     def search_runs(self, query: str, workflow: str | None = None) -> list[Hit]:
         """FTS5 over the run summaries and transcripts the Library holds, no model."""
         return [
-            Hit(found.object_id, found.title, found.kind, found.score, (found.item,))
+            Hit(found.object_id, found.title, found.kind, found.rank, (found.item,))
             for found in self.store.search_runs(self.store.engine, query, workflow)
         ]
 
@@ -232,9 +232,11 @@ class RecallEngine:
             self._relate(commit.object_id, COMMIT, target)
         if replaces is not None:
             self._relate(commit.object_id, REPLACES, replaces)
-        found = self._row(commit.object_id)
-        self.retain([found])
-        return found
+        written = self._row(commit.object_id)
+        if written is None:
+            raise LibraryRefused("not_found", f"the row {commit.object_id} was not written")
+        self.retain([written])
+        return written
 
     def consolidate(self, run_id: str, into_scope: str, name: str = "") -> Consolidated:
         """A run's rows as one `procedure` row in `into_scope`, derived from each of them."""
@@ -329,10 +331,7 @@ class RecallEngine:
         live = [row for row in found if row is not None and self._active(row.object_id)]
         if name:
             ref = memory_ref(scope, name)
-            named = {
-                object_id
-                for object_id, _ in self.store.placed(name, "memory-row", ref)
-            }
+            named = {object_id for object_id, _ in self.store.placed(name, "memory-row", ref)}
             live = [row for row in live if row.object_id in named] if named else live
         return sorted(live, key=lambda row: row.learned_at, reverse=True)
 
@@ -435,7 +434,7 @@ class RecallEngine:
             "intent_key": row.get("intent_key"),
             "when_to_use": str(row.get("when_to_use", "")),
             "content": str(row.get("content", "")),
-            "refs": list(row.get("refs") or refs),
+            "refs": _refs(row.get("refs")) or list(refs),
             "valid_from": valid_from,
             "valid_to": row.get("valid_to"),
         }
@@ -445,6 +444,11 @@ class RecallEngine:
             self.store.relate(self.store.engine, from_id, edge, to_id)
         except LibraryRefused:
             return
+
+
+def _refs(value: object) -> list[str]:
+    """A row's `refs` as written: a list of strings, or nothing."""
+    return [str(one) for one in cast("list[object]", value)] if isinstance(value, list) else []
 
 
 def _named_objects(row: MemoryRow) -> list[str]:
@@ -465,11 +469,11 @@ def _json(values: Mapping[str, object]) -> JsonObject:
     return found
 
 
-def _plain(value: object) -> object:
+def _plain(value: object) -> JsonValue:
     if isinstance(value, datetime):
         return iso(value)
-    if isinstance(value, tuple):
-        return [_plain(one) for one in value]  # pyright: ignore[reportUnknownVariableType]
-    if isinstance(value, list):
-        return [_plain(one) for one in value]  # pyright: ignore[reportUnknownVariableType]
-    return value
+    if isinstance(value, tuple | list):
+        return [_plain(one) for one in cast("list[object]", value)]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)

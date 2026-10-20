@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -9,8 +10,9 @@ from pathlib import Path
 import pytest
 from qmx_engine.ledger import redact
 from qmx_engine.ports.memory import Hit
-from qmx_library.principal import Principal
+from qmx_library.kinds import roster
 from qmx_library.port import Draft
+from qmx_library.principal import Principal
 from qmx_library.store import Store
 
 from qmx_memory.engine import RecallEngine
@@ -55,9 +57,7 @@ def test_recall_finds_a_live_row_and_leaves_out_a_closed_window(engine: RecallEn
     assert today == {live}
     inside = {
         hit.row_id
-        for hit in engine.recall(
-            "pod P ATR period", ("home",), 1_000, now=NOW - timedelta(days=45)
-        )
+        for hit in engine.recall("pod P ATR period", ("home",), 1_000, now=NOW - timedelta(days=45))
     }
     assert inside == {old}
 
@@ -208,17 +208,13 @@ def test_a_session_digest_names_the_session_item_it_came_from(engine: RecallEngi
     assert worker.turn_ended("chat-1") is None
 
 
-def test_every_port_verb_answers_over_the_fts_fallback_too(
-    store: Store, tmp_path: Path
-) -> None:
+def test_every_port_verb_answers_over_the_fts_fallback_too(store: Store, tmp_path: Path) -> None:
     fallback = RecallEngine(store, home=tmp_path, clock=lambda: NOW)
     try:
         row = lesson(fallback, "a fallback answers when Hindsight is stopped")
         assert isinstance(fallback.fallback, FtsIndex)
         assert fallback.fallback.count() == 1
-        assert [hit.row_id for hit in fallback.recall("Hindsight stopped", ("home",), 500)] == [
-            row
-        ]
+        assert [hit.row_id for hit in fallback.recall("Hindsight stopped", ("home",), 500)] == [row]
         assert fallback.snapshot(("home",), 500).row_ids == (row,)
         assert fallback.check_built("build:none:2026") == []
         assert fallback.search_runs("nothing") == []
@@ -248,17 +244,11 @@ def _scores(hits: Sequence[Hit]) -> dict[str, float]:
     return {hit.row_id: hit.score for hit in hits}
 
 
-def _only(engine: RecallEngine) -> str:
-    found = engine.store.with_field("memory-row", "scope", "home")
-    assert len(found) == 1
-    return found[0]
-
-
 def test_the_store_reads_a_memory_row_kind_that_keeps_its_window() -> None:
-    from qmx_library.kinds import roster  # noqa: PLC0415
-
     found = roster()["memory-row"]
+    written = json.dumps(found.validator.schema)
 
-    assert "valid_from" in found.validator.schema["properties"]
+    assert '"valid_from"' in written
+    assert '"valid_to"' in written
     assert "regime" in found.annotations
     assert Principal("engine", "test").who == "engine"

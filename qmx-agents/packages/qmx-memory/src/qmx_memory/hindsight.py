@@ -19,11 +19,13 @@ host's relay grant: a base URL on the router's key lane and a grant secret minte
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import os
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Protocol, cast
 
 from qmx_memory.rows import MemoryRow
 
@@ -68,11 +70,57 @@ class HindsightConfig:
 
 def importable() -> bool:
     """Whether Hindsight is installed. The engine builds its fallback when it is not."""
-    try:
-        import hindsight  # noqa: F401, PLC0415
-    except ImportError:
-        return False
-    return True
+    return importlib.util.find_spec("hindsight") is not None
+
+
+class Recalled(Protocol):
+    """What one recall answer carries: the results, best first."""
+
+    results: Sequence[object]
+
+
+class Documents(Protocol):
+    def delete_document(self, bank_id: str, document_id: str) -> object: ...
+
+
+class Client(Protocol):
+    """The handful of Hindsight client calls this adapter makes, typed here: the package ships
+    no py.typed, so its boundary is read through this and every result past it is checked."""
+
+    def create_bank(
+        self, *, bank_id: str, retain_extraction_mode: str, enable_observations: bool
+    ) -> object: ...
+    def retain(
+        self,
+        *,
+        bank_id: str,
+        content: str,
+        document_id: str,
+        tags: list[str],
+        update_mode: str,
+    ) -> object: ...
+    def recall(
+        self,
+        *,
+        bank_id: str,
+        query: str,
+        budget: str,
+        max_tokens: int,
+        tags: list[str] | None,
+    ) -> Recalled: ...
+    def reflect(self, *, bank_id: str, query: str, tags: list[str] | None) -> object: ...
+    def delete_bank(self, bank_id: str) -> object: ...
+    def documents(self) -> Documents: ...
+    def close(self) -> None: ...
+
+
+class Server(Protocol):
+    """The embedded server: started here, stopped with the engine."""
+
+    def start(self, *, timeout: float) -> None: ...
+    def stop(self) -> None: ...
+    @property
+    def url(self) -> str: ...
 
 
 class HindsightIndex:
@@ -80,8 +128,8 @@ class HindsightIndex:
 
     def __init__(self, config: HindsightConfig) -> None:
         self.config = config
-        self.server: object | None = None
-        self.client: object | None = None
+        self.server: Server | None = None
+        self.client: Client | None = None
         self._banks: set[str] = set()
 
     def start(self) -> None:
@@ -93,17 +141,20 @@ class HindsightIndex:
         url = self.config.url
         if not url:
             self._isolate()
-            self.server = HindsightServer(
-                db_url=self.config.db_url,
-                llm_provider="openai",
-                llm_api_key=self.config.grant or "none",
-                llm_model=self.config.model or "none",
-                llm_base_url=self.config.base_url or None,
+            server = cast(
+                "Server",
+                HindsightServer(
+                    db_url=self.config.db_url,
+                    llm_provider="openai",
+                    llm_api_key=self.config.grant or "none",
+                    llm_model=self.config.model or "none",
+                    llm_base_url=self.config.base_url or None,
+                ),
             )
-            start = getattr(self.server, "start")  # noqa: SLF001
-            start(timeout=self.config.start_timeout_s)
-            url = str(getattr(self.server, "url"))  # noqa: SLF001
-        self.client = HindsightClient(base_url=url, timeout=self.config.timeout_s)
+            self.server = server
+            server.start(timeout=self.config.start_timeout_s)
+            url = server.url
+        self.client = cast("Client", HindsightClient(base_url=url, timeout=self.config.timeout_s))
         for bank in dict.fromkeys(BANKS.values()):
             self.bank(bank)
 
@@ -123,7 +174,7 @@ class HindsightIndex:
             return bank_id
         client = self._need()
         try:
-            client.create_bank(  # pyright: ignore[reportAttributeAccessIssue]
+            client.create_bank(
                 bank_id=bank_id, retain_extraction_mode=RETAIN_MODE, enable_observations=False
             )
         except Exception as error:  # a bank that exists is what we wanted
@@ -157,7 +208,7 @@ class HindsightIndex:
     def _retain(self, row: MemoryRow) -> None:
         client = self._need()
         bank = self.bank(bank_of(row.scope))
-        client.retain(  # pyright: ignore[reportAttributeAccessIssue]
+        client.retain(
             bank_id=bank,
             content=row.indexed(),
             document_id=row.object_id,
@@ -196,7 +247,7 @@ class HindsightIndex:
         client = self._need()
         for bank in dict.fromkeys(BANKS.values()):
             try:
-                client.delete_bank(bank)  # pyright: ignore[reportAttributeAccessIssue]
+                client.delete_bank(bank)
             except Exception as error:
                 if "exist" not in str(error).lower() and "found" not in str(error).lower():
                     raise
@@ -213,7 +264,7 @@ class HindsightIndex:
         for bank in dict.fromkeys(BANKS.values()):
             asked = list(tags) if tags else None
             try:
-                answer = client.recall(  # pyright: ignore[reportAttributeAccessIssue]
+                answer = client.recall(
                     bank_id=bank, query=query, budget="mid", max_tokens=4096, tags=asked
                 )
             except Exception as error:
@@ -234,22 +285,22 @@ class HindsightIndex:
         client = self._need()
         bank = self.bank(BANKS["operator"])
         asked = list(tags) if tags else None
-        answer = client.reflect(  # pyright: ignore[reportAttributeAccessIssue]
-            bank_id=bank, query=question, tags=asked
-        )
+        answer: object = client.reflect(bank_id=bank, query=question, tags=asked)
         text = str(getattr(answer, "text", "") or getattr(answer, "answer", "") or "")
-        cited = [
-            str(found)
-            for found in (getattr(answer, "citations", None) or [])
-            if isinstance(found, str)
-        ]
-        return text, cited
+        return text, _citations(answer)
 
-    def _need(self) -> object:
+    def _need(self) -> Client:
         client = self.client
         if client is None:
             raise RuntimeError("Hindsight is not started")
         return client
+
+
+def _citations(answer: object) -> list[str]:
+    """The row ids a provider's answer cites, when it reports them."""
+    found = getattr(answer, "citations", None)
+    cited = cast("list[object]", found) if isinstance(found, list | tuple) else []
+    return [str(one) for one in cited]
 
 
 def _score(result: object, rank: int) -> float:

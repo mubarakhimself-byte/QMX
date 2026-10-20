@@ -46,12 +46,15 @@ ROLE_TIERS: Final[Mapping[str, str]] = {
     "searcher": "mid",
     "writer": "mid",
     "extractor": "mid",
+    "memory_extractor": "mid",
     "planner": "strong",
     "synthesiser": "strong",
     "builder": "strong",
     "reviewer": "strong",
 }
-"""Each role's class: what kind of work it is, never a provider or a model name."""
+"""Each role's class: what kind of work it is, never a provider or a model name.
+`memory_extractor` is Hindsight's own extraction and reflection calls (AD-18, §28.6): its grant
+goes through the router's key lane, so the memory engine never holds a provider key."""
 CHINESE: Final = frozenset({"kimi", "moonshot", "deepseek", "glm", "zai", "qwen", "minimax"})
 """The profiles whose models lead every tier (ruling 107)."""
 BUNDLED_ROWS: Final = (
@@ -148,6 +151,7 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "roles.searcher": _MID,  # Claude's default, UI-editable
         "roles.writer": _MID,  # Claude's default, UI-editable
         "roles.extractor": _MID,  # Claude's default, UI-editable
+        "roles.memory_extractor": _MID,  # Claude's default, UI-editable; Hindsight's extractor
         "roles.planner": _STRONG,  # Claude's default, UI-editable
         "roles.synthesiser": _STRONG,  # Claude's default, UI-editable
         "roles.builder": _STRONG,  # Claude's default, UI-editable

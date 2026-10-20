@@ -345,6 +345,115 @@ HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
             },
             "required": ["ref"],
         },
+        "memory_recall": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "The question to ask memory, in words",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Only rows tagged or keyed with these, such as built or "
+                    "dead_end",
+                },
+                "budget_tokens": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 2000,
+                    "description": "Most tokens of rows to return",
+                },
+                "as_of": {
+                    "type": "string",
+                    "description": "Read memory as it stood for a validity window containing "
+                    "this ISO date, instead of today",
+                },
+                "regime": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Rows learnt in this regime rank first",
+                },
+            },
+            "required": ["query"],
+        },
+        "memory_note": {
+            "type": "object",
+            "properties": {
+                "tag": {
+                    "type": "string",
+                    "enum": [
+                        "built",
+                        "lesson",
+                        "dead_end",
+                        "do_not_retry",
+                        "negative_result",
+                        "procedure",
+                        "preference",
+                    ],
+                    "description": "What kind of row this is",
+                },
+                "content": {"type": "string", "description": "What to remember, in one paragraph"},
+                "when_to_use": {
+                    "type": "string",
+                    "description": "The situation this row is for",
+                },
+                "refs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The Library objects it is about, as item:<object id>",
+                },
+                "intent_key": {
+                    "type": "string",
+                    "description": "For a built or dead_end row, the key a later build checks",
+                },
+                "regime": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The market regime it was learnt in, when that matters",
+                },
+                "valid_to": {
+                    "type": "string",
+                    "description": "An ISO date after which the row no longer applies",
+                },
+            },
+            "required": ["tag", "content"],
+        },
+        "memory_check": {
+            "type": "object",
+            "properties": {
+                "intent_key": {
+                    "type": "string",
+                    "description": "The build's key: kind, canonical inputs, parameters and code",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "A question to check for a known dead end when there is no key",
+                },
+            },
+        },
+        "memory_forget": {
+            "type": "object",
+            "properties": {
+                "row_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The rows to forget, as recall returned their ids",
+                }
+            },
+            "required": ["row_ids"],
+        },
+        "memory_rebuild": {
+            "type": "object",
+            "properties": {
+                "scope": {
+                    "type": "string",
+                    "enum": ["all", "run", "workflow", "home", "operator"],
+                    "default": "all",
+                    "description": "Which scope to re-index",
+                }
+            },
+        },
     }
 )
 

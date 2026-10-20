@@ -14,8 +14,10 @@ item whose `main` has moved carries the note "newer version exists" (Library AD-
 
 The reads are this module's narrow port, not `qmx_library`: the host that owns the store supplies
 an adapter, so control stays free of the store's package and the tests use a fixture. `file`,
-`folder`, `url` and `youtube` arrive with REF2 and `memory` with MEM; each is refused here by name
-with that reason rather than silently unresolved.
+`folder`, `url` and `youtube` arrive with REF2 and are refused here by name with that reason rather
+than silently unresolved. `memory` is a question, not an object: its resolver asks the host's
+memory engine, which returns the rows it recalled and the Library objects they cite, so a chat can
+point at what the copilot remembers instead of pasting it into the prompt.
 
 The excerpt a model sees is capped by `H/surface.py`'s budget (25 % soft and 50 % hard of the
 window, and at most 200 folder entries: Claude's defaults, Settings); this module only cuts to the
@@ -24,6 +26,7 @@ number it is given.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -55,10 +58,12 @@ LATER: Final[Mapping[str, str]] = MappingProxyType(
         "folder": "the @folder kind arrives with REF2",
         "url": "the @url kind arrives with REF2",
         "youtube": "the @youtube kind arrives with REF2",
-        "memory": "the @memory kind arrives with MEM",
     }
 )
 """The kinds another PR brings, with the reason a reference to one is refused today."""
+
+NO_MEMORY: Final = "this host has no memory engine, so @memory recalls nothing"
+"""The refusal for `@memory` on a host that installed none (MEM wires it at composition)."""
 
 NEWER: Final = "newer version exists"
 """What a pinned item whose `main` has moved reads (Library AD-22, AD-63)."""
@@ -194,6 +199,26 @@ class LibraryHit:
     title: str = ""
 
 
+@dataclass(frozen=True)
+class MemoryRowHit:
+    """One recalled memory row: what it says, what it is for and the objects it cites."""
+
+    row_id: str
+    text: str
+    tag: str
+    refs: tuple[str, ...] = ()
+    when_to_use: str = ""
+    tainted: bool = False
+
+
+class MemoryReads(Protocol):
+    """The memory read an `@memory` resolver needs: a question in, rows with their sources out.
+    The host supplies it from the engine it installed (MEM); a host that installed none answers
+    with an empty list, and the resolver refuses by name."""
+
+    def memory(self, question: str, limit: int = 10) -> list[MemoryRowHit]: ...
+
+
 class LibraryReads(Protocol):
     """The Library reads a resolver needs. The host's adapter answers them from the store; no
     policy lives here."""
@@ -242,11 +267,15 @@ def cut(text: str, limit: int) -> str:
 
 class Resolvers:
     """One resolver per kind over `reads`. `add` is `context_add`'s work, `refresh` re-reads a
-    `follow` entry, and `read` returns the capped excerpt plus the handle."""
+    `follow` entry, and `read` returns the capped excerpt plus the handle. `memory` is the host's
+    memory engine when it installed one; without it, `@memory` is refused by name."""
 
-    def __init__(self, reads: LibraryReads, budget: Budget) -> None:
+    def __init__(
+        self, reads: LibraryReads, budget: Budget, memory: MemoryReads | None = None
+    ) -> None:
         self.reads = reads
         self.budget = budget
+        self.memory = memory
 
     def add(self, ref: str, pin: Pin = "version") -> AttachedRef:
         """Resolve `ref` into a pinned entry. `follow` leaves the version open."""
@@ -273,19 +302,28 @@ class Resolvers:
         )
 
     def read(self, attached: AttachedRef, span: str | None = None) -> str:
-        """The handle and an excerpt, capped at the hard budget. `span` is `a-b` in characters."""
-        found = self.reads.get(self._object_id(attached), TEXT_SLOTS)
-        text = self._text(found)
-        if span is not None:
-            text = _span(text, span)
+        """The handle and an excerpt, capped at the hard budget. `span` is `a-b` in characters.
+        A memory reference reads the rows the question recalls now, not a pinned object."""
+        found = self._memory_row(attached)
+        if found is not None:
+            text = found
+        else:
+            view = self.reads.get(self._object_id(attached), TEXT_SLOTS)
+            text = self._text(view)
+            if span is not None:
+                text = _span(text, span)
         body = cut(text, self.budget.hard_chars)
-        return f"{attached.described()}\n{found.title}\n\n{body}".strip()
+        title = "" if found is not None else self.reads.get(self._object_id(attached)).title
+        return f"{attached.described()}\n{title}\n\n{body}".strip()
 
     def excerpt(self, attached: AttachedRef) -> str:
         """What `context_add` returns: the handle and a soft-capped excerpt."""
-        found = self.reads.get(self._object_id(attached), TEXT_SLOTS)
-        head = cut(self._text(found), self.budget.soft_chars)
-        return f"{attached.described()}\n{found.title}\n\n{head}"
+        found = self._memory_row(attached)
+        if found is not None:
+            return f"{attached.described()}\n\n{cut(found, self.budget.soft_chars)}"
+        view = self.reads.get(self._object_id(attached), TEXT_SLOTS)
+        head = cut(self._text(view), self.budget.soft_chars)
+        return f"{attached.described()}\n{view.title}\n\n{head}"
 
     def _object_id(self, attached: AttachedRef) -> str:
         """A following entry reads `main` now, not the object the chat was born on."""
@@ -303,7 +341,34 @@ class Resolvers:
             return self._run(target)
         if kind == "app":
             return self._app(target)
+        if kind == "memory":
+            return self._memory(target)
         raise ContextRefused("invalid_arguments", f"@{kind} has no resolver")
+
+    def _memory(self, question: str) -> AttachedRef:
+        """`@memory:<question>` recalls now and pins the rows it answered with: the version is a
+        digest of their ids, so `refresh` says "newer version exists" once memory has moved."""
+        rows = self._recall(question)
+        return AttachedRef(
+            ref=f"@memory:{question}",
+            item_id=f"memory:{question}",
+            version_id=_memory_version(rows),
+            status="ready" if rows else "not_cached",
+            note=f"{len(rows)} rows" if rows else "nothing recalled this question",
+        )
+
+    def _recall(self, question: str) -> list[MemoryRowHit]:
+        if self.memory is None:
+            raise ContextRefused("not_yet", NO_MEMORY)
+        return self.memory.memory(question)
+
+    def _memory_row(self, attached: AttachedRef) -> str | None:
+        """A memory reference's own text: its rows with their tags and sources."""
+        if not attached.item_id.startswith("memory:"):
+            return None
+        question = attached.item_id.removeprefix("memory:")
+        rows = self._recall(question)
+        return _memory_text(rows)
 
     def _pinned(self, kind: str, target: str) -> AttachedRef:
         """`@pod`, `@unit`, `@bot` and `@session` name one Library item by id; `@library` names
@@ -415,6 +480,25 @@ def _names_output(found: LibraryObject, name: str) -> bool:
     if not isinstance(metadata, Mapping):
         return False
     return cast("Mapping[str, object]", metadata).get("output") == name
+
+
+def _memory_version(rows: Sequence[MemoryRowHit]) -> str | None:
+    """A digest of the recalled row ids: the version an `@memory` reference was pinned to."""
+    if not rows:
+        return None
+    return hashlib.sha256("|".join(row.row_id for row in rows).encode()).hexdigest()[:16]
+
+
+def _memory_text(rows: Sequence[MemoryRowHit]) -> str:
+    """Recalled rows as text a model reads: the row's words, its tag and what it cites."""
+    if not rows:
+        return "nothing in memory answers this question"
+    lines: list[str] = []
+    for row in rows:
+        sources = f" ({', '.join(row.refs)})" if row.refs else ""
+        warning = " [source quarantined]" if row.tainted else ""
+        lines.append(f"[{row.tag}]{warning} {row.text}{sources}")
+    return "\n\n".join(lines)
 
 
 def _span(text: str, span: str) -> str:

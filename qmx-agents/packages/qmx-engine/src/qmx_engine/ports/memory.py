@@ -94,23 +94,21 @@ class MemoryPort(Protocol):
         ...
 
 
-INSTALLED: dict[int, MemoryPort] = {}
-"""The engine the host installed, by the Library object it was built for. One host, one store, so
-the dictionary holds one entry in practice; keying it by the library keeps a test's second store
-from answering with the first's rows."""
+INSTALLED: list[MemoryPort] = []
+"""The engine the host installed. A host serves one home, so one provider answers here; the list
+holds at most one entry and `install(None)` clears it."""
 
 
-def install(provider: MemoryPort | None, *, library: object | None = None) -> None:
+def install(provider: MemoryPort | None) -> None:
     """Called by the host at composition, before the engine's door opens. `None` uninstalls."""
-    if provider is None:
-        INSTALLED.clear()
-        return
-    INSTALLED[id(library)] = provider
+    INSTALLED.clear()
+    if provider is not None:
+        INSTALLED.append(provider)
 
 
-def installed(library: object) -> MemoryPort | None:
-    """The provider built for this Library, if the host installed one."""
-    return INSTALLED.get(id(library))
+def installed() -> MemoryPort | None:
+    """The provider the host installed, if any."""
+    return INSTALLED[0] if INSTALLED else None
 
 
 class MemoryStub:
@@ -120,7 +118,7 @@ class MemoryStub:
 
     def __init__(self, library: LibraryPort) -> None:
         self.library = library
-        self.provider = installed(library)
+        self.provider = installed()
 
     def snapshot(
         self, scopes: tuple[str, ...], budget_tokens: int, questions: tuple[str, ...] = ()

@@ -11,11 +11,13 @@ import pytest
 from qmx_control.catalog import rows
 from qmx_control.context import (
     NEWER,
+    NO_MEMORY,
     AttachedRef,
     Budget,
     ContextRefused,
     LibraryHit,
     LibraryObject,
+    MemoryRowHit,
     Resolvers,
     listing,
     parse,
@@ -26,6 +28,17 @@ POD_V7 = "fp1:sha256::pod7"
 POD_V8 = "fp1:sha256::pod8"
 RUN = "0192f0aa-0000-7000-8000-00000000run1"
 APP = "macro-bias"
+
+
+class Memory:
+    """A host's memory engine for the resolver: one list of recalled rows."""
+
+    def __init__(self, rows: Sequence[MemoryRowHit]) -> None:
+        self.rows = rows
+
+    def memory(self, question: str, limit: int = 10) -> list[MemoryRowHit]:
+        del question
+        return list(self.rows[:limit])
 
 
 class Fixture:
@@ -142,8 +155,28 @@ def test_the_grammar_names_its_kinds_and_the_refusals(library: Fixture) -> None:
         parse("@dataset:r12")
     with pytest.raises(ContextRefused, match="the @file kind arrives with REF2"):
         parse("@file:a/b.py")
-    with pytest.raises(ContextRefused, match="the @memory kind arrives with MEM"):
-        parse("@memory:why did we drop the filter")
+    assert parse("@memory:why did we drop the filter") == (
+        "memory",
+        "why did we drop the filter",
+    )
+
+
+def test_memory_recalls_the_rows_that_answer_the_question(library: Fixture) -> None:
+    rows = [MemoryRowHit("row-1", "pod P wants a 20 day ATR", "lesson", ("item:pod-p",))]
+    found = Resolvers(library, BUDGET, Memory(rows))
+
+    attached = found.add("@memory:what did we find about pod P")
+
+    assert attached.item_id == "memory:what did we find about pod P"
+    assert attached.status == "ready"
+    assert attached.note == "1 rows"
+    assert "20 day ATR" in found.excerpt(attached)
+    assert "item:pod-p" in found.read(attached)
+
+
+def test_memory_is_refused_by_name_on_a_host_that_installed_none(library: Fixture) -> None:
+    with pytest.raises(ContextRefused, match=NO_MEMORY):
+        Resolvers(library, BUDGET).add("@memory:what did we find about pod P")
 
 
 def test_a_pinned_item_whose_main_moved_says_the_newer_version_exists(library: Fixture) -> None:

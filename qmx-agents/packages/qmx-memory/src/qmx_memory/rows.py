@@ -129,7 +129,8 @@ class MemoryRow:
         return (self.scope, self.tag, *self.keywords, *self.refs)
 
     def live_at(self, at: datetime) -> bool:
-        """Whether the row is in force at `at`: from `valid_from` up to, not including, `valid_to`."""
+        """Whether the row is in force at `at`: from `valid_from` up to, not including,
+        `valid_to`."""
         if not self.valid_from:
             return True
         if parse_time(self.valid_from) > at:
