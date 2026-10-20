@@ -486,9 +486,8 @@ async def one_token_test(
             return await _key_test(provider, row, secrets or _keyring, transport)
 
 
-ROUTING_ENV: Final = re.compile(
-    r"^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CONFIG_DIR|\w*API_KEY\w*)$"
-)
+ROUTING_ENV: Final = re.compile(r"^(ANTHROPIC_\w+|CLAUDE_CODE_OAUTH_TOKEN|CLAUDE_CONFIG_DIR)$")
+"""Names that would route the plan CLI away from the plan login."""
 
 
 def plan_test(plan_dir: Path, cwd: Path) -> PlanTurn:
@@ -523,7 +522,8 @@ def plan_test(plan_dir: Path, cwd: Path) -> PlanTurn:
         return RowTestResult(
             row.qmx_id,
             "ok",
-            f"answered {(result.result or '').strip()[:40]!r}",
+            f"answered {(result.result or '').strip()[:40]!r} on "
+            f"{', '.join(sorted(result.model_usage or {})) or 'an unreported model'}",
             output_tokens=tokens if isinstance(tokens, int) else None,
             ms=ms,
             spent=True,
