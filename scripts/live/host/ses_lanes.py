@@ -106,11 +106,10 @@ async def ship(item: Log, export: Log, search: Log) -> None:
     from qma.harness import Home, NewChat, OperatorText, QmxHome, control_service  # noqa: PLC0415
     from qma.harness.chat import transcript  # noqa: PLC0415
     from qmx_engine.ledger import redact  # noqa: PLC0415
-    from qmx_library.principal import MAIN  # noqa: PLC0415
-    from qmx_library.store import Store  # noqa: PLC0415
-
     from qmx_host.host import LIBRARY  # noqa: PLC0415
     from qmx_host.sessions import RecordedHarness, SessionRecorder  # noqa: PLC0415
+    from qmx_library.principal import MAIN  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
 
     home = QmxHome(SHIP_HOME)
     control = control_service(home)
@@ -220,9 +219,8 @@ def chat_id(n: int) -> str:
 
 def lane_idle(log: Log) -> None:
     from qmx_engine.ledger import redact  # noqa: PLC0415
-    from qmx_library.store import Store  # noqa: PLC0415
-
     from qmx_host.sessions import SessionRecorder  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
 
     now = [datetime(2026, 10, 20, 9, 0, tzinfo=UTC)]
     folder = throwaway_home("idle")
@@ -256,9 +254,8 @@ def lane_idle(log: Log) -> None:
 
 def lane_restart(log: Log) -> None:
     from qmx_engine.ledger import redact  # noqa: PLC0415
-    from qmx_library.store import Store  # noqa: PLC0415
-
     from qmx_host.sessions import SessionRecorder  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
 
     folder = throwaway_home("restart") / "library"
     chat = chat_id(1)
@@ -276,9 +273,8 @@ def lane_restart(log: Log) -> None:
 
 def lane_count(log: Log) -> None:
     from qmx_engine.ledger import redact  # noqa: PLC0415
-    from qmx_library.store import Store  # noqa: PLC0415
-
     from qmx_host.sessions import SessionRecorder  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
 
     with Store.open(throwaway_home("count") / "library", redactor=redact) as store:
         recorder = SessionRecorder(store)

@@ -45,6 +45,13 @@ TRANSCRIPT: Final = "transcript.jsonl"
 
 type Exporter = Callable[[SessionId], Awaitable[Path]]
 
+RECORDING_FAILED: Final = (OSError, LibraryRefused)
+"""A recorder write that fails is reported and skipped, never raised into the chat."""
+
+
+def _skipped(what: str, error: Exception) -> None:
+    print(f"session {what} skipped: {type(error).__name__}: {error}", file=sys.stderr)
+
 
 def _list(value: JsonValue, add: str) -> list[JsonValue]:
     found = list(value) if isinstance(value, list) else []
@@ -183,7 +190,10 @@ class RecordedHarness(Harness):
         record = self._record(chat)
         if self.recorder is not None and record is not None:
             self._titles[chat] = spec.title
-            await asyncio.to_thread(self.recorder.born, record, spec.title)
+            try:
+                await asyncio.to_thread(self.recorder.born, record, spec.title)
+            except RECORDING_FAILED as error:
+                _skipped("item", error)
         return chat
 
     def _watch(self, chat: SessionId, handle: TurnHandle) -> None:
@@ -198,7 +208,11 @@ class RecordedHarness(Harness):
                 return
             began = time.perf_counter()
             title = self._titles.get(chat, "")
-            await asyncio.to_thread(recorder.turn_ended, record, result, title)
+            try:
+                await asyncio.to_thread(recorder.turn_ended, record, result, title)
+            except RECORDING_FAILED as error:
+                _skipped("turn end", error)
+                return
             self.turn_end_ms.append((time.perf_counter() - began) * 1000)
 
         task = asyncio.create_task(ended())
@@ -221,7 +235,10 @@ class RecordedHarness(Harness):
     async def close_chat(self, chat: SessionId) -> None:
         await super().close_chat(chat)
         if self.recorder is not None and self.recorder.head(chat) is not None:
-            await self.recorder.export(chat, self.export)
+            try:
+                await self.recorder.export(chat, self.export)
+            except RECORDING_FAILED as error:
+                _skipped("export", error)
 
     async def export_idle(self) -> list[SessionId]:
         """Export every chat idle past `IDLE` since its last export; the chats exported."""
@@ -243,8 +260,8 @@ class RecordedHarness(Harness):
             await asyncio.sleep(IDLE_TICK_S)
             try:
                 await self.export_idle()
-            except (OSError, LibraryRefused) as error:
-                print(f"session export skipped: {type(error).__name__}: {error}", file=sys.stderr)
+            except RECORDING_FAILED as error:
+                _skipped("daily export", error)
 
     @override
     async def close(self) -> None:
