@@ -84,15 +84,16 @@ def materialise(names: tuple[str, ...]) -> dict[str, Path]:
 
 
 def reply(blocks: list[dict[str, Any]]) -> str:
+    """The text the chat wrote back: the `text` blocks a `Session.turn` returns."""
     return " ".join(
         str(block["content"].get("text", ""))
         for block in blocks
-        if block["type"] in {"assistant", "result"} and block["content"].get("text")
+        if block["type"] in {"text", "result"} and block["content"].get("text")
     )
 
 
 def tool_uses(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [block["content"] for block in blocks if block["type"] == "tool_use"]
+    return [block["content"] for block in blocks if block["type"] == "tool"]
 
 
 async def lane_two(say: Log, root: Path) -> dict[str, Any]:
@@ -191,6 +192,7 @@ async def lane_four(say: Log, root: Path) -> dict[str, Any]:
     )
     try:
         await session.harness.set_packs(session.chat, PACKS)
+        await session.turn(say, "Reply with OK.")
         surface = session.harness.surface(session.chat)
         if surface is None:  # a launch always leaves one
             raise RuntimeError("the chat launched with no Surface")
@@ -207,29 +209,42 @@ async def lane_four(say: Log, root: Path) -> dict[str, Any]:
 
 
 async def perf(say: Log, root: Path) -> dict[str, Any]:
-    """Chat launch time with five packs, five launches."""
+    """Chat launch time, five launches each with no pack and with five packs. A launch is one
+    `Harness.send` on a Cold chat, which returns once the prompt reached the CLI: the control
+    record, the settings read, the tool list, the CLI connect and its init. The two runs differ
+    only in the pack set, so their difference is what five plug�in views cost. It is not PRB-H's
+    number: that probe timed `ClaudeSDKClient` entry to `get_server_info` with no harness around
+    it, so the two are recorded side by side, never subtracted."""
     from qma.harness import OperatorText  # noqa: PLC0415
 
     materialise(FIVE)
-    session = await Session.start(
-        SHIP_HOME, model="haiku", workspace=root / "ws", title="pack-perf", tools=["Read"]
-    )
-    try:
-        await session.harness.set_packs(session.chat, FIVE)
+
+    async def launches(names: tuple[str, ...], slug: str) -> tuple[list[float], Any]:
+        session = await Session.start(
+            SHIP_HOME, model="haiku", workspace=root / slug, title=slug, tools=["Read"]
+        )
         timings: list[float] = []
         seen = None
-        for _ in range(LAUNCHES):
-            await session.harness.close_chat(session.chat)
-            started = time.perf_counter()
-            await session.harness.send(session.chat, OperatorText("Reply with OK."))
-            seen = session.harness.surface(session.chat) or seen
-            await session.harness.close_chat(session.chat)
-            timings.append(round((time.perf_counter() - started) * 1000, 1))
-    finally:
-        await session.harness.close()
+        try:
+            await session.harness.set_packs(session.chat, names)
+            for _ in range(LAUNCHES):
+                await session.harness.close_chat(session.chat)
+                started = time.perf_counter()
+                await session.harness.send(session.chat, OperatorText("Reply with OK."))
+                timings.append(round((time.perf_counter() - started) * 1000, 1))
+                seen = session.harness.surface(session.chat) or seen
+                await session.harness.close_chat(session.chat)
+        finally:
+            await session.harness.close()
+        return timings, seen
+
+    with_five, seen = await launches(FIVE, "perf-five")
+    with_none, _ = await launches((), "perf-none")
     return {
-        "launches_ms": timings,
-        "median_ms": statistics.median(timings),
+        "five_ms": with_five,
+        "five_median_ms": statistics.median(with_five),
+        "none_ms": with_none,
+        "none_median_ms": statistics.median(with_none),
         "views": [] if seen is None else [view.name for view in seen.views],
     }
 
@@ -254,17 +269,21 @@ def verdict(say: Log, observation: dict[str, Any]) -> None:
     say.check(
         "lane 2, a pack agent spawns",
         any(
-            use["input"].get("subagent_type") == "pack-alpha:alpha-agent"
+            use.get("arguments", {}).get("subagent_type") == "pack-alpha:alpha-agent"
             for use in two["agent_calls"]
         )
         and any(state.get("name") == "pack-alpha:alpha-agent" for state in two["agents"]),
         {
-            "calls": two["agent_calls"],
+            "calls": [use.get("arguments") for use in two["agent_calls"]],
             "agents": two["agents"],
             "reply": two["agent"][-160:],
         },
     )
     say.check("lane 2, a pack command runs", "BETA-CMD-OK" in two["command"], two["command"])
+    say(
+        "recorded, not gating: the pack agent's completion notices "
+        f"{[state.get('summary') for state in two['agents'] if state.get('summary')]}"
+    )
     say.check(
         "lane 2, no pack hook and no pack MCP server runs",
         not two["external"] and {"pack-alpha", "pack-beta"} <= set(two["plugins"]),
@@ -310,9 +329,12 @@ def verdict(say: Log, observation: dict[str, Any]) -> None:
         four["doctor_named"],
     )
     say(
-        f"PERF launch ms with five packs, {LAUNCHES} launches: {measured['launches_ms']} "
-        f"(median {measured['median_ms']}); PRB-H's P-PL baseline was 578.3 ms with two views and "
-        f"592.9 ms with the core plugin alone"
+        f"PERF chat launch ms, {LAUNCHES} launches each: five packs {measured['five_ms']} "
+        f"(median {measured['five_median_ms']}), no pack {measured['none_ms']} "
+        f"(median {measured['none_median_ms']}); the difference is what five plugin views cost "
+        f"in this harness. PRB-H's P-PL baseline was 578.3 ms with two views and 592.9 ms with "
+        f"the core plugin alone, timed from ClaudeSDKClient entry to get_server_info with no "
+        f"harness around it, so the two numbers are recorded side by side and never subtracted"
     )
 
 

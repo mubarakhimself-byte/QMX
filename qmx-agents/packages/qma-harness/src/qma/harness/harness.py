@@ -464,9 +464,10 @@ class Harness:
         fixes plugins, skills and the prompt at connect and has no per-chat filter for a
         plugin's agents and commands. A Cold chat launches with the new set."""
         found = self._chat(chat)
+        before = found.record.config.packs
         was_live = found.is_live
         await found.set_packs(tuple(packs))
-        if was_live and found.record.config.packs != tuple(packs):
+        if was_live and before != tuple(packs):
             self._repack.add(chat)
 
     async def set_toolsets(self, chat: SessionId, toolsets: tuple[str, ...] | None) -> None:
