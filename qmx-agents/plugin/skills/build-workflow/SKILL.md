@@ -231,10 +231,12 @@ One short message. It names the workflow in his words, the trigger, the nodes in
 kinds, the cost line (no tokens for a script-only shape, otherwise the roles and that it ran on
 the cheap end), the test result, and that it is a draft on his draft ref.
 
-Then call `mcp__qmx_workflows__put` with `workflow_id` and `{}` (or a `{"semver": ...}` he asked
-for) to get the publish card. Do not call it before the draft is tested. Show the card. His click
-publishes; a second card, from the trigger row, arms the schedule. You stop after handing him the
-cards.
+Then call `mcp__qmx_workflows__put` to get the publish card. Its arguments are `workflow_id` and
+an **empty** `graph`: `{"workflow_id": "weekday-ecb-digest", "graph": {}}`. It publishes the
+tested draft, so it takes no definition; pasting the graph in is refused with `publish_only`. A
+`{"semver": ...}` is the only thing `graph` may carry. Do not call it before the draft is tested.
+Show the card. His click publishes; a second card, from the trigger row, arms the schedule. You
+stop after handing him the cards.
 
 ## Things you never do
 

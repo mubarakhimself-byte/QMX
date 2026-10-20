@@ -239,18 +239,23 @@ def wait_idle(client: httpx.Client, chat: str, seconds: float) -> str:
     return "idle" if until(idle, seconds) else str(client.get(f"/api/chats/{chat}").json().get("turn"))
 
 
+def answer_of(blocks: list[dict[str, Any]], call: dict[str, Any]) -> str:
+    """The engine's answer to one tool call, found by the call's id."""
+    for block in blocks:
+        content = block["content"]
+        if block.get("type") == "tool" and str(content.get("id")) == str(call.get("id")):
+            if "result" in content:
+                return str(content["result"])
+    return ""
+
+
 def draft_item(blocks: list[dict[str, Any]]) -> str | None:
     """The last draft the chat saved that the engine accepted. A call whose answer carries no
     `revision` was refused, so it is not a save."""
-    results = {
-        str(block["content"].get("id")): str(block["content"].get("result", ""))
-        for block in blocks
-        if block.get("type") == "tool" and "result" in block["content"]
-    }
     saved = [
         call
         for call in tool_calls(blocks, "mcp__qmx_workflows__drafts_put")
-        if '"revision"' in results.get(str(call.get("id")), "")
+        if '"revision"' in answer_of(blocks, call)
     ]
     if not saved:
         return None
@@ -267,12 +272,19 @@ def tokens(run: dict[str, Any]) -> dict[str, Any]:
 
 
 def turn(
-    log: Log, client: httpx.Client, chat: str, text: str, *, allow_publish: bool, needs_draft: bool
+    log: Log,
+    client: httpx.Client,
+    chat: str,
+    text: str,
+    *,
+    allow_publish: bool,
+    needs_draft: bool,
+    pressed: dict[int, dict[str, Any]],
 ) -> tuple[str, list[dict[str, Any]], float]:
-    """One operator turn to its end, pressing each ask once, and the draft id it saved."""
+    """One operator turn to its end, pressing each ask once, and the draft id it saved. `pressed`
+    carries across a lane's turns, because an answered ask stays in the log as an asking one."""
     began = ask_turn(client, chat, text)
     log(f"request: {text}")
-    pressed: dict[int, dict[str, Any]] = {}
     asks: list[dict[str, Any]] = []
     item = ""
     deadline = time.monotonic() + TURN_S
@@ -296,17 +308,21 @@ def show(log: Log, blocks: list[dict[str, Any]]) -> None:
         log(f"  [{block['type']}] {json.dumps(block['content'], ensure_ascii=False)[:240]}")
 
 
-def build(log: Log, client: httpx.Client, chat: str) -> tuple[str, float, dict[str, Any]]:
+def build(
+    log: Log, client: httpx.Client, chat: str, pressed: dict[int, dict[str, Any]]
+) -> tuple[str, float, dict[str, Any]]:
     """Lane 2. The request, the draft, the ask check, and the perf number."""
     name = run_item("ecb-digest")
     item, asks, seconds = turn(
-        log, client, chat, REQUEST.format(item=name), allow_publish=False, needs_draft=True
-    )
+        log, client, chat, REQUEST.format(item=name), allow_publish=False, needs_draft=True,
+        pressed=pressed,
+    )  # fmt: skip
     if not item:
         log(f"no draft saved for {name}; asking once more before the check")
         item, more, spent = turn(
-            log, client, chat, REBUILD.format(item=name), allow_publish=False, needs_draft=True
-        )
+            log, client, chat, REBUILD.format(item=name), allow_publish=False, needs_draft=True,
+            pressed=pressed,
+        )  # fmt: skip
         asks += more
         seconds += spent
     blocks = chat_blocks(chat)
@@ -356,39 +372,38 @@ def build(log: Log, client: httpx.Client, chat: str) -> tuple[str, float, dict[s
     return item, seconds, {} if not done else done[-1]
 
 
-def publish(log: Log, client: httpx.Client, chat: str, item: str) -> None:
+def publish(
+    log: Log, client: httpx.Client, chat: str, item: str, pressed: dict[int, dict[str, Any]]
+) -> None:
     """Lane 3. His publish click, allowed, and the card the row returns."""
     _, asks, seconds = turn(
-        log, client, chat, PUBLISH, allow_publish=True, needs_draft=False
+        log, client, chat, PUBLISH, allow_publish=True, needs_draft=False, pressed=pressed
     )
     blocks = chat_blocks(chat)
     show(log, blocks)
     log(f"asks in the publish turn: {[str(ask['content'].get('tool')) for ask in asks]}")
     cards = [
-        str(block["content"].get("result"))
-        for block in blocks
-        if block["type"] == "tool"
-        and str(block["content"].get("name")) == "mcp__qmx_workflows__put"
-        and block["content"].get("state") == "finished"
+        answer
+        for call in tool_calls(blocks, "mcp__qmx_workflows__put")
+        for answer in [answer_of(blocks, call)]
+        if '"card": "publish"' in answer
     ]
-    log(f"publish answers: {[text[:200] for text in cards]}")
-    log.check(
-        "the publish row answered with a card",
-        any('"card": "publish"' in text for text in cards),
-        [text[:120] for text in cards],
-    )
+    answers = [answer_of(blocks, call)[:200] for call in tool_calls(blocks, "mcp__qmx_workflows__put")]
+    log(f"publish answers: {answers}")
+    log.check("the publish row answered with a card", bool(cards), [text[:160] for text in cards])
     versions = client.get(f"/api/workflows/{item}/versions").json()
     log(f"versions of {item}: {len(versions)}")
     log.check("nothing was published", versions == [], versions)
     log(f"publish lane: {seconds:.1f} s")
 
 
-def script_only(log: Log, client: httpx.Client, chat: str) -> None:
+def script_only(log: Log, client: httpx.Client, chat: str, pressed: dict[int, dict[str, Any]]) -> None:
     """Lane 4. A request with no model step anywhere, and a run that spends nothing."""
     name = run_item("trades-totals")
     item, asks, seconds = turn(
-        log, client, chat, SCRIPT_REQUEST.format(item=name), allow_publish=False, needs_draft=True
-    )
+        log, client, chat, SCRIPT_REQUEST.format(item=name), allow_publish=False, needs_draft=True,
+        pressed=pressed,
+    )  # fmt: skip
     blocks = chat_blocks(chat)
     show(log, blocks)
     others = [str(ask["content"].get("tool")) for ask in asks if "workflows__put" not in str(ask)]
@@ -483,23 +498,24 @@ def main() -> int:
     before = settings_sha()
     log(f"ship home settings.toml sha256 before: {before}")
     bearer = secrets.token_urlsafe(32)
+    pressed: dict[int, dict[str, Any]] = {}
     with lane_lock(log):
         try:
             with served(log, bearer) as client:
                 chat = new_chat(client, f"TPL2 lane {args.lane}", LANES[args.lane])
                 log(f"copilot chat {chat} on claude/haiku, default permission mode")
                 if args.lane == 2:
-                    item, seconds, _ = build(log, client, chat)
+                    item, seconds, _ = build(log, client, chat, pressed)
                     log(f"PERF request to tested draft: {seconds:.1f} s for {item or 'no draft'}")
                 elif args.lane == 3:
-                    item, seconds, _ = build(log, client, chat)
+                    item, seconds, _ = build(log, client, chat, pressed)
                     log(f"the build before the publish: {seconds:.1f} s for {item or 'no draft'}")
                     log.check("the draft exists to publish", item != "", item)
                     if item:
-                        publish(log, client, chat, item)
+                        publish(log, client, chat, item, pressed)
                         summary(log, client, chat, item)
                 else:
-                    script_only(log, client, chat)
+                    script_only(log, client, chat, pressed)
         finally:
             after = settings_sha()
             log.check("the ship home's settings.toml is unchanged", after == before, after[:16])
