@@ -148,7 +148,10 @@ document would raise `RecursionError` mid-request."""
 START_WAIT_S: Final = 120.0
 STOP_WAIT_S: Final = 5.0
 CLIENT_GONE: Final = 499
-UPSTREAM_TIMEOUT: Final = httpx.Timeout(connect=30.0, read=600.0, write=60.0, pool=30.0)
+UPSTREAM_TIMEOUT: Final = httpx.Timeout(connect=30.0, read=None, write=60.0, pool=30.0)
+"""No read bound on the upstream. A legal 1M-token prefill waits 720 s before its first token,
+so a fixed read timeout would cut the very request AD-50 (8) sizes for. The first event is
+bounded per row in `_events`, and the CLI bounds the whole request by `API_TIMEOUT_MS`."""
 PING_S: Final = 15.0
 """A GPT stream silent this long gets an Anthropic `ping`, as Anthropic's own streams do."""
 
@@ -783,8 +786,12 @@ class Relay:
                 return _GptLaneRequest(main, pinned, self._row_for(main, pinned))
             return _KeyLaneRequest(main, self._row_for(main, pinned), pinned)
         row = self._registry_row(requested)
-        if row is not None and row.provider not in (main.name, ProfileName("claude")):
-            return self._mixed(held, row)
+        if (
+            row is not None
+            and row.provider != ProfileName("claude")
+            and (row.provider != main.name or requested == row.qmx_id)
+        ):
+            return self._by_row(held, row)
         if isinstance(main, GptPlan):
             return self._tier_reply(held, requested)
         refusal = family_refusal(requested)
@@ -821,8 +828,8 @@ class Relay:
             return None
         return _unknown_row(main, pinned)
 
-    def _mixed(self, held: RelayGrant, row: ModelRow) -> _Routed:
-        """A row another provider owns, on the wire it names. The scope check comes first so a
+    def _by_row(self, held: RelayGrant, row: ModelRow) -> _Routed:
+        """A row the registry holds, on the wire it names. The scope check comes first so a
         grant never reaches a provider it was not given."""
         if held.model_scope and row.provider not in held.model_scope:
             return _Refused(
