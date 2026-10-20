@@ -26,7 +26,7 @@ import math
 import os
 import subprocess
 import sys
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -44,7 +44,7 @@ from qma.boot import banned_fragment
 from qma.harness import guard
 
 if TYPE_CHECKING:
-    from claude_agent_sdk import McpServerConfig
+    from claude_agent_sdk import McpServerConfig, SdkPluginConfig
     from claude_agent_sdk.types import (
         CanUseTool,
         HookCallback,
@@ -578,6 +578,18 @@ def assert_argv_fits(options: ClaudeAgentOptions) -> None:
         )
 
 
+def plugin_options(paths: Sequence[Path]) -> list[SdkPluginConfig]:
+    """The SDK's `plugins` list for one launch: every folder once, in the Surface's order, which
+    is the core plugin, the pack set's views, `library-skills` and this chat's own `qmx-slots`.
+    Only the pack set's plugins load, so a pack's agents and commands never reach a chat whose
+    set leaves it out (H55)."""
+    seen: list[Path] = []
+    for path in paths:
+        if path not in seen:
+            seen.append(path)
+    return [{"type": "local", "path": str(path)} for path in seen]
+
+
 def build_options(
     config: ChatConfig,
     surface: Surface,
@@ -644,7 +656,7 @@ def build_options(
         env={**env, **surface.env},
         setting_sources=[],
         settings=str(settings_file),
-        plugins=[{"type": "local", "path": str(path)} for path in surface.plugins],
+        plugins=plugin_options(surface.plugins),
         strict_mcp_config=True,
         mcp_servers=dict(mcp_servers),
         hooks=hooks or None,

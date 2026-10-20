@@ -131,7 +131,7 @@ from qma.harness.launch import (
 )
 from qma.harness.procs import AgentProcessCap
 from qma.harness.project import redact
-from qma.harness.surface import Declaration, child_scope
+from qma.harness.surface import Declaration, Surface, child_scope
 from qma.harness.tools import DelegateRefused, HostRead
 from qma.harness.turns import TurnHandle, watch_turn
 from qma.harness.usage import journal_path, token_sums, usage_lines
@@ -312,6 +312,9 @@ class Harness:
         self._hooks: dict[SessionId, ChatHooks] = {}
         """Each chat's `NewChat.hooks`, the one option the record cannot hold. Dropped when the
         chat ends through `close_chat`."""
+        self._repack: set[SessionId] = set()
+        """Live chats whose pack set changed: each is relaunched by resume before its next turn,
+        so the new plugin list reaches the model with the context kept (H55)."""
         self._freed = asyncio.Event()
         """Set whenever a slot may have freed: a turn ended, a CLI ended or a send let go."""
         self._deps = replace(self._deps, on_free=self._freed.set)
@@ -455,9 +458,16 @@ class Harness:
         return chat
 
     async def set_packs(self, chat: SessionId, packs: tuple[str, ...]) -> None:
-        """Store the chat's pack set on its record and re-list a live chat's QMX tools. A Cold
-        chat launches with it."""
-        await self._chat(chat).set_packs(tuple(packs))
+        """Store the chat's pack set on its record. A live chat's **tools** change at once, and
+        its skills, agents, commands and pack-layer text join at the next turn, when the harness
+        relaunches it by resuming the same session id with the new plugin list (H55): the CLI
+        fixes plugins, skills and the prompt at connect and has no per-chat filter for a
+        plugin's agents and commands. A Cold chat launches with the new set."""
+        found = self._chat(chat)
+        was_live = found.is_live
+        await found.set_packs(tuple(packs))
+        if was_live and found.record.config.packs != tuple(packs):
+            self._repack.add(chat)
 
     async def set_toolsets(self, chat: SessionId, toolsets: tuple[str, ...] | None) -> None:
         """Change which QMX toolsets the chat has (None is every core toolset). A live chat's
@@ -574,6 +584,9 @@ class Harness:
         wait = not isinstance(kind, Interactive)
         await self._take_slot(chat, budgets, wait=wait, handle=handle, priority=priority)
         try:
+            if chat in self._repack and found.record.turn != "running":
+                self._repack.discard(chat)
+                await found.close()
             await found.send(prompt, handle)
         finally:
             self._release(chat)
@@ -1003,6 +1016,7 @@ class Harness:
         leaves no process behind."""
         found = self._chats.pop(chat, None)
         self._hooks.pop(chat, None)
+        self._repack.discard(chat)
         if found is not None:
             closing = asyncio.ensure_future(found.close())
             self._background.add(closing)
@@ -1074,6 +1088,12 @@ class Harness:
         found = self._chats.get(chat)
         record = found.record if found is not None else read_record(self._deps.home, chat)
         return record.digests[-1] if record is not None and record.digests else None
+
+    def surface(self, chat: SessionId) -> Surface | None:
+        """What the chat's latest launch gave the model: its toolsets, tools, skills, plugins and
+        the pack views it loaded (AD-62, AD-55). None before the first launch."""
+        found = self._chats.get(chat)
+        return None if found is None else found.surface
 
     def _chat(self, chat: SessionId) -> Chat:
         found = self._chats.get(chat)

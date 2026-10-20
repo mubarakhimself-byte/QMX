@@ -1,6 +1,6 @@
 {
   "plugin": "qmx",
-  "generated": "uv run --no-sync python -c \"from qma.harness.packs import write_manifest; write_manifest()\"",
+  "generated": "uv run --no-sync python -c \"from qma.harness.home import PLUGIN_DIR; from qma.harness.packs import write_manifest; write_manifest(PLUGIN_DIR)\"",
   "sha256": "f7609bea559d247cc95eb762707d739efeebd9bcefed3bc6c25262fb39672185",
   "files": {
     ".claude-plugin/plugin.json": "sha256:30ec523f11f39f52ef395d93a798f1211fc968a5f48722089039fa7af2274223",
