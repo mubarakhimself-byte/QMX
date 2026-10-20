@@ -8,6 +8,11 @@ A test run builds its list by `roles.test_order`: those named test-only rows, th
 end (the role's own haiku row, else `claude/haiku`), then the role's other rows from the cheap end.
 A live run sorts the role's rows by `roles.live_order` (key rows, then GPT, then the plan; ruling
 107), keeping the role's order inside a class, and never takes a test-only row.
+
+Until he edits a list, its rows are generated from the model registry by class (RTR5): the host
+adopts a `RouterPort`, and a role whose list still reads exactly like the Settings default takes
+the generated one instead, so the lists follow the providers he configured. A candidate's context
+window comes from its registry row, so a 1M model and a 128k model compact and chunk differently.
 """
 
 from __future__ import annotations
@@ -18,7 +23,8 @@ from typing import Final, Literal
 
 from pydantic import JsonValue
 
-from qmx_engine.settings import DEFAULTS
+from qmx_engine.ports.router import Row, adopted
+from qmx_engine.settings import DEFAULTS, generated
 
 PLAN: Final = "claude"
 """The harness's plan profile."""
@@ -73,6 +79,29 @@ def _rows(settings: Mapping[str, object], key: str) -> tuple[str, ...]:
     return ()
 
 
+def _rows_for(settings: Mapping[str, object], role: str) -> tuple[str, ...]:
+    """A role's configured rows; while they are untouched, the registry's generated ones
+    (RTR5). A Settings row he edited always wins."""
+    key = f"roles.{role}"
+    rows = _rows(settings, key)
+    port = adopted()
+    default = _rows(DEFAULTS, key)
+    if port is None or (key in settings and rows != default):
+        return rows
+    return generated(port.rows()).get(key, rows)
+
+
+def _registry(settings: Mapping[str, object]) -> Mapping[str, Row]:
+    """The registry rows by qmx id, for a role's window; empty without a router."""
+    port = adopted()
+    return {} if port is None else {row.qmx_id: row for row in port.rows()}
+
+
+def _window(name: str, registry: Mapping[str, Row], fallback: int) -> int:
+    row = registry.get(name)
+    return fallback if row is None else row.window
+
+
 def _cheapness(candidate: Candidate) -> int:
     tier = candidate.model.split("-")[0]
     return CHEAPNESS.index(tier) if tier in CHEAPNESS else len(CHEAPNESS)
@@ -92,9 +121,13 @@ def order(settings: Mapping[str, object], role: str, mode: Mode) -> tuple[Candid
     """The role's candidates for a run in `mode`, in the order they are tried."""
     window = settings.get("context_window")
     window = window if isinstance(window, int) else DEFAULT_WINDOW
+    registry = _registry(settings)
     flagged = set(_rows(settings, "roles.test_only"))
-    rows = dict.fromkeys(_rows(settings, f"roles.{role}"))
-    parsed = [parse(r, test_only=r in flagged, window=window) for r in rows]
+    rows = dict.fromkeys(_rows_for(settings, role))
+    parsed = [
+        parse(r, test_only=r in flagged, window=_window(r.partition("@")[0], registry, window))
+        for r in rows
+    ]
     found = [c for c in parsed if c is not None]
     if mode == "live":
         classes = _steps(settings, "roles.live_order")
@@ -103,7 +136,9 @@ def order(settings: Mapping[str, object], role: str, mode: Mode) -> tuple[Candid
         return tuple(sorted(kept, key=lambda c: rank.get(_live_class(c), len(classes))))
     rest = sorted((c for c in found if not c.test_only), key=_cheapness)
     own = next((c for c in rest if c.profile == PLAN and _cheapness(c) == 0), None)
-    plan_cheap = own or Candidate(PLAN, CHEAPNESS[0], None, window, test_only=False)
+    plan_cheap = own or Candidate(
+        PLAN, CHEAPNESS[0], None, _window(f"{PLAN}/{CHEAPNESS[0]}", registry, window), False
+    )
     steps = {
         "test_only": [c for c in found if c.test_only],
         "plan_cheap": [plan_cheap],
