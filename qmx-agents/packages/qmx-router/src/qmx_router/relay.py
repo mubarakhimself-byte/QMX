@@ -83,6 +83,7 @@ import httpx
 import keyring
 import uvicorn
 
+from qmx_router import chat_lane
 from qmx_router.gpt import translate
 from qmx_router.gpt.probe import ProbePassed, ProbeRun, stored_result, translator_version
 from qmx_router.gpt.siwc import SignInError, SiwcSession
@@ -115,6 +116,9 @@ secret-scanner patterns inside Claude Code 2.1.296, plus `sid` session keys. A c
 this file, API docs or an `.env.example` holds only the bare prefix and keeps working."""
 
 MESSAGES: Final = "/v1/messages"
+CHAT: Final = "/v1/chat/completions"
+"""The chat lane's upstream path. Chat-completions rows on one provider share its base URL with
+its Anthropic route, as OpenRouter's and Ollama's do."""
 PATHS: Final = frozenset({MESSAGES, "/v1/messages/count_tokens"})
 HOP_BY_HOP: Final = frozenset(
     {
@@ -352,6 +356,15 @@ class _Server(uvicorn.Server):
     @contextlib.contextmanager
     def capture_signals(self) -> Generator[None]:
         yield
+
+
+@dataclass(frozen=True)
+class _Sent:
+    """An upstream request whose response headers arrived inside the row's bound."""
+
+    response: httpx.Response
+    wait: float
+    deadline: float
 
 
 @dataclass
@@ -794,6 +807,10 @@ class Relay:
                 if refusal:
                     self.counters.family += 1
                     return await self._refuse(held, f"family guard: {refusal}")
+                if row is not None and row.wire == "openai_chat":
+                    return await self._chat(
+                        held, provider, path, query, headers, document, pinned, row
+                    )
                 if pinned != requested:
                     document["model"] = pinned
                     body = _dumps(document)
@@ -878,18 +895,10 @@ class Relay:
         except ProfileError as error:
             return _Refused(reply=_error(400, "invalid_request_error", f"family guard: {error}"))
         match (target, row.wire):
-            case (KeyProvider(), "anthropic"):
+            case (KeyProvider(), "anthropic" | "openai_chat"):
                 return _KeyLaneRequest(target, row, row.native)
             case (GptPlan(), "responses"):
                 return _GptLaneRequest(target, row.native, row)
-            case (_, "openai_chat"):
-                return _Refused(
-                    reply=_error(
-                        400,
-                        "invalid_request_error",
-                        f"{row.qmx_id} speaks chat completions, whose lane has not landed (RTR3)",
-                    )
-                )
             case _:
                 return _Refused(
                     reply=_error(
@@ -1088,6 +1097,64 @@ class Relay:
         row: ModelRow | None,
         streamed: bool = False,
     ) -> Reply:
+        if row is None:
+            egress, out_headers = body, dict(headers)
+        else:
+            normalised = normalise(row, body, headers)
+            egress, out_headers = normalised.body, normalised.headers
+        sent = await self._send(
+            held,
+            profile,
+            path,
+            query,
+            out_headers,
+            apply_wire_quirks(profile, egress),
+            model,
+            row,
+            _prompt_tokens(row, body) if row is not None else 0,
+            streamed,
+        )
+        if isinstance(sent, Reply):
+            return sent
+        upstream = _Upstream(
+            self,
+            held,
+            path,
+            sent.response,
+            model,
+            row,
+            provider=profile.name,
+            start_wait=sent.wait,
+            deadline=sent.deadline,
+            keepalive=bool(row is not None and row.keepalive),
+        )
+        try:
+            reply = await self._reply(upstream)
+        except BaseException:
+            await upstream.finish()
+            raise
+        if reply.finish is None:
+            await upstream.finish()
+        return reply
+
+    async def _send(
+        self,
+        held: RelayGrant,
+        profile: KeyProvider,
+        path: str,
+        query: str,
+        headers: Mapping[str, str],
+        content: bytes,
+        model: str,
+        row: ModelRow | None,
+        prompt_tokens: int,
+        streamed: bool,
+        target: str | None = None,
+    ) -> _Sent | Reply:
+        """One upstream request up to its response headers, under the row's no-progress bound
+        (AD-50 (8)). Both key-lane paths share it, so the bound and the 504 reply are one.
+        `target` is the upstream path when it is not the CLI's own, and the journal keeps the
+        CLI's either way."""
         if self._client is None:
             raise RuntimeError("the relay is not started")
         try:
@@ -1096,21 +1163,16 @@ class Relay:
             reason = _keyring_refusal(profile.credential, error)
             await self._alert(held.session_id, reason)
             return _error(401, "authentication_error", reason)
-        if row is None:
-            egress, out_headers = body, dict(headers)
-        else:
-            normalised = normalise(row, body, headers)
-            egress, out_headers = normalised.body, normalised.headers
         request = self._client.build_request(
             "POST",
-            f"{profile.base_url}{path}" + (f"?{query}" if query else ""),
-            headers=swap_auth(out_headers, key, profile.quirks.wire.auth_header),
-            content=apply_wire_quirks(profile, egress),
+            f"{profile.base_url}{target or path}" + (f"?{query}" if query else ""),
+            headers=swap_auth(headers, key, profile.quirks.wire.auth_header),
+            content=content,
         )
         del key
         self.counters.upstream += 1
         loop = asyncio.get_running_loop()
-        wait = START_WAIT_S if row is None else row.first_token_timeout(_prompt_tokens(row, body))
+        wait = START_WAIT_S if row is None else row.first_token_timeout(prompt_tokens)
         deadline = loop.time() + wait
         try:
             async with asyncio.timeout_at(deadline):
@@ -1123,26 +1185,175 @@ class Relay:
         except asyncio.CancelledError:
             await self.tee(held, path, CLIENT_GONE, model, {}, profile.name)
             raise
+        return _Sent(response, wait, deadline)
+
+    async def _chat(
+        self,
+        held: RelayGrant,
+        profile: KeyProvider,
+        path: str,
+        query: str,
+        headers: Mapping[str, str],
+        document: dict[str, object],
+        pinned: str,
+        row: ModelRow,
+    ) -> Reply:
+        """The chat lane: normalise for the row, translate to chat completions, translate the
+        stream back (H12). A fresh body and this lane's own headers mean no Anthropic-only field
+        leaves, and a thinking block another provider signed never arrives."""
+        streamed = document.get("stream") is True
+        if path != MESSAGES:
+            count = {"input_tokens": translate.estimate_tokens(document)}
+            return Reply(200, [("content-type", "application/json")], _once(_dumps(count)))
+        normalised = normalise(row, _dumps(document), headers)
+        document = cast("dict[str, object]", json.loads(normalised.body))
+        try:
+            translation = chat_lane.to_chat(document, model=pinned)
+        except chat_lane.RefusedRequest as error:
+            return _error(400, "invalid_request_error", str(error))
+        sent = await self._send(
+            held,
+            profile,
+            path,
+            query,
+            self._chat_headers(row, normalised.headers),
+            _dumps(translation.body),
+            pinned,
+            row,
+            _prompt_tokens(row, normalised.body),
+            streamed,
+            target=CHAT,
+        )
+        if isinstance(sent, Reply):
+            return sent
         upstream = _Upstream(
             self,
             held,
             path,
-            response,
-            model,
+            sent.response,
+            pinned,
             row,
             provider=profile.name,
-            start_wait=wait,
-            deadline=deadline,
-            keepalive=bool(row is not None and row.keepalive),
+            start_wait=sent.wait,
+            deadline=sent.deadline,
         )
+        state = chat_lane.StreamState(translation, pinned)
         try:
-            reply = await self._reply(upstream)
+            if not sent.response.is_success:
+                return await self._chat_error(upstream)
+            events = self._chat_events(upstream, state)
+            if streamed:
+                headers_out = [("content-type", "text/event-stream"), ("cache-control", "no-cache")]
+                return Reply(200, headers_out, events, upstream.finish)
+            async for _ in events:
+                pass
+            await upstream.finish()
+            if state.error is not None:
+                return _error(*state.error)
+            return Reply(
+                200, [("content-type", "application/json")], _once(_dumps(state.message()))
+            )
         except BaseException:
             await upstream.finish()
             raise
-        if reply.finish is None:
-            await upstream.finish()
-        return reply
+
+    def _chat_headers(self, row: ModelRow, headers: Mapping[str, str]) -> dict[str, str]:
+        """Chat completions' own header set. Only the headers the row forwards come across, so
+        `anthropic-version`, `anthropic-beta` and every `x-claude-code-*` header stay behind."""
+        kept = {"content-type": "application/json", "accept": "text/event-stream"}
+        for name in row.forward_headers:
+            if name in headers:
+                kept[name] = headers[name]
+        return kept
+
+    async def _chat_error(self, upstream: _Upstream) -> Reply:
+        """An error reply, mapped once and refused a retry the pool must rotate away from."""
+        data = await upstream.response.aread()
+        parsed = _json(data)
+        document = cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else {}
+        error = document.get("error")
+        table = cast("dict[str, Any]", error) if isinstance(error, dict) else document
+        status, kind, message = chat_lane.map_error(upstream.response.status_code, table)
+        await upstream.finish()
+        reply = _error(status, kind, message)
+        refused = list(refuse_retry(upstream.response.status_code, data).items())
+        return Reply(reply.status, reply.headers + refused, reply.body)
+
+    async def _chat_events(
+        self, upstream: _Upstream, state: chat_lane.StreamState
+    ) -> AsyncGenerator[bytes]:
+        """Chat-completions SSE in, Anthropic SSE out. Nothing reaches the CLI before the first
+        chunk, so a late error keeps its own status; after that the row's no-progress bound is
+        spent. A served model outside the provider family ends the stream as the key lane does."""
+        lines: asyncio.Queue[str | None] = asyncio.Queue()
+        broken: list[str] = []
+        loop = asyncio.get_running_loop()
+        deadline = upstream.deadline or (loop.time() + upstream.start_wait)
+
+        async def pump() -> None:
+            try:
+                async for line in upstream.response.aiter_lines():
+                    lines.put_nowait(line)
+            except httpx.HTTPError as error:
+                broken.append(type(error).__name__)
+            finally:
+                lines.put_nowait(None)
+
+        reader = asyncio.create_task(pump())
+        block: list[str] = []
+        try:
+            while not state.ended:
+                try:
+                    async with asyncio.timeout_at(None if state.started else deadline):
+                        line = await lines.get()
+                except TimeoutError:
+                    yield await self._stop_stream(
+                        upstream, f"no chat-completions chunk in {upstream.start_wait:.0f} s"
+                    )
+                    return
+                if line is None:
+                    break
+                if line:
+                    block.append(line)
+                    continue
+                for chunk in chat_lane.parse_sse(block):
+                    for event in state.feed(chunk):
+                        yield event.encode()
+                    if state.error is not None:
+                        status, _, message = state.error
+                        upstream.error_class = classify(status, {"message": message})
+                        upstream.journal_status = status
+                        await self._alert(
+                            upstream.held.session_id,
+                            f"{upstream.provider} stream error ({upstream.error_class}): {message}",
+                        )
+                        return
+                    refusal = None if state.served is None else family_refusal(state.served)
+                    if refusal:
+                        self.counters.family += 1
+                        yield await self._stop_stream(upstream, f"family guard: {refusal}")
+                        return
+                block = []
+            if not state.ended:
+                cut = f" ({broken[0]})" if broken else ""
+                for event in state.finish():
+                    yield event.encode()
+                if state.error is not None:
+                    status, _, message = state.error
+                    upstream.error_class = classify(status, {"message": message})
+                    upstream.journal_status = status
+                    await self._alert(
+                        upstream.held.session_id,
+                        f"{upstream.provider} stream error ({upstream.error_class}): "
+                        f"{message}{cut}",
+                    )
+        finally:
+            reader.cancel()
+            await asyncio.wait({reader})
+            upstream.served = state.served or upstream.served
+            upstream.usage = dict(state.usage)
+            if state.error is not None:
+                upstream.journal_status = state.error[0]
 
     async def _late(
         self,
