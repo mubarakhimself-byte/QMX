@@ -20,8 +20,8 @@ text = (
         else "Every candidate was refused, so the loop plateaued and stopped."
     )
     + (
-        " The negative results are kept beside the card, one per refused candidate, so the next run "
-        "does not repeat them."
+        " The negative results are kept beside the card, one per refused candidate, so the next "
+        "run does not repeat them."
         if negatives
         else ""
     )

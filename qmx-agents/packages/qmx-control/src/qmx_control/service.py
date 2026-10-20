@@ -339,8 +339,11 @@ class ControlService:
             row = db.execute(
                 "SELECT position, at FROM operator_cursor WHERE name='last_look'"
             ).fetchone()
-        return {"name": "last_look", "position": 0 if row is None else int(row[0]),
-                "at": None if row is None else str(row[1])}
+        return {
+            "name": "last_look",
+            "position": 0 if row is None else int(row[0]),
+            "at": None if row is None else str(row[1]),
+        }
 
     def mark_looked(self, position: int) -> Document:
         """Move the cursor to `position`, and never back, then return the row as it stands.

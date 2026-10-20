@@ -71,8 +71,9 @@ for seat in seats:
     if seat["present"]:
         stances.setdefault(str(seat["stance"]), []).append(seat["slot"])
 majority = max(stances, key=lambda name: len(stances[name])) if stances else None
-agreement = [f"{', '.join(slots)} all read {name}" for name, slots in stances.items()
-             if len(slots) > 1]
+agreement = [
+    f"{', '.join(slots)} all read {name}" for name, slots in stances.items() if len(slots) > 1
+]
 disagreement = [
     {
         "slot": seat["slot"],

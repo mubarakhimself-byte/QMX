@@ -37,8 +37,11 @@ with LibraryFake.open(home_of(Path(os.environ["QMX_WORK_SHARED"]))) as library:
         stored = library.put_artifact(
             body,
             "clipping",
-            {"title": clipping.get("title"), "hash": clipping["hash"],
-             "source": clipping.get("source")},
+            {
+                "title": clipping.get("title"),
+                "hash": clipping["hash"],
+                "source": clipping.get("source"),
+            },
             run_id=run_id,
             principal=principal,
             intent_key=clipping["intent_key"],

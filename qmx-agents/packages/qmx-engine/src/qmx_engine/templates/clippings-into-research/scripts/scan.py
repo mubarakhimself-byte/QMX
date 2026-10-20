@@ -54,7 +54,5 @@ elif folder:
             }
         )
 for row in rows:
-    row["intent_key"] = hashlib.sha256(
-        f"{KIND}|{row['hash']}|{row['source']}".encode()
-    ).hexdigest()
+    row["intent_key"] = hashlib.sha256(f"{KIND}|{row['hash']}|{row['source']}".encode()).hexdigest()
 print(json.dumps({"kind": KIND, "clippings": rows, "count": len(rows)}))

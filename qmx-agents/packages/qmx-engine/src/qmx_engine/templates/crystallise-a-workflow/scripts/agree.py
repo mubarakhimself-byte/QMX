@@ -1,8 +1,8 @@
 """Does a script agree with the agent on every replay?
 
-The script is derived from the replays alone, with no model: a word that appears in titles of exactly
-one label becomes a rule for that label, and a title is labelled by its longest matching word. A
-title no rule matches has no label, and the workflow sends it to the agent, never guesses.
+The script is derived from the replays alone, with no model: a word that appears in titles of
+exactly one label becomes a rule for that label, and a title is labelled by its longest matching
+word. A title no rule matches has no label, and the workflow sends it to the agent, never guesses.
 
 The equivalence check is the point: only when every one of the replays gets back the label the agent
 gave is the step crystallised, and only then is the sampling rate set (one item in ten goes back to
@@ -40,7 +40,11 @@ state = given if isinstance(given, dict) else given[-1]
 replays = state.get("replays") or []
 rules = derive(replays)
 wrong = [
-    {"item_id": replay["item_id"], "agent": replay["label"], "script": classify(replay["title"], rules)}
+    {
+        "item_id": replay["item_id"],
+        "agent": replay["label"],
+        "script": classify(replay["title"], rules),
+    }
     for replay in replays
     if classify(replay["title"], rules) != replay["label"]
 ]

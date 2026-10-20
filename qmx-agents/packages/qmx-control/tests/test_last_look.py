@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from qmx_control.models import ControlError
+from qmx_control.models import ControlError, Document
 from qmx_control.service import ControlService
 
 
-def read(service: ControlService) -> dict[str, object]:
+def read(service: ControlService) -> Document:
     return service.last_look()
 
 

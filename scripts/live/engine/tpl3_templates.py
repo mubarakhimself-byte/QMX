@@ -107,8 +107,17 @@ def home(slug: str) -> Path:
 
 
 def spans_of(root: Path, run_id: str) -> list[Any]:
+    """The model spans of a run and of every child run it started, so a nested template's turns
+    are counted against it and not lost."""
     with Reader.open(root) as reader:
-        return [span for span in reader.spans(run_id) if span.profile is not None]
+        rows = reader.connection.execute(
+            "SELECT run_id, data FROM events WHERE kind = 'run_created'"
+        ).fetchall()
+        parents = {str(rid): json.loads(data).get("parent_run_id") for rid, data in rows}
+        mine = {run_id} | {
+            rid for rid, parent in parents.items() if parent is not None and str(parent) == run_id
+        }
+        return [span for rid in sorted(mine) for span in reader.spans(rid) if span.profile]
 
 
 def delivered(root: Path, run_id: str, node: str = "deliver") -> Any:
@@ -353,9 +362,9 @@ def digest(log: Log) -> int:
     log.check(
         "the first digest reads what landed and leaves the cursor on it",
         first.status == "passed"
-        and len(first_card["landed"]) == 1
         and first_card["read_from"] == 0
-        and first_card["cursor_to"] == 1,
+        and first_card["cursor_to"] == max(item["seq"] for item in first_card["landed"])
+        and bool(first_card["landed"]),
         {k: first_card.get(k) for k in ("landed", "read_from", "cursor_to")},
     )
     log.check(

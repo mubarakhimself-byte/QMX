@@ -31,8 +31,7 @@ counts = {
 }
 text = (
     f"Since your last look: {counts['landed']} items landed, {counts['ran']} runs finished and "
-    f"{counts['failed']} failed. "
-    + (written.get("opening") or "")
+    f"{counts['failed']} failed. " + (written.get("opening") or "")
 )
 print(
     json.dumps(

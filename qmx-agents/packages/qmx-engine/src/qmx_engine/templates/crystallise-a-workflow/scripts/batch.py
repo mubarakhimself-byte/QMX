@@ -1,8 +1,8 @@
 """Classify the new batch with the crystallised rule, and mark what falls back to the agent.
 
 A title the rule matches is labelled by the script, for free. A title it does not match is marked
-`fallback` and goes to the agent, which is the whole point of the pattern: the script handles what it
-proved, the agent keeps what it never saw.
+`fallback` and goes to the agent, which is the whole point of the pattern: the script handles what
+it proved, the agent keeps what it never saw.
 
 Every tenth item is also sent to the agent as a sample, so production keeps measuring the script
 against the agent after the equivalence check passed (K-19)."""

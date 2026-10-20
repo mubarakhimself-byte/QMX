@@ -1,7 +1,7 @@
 """Measure the script against the agent on the sampled items.
 
-The agreement rate is what keeps the crystallised step honest: when the script and the agent disagree
-on a sample, the card says so and the step goes back to the agent on titles like it."""
+The agreement rate is what keeps the crystallised step honest: when the script and the agent
+disagree on a sample, the card says so and the step goes back to the agent on titles like it."""
 
 import json
 import sys
@@ -11,9 +11,7 @@ items = given if isinstance(given, list) else [given]
 batch = next((v for v in items if isinstance(v, dict) and "sampled" in v), {})
 asked = next((v for v in items if isinstance(v, dict) and "labels" in v), {"labels": []})
 by_id = {str(item["item_id"]): item for item in batch.get("sampled") or []}
-labels = {
-    str(entry.get("item_id")): str(entry.get("label")) for entry in asked.get("labels") or []
-}
+labels = {str(entry.get("item_id")): str(entry.get("label")) for entry in asked.get("labels") or []}
 samples = [
     {
         "item_id": item["item_id"],

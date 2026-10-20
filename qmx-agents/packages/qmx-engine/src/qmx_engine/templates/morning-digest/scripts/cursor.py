@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from qmx_control.service import ControlService
+
 from qmx_engine.workers.zones import home_of
 
 given = json.load(sys.stdin)["in"]
@@ -20,4 +21,6 @@ try:
     row = service.last_look()
 finally:
     service.close()
-print(json.dumps({"position": int(row["position"]), "at": row["at"], "fixture": state.get("fixture")}))
+print(
+    json.dumps({"position": int(row["position"]), "at": row["at"], "fixture": state.get("fixture")})
+)

@@ -549,7 +549,6 @@ def test_install_publishes_15_disabled_saves_22_drafts_and_a_second_install_chan
         triggers = rows.triggers(reader.connection)
 
     built = [template.id for template in CATALOG if not template.needs]
-    drafts = [template.id for template in CATALOG if template.needs]
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
@@ -714,7 +713,8 @@ def test_the_panel_marks_an_absent_seat_and_labels_a_judge_of_the_same_family(
     connections = definition["connections"]
     connections.pop("Sentiment member")
     connections["Seat the panel"]["main"][0] = [
-        edge for edge in connections["Seat the panel"]["main"][0]
+        edge
+        for edge in connections["Seat the panel"]["main"][0]
         if edge["node"] != "Sentiment member"
     ]
     (folder / "definition.json").write_text(json.dumps(definition), "utf-8")

@@ -70,7 +70,7 @@ text = (
         else "The spread is the answer: the disagreement below is what changes what to do. "
     )
     + (
-        f"The judge shares a family with {', '.join(same_family)}, and that is labelled on the card. "
+        f"The judge shares a family with {', '.join(same_family)}, labelled on the card. "
         if same_family
         else ""
     )
