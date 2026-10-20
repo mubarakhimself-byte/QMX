@@ -10,7 +10,7 @@ from collections.abc import Iterator, Mapping, Sequence
 import pytest
 
 from qmx_engine.ports.router import Reply, Row, adopt
-from qmx_engine.roles import Mode, Candidate, order, resolve
+from qmx_engine.roles import Mode, order, resolve
 from qmx_engine.settings import DEFAULTS
 
 KIMI = "openrouter/moonshotai/kimi-k2.5"
@@ -101,9 +101,7 @@ def test_the_generated_lists_put_key_rows_first_with_the_chinese_rows_leading(
 def test_test_mode_resolves_the_plan_haiku_first_for_every_generated_role(
     registry: RegistryStub, role: str
 ) -> None:
-    first = resolve(
-        order(DEFAULTS, role, "test"), {"claude", "kimi", "openrouter", "gpt"}, None
-    )
+    first = resolve(order(DEFAULTS, role, "test"), {"claude", "kimi", "openrouter", "gpt"}, None)
 
     assert getattr(first, "name", first) == "claude/haiku"
 

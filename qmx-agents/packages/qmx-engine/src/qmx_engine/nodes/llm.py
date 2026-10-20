@@ -1,6 +1,10 @@
 """The `llm` node (AD-13, SOLUTION-DESIGN 2.3): one turn in a harness Background chat born with no
 tool at all (H2, B-70), its final text validated against the node's JSON schema.
 
+A key or GPT row does not start a chat: the node calls the router's `complete` (AD-56), one request
+with no CLI process, through the same lease, classifier and journal as a chat request. A plan row
+keeps the one-turn, tool-less Background chat, because only the CLI holds the plan sign-in.
+
 The runner resolves the candidate at dispatch and passes it as `NodeJob.resolved_model`. The brief
 puts the static prompt first and the input last, so a second chat with the same prompt can reuse
 its cache (EP0 FINDINGS). An answer that fails the schema gets one repair turn in the same chat,
@@ -21,7 +25,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from jsonschema.validators import validator_for
 from pydantic import JsonValue
@@ -31,8 +35,10 @@ from qmx_engine.definition.lint import redact
 from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
 from qmx_engine.nodes.script import failed
 from qmx_engine.ports.harness_adapter import HarnessPort, Refusal, Turn
+from qmx_engine.ports.router import Refused as RouterRefused
+from qmx_engine.ports.router import Reply, RouterPort, adopted
 from qmx_engine.prompts import Prompt, payload, static
-from qmx_engine.roles import Candidate
+from qmx_engine.roles import PLAN, Candidate
 
 BAD_OUTPUT: Final = "the answer did not match the node's schema after one repair turn"
 TOOL_LESS: Final = "This task has no tools. Do not call any tool; answer from this message alone."
@@ -129,6 +135,64 @@ def ended_badly(turn: Turn, usage: Usage) -> NodeResult | None:
 
 def with_span(result: Failed, usage: Usage, effect_state: EffectState = "before") -> Failed:
     return replace(result, effect_state=effect_state, span=usage.span())
+
+
+async def completed(
+    port: RouterPort,
+    admission: Admission,
+    candidate: Candidate,
+    job: NodeJob,
+    *,
+    system: str,
+    text: str,
+    schema: JsonObject,
+) -> NodeResult:
+    """One `complete` on a key or GPT row: no CLI, no chat, one request through the router's own
+    normaliser, lease, classifier and journal (AD-56). The attempt's lease is taken under its
+    affinity and given back when the request ends."""
+    affinity = f"{job.run_id}:{job.node_id}"
+    blocked = admission.hold(candidate, affinity)
+    if blocked is not None:
+        return blocked
+    try:
+        reply = await port.complete(
+            f"{candidate.profile}/{candidate.model}",
+            [{"role": "user", "content": [{"type": "text", "text": text}]}],
+            schema=schema,
+            session=affinity,
+            system=system,
+        )
+    except RouterRefused as refused:
+        return failed("unavailable", redact(str(refused)), retryable=True)
+    finally:
+        admission.let_go(affinity)
+    document: JsonValue
+    if reply.data is not None:
+        document = cast("JsonValue", dict(reply.data))
+    else:
+        document, problem = answer(reply.text, schema)
+        if problem is not None:
+            return failed("bad_output", BAD_OUTPUT, retryable=True)
+    return Ok({"main": document}, span=router_span(reply))
+
+
+def router_span(reply: Reply) -> JsonObject:
+    """What the ending event records about a `complete`: its tokens and the router's own row,
+    account and journal id, so a span says which journal row answered it."""
+    return {
+        "turns": 1,
+        "tokens": {
+            "in": int(reply.usage.get("input_tokens", 0)),
+            "out": int(reply.usage.get("output_tokens", 0)),
+            "cache_read": int(reply.usage.get("cache_read_input_tokens", 0)),
+        },
+        "router": {
+            "qmx_id": reply.qmx_id,
+            "model": reply.model,
+            "account": reply.account,
+            "ms": reply.ms,
+        },
+    }
 
 
 async def call(
@@ -250,6 +314,17 @@ class Llm:
             message = "an llm node needs a readable prompt_ref and a JSON schema_ref"
             return failed("bad_definition", message, retryable=False)
         hint = (job.resolved_model or {}).get("hint")
+        port = adopted()
+        if port is not None and candidate.profile != PLAN:
+            return await completed(
+                port,
+                self.admission,
+                candidate,
+                job,
+                system="\n\n".join([prompt.strip(), TOOL_LESS]),
+                text=payload(job.inputs, hint=hint if isinstance(hint, str) else None),
+                schema=schema,
+            )
         return await call(
             self.harness,
             self.admission,

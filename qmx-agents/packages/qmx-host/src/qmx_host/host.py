@@ -66,11 +66,17 @@ from qmx_engine.heartbeat import (
 from qmx_engine.ledger import redact
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.library import JsonObject
+from qmx_engine.ports.router import Refused, Reply
+from qmx_engine.ports.router import Row as EngineRow
+from qmx_engine.ports.router import adopt as adopt_router
 from qmx_engine.runner import Engine
 from qmx_engine.service.rest import engine_router
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.migrate.from_library_b import DualWrite
 from qmx_library.store import Store
+from qmx_router import complete as router_complete
+from qmx_router.pool import NoAccount
+from qmx_router.relay import Relay
 from qmx_router.server import RouterService
 
 from qmx_host.door import PrincipalDoor
@@ -167,6 +173,78 @@ def serve_forever(
     return 0
 
 
+class RelayRouter:
+    """The engine's `RouterPort` over this host's one relay (AD-56): the registry's rows, one
+    `complete` on the key and GPT lanes, and the pool lease an engine attempt holds."""
+
+    def __init__(self, relay: Relay) -> None:
+        self.relay = relay
+
+    def rows(self) -> tuple[EngineRow, ...]:
+        return tuple(
+            EngineRow(
+                row.qmx_id,
+                row.provider,
+                row.native,
+                row.class_,
+                row.window,
+                row.chars_per_token,
+                row.count_tokens,
+            )
+            for row in self.relay.registry().rows()
+        )
+
+    async def complete(
+        self,
+        role_or_model: str,
+        messages: Sequence[Mapping[str, object]],
+        *,
+        schema: Mapping[str, object] | None = None,
+        session: str | None = None,
+        system: str = "",
+        max_tokens: int = 4096,
+        roles: Mapping[str, Sequence[str]] | None = None,
+    ) -> Reply:
+        try:
+            done = await self.relay.complete(
+                role_or_model,
+                messages,
+                schema=schema,
+                session=session,
+                system=system,
+                max_tokens=max_tokens,
+                roles=roles,
+            )
+        except router_complete.Refused as refused:
+            raise Refused(str(refused)) from None
+        return Reply(
+            done.text,
+            done.qmx_id,
+            done.model,
+            done.account,
+            dict(done.usage),
+            done.data,
+            done.ms,
+        )
+
+    def hold(self, *, provider: str, model: str, affinity: str) -> str:
+        try:
+            lease = self.relay.accounts().lease(provider=provider, model=model, affinity=affinity)
+        except NoAccount as refused:
+            raise Refused(str(refused)) from None
+        return lease.account.id
+
+    def let_go(self, affinity: str) -> None:
+        self.relay.accounts().release_affinity(affinity)
+
+
+def harness_relay(harness: Harness) -> Relay:
+    """The relay the harness started. It lives in the harness's chat dependencies, which
+    `qma.harness` exposes no public accessor for; RTRP moves the router behind the tailnet."""
+    deps = harness._deps  # pyright: ignore[reportPrivateUsage]  # the one private read
+    return deps.relay
+
+
 async def serve(
     home: Path, port: int, role: Role, ui_origin: str, scrubbed: Sequence[str], keep: Sequence[str]
 ) -> None:
@@ -184,23 +262,31 @@ async def serve(
             with Store.open(home / LIBRARY, redactor=redact) as store:
                 control.attach_library_mirror(DualWrite(store))
                 harness.record_into(SessionRecorder(store))
-                async with EngineDoor.open(
-                    control, harness=HarnessAdapter(harness), library=EngineLibraryAdapter(store)
-                ) as engine:
-                    harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
-                    origin = ui_origin if role == "pc" else ""
-                    bearer = qmx_control.server.local_token()
-                    app = compose(control, engine, harness_api, bearer, origin)
-                    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
-                    beating = asyncio.create_task(heartbeats(home, role, control, harness, engine))
-                    exporting = asyncio.create_task(harness.idle_exports())
-                    try:
-                        await server.serve()
-                    finally:
-                        for task in (beating, exporting):
-                            task.cancel()
-                            with suppress(asyncio.CancelledError):
-                                await task
+                adopt_router(RelayRouter(harness_relay(harness)))
+                try:
+                    async with EngineDoor.open(
+                        control,
+                        harness=HarnessAdapter(harness),
+                        library=EngineLibraryAdapter(store),
+                    ) as engine:
+                        harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
+                        origin = ui_origin if role == "pc" else ""
+                        bearer = qmx_control.server.local_token()
+                        app = compose(control, engine, harness_api, bearer, origin)
+                        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
+                        beating = asyncio.create_task(
+                            heartbeats(home, role, control, harness, engine)
+                        )
+                        exporting = asyncio.create_task(harness.idle_exports())
+                        try:
+                            await server.serve()
+                        finally:
+                            for task in (beating, exporting):
+                                task.cancel()
+                                with suppress(asyncio.CancelledError):
+                                    await task
+                finally:
+                    adopt_router(None)
         finally:
             await harness.close()
     finally:

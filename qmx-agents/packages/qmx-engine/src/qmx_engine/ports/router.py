@@ -83,19 +83,22 @@ class RouterPort(Protocol):
         ...
 
 
-_adopted: RouterPort | None = None
+class _Registered:
+    port: RouterPort | None = None
+
+
+_registered = _Registered()
 """The host's router, once it adopted one. One process, one router (AD-56)."""
 
 
 def adopt(port: RouterPort | None) -> None:
     """Make `port` the router this process's engine calls, or forget it with None."""
-    global _adopted
-    _adopted = port
+    _registered.port = port
 
 
 def adopted() -> RouterPort | None:
     """The router this process adopted, if any."""
-    return _adopted
+    return _registered.port
 
 
 PLAN: Final = "claude"

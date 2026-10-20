@@ -16,7 +16,9 @@ before it starts, so a held chunk writes no `node_started` and is never an idle 
 chunk of a node's iteration sets it when its first turn ends, so the others read its prompt cache.
 Each chat's slot comes from the harness slot table, the only chat-slot counter (AD-58).
 
-The chat compacts in place at `compact_at` (AD-34), which its record keeps across a restart (H19).
+The chat compacts in place at the resolved model's compaction point (AD-34): `agent.compact_at`
+at 512k and above, 0.75 below it, because compacting a small window at 40 % throws most of it away.
+Its record keeps that point across a restart (H19).
 The `engine` hook sink hands the attempt its chat's hook events: PostToolUse records each tool
 call as a child span as it happens, PreCompact writes the working state with `memory_note` and
 records the compaction, and Stop and SubagentStop are logged. At each turn end the turn's tool
@@ -57,6 +59,7 @@ from qmx_engine.nodes.llm import (
 from qmx_engine.nodes.script import failed
 from qmx_engine.ports.harness_adapter import HarnessPort, Refusal, ToolCall, Turn
 from qmx_engine.ports.memory import MemoryPort
+from qmx_engine.ports.router import adopted
 from qmx_engine.prompts import payload, static
 from qmx_engine.roles import DEFAULT_WINDOW, Candidate
 from qmx_engine.sink import HookData
@@ -185,6 +188,22 @@ class Agent:
                 self.harness.listen(attempt.chat, None)
 
 
+LARGE_WINDOW: Final = 512_000
+"""From this window up a chat compacts at `agent.compact_at`, and below it at 0.75 (AD-34)."""
+SMALL_POINT: Final = 0.75
+
+
+def compact_at(settings: Mapping[str, object], window: int) -> float:
+    """The point a chat of this window compacts at: `agent.compact_at` (Claude's default 0.40) at
+    512k and above, 0.75 below, because a small window compacted at 40 % loses most of it. Below
+    512k the point moves only when a registry answered the window; without one, as in a fake-provider
+    test, the setting stands."""
+    point = setting(settings, "agent.compact_at", 0.4)
+    if window >= LARGE_WINDOW or adopted() is None:
+        return point
+    return SMALL_POINT
+
+
 class Attempt:
     """One attempt of an agent node: its chat, the tool calls the hooks and the turns reported,
     and its compactions."""
@@ -206,7 +225,7 @@ class Attempt:
         self.system = system
         self.schema = schema
         self.declared = declared
-        self.compact_at = setting(agent.settings, "agent.compact_at", 0.4)
+        self.compact_at = compact_at(agent.settings, candidate.context_window or DEFAULT_WINDOW)
         self.window = candidate.context_window or DEFAULT_WINDOW
         self.usage = Usage()
         self.chat = ""
