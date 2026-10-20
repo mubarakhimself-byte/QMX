@@ -36,6 +36,16 @@ ROWS = (
     Row("qwen/qwen3.5-max", "qwen", "qwen3.5-max", "strong"),
     Row("gpt/gpt-5.5", "gpt", "gpt-5.5", "strong"),
     Row("claude/opus", "claude", "opus", "strong"),
+    Row(
+        "openrouter/moonshotai/kimi-k2.5",
+        "openrouter",
+        "moonshotai/kimi-k2.5",
+        "strong",
+        256_000,
+        3.0,
+        False,
+        True,
+    ),
 )
 
 
@@ -83,6 +93,7 @@ def test_the_generated_lists_put_key_rows_first_with_the_chinese_rows_leading(
         "gpt/gpt-5.5",
         "claude/opus",
     ]
+    assert "openrouter/moonshotai/kimi-k2.5" not in names(DEFAULTS, "planner", "live")
     assert names(DEFAULTS, "writer", "live") == [
         "glm/glm-5",
         "qwen/qwen3-max",

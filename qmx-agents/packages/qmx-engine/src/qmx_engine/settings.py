@@ -86,10 +86,13 @@ def _lane(row: Row) -> tuple[int, int]:
 
 def generated(rows: Sequence[Row]) -> Mapping[str, tuple[str, ...]]:
     """Every role's candidate rows, from the registry's rows by class: his configured providers,
-    key rows first with the Chinese rows leading every tier, then GPT, then the plan."""
+    key rows first with the Chinese rows leading every tier, then GPT, then the plan. A
+    provider-proof row is never generated; only a role that names it may use it."""
     found: dict[str, tuple[str, ...]] = {}
     for role, tier in ROLE_TIERS.items():
-        chosen = sorted((row for row in rows if row.class_ == tier), key=_lane)
+        chosen = sorted(
+            (row for row in rows if row.class_ == tier and not row.test_only), key=_lane
+        )
         found[f"roles.{role}"] = tuple(dict.fromkeys(row.qmx_id for row in chosen))
     return found
 

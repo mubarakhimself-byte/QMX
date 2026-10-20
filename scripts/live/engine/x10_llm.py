@@ -24,12 +24,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import psutil
 import statistics
 import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from common import Log, plan_harness, throwaway_home
 from jsonschema import validate
@@ -55,6 +58,42 @@ WRITE_ATTEMPT = (
     "Before you answer, use the Write tool to create the file probe.txt in your working directory "
     "with the content hi. Then name the capital city of France."
 )
+DEEPSEEK: Final = "openrouter/deepseek/deepseek-v4.1-flash"
+"""The OpenRouter registry row, the cheapest and the one the plan names (RTR5 lane 4)."""
+DEEPSEEK_SETTINGS: dict[str, Any] = {
+    **DEFAULTS,
+    "roles.triage": (DEEPSEEK,),
+    "roles.test_only": (DEEPSEEK,),
+}
+
+
+def adopt_relay(harness: Any) -> Any:
+    """Adopt the harness's relay as this process's router, or None on a tree without RTR5."""
+    try:
+        from qmx_engine.ports.router import adopt  # noqa: PLC0415
+        from qmx_host.host import RelayRouter, harness_relay  # noqa: PLC0415
+    except ImportError:
+        return None
+    port = RelayRouter(harness_relay(harness))
+    adopt(port)
+    return port
+
+
+def cli_children() -> list[str]:
+    """Every child process of this one, by name: a CLI chat leaves a `claude` here."""
+    return [child.name() for child in psutil.Process().children(recursive=True)]
+
+
+def tree_rss() -> int:
+    """This process and every child, in bytes, as the parent's fan-out is charged."""
+    me = psutil.Process()
+    total = me.memory_info().rss
+    for child in me.children(recursive=True):
+        try:
+            total += child.memory_info().rss
+        except psutil.Error:
+            continue
+    return total
 
 
 def node_events(events: list[Event], kind: str) -> list[dict[str, Any]]:
@@ -283,12 +322,101 @@ async def perf(log: Log, home: Path, harness: Any) -> None:
     )
 
 
+async def complete(log: Log, home: Path, harness: Any) -> None:
+    """RTR5 lane 4: one `llm` node on the OpenRouter DeepSeek row goes through `complete` with no
+    CLI process, and its span carries the router's own row, account and session."""
+    adopt_relay(harness)
+    before = cli_children()
+    try:
+        outcome, events, spans, _ = await run(
+            throwaway_home(PR, "complete-engine"),
+            folder("complete"),
+            harness,
+            DEEPSEEK_SETTINGS,
+        )
+    finally:
+        from qmx_engine.ports.router import adopt  # noqa: PLC0415
+
+        adopt(None)
+    after = cli_children()
+    turns = model_spans(spans)
+    for span in turns:
+        log(f"span {describe(span)}")
+    finished = node_events(events, "node_finished")
+    router = finished[-1].get("router") if finished else None
+    log(f"node_finished router: {json.dumps(router)}")
+    log.check(
+        "the llm node ran on the OpenRouter DeepSeek row, with no chat",
+        outcome.status == "passed"
+        and [(s.profile, s.model, s.status) for s in turns]
+        == [("openrouter", "deepseek/deepseek-v4.1-flash", "ok")],
+        [(s.profile, s.model, s.status, s.tokens) for s in turns],
+    )
+    log.check(
+        "the span carries the router's journal id, account and session",
+        isinstance(router, dict)
+        and router.get("qmx_id") == DEEPSEEK
+        and isinstance(router.get("account"), str)
+        and str(router.get("session", "")).endswith(":capital"),
+        router,
+    )
+    log.check(
+        "no CLI process started for the call",
+        before == after and not any("claude" in name for name in before + after),
+        {"before": before, "after": after},
+    )
+    log(f"OpenRouter spend estimate (upper bound): ${relay_usd(home):.4f}")
+
+
+async def fanout(log: Log, home: Path, harness: Any) -> None:
+    """RTR5's perf block: the peak RSS of a 20-call `llm` fan-out on a key row. At this head every
+    call is `complete`; the parent runs the same fan-out with one CLI per call."""
+    port = adopt_relay(harness)
+    peak = [0]
+
+    def sample() -> None:
+        while not stop.is_set():
+            peak[0] = max(peak[0], tree_rss())
+            stop.wait(0.05)
+
+    stop = threading.Event()
+    watcher = threading.Thread(target=sample, daemon=True)
+    watcher.start()
+    try:
+        outcome, _, spans, _ = await run(
+            throwaway_home(PR, "perf-engine"),
+            folder("perf", nodes=20),
+            harness,
+            DEEPSEEK_SETTINGS,
+        )
+    finally:
+        stop.set()
+        watcher.join()
+        if port is not None:
+            from qmx_engine.ports.router import adopt  # noqa: PLC0415
+
+            adopt(None)
+    turns = model_spans(spans)
+    log(
+        f"PERF peak RSS {peak[0] / 1e6:.0f} MB (pid {os.getpid()}) over {len(turns)} llm calls on "
+        f"{DEEPSEEK}; router {'on' if port is not None else 'off, one CLI per call'}"
+    )
+    log.check(
+        "20 llm calls answered on the key row",
+        outcome.status == "passed" and len(turns) == 20,
+        (outcome.status, len(turns)),
+    )
+    log(f"OpenRouter spend estimate (upper bound): ${relay_usd(home):.4f}")
+
+
 MODES = {
     "schema": ("ep10-repair", schema),
     "cache": ("ep10-cache", cache),
     "ask": ("ep10-ask", ask),
     "doctor": ("ep10-doctor", doctor),
-    "perf": ("ep10-perf", perf),
+    "complete": ("rtr5-complete", complete),
+    "fanout": ("rtr5-perf", fanout),
+    "fanout-parent": ("rtr5-perf", fanout),
 }
 
 
@@ -299,7 +427,7 @@ async def main(mode: str) -> int:
             await plan(log, found)
         return log.verdict()
     slug, lane = MODES[mode]
-    log = Log(PR, slug)
+    log = Log("rtr5" if mode in {"complete", "fanout", "fanout-parent"} else PR, slug)
     home = openrouter_home(f"x10-{mode}")
     async with harnessed(home) as found:
         await lane(log, home, found.harness)

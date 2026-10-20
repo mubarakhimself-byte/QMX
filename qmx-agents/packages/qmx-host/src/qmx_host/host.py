@@ -181,6 +181,7 @@ class RelayRouter:
         self.relay = relay
 
     def rows(self) -> tuple[EngineRow, ...]:
+        registry = self.relay.registry()
         return tuple(
             EngineRow(
                 row.qmx_id,
@@ -190,8 +191,9 @@ class RelayRouter:
                 row.window,
                 row.chars_per_token,
                 row.count_tokens,
+                registry.providers[row.provider].use == "test_only",
             )
-            for row in self.relay.registry().rows()
+            for row in registry.rows()
         )
 
     async def complete(

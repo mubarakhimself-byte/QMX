@@ -14,13 +14,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Final, NamedTuple
+from typing import Final, NamedTuple, Protocol
 
 from pydantic import JsonValue
 from qmx_ledger.journal import encoded
 
 from qmx_engine.definition.model import Chunk
-from qmx_engine.ports.router import Row
 
 RUN_SETTINGS: Final = ("chunk.size", "chunk.fill", "context_window")
 """The settings a run records on `run_created` for the core to read."""
@@ -28,6 +27,21 @@ CHARS_PER_TOKEN: Final = 4
 """The estimate without a model row: a quarter of an item's canonical JSON bytes."""
 HEADROOM: Final = 1.1
 """Byte estimates are conservative by 10 % when the row cannot count its own tokens."""
+
+
+class Window(Protocol):
+    """What sizing reads off a model registry row: its window and how it counts tokens. The three
+    values are declared here, not as the router's row type, because a pure module imports no port
+    (E15); a `RouterPort` row satisfies this structurally."""
+
+    @property
+    def window(self) -> int: ...
+
+    @property
+    def chars_per_token(self) -> float: ...
+
+    @property
+    def count_tokens(self) -> bool: ...
 
 
 class ChunkError(ValueError):
@@ -42,7 +56,7 @@ class Span(NamedTuple):
     tokens: int
 
 
-def estimate(item: JsonValue, row: Row | None = None) -> int:
+def estimate(item: JsonValue, row: Window | None = None) -> int:
     """Tokens in an item: its canonical JSON bytes over the row's `chars_per_token`, with 10 %
     headroom when the row cannot count its own tokens, else a quarter of the bytes."""
     size = len(encoded(item))
@@ -63,7 +77,7 @@ def chunks(
     items: Sequence[JsonValue],
     spec: Chunk,
     settings: Mapping[str, JsonValue],
-    row: Row | None = None,
+    row: Window | None = None,
 ) -> list[Span]:
     sizes = [estimate(item, row) for item in items]
     if spec.by == "items":

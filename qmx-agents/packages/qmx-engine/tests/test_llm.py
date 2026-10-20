@@ -179,6 +179,7 @@ def test_a_key_row_calls_complete_with_no_chat_and_spans_the_router_row(tmp_path
         "qmx_id": "kimi/k3",
         "model": "k3",
         "account": "kimi-1",
+        "session": "r1:capital",
         "ms": 21,
     }
     assert result.span["tokens"] == {"in": 30, "out": 12, "cache_read": 0}

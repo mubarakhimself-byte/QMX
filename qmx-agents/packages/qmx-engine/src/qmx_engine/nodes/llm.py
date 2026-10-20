@@ -173,10 +173,10 @@ async def completed(
         document, problem = answer(reply.text, schema)
         if problem is not None:
             return failed("bad_output", BAD_OUTPUT, retryable=True)
-    return Ok({"main": document}, span=router_span(reply))
+    return Ok({"main": document}, span=router_span(reply, affinity))
 
 
-def router_span(reply: Reply) -> JsonObject:
+def router_span(reply: Reply, session: str) -> JsonObject:
     """What the ending event records about a `complete`: its tokens and the router's own row,
     account and journal id, so a span says which journal row answered it."""
     return {
@@ -190,6 +190,7 @@ def router_span(reply: Reply) -> JsonObject:
             "qmx_id": reply.qmx_id,
             "model": reply.model,
             "account": reply.account,
+            "session": session,
             "ms": reply.ms,
         },
     }

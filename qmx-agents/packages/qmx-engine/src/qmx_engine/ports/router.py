@@ -32,6 +32,9 @@ class Row:
     window: int = 200_000
     chars_per_token: float = 3.0
     count_tokens: bool = False
+    test_only: bool = False
+    """A provider-proof row (`use` test-only in the profile): named only by a role that asks for
+    it, never generated into a live list (ruling 105)."""
 
 
 @dataclass(frozen=True, slots=True)
