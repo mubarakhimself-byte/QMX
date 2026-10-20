@@ -8,19 +8,28 @@ surface digest, engine AD-62), so no version is minted per turn (AD-2). A close 
 chat idle past `IDLE`, puts a new version whose `transcript` blob is the harness's redacted export
 (engine AD-37). The live transcript stays the CLI's JSONL; the Library copy is never read back.
 
+The recorder also mirrors the chat record's attached context references (engine AD-63) onto the
+item: each attached object becomes an `item:<object_id>` tag and a `mentions` edge, so the Library
+answers "what did this session use" without a second list (Library AD-21).
+
 `RecordedHarness` is the harness the host serves. It tells the recorder of each chat's birth,
-each turn's end and each close. A hook sink cannot do it: only Background and Child chats may
-name one, and engine chats already name `engine`.
+each turn's end and each close, and it serves the `context` toolset from the same store: one read
+per catalog target per chat, because attaching writes that chat's own record.
+
+A hook sink cannot do any of it: only Background and Child chats may name one, and engine chats
+already name `engine`.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, cast, override
 
 from pydantic import JsonValue
@@ -28,8 +37,17 @@ from qma.harness import Harness, NewChat, QmxHome, SessionId, TurnHandle, TurnRe
 from qma.harness.chat import ChatDeps, Prompt
 from qma.harness.harness import PlanWatch
 from qma.harness.home import ChatRecord, list_records, read_record
+from qma.harness.surface import excerpt_budget
 from qma.harness.tools import HostRead
-from qmx_library.port import Draft, JsonObject, LibraryRefused
+from qmx_control.context import (
+    AttachedRef,
+    ContextRefused,
+    LibraryHit,
+    LibraryObject,
+    Resolvers,
+    listing,
+)
+from qmx_library.port import Draft, JsonObject, LibraryRefused, ObjectView
 from qmx_library.principal import MAIN, sessions_ref
 from qmx_library.store import Store
 
@@ -42,6 +60,8 @@ IDLE: Final = timedelta(hours=24)
 """Claude's default: a chat idle this long gets its daily export."""
 IDLE_TICK_S: Final = 3600.0
 TRANSCRIPT: Final = "transcript.jsonl"
+MENTIONS: Final = "mentions"
+"""The edge from a session item to each object it attached (Library AD-14's vocabulary)."""
 
 type Exporter = Callable[[SessionId], Awaitable[Path]]
 
@@ -62,7 +82,176 @@ def _int(value: JsonValue) -> int:
     return value if isinstance(value, int) else 0
 
 
+class StoreReads:
+    """`qmx_control.context.LibraryReads` over the host's store: reads only, no policy. A
+    missing object reads as an empty one, so a resolver refuses it by name."""
+
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    def resolve(self, item: str, ref: str = MAIN) -> str | None:
+        try:
+            return self.store.resolve(self.store.engine, item, ref)
+        except LibraryRefused:
+            return None
+
+    def head(self, item: str, ref: str = MAIN) -> str | None:
+        found = self.store.head(item, ref)
+        return None if found is None else found[0]
+
+    def get(self, object_id: str, slots: Sequence[str] = ()) -> LibraryObject:
+        try:
+            found = self.store.get(self.store.engine, object_id)
+        except LibraryRefused:
+            return LibraryObject("", "", "")
+        data = {
+            slot: self.store.read_blob(found.blobs[slot].blob_id)
+            for slot in slots
+            if slot in found.blobs
+        }
+        return _library_object(found, data)
+
+    def search(self, text: str, *, kind: str | None = None, limit: int = 20) -> list[LibraryHit]:
+        found = self.store.search(self.store.engine, text, kind=kind, limit=limit)
+        return [LibraryHit(hit.object_id, hit.item, hit.kind, hit.title) for hit in found]
+
+    def versions(self, item: str, kind: str) -> list[str]:
+        return [object_id for object_id, _ in self.store.placed(item, kind, None)]
+
+    def produced(self, producer: str) -> list[str]:
+        """The artifacts a run object produced, in the order the edges were written."""
+        return [from_id for from_id, name, _, _, _ in self.store.edges_of(producer, reverse=True)
+                if name == "produced-by"]  # fmt: skip
+
+    def outputs(self, producer: str, name: str) -> list[str]:
+        """The artifacts the app `producer` landed under `name`, oldest first. An output names
+        itself by the artifact's `type` (or its `metadata.output`, the shape
+        `qmx_apps.artifacts.ArtifactRef` already uses), and the app by a `producer_app` key or a
+        `produced-by` edge from one of the app's versions."""
+        produced: set[str] = set()
+        for version in self.versions(producer, "mini-app"):
+            produced.update(self.produced(version))
+        found: list[str] = []
+        for object_id in self.store.with_field("artifact", "type", name):
+            view = self.store.get(self.store.engine, object_id)
+            metadata = view.fields.get("metadata")
+            named = isinstance(metadata, dict) and metadata.get("producer_app") in (producer, None)
+            if object_id in produced or (named and metadata.get("producer_app") == producer):
+                found.append(object_id)
+        for object_id in sorted(produced):
+            view = self.store.get(self.store.engine, object_id)
+            metadata = view.fields.get("metadata")
+            if isinstance(metadata, dict) and metadata.get("output") == name:
+                if object_id not in found:
+                    found.append(object_id)
+        return found
+
+
+def _library_object(found: ObjectView, data: Mapping[str, bytes]) -> LibraryObject:
+    return LibraryObject(
+        object_id=found.object_id,
+        item=found.item,
+        kind=found.kind,
+        title=found.title,
+        summary=found.summary,
+        fields=dict(found.fields),
+        annotations=dict(found.annotations),
+        relations=tuple(found.relations),
+        data=MappingProxyType(dict(data)),
+    )
+
+
+def _refusal(error: ContextRefused) -> Exception:
+    """`tools._host_def` maps `KeyError` to `not_found` and `ValueError` to `invalid_arguments`;
+    a refusal keeps its own code by choosing the one that carries it."""
+    return (KeyError if error.code == "not_found" else ValueError)(error.message)
+
+
+def chat_reads(
+    harness: RecordedHarness, store: Store, chat: SessionId
+) -> Mapping[str, HostRead]:
+    """The five `context` reads for one chat (AD-63), over the store the host owns. Each one
+    reads the chat record's list, acts through `Harness.set_attached`, and returns what the tool
+    hands the model."""
+
+    resolvers = Resolvers(
+        StoreReads(store), excerpt_budget(harness.control.settings_get("agents"))
+    )
+
+    def entries() -> tuple[AttachedRef, ...]:
+        record = harness.record(chat)
+        return () if record is None else record.attached
+
+    def entry(ref: str) -> AttachedRef:
+        found = next((item for item in entries() if item.ref == ref), None)
+        if found is None:
+            raise KeyError(f"{ref!r} is not attached to this chat")
+        return found
+
+    async def add(arguments: dict[str, object]) -> Mapping[str, object]:
+        ref = str(arguments.get("ref", ""))
+        pin = "follow" if arguments.get("pin") == "follow" else "version"
+        try:
+            found = await asyncio.to_thread(resolvers.add, ref, pin)
+        except ContextRefused as error:
+            raise _refusal(error) from None
+        kept = [item for item in entries() if item.ref != found.ref]
+        await harness.set_attached(chat, [*kept, found])
+        excerpt = await asyncio.to_thread(resolvers.excerpt, found)
+        return {**found.document(), "excerpt": excerpt}
+
+    async def listed(_arguments: dict[str, object]) -> Mapping[str, object]:
+        page = await asyncio.to_thread(listing, entries(), resolvers)
+        return {
+            "entries": [item.document() for item in page.entries],
+            "lines": page.lines(),
+            "ready": page.ready,
+            "pending": page.pending,
+        }
+
+    async def refresh(arguments: dict[str, object]) -> Mapping[str, object]:
+        ref = str(arguments.get("ref", ""))
+        current = entry(ref)
+        try:
+            moved = await asyncio.to_thread(resolvers.refresh, current)
+        except ContextRefused as error:
+            raise _refusal(error) from None
+        await harness.set_attached(chat, [moved if item.ref == ref else item for item in entries()])
+        return moved.document()
+
+    async def drop(arguments: dict[str, object]) -> Mapping[str, object]:
+        ref = str(arguments.get("ref", ""))
+        kept = [item for item in entries() if item.ref != ref]
+        if len(kept) == len(entries()):
+            raise KeyError(f"{ref!r} is not attached to this chat")
+        await harness.set_attached(chat, kept)
+        return {"dropped": ref, "attached": len(kept)}
+
+    async def read(arguments: dict[str, object]) -> Mapping[str, object]:
+        ref = str(arguments.get("ref", ""))
+        current = entry(ref)
+        span = arguments.get("range")
+        try:
+            text = await asyncio.to_thread(
+                resolvers.read, current, span if isinstance(span, str) else None
+            )
+        except ContextRefused as error:
+            raise _refusal(error) from None
+        return {"ref": ref, "text": text}
+
+    return MappingProxyType(
+        {
+            "context_add": add,
+            "context_list": listed,
+            "context_refresh": refresh,
+            "context_drop": drop,
+            "context_read": read,
+        }
+    )
+
+
 class SessionRecorder:
+
     def __init__(self, store: Store, clock: Callable[[], datetime] | None = None) -> None:
         self.store = store
         self.clock = clock or (lambda: datetime.now(UTC))
@@ -109,6 +298,27 @@ class SessionRecorder:
             "surface_digest": record.digests[-1] if record.digests else None,
         }
         self.store.annotate(self.store.engine, object_id, values)
+        if record.attached:
+            self.attached(record.session_id, record.attached)
+
+    def attached(self, chat: str, entries: Sequence[AttachedRef]) -> str | None:
+        """Mirror the chat record's attached references onto its item (AD-63, Library AD-21):
+        one `item:<object_id>` tag and one `mentions` edge per resolved reference. Idempotent,
+        so an attach and the turn end after it both land the same mirror. None when the chat has
+        no item yet."""
+        head = self.head(chat)
+        if head is None:
+            return None
+        current = self.store.get(self.store.engine, head).annotations.get("tags")
+        tags = [str(tag) for tag in current] if isinstance(current, list) else []
+        for item in entries:
+            tag = f"item:{item.object_id}"
+            if tag not in tags:
+                tags.append(tag)
+            with contextlib.suppress(LibraryRefused):
+                self.store.relate(self.store.engine, head, MENTIONS, item.object_id)
+        self.store.annotate(self.store.engine, head, {"tags": sorted(tags)})
+        return head
 
     def exported(self, chat: str, transcript: bytes) -> str:
         """A new version holding `transcript`, carrying the head's annotations forward."""
@@ -183,6 +393,30 @@ class RecordedHarness(Harness):
     def _record(self, chat: SessionId) -> ChatRecord | None:
         found = self._chats.get(chat)
         return found.record if found is not None else read_record(self.home, chat)
+
+    def record(self, chat: SessionId) -> ChatRecord | None:
+        """The chat's record as this process holds it, for the reads that act on the chat."""
+        return self._record(chat)
+
+    @override
+    def context_reads(self, chat: SessionId) -> Mapping[str, HostRead]:
+        """The `context` toolset this host serves: the store's resolvers, bound to `chat`."""
+        recorder = self.recorder
+        if recorder is None:
+            return MappingProxyType({})
+        return chat_reads(self, recorder.store, chat)
+
+    @override
+    async def set_attached(self, chat: SessionId, refs: Sequence[AttachedRef]) -> None:
+        """Attach through the harness, then mirror the list onto the chat's session item."""
+        await super().set_attached(chat, refs)
+        recorder = self.recorder
+        if recorder is None:
+            return
+        try:
+            await asyncio.to_thread(recorder.attached, chat, tuple(refs))
+        except RECORDING_FAILED as error:
+            _skipped("context mirror", error)
 
     @override
     async def start_chat(self, spec: NewChat) -> SessionId:

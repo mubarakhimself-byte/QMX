@@ -97,6 +97,69 @@ toolset listing counting as one, and `skills_index` per skill. None has no budge
 workspace files load whole as in vanilla Claude Code, the brief is the caller's, and the memory
 snapshot is bounded where it is built (AD-18)."""
 
+EXCERPT_SOFT: Final = 0.25
+EXCERPT_HARD: Final = 0.50
+"""A context reference's excerpt, as a share of the model's window: the share `context_add`
+returns and the share `context_read` may return (Claude's defaults, Settings, AD-63). Context
+hygiene, never a usage cap."""
+
+MAX_FOLDER_ENTRIES: Final = 200
+"""Most entries one folder reference lists (Claude's default, Settings, AD-63)."""
+
+DEFAULT_WINDOW_TOKENS: Final = 200_000
+"""The window the shares are taken of until the model registry carries one per model row (RTR1),
+Claude's default."""
+
+CHARS_PER_TOKEN: Final = 4
+"""A window in characters, by Claude Code's own estimate. A character count is what an excerpt
+has, so that is what the budget is kept in."""
+
+
+@dataclass(frozen=True)
+class ExcerptBudget:
+    """What a reference's excerpt may carry, in characters (AD-63)."""
+
+    soft_chars: int
+    hard_chars: int
+    folder_entries: int = MAX_FOLDER_ENTRIES
+
+    def capped(self, text: str) -> str:
+        """The soft share of `text`: what an attachment adds to a turn unasked."""
+        return text if len(text) <= self.soft_chars else text[: self.soft_chars]
+
+
+def excerpt_budget(
+    settings: Mapping[str, object], window_tokens: int | None = None
+) -> ExcerptBudget:
+    """`[agents] excerpt` over the defaults: `soft` and `hard` shares of the window, the
+    window itself in tokens, and `folder_entries`. A written value that is not a positive
+    number is skipped rather than read as zero."""
+    written = _table(_table(settings.get("excerpt")))
+    soft = _share(written.get("soft"), EXCERPT_SOFT)
+    hard = _share(written.get("hard"), EXCERPT_HARD)
+    hard = max(hard, soft)
+    tokens = written.get("window_tokens")
+    window = (
+        tokens
+        if isinstance(tokens, int) and not isinstance(tokens, bool) and tokens > 0
+        else DEFAULT_WINDOW_TOKENS
+    )
+    if window_tokens is not None and window_tokens > 0:
+        window = window_tokens
+    entries = written.get("folder_entries")
+    count = entries if isinstance(entries, int) and entries > 0 else MAX_FOLDER_ENTRIES
+    return ExcerptBudget(
+        soft_chars=int(window * CHARS_PER_TOKEN * soft),
+        hard_chars=int(window * CHARS_PER_TOKEN * hard),
+        folder_entries=count,
+    )
+
+
+def _share(value: object, default: float) -> float:
+    if isinstance(value, int | float) and not isinstance(value, bool) and 0 < value <= 1:
+        return float(value)
+    return default
+
 CLI_BUILTINS: Final[tuple[str, ...]] = (
     "Task",
     "AskUserQuestion",

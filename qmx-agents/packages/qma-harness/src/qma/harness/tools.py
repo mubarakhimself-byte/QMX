@@ -290,6 +290,12 @@ type HostRead = Callable[[dict[str, Any]], Awaitable[Mapping[str, object]]]
 or one the hosting process passes to `Harness.open`, such as its heartbeats."""
 
 NO_ARGUMENTS: Final[Mapping[str, object]] = MappingProxyType({"type": "object", "properties": {}})
+_REF: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "type": "string",
+        "description": "A reference as written, for example @pod:pod-7 or @run:<id>/bias",
+    }
+)
 HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
     {
         "slot_table": {"type": "object", "properties": {}},
@@ -301,6 +307,42 @@ HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
                 "limit": {"type": "integer", "minimum": 1, "default": 50},
             },
             "required": ["session_id"],
+        },
+        "context_add": {
+            "type": "object",
+            "properties": {
+                "ref": _REF,
+                "pin": {
+                    "type": "string",
+                    "enum": ["version", "follow"],
+                    "default": "version",
+                    "description": "version keeps the object resolved now; follow re-reads "
+                    "main at each read",
+                },
+            },
+            "required": ["ref"],
+        },
+        "context_list": {"type": "object", "properties": {}},
+        "context_refresh": {
+            "type": "object",
+            "properties": {"ref": _REF},
+            "required": ["ref"],
+        },
+        "context_drop": {
+            "type": "object",
+            "properties": {"ref": _REF},
+            "required": ["ref"],
+        },
+        "context_read": {
+            "type": "object",
+            "properties": {
+                "ref": _REF,
+                "range": {
+                    "type": "string",
+                    "description": "An a-b character range of the object's text",
+                },
+            },
+            "required": ["ref"],
         },
     }
 )

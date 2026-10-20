@@ -40,6 +40,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import PermissionResultDeny
+from qmx_control.context import AttachedRef
 from qmx_router.ids import SessionId
 
 from qma.boot import banned_fragment
@@ -679,6 +680,10 @@ class ChatRecord:
     turn: TurnState
     digests: tuple[str, ...] = ()
     """The surface digest of each launch whose surface differed from the one before (AD-62)."""
+    attached: tuple[AttachedRef, ...] = ()
+    """The chat's attached context references (AD-63, H49), changed only by
+    `Harness.set_attached`. Beside `home` and `packs` on the record, never in a table of its
+    own. The session recorder mirrors them into the Library session item (Library AD-21)."""
 
 
 def _kind_document(kind: ChatKind) -> dict[str, object]:
@@ -744,6 +749,7 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
         "started": record.started,
         "turn": record.turn,
         "digests": list(record.digests),
+        "attached": [entry.document() for entry in record.attached],
     }
 
 
@@ -796,6 +802,9 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
         started=bool(document["started"]),
         turn=document["turn"],
         digests=tuple(document.get("digests", ())),
+        attached=tuple(
+            AttachedRef.from_document(page) for page in document.get("attached") or ()
+        ),
     )
 
 
