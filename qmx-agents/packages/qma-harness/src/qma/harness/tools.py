@@ -31,6 +31,7 @@ from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
 from qmx_broker.service import BrokerService
 from qmx_control.catalog import CORE_TOOLSETS, OperationSpec, name_problem, rows, spill
 
+from qma.harness.delegate import DelegateRefused
 from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
 from qma.harness.money_words import named_money_act
 
@@ -411,42 +412,106 @@ DOMAIN_GROUPS: Final = ("data", "backtest", "research", "node")
 
 
 type Delegate = Callable[[str, str], Awaitable[str]]
-"""Runs a helper chat on a profile with a prompt, to its end, and returns its final text.
-Bound to the calling chat by the harness."""
+"""The harness's helper manager behind the four `delegate` rows: the row's wire name and the
+tool call's JSON, answered as JSON. Bound to the calling chat by the harness."""
 
 
-class DelegateRefused(RuntimeError):
-    """The helper chat was not started, or ended without an answer. The tool returns the
-    reason as an error result."""
-
-
-DELEGATE_SCHEMA: Final[Mapping[str, object]] = MappingProxyType(
+DELEGATE_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
     {
-        "type": "object",
-        "properties": {
-            "profile": {"type": "string", "description": "A provider profile from the allow-list"},
-            "prompt": {"type": "string", "description": "The whole task for the helper"},
+        "run": {
+            "type": "object",
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "The whole job for the helper, in your own words. It starts "
+                    "fresh and cannot ask you anything.",
+                },
+                "profile": {
+                    "type": "string",
+                    "description": "A provider profile from [providers], for example kimi. "
+                    "Leave it out to use role or model, or this chat's own provider.",
+                },
+                "model": {
+                    "type": "string",
+                    "description": "A model id the registry or that provider row names.",
+                },
+                "role": {
+                    "type": "string",
+                    "description": "A role whose tier picks the model and whose preset picks "
+                    "the helper's tools, for example reviewer or extractor.",
+                },
+                "effort": {
+                    "type": "string",
+                    "enum": ["low", "medium", "high", "xhigh", "max"],
+                    "description": "Thinking effort where the model takes one.",
+                },
+                "output_schema": {
+                    "type": "object",
+                    "description": "A JSON Schema the answer must hold to. It gets one "
+                    "correction turn, then the raw answer with schema_valid false.",
+                },
+                "worktree": {
+                    "type": "boolean",
+                    "description": "Give the helper its own folder beside yours.",
+                },
+                "group": {
+                    "type": "string",
+                    "description": "A label so you can list these helpers together.",
+                },
+                "target": {
+                    "type": "string",
+                    "enum": ["chat", "cli"],
+                    "description": "chat runs a helper chat here; cli runs an agent CLI as a "
+                    "local process owned by the handle.",
+                },
+                "allow_cli": {
+                    "type": "boolean",
+                    "description": "Allow the cli binary version this tool refused the first "
+                    "time, after you have asked the operator.",
+                },
+            },
+            "required": ["task"],
         },
-        "required": ["profile", "prompt"],
+        "list": {
+            "type": "object",
+            "properties": {
+                "group": {"type": "string", "description": "Only helpers with this label."}
+            },
+        },
+        "steer": {
+            "type": "object",
+            "properties": {
+                "handle": {"type": "string", "description": "The helper's handle"},
+                "text": {"type": "string", "description": "What to tell it"},
+            },
+            "required": ["handle", "text"],
+        },
+        "stop": {
+            "type": "object",
+            "properties": {
+                "handle": {"type": "string", "description": "The helper's handle"},
+                "reason": {"type": "string", "description": "Why it is stopping"},
+            },
+            "required": ["handle"],
+        },
     }
 )
+"""The four `delegate` rows' schemas, by `op`."""
 
 
 def delegate_def(row: OperationSpec, delegate: Delegate) -> ToolDef:
-    """`mcp__qmx_delegate__run`, the one QMX tool that adds what the SDK lacks: native
-    sub-agents cannot change provider. The helper is a full chat with its own process, relay
-    grant, qmx-control child session, asks and verbatim prompts, so every rule above holds in it."""
+    """One `delegate` tool: a thin JSON call into the harness's helper manager, which resolves
+    the child bundle and returns its handle at once (AD-41). The manager answers a refusal with
+    the reason, so the tool reports it rather than raising into the CLI."""
 
     async def call(arguments: dict[str, Any]) -> dict[str, Any]:
-        profile, prompt = arguments.get("profile"), arguments.get("prompt")
-        if not isinstance(profile, str) or not isinstance(prompt, str) or not prompt.strip():
-            return failure("invalid_arguments", "delegate needs a profile name and a prompt")
         try:
-            return {"content": [{"type": "text", "text": await delegate(profile, prompt)}]}
+            answer = await delegate(row.name, json.dumps(arguments))
         except DelegateRefused as refused:
             return failure("refused", str(refused))
+        return {"content": [{"type": "text", "text": answer}]}
 
-    return _plain(row, DELEGATE_SCHEMA, call)
+    return _plain(row, DELEGATE_SCHEMAS.get(row.op, NO_ARGUMENTS), call)
 
 
 class ToolSurfaceError(RuntimeError):

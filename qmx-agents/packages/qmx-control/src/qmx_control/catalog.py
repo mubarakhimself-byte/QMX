@@ -291,8 +291,41 @@ HOST_ROWS: Final = (
         "delegate",
         "delegate",
         "domain_write",
-        "Run a helper chat on another provider profile and return its final answer. The "
-        "helper starts fresh: put the whole task in the prompt. It cannot start helpers.",
+        "Start a helper chat on another provider profile and return its handle at once, so you "
+        "keep working while it runs. The helper starts fresh: put the whole task in `task`. Its "
+        "answer arrives as a report between your turns; `delegate_list` shows it, "
+        "`delegate_steer` adds a note to it and `delegate_stop` ends it.",
+        reversibility="reversible",
+    ),
+    _row(
+        "delegate",
+        "list",
+        "delegate",
+        "delegate_list",
+        "read",
+        "List this chat's helpers and where each one is: queued, running, done, failed, stalled "
+        "or unknown, with its elapsed time and where it last moved. Read it before steering or "
+        "stopping one.",
+    ),
+    _row(
+        "delegate",
+        "steer",
+        "delegate",
+        "delegate_steer",
+        "domain_write",
+        "Add a note to a running helper's next checkpoint, to correct where it is going without "
+        "starting again. The helper's report says whether the note arrived.",
+        reversibility="reversible",
+    ),
+    _row(
+        "delegate",
+        "stop",
+        "delegate",
+        "delegate_stop",
+        "domain_write",
+        "End one helper now and say why. Its work stops and its report says stopped. Use it for "
+        "a helper that is no longer worth running.",
+        reversibility="compensable",
     ),
 )
 """Rows the harness serves itself (the chat-slot table, the relay journal and `delegate`), the

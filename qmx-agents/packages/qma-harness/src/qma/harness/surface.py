@@ -735,6 +735,45 @@ def child_scope(parent: Surface) -> Declaration:
     return Declaration(parent.toolsets, parent.builtins, skills)
 
 
+HELPER_TOOLSETS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "triage": (),
+        "clarifier": (),
+        "judge": (),
+        "planner": (),
+        "synthesiser": (),
+        "scanner": ("library",),
+        "doctor": ("library",),
+        "reader": ("library",),
+        "writer": ("library",),
+        "extractor": ("library",),
+        "searcher": ("library", "research"),
+        "reviewer": ("library", "context"),
+    }
+)
+"""The QMX toolsets each role's helper gets, before the cut to its parent's surface. A role this
+table leaves out, `builder` included, keeps every toolset its parent had. A role with `()` reads
+and answers with the built-in tools alone, which is what a judge or a triage helper needs."""
+
+
+def helper_scope(
+    parent: Surface | None, role: str | None = None, *, declared: Declaration | None = None
+) -> Declaration:
+    """A `delegate` helper's declaration: its role's preset inside its parent's surface, so a
+    helper is never wider than the parent (AD-62). A parent that never launched has no Surface,
+    and `declared` is the declaration it had at birth."""
+    base = child_scope(parent) if parent is not None else declared
+    if base is None:
+        base = Declaration()
+    preset = None if role is None else HELPER_TOOLSETS.get(role)
+    if preset is None:
+        return base
+    keep = set(preset) & set(base.toolsets or ())
+    return Declaration(
+        tuple(name for name in base.toolsets or () if name in keep), base.builtins, base.skills
+    )
+
+
 def surface_files(surface: Surface, launch_dir: Path) -> dict[Path, str]:
     """The files a launch writes beside its settings and system text: `surface.json`, and the
     `qmx-slots` plugin when a slot spilled."""

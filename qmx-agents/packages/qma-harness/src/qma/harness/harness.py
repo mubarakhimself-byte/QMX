@@ -85,6 +85,15 @@ from qma.harness.chat import (
     rewind_points,
     transcript,
 )
+from qma.harness.delegate import (
+    ChildSpec,
+    CliSpawn,
+    DelegateRefused,
+    Helpers,
+    ParentBundle,
+    Start,
+    report_text,
+)
 from qma.harness.home import (
     ChatRecord,
     DoctorLine,
@@ -130,10 +139,9 @@ from qma.harness.launch import (
     unattended,
 )
 from qma.harness.procs import AgentProcessCap
-from qma.harness.project import redact
-from qma.harness.surface import Declaration, Surface, child_scope
-from qma.harness.tools import DelegateRefused, HostRead
-from qma.harness.turns import TurnHandle, watch_turn
+from qma.harness.surface import Surface, declaration
+from qma.harness.tools import HostRead
+from qma.harness.turns import TurnHandle
 from qma.harness.usage import journal_path, token_sums, usage_lines
 
 if TYPE_CHECKING:
@@ -303,8 +311,6 @@ class Harness:
         self._admit = asyncio.Lock()
         self._sending: Counter[SessionId] = Counter()
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
-        self._lenders: dict[SessionId, SessionId] = {}
-        """Each `delegate` child and the parent blocked on it, whose slot the child uses."""
         self._waiting: dict[int, tuple[tuple[int, int], SessionId]] = {}
         """Each send waiting for a slot: its place, its serving order and its chat."""
         self._order = itertools.count()
@@ -320,6 +326,8 @@ class Harness:
         self._deps = replace(self._deps, on_free=self._freed.set)
         self._background: set[asyncio.Task[None]] = set()
         """Sends `run_turn` left running and closes `close_chat` shielded."""
+        self._helpers = Helpers(self)
+        """Every `delegate` helper this harness started, and the completions it owes a parent."""
         self._metered: float | None = None
         """When the last meter turn ran, on the loop clock."""
         self._reaper = asyncio.create_task(self._reap())
@@ -568,6 +576,7 @@ class Harness:
             raise UntrustedPrompt(
                 "injected text goes only to a Background or Child chat, which reads it verbatim"
             )
+        prompt = await self._with_reports(chat, prompt)
         budgets = await self._budgets()
         if found.on_plan:
             stop = self._ledger.hard_stop()
@@ -598,13 +607,22 @@ class Harness:
             del self._sending[chat]
         self._freed.set()
 
-    def _held(self) -> tuple[list[Chat], set[SessionId], set[SessionId]]:
-        """The live chats, the chats holding a slot, and the `delegate` children using their
-        parent's slot."""
+    async def _with_reports(self, chat: SessionId, prompt: Prompt) -> Prompt:
+        """The helper reports this chat has not been handed yet, in front of its next turn. They
+        are claimed in the same write that carries them, so each is delivered once even across a
+        restart (AD-41). The report's own header keeps it from reading as a slash command or an
+        `@path` in a copilot chat."""
+        rows = await self._helpers.pending(chat)
+        if not rows:
+            return prompt
+        await self._helpers.claim(rows)
+        return type(prompt)(f"{report_text(rows)}\n\n{prompt.text}")
+
+    def _held(self) -> tuple[list[Chat], set[SessionId]]:
+        """The live chats and the chats holding a slot. A `delegate` helper holds its own slot:
+        its parent is not blocked on it, so nothing is lent (AD-41, AD-58)."""
         live = [found for found in self._chats.values() if found.is_live]
-        held = {found.session_id for found in live} | self._sending.keys()
-        lent = {child for child, parent in self._lenders.items() if parent in held}
-        return live, held, lent
+        return live, {found.session_id for found in live} | self._sending.keys()
 
     def _unattended(self, chats: set[SessionId]) -> set[SessionId]:
         return {
@@ -618,12 +636,12 @@ class Harness:
         """The one chat-slot reading (AD-58): what the table holds and who waits for it. The
         engine reads it to tell an attempt queued for a slot from one that stopped moving."""
         budgets = parse_budgets(self._deps.control.settings_get("budgets"))
-        _, held, lent = self._held()
+        _, held = self._held()
         return SlotTable(
             capacity=live_chat_slots(budgets, self._ram_mb),
             reserve=budgets.interactive_reserve,
-            held=tuple(sorted(held - lent)),
-            unattended=tuple(sorted(self._unattended(held - lent))),
+            held=tuple(sorted(held)),
+            unattended=tuple(sorted(self._unattended(held))),
             waiting=tuple(chat for _, chat in sorted(self._waiting.values())),
         )
 
@@ -641,11 +659,11 @@ class Harness:
         idle, `wait` waits until a slot frees; otherwise this raises `ChatTableFull`. A waiting
         (Background or Child) send also leaves `interactive_reserve` slots to Interactive chats:
         unattended chats hold at most `background_slots` between them. Waiting sends are served
-        by `priority`, higher first, then by when they began to wait. A `delegate` child uses
-        the slot of the parent blocked on it (42 N5), so a parent never waits on a child that
-        waits on the parent's slot. Admission is one critical section, so two sends never both
-        take the last slot. A waiting send wakes when a turn ends, a CLI ends or another send
-        lets go; nothing polls."""
+        by `priority`, higher first, then by when they began to wait. A `delegate` helper holds
+        its own slot, and host capacity queues it, so no parent waits on a child that waits on
+        the parent's slot. Admission is one critical section, so two sends never both take the
+        last slot. A waiting send wakes when a turn ends, a CLI ends or another send lets go;
+        nothing polls."""
         cap = live_chat_slots(budgets, self._ram_mb)
         own = background_slots(budgets, self._ram_mb)
         place = next(self._order)
@@ -655,13 +673,13 @@ class Harness:
             while True:
                 async with self._admit:
                     while True:
-                        live, held, lent = self._held()
-                        if chat in held or chat in lent:
+                        live, held = self._held()
+                        if chat in held:
                             self._sending[chat] += 1
                             return
                         first = not wait or min(self._waiting.values())[0][1] == place
-                        crowded = wait and len(self._unattended(held - lent)) >= own
-                        if first and not crowded and len(held - lent) < cap:
+                        crowded = wait and len(self._unattended(held)) >= own
+                        if first and not crowded and len(held) < cap:
                             self._sending[chat] += 1
                             return
                         idle = sorted(
@@ -682,7 +700,7 @@ class Harness:
                             if await found.close_if_idle(0):
                                 break
                     if not wait:
-                        busy = sorted(held - lent)
+                        busy = sorted(held)
                         full = ChatTableFull(cap, tuple(busy))
                         await self._needs_you(chat, str(full), busy=busy)
                         raise full
@@ -693,66 +711,115 @@ class Harness:
             if self._waiting.pop(place, None) is not None:
                 self._freed.set()
 
-    async def _delegate(self, parent: SessionId, profile: str, prompt: str) -> str:
-        """Backs `mcp__qmx_delegate__run`. Refuses a profile outside `Profiles.delegate_targets`.
-        Starts a Child chat (a qmx-control child session with `parent_id`, verbatim, `unattended`
-        copied from the parent, its own relay grant, any [budgets] turn and spend limits the
-        operator wrote) on the parent's model tier, workspace and mode, declaring the toolsets,
-        built-ins and skills of the parent's current surface, so the helper is never wider than
-        its parent (AD-62); its own Surface then cuts what a Child loses. Sends the prompt as
-        `InjectedText`, because a model wrote it, and returns the turn's final text. The parent
-        is blocked on this tool call, so the child uses the parent's slot. The overage stop
-        refuses through `send`. The turn runs under the stuck rules (H45): a loop, a fixer that
-        does not converge or a stall interrupts it and refuses with the verdict. The child
-        closes, and its grant is revoked, however this ends."""
-        profiles = await asyncio.to_thread(self._deps.relay.profiles)
-        refusal = profiles.delegate_refusal(profile)
-        if refusal is not None:
-            raise DelegateRefused(refusal)
-        caller = self._chat(parent)
-        origin = caller.record.config
-        scope = (
-            Declaration(origin.toolsets, origin.tools, origin.skills)
-            if caller.surface is None
-            else child_scope(caller.surface)
-        )
+    async def _delegate(self, parent: SessionId, op: str, arguments: str) -> str:
+        """Backs the four `delegate` tools. `op` is the row's wire name and `arguments` is the
+        tool call's JSON document; the answer is JSON text. Nothing here waits for a helper: the
+        start returns its handle, and the answer arrives at the parent's next turn (AD-41)."""
         try:
-            target = profiles.get(profile)
-            child = await self.start_chat(
+            found: object = json.loads(arguments) if arguments.strip() else {}
+        except ValueError:
+            raise DelegateRefused("the delegate arguments are not JSON") from None
+        if not isinstance(found, dict):
+            raise DelegateRefused("the delegate arguments are one JSON object")
+        given = cast("dict[str, Any]", found)
+        match op:
+            case "delegate_run":
+                answer: object = await self._helpers.start(parent, Start.parse(given))
+            case "delegate_list":
+                answer = {
+                    "helpers": await self._helpers.listing(parent, str(given.get("group") or ""))
+                }
+            case "delegate_steer":
+                answer = await self._helpers.steer(
+                    parent, str(given.get("handle") or ""), str(given.get("text") or "")
+                )
+            case "delegate_stop":
+                answer = await self._helpers.stop(
+                    parent, str(given.get("handle") or ""), str(given.get("reason") or "")
+                )
+            case _:
+                raise DelegateRefused(f"{op!r} is not a delegate operation")
+        return json.dumps(answer)
+
+    @property
+    def state_dir(self) -> Path:
+        """Where this home keeps state that outlives a process, such as an allowed cli version."""
+        return self._deps.home.state_dir
+
+    def parent_bundle(self, parent: SessionId) -> ParentBundle:
+        """What a helper copies from its parent: the chat's profile and model, where it works,
+        the declaration it had at birth, its permission mode and whether it is unattended."""
+        record = self._chat(parent).record
+        config = record.config
+        return ParentBundle(
+            profile=str(config.profile),
+            model=config.model,
+            workspace=config.workspace,
+            declared=declaration(config),
+            mode=config.mode,
+            unattended=unattended(config.kind),
+        )
+
+    async def provider_profiles(self) -> Profiles:
+        return await asyncio.to_thread(self._deps.relay.profiles)
+
+    async def start_helper(self, spec: ChildSpec) -> SessionId:
+        """One helper chat, launched as its own Child chat. A refusal is the tool's answer, and
+        nothing was spent."""
+        bundle = self.parent_bundle(spec.parent)
+        try:
+            return await self.start_chat(
                 NewChat(
-                    title=f"Helper on {profile}",
-                    model=origin.model if resolve_model(target, origin.model) else "opus",
-                    mode=origin.mode,
-                    workspace=origin.workspace,
-                    profile=profile,
-                    kind=Child(parent, unattended=unattended(origin.kind)),
-                    toolsets=scope.toolsets,
-                    tools=scope.builtins,
-                    skills=scope.skills,
+                    title=spec.title,
+                    model=spec.model,
+                    effort=cast("Effort | None", spec.effort),
+                    mode=bundle.mode,
+                    workspace=spec.workspace,
+                    profile=spec.profile,
+                    kind=Child(spec.parent, unattended=bundle.unattended),
+                    toolsets=spec.scope.toolsets,
+                    tools=spec.scope.builtins,
+                    skills=spec.scope.skills,
                 )
             )
         except (ProfileError, LaunchRefused) as refused:
             raise DelegateRefused(f"the helper did not start: {refused}") from None
-        self._lenders[child] = parent
+
+    async def helper_turn(self, child: SessionId, text: str) -> TurnHandle:
+        """A helper's turn. Its prompt was written by a model, so it goes in as `InjectedText`
+        and the child reads it verbatim."""
         try:
-            handle = await self.run_turn(child, InjectedText(prompt))
-            verdict = await watch_turn(handle, functools.partial(self.interrupt, child))
-            ended = await handle.result()
-        except LaunchRefused as refused:
+            return await self.run_turn(child, InjectedText(text))
+        except (LaunchRefused, UntrustedPrompt) as refused:
             raise DelegateRefused(f"the helper did not start: {refused}") from None
-        finally:
-            await self.close_chat(child)
-            del self._lenders[child]
-        if verdict is not None:
-            raise DelegateRefused(f"the helper was stopped by the stuck rules: {verdict}")
-        if ended.status == "unknown":
-            raise DelegateRefused("the helper's process ended before it answered")
-        text = ended.text or ""
-        if self._deps.redaction:
-            text = redact(text)
-        if ended.status != "ok":
-            raise DelegateRefused(f"the helper's turn failed: {text or ended.terminal_reason}")
-        return text
+
+    async def cli_spawn(self, spec: ChildSpec, child: SessionId) -> CliSpawn:
+        """The command, environment and folder of one `cli` helper: an ordinary local process
+        whose model calls reach the relay on a grant whose owner is the helper's handle,
+        journalled with it (AD-28, AD-41). `[agents] cli_helper` names the binary and its
+        arguments; the pinned Claude Code CLI is the default."""
+        rows = await asyncio.to_thread(self._deps.control.settings_get, "agents")
+        written = rows.get("cli_helper")
+        if isinstance(written, list) and written and all(isinstance(part, str) for part in written):
+            argv = tuple(cast("list[str]", written))
+        else:
+            argv = (str(LAUNCHER), "-p", "--output-format", "text")
+        binary = Path(argv[0])
+        try:
+            info = await asyncio.to_thread(binary.stat)
+        except OSError as error:
+            raise DelegateRefused(f"the cli helper {binary} cannot be read: {error}") from None
+        version = f"{binary.name} {info.st_size}-{int(info.st_mtime)}"
+        grant = await self._deps.relay.grant(
+            child, ProfileName(spec.profile), unattended=True, agent_id=spec.handle
+        )
+        env = launch_env(
+            RelayedLaunch(grant),
+            home=self._deps.home,
+            session_id=child,
+            cap=self._deps.procs.handle_name,
+        )
+        return CliSpawn(argv, env, spec.workspace, version)
 
     async def _reap(self) -> None:
         """Close every live chat idle longer than `idle_reap_seconds`, checked at a quarter of
@@ -1071,11 +1138,12 @@ class Harness:
         return "unknown" if read_record(self._deps.home, ask.session_id) is None else "expired"
 
     async def close(self) -> None:
-        """Close every chat, then the relay, then release the process cap so the home can be
-        opened again. Idempotent."""
+        """Close every helper, then every chat, then the relay, then release the process cap so
+        the home can be opened again. Idempotent."""
         self._reaper.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await self._reaper
+        await self._helpers.shutdown()
         for chat in list(self._chats.values()):
             await chat.close()
         for task in list(self._background):

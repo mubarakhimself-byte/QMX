@@ -1,8 +1,29 @@
 """Shared documents and transport-independent errors."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 type Document = dict[str, JsonValue]
+
+DELEGATE_SUMMARY_CHARS = 4_000
+"""How much of a helper's answer one completion row keeps. The full text, when longer, is a
+Library artifact the row points at (AD-41)."""
+
+
+class DelegateCompletion(BaseModel):
+    """One `delegate` helper's answer as the parent will be handed it (AD-41). Stored in
+    `control.db` before it is announced or delivered, so a host restart loses nothing."""
+
+    model_config = ConfigDict(extra="forbid")
+    handle: str = Field(min_length=1, max_length=64)
+    parent_session: str = Field(min_length=1)
+    state: Literal["done", "failed", "stalled", "stopped"]
+    summary: str = Field(default="", max_length=DELEGATE_SUMMARY_CHARS)
+    artifact_id: str = ""
+    """A Library artifact holding the full answer when `summary` was cut."""
+    schema_valid: bool = True
+    """False when an `output_schema` helper never produced a document that holds to it."""
 
 
 class ControlError(Exception):
