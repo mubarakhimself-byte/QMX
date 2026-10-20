@@ -54,13 +54,26 @@ from common import SHIP_HOME, Log, boot, require_login, session_blocks, use_fake
 SETTINGS: Final = SHIP_HOME / "settings.toml"
 LIBRARY: Final = SHIP_HOME / "library"
 REQUEST: Final = (
-    "every weekday at 7, pull the ECB calendar, summarise it, and save it to the Library"
+    "every weekday at 7, pull the ECB calendar, summarise it, and save it to the Library. "
+    "Call the workflow {item}."
 )
+"""The one-line request, with the workflow's name in it so each lane run builds its own item: a
+home that already holds a tested draft of this line would otherwise be finished already."""
 SCRIPT_REQUEST: Final = (
-    "a script-only workflow, no model at all: read my trades.csv, total the size column by "
-    "symbol, and write the totals to a file"
+    "a script-only workflow with no model at all: read my trades.csv, total the size column by "
+    "symbol, and write the totals to a file. Call the workflow {item}."
 )
 PUBLISH: Final = "publish it now"
+REBUILD: Final = (
+    "save the draft for {item} again with expected_revision set to its current revision, and "
+    "test-run it; the one I have is stale"
+)
+
+
+def run_item(prefix: str) -> str:
+    """A workflow id for this lane run, so a home that already holds an earlier draft of the
+    same line still gets a build."""
+    return f"{prefix}-{time.strftime('%y%m%d-%H%M%S')}"
 TURN_S: Final = 900.0
 START_S: Final = 180.0
 LANES: Final = {2: "owner-tpl2-e42", 3: "owner-tpl2-publish", 4: "owner-tpl2-script"}
@@ -227,7 +240,18 @@ def wait_idle(client: httpx.Client, chat: str, seconds: float) -> str:
 
 
 def draft_item(blocks: list[dict[str, Any]]) -> str | None:
-    saved = tool_calls(blocks, "mcp__qmx_workflows__drafts_put")
+    """The last draft the chat saved that the engine accepted. A call whose answer carries no
+    `revision` was refused, so it is not a save."""
+    results = {
+        str(block["content"].get("id")): str(block["content"].get("result", ""))
+        for block in blocks
+        if block.get("type") == "tool" and "result" in block["content"]
+    }
+    saved = [
+        call
+        for call in tool_calls(blocks, "mcp__qmx_workflows__drafts_put")
+        if '"revision"' in results.get(str(call.get("id")), "")
+    ]
     if not saved:
         return None
     found = saved[-1].get("arguments", {}).get("workflow_id")
@@ -274,9 +298,17 @@ def show(log: Log, blocks: list[dict[str, Any]]) -> None:
 
 def build(log: Log, client: httpx.Client, chat: str) -> tuple[str, float, dict[str, Any]]:
     """Lane 2. The request, the draft, the ask check, and the perf number."""
+    name = run_item("ecb-digest")
     item, asks, seconds = turn(
-        log, client, chat, REQUEST, allow_publish=False, needs_draft=True
+        log, client, chat, REQUEST.format(item=name), allow_publish=False, needs_draft=True
     )
+    if not item:
+        log(f"no draft saved for {name}; asking once more before the check")
+        item, more, spent = turn(
+            log, client, chat, REBUILD.format(item=name), allow_publish=False, needs_draft=True
+        )
+        asks += more
+        seconds += spent
     blocks = chat_blocks(chat)
     show(log, blocks)
     log(f"{len(blocks)} blocks; {len(asks)} asks")
@@ -353,8 +385,9 @@ def publish(log: Log, client: httpx.Client, chat: str, item: str) -> None:
 
 def script_only(log: Log, client: httpx.Client, chat: str) -> None:
     """Lane 4. A request with no model step anywhere, and a run that spends nothing."""
+    name = run_item("trades-totals")
     item, asks, seconds = turn(
-        log, client, chat, SCRIPT_REQUEST, allow_publish=False, needs_draft=True
+        log, client, chat, SCRIPT_REQUEST.format(item=name), allow_publish=False, needs_draft=True
     )
     blocks = chat_blocks(chat)
     show(log, blocks)
