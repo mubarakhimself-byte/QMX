@@ -1,4 +1,4 @@
-# L1 Idea to first result
+# Get a first backtest result from an idea
 
 Waits for QMB's doors for agents and the Lab's Toolbox and data check (`needs: qmb-door`).
 

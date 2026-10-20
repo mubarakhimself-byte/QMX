@@ -90,5 +90,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "T4"}
+  "meta": {"template": "research-desk-overnight"}
 }

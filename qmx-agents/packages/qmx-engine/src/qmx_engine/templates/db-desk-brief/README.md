@@ -1,4 +1,4 @@
-# DB Desk brief
+# Morning market brief before each session
 
 Built from cards T1 (morning brief), T2 (pre-session read) and T10 (end-of-day wrap) in `research/methodology/16-templates-trader-risk.md`. One screen before a session: what is on today for the watchlist, what the research desk, the calendar watch and the paper scout found, and what needs him. It runs at 06:00 London (morning), 07:30 New York (pre-session) and 17:05 New York (end of day), weekdays, and on request. Until the trading node exists, every node fact (account, cushion, open risk, overnight result, positions, unit states, session conditions) reads `could not check: trading node`.
 

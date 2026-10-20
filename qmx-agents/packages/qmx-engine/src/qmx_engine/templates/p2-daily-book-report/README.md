@@ -1,4 +1,4 @@
-# P2 Daily book report
+# Daily book report
 
 Waits for the read-only broker token he makes himself (`needs: broker-read-token`).
 

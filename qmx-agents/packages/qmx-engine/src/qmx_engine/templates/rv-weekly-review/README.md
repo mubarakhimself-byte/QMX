@@ -1,4 +1,4 @@
-# RV Weekly review
+# Weekly review
 
 Built from card R9 in `research/methodology/15-templates-researcher.md` with D10 in `17-templates-dev-pm-lab.md`. Every Monday it reads the week's runs and the open inbox from the engine itself, not from the Library, clusters the failures, and proposes at most three edits as a change card. Nothing changes until he approves an edit.
 

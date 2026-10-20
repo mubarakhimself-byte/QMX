@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "t7-trade-journal-review",
-  "name": "Trade journal review in R",
+  "name": "Review my trade journal in risk units",
   "outputs": {
     "type": "object",
     "description": "slice stats in R that pass the significance filter, and at most three lessons"
@@ -62,5 +62,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "T7", "needs": ["trading-node"]}
+  "meta": {"template": "trade-journal-in-risk-units", "needs": ["trading-node"]}
 }

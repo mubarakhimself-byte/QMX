@@ -1,4 +1,4 @@
-# RS2 Source to component card
+# Source to component card
 
 Built from card R2 with R5 (understand and extract) and R7 (calibrate) in `research/methodology/15-templates-researcher.md`. It takes one piece of a paper, such as a signal, a filter, an exit, a sizing rule or a regime classifier, and makes it a card the Lab can test on its own. Every field the paper does not state stays `unresolved`.
 

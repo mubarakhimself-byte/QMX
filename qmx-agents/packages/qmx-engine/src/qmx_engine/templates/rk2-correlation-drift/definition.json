@@ -54,5 +54,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RK2", "needs": ["trading-node"]}
+  "meta": {"template": "correlation-and-exposure-drift", "needs": ["trading-node"]}
 }

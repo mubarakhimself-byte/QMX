@@ -60,5 +60,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "T3"}
+  "meta": {"template": "news-and-macro-calendar-watch"}
 }

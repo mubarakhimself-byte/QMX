@@ -1,4 +1,4 @@
-# D3 Iterate against QMB with overfit guards
+# Iterate against QMB with overfit guards
 
 Waits for QMB's doors for agents: reports, family ledger, compile, walk-forward, robustness and sealed holdout (`needs: qmb-door`).
 

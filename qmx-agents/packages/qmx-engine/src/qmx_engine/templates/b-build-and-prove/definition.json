@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "b-build-and-prove",
-  "name": "Build and prove, funnel stages 8 to 12",
+  "name": "Turn a strategy idea into a tested strategy, ending on paper",
   "inputs": {
     "type": "object",
     "required": [
@@ -56,5 +56,5 @@
     "Assemble the scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "B", "needs": ["qmb-door"]}
+  "meta": {"template": "strategy-idea-to-paper-tested", "needs": ["qmb-door"]}
 }

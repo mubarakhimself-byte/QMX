@@ -1,4 +1,4 @@
-# RS4 Literature review on a topic
+# Literature review on a topic
 
 Built from card R4 with R7 (calibrate) in `research/methodology/15-templates-researcher.md`. It answers "what methods exist for X, which hold up, which could we test" across a set of sources: a headline, a methods matrix with an evidence tier and a confidence per row, what QMX could test next, and the gaps.
 

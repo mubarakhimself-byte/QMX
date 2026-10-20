@@ -72,5 +72,5 @@
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
                          "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "EV"}
+  "meta": {"template": "copilot-eval-battery"}
 }

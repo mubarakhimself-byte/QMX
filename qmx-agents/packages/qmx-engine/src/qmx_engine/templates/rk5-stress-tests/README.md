@@ -1,4 +1,4 @@
-# RK5 Stress tests
+# Stress tests
 
 Waits for the trading node: its book, guard config and cost model reads (`needs: trading-node`).
 

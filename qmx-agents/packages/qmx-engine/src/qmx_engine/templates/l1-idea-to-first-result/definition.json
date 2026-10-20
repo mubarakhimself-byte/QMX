@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "l1-idea-to-first-result",
-  "name": "Idea to first result",
+  "name": "Get a first backtest result from an idea",
   "inputs": {
     "type": "object",
     "required": [
@@ -52,5 +52,5 @@
     "Assemble the card and scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "L1", "needs": ["qmb-door"]}
+  "meta": {"template": "first-backtest-from-an-idea", "needs": ["qmb-door"]}
 }

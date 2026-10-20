@@ -25,7 +25,7 @@ from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle, drafts_ref
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
-from qmx_engine.templates.catalog import CATALOG, PACK, SHARED, SHARED_COPIES, find
+from qmx_engine.templates.catalog import ALIASES, CATALOG, PACK, SHARED, find
 from qmx_engine.templates.install import install, listing
 from qmx_engine.triggers import rows
 
@@ -40,7 +40,72 @@ RV = PACK / "rv-weekly-review"
 DB = PACK / "db-desk-brief"
 T4 = PACK / "t4-research-desk-overnight"
 EV = PACK / "ev-copilot-eval-battery"
-DRAFTS = [PACK / t.folder for t in CATALOG if t.folder and t.needs]
+DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
+CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
+
+BLOCK_COPIES = {
+    "preflight/scripts/new_ids.py": ("rs1-paper-scout/scripts/new_ids.py",),
+    "paper-read/prompts/read.md": ("rs1-paper-scout/prompts/read.md",),
+    "paper-read/schemas/cards.json": ("rs1-paper-scout/schemas/cards.json",),
+    "research-harness/scripts/citation_check.py": (
+        "rs1-paper-scout/scripts/citation_check.py",
+        "rs4-literature-review/scripts/citation_check.py",
+        "_shared/understand-extract/scripts/citation_check.py",
+        "rs2-source-to-component-card/scripts/citation_check.py",
+        "a-fill-the-library/scripts/citation_check.py",
+        "t4-research-desk-overnight/scripts/citation_check.py",
+        "rk8-incident-post-mortem/scripts/citation_check.py",
+        "rs3-source-to-lab-test/scripts/citation_check.py",
+    ),
+    "render-and-grade/scripts/render_and_grade.py": tuple(
+        f"{template.folder}/scripts/render_and_grade.py" for template in CATALOG
+    ),
+    "render-and-grade/scripts/stop.py": tuple(
+        f"{template.folder}/scripts/stop.py" for template in CATALOG
+    ),
+    "render-and-grade/scripts/deliver.py": tuple(
+        f"{template.folder}/scripts/deliver.py"
+        for template in CATALOG
+        if template.folder != "a-fill-the-library"
+    ),
+    "overfit-gates/scripts/deflated_sharpe.py": tuple(
+        f"{folder}/scripts/deflated_sharpe.py"
+        for folder in (
+            "b-build-and-prove",
+            "l4-overnight-lab-loop",
+            "d3-iterate-against-qmb",
+            "d4-variant-comparison",
+        )
+    ),
+    "understand-extract/scripts/sections.py": (
+        "rs2-source-to-component-card/scripts/sections.py",
+        "a-fill-the-library/scripts/sections.py",
+    ),
+    "understand-extract/prompts/sections.md": (
+        "rs2-source-to-component-card/prompts/sections.md",
+        "a-fill-the-library/prompts/sections.md",
+    ),
+    "understand-extract/schemas/claims.json": (
+        "rs2-source-to-component-card/schemas/claims.json",
+        "a-fill-the-library/schemas/claims.json",
+    ),
+    "understand-extract/scripts/card_holes.py": ("a-fill-the-library/scripts/card_holes.py",),
+    "understand-extract/prompts/extract.md": ("a-fill-the-library/prompts/extract.md",),
+    "understand-extract/schemas/cards.json": ("a-fill-the-library/schemas/cards.json",),
+    **{
+        f"calibrate/{name}": tuple(f"{folder}/{name}" for folder in CALIBRATED)
+        for name in (
+            "scripts/basis.py",
+            "scripts/agreement.py",
+            "prompts/sample.md",
+            "schemas/votes.json",
+        )
+    },
+}
+"""Each shared block file, under `_shared/`, to the copies the templates carry. `catalog` held this
+list until TPL1; it lives here now because this test is its only reader, and a bundle carries a
+`subworkflow` node's child folder and hashes its bytes (B-76), so a template may call a block as a
+child instead and the copies can go."""
 
 
 def recorded(folder: Path, name: str) -> str:
@@ -152,14 +217,48 @@ def test_the_catalogue_lists_32_templates_each_with_a_source_card_and_its_own_fo
     assert all(t.cards and all(c.file in ("15", "16", "17", "44") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
-        "RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4", "EV",
-    ]  # fmt: skip
-    assert find("P1").needs == ("trading-node", "risk-session")
-    assert all(t.folder for t in CATALOG)
+        "paper-scout-to-research-note",
+        "news-and-macro-calendar-watch",
+        "rough-idea-to-test-plan",
+        "source-to-component-card",
+        "literature-review-on-a-topic",
+        "video-to-strategy-ideas",
+        "weekly-review",
+        "morning-market-brief",
+        "research-desk-overnight",
+        "copilot-eval-battery",
+    ]
+    assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
     assert sum(1 for t in CATALOG if t.needs) == 22
+
+
+def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
+    for template in CATALOG:
+        assert template.id == template.id.casefold()
+        assert all(word.isalnum() for word in template.id.split("-")), template.id
+        assert not template.id.startswith(("rs", "rk", "tp", "db", "dm", "dc", "gw", "bc")), (
+            template.id
+        )
+        assert template.name[0].isupper() and not template.name.endswith("."), template.name
+    assert [t.name for t in CATALOG if t.id == "video-to-strategy-ideas"] == [
+        "Turn a video, a playlist or saved posts into strategy ideas"
+    ]
+
+
+def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
+    assert find("RS1") is find("paper-scout-to-research-note")
+    assert find("rs1") is find("paper-scout-to-research-note")
+    assert find("rs1-paper-scout") is find("paper-scout-to-research-note")
+    assert find(" A ") is find("video-to-strategy-ideas")
+    assert find("b-build-and-prove").id == "strategy-idea-to-paper-tested"
+    assert {template.id for template in CATALOG} == set(ALIASES.values())
+    for old, new in ALIASES.items():
+        assert find(old).id == new, old
+    with pytest.raises(KeyError):
+        find("no-such-template")
 
 
 def test_each_built_folder_names_the_needs_its_catalogue_row_names() -> None:
@@ -171,7 +270,7 @@ def test_each_built_folder_names_the_needs_its_catalogue_row_names() -> None:
 
 
 def test_each_template_carries_an_identical_copy_of_every_block_file_it_uses() -> None:
-    for shared, copies in SHARED_COPIES.items():
+    for shared, copies in BLOCK_COPIES.items():
         for copy in copies:
             assert (PACK / copy).read_bytes() == (SHARED / shared).read_bytes(), copy
 
@@ -415,10 +514,20 @@ def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_cha
     with Reader.open(tmp_path) as reader:
         triggers = rows.triggers(reader.connection)
 
-    built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4", "EV"]
+    built = [
+        "paper-scout-to-research-note", "news-and-macro-calendar-watch", "rough-idea-to-test-plan",
+        "source-to-component-card", "literature-review-on-a-topic", "video-to-strategy-ideas",
+        "weekly-review", "morning-market-brief", "research-desk-overnight", "copilot-eval-battery",
+    ]  # fmt: skip
     drafts = [
-        "DM", "T7", "GW", "RK2", "DC", "RK5", "RK8", "P1", "P2", "PP", "B", "RS3", "RS6", "RS8",
-        "L1", "L4", "BC", "D3", "D4", "D6", "MA", "D9",
+        "demo-trades-fill-quality", "trade-journal-in-risk-units", "trading-guards-alive",
+        "correlation-and-exposure-drift", "decay-and-limit-report", "stress-tests",
+        "incident-post-mortem", "portfolio-combination-study", "daily-book-report",
+        "change-bundle-for-approval", "strategy-idea-to-paper-tested", "source-to-a-lab-test",
+        "hypotheses-from-dead-ends", "question-over-a-large-table", "first-backtest-from-an-idea",
+        "overnight-lab-loop", "build-a-component-or-indicator",
+        "iterate-against-qmb-with-overfit-guards", "variant-generation-and-comparison",
+        "ml-training-run-with-a-holdout", "mini-app-lifecycle", "connect-mini-apps",
     ]  # fmt: skip
     assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built] + [
         (t, "saved draft") for t in drafts
@@ -426,11 +535,17 @@ def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_cha
     assert [i.action for i in second] == ["unchanged"] * 32
     assert library_after == seen
     assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 10
-    assert status["GW"] == ("validated draft, needs: trading-node", None)
-    assert status["P2"] == ("validated draft, needs: broker-read-token", None)
-    assert status["PP"] == ("validated draft, needs: trading-node, risk-session", None)
-    assert status["D6"] == ("validated draft, needs: qmb-door, sandbox", None)
-    assert status["RS8"] == ("validated draft, needs: rlm", None)
+    assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
+    assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
+    assert status["change-bundle-for-approval"] == (
+        "validated draft, needs: trading-node, risk-session",
+        None,
+    )
+    assert status["ml-training-run-with-a-holdout"] == (
+        "validated draft, needs: qmb-door, sandbox",
+        None,
+    )
+    assert status["question-over-a-large-table"] == ("validated draft, needs: rlm", None)
     assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
@@ -440,6 +555,23 @@ def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_cha
         ("t3-news-calendar-watch", "cron", False),
         ("t4-research-desk-overnight", "cron", False),
     ]
+
+
+def test_installing_by_an_old_id_installs_the_renamed_template(tmp_path: Path) -> None:
+    with EngineService.open(tmp_path, harness=answers()) as svc:
+        done = asyncio.run(install(svc, [find("B")]))
+        found = listing(svc, [find("b-build-and-prove")])
+        drafted = svc.drafts.get("b-build-and-prove")
+
+    assert [(i.template.id, i.template.name, i.action) for i in done] == [
+        (
+            "strategy-idea-to-paper-tested",
+            "Turn a strategy idea into a tested strategy, ending on paper",
+            "saved draft",
+        )
+    ]
+    assert [row.status for row in found] == ["validated draft, needs: qmb-door"]
+    assert drafted.item == "b-build-and-prove"
 
 
 def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(tmp_path: Path) -> None:

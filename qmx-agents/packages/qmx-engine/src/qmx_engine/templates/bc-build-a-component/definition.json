@@ -40,5 +40,5 @@
     "Publish or keep as a draft": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "BC", "needs": ["sandbox"]}
+  "meta": {"template": "build-a-component-or-indicator", "needs": ["sandbox"]}
 }

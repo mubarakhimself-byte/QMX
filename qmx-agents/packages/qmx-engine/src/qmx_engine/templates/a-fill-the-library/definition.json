@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "a-fill-the-library",
-  "name": "Fill the Library, funnel stages 1 to 7",
+  "name": "Turn a video, a playlist or saved posts into strategy ideas",
   "inputs": {
     "type": "object",
     "properties": {
@@ -148,5 +148,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "A"}
+  "meta": {"template": "video-to-strategy-ideas"}
 }

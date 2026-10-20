@@ -1,4 +1,4 @@
-# BC Build a component or indicator
+# Build a component or indicator
 
 Waits for the Lab sandbox where agents write and built code runs (`needs: sandbox`).
 

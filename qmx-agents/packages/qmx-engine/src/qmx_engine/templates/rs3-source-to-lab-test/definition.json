@@ -48,5 +48,5 @@
     "Assemble the scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "RS3", "needs": ["qmb-door"]}
+  "meta": {"template": "source-to-a-lab-test", "needs": ["qmb-door"]}
 }

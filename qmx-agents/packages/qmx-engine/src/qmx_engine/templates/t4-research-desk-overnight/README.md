@@ -1,4 +1,4 @@
-# T4 Research desk overnight
+# Research desk overnight
 
 Built from card T4 in `research/methodology/16-templates-trader-risk.md`. Sunday to Thursday at 03:00 London, before the desk brief, a desk of analysts reads the night's news for the watchlist in chunks, code applies the cut rules, and a coordinator writes a ranked brief: HIGH, MEDIUM, CALENDAR, POSITIONING, CROSS-ASSET, and what was cut and why. Every line carries the links of the claims it rests on and a label, retrieved or inferred. No source, no claim.
 

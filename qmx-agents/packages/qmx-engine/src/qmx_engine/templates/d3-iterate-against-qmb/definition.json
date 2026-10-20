@@ -56,5 +56,5 @@
     "Assemble the tree and scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "D3", "needs": ["qmb-door"]}
+  "meta": {"template": "iterate-against-qmb-with-overfit-guards", "needs": ["qmb-door"]}
 }

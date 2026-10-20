@@ -1,4 +1,4 @@
-# P1 Portfolio combination study
+# Portfolio combination study
 
 Waits for the trading node's journals and the risk session's method list (`needs: trading-node, risk-session`).
 

@@ -1,4 +1,4 @@
-# DC Decay and limit report
+# Decay and limit report
 
 Waits for the trading node: its unit adapter and guard reader (`needs: trading-node`).
 

@@ -1,4 +1,4 @@
-# GW Guard watchdogs
+# Check that the trading guards are alive
 
 Waits for the trading node: its read-only guard reader (`needs: trading-node`).
 

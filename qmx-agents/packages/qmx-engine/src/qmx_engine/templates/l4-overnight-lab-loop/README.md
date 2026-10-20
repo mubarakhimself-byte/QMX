@@ -1,4 +1,4 @@
-# L4 Overnight Lab loop
+# Overnight Lab loop
 
 Waits for QMB's doors for agents: family ledger, compile, backtest, validation and sealed holdout (`needs: qmb-door`).
 

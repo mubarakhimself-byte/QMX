@@ -1,4 +1,4 @@
-# RS0 Idea grill to term sheet
+# Question a rough idea until it is a clear test plan
 
 Built from card R0 in `research/methodology/15-templates-researcher.md`. It turns a one-line idea, such as "funding spikes predict reversals", into a term sheet that can die: a mechanism, a universe and timeframe, the data it needs, an entry, an exit or `unresolved`, at least one kill criterion, a capacity guess, and what could fake the result.
 

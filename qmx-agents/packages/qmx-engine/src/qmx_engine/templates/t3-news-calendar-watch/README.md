@@ -1,4 +1,4 @@
-# T3 News and macro calendar watch
+# News and macro calendar watch
 
 Built from card T3 in `research/methodology/16-templates-trader-risk.md`, script-first. Every day at 00:05 UTC it reads the day's economic calendar and builds the calendar strip for the watchlist: each release that touches a watched currency, a blackout window around each high-impact release, and one alert line per high-impact release or surprise, each with its source link. Only a surprise costs tokens: one cheap note from the `scanner` role on what moved and what it means.
 

@@ -1,4 +1,4 @@
-# MA Mini app lifecycle
+# Mini app lifecycle
 
 Waits for the Lab sandbox and the host's app operations: list, consumers and `qmx app check` (`needs: sandbox, app-op`).
 

@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "rs8-big-data-question",
-  "name": "Big-data question",
+  "name": "Answer a question over a large table",
   "inputs": {
     "type": "object",
     "required": [
@@ -49,5 +49,5 @@
     "Assemble the explainer": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "RS8", "needs": ["rlm"]}
+  "meta": {"template": "question-over-a-large-table", "needs": ["rlm"]}
 }

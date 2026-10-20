@@ -1,4 +1,4 @@
-# A Fill the Library, funnel stages 1 to 7
+# Turn a video, a playlist or saved posts into strategy ideas
 
 Built from funnel stages 1 to 7 (file 19 section 7, detailed in `research/methodology/08-strategy-funnel-lineage.md` section 3) with R5 (understand and extract) and R7 (calibrate) in `15-templates-researcher.md`. Drop URLs and notes in; it keeps an inventory row for every one, captures captions and text, triages, pulls located claims and typed cards with their holes kept, audits them in a fresh context, and writes the entry into the Library as run files.
 

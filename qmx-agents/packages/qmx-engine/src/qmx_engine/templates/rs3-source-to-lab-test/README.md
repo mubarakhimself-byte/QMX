@@ -1,4 +1,4 @@
-# RS3 Source to a Lab test
+# Source to a Lab test
 
 Waits for QMB's doors for agents and the Lab build (`needs: qmb-door`).
 

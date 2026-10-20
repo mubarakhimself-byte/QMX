@@ -1,4 +1,4 @@
-# D6 ML training run with a holdout
+# ML training run with a holdout
 
 Waits for QMB's doors for agents and the Lab sandbox with its compute (`needs: qmb-door, sandbox`).
 

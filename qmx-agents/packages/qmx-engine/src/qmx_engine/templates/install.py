@@ -38,11 +38,7 @@ class Installed:
 async def install(
     svc: EngineService, templates: Iterable[Template] = CATALOG, *, caller: Caller = OPERATOR
 ) -> list[Installed]:
-    return [
-        await install_one(svc, template, caller)
-        for template in templates
-        if template.folder is not None
-    ]
+    return [await install_one(svc, template, caller) for template in templates]
 
 
 def current_draft(svc: EngineService, item: str) -> Draft | None:
@@ -54,8 +50,6 @@ def current_draft(svc: EngineService, item: str) -> Draft | None:
 
 async def install_one(svc: EngineService, template: Template, caller: Caller) -> Installed:
     item = template.folder
-    if item is None:
-        raise ValueError(f"template {template.id} has no folder yet")
     bundle = Bundle.read(PACK / item)
     content_hash = bundle.content_hash()
     if any(v.content_hash == content_hash for v in svc.versions.list(item)):
@@ -135,8 +129,6 @@ def listing(svc: EngineService, templates: Iterable[Template] = CATALOG) -> list
 
 
 def row(svc: EngineService, template: Template) -> Row:
-    if template.folder is None:
-        return Row(template, "not yet built", None)
     versions = svc.versions.list(template.folder)
     if versions:
         latest = versions[-1]
