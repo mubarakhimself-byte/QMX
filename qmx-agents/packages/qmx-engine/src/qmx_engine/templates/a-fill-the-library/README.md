@@ -4,7 +4,7 @@ Built from funnel stages 1 to 7 (file 19 section 7, detailed in `research/method
 
 ## Steps
 
-1. `Intake` normalises each URL, merges duplicates with all their provenance, and gives every row a stable id.
+1. `Intake` normalises each URL, expands a playlist, a channel or a saved collection into one row per member without asking, merges duplicates with all their provenance, and gives every row a stable id. `collections` names what each collection expanded to and how.
 2. `Capture captions and text` gets a video's captions with `yt-dlp`, native first, then automatic. A video with no captions is recorded as `no captions` and the run goes on. A note is kept as written.
 3. `Pre-filter` passes only items that say a trading word. `Triage each item` (role `triage`) buckets each one from its transcript alone and maps a video's parts in seconds.
 4. `Items to understand`, `Sections`, `Read each chunk of sections` (role `reader`) and `Quotes check` are the shared `understand-extract` block: located claims tagged source-stated, inferred or unresolved, with each quote checked against its window; promo windows are skipped.
@@ -15,13 +15,12 @@ Built from funnel stages 1 to 7 (file 19 section 7, detailed in `research/method
 
 ## Test runs
 
-`{"fixture": "one-video"}` replays one synthetic video transcript, dropped twice in two URL spellings. `{"fixture": "no-captions"}` replays a video with no captions and a note with no trading words, which makes no model call. `fixtures/recorded/` holds the answers for the `--fake` switch and the unit tests (`cards.json` answers the agent step in tests only).
+`{"fixture": "one-video"}` replays one synthetic video transcript, dropped twice in two URL spellings. `{"fixture": "no-captions"}` replays a video with no captions and a note with no trading words, which makes no model call. `{"fixture": "playlist"}` drops one 20-video playlist URL: intake expands it into its 20 members from the pinned `playlists` map in `fixtures/inventory.json`, and the chunked triage edge runs over all 20. `fixtures/recorded/` holds the answers for the `--fake` switch and the unit tests (`cards.json` answers the agent step in tests only).
 
 ## Left out, and why
 
 - Whisper for videos with no captions: it needs a key.
-- Expanding a playlist, a channel or a saved collection: it needs his approval. Each such URL is one row.
-- Logged-in sources (Instagram saves, X bookmarks) and TradingView pages: they need the browser; such rows read "not captured" with the tool they need.
+- Logged-in sources (Instagram saves, X bookmarks) and TradingView pages: they need the browser; such rows read "not captured" with the tool they need. Their collection URLs expand only when `yt-dlp` lists them.
 - PDF to Markdown for papers: it needs the PDF tool.
 - Frames and the visual pass on flagged windows: no vision step is wired; claims are transcript-only.
 - Pine parsing and repaint flags: TradingView capture is not built.

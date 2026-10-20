@@ -6,7 +6,7 @@
     "type": "object",
     "properties": {
       "items": {"type": "array", "description": "URLs and notes, one string each"},
-      "fixture": {"enum": ["one-video", "no-captions"], "description": "replay a fixture"}
+      "fixture": {"enum": ["one-video", "no-captions", "playlist"], "description": "replay a fixture"}
     }
   },
   "outputs": {"type": "object", "description": "the graded Library entry: inventory, cards, sources"},
