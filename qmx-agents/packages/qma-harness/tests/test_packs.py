@@ -79,6 +79,7 @@ def test_the_shipped_plugin_manifest_is_what_the_code_generates() -> None:
 
 def test_the_builder_skill_names_only_catalog_tools_that_exist() -> None:
     from qma.harness.home import PLUGIN_DIR
+    from qma.harness.tools import tool_name
     from qmx_control.catalog import rows
 
     text = (PLUGIN_DIR / "skills" / "build-workflow" / "SKILL.md").read_text(encoding="utf-8")
@@ -89,10 +90,10 @@ def test_the_builder_skill_names_only_catalog_tools_that_exist() -> None:
         )
     }
     named = header["allowed-tools"].split()
-    known = {f"mcp__qmx__{row.wire}" for row in rows() if row.agent}
+    known = {tool_name(row.toolset, row.op) for row in rows() if row.agent}
 
     assert header["name"] == "build-workflow"
-    assert "mcp__qmx__workflows_drafts_put" in named
+    assert "mcp__qmx_workflows__drafts_put" in named
     assert [tool for tool in named if tool not in known] == []
 
 

@@ -1,7 +1,7 @@
 ---
 name: build-workflow
 description: Build, validate and test-run a QMX workflow from one line of the operator's intent. Use when he describes a routine, schedule, automation or recurring job, or asks to build, change, test or publish a workflow.
-allowed-tools: mcp__qmx__workflows_drafts_get mcp__qmx__workflows_drafts_put mcp__qmx__workflows_get mcp__qmx__workflows_put mcp__qmx__workflows_tests_run mcp__qmx__workflows_validate mcp__qmx__workflows_versions_list
+allowed-tools: mcp__qmx_workflows__drafts_get mcp__qmx_workflows__drafts_put mcp__qmx_workflows__get mcp__qmx_workflows__put mcp__qmx_workflows__tests_run mcp__qmx_workflows__validate mcp__qmx_workflows__versions_list
 ---
 
 # Build a workflow
@@ -12,15 +12,15 @@ He gives you one line. You give him a tested draft and a publish card. He never 
 request. Do not ask him what a trigger is, which model to use, or where the Library is. Build the
 thing, run it, show it.
 
-This file is self-contained. A chat cannot read a file beside the plugin without asking him, and
-nothing in a build may ask, so never reach for another file to finish a build.
+This file is self-contained. Nothing in a build may ask him, and every read, search or shell
+command would ask, so build from his line and this file alone.
 
 ## What you promise
 
 - A draft, not a published workflow. You never publish and you never enable. `workflows_put`
   answers you with a card, and the card's button is his click (AD-11, AD-22).
 - Saving the draft and test-running it never ask him. They are `domain_write` rows. Nothing in
-  this skill needs a permission prompt, and nothing needs a file read or a shell command.
+  this skill needs a permission prompt.
 - The draft lands on his Library draft ref, from your chat's own agent ref. Nothing you write
   reaches `main`.
 - A test run that spends as little as the workflow allows.
@@ -44,7 +44,8 @@ The interview fills exactly three things, and nothing else:
 
 Ask at most three numbered questions, each with the recommended answer first, and treat "yes" as
 accepting all of them. Ask only what changes the graph. If his line already says it, do not ask
-it. If he answered it a sentence ago, do not ask it again.
+it. If he answered it a sentence ago, do not ask it again. A line like the one above answers all
+three, so it gets no question at all.
 
 The questions worth asking, in his words:
 
@@ -84,11 +85,10 @@ Only as far as the shape needs them:
 
 ### 4. Draft
 
-Write one graph with `mcp__qmx__workflows_drafts_put`. The call takes
-`{"definition": ..., "files": {...}, "expected_revision": n}`: the definition is the graph, and
-`files` are the folder's text files keyed by their path. `expected_revision` is the draft's
-current revision, `0` for a new draft, or the `revision` you read from
-`mcp__qmx__workflows_drafts_get`.
+Save it with `mcp__qmx_workflows__drafts_put`. Its two arguments are `workflow_id` and `graph`,
+and `graph` is `{"definition": ..., "files": {...}, "expected_revision": n}`. `expected_revision`
+is the draft's current revision, `0` for a new draft, or the `revision` you read from
+`mcp__qmx_workflows__drafts_get`.
 
 The document:
 
@@ -176,7 +176,7 @@ A worked three-node draft for the ECB request:
     "meta": {}
   },
   "files": {
-    "scripts/pull_ecb.py": "import json, os, urllib.request\n...",
+    "scripts/pull_ecb.py": "import json, urllib.request\n...",
     "prompts/summarise.md": "Summarise the calendar below in one paragraph...",
     "schemas/summary.json": "{\"type\": \"object\", \"required\": [\"summary\"]}"
   },
@@ -189,6 +189,10 @@ The folder files:
 - A script takes JSON on stdin and answers JSON on stdout. It reads engine state nowhere. It
   writes only inside `QMX_WORK`, its own overlay, and it takes the clock from `QMX_NOW` rather
   than `datetime.now()`.
+- A script that reaches the outside world ships a fixture beside it and reads that fixture when
+  `QMX_MODE` is `test`, so the first test run passes without the network. It fetches for real in
+  a live run. This is how the shipped templates test: a quiet fixture and a surprise fixture, not
+  a live call.
 - A prompt is markdown holding the instruction, with no model name in it. The role picks the
   model.
 - A schema is a small JSON Schema object the model's answer is parsed against.
@@ -199,10 +203,10 @@ trigger node's name and in your message.
 
 ### 5. Build with a deterministic lint gate
 
-Call `mcp__qmx__workflows_validate` with the same `{"definition": ..., "files": ...}`. It returns
-`valid`, `content_hash` and `problems`, each with a `kind`, a `where` and a `message`. Every
-problem is yours to fix: fix, save the draft again with the new `expected_revision`, and validate
-again until `problems` is empty. Do not show him a draft that has not validated.
+Call `mcp__qmx_workflows__validate` with the same `graph`. It returns `valid`, `content_hash` and
+`problems`, each with a `kind`, a `where` and a `message`. Every problem is yours to fix: fix,
+save the draft again with the new `expected_revision`, and validate again until `problems` is
+empty. Do not show him a draft that has not validated.
 
 Two refusals are not yours to fix: a `needs_unmet` problem names a setting or tool the run needs,
 so show it to him in one line and keep the draft, and an unknown node type means the executor is
@@ -210,10 +214,10 @@ not built yet, so pick an available kind from the table instead of inventing one
 
 ### 6. Optimise, then test-run
 
-Test-run the draft with `mcp__qmx__workflows_tests_run`: the whole graph (no `subgraph`) and
-`fake: false`. A test run uses the cheap end of each role's list, so it costs one model call per
-model node. Pass `fake: true` only when he asked for a dry run or when you must show the graph
-without spending.
+Test-run the draft with `mcp__qmx_workflows__tests_run`, which takes `workflow_id`, and optionally
+`subgraph` and `fake`. Pass neither of those: the whole graph, `fake: false`. A test run uses the
+cheap end of each role's list, so it costs one model call per model node. Pass `fake: true` only
+when he asked for a dry run or when you must show the graph without spending.
 
 The answer is `{"run": ..., "report": ...}`. The draft is tested when a run with status `passed`
 ran the same `content_hash`, so test after your last edit: an edit changes the hash and loses the
@@ -227,9 +231,10 @@ One short message. It names the workflow in his words, the trigger, the nodes in
 kinds, the cost line (no tokens for a script-only shape, otherwise the roles and that it ran on
 the cheap end), the test result, and that it is a draft on his draft ref.
 
-Then call `mcp__qmx__workflows_put` with `{}` (or a `semver` he asked for) to get the publish
-card. Do not call it before the draft is tested. Show the card. His click publishes; a second
-card, from the trigger row, arms the schedule. You stop after handing him the cards.
+Then call `mcp__qmx_workflows__put` with `workflow_id` and `{}` (or a `{"semver": ...}` he asked
+for) to get the publish card. Do not call it before the draft is tested. Show the card. His click
+publishes; a second card, from the trigger row, arms the schedule. You stop after handing him the
+cards.
 
 ## Things you never do
 
@@ -237,6 +242,9 @@ card, from the trigger row, arms the schedule. You stop after handing him the ca
   a card instead (AD-11).
 - Never write a definition with `library_save` or a file write. The draft goes through
   `workflows_drafts_put` only, so it passes the same validation and test gate as a hand-built one.
+- Never search the web, run a shell command or read a file to finish a build. Each one asks him,
+  and the build must not ask. The script you write fetches at run time; that is what its test run
+  is for.
 - Never invent a node type, a port or a tool name. If the graph needs a capability the registry
   does not have, say which one and stop at that point.
 - Never claim a test passed without a `report` whose status is `passed`.
