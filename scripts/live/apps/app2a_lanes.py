@@ -136,21 +136,29 @@ def python_of(checkout: Path) -> Path:
     )
 
 
-def run_suites(checkout: Path) -> dict[str, list[str]]:
-    """Every touched suite's failing test ids, by package, at `checkout`."""
+def run_suites(checkout: Path, packages: list[str]) -> dict[str, list[str]]:
+    """Every touched suite's failing test ids, by package, at `checkout`. A suite file the
+    checkout does not hold is named and left out: the parent cannot run a test this PR adds."""
     found: dict[str, list[str]] = {}
     for package, suite in (
         ("qmx-apps", APPS_SUITE),
         ("qmx-control", CONTROL_SUITE),
         ("qmx-engine", ENGINE_SUITE),
     ):
+        if package not in packages:
+            continue
         folder = checkout / "qmx-agents" / "packages" / package
+        present = [item for item in suite if (folder / item).exists()]
+        if not present:
+            print(f"  {package}: nothing to run at {checkout.name}")
+            found[package] = []
+            continue
         result = subprocess.run(
             [
                 str(python_of(checkout)),
                 "-m",
                 "pytest",
-                *suite,
+                *present,
                 "-n",
                 "2",
                 "-q",
@@ -170,23 +178,31 @@ def run_suites(checkout: Path) -> dict[str, list[str]]:
         )
         found[package] = [f"{package}:{item}" for item in found[package]]
         tail = result.stdout.strip().splitlines()
-        print(f"  {package}: {tail[-1] if tail else 'no output'}")
+        missing = sorted(set(suite) - set(present))
+        note = f" (absent here: {', '.join(missing)})" if missing else ""
+        print(f"  {package}: {tail[-1] if tail else 'no output'}{note}")
     return found
 
 
-def lane_one(evidence: Path, work: Path) -> bool:
-    lines, path = log_of(evidence, "regression")
+def lane_one(evidence: Path, work: Path, packages: list[str]) -> bool:
+    chosen = ("qmx-apps", "qmx-control", "qmx-engine")
+    name = (
+        "regression"
+        if list(packages) == list(chosen)
+        else "regression-" + "-".join(package.removeprefix("qmx-") for package in packages)
+    )
+    lines, path = log_of(evidence, name)
     parent_root = globals()["PARENT"]
     if not (parent_root / "qmx-agents").is_dir():
         lines += [f"FAIL  no parent checkout at {parent_root}", "APP2A-LANE-1 FAIL"]
         write(lines, path)
         return False
     lines += ["# Lane 1: the touched suites at the parent and at the head (pytest -n 2)", ""]
-    lines += [f"parent {parent_root}", f"head   {ROOT}", ""]
+    lines += [f"parent {parent_root}", f"head   {ROOT}", f"packages {', '.join(packages)}", ""]
     print("parent suites")
-    parent = run_suites(parent_root)
+    parent = run_suites(parent_root, packages)
     print("head suites")
-    head = run_suites(ROOT)
+    head = run_suites(ROOT, packages)
     regressed: list[str] = []
     for package in parent:
         new = [item for item in head[package] if item not in parent[package]]
@@ -511,6 +527,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lane", type=int, nargs="+", default=[])
     parser.add_argument("--perf", action="store_true", help="record the perf block's number")
+    parser.add_argument("--packages", nargs="+", default=["qmx-apps", "qmx-control", "qmx-engine"])
     parser.add_argument("--evidence", type=Path, default=EVIDENCE)
     parser.add_argument("--work", type=Path, default=WORK)
     parser.add_argument("--parent", type=Path, default=PARENT)
@@ -523,7 +540,7 @@ def main(argv: list[str] | None = None) -> int:
     started = time.monotonic()
     for lane in args.lane:
         if lane == 1:
-            results[1] = lane_one(args.evidence, args.work)
+            results[1] = lane_one(args.evidence, args.work, args.packages)
         elif lane == 2:
             results[2] = lane_two(args.evidence)
         elif lane == 3:

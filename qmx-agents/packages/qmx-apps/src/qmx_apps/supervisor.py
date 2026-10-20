@@ -42,9 +42,9 @@ type EventSink = Callable[[str, Document], None]
 JOB_QUEUE: Final = "data/jobs"
 """Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
 JOB_POLL_SECONDS: Final = 0.25
-PARTITIONS: Final = "data/profiles"
-"""One folder per profile, under the app's own `data/` (AD-64). The host's own files, the
-heartbeat and the job queue, stay at `data/` because the app's bootstrap writes them there."""
+PROFILES: Final = "profiles"
+"""One folder per profile under the app's own `data/` (AD-64). The host's files, the heartbeat
+and the job queue, stay at `data/` because the app's bootstrap writes them there."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,7 +105,7 @@ class Instance:
         """This instance's partition of the app's `data/`: `data/profiles/<profile>` under a
         named profile, `data/` itself when the app runs without one."""
         root = self.volume.root / "data"
-        return root if self.profile is None else root / "profiles" / self.profile
+        return root if self.profile is None else root / PROFILES / self.profile
 
     def document(self) -> Document:
         return {
