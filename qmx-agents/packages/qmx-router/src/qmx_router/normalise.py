@@ -28,7 +28,6 @@ GATED_FIELDS: Final[Mapping[str, str]] = {
 }
 """Each top-level body field one beta carries. The field goes when its beta did."""
 STRICT_BETA: Final = "structured-outputs-2025-11-13"
-CACHE_TTL_BETA: Final = "extended-cache-ttl-2025-04-11"
 TOOL_SEARCH_TYPE: Final = "tool_search_tool"
 """The deferred-tool loader's `type` prefix. The tool itself is useless once `defer_loading` is
 gone, and third parties refuse the type outright."""
