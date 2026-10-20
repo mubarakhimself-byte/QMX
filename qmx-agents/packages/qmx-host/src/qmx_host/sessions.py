@@ -89,12 +89,6 @@ class StoreReads:
     def __init__(self, store: Store) -> None:
         self.store = store
 
-    def resolve(self, item: str, ref: str = MAIN) -> str | None:
-        try:
-            return self.store.resolve(self.store.engine, item, ref)
-        except LibraryRefused:
-            return None
-
     def head(self, item: str, ref: str = MAIN) -> str | None:
         found = self.store.head(item, ref)
         return None if found is None else found[0]
