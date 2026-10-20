@@ -187,8 +187,14 @@ class RouterService:
         if listener is not None:
             with contextlib.suppress(OSError):
                 listener.close()
-        old, self._thread, self._loop = self._thread, None, None
-        self._stop = None
+        old_loop, self._loop = self._loop, None
+        old_stop, self._stop = self._stop, None
+        old, self._thread = self._thread, None
+        if old_loop is not None and old_stop is not None and not old_loop.is_closed():
+            # A live loop stops cleanly. A stalled one never runs this, and the daemon thread
+            # stays behind because there is nothing left that could end it.
+            with contextlib.suppress(RuntimeError):
+                old_loop.call_soon_threadsafe(old_stop.set)
         if old is not None and old is not threading.current_thread():
             old.join(timeout=JOIN_S)
         self._ensure_thread()
