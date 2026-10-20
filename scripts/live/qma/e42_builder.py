@@ -372,6 +372,15 @@ def build(
     return item, seconds, {} if not done else done[-1]
 
 
+def card_in(answer: str) -> dict[str, Any] | None:
+    """The card a `user`-only row answers a non-`user` caller with, or None."""
+    try:
+        found = json.loads(answer)
+    except ValueError:
+        return None
+    return found if isinstance(found, dict) and found.get("card") else None
+
+
 def publish(
     log: Log, client: httpx.Client, chat: str, item: str, pressed: dict[int, dict[str, Any]]
 ) -> None:
@@ -382,15 +391,10 @@ def publish(
     blocks = chat_blocks(chat)
     show(log, blocks)
     log(f"asks in the publish turn: {[str(ask['content'].get('tool')) for ask in asks]}")
-    cards = [
-        answer
-        for call in tool_calls(blocks, "mcp__qmx_workflows__put")
-        for answer in [answer_of(blocks, call)]
-        if '"card": "publish"' in answer
-    ]
-    answers = [answer_of(blocks, call)[:200] for call in tool_calls(blocks, "mcp__qmx_workflows__put")]
-    log(f"publish answers: {answers}")
-    log.check("the publish row answered with a card", bool(cards), [text[:160] for text in cards])
+    answers = [answer_of(blocks, call) for call in tool_calls(blocks, "mcp__qmx_workflows__put")]
+    cards = [card for answer in answers for card in [card_in(answer)] if card]
+    log(f"publish answers: {[answer[:200] for answer in answers]}")
+    log.check("the publish row answered with a card", bool(cards), cards[-1] if cards else answers[-1:])
     versions = client.get(f"/api/workflows/{item}/versions").json()
     log(f"versions of {item}: {len(versions)}")
     log.check("nothing was published", versions == [], versions)
@@ -479,12 +483,12 @@ def summary(log: Log, client: httpx.Client, chat: str, item: str) -> None:
     runs = runs_of(client, item)
     log(f"  runs {[(r.get('mode'), r.get('status')) for r in runs]}")
     cards = [
-        str(block["content"].get("result"))
-        for block in chat_blocks(chat)
-        if block["type"] == "tool"
-        and str(block["content"].get("name")) == "mcp__qmx_workflows__put"
+        card
+        for call in tool_calls(chat_blocks(chat), "mcp__qmx_workflows__put")
+        for card in [card_in(answer_of(chat_blocks(chat), call))]
+        if card
     ]
-    log(f"  publish card {cards[-1][:400] if cards else 'none'}")
+    log(f"  publish card {cards[-1] if cards else 'none'}")
 
 
 def main() -> int:
