@@ -254,13 +254,17 @@ SETS: Final = frozenset({"accepts_betas", "strip_fields", "forward_headers"})
 BUNDLED: Final = resources.files("qmx_router") / "profiles"
 
 
-def merge(bundled: Mapping[str, Any], user: Mapping[str, Any]) -> dict[str, Any]:
-    """A user profile over a bundled one, key by key."""
-    merged = {**bundled, **{k: v for k, v in user.items() if k not in ("defaults", "models")}}
-    merged["defaults"] = {**bundled.get("defaults", {}), **user.get("defaults", {})}
-    rows: dict[str, dict[str, Any]] = {}
-    for row in [*bundled.get("models", []), *user.get("models", [])]:
-        key = str(row.get("qmx_id", ""))
+def merge(base: Mapping[str, Any], user: Mapping[str, Any]) -> dict[str, Any]:
+    """A user profile over a bundled one, key by key. A user row that is not a table is kept as
+    it is, so the parse refuses it by name."""
+    merged = {**base, **{k: v for k, v in user.items() if k not in ("defaults", "models")}}
+    merged["defaults"] = {**base.get("defaults", {}), **user.get("defaults", {})}
+    rows: dict[object, Any] = {}
+    for index, row in enumerate([*base.get("models", []), *user.get("models", [])]):
+        if not isinstance(row, dict):
+            rows[index] = row
+            continue
+        key = str(cast("dict[str, Any]", row).get("qmx_id", ""))
         rows[key] = {**rows.get(key, {}), **row}
     merged["models"] = list(rows.values())
     return merged
@@ -274,7 +278,7 @@ def load(user_dir: Path | None = None) -> Registry:
     for entry in BUNDLED.iterdir():
         if entry.name.endswith(".toml"):
             documents[entry.name.removesuffix(".toml")] = (
-                tomllib.loads(entry.read_text()),
+                tomllib.loads(entry.read_text(encoding="utf-8")),
                 "bundled",
             )
     for path in sorted(user_dir.glob("*.toml")) if user_dir and user_dir.is_dir() else ():
