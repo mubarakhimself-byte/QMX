@@ -54,6 +54,11 @@ def runs_ref(run_id: str) -> str:
     return f"refs/runs/{run_id}"
 
 
+def sessions_ref(session_id: str) -> str:
+    """Where the host's session recorder writes a chat's `session` item before landing it."""
+    return f"refs/sessions/{session_id}"
+
+
 def state_ref(item: str) -> str:
     return f"refs/items/{item}/state"
 
@@ -85,6 +90,8 @@ def may_advance(principal: Principal, ref: str, act: Act, *, store: str) -> bool
             return who == "agent" and rest[0] == name
         case "runs" if len(rest) == 1:
             return who == "run" and rest[0] == name
+        case "sessions" if len(rest) == 1:
+            return engine
         case "memory" | "champions" | "challengers":
             return engine
         case "hub":

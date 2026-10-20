@@ -9,8 +9,42 @@
     "properties": {
       "session_id": {
         "type": "string"
+      },
+      "home": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "general",
+              "lab",
+              "portfolio",
+              "library",
+              "app",
+              "agent"
+            ]
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "project_id"
+        ],
+        "additionalProperties": false
+      },
+      "created": {
+        "type": "string"
       }
-    }
+    },
+    "required": [
+      "session_id",
+      "home",
+      "created"
+    ]
   },
   "blobs": {
     "transcript": {
@@ -20,7 +54,16 @@
   "annotations": [
     "tags",
     "aliases",
-    "intent_key"
+    "intent_key",
+    "title",
+    "last_turn_at",
+    "turns",
+    "models",
+    "profiles",
+    "packs",
+    "tokens",
+    "surface_digest",
+    "exported_at"
   ],
   "preview": {
     "card": [
