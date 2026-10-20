@@ -367,6 +367,10 @@ class _Upstream:
     start_wait: float = START_WAIT_S
     """The row's no-progress bound on the first event, or the Claude default when no row
     describes the target (AD-50 (8), Appendix H)."""
+    deadline: float | None = None
+    """When that bound runs out, on the loop clock, measured from before the request was sent.
+    A provider that sends its SSE headers late spends the same window, so a slow prefill cannot
+    hide behind the headers."""
     keepalive: bool = False
     """Per-row opt-in, off by default: nothing is sent to the CLI before the upstream's first
     event, so a late error keeps its own status (42 N3)."""
@@ -793,7 +797,17 @@ class Relay:
                 if pinned != requested:
                     document["model"] = pinned
                     body = _dumps(document)
-                return await self._forward(held, provider, path, query, headers, body, pinned, row)
+                return await self._forward(
+                    held,
+                    provider,
+                    path,
+                    query,
+                    headers,
+                    body,
+                    pinned,
+                    row,
+                    streamed=document.get("stream") is True,
+                )
 
     def _route(self, held: RelayGrant, requested: str) -> _Routed:
         """The lane and provider one request's `model` field names (AD-29, AD-38). A tier alias
@@ -1072,6 +1086,7 @@ class Relay:
         body: bytes,
         model: str,
         row: ModelRow | None,
+        streamed: bool = False,
     ) -> Reply:
         if self._client is None:
             raise RuntimeError("the relay is not started")
@@ -1094,8 +1109,14 @@ class Relay:
         )
         del key
         self.counters.upstream += 1
+        loop = asyncio.get_running_loop()
+        wait = START_WAIT_S if row is None else row.first_token_timeout(_prompt_tokens(row, body))
+        deadline = loop.time() + wait
         try:
-            response = await self._client.send(request, stream=True)
+            async with asyncio.timeout_at(deadline):
+                response = await self._client.send(request, stream=True)
+        except TimeoutError:
+            return await self._late(held, path, model, profile, wait, streamed)
         except httpx.HTTPError as error:
             await self.tee(held, path, 502, model, {}, profile.name)
             return _error(502, "api_error", f"the provider did not answer: {type(error).__name__}")
@@ -1110,9 +1131,8 @@ class Relay:
             model,
             row,
             provider=profile.name,
-            start_wait=(
-                START_WAIT_S if row is None else row.first_token_timeout(_prompt_tokens(row, body))
-            ),
+            start_wait=wait,
+            deadline=deadline,
             keepalive=bool(row is not None and row.keepalive),
         )
         try:
@@ -1123,6 +1143,25 @@ class Relay:
         if reply.finish is None:
             await upstream.finish()
         return reply
+
+    async def _late(
+        self,
+        held: RelayGrant,
+        path: str,
+        model: str,
+        profile: KeyProvider,
+        wait: float,
+        streamed: bool,
+    ) -> Reply:
+        """No headers inside the row's bound. Nothing was answered, so nothing is retried: one
+        request was sent and the CLI gets an error event it stops on."""
+        reason = f"no message_start in {wait:.0f} s"
+        await self.tee(held, path, 504, model, {}, profile.name)
+        await self._alert(held.session_id, reason)
+        if streamed:
+            headers = [("content-type", "text/event-stream"), ("cache-control", "no-cache")]
+            return Reply(200, headers, _once(_error_event(reason)))
+        return _error(504, "api_error", reason)
 
     async def _reply(self, upstream: _Upstream) -> Reply:
         response, path = upstream.response, upstream.path
@@ -1163,7 +1202,7 @@ class Relay:
         held, errors, pending, started = b"", b"", b"", not guarded
         chunks = cast("AsyncGenerator[bytes]", upstream.response.aiter_bytes())
         loop = asyncio.get_running_loop()
-        deadline = loop.time() + upstream.start_wait
+        deadline = upstream.deadline or (loop.time() + upstream.start_wait)
         try:
             while True:
                 try:

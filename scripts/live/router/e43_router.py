@@ -184,10 +184,12 @@ def profiles_for(port: int) -> Any:
 
 
 def prompt() -> bytes:
+    """The turn a CLI sends: streamed, so the relay's own stop is an error event, not a status."""
     return json.dumps(
         {
             "model": ROW,
             "max_tokens": 16,
+            "stream": True,
             "messages": [{"role": "user", "content": "x" * PROMPT_CHARS}],
         }
     ).encode()

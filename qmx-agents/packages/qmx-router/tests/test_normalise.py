@@ -7,16 +7,21 @@ DeepSeek actually take rather than a row invented for the test.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
+
+import httpx
 
 from qmx_router.ids import SessionId
 from qmx_router.normalise import Egress, classify, normalise, refuse_retry
-from qmx_router.profiles import ProfileName, parse_profiles
-from qmx_router.registry import ModelRow, Registry, bundled
+from qmx_router.profiles import ModelId, ProfileName, parse_profiles
+from qmx_router.registry import ModelRow, Provider, QmxId, Registry, bundled
 from qmx_router.relay import Relay, RelayUsage
 from qmx_router.server import PORT_FILE, RouterService
 
@@ -224,5 +229,157 @@ def test_the_router_restarts_on_its_pinned_port_after_a_stall(tmp_path: Path) ->
         assert await service.canary()
         await relay.close()
         await service.close()
+
+    asyncio.run(check())
+
+
+BOUND_S = 1.0
+SLEEP_S = 4.0
+"""The fake's silence and the row's bound. A literal pair, so the assertion can name both."""
+
+
+class FakeUpstream:
+    """One HTTP/1.1 responder. `headers_after` delays the status line, `event_after` delays the
+    first SSE event behind it, which are the two ways a prefill stalls."""
+
+    def __init__(self, *, headers_after: float, event_after: float) -> None:
+        self.headers_after = headers_after
+        self.event_after = event_after
+        self.requests = 0
+        self.port = 0
+        self._server: asyncio.Server | None = None
+
+    async def start(self) -> FakeUpstream:
+        self._server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
+        self.port = self._server.sockets[0].getsockname()[1]
+        return self
+
+    async def close(self) -> None:
+        if self._server is not None:
+            self._server.close()
+            await self._server.wait_closed()
+
+    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        head = await reader.readuntil(b"\r\n\r\n")
+        length = 0
+        for line in head.split(b"\r\n"):
+            if line.lower().startswith(b"content-length:"):
+                length = int(line.split(b":", 1)[1])
+        await reader.readexactly(length)
+        self.requests += 1
+        await asyncio.sleep(self.headers_after)
+        writer.write(
+            b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\n"
+            b"transfer-encoding: chunked\r\n\r\n"
+        )
+        await writer.drain()
+        await asyncio.sleep(self.event_after)
+        event = (
+            b'event: message_start\ndata: {"type": "message_start", '
+            b'"message": {"model": "fake-1m", "usage": {"input_tokens": 5}}}\n\n'
+        )
+        with contextlib.suppress(ConnectionError):
+            writer.write(f"{len(event):x}\r\n".encode() + event + b"\r\n0\r\n\r\n")
+            await writer.drain()
+        writer.close()
+
+
+class Rows:
+    """A journal that keeps what the relay wrote."""
+
+    def __init__(self) -> None:
+        self.rows: list[RelayUsage] = []
+
+    def append(self, usage: RelayUsage) -> None:
+        self.rows.append(usage)
+
+    def close(self) -> None:
+        return None
+
+
+async def first_bytes(port: int) -> tuple[float, bytes, list[RelayUsage]]:
+    """One streamed request through the relay, the clock from send to first byte, and its row."""
+    journal = Rows()
+    row = ModelRow(
+        qmx_id=QmxId("fake/one"),
+        provider=ProfileName("fake"),
+        native=ModelId("fake-1m"),
+        window=1_000_000,
+        first_token_timeout_s=int(BOUND_S),
+        first_token_per_100k_s=0,
+    )
+    provider = Provider(
+        name=ProfileName("fake"),
+        kind="key",
+        base_url=MappingProxyType({"local": f"http://127.0.0.1:{port}"}),
+        models=(row,),
+    )
+    registry = Registry(MappingProxyType({ProfileName("fake"): provider}))
+    profiles = parse_profiles(
+        {
+            "fake": {
+                "base_url": f"http://127.0.0.1:{port}",
+                "credential_ref": "qmx/fake",
+                "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "fake-1m"),
+            }
+        },
+        allow_loopback_http=True,
+    )
+    relay = await Relay(
+        secrets=lambda _reference: "key",
+        journal=lambda _session: journal,
+        alert=quiet,
+        profiles=lambda: profiles,
+        registry=lambda: registry,
+    ).start()
+    grant = await relay.grant(SessionId("fake-chat"), ProfileName("fake"))
+    started = time.monotonic()
+    async with (
+        httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client,
+        client.stream(
+            "POST",
+            f"{relay.base_url}/v1/messages",
+            json={
+                "model": "fake/one",
+                "max_tokens": 8,
+                "stream": True,
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+            headers={"authorization": f"Bearer {grant.secret}"},
+        ) as answer,
+    ):
+        first = b""
+        async for chunk in answer.aiter_bytes():
+            first += chunk
+            break
+    elapsed = time.monotonic() - started
+    await relay.close()
+    return elapsed, first, journal.rows
+
+
+def test_a_provider_that_sends_no_headers_inside_the_row_bound_is_stopped() -> None:
+    async def check() -> None:
+        fake = await FakeUpstream(headers_after=SLEEP_S, event_after=0.0).start()
+        elapsed, first, rows = await first_bytes(fake.port)
+        await fake.close()
+        assert first.startswith(b"event: error\n")
+        assert b"no message_start in 1 s" in first
+        assert elapsed < BOUND_S + 2.0
+        assert fake.requests == 1
+        assert [row.status for row in rows] == [504]
+
+    asyncio.run(check())
+
+
+def test_a_provider_that_sends_headers_and_then_stalls_is_stopped() -> None:
+    async def check() -> None:
+        fake = await FakeUpstream(headers_after=0.0, event_after=SLEEP_S).start()
+        elapsed, first, rows = await first_bytes(fake.port)
+        await fake.close()
+        assert first.startswith(b"event: error\n")
+        assert b"no message_start in 1 s" in first
+        assert elapsed < BOUND_S + 2.0
+        assert fake.requests == 1
+        assert [row.status for row in rows] == [200]
 
     asyncio.run(check())
