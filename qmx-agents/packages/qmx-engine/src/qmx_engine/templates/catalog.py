@@ -342,6 +342,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TPL3",
         folder="revolution-loop",
         test_inputs={"fixture": "first-pass"},
+        test_cost="TPL3 lane 2: 3 haiku turns, tokens in 6, out 15, cache read 8852; 38 s",
     ),
     Template(
         "ask-the-panel",
@@ -350,6 +351,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TPL3",
         folder="ask-the-panel",
         test_inputs={"fixture": "recorded"},
+        test_cost="TPL3 lane 2: 4 haiku turns, tokens in 8, out 20, cache read 13633; 41 s",
     ),
     Template(
         "clippings-into-research",
@@ -358,6 +360,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TPL3",
         folder="clippings-into-research",
         test_inputs={"fixture": True},
+        test_cost="TPL3 lane 2: 1 haiku turn, tokens in 2, out 1, cache read 3888; 27 s",
     ),
     Template(
         "morning-digest",
@@ -367,6 +370,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="morning-digest",
         triggers=(Cron("0 7 * * *", "Europe/London"),),
         test_inputs={"fixture": True},
+        test_cost="TPL3 lane 2: 1 haiku turn, tokens in 2, out 4, cache read 2531; 34 s",
     ),
     Template(
         "crystallise-a-workflow",
@@ -375,6 +379,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "TPL3",
         folder="crystallise-a-workflow",
         test_inputs={"fixture": True},
+        test_cost="TPL3 lane 2: 1 haiku turn, tokens in 2, out 5, cache read 5122; 13 s",
     ),
 )
 

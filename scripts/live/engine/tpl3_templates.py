@@ -160,6 +160,7 @@ async def runs(log: Log) -> int:
     root = home("runs")
     turns: dict[str, int] = {}
     seconds: dict[str, float] = {}
+    tokens: dict[str, dict[str, int]] = {}
     failures: list[str] = []
     async with plan_harness(log) as opened:
         settings = plan_settings(opened.control)
@@ -178,10 +179,15 @@ async def runs(log: Log) -> int:
                 spans = spans_of(root, report.run_id)
                 turns[name] = len(spans)
                 seconds[name] = time.monotonic() - began
+                tokens[name] = {
+                    key: sum(span.tokens.get(key, 0) for span in spans)
+                    for key in ("in", "out", "cache_read", "cache_write")
+                }
                 card = delivered(root, report.run_id)
                 log(
                     f"{name} {report.run_id} {report.status} {report.reason or ''} in"
-                    f" {seconds[name]:.0f} s, {len(spans)} haiku turns, card {bool(card)}"
+                    f" {seconds[name]:.0f} s, {len(spans)} haiku turns, tokens {tokens[name]},"
+                    f" card {bool(card)}"
                 )
                 if report.status != "passed":
                     failures.append(name)
@@ -191,9 +197,11 @@ async def runs(log: Log) -> int:
         {"turns": turns, "failed": failures},
     )
     log(f"perf lane 2: haiku turns per template {turns}")
+    log(f"perf lane 2: tokens per template {tokens}")
     log(f"perf lane 2: wall time per template {seconds}")
-    turns_log = Log("turns")
+    turns_log = Log("tpl3-turns")
     turns_log(f"haiku turns per template: {json.dumps(turns)}")
+    turns_log(f"tokens per template: {json.dumps(tokens)}")
     turns_log(f"wall time per template: {json.dumps(seconds)}")
     turns_log.check("the haiku turn count per template is recorded", bool(turns), turns)
     return log.verdict()
@@ -391,7 +399,7 @@ def nest(log: Log) -> int:
 
 def turns(log: Log) -> int:
     """Lane 8: the perf block's number, read back out of the lane 2 log."""
-    path = EVIDENCE / "owner-turns.log"
+    path = EVIDENCE / "owner-tpl3-turns.log"
     log(f"lane 2 log: {path}")
     log(path.read_text("utf-8") if path.exists() else "the lane 2 log does not exist yet")
     log.check("the haiku turn count per template is recorded", path.exists(), str(path))
@@ -408,18 +416,18 @@ def main() -> int:
     args = parser.parse_args()
     boot()
     if args.lane == "runs":
-        return asyncio.run(runs(Log("runs")))
+        return asyncio.run(runs(Log("tpl3-runs")))
     if args.lane == "panel":
-        return asyncio.run(panel(Log("panel")))
+        return asyncio.run(panel(Log("tpl3-panel")))
     if args.lane == "dedupe":
-        return dedupe(Log("dedupe"))
+        return dedupe(Log("tpl3-dedupe"))
     if args.lane == "crystallise":
-        return crystallise(Log("crystallise"))
+        return crystallise(Log("tpl3-crystallise"))
     if args.lane == "digest":
-        return digest(Log("digest"))
+        return digest(Log("tpl3-digest"))
     if args.lane == "nest":
-        return nest(Log("nest"))
-    return turns(Log("turns-read"))
+        return nest(Log("tpl3-nest"))
+    return turns(Log("tpl3-turns-read"))
 
 
 if __name__ == "__main__":
