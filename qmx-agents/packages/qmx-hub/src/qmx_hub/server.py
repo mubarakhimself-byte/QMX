@@ -257,13 +257,22 @@ def _claim_payload(claim: Claim) -> dict[str, JsonValue]:
 
 
 def _purge_payload(done: Purged | PurgeResult) -> dict[str, JsonValue]:
+    if isinstance(done, Purged):
+        return {
+            "blob_id": done.blob_id,
+            "reason": done.reason,
+            "at": done.at,
+            "targets": list(done.targets),
+            "ref": "",
+            "tombstone": "",
+        }
     return {
         "blob_id": done.blob_id,
-        "reason": getattr(done, "reason", ""),
-        "at": getattr(done, "at", ""),
-        "targets": list(getattr(done, "targets", ())),
-        "ref": getattr(done, "ref", ""),
-        "tombstone": str(getattr(done, "tombstone", "")),
+        "reason": "",
+        "at": "",
+        "targets": [],
+        "ref": done.ref,
+        "tombstone": str(done.tombstone),
     }
 
 

@@ -127,7 +127,8 @@ WantedBy=timers.target
 EOF
 systemctl daemon-reload
 systemctl enable --now docker tailscaled qmx-ship.timer
-systemctl enable qmx-hub qmx-node
+systemctl enable qmx-node
+systemctl enable qmx-hub
 if [[ '@HINDSIGHT@' == '1' ]]; then
   # The memory package lands in MEM and pins Hindsight's own version there; PRB-S measured
   # 2,687 MB against the plan's 2,048 MB line, so the setting stays off until the box grows.
@@ -146,3 +147,4 @@ if tailscale ip -4 >/dev/null 2>&1; then
   systemctl restart qmx-hub
 fi
 echo 'Bootstrap complete; CLIProxy subscription setup is a separate live operation.'
+

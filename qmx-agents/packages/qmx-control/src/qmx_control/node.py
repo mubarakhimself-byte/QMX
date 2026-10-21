@@ -61,7 +61,7 @@ def read_secret(vault: Path, service: str, username: str) -> str | None:
 def bootstrap_script(revision: str, *, hindsight: bool = False, hub_port: int = 0) -> str:
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Bootstrap needs an exact Git commit.")
-    if not 18100 <= hub_port <= 18199:
+    if hub_port != 0 and not 18100 <= hub_port <= 18199:
         raise ValueError("The Hub listens in 18100-18199, or on 0 for an ephemeral port.")
     return (
         Path(__file__)
@@ -245,32 +245,28 @@ def main() -> int:
         hindsight = bool(args.hindsight) or hindsight_enabled(home)
         ssh = transfer(host, revision)
         run(
-            ["ssh", host, "sudo bash -s"],
+            [ssh, host, "sudo bash -s"],
             input_text=bootstrap_script(revision, hindsight=hindsight, hub_port=int(args.hub_port)),
         )
-        exists = run(
-            ["ssh", host, "sudo test -s /etc/qmx/vault/pairing-key && echo present || true"]
+        # The Hub holds the store's writer lock, so the import stops it first and starts it after,
+        # and it runs as `qmx` because the store's files belong to that user.
+        run([ssh, host, "sudo systemctl stop qmx-hub || true"])
+        run(
+            [
+                ssh,
+                host,
+                "sudo runuser -u qmx -- /opt/qmx/qmx-agents/.venv/bin/qmx node import "
+                f"--home {remote}",
+            ]
         )
-        if not exists:
-            # The pairing key is generated on the server and copied down; its bytes are never
-            # printed here, so it cannot land in a log (MIGRATION step 7, AD-11).
-            generated = subprocess.run(
-                [ssh, host, "sudo sh -c 'umask 077; cat > /etc/qmx/vault/pairing-key'"],
-                input=secrets.token_hex(32).encode("utf-8"),
-                capture_output=True,
-                check=False,
-            )
-            if generated.returncode:
-                raise RuntimeError("SSH could not exchange the Hub pairing key.")
-        # The Hub holds the store's writer lock, so the import stops it first and starts it after.
-        run(["ssh", host, "sudo systemctl stop qmx-hub || true"])
-        run(["ssh", host, f"sudo /opt/qmx/qmx-agents/.venv/bin/qmx node import --home {remote}"])
-        run(["ssh", host, "sudo systemctl restart qmx-hub qmx-node"])
-        address = run(["ssh", host, "tailscale ip -4"]).splitlines()[0]
-        port = run(["ssh", host, f"sudo cat {remote}/hub.port"]).strip()
+        run([ssh, host, "sudo systemctl restart qmx-hub qmx-node"])
+        address = run([ssh, host, "tailscale ip -4"]).splitlines()[0]
+        port = run([ssh, host, f"sudo cat {remote}/hub.port"]).strip()
         url = f"http://{address}:{port}"
         (home / "vault").mkdir(parents=True, exist_ok=True)
-        key = run(["ssh", host, "sudo cat /etc/qmx/vault/pairing-key"])
+        # The pairing key is generated on the server by the bootstrap and copied down; its bytes
+        # are never printed, so they cannot land in a log (MIGRATION step 7, AD-11).
+        key = run([ssh, host, "sudo cat /etc/qmx/vault/pairing-key"])
         (home / "vault" / "pairing-key").write_text(key + "\n", encoding="utf-8")
         flip_primary(home, url)
         print(f"primary: {library_primary(home)}")
