@@ -45,7 +45,7 @@ from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.runner import new_run_id
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import Caller, Refused
-from qmx_engine.service.runs import status_of, summarize_again
+from qmx_engine.service.runs import fire_after, status_of, summarize_again
 from qmx_engine.trace_export import export
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.catchup import CatchUp
@@ -182,13 +182,6 @@ def take_over(run_id: str, now: str) -> Operation[str | None]:
             (run_id,),
         )
         return None
-
-    return operation
-
-
-def drop_wake(run_id: str) -> Operation[None]:
-    def operation(txn: Transaction) -> None:
-        txn.connection.execute("DELETE FROM wakes WHERE run_id = ?", (run_id,))
 
     return operation
 
@@ -530,24 +523,19 @@ class EngineDoor:
         return self._serve(lambda: self.svc.explain(run_id))
 
     def workflow_runs_cancel(self, run_id: str) -> Document:
-        """Stop the run's attempts and the run here, then end it `stopped` (reason `operator`,
-        SOLUTION-DESIGN 3.1) whether it was running, waiting or parked."""
+        """End the run and every child run under it `stopped` (reason `operator`, SOLUTION-DESIGN
+        3.1) whether it was running, waiting or parked, then wait for its drive to end."""
 
         async def cancel() -> object:
             status = self.svc.runs.get(run_id).status
             if status in ENDED:
                 raise Refused("cancel_refused", f"run {run_id} already ended {status}")
-            running = self.svc.ctx.engine.worker.running
-            going = [t for key, t in running.items() if key.startswith(f"{run_id}:")]
-            going += [self.live[run_id]] if run_id in self.live else []
-            for task in going:
-                task.cancel()
+            stopped = self.svc.runs.cancel(run_id)
+            going = [self.live[rid] for rid in stopped if rid in self.live]
             if going:
                 await asyncio.wait(going, timeout=10)
-            ledger = self.svc.ctx.engine.ledger
-            ledger.write(drop_wake(run_id))
-            ledger.append(run_id, "run_cancelled", {"reason": "operator"}, at=self.svc.ctx.at())
-            self._summarize(run_id)
+            for rid in stopped:
+                self._summarize(rid)
             return self._run(run_id)
 
         return cast(Document, plain(self._call(cancel)))
@@ -594,6 +582,7 @@ class EngineDoor:
         summarize_again(ctx, outcome)
         outputs = outcome.outputs if outcome.status == "passed" else None
         ctx.engine.ledger.write(settle_run(run_id, ENDING[outcome.status], ctx.at(), outputs))
+        fire_after(ctx, outcome)
 
     def workflow_triggers_list(self, workflow_id: str | None) -> list[Document]:
         def listed() -> list[Any]:
@@ -679,10 +668,7 @@ class EngineDoor:
     def workflow_triggers_run_now(self, trigger_id: str) -> Document:
         async def fire() -> object:
             self._trigger_row(trigger_id)
-            ledger = self.svc.ctx.engine.ledger
-            fire_id = rows.fire_now(ledger, trigger_id, self.svc.ctx.clock.now(), {})
-            await self.scheduler.tick()
-            return {"trigger_id": trigger_id, "fire_id": fire_id}
+            return await self.scheduler.run_now(trigger_id)
 
         return cast(Document, plain(self._call(fire)))
 

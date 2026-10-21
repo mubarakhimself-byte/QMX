@@ -69,7 +69,7 @@ class EngineService:
             engine = Engine(
                 home,
                 ledger,
-                settings=settings.values(),
+                settings=settings,
                 wall=clock.now,
                 executors=executors,
                 doctor=doctor,

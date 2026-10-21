@@ -215,12 +215,16 @@ class Ledger:
             text = encoded(clean).decode()
         except TypeError, ValueError:
             raise ValueError("event data is not a JSON object") from None
+        if not isinstance(clean, dict):
+            raise ValueError("event data is not a JSON object")
         data = cast(JsonObject, clean)
         if kind == "node_started" and spans.attempt_of(data) is None:
             raise ValueError("node_started needs a string node_id and an integer attempt")
 
         def operation(txn: Transaction) -> Event:
             seq = txn.next_seq(run_id)
+            if kind == "run_created" and seq != 1:
+                raise ValueError("the run already has a run_created")
             txn.connection.execute(
                 "INSERT INTO events (run_id, seq, at, kind, data) VALUES (?, ?, ?, ?, ?)",
                 (run_id, seq, at, kind, text),
@@ -272,7 +276,7 @@ class Ledger:
                 continue
             try:
                 self._commit(connection, batch)
-            except Exception as error:
+            except BaseException as error:  # the writer thread must outlive any operation
                 failure = _write_error(error) if isinstance(error, sqlite3.Error) else error
                 self._seqs.clear()
                 for unresolved in batch:
@@ -297,7 +301,7 @@ class Ledger:
                 connection.execute("SAVEPOINT operation")
                 result = item.operation(txn)
                 connection.execute("RELEASE operation")
-            except Exception as error:
+            except BaseException as error:
                 txn.drop_operation()
                 failure = _write_error(error) if isinstance(error, sqlite3.Error) else error
                 # SQLITE_FULL, IOERR and NOMEM roll back the whole transaction, not only the

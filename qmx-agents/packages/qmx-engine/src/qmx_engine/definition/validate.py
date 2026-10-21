@@ -132,6 +132,12 @@ def graph(workflow: Workflow, registry: Registry, *, publish: bool) -> Iterator[
             yield Problem("node_name_duplicate", f"nodes[{i}].name", "another node has this name")
         if node.id in seen_ids:
             yield Problem("node_id_duplicate", f"nodes[{i}].id", "another node has this id")
+        if ":" in node.id:
+            yield Problem(
+                "node_id_invalid",
+                f"nodes[{i}].id",
+                "a node id may not hold ':', which separates an idempotency key's parts",
+            )
         by_name.setdefault(node.name, (i, node, kind))
         seen_ids.add(node.id)
 

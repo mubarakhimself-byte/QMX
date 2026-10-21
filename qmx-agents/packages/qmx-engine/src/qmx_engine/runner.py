@@ -27,7 +27,9 @@ recorded waits and host sleep, on a run-level `heartbeat`. The engine dying mid-
 
 The recorded clock moves on with the wall clock: before an event, a `clock_tick` is written when a
 second or more passed since the last one, and every event's `at` is the latest tick. The core
-reads only those ticks (AD-6).
+reads only those ticks (AD-6). Every instant the runner writes, the clock's, a hold's, a retry's
+and a provider wait's `resume_at`, is UTC in one form (`nodes.wait.utc_text`), so the core's text
+comparison is time order; a naive instant is read as UTC (L-37).
 
 `Engine.resume` picks a run up again from the ledger. An attempt left in flight belongs to an
 engine that died, since only one engine process can hold the writer: its outcome is unknown, and
@@ -37,7 +39,13 @@ engine that died, since only one engine process can hold the writer: its outcome
 A model node that waits on a usage limit drains the run (AD-9): no new model attempt starts while
 any slot waits on a limit, and other nodes go on. Once nothing runs, the run leaves a wake at the
 earliest `resume_at`, which already holds `limits.slack`, writes `run_paused` and returns
-`waiting`. The scheduler's ticker resumes it at that instant with `run_resumed` (`triggers`).
+`waiting`. The scheduler's ticker resumes it at that instant with `run_resumed` (`triggers`). A
+run held on a time `wait` or a retry backoff leaves a wake at its earliest `resume_at` the same
+way (AD-10), so only the ticker resumes it on time.
+
+A run's settings are read from the port as it opens and kept for the pass (B-42), with a trigger's
+role and effort pins over them. `Engine.cancel` stops a run and every live run under it: each
+records `run_cancelled`, its attempts are cancelled and it ends `stopped` (AD-5, B-66).
 """
 
 from __future__ import annotations
@@ -46,10 +54,10 @@ import asyncio
 import os
 import secrets
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Final, Literal, Protocol, cast
+from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
 from pydantic import JsonValue
 from qma.harness import Pulse
@@ -67,7 +75,7 @@ from qmx_engine.core.commands import (
     Wait,
 )
 from qmx_engine.core.fold import fold, slot_of
-from qmx_engine.core.ladder import NO_DOCTOR, limits_line, step_data
+from qmx_engine.core.ladder import CANCELLED, NO_DOCTOR, limits_line, step_data
 from qmx_engine.core.partitions import RUN_SETTINGS
 from qmx_engine.core.ready import next_commands
 from qmx_engine.core.replay import idempotency_key, node_definition
@@ -81,7 +89,7 @@ from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.agent import Agent
-from qmx_engine.nodes.base import Failed, Look, NodeJob, ending
+from qmx_engine.nodes.base import Failed, Look, NodeJob, Waiting, ending
 from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
 from qmx_engine.nodes.fake_provider import FakeProvider
 from qmx_engine.nodes.grader import Grader
@@ -94,12 +102,12 @@ from qmx_engine.nodes.script import HostScript, Script
 from qmx_engine.nodes.subworkflow import Subworkflow
 from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
-from qmx_engine.nodes.wait import resume_at
+from qmx_engine.nodes.wait import resume_at, utc, utc_text
 from qmx_engine.ports.harness_adapter import HarnessPort
-from qmx_engine.ports.inbox import InboxPort, raised_by
+from qmx_engine.ports.inbox import InboxPort, Raise, raised_by
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
-from qmx_engine.roles import order, resolve
+from qmx_engine.roles import EFFORTS, order, resolve
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers.rows import put_wake
 from qmx_engine.watchdog import MAX_TICKS, Action, Kind, Meter, Watchdog, Watched, ledger_fault
@@ -107,13 +115,16 @@ from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, m
 from qmx_engine.workers.local import AnyExecutor, LocalWorker, sweep
 from qmx_engine.workers.zones import RunZone
 
+if TYPE_CHECKING:
+    from qmx_engine.ports.settings import SettingsPort
+
 TICK: Final = timedelta(seconds=1)
 LADDER_SETTINGS: Final = ("retry.max_tries", "retry.backoff")
 NOTICED: Final = frozenset({"node_failed", "gate_opened"})
 SCRIPTS: Final = frozenset({"script", "grader", "monitor"})
 
 type Mode = Literal["live", "test"]
-type Status = Literal["passed", "failed", "waiting", "interrupted"]
+type Status = Literal["passed", "failed", "waiting", "interrupted", "stopped"]
 type Classification = Literal["transient", "bad_input", "bad_output", "logic", "unavailable"]
 
 
@@ -212,7 +223,7 @@ class Engine:
         home: Path,
         ledger: Ledger,
         *,
-        settings: Mapping[str, object] = DEFAULTS,
+        settings: Mapping[str, object] | SettingsPort = DEFAULTS,
         worker: LocalWorker | None = None,
         wall: Callable[[], datetime] = lambda: datetime.now(UTC),
         executors: Mapping[str, AnyExecutor] | None = None,
@@ -222,14 +233,17 @@ class Engine:
         harness: HarnessPort | None = None,
         memory: MemoryPort | None = None,
     ) -> None:
-        """`executors` replace the built-in executor of a kind. Without a `doctor`, the ladder's
-        doctor step is recorded as skipped. Without a `harness`, model nodes fail `unavailable`.
-        Without `memory`, agent notes go to the memory stub over the home's Library."""
+        """`settings` given as a port are read at use, so a run starts on the settings of that
+        moment (B-42). `executors` replace the built-in executor of a kind. Without a `doctor`,
+        the ladder's doctor step is recorded as skipped. Without a `harness`, model nodes fail
+        `unavailable`. Without `memory`, agent notes go to the memory stub over the home's
+        Library."""
         self.home = home
         self.ledger = ledger
-        self.settings = settings
+        self._settings = settings
+        settings = self.settings
         self.worker = worker or LocalWorker(Capacity.of(settings))
-        self.wall = wall
+        self.wall: Callable[[], datetime] = lambda: utc(wall())
         self.executors = executors or {}
         self.doctor = doctor
         self.harness = harness
@@ -241,6 +255,13 @@ class Engine:
         self.claiming = True
         """False once a ledger write failed: the scheduler claims no more fires."""
         self.children: set[asyncio.Future[Outcome]] = set()
+        self.live: dict[str, Run] = {}
+        """The runs this engine drives now, by run id."""
+
+    @property
+    def settings(self) -> Mapping[str, object]:
+        found = self._settings
+        return found if isinstance(found, Mapping) else found.values()
 
     @property
     def inbox(self) -> InboxPort:
@@ -272,9 +293,12 @@ class Engine:
         call_depth: int = 0,
         fake: bool = False,
         priority: int = 0,
+        pins: JsonObject | None = None,
     ) -> Outcome:
         """`fake` is the per-run switch that answers model nodes with the fake provider.
-        `priority` orders the run's waiting work against other runs', higher first (AD-58)."""
+        `priority` orders the run's waiting work against other runs', higher first (AD-58).
+        `pins` are a trigger's `{"roles": {role: row}, "effort": ...}`, which override role
+        resolution for this run and are recorded on `run_created` (B-60)."""
         if not self.claiming:
             raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
@@ -291,15 +315,18 @@ class Engine:
             call_depth=call_depth,
             fake=fake,
             priority=priority,
+            parent_run_id=parent_run_id,
+            pins=pins or {},
         )
-        run.create(inputs, parent_run_id)
+        run.create(inputs)
         return await run.drive()
 
     async def resume(
         self, run_id: str, *, reason: str = "operator", woke: str | None = None
     ) -> Outcome:
-        """`reason` is what `run_resumed` records when nothing was left in flight: `limit` when
-        the ticker wakes a paused run at the reset `woke`."""
+        """`reason` is what `run_resumed` records when nothing was left in flight. The ticker
+        passes `wake` with the instant `woke` it woke the run at; a run a usage limit paused then
+        records `limit`."""
         with Reader.open(self.home) as reader:
             events = reader.events(run_id)
         if not events or events[0].kind != "run_created":
@@ -313,6 +340,8 @@ class Engine:
         mode: Mode = "live" if created.get("mode") == "live" else "test"
         depth = created.get("call_depth")
         priority = created.get("priority")
+        parent = created.get("parent_run_id")
+        pins = created.get("pins")
         run = Run(
             self,
             root,
@@ -322,11 +351,31 @@ class Engine:
             call_depth=depth if isinstance(depth, int) else 0,
             fake=created.get("fake") is True,
             priority=priority if isinstance(priority, int) else 0,
+            parent_run_id=parent if isinstance(parent, str) else None,
+            pins=pins if isinstance(pins, dict) else {},
         )
         run.events = events
         run.woke = woke
-        run.recover(reason)
+        run.recover(woken_by(events) if reason == "wake" else reason)
         return await run.drive()
+
+    def cancel(self, run_id: str, reason: str = "operator") -> list[str]:
+        """Stop a run this engine drives and every live run under it (AD-5, B-66): each records
+        `run_cancelled` and its attempts are cancelled. Returns the run ids it stopped."""
+        found = [run for run in self.live.values() if run_id in self.lineage(run)]
+        for run in found:
+            run.stop(reason)
+        return [run.run_id for run in found]
+
+    def lineage(self, run: Run) -> set[str]:
+        """The run's id and those of its live ancestors."""
+        found = {run.run_id}
+        parent = run.parent_run_id
+        while parent is not None and parent not in found:
+            found.add(parent)
+            above = self.live.get(parent)
+            parent = above.parent_run_id if above is not None else None
+        return found
 
     def spawn(self, outcome: Awaitable[Outcome]) -> None:
         task = asyncio.ensure_future(outcome)
@@ -351,10 +400,16 @@ class Run:
         call_depth: int,
         fake: bool = False,
         priority: int = 0,
+        parent_run_id: str | None = None,
+        pins: JsonObject | None = None,
     ) -> None:
         self.engine = engine
         self.fake = fake
         self.priority = priority
+        self.parent_run_id = parent_run_id
+        self.pins: JsonObject = pins or {}
+        self.settings = pinned(engine.settings, self.pins)
+        """The settings this pass runs on, read once as it opens (B-42)."""
         self.root = root.resolve()
         self.definition = workflow
         self.run_id = run_id
@@ -369,7 +424,9 @@ class Run:
         self.started: set[str] = set()
         """Attempts that wrote `node_started`; one held at dispatch or queued for a slot has not."""
         self.stopping: set[str] = set()
-        self.watchdog = Watchdog(engine.settings, engine.watch_every)
+        self.noticed: dict[Slot, Raise] = {}
+        """A failure's inbox item, held until the ladder's step on that failure is written."""
+        self.watchdog = Watchdog(self.settings, engine.watch_every)
         self.meter = Meter()
         self.watched: datetime | None = None
         self.marked: datetime | None = None
@@ -381,8 +438,7 @@ class Run:
         self.executors = self.build_executors()
 
     def build_executors(self) -> dict[str, AnyExecutor]:
-        settings = self.engine.settings
-        max_depth = settings.get("subworkflow.max_depth")
+        max_depth = self.settings.get("subworkflow.max_depth")
         manifest = self.zone.prepare_code(self.root)
         host = self.host = HostScript(
             self.zone.code, None, self.engine.banned_values(), fake=self.fake, manifest=manifest
@@ -401,6 +457,7 @@ class Run:
                 call_depth=self.call_depth + 1,
                 fake=self.fake,
                 priority=self.priority,
+                pins=self.pins,
             )
 
         built: dict[str, AnyExecutor] = {
@@ -435,7 +492,7 @@ class Run:
             workspace(engine.home, self.definition.id),
             record=self.append,
             memory=engine.memory,
-            settings=engine.settings,
+            settings=self.settings,
         )
 
     def llm_executor(self) -> AnyExecutor:
@@ -461,17 +518,36 @@ class Run:
             return asks | {"role": node.role, "profile": FAKE_PROFILE, "model": FAKE_PROFILE}
         harness = self.engine.harness
         profiles = harness.profiles() if harness is not None else frozenset[str]()
-        found = resolve(order(self.engine.settings, node.role, self.mode), profiles, ladder)
+        found = resolve(order(self.settings, node.role, self.mode), profiles, ladder)
         if isinstance(found, str):
             return asks | {"role": node.role, "unresolved": found}
+        effort = self.pins.get("effort")
+        if isinstance(effort, str) and effort in EFFORTS:
+            found = replace(found, effort=effort)
         return asks | found.started(node.role) | {"context_window": found.context_window}
 
     def write(self, kind: EventKind, data: JsonObject) -> None:
-        tried = self.tried(slot_of(data)) if kind in NOTICED else ()
+        """Write one event and raise the item it raises. A failure's item waits for the ladder's
+        step on it, so the item shows what was tried for that failure too (L-47)."""
+        slot = slot_of(data)
+        before = self.tried(slot) if kind in NOTICED or kind == "ladder_step" else ()
         self.events.append(self.engine.ledger.append(self.run_id, kind, data, at=self.now))
-        item = raised_by(self.run_id, kind, data, tried)
-        if item is not None:
+        if kind == "ladder_step" and (failed := self.noticed.pop(slot, None)) is not None:
+            tried = (*before, str(data.get("step")))
+            self.engine.inbox.raise_item(replace(failed, tried=tried), at=self.now)
+        item = raised_by(self.run_id, kind, data, before)
+        if item is None:
+            return
+        if kind == "node_failed":
+            self.noticed[slot] = item
+        else:
             self.engine.inbox.raise_item(item, at=self.now)
+
+    def flush(self) -> None:
+        """Raise every failure's item still waiting for a ladder step."""
+        for slot, item in self.noticed.items():
+            self.engine.inbox.raise_item(replace(item, tried=self.tried(slot)), at=self.now)
+        self.noticed.clear()
 
     def tried(self, slot: Slot) -> tuple[str, ...]:
         """The slot's ladder steps since its last park."""
@@ -487,7 +563,7 @@ class Run:
         `progress` is False for the stuck detector's own lines, which are no attempt's progress."""
         wall = self.engine.wall()
         if self.ticked is None or wall - self.ticked >= TICK:
-            self.ticked, self.now = wall, wall.isoformat()
+            self.ticked, self.now = wall, utc_text(wall)
             self.write("clock_tick", {"now": self.now})
         attempt = data.get("attempt")
         if progress and isinstance(attempt, int) and "node_id" in data and kind != "heartbeat":
@@ -497,22 +573,23 @@ class Run:
                 self.started.add(key)
         self.write(kind, data)
 
-    def create(self, inputs: JsonValue, parent_run_id: str | None) -> None:
+    def create(self, inputs: JsonValue) -> None:
         self.ticked = self.engine.wall()
-        self.now = self.ticked.isoformat()
+        self.now = utc_text(self.ticked)
         self.write(
             "run_created",
             {
                 "mode": self.mode,
                 "fake": self.fake,
-                "settings": recorded_settings(self.engine.settings, self.definition, self.mode),
+                "settings": recorded_settings(self.settings, self.definition, self.mode),
                 "limits": recorded_limits(self.definition),
                 "workflow_id": self.definition.id,
                 "folder": str(self.root),
                 "content_hash": content_hash(load(self.root)),
-                "parent_run_id": parent_run_id,
+                "parent_run_id": self.parent_run_id,
                 "call_depth": self.call_depth,
                 "priority": self.priority,
+                "pins": self.pins,
             },
         )
         self.write("run_input", {"inputs": inputs})
@@ -527,10 +604,23 @@ class Run:
         return fold(self.definition, self.events)
 
     async def drive(self) -> Outcome:
+        self.engine.live[self.run_id] = self
         try:
             return await self.steps()
         except LedgerWriteError as error:
             return await self.fault(error)
+        finally:
+            self.engine.live.pop(self.run_id, None)
+
+    def stop(self, reason: str) -> None:
+        """Record `run_cancelled` and cancel every attempt; the drive then ends `stopped`."""
+        if self.state().ended is None:
+            self.append("run_cancelled", {"reason": reason})
+        for task in self.inflight:
+            task.cancel()
+
+    def stopped(self) -> bool:
+        return self.state().ended == "stopped"
 
     async def steps(self) -> Outcome:
         self.active = float(self.state().active_seconds)
@@ -562,11 +652,19 @@ class Run:
             if moved:
                 continue
             if self.inflight:
-                done, _ = await asyncio.wait(
-                    self.inflight,
-                    timeout=self.engine.watch_every,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+                try:
+                    done, _ = await asyncio.wait(
+                        self.inflight,
+                        timeout=self.engine.watch_every,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                except asyncio.CancelledError:
+                    if not self.stopped():
+                        raise
+                    for task in self.inflight:
+                        task.cancel()
+                    await asyncio.gather(*self.inflight, return_exceptions=True)
+                    return self.end(None, self.state())
                 self.mark_active()
                 now = self.engine.wall()
                 if self.watched is None or (now - self.watched).total_seconds() >= (
@@ -575,16 +673,18 @@ class Run:
                     await self.watch(now)
                 for task in done:
                     del self.inflight[task]
-                    task.result()
+                    if not (task.cancelled() and self.stopped()):
+                        task.result()
                 continue
             return self.end(ended, state)
 
-    def wakes(self, paused: Pause) -> bool:
-        """Whether a limit pause leaves a wake: always, unless it names the reset the run was
-        just woken at and that reset is past, so a stale reset cannot spin the run."""
-        if paused.reason != "limit" or paused.resume_at is None:
+    def wakes(self, held: Pause | Wait) -> bool:
+        """Whether a hold with a `resume_at` leaves a wake (AD-10): a usage limit, a time `wait` or
+        a retry backoff always does, unless it names the instant the run was just woken at and that
+        instant is past, so a stale reset cannot spin the run. A `limits` pause waits for him."""
+        if held.resume_at is None or (isinstance(held, Pause) and held.reason != "limit"):
             return False
-        reset = datetime.fromisoformat(paused.resume_at)
+        reset = datetime.fromisoformat(held.resume_at)
         woke = datetime.fromisoformat(self.woke) if self.woke is not None else None
         return reset > self.engine.wall() or reset != woke
 
@@ -683,7 +783,7 @@ class Run:
             task.cancel()
         await asyncio.gather(*self.inflight, return_exceptions=True)
         self.inflight.clear()
-        at = self.now or self.engine.wall().isoformat()
+        at = self.now or utc_text(self.engine.wall())
         self.engine.inbox.raise_item(ledger_fault(self.run_id, error), at=at)
         return Outcome(self.run_id, "interrupted", str(error))
 
@@ -766,6 +866,8 @@ class Run:
         if gate is not None:
             await gate.wait()
         result = await self.engine.worker.run(job, executor, self.append)
+        if isinstance(result, Waiting) and result.resume_at is not None:
+            result = replace(result, resume_at=utc_text(datetime.fromisoformat(result.resume_at)))
         slot = Slot(job.node_id, job.iteration, job.partition)
         if isinstance(result, Failed) and result.effect_state == "unknown":
             self.unknown(slot, job.attempt, result.code, result.message)
@@ -795,6 +897,11 @@ class Run:
         )
 
     def end(self, command: Finish | Park | Pause | Wait | None, state: State) -> Outcome:
+        outcome = self.ended(command, state)
+        self.flush()
+        return outcome
+
+    def ended(self, command: Finish | Park | Pause | Wait | None, state: State) -> Outcome:
         match command:
             case Finish():
                 digest = fingerprint(command.outputs)
@@ -812,7 +919,11 @@ class Run:
                 self.append("run_paused", paused)
                 return Outcome(self.run_id, "waiting", command.reason)
             case Wait():
+                if self.wakes(command):
+                    self.engine.ledger.write(put_wake(self.run_id, str(command.resume_at)))
                 return Outcome(self.run_id, "waiting", f"waiting on {' '.join(command.node_ids)}")
+            case None if state.ended == "stopped":
+                return Outcome(self.run_id, "stopped", "the run was cancelled")
             case None:
                 status: Status = "passed" if state.ended == "passed" else "failed"
                 return Outcome(self.run_id, status, f"the run already ended {state.ended}")
@@ -845,14 +956,16 @@ class Run:
             interrupted = True
         self.append("run_resumed", {"reason": "interrupted" if interrupted else reason})
         restarts = self.state().restarts
-        allowed = self.engine.settings.get("crash_loop.restarts")
+        allowed = self.settings.get("crash_loop.restarts")
         if interrupted and isinstance(allowed, int) and restarts >= allowed:
             why = f"crash loop: the engine stopped mid-run {restarts} times"
             self.append("ladder_step", {"step": "park", "reason": why, "crash_loop": restarts})
 
     def unknown(self, slot: Slot, attempt: int, code: str, message: str) -> AfterUnknown:
         """Record an attempt whose outcome is unknown: a crash, a timeout or a cancel. A step that
-        may rerun ends failed; any other waits on a gate that shows its idempotency key."""
+        may rerun ends failed; any other waits on a gate that shows its idempotency key. A
+        cancelled step that may rerun ends failed and is not retried, since the cancel was a stop
+        (B-37)."""
         node = next(n for n in self.definition.nodes if n.id == slot.node_id)
         definition = node_definition(node)
         earlier = sum(
@@ -866,8 +979,10 @@ class Run:
         verdict = after_unknown(definition, earlier)
         key = idempotency_key(self.run_id, slot, attempt)
         if verdict == "retry":
+            retryable = code != CANCELLED
             self.append(
-                "node_failed", slot_keys(slot, attempt) | failure(code, message, True, "unknown")
+                "node_failed",
+                slot_keys(slot, attempt) | failure(code, message, retryable, "unknown"),
             )
             if model_bearing(definition):
                 line = f"{node.name}: a model call of unknown outcome ({key}) is retried once"
@@ -920,6 +1035,30 @@ def drain(state: State) -> list[str | None]:
 def earliest(times: list[str | None]) -> str | None:
     known = [t for t in times if t is not None]
     return min(known, key=datetime.fromisoformat) if known else None
+
+
+def woken_by(events: list[Event]) -> str:
+    """Why a wake resumes the run: the reason of its pause in this pass, else `wake`."""
+    for event in reversed(events):
+        if event.kind == "run_resumed":
+            break
+        if event.kind == "run_paused":
+            return str(event.data.get("reason"))
+    return "wake"
+
+
+def pinned(settings: Mapping[str, object], pins: JsonObject) -> Mapping[str, object]:
+    """The settings with a trigger's role pins over the roles they name (B-60)."""
+    roles = pins.get("roles")
+    if not isinstance(roles, dict) or not roles:
+        return settings
+    found = dict(settings)
+    for role, row in roles.items():
+        rows = [row] if isinstance(row, str) else row if isinstance(row, list) else []
+        kept = tuple(r for r in rows if isinstance(r, str))
+        if kept:
+            found[f"roles.{role}"] = kept
+    return found
 
 
 def resumed_chat(events: list[Event], slot: Slot, attempt: int) -> str | None:

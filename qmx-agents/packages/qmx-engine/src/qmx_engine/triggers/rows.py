@@ -7,8 +7,8 @@ The kinds tonight are `cron` in an IANA zone, `interval`, `manual` and `after`; 
 which is what makes a claim exclusive. A wake is a paused run's `resume_at`, which the ticker
 honours (AD-9).
 
-`role_pins`, `effort_pin`, `source` and `incident_id` are stored as 4.1 names them; nothing reads
-them yet.
+`role_pins` and `effort_pin` override role resolution for the runs a trigger fires (B-60).
+`source` and `incident_id` are stored as 4.1 names them; nothing reads them yet.
 """
 
 from __future__ import annotations
@@ -44,12 +44,15 @@ type FireStatus = Literal[
     "failed",
     "waiting",
     "unknown",
+    "cancelled",
 ]
 
 HERE: Final[HomeEngine] = "pc"
 """The home this engine instance claims for."""
 LIVE: Final = ("claimed", "running")
 """Fire statuses that hold a lease."""
+ENDINGS: Final = ("ok", "silent", "blocked_config", "failed", "unknown", "cancelled", "skipped")
+"""Fire statuses a fire never leaves."""
 
 
 @dataclass(frozen=True, slots=True)

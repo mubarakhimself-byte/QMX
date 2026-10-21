@@ -3,7 +3,9 @@ a live run of a version or a test run of a draft.
 
 Each run gets its own folder `<home>/engine/runs/<run_id>/workflow/`, written from the Library's
 bundle, so no two runs share files. A run's status is read from its ledger events with
-SOLUTION-DESIGN 3.1's words; nothing stores it beside them.
+SOLUTION-DESIGN 3.1's words; nothing stores it beside them. A live run that passed fires every
+`after` trigger on its workflow, whoever started it (B-60). Cancelling a run cancels every child
+run under it (AD-5, B-66).
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from pydantic import JsonValue
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
-from qmx_engine.ledger.store import Reader, ledger_path
+from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
 from qmx_engine.ports.library import (
     MAIN,
     Bundle,
@@ -30,6 +32,7 @@ from qmx_engine.runner import Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context, Refused, State, require
 from qmx_engine.trace_export import export
+from qmx_engine.triggers.rows import After, fire_now, triggers
 
 SUBGRAPH_ENTRY = "subgraph-input"
 NODE_KINDS = frozenset({"node_scheduled", "node_started", "node_finished", "node_failed"})
@@ -137,7 +140,9 @@ async def run_bundle(
     caller: Caller,
     fake: bool = False,
     run_id: str | None = None,
+    pins: JsonObject | None = None,
 ) -> tuple[Outcome, Stored]:
+    """`pins` are the firing trigger's role and effort pins (B-60)."""
     run_id = run_id or new_run_id(ctx.clock.now())
     if subgraph is not None:
         bundle = induced(bundle, subgraph)
@@ -148,12 +153,61 @@ async def run_bundle(
         raise Refused("not_runnable", f"the workflow does not run: {codes}")
     try:
         outcome = await ctx.engine.start(
-            root, found[1], mode=mode, inputs=inputs, run_id=run_id, fake=fake
+            root, found[1], mode=mode, inputs=inputs, run_id=run_id, fake=fake, pins=pins
         )
     except EngineRefused as refused:
         raise Refused("engine_refused", str(refused)) from refused
     await ctx.engine.settle()
-    return outcome, summarize(ctx, outcome, item, object_id, mode, caller.principal)
+    stored = summarize(ctx, outcome, item, object_id, mode, caller.principal)
+    if mode == "live":
+        fire_after(ctx, outcome, item)
+    return outcome, stored
+
+
+def fire_after(ctx: Context, outcome: Outcome, item: str | None = None) -> None:
+    """Fire every `after` trigger on a passed live run's workflow (AD-10). Without `item`, the
+    workflow and the mode are read from the run's last summary."""
+    if outcome.status != "passed":
+        return
+    if item is None:
+        found = ctx.library.objects(outcome.run_id, "workflow-run")
+        if not found or found[-1].fields.get("mode") != "live":
+            return
+        item = str(found[-1].fields.get("workflow_item"))
+    with Reader.open(ctx.home) as reader:
+        listed = triggers(reader.connection, "WHERE kind = 'after' AND enabled = 1")
+    upstream: dict[str, JsonValue] = {
+        "run_id": outcome.run_id,
+        "workflow_item": item,
+        "outputs": outcome.outputs,
+    }
+    for trigger in listed:
+        if isinstance(trigger.spec, After) and trigger.spec.workflow_item == item:
+            fire_now(ctx.engine.ledger, trigger.id, ctx.clock.now(), {"upstream": upstream})
+
+
+def descendants(reader: Reader, run_id: str) -> list[str]:
+    """Every run started under `run_id` by a subworkflow node, nearest first."""
+    found: list[str] = []
+    frontier = [run_id]
+    while frontier:
+        parent = frontier.pop(0)
+        rows = reader.connection.execute(
+            "SELECT run_id FROM events WHERE seq = 1 AND kind = 'run_created'"
+            " AND json_extract(data, '$.parent_run_id') = ? ORDER BY at, run_id",
+            (parent,),
+        ).fetchall()
+        children = [str(child) for (child,) in rows if child not in found]
+        found += children
+        frontier += children
+    return found
+
+
+def drop_wake(run_id: str) -> Operation[None]:
+    def operation(txn: Transaction) -> None:
+        txn.connection.execute("DELETE FROM wakes WHERE run_id = ?", (run_id,))
+
+    return operation
 
 
 def summarize(
@@ -276,6 +330,24 @@ class Runs:
         found = summaries[-1].fields.get("object_id") if summaries else None
         object_id = found if isinstance(found, str) else None
         return RunView(run_id, mode, state.status, state.reason, state.detail, object_id)
+
+    def cancel(self, run_id: str, reason: str = "operator") -> list[str]:
+        """End a run and every child run under it `stopped`, whether they run here, wait or
+        parked. Returns the run ids that ended."""
+        if self.get(run_id).status in ("passed", "stopped"):
+            raise Refused("cancel_refused", f"run {run_id} already ended")
+        engine = self.ctx.engine
+        with Reader.open(self.ctx.home) as reader:
+            tree = [run_id, *descendants(reader, run_id)]
+            ended = {rid: status_of(reader.events(rid)).status for rid in tree}
+        stopped = engine.cancel(run_id, reason)
+        for rid in tree:
+            engine.ledger.write(drop_wake(rid))
+            if rid in stopped or ended[rid] in ("passed", "stopped"):
+                continue
+            engine.ledger.append(rid, "run_cancelled", {"reason": reason}, at=self.ctx.at())
+            stopped.append(rid)
+        return stopped
 
     def list(self, workflow_item: str, object_id: str | None = None) -> list[RunSummary]:
         return self.ctx.library.list_runs(workflow_item, object_id)

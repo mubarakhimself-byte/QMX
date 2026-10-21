@@ -5,8 +5,11 @@ Each claimed fire runs as its own task, so a tick never waits on a run. A fire's
 pinned version must be enabled; preflight (`triggers.preflight`); a closed usage window holds it
 (`triggers.quota`); the trigger's `monitor` precheck ends it `silent` when its source hash is
 unchanged; otherwise one live run starts with the trigger's inputs, the trigger's last successful
-outputs when `continuity` is on, and an `after` trigger's upstream outputs. A run that finishes
-passed fires every `after` trigger on its workflow.
+outputs when `continuity` is on, and an `after` trigger's upstream outputs, on the trigger's role
+and effort pins (B-60). A run that finishes passed fires every `after` trigger on its workflow
+(`service.runs.fire_after`). A wake resumes any run held with a `resume_at`: a usage limit, a time
+`wait` or a retry backoff (AD-10). A fire whose run is cancelled ends `cancelled` at once (L-69),
+and `run_now` answers what became of the fire it asked for (B-72).
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Final
 
-from pydantic import JsonValue, ValidationError
+from pydantic import ValidationError
 
 from qmx_engine.definition.model import Workflow
 from qmx_engine.ledger.store import Reader
@@ -32,7 +35,7 @@ from qmx_engine.ports.library import Bundle, LibraryRefused, Stored
 from qmx_engine.runner import Engine, Outcome, new_run_id, workspace
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context
-from qmx_engine.service.runs import Runs, run_bundle, summarize_again
+from qmx_engine.service.runs import Runs, fire_after, run_bundle, summarize_again
 from qmx_engine.triggers.claims import (
     Claimed,
     Lease,
@@ -49,13 +52,13 @@ from qmx_engine.triggers.preflight import Blocked, preflight
 from qmx_engine.triggers.quota import closed_until
 from qmx_engine.triggers.rows import (
     HERE,
-    After,
     Fire,
     FireStatus,
     HomeEngine,
     JsonObject,
     Trigger,
     fire_now,
+    fires,
     triggers,
 )
 
@@ -64,7 +67,30 @@ ENDING: Final[dict[str, FireStatus]] = {
     "failed": "failed",
     "waiting": "waiting",
     "interrupted": "unknown",
+    "stopped": "cancelled",
 }
+
+
+def pins(trigger: Trigger) -> JsonObject:
+    found: JsonObject = {}
+    if trigger.role_pins:
+        found["roles"] = trigger.role_pins
+    if trigger.effort_pin is not None:
+        found["effort"] = trigger.effort_pin
+    return found
+
+
+def unclaimed(trigger: Trigger, live: int, home: HomeEngine, *, claiming: bool) -> str:
+    """Why a pending fire was not claimed on this tick."""
+    if not claiming:
+        return "the engine stopped claiming work after a ledger write error"
+    if not trigger.enabled:
+        return "the trigger is disabled"
+    if trigger.home_engine != home:
+        return f"the trigger runs on {trigger.home_engine}, not on this engine ({home})"
+    if live >= trigger.max_concurrent:
+        return f"the trigger already runs {live} of max_concurrent {trigger.max_concurrent} fires"
+    return "the fire waits for the next tick"
 
 
 def caller_of(principal: str) -> Caller:
@@ -151,7 +177,7 @@ class Scheduler:
     async def _wake(self, run_id: str, reset: str) -> None:
         ledger = self.engine.ledger
         try:
-            outcome = await self.engine.resume(run_id, reason="limit", woke=reset)
+            outcome = await self.engine.resume(run_id, reason="wake", woke=reset)
         except EngineRefused:
             outcome = None
         ledger.write(end_wake(run_id, self.claimant))
@@ -160,8 +186,7 @@ class Scheduler:
         summarize_again(self.ctx, outcome)
         outputs = outcome.outputs if outcome.status == "passed" else None
         ledger.write(settle_run(run_id, ENDING[outcome.status], self.ctx.at(), outputs))
-        if outcome.status == "passed":
-            self._after(run_id, outcome)
+        fire_after(self.ctx, outcome)
 
     async def _fire(self, claimed: Claimed) -> None:
         fire, trigger = claimed.fire, claimed.trigger
@@ -170,6 +195,7 @@ class Scheduler:
             if fire.status == "running" and fire.run_id is not None and self._exists(fire.run_id):
                 outcome = await self.engine.resume(fire.run_id)
                 self._ended(fire, trigger, outcome)
+                fire_after(self.ctx, outcome, trigger.workflow_item)
                 return
             version = self._version(trigger)
             if isinstance(version, str):
@@ -220,8 +246,14 @@ class Scheduler:
                 subgraph=None,
                 caller=caller_of(trigger.created_by),
                 run_id=run_id,
+                pins=pins(trigger),
             )
             self._ended(fire, trigger, outcome)
+        except asyncio.CancelledError:
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                raise
+            ledger.write(settle(fire, "cancelled", self.ctx.at(), detail="the run was cancelled"))
         except LibraryRefused as refused:
             ledger.write(settle(fire, "blocked_config", self.ctx.at(), detail=str(refused)))
         except Exception as error:  # one broken fire must not stop the ticker
@@ -324,25 +356,28 @@ class Scheduler:
         self.engine.ledger.write(
             settle(fire, status, self.ctx.at(), detail=detail, outputs=outputs)
         )
-        if outcome.status == "passed":
-            self._after(outcome.run_id, outcome, trigger.workflow_item)
 
-    def _after(self, run_id: str, outcome: Outcome, item: str | None = None) -> None:
-        """Fire every `after` trigger on the finished run's workflow."""
-        if item is None:
-            found = self.ctx.library.objects(run_id, "workflow-run")
-            item = str(found[-1].fields.get("workflow_item")) if found else None
-        if item is None:
-            return
+    async def run_now(self, trigger_id: str) -> JsonObject:
+        """Fire a trigger now and say what became of the fire: started, settled with its reason,
+        or still pending and why it was not claimed (B-72)."""
+        fire_id = fire_now(self.engine.ledger, trigger_id, self.ctx.clock.now(), {})
+        await self.tick()
+        await asyncio.sleep(0)
         with Reader.open(self.ctx.home) as reader:
-            listed = triggers(reader.connection, "WHERE kind = 'after' AND enabled = 1")
-        upstream: dict[str, JsonValue] = {
-            "run_id": run_id,
-            "workflow_item": item,
-            "outputs": outcome.outputs,
+            found = next(f for f in fires(reader.connection, trigger_id) if f.id == fire_id)
+            trigger = triggers(reader.connection, "WHERE id = ?", trigger_id)[0]
+            (live,) = reader.connection.execute(
+                "SELECT count(*) FROM fires WHERE trigger_id = ? AND id != ?"
+                " AND status IN ('claimed', 'running')",
+                (trigger_id, fire_id),
+            ).fetchone()
+        detail = found.detail
+        if found.status == "pending":
+            detail = unclaimed(trigger, int(live), self.home, claiming=self.engine.claiming)
+        return {
+            "trigger_id": trigger_id,
+            "fire_id": fire_id,
+            "status": found.status,
+            "detail": detail,
+            "run_id": found.run_id,
         }
-        for trigger in listed:
-            if isinstance(trigger.spec, After) and trigger.spec.workflow_item == item:
-                fire_now(
-                    self.engine.ledger, trigger.id, self.ctx.clock.now(), {"upstream": upstream}
-                )
