@@ -356,6 +356,7 @@ def worker(payload: Mapping[str, Any]) -> int:
                 caller=OPERATOR,
                 now=now,
                 home_engine="contabo",
+                max_concurrent=int(payload.get("concurrency", 1)),
             )
             svc.ctx.engine.ledger.write(set_enabled(trigger.id, True))
             ticker = Scheduler(svc.ctx, home="contabo", credentials=set(), skills=set())
@@ -556,7 +557,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         log.say(f"lane {lane} at {time.strftime('%Y-%m-%dT%H:%M:%S')}")
         prepare_server()
         host = tailnet_address()
-        tick = DEFAULT_TICK if lane == "pev" else 5.0
+        tick = DEFAULT_TICK
         expect = 10 if lane == "cross" else 1
         payload = {
             "lane": lane,
@@ -567,6 +568,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "filter": FILTER,
             "tick": tick,
             "expect": expect,
+            "concurrency": expect,
             "timeout": 900 if lane == "e63" else 1500,
         }
         start_worker(payload)
@@ -597,7 +599,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             client = hub_client(home)
             cursor = 0
             count = 10 if lane == "cross" else 1
-            spaced = 6.0 if lane == "cross" else 0.0
+            spaced = 2.0 if lane == "cross" else 0.0
             for index in range(count):
                 object_id = pc_landing(home, store, library, index)
                 done = sync_to_hub(home, store)
