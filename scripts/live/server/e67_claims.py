@@ -154,18 +154,23 @@ def start_hub(lane: str, *, primary: str = "server", extra: str = "") -> tuple[s
     if LOCAL:
         return _local_hub(home, primary=primary, extra=extra)
     remote = f"{SERVER_DIR}/{lane}/hub"
+    stop_hub(lane)
     address = ssh("tailscale ip -4 | head -1")
     ssh(
         as_prbs(
-            f"mkdir -p {remote}/vault && chmod 700 {remote}/vault && "
+            f"mkdir -p {remote}/vault && chmod 700 {remote}/vault && rm -f {remote}/hub.port && "
             f"[ -s {remote}/vault/pairing-key ] || openssl rand -hex 32 "
             f"> {remote}/vault/pairing-key"
         )
     )
+    # One simple `setsid` command: the ssh session must close while the Hub keeps running. The
+    # box's SSH is Tailscale's wrapper, which waits for any tracked descendant, so a `cd && ...`
+    # list or a plain `runuser` would hold the connection open until the Hub exits.
     ssh(
-        f"cd {SERVER_DIR} && setsid nohup runuser -u prbs -- env HOME={SERVER_HOME} "
-        f"UV_CACHE_DIR={SERVER_DIR}/uv-cache {VENV}/bin/python -m qmx_hub.server "
-        f"--home {remote} --host {address} --port 0 --primary {primary} {extra} "
+        f"setsid nohup sh -c 'cd {SERVER_DIR} && HOME={SERVER_HOME} "
+        f"UV_CACHE_DIR={SERVER_DIR}/uv-cache exec setpriv --reuid=prbs --regid=prbs "
+        f"--init-groups {VENV}/bin/python -m qmx_hub.server "
+        f"--home {remote} --host {address} --port 0 --primary {primary} {extra}' "
         f">{SERVER_DIR}/{lane}/hub.log 2>&1 < /dev/null & echo started"
     )
     port = ""
@@ -213,7 +218,7 @@ def stop_hub(lane: str) -> None:
             process.wait(timeout=10)
         LOCAL_PROCESSES.clear()
         return
-    ssh(f"pkill -f 'qmx_hub.server --home {SERVER_DIR}/{lane}/hub' || true")
+    ssh(f"pkill -f 'qmx_hub[.]server --home {SERVER_DIR}/{lane}/hub' || true")
 
 
 def write_home(home: Path, url: str, key: str, *, primary: str = "server") -> None:
