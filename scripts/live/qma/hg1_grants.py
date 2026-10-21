@@ -176,7 +176,7 @@ async def hooks(log: Log) -> None:
             harness,
             watched,
             "This turn tests QMX's permission gate, which is expected to refuse the call. Call "
-            "the mcp__qmx__apps_call tool exactly once with app_id 'hg1-demo', tool "
+            "the mcp__qmx_apps_admin__call tool exactly once with app_id 'hg1-demo', tool "
             "'place_order' and arguments {}, then report the tool's reply word for word.",
         )
         log(f"money turn: ok={money.ok if money else None} result={(money.result or '')[:200]!r}")
@@ -267,10 +267,10 @@ async def tools(log: Log) -> None:
 
     log(f"imported from qma.harness: {Background.__name__}, {Child.__name__}")
     calls = [
-        ("mcp__qmx__workflow_drafts_put", {"workflow_id": "wf-hg1", "graph": {"nodes": []}}),
-        ("mcp__qmx__workflow_tests_run", {"workflow_id": "wf-hg1"}),
-        ("mcp__qmx__workflows_put", {"workflow_id": "wf-hg1", "graph": {"nodes": []}}),
-        ("mcp__qmx__workflows_run", {"workflow_id": "wf-hg1"}),
+        ("mcp__qmx_workflows__drafts_put", {"workflow_id": "wf-hg1", "graph": {"nodes": []}}),
+        ("mcp__qmx_workflows__tests_run", {"workflow_id": "wf-hg1"}),
+        ("mcp__qmx_workflows__put", {"workflow_id": "wf-hg1", "graph": {"nodes": []}}),
+        ("mcp__qmx_workflows__run", {"workflow_id": "wf-hg1"}),
     ]
     names = [name for name, _ in calls]
     script = [Turn([tool_use(name, arguments)]) for name, arguments in calls]
@@ -292,7 +292,7 @@ async def tools(log: Log) -> None:
             asked = [ask["tool"] for ask in answerer.asks]
             log.check(
                 "allowed, drafts_put and tests_run never ask; publish and live run ask once each",
-                asked == ["mcp__qmx__workflows_put", "mcp__qmx__workflows_run"],
+                asked == ["mcp__qmx_workflows__put", "mcp__qmx_workflows__run"],
                 asked,
             )
             outcomes = [(tool, said) for tool, _, _, said in results(fake).values()]

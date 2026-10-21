@@ -32,6 +32,7 @@ from qmx_remote.runs import RemoteRuns
 
 from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
+from qmx_control.catalog import operation
 from qmx_control.library import Library
 from qmx_control.models import ControlError as ControlError  # noqa: PLC0414 - public re-export
 from qmx_control.models import Document, MemoKey
@@ -250,6 +251,7 @@ class ControlService:
                     return
             await asyncio.sleep(0.05)
 
+    @operation("settings_read", "get", "read", rest=("GET", "/api/settings/{section}"))
     def settings_get(self, section: SettingsSection) -> Document:
         """Read UI-editable provider, MCP, budget or memory settings."""
         with self._lock:
@@ -280,6 +282,14 @@ class ControlService:
             values = change(current)
             return values if values == current else self.settings_put(section, values)
 
+    @operation(
+        "settings_read",
+        "put",
+        "manage",
+        rest=("PUT", "/api/settings/{section}"),
+        agent=False,
+        left_out="an agent that edits a provider row could send a stored key to a host",
+    )
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
         """Replace a settings section; credentials must be vault references."""
         with self._lock:
@@ -369,10 +379,21 @@ class ControlService:
                 self._event(db, "settings", section, {"section": section})
         return values
 
+    @operation(
+        "broker_read", "proposals", "read", rest=("GET", "/api/portfolio/proposals"), cursor=True
+    )
     def portfolio_proposals(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """Read unsigned broker proposals awaiting the operator's Portfolio signature."""
         return cast(list[Document], read_proposals(self.home, offset, limit))
 
+    @operation(
+        "ops",
+        "sessions_create",
+        "domain_write",
+        rest=("POST", "/api/sessions"),
+        agent=False,
+        left_out="chats are created by the harness",
+    )
     def sessions_create(self, session: SessionInput) -> Document:
         """Create a durable Copilot session, optionally a child session."""
         with self._lock, self._connect() as db:
@@ -388,6 +409,7 @@ class ControlService:
             self._event(db, "sessions", session_id, {"type": "created", "session": data})
         return data
 
+    @operation("ops", "sessions", "read", rest=("GET", "/api/sessions"), cursor=True)
     def sessions_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """List saved sessions, including their origin and parent."""
         self._page(offset, limit)
@@ -397,6 +419,14 @@ class ControlService:
             ).fetchall()
         return [_document(row[0]) for row in rows]
 
+    @operation(
+        "ops",
+        "sessions_append",
+        "domain_write",
+        rest=("POST", "/api/sessions/{session_id}/blocks"),
+        agent=False,
+        left_out="an agent could forge permission or needs_you blocks",
+    )
     def sessions_append(self, session_id: str, block: SessionBlock) -> Document:
         """Append a typed block; history is never rewritten."""
         with self._lock, self._connect() as db:
@@ -410,6 +440,14 @@ class ControlService:
             self._event(db, "sessions", session_id, {"type": "block", "block": data})
         return data
 
+    @operation(
+        "ops",
+        "sessions_stream",
+        "read",
+        rest=("GET", "/api/sessions/{session_id}/events"),
+        agent=False,
+        left_out="a live event stream, not a tool",
+    )
     def sessions_stream(self, session_id: str, after: int = 0, limit: int = 100) -> list[Document]:
         """Read a page of session events. REST also offers a continuous SSE stream."""
         with self._connect() as db:
@@ -417,6 +455,7 @@ class ControlService:
                 raise ControlError("not_found", "Session does not exist.", 404)
         return self.events("sessions", after, session_id, limit)
 
+    @operation("library", "save", "domain_write", rest=("POST", "/api/library"))
     def library_save(self, item: LibraryInput) -> Document:
         """Save an immutable artifact, optionally a new version or URL/date result."""
         with self._lock, self._connect() as db:
@@ -424,10 +463,12 @@ class ControlService:
             self._event(db, "library", str(data["id"]), {"type": "saved", "item_id": data["id"]})
         return data
 
+    @operation("library", "search", "read", rest=("GET", "/api/library"), cursor=True)
     def library_search(self, query: str = "", offset: int = 0, limit: int = 100) -> list[Document]:
         """FTS5 search over title, tags and extracted text, ordered by relevance."""
         return self.library.search(query, offset, limit)
 
+    @operation("library", "get", "read", rest=("GET", "/api/library/{artifact_id}"))
     def library_get(self, artifact_id: str) -> Document:
         """Read an artifact with its verified blob content."""
         return self.library.get(artifact_id)
@@ -454,10 +495,12 @@ class ControlService:
                     )
         return result
 
+    @operation("library", "versions", "read", rest=("GET", "/api/library/{artifact_id}/versions"))
     def library_versions(self, artifact_id: str) -> list[Document]:
         """Read an artifact's immutable version chain."""
         return self.library.versions(artifact_id)
 
+    @operation("library", "link", "domain_write", rest=("POST", "/api/library/links"))
     def library_link(self, source_id: str, target_id: str, relation: str = "related") -> Document:
         """Link two existing artifacts without changing their contents."""
         with self._lock, self._connect() as db:
@@ -465,10 +508,19 @@ class ControlService:
             self._event(db, "library", source_id, {"type": "linked", **data})
         return data
 
+    @operation("library", "links", "read", rest=("GET", "/api/library/{artifact_id}/links"))
     def library_links(self, artifact_id: str) -> list[Document]:
         """Read incoming and outgoing artifact links."""
         return self.library.links(artifact_id)
 
+    @operation(
+        "ops",
+        "backup_weekly",
+        "manage",
+        rest=("POST", "/api/backup/weekly"),
+        agent=False,
+        left_out="a host maintenance job, not an agent act",
+    )
     def backup_weekly(self, dry_run: bool = False) -> Document:
         """Snapshot small stores to the private backup repo in Settings, at most weekly."""
         settings = self.settings_get("backup")
@@ -504,6 +556,7 @@ class ControlService:
             "active_jobs": sum(status == "running" for status in statuses),
         }
 
+    @operation("ops", "aggregates", "read", rest=("GET", "/api/aggregates"))
     def aggregates_get(self) -> Document:
         """Read short-lived UI totals; event revisions invalidate the cached view."""
         self._refresh_runs()
@@ -555,12 +608,14 @@ class ControlService:
             ).fetchall()
         return [{**_document(row[1]), "id": row[0]} for row in rows]
 
+    @operation("workflows", "remote_list", "read", rest=("GET", "/api/runs"), cursor=True)
     def runs_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """List recorded runs; an empty installation has no runs."""
         self._page(offset, limit)
         self._refresh_runs()
         return self.run_index.list(offset, limit)
 
+    @operation("workflows", "remote_get", "read", rest=("GET", "/api/runs/{run_id}"))
     def runs_get(self, run_id: str) -> Document:
         """Read a journal-indexed run, including resolved models and artifacts."""
         self._refresh_runs()
@@ -577,6 +632,7 @@ class ControlService:
             self._remote.settings = RemoteSettings.model_validate(self.settings_get("remote"))
         return self._remote
 
+    @operation("workflows", "remote_start", "manage", rest=("POST", "/api/runs/remote"))
     def runs_start_remote(
         self, bundle: RunBundle, target: str | None = None, definition_path: str | None = None
     ) -> Document:
@@ -595,15 +651,20 @@ class ControlService:
             self.record_work("jobs", run_id, recorded)
         return recorded
 
+    @operation("workflows", "remote_status", "read", rest=("GET", "/api/runs/{run_id}/status"))
     def runs_status(self, run_id: str) -> Document:
         """Read actual remote status and publish it to the shared run index."""
         result = self.remote_runtime().status(run_id)
         return self._record_remote(result)
 
+    @operation("workflows", "remote_logs", "read", rest=("GET", "/api/runs/{run_id}/logs"))
     def runs_logs(self, run_id: str) -> Document:
         """Read the remote worker's incremental, redacted logs."""
         return self.remote_runtime().logs(run_id)
 
+    @operation(
+        "workflows", "remote_fetch", "domain_write", rest=("POST", "/api/runs/{run_id}/fetch")
+    )
     def runs_fetch(self, run_id: str) -> Document:
         """Verify remote output hashes, register artifacts and journal the fetch."""
         result = self.remote_runtime().fetch(run_id)
@@ -634,30 +695,36 @@ class ControlService:
             self.record_work("jobs", run_id, self.runs_get(run_id))
         return result
 
+    @operation("workflows", "remote_resume", "manage", rest=("POST", "/api/runs/{run_id}/resume"))
     def runs_resume(self, run_id: str, target: str | None = None) -> Document:
         """Restart an interrupted remote run from its verified LangGraph checkpoint."""
         result = self.remote_runtime().resume(run_id, target)
         return self._record_remote(result)
 
+    @operation("workflows", "remote_stop", "manage", rest=("POST", "/api/runs/{run_id}/stop"))
     def runs_stop(self, run_id: str) -> Document:
         """Stop remote work and remove its container or sandbox, including credentials."""
         result = self.remote_runtime().stop(run_id)
         return self._record_remote(result)
 
+    @operation("workflows", "jobs_run", "manage", rest=("POST", "/api/jobs/remote"))
     def run_job(
         self, bundle: RunBundle, target: str | None = None, definition_path: str | None = None
     ) -> Document:
         """Place a job on a CPU or GPU target and record it automatically."""
         return self.runs_start_remote(bundle, target, definition_path)
 
+    @operation("workflows", "jobs_status", "read", rest=("GET", "/api/jobs/{run_id}/status"))
     def job_status(self, run_id: str) -> Document:
         """Read a placed job's actual status."""
         return self.runs_status(run_id)
 
+    @operation("workflows", "jobs_logs", "read", rest=("GET", "/api/jobs/{run_id}/logs"))
     def job_logs(self, run_id: str) -> Document:
         """Read a placed job's durable logs."""
         return self.runs_logs(run_id)
 
+    @operation("workflows", "jobs_fetch", "domain_write", rest=("POST", "/api/jobs/{run_id}/fetch"))
     def job_fetch(self, run_id: str) -> Document:
         """Fetch and register a placed job's verified results."""
         return self.runs_fetch(run_id)
@@ -673,6 +740,7 @@ class ControlService:
                 )
                 self._event(db, "runs", run_id, data)
 
+    @operation("workflows", "jobs_list", "read", rest=("GET", "/api/jobs"), cursor=True)
     def jobs_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """List recorded background jobs."""
         return self._work_list("jobs", offset, limit)
@@ -708,10 +776,12 @@ class ControlService:
             self._event(db, kind, work_id, result)
         return result
 
+    @operation("workflows", "remote_cancel", "manage", rest=("POST", "/api/runs/{run_id}/cancel"))
     def runs_cancel(self, run_id: str) -> Document:
         """Cancel a run through its owner; unavailable until the runner is connected."""
         return self._cancel("runs", run_id)
 
+    @operation("workflows", "jobs_cancel", "manage", rest=("POST", "/api/jobs/{job_id}/cancel"))
     def jobs_cancel(self, job_id: str) -> Document:
         """Cancel a job through its owner; unavailable until the runner is connected."""
         return self._cancel("jobs", job_id)
@@ -722,18 +792,22 @@ class ControlService:
             "not_implemented", f"{operation} is not available yet; requires {packet}.", 501
         )
 
+    @operation("apps_admin", "list", "read", rest=("GET", "/api/apps"))
     def apps_list(self) -> list[Document]:
         """List installed definitions and their actual runtime state."""
         return self.app_runtime().list()
 
+    @operation("apps_admin", "get", "read", rest=("GET", "/api/apps/{app_id}"))
     def apps_get(self, app_id: str) -> Document:
         """Read an app definition and runtime status."""
         return self.app_runtime().get(app_id)
 
+    @operation("apps_admin", "create", "manage", rest=("POST", "/api/apps"))
     def apps_create(self, path: str, trust: Trust = "agent") -> Document:
         """Install an app definition from a local package directory."""
         return self.app_runtime().install(Path(path), trust=trust)
 
+    @operation("apps_admin", "update", "manage", rest=("PUT", "/api/apps/{app_id}"))
     def apps_update(
         self, app_id: str, path: str, trust: Trust = "agent", expected_hash: str | None = None
     ) -> Document:
@@ -742,10 +816,18 @@ class ControlService:
             Path(path), trust=trust, expected_id=app_id, expected_hash=expected_hash
         )
 
+    @operation("apps_admin", "versions", "read", rest=("GET", "/api/apps/{app_id}/versions"))
     def apps_versions(self, app_id: str) -> list[Document]:
         """List immutable app definitions."""
         return self.app_runtime().versions(app_id)
 
+    @operation(
+        "apps_admin",
+        "test",
+        "domain_write",
+        rest=("POST", "/api/apps/{app_id}/test"),
+        forced={"auto_publish": False},
+    )
     def apps_test(
         self,
         app_id: str,
@@ -760,6 +842,7 @@ class ControlService:
             app_id, expected_hash or current, stage, auto_publish=auto_publish
         )
 
+    @operation("apps_admin", "publish", "manage", rest=("POST", "/api/apps/{app_id}/publish"))
     def apps_publish(
         self,
         app_id: str,
@@ -772,6 +855,7 @@ class ControlService:
         current = str(owner.get(app_id)["definition_hash"])
         return owner.road.publish(app_id, expected_hash or current, expected_active, signature)
 
+    @operation("apps_admin", "rollback", "manage", rest=("POST", "/api/apps/{app_id}/rollback"))
     def apps_rollback(
         self, app_id: str, expected_active: str, signature: str | None = None
     ) -> Document:
@@ -785,26 +869,39 @@ class ControlService:
             rollback=True,
         )
 
+    @operation("apps_admin", "start", "manage", rest=("POST", "/api/apps/{app_id}/start"))
     def apps_start(self, app_id: str) -> Document:
         """Start an installed app instance."""
         return self.app_runtime().start(app_id)
 
+    @operation("apps_admin", "stop", "manage", rest=("POST", "/api/apps/{app_id}/stop"))
     def apps_stop(self, app_id: str) -> Document:
         """Stop an app's process tree."""
         return self.app_runtime().stop(app_id)
 
+    @operation("apps_admin", "logs", "read", rest=("GET", "/api/apps/{app_id}/logs"))
     def apps_logs(self, app_id: str, limit: int = 100) -> list[Document]:
         """Read structured app logs."""
         return self.app_runtime().logs(app_id, limit)
 
+    @operation("apps_admin", "restart", "manage", rest=("POST", "/api/apps/{app_id}/restart"))
     def apps_restart(self, app_id: str) -> Document:
         """Restart the selected immutable definition, retaining its volume."""
         return self.app_runtime().restart(app_id)
 
+    @operation("apps_admin", "registry", "read", rest=("GET", "/api/apps/registry"))
     def apps_registry(self) -> list[Document]:
         """Discover connected MCP servers and their tools and resources."""
         return self.app_runtime().registry()
 
+    @operation(
+        "apps_admin",
+        "call",
+        "manage",
+        rest=("POST", "/api/apps/{app_id}/tools/{tool}"),
+        agent=False,
+        left_out="a REST door for the UI; apps ask each other through their own operations",
+    )
     def apps_call(self, app_id: str, tool: str, arguments: Document) -> Document:
         """Call a connected app; feed arguments must be registered artifact refs."""
         result = self.app_runtime().call(app_id, tool, arguments)
@@ -824,6 +921,7 @@ class ControlService:
             result["library_ref"] = saved["ref"]
         return result
 
+    @operation("apps_admin", "resource", "read", rest=("GET", "/api/apps/{app_id}/resources"))
     def apps_resource(self, app_id: str, uri: str) -> list[Document]:
         """Read an app's MCP resource, including ui:// panels."""
         return self.app_runtime().resource(app_id, uri)
@@ -884,6 +982,7 @@ class ControlService:
                 db, "apps", app_id, {"type": "backup_failed", "error": type(error).__name__}
             )
 
+    @operation("apps_admin", "backup", "domain_write", rest=("POST", "/api/apps/{app_id}/backup"))
     def apps_backup(self, app_id: str) -> Document:
         """Back up now using the UI-editable remote and verify a downloaded restore."""
         self.app_runtime().get(app_id)
@@ -898,6 +997,7 @@ class ControlService:
             self._event(db, "apps", app_id, {"type": "backup", **result})
         return result
 
+    @operation("apps_admin", "restore", "manage", rest=("POST", "/api/apps/{app_id}/restore"))
     def apps_restore(self, app_id: str, snapshot_id: str) -> Document:
         """Verify and replace a stopped app's volume from a backup snapshot."""
         self.app_runtime().get(app_id)
@@ -949,6 +1049,7 @@ class ControlService:
             self._apps = None
         self._app_hooks.clear()
 
+    @operation("apps_admin", "evidence", "read", rest=("GET", "/api/apps/{app_id}/evidence"))
     def apps_evidence(self, app_id: str) -> list[Document]:
         """Read verified version and stage evidence from the app volume."""
         return self.app_runtime().road.evidence(app_id)
@@ -965,92 +1066,163 @@ class ControlService:
             self._unavailable(operation, ENGINE)
         return engine
 
+    @operation("workflows", "get", "read", rest=("GET", "/api/workflows/{workflow_id}"))
     def workflows_get(self, workflow_id: str) -> Document:
         """Read a workflow definition."""
         return self._engine("workflows.get").workflows_get(workflow_id)
 
+    @operation("workflows", "put", "manage", rest=("PUT", "/api/workflows/{workflow_id}"))
     def workflows_put(self, workflow_id: str, graph: Document) -> Document:
-        """Publish a workflow graph as a new version. Saving a draft is workflow_drafts_put."""
+        """Publish a workflow graph as a new version. Saving a draft is workflows_drafts_put."""
         return self._engine("workflows.put").workflows_put(workflow_id, graph)
 
+    @operation("workflows", "validate", "read", rest=("POST", "/api/workflows/validate"))
     def workflows_validate(self, graph: Document) -> Document:
         """Validate a workflow graph."""
         return self._engine("workflows.validate").workflows_validate(graph)
 
+    @operation("workflows", "run", "manage", rest=("POST", "/api/workflows/{workflow_id}/run"))
     def workflows_run(self, workflow_id: str) -> Document:
-        """Start a live run of a published workflow. A test run is workflow_tests_run."""
+        """Start a live run of a published workflow. A test run is workflows_tests_run."""
         return self._engine("workflows.run").workflows_run(workflow_id)
 
+    @operation(
+        "workflows", "drafts_get", "read", rest=("GET", "/api/workflows/{workflow_id}/draft")
+    )
     def workflow_drafts_get(self, workflow_id: str) -> Document:
         """Read a workflow's draft."""
         return self._engine("workflow_drafts.get").workflow_drafts_get(workflow_id)
 
+    @operation(
+        "workflows",
+        "drafts_put",
+        "domain_write",
+        rest=("PUT", "/api/workflows/{workflow_id}/draft"),
+    )
     def workflow_drafts_put(self, workflow_id: str, graph: Document) -> Document:
         """Save a workflow draft. Nothing is published."""
         return self._engine("workflow_drafts.put").workflow_drafts_put(workflow_id, graph)
 
+    @operation(
+        "workflows", "tests_run", "domain_write", rest=("POST", "/api/workflows/{workflow_id}/test")
+    )
     def workflow_tests_run(
         self, workflow_id: str, subgraph: list[str] | None = None, fake: bool = False
     ) -> Document:
         """Test-run a workflow's draft, whole or only the named nodes, on fake models if asked."""
         return self._engine("workflow_tests.run").workflow_tests_run(workflow_id, subgraph, fake)
 
+    @operation(
+        "workflows", "versions_list", "read", rest=("GET", "/api/workflows/{workflow_id}/versions")
+    )
     def workflow_versions_list(self, workflow_id: str) -> list[Document]:
         """List a workflow's published versions."""
         return self._engine("workflow_versions.list").workflow_versions_list(workflow_id)
 
+    @operation(
+        "workflows",
+        "versions_archive",
+        "manage",
+        rest=("POST", "/api/workflows/{workflow_id}/archive"),
+    )
     def workflow_versions_archive(self, workflow_id: str, version: int) -> Document:
         """Archive one published version of a workflow."""
         return self._engine("workflow_versions.archive").workflow_versions_archive(
             workflow_id, version
         )
 
+    @operation("workflows", "runs_list", "read", rest=("GET", "/api/workflow-runs"))
     def workflow_runs_list(self, workflow_id: str | None = None) -> list[Document]:
         """List workflow runs, newest first, optionally for one workflow."""
         return self._engine("workflow_runs.list").workflow_runs_list(workflow_id)
 
+    @operation("workflows", "runs_get", "read", rest=("GET", "/api/workflow-runs/{run_id}"))
     def workflow_runs_get(self, run_id: str) -> Document:
         """Read one workflow run and its node states."""
         return self._engine("workflow_runs.get").workflow_runs_get(run_id)
 
+    @operation(
+        "workflows", "runs_explain", "read", rest=("GET", "/api/workflow-runs/{run_id}/explain")
+    )
     def workflow_runs_explain(self, run_id: str) -> Document:
         """Explain what a workflow run did and why it stopped."""
         return self._engine("workflow_runs.explain").workflow_runs_explain(run_id)
 
+    @operation("ops", "spans", "read", rest=("GET", "/api/ops/spans/{run_id}"))
+    def ops_spans(self, run_id: str) -> Document:
+        """Read a workflow run's spans: per node attempt, its model, tokens, cost and duration."""
+        explained = self._engine("ops.spans").workflow_runs_explain(run_id)
+        nodes = cast("list[Document]", explained.get("nodes") or [])
+        return {
+            "run_id": explained.get("run_id"),
+            "status": explained.get("status"),
+            "cost": explained.get("cost"),
+            "spans": [
+                {"node_id": node.get("node_id"), **span}
+                for node in nodes
+                for span in cast("list[Document]", node.get("spans") or [])
+            ],
+        }
+
+    @operation(
+        "workflows", "runs_cancel", "manage", rest=("POST", "/api/workflow-runs/{run_id}/cancel")
+    )
     def workflow_runs_cancel(self, run_id: str) -> Document:
         """Cancel a workflow run."""
         return self._engine("workflow_runs.cancel").workflow_runs_cancel(run_id)
 
+    @operation(
+        "workflows", "runs_resume", "manage", rest=("POST", "/api/workflow-runs/{run_id}/resume")
+    )
     def workflow_runs_resume(self, run_id: str) -> Document:
         """Resume a paused or failed workflow run."""
         return self._engine("workflow_runs.resume").workflow_runs_resume(run_id)
 
+    @operation("workflows", "triggers_list", "read", rest=("GET", "/api/triggers"))
     def workflow_triggers_list(self, workflow_id: str | None = None) -> list[Document]:
         """List workflow triggers, optionally for one workflow."""
         return self._engine("workflow_triggers.list").workflow_triggers_list(workflow_id)
 
+    @operation("workflows", "triggers_create", "manage", rest=("POST", "/api/triggers"))
     def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document:
         """Create a trigger for a published workflow. It starts disabled."""
         return self._engine("workflow_triggers.create").workflow_triggers_create(
             workflow_id, trigger
         )
 
+    @operation(
+        "workflows", "triggers_enable", "manage", rest=("POST", "/api/triggers/{trigger_id}/enable")
+    )
     def workflow_triggers_enable(self, trigger_id: str) -> Document:
         """Enable a workflow trigger."""
         return self._engine("workflow_triggers.enable").workflow_triggers_enable(trigger_id)
 
+    @operation(
+        "workflows",
+        "triggers_disable",
+        "manage",
+        rest=("POST", "/api/triggers/{trigger_id}/disable"),
+    )
     def workflow_triggers_disable(self, trigger_id: str) -> Document:
         """Disable a workflow trigger."""
         return self._engine("workflow_triggers.disable").workflow_triggers_disable(trigger_id)
 
+    @operation(
+        "workflows",
+        "triggers_run_now",
+        "manage",
+        rest=("POST", "/api/triggers/{trigger_id}/run-now"),
+    )
     def workflow_triggers_run_now(self, trigger_id: str) -> Document:
         """Fire a workflow trigger once, now."""
         return self._engine("workflow_triggers.run_now").workflow_triggers_run_now(trigger_id)
 
+    @operation("workflows", "inbox_list", "read", rest=("GET", "/api/inbox"))
     def workflow_inbox_list(self) -> list[Document]:
         """List open workflow inbox items."""
         return self._engine("workflow_inbox.list").workflow_inbox_list()
 
+    @operation("apps_admin", "archive", "manage", rest=("POST", "/api/apps/{app_id}/archive"))
     def apps_archive(self, app_id: str) -> Document:
         """Archive a mini app."""
         return self._unavailable("apps.archive", ENGINE)

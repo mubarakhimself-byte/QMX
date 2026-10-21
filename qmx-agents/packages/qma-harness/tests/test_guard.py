@@ -31,7 +31,7 @@ from qma.harness.guard import (
 from qma.harness.tools import guard_rules
 
 RULES = GuardRules(
-    mandatory_asks=frozenset({"mcp__qmx__propose_order", "mcp__qmx__apps_publish"}),
+    mandatory_asks=frozenset({"mcp__qmx_node__propose_order", "mcp__qmx_apps_admin__publish"}),
     protected_paths=(
         "/d/qmx/home/claude",
         "/d/qmx/home/chats",
@@ -62,6 +62,10 @@ RULES = GuardRules(
     case_insensitive=True,
     unattended=False,
     external_unattended=frozenset(),
+    qmx_servers=frozenset(
+        {"qmx_node", "qmx_apps_admin", "qmx_data", "qmx_ops", "qmx_delegate", "qmx_library"}
+    ),
+    surface={"qmx_node", "qmx_apps_admin", "qmx_data", "qmx_delegate", "qmx_library"},
 )
 CWD = "C:\\Users\\Op\\Desktop\\QMX"
 
@@ -291,9 +295,11 @@ VERDICTS: list[tuple[str, dict[str, Any], str, str]] = [
     ("Bash", {"command": "git show HEAD~1:src/a.py"}, "pass", ""),
     ("Bash", {"command": "git commit -m 'Fix src/a.py.'"}, "pass", ""),
     ("mcp__broker__placeOrder", {}, "pass", ""),
-    ("mcp__qmx__propose_order", {}, "ask", "mcp__qmx__propose_order always asks you"),
-    ("mcp__qmx__apps_publish", {}, "ask", "always asks"),
-    ("mcp__qmx__read_bars", {}, "pass", ""),
+    ("mcp__qmx_node__propose_order", {}, "ask", "mcp__qmx_node__propose_order always asks you"),
+    ("mcp__qmx_apps_admin__publish", {}, "ask", "always asks"),
+    ("mcp__qmx_data__bars", {}, "pass", ""),
+    ("mcp__qmx_ops__capacity", {}, "deny", "mcp__qmx_ops__capacity is outside this chat's tools"),
+    ("mcp__qmx_unknown__x", {}, "deny", "outside this chat's tools"),
     ("ExitPlanMode", {}, "pass", ""),
     ("WebFetch", {"url": "https://help.ctrader.com/open-api/"}, "pass", ""),
     ("WebFetch", {"url": "https://docs.python.org"}, "pass", ""),
@@ -394,7 +400,10 @@ def test_the_hook_denies_with_the_reason() -> None:
         }
     }
     assert hook("Bash", {"command": "ls"}) == {}
-    assert hook("mcp__qmx__apps_publish", {})["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert (
+        hook("mcp__qmx_apps_admin__publish", {})["hookSpecificOutput"]["permissionDecision"]
+        == "ask"
+    )
 
 
 def test_an_exception_inside_the_guard_denies(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -495,7 +504,7 @@ def test_real_short_names_read_as_the_long_path(tmp_path: Path) -> None:
             "deny",
         ),
         ("mcp__news__get_weather", "bypassPermissions", False, ("weather/*",), "deny"),
-        ("mcp__qmx__read_bars", "bypassPermissions", True, (), "pass"),
+        ("mcp__qmx_data__bars", "bypassPermissions", True, (), "pass"),
         ("Bash", "bypassPermissions", True, (), "pass"),
     ],
 )
@@ -532,7 +541,7 @@ def test_a_hook_input_without_a_permission_mode_counts_as_unattended() -> None:
     assert hook("mcp__weather__get_weather", {})["hookSpecificOutput"]["permissionDecision"] == (
         "deny"
     )
-    assert hook("mcp__qmx__read_bars", {}) == {}
+    assert hook("mcp__qmx_data__bars", {}) == {}
 
 
 FAKE_KEY = "sk-" + "or-v1-" + "GUARDTESTFAKE" * 2
@@ -620,7 +629,7 @@ def judged(rules: GuardRules, tool: str, tool_input: dict[str, Any]) -> tuple[st
 
 
 def test_his_always_list_never_lifts_a_floor_row_a_never_row_or_an_asking_tool() -> None:
-    rules = with_lists(never=("Bash(git push*)",), always=("Bash(*)", "Read", "mcp__qmx__*"))
+    rules = with_lists(never=("Bash(git push*)",), always=("Bash(*)", "Read", "mcp__qmx_*"))
     assert judged(rules, "Bash", {"command": "cmdkey /list"})[0] == "deny"
     assert judged(rules, "Bash", {"command": "rm -rf D:/elsewhere"})[0] == "ask"
     assert judged(rules, "Read", {"file_path": "D:/qmx/home/settings.toml"})[0] == "deny"
@@ -628,7 +637,7 @@ def test_his_always_list_never_lifts_a_floor_row_a_never_row_or_an_asking_tool()
         "deny",
         "guard: your never-allow list refuses this (Bash(git push*))",
     )
-    assert judged(rules, "mcp__qmx__propose_order", {})[0] == "ask"
+    assert judged(rules, "mcp__qmx_node__propose_order", {})[0] == "ask"
     assert judged(rules, "Bash", {"command": "git status"}) == (
         "allow",
         "your always-allow list allows this (Bash(*))",

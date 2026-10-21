@@ -75,7 +75,7 @@ SessionId = NewType("SessionId", str)
 PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
 """`qmx-agents/plugin/`, QMX's shipped skills, agents, commands and rules."""
 
-PLUGIN_SHA256: Final = "1ad08fe8432b60134d15fa747251aed6b418d92a783be20619e9e59527402642"
+PLUGIN_SHA256: Final = "f7609bea559d247cc95eb762707d739efeebd9bcefed3bc6c25262fb39672185"
 """`plugin_digest(PLUGIN_DIR)` as shipped. The CLI reloads the plugin at every launch and
 only bypassable rules guard its folder, so a launch refuses any other content. Update this
 with any edit to the plugin."""
@@ -717,6 +717,7 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
             "tools": None if config.tools is None else list(config.tools),
             "home": {"kind": config.home.kind, "project_id": config.home.project_id},
             "packs": list(config.packs),
+            "toolsets": None if config.toolsets is None else list(config.toolsets),
             "agents": {
                 name: {
                     "description": agent.description,
@@ -764,6 +765,7 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
             tools=None if tools is None else tuple(tools),
             home=Home(home.get("kind", "general"), home.get("project_id")),
             packs=tuple(config.get("packs", ())),
+            toolsets=None if config.get("toolsets") is None else tuple(config["toolsets"]),
             agents=MappingProxyType(
                 {
                     name: SubAgent(

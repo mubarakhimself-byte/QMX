@@ -2,12 +2,12 @@
 throwaway QMX home whose [brokers] names one demo account with the propose permission and a
 credential reference that is not in the keyring, so no broker connection can open.
 
-The fake model calls `mcp__qmx__propose_order` four times. The answers go through
+The fake model calls `mcp__qmx_node__propose_order` four times. The answers go through
 `POST /api/approvals/{ask_id}`:
 1. order A, AllowOnce;
 2. order A again (the replay), Reject;
 3. order B, one field changed, Reject;
-4. after `[claude] permissions.allow = ["mcp__qmx__propose_order"]`, in a new chat, order A:
+4. after `[claude] permissions.allow = ["mcp__qmx_node__propose_order"]`, in a new chat, order A:
    AllowAlways, then Reject.
 
 PASS when each call asks, the first writes one unsigned row, the allow rule does not let call 4
@@ -39,7 +39,7 @@ from common import SCRATCH, Log, boot, put_claude, use_fake_home, use_fake_key
 from fake_model import Turn, text, tool_use
 from money_lane import broker_connections, results
 
-PROPOSE = "mcp__qmx__propose_order"
+PROPOSE = "mcp__qmx_node__propose_order"
 TOOLS = ["Read"]
 ORDER_A = {
     "broker_id": "demo",

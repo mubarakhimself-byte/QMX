@@ -74,16 +74,16 @@ def test_remote_rest_and_mcp_use_one_owner_and_register_verified_artifacts(tmp_p
 
         async def compare() -> None:
             async with Client(create_mcp(service)) as mcp:
-                result = await mcp.call_tool("runs_status", {"run_id": run_id})
+                result = await mcp.call_tool("workflows_remote_status", {"run_id": run_id})
                 assert result.data == status.json()
                 names = {tool.name for tool in await mcp.list_tools()}
                 assert {
-                    "run_job",
-                    "job_status",
-                    "job_logs",
-                    "job_fetch",
-                    "runs_resume",
-                    "runs_stop",
+                    "workflows_jobs_run",
+                    "workflows_jobs_status",
+                    "workflows_jobs_logs",
+                    "workflows_jobs_fetch",
+                    "workflows_remote_resume",
+                    "workflows_remote_stop",
                 } <= names
 
         asyncio.run(compare())

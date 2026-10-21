@@ -9,7 +9,7 @@ subagents:
   - ref: data-analyst.yaml
   - ref: app-builder.yaml
 background_tasks: [overnight-builder.yaml]
-interrupt_on: {apps_publish: true, apps_start: true}
+interrupt_on: {apps_admin_publish: true, apps_admin_start: true}
 permissions:
   write: [/artifacts/**, /memories/**]
   deny_write: [/skills/**, /data/**]

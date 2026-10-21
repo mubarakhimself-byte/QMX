@@ -36,7 +36,16 @@ from qmx_control.service import ControlService, SessionBlock
 import qma.harness.chat
 import qma.harness.harness
 import qma.harness.procs
-from qma.harness import Harness, LaunchRefused, NewChat, OperatorText, QmxHome, SessionId
+from qma.harness import (
+    Background,
+    Harness,
+    InjectedText,
+    LaunchRefused,
+    NewChat,
+    OperatorText,
+    QmxHome,
+    SessionId,
+)
 from qma.harness.harness import UsageRows, journal_path
 from qma.harness.home import PlanAuth, read_record, write_record
 from qma.harness.profiles import ProfileName
@@ -583,7 +592,74 @@ def test_the_gate_denies_a_dropped_servers_tools_for_the_rest_of_the_chat(
             "deny guard: the MCP server weather was left out of this chat "
             "(mcp__weather__get_weather)"
         )
-        assert await gate_says(client, "mcp__qmx__read_bars") == "pass "
+        assert await gate_says(client, "mcp__qmx_data__bars") == "pass "
+
+    run(body, home)
+
+
+QMX_SERVERS = {
+    "qmx_apps_admin",
+    "qmx_backtest",
+    "qmx_broker_read",
+    "qmx_data",
+    "qmx_delegate",
+    "qmx_library",
+    "qmx_node",
+    "qmx_ops",
+    "qmx_research",
+    "qmx_settings_read",
+    "qmx_workflows",
+}
+
+
+def test_an_intake_node_chat_lists_only_its_declared_toolsets(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(
+            NewChat(
+                title="intake",
+                model="haiku",
+                kind=Background(),
+                toolsets=("library", "research"),
+            )
+        )
+        await harness.send(chat, InjectedText("go"))
+        [client] = FakeClient.made
+        assert set(client.options.mcp_servers) == QMX_SERVERS  # pyright: ignore[reportArgumentType]
+        switched_off = {name for name, on in client.toggled if not on}
+        assert switched_off == QMX_SERVERS - {"qmx_library", "qmx_research"}
+        assert await gate_says(client, "mcp__qmx_library__search") == "pass "
+        assert await gate_says(client, "mcp__qmx_ops__capacity") == (
+            "deny guard: mcp__qmx_ops__capacity is outside this chat's tools"
+        )
+
+    run(body, home)
+
+
+def test_a_scope_change_relists_the_live_chat_without_a_relaunch(home: QmxHome) -> None:
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="copilot", model="haiku"))
+        await harness.send(chat, OperatorText("hi"))
+        [client] = FakeClient.made
+        assert client.toggled == []
+        await harness.set_toolsets(chat, ("library", "ops"))
+        assert {name for name, on in client.toggled if not on} == QMX_SERVERS - {
+            "qmx_library",
+            "qmx_ops",
+        }
+        assert await gate_says(client, "mcp__qmx_workflows__put") == (
+            "deny guard: mcp__qmx_workflows__put is outside this chat's tools"
+        )
+        client.toggled.clear()
+        await harness.set_toolsets(chat, None)
+        assert client.toggled == sorted(
+            (name, True) for name in QMX_SERVERS - {"qmx_library", "qmx_ops"}
+        )
+        assert await gate_says(client, "mcp__qmx_workflows__put") == (
+            "ask mcp__qmx_workflows__put always asks you"
+        )
+        assert len(FakeClient.made) == 1
+        record = read_record(home, chat)
+        assert record is not None and record.config.toolsets is None
 
     run(body, home)
 

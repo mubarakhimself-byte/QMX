@@ -305,11 +305,11 @@ def door_host(lane: Any, engine: Any) -> Any:
 async def tools_chat(log: Log, lane: Any, fake_model: Any, money: Any) -> None:
     from qmx_engine.control_door import EngineDoor  # noqa: PLC0415
 
-    quiet = ["mcp__qmx__workflow_drafts_put", "mcp__qmx__workflow_tests_run"]
+    quiet = ["mcp__qmx_workflows__drafts_put", "mcp__qmx_workflows__tests_run"]
     calls = [
         (quiet[0], {"workflow_id": "chain", "graph": chain("chain")}),
         (quiet[1], {"workflow_id": "chain"}),
-        ("mcp__qmx__workflows_put", {"workflow_id": "chain", "graph": {}}),
+        ("mcp__qmx_workflows__put", {"workflow_id": "chain", "graph": {}}),
     ]
     script = [fake_model.Turn([fake_model.tool_use(name, args)]) for name, args in calls]
     script.append(fake_model.Turn([fake_model.text("calls done")]))
@@ -349,7 +349,7 @@ async def tools_chat(log: Log, lane: Any, fake_model: Any, money: Any) -> None:
         asked = [ask["tool"] for ask in answered.asks]
         log.check(
             "draft save and test run raise no ask; publish raises exactly one",
-            asked == ["mcp__qmx__workflows_put"],
+            asked == ["mcp__qmx_workflows__put"],
             asked,
         )
         said = {tool: (error, text) for tool, _, error, text in money.results(fake).values()}
@@ -357,7 +357,7 @@ async def tools_chat(log: Log, lane: Any, fake_model: Any, money: Any) -> None:
             log(f"  {tool} error={error} -> {text[:300]!r}")
         draft = json.loads(said[quiet[0]][1])
         test = json.loads(said[quiet[1]][1])
-        card = json.loads(said["mcp__qmx__workflows_put"][1])
+        card = json.loads(said["mcp__qmx_workflows__put"][1])
         button = card.get("button") or {}
         log.check(
             "the draft saves and its test passes",

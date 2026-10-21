@@ -74,17 +74,19 @@ def test_actual_road_evidence_signature_and_transport_parity(tmp_path: Path) -> 
                 assert first.status_code == 200, first.text
                 for stage in ("sandbox", "shadow"):
                     result = await mcp.call_tool(
-                        "apps_test",
+                        "apps_admin_test",
                         {"app_id": "exchange-status", "expected_hash": revision, "stage": stage},
                     )
                     assert result.data["stage"] == stage
                 evidence = rest.get("/api/apps/exchange-status/evidence", headers=headers)
                 assert (
                     evidence.json()
-                    == (await mcp.call_tool("apps_evidence", {"app_id": "exchange-status"})).data
+                    == (
+                        await mcp.call_tool("apps_admin_evidence", {"app_id": "exchange-status"})
+                    ).data
                 )
                 denied = await mcp.call_tool(
-                    "apps_publish",
+                    "apps_admin_publish",
                     {"app_id": "exchange-status", "expected_hash": revision},
                     raise_on_error=False,
                 )
@@ -97,7 +99,7 @@ def test_actual_road_evidence_signature_and_transport_parity(tmp_path: Path) -> 
                 )
                 assert signed.status_code == 200
                 published = await mcp.call_tool(
-                    "apps_publish",
+                    "apps_admin_publish",
                     {
                         "app_id": "exchange-status",
                         "expected_hash": revision,
@@ -118,9 +120,9 @@ def test_actual_road_evidence_signature_and_transport_parity(tmp_path: Path) -> 
                     stale.status_code == 409
                     and stale.json()["error"]["code"] == "publication_conflict"
                 )
-                assert (await mcp.call_tool("apps_evidence", {"app_id": "exchange-status"})).data[
-                    -1
-                ] == published.data
+                assert (
+                    await mcp.call_tool("apps_admin_evidence", {"app_id": "exchange-status"})
+                ).data[-1] == published.data
 
                 # Replacement and rollback must run different immutable processes.
                 service.apps_stop("exchange-status")
@@ -147,7 +149,7 @@ def test_actual_road_evidence_signature_and_transport_parity(tmp_path: Path) -> 
                 next_revision = updated.json()["definition_hash"]
                 for stage in ("tests", "sandbox", "shadow"):
                     check = await mcp.call_tool(
-                        "apps_test",
+                        "apps_admin_test",
                         {
                             "app_id": "exchange-status",
                             "expected_hash": next_revision,
@@ -164,7 +166,7 @@ def test_actual_road_evidence_signature_and_transport_parity(tmp_path: Path) -> 
                     },
                 )
                 replaced = await mcp.call_tool(
-                    "apps_publish",
+                    "apps_admin_publish",
                     {
                         "app_id": "exchange-status",
                         "expected_hash": next_revision,

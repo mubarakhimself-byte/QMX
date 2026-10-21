@@ -513,7 +513,7 @@ async def h20(log: Log) -> None:
         handle = await harness.run_turn(
             chat,
             OperatorText(
-                "Call the mcp__qmx__workflow_drafts_put tool exactly once to save a draft "
+                "Call the mcp__qmx_workflows__drafts_put tool exactly once to save a draft "
                 "workflow named turn-h-draft with a minimal document of your choice. Report the "
                 "tool's reply in one line, even if it is an error."
             ),

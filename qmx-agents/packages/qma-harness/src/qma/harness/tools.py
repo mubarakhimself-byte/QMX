@@ -1,13 +1,14 @@
-"""The `qmx` in-process MCP server: QMX's own tools, nothing else.
+"""QMX's own tools for a chat, built from the operation catalog (engine AD-61).
 
-"The copilot is the same API as the UI" (01 section 11.1), so the tools are the existing
-control-plane, broker and domain functions, read from the FastMCP servers that already serve
-them, not new code. In-process means the CLI never receives the qmx-control bearer token
-(HOW seam 2).
+"The copilot is the same API as the UI" (01 section 11.1), so every tool is a catalog row
+(`qmx_control.catalog`) bound to the control-plane, broker, domain or host function that already
+serves it. In-process means the CLI never receives the qmx-control bearer token (HOW seam 2).
 
-One list. `tool_defs` is the only place a QMX tool joins the agent surface. Every tool
-declares an `Effect` in an explicit table; a function missing from its table does not join.
-Which tools ask and the grant check derive from that one field.
+A row with `agent=False` never joins. Which tools ask and the grant check derive from the row's
+`approval`. Each toolset is one in-process server, `qmx_<toolset>`, and a chat's surface is the
+set of those servers switched on (probe P-PK found no mid-chat re-list for one server; P-TG
+passed toggling). A tool's full name is `mcp__qmx_<toolset>__<op>`, the same length as the
+`mcp__qmx__<toolset>_<op>` the catalog checks.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,8 +29,9 @@ from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
 from qmx_broker.service import BrokerService
+from qmx_control.catalog import CORE_TOOLSETS, OperationSpec, name_problem, rows, spill
 
-from qma.harness.guard import DELEGATE_TOOL, QMX_SERVER, GuardRules, Rule, normalize_path
+from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
 from qma.harness.money_words import named_money_act
 
 if TYPE_CHECKING:
@@ -43,18 +45,16 @@ if TYPE_CHECKING:
     from qma.harness.home import QmxHome
 
 SERVER: Final = QMX_SERVER
-PREFIX: Final = f"mcp__{SERVER}__"
 
 
 class Effect(Enum):
-    """What a QMX tool does to the world. Closed. There is no member for moving money: agents
-    have no path to money (ruling 116).
+    """What a QMX tool does to the world, from its row's `approval`. Closed. There is no member
+    for moving money: agents have no path to money (ruling 116).
 
     READ           reads QMX or broker state. Runs without asking.
     DOMAIN_WRITE   writes QMX research state (library, backtests, run results). Asks or not
                    per `settings.toml [agents] domain_write` ("allow" | "ask"). `delegate`
-                   is DOMAIN_WRITE: its child chat's own acts face their own gates, and its
-                   spend is bounded by the allow-list and the child's [budgets] limits.
+                   is DOMAIN_WRITE: its child chat's own acts face their own gates.
     MANAGE         publish, install, schedule, run, cancel, destructive control-plane ops.
                    Always asks (R35).
     PROPOSE_MONEY  writes an unsigned order proposal. Always asks. Accepted on
@@ -93,16 +93,26 @@ def domain_write_policy(agents: Mapping[str, object]) -> DomainWritePolicy:
 type ToolCall = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
+def server_name(toolset: str) -> str:
+    return f"{SERVER}_{toolset}"
+
+
+def tool_name(toolset: str, op: str) -> str:
+    """The name the CLI gives a tool: `mcp__qmx_<toolset>__<op>`."""
+    return f"mcp__{server_name(toolset)}__{op}"
+
+
 @dataclass(frozen=True)
 class ToolDef:
-    name: str
+    toolset: str
+    op: str
     description: str
     input_schema: Mapping[str, object]
     effect: Effect
     """Required, no default. A tool without one does not construct."""
     call: ToolCall
     metadata: Mapping[str, object] = field(default_factory=dict[str, object])
-    """The MCP annotations and `_meta`, for the surface check."""
+    """The MCP annotations and `_meta`."""
     target: object = None
     """The function the tool runs. PROPOSE_MONEY is accepted by its identity."""
 
@@ -110,131 +120,15 @@ class ToolDef:
         if not isinstance(self.effect, Effect):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(f"{self.name} declares no Effect")
 
+    @property
+    def name(self) -> str:
+        """The wire name, `<toolset>_<op>`."""
+        return f"{self.toolset}_{self.op}"
 
-AGENT_OPERATIONS: Final[Mapping[str, Effect]] = MappingProxyType(
-    {
-        "apps_list": Effect.READ,
-        "apps_registry": Effect.READ,
-        "apps_get": Effect.READ,
-        "apps_create": Effect.MANAGE,
-        "apps_update": Effect.MANAGE,
-        "apps_versions": Effect.READ,
-        "apps_test": Effect.DOMAIN_WRITE,
-        "apps_publish": Effect.MANAGE,
-        "apps_rollback": Effect.MANAGE,
-        "apps_start": Effect.MANAGE,
-        "apps_stop": Effect.MANAGE,
-        "apps_restart": Effect.MANAGE,
-        "apps_call": Effect.MANAGE,
-        "apps_resource": Effect.READ,
-        "apps_logs": Effect.READ,
-        "apps_evidence": Effect.READ,
-        "apps_backup": Effect.DOMAIN_WRITE,
-        "apps_restore": Effect.MANAGE,
-        "apps_archive": Effect.MANAGE,
-        "workflows_get": Effect.READ,
-        "workflows_put": Effect.MANAGE,
-        "workflows_validate": Effect.READ,
-        "workflows_run": Effect.MANAGE,
-        "workflow_drafts_get": Effect.READ,
-        "workflow_drafts_put": Effect.DOMAIN_WRITE,
-        "workflow_tests_run": Effect.DOMAIN_WRITE,
-        "workflow_versions_list": Effect.READ,
-        "workflow_versions_archive": Effect.MANAGE,
-        "workflow_runs_list": Effect.READ,
-        "workflow_runs_get": Effect.READ,
-        "workflow_runs_explain": Effect.READ,
-        "workflow_runs_cancel": Effect.MANAGE,
-        "workflow_runs_resume": Effect.MANAGE,
-        "workflow_triggers_list": Effect.READ,
-        "workflow_triggers_create": Effect.MANAGE,
-        "workflow_triggers_enable": Effect.MANAGE,
-        "workflow_triggers_disable": Effect.MANAGE,
-        "workflow_triggers_run_now": Effect.MANAGE,
-        "workflow_inbox_list": Effect.READ,
-        "runs_list": Effect.READ,
-        "runs_start_remote": Effect.MANAGE,
-        "runs_status": Effect.READ,
-        "runs_logs": Effect.READ,
-        "runs_fetch": Effect.DOMAIN_WRITE,
-        "runs_resume": Effect.MANAGE,
-        "runs_stop": Effect.MANAGE,
-        "run_job": Effect.MANAGE,
-        "job_status": Effect.READ,
-        "job_logs": Effect.READ,
-        "job_fetch": Effect.DOMAIN_WRITE,
-        "runs_get": Effect.READ,
-        "runs_cancel": Effect.MANAGE,
-        "jobs_list": Effect.READ,
-        "jobs_cancel": Effect.MANAGE,
-        "library_search": Effect.READ,
-        "library_save": Effect.DOMAIN_WRITE,
-        "library_get": Effect.READ,
-        "library_versions": Effect.READ,
-        "library_links": Effect.READ,
-        "library_link": Effect.DOMAIN_WRITE,
-        "aggregates_get": Effect.READ,
-        "settings_get": Effect.READ,
-        "portfolio_proposals": Effect.READ,
-        "sessions_list": Effect.READ,
-    }
-)
-"""Names from `qmx_control.server.OPERATIONS` the agent may call, each with its effect. An
-explicit allow-list; `OPERATIONS_LEFT_OUT` says why each other row stays out. A unit test holds
-that no row names an order act (`money_words`)."""
+    @property
+    def full(self) -> str:
+        return tool_name(self.toolset, self.op)
 
-OPERATIONS_LEFT_OUT: Final[Mapping[str, str]] = MappingProxyType(
-    {
-        "settings_put": "an agent that edits a provider row could send a stored key to a host",
-        "backup_weekly": "a host maintenance job, not an agent act",
-        "sessions_create": "chats are created by the harness",
-        "sessions_append": "an agent could forge permission or needs_you blocks",
-        "sessions_stream": "a live event stream, not a tool",
-    }
-)
-
-FORCED_ARGUMENTS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
-    {"apps_test": MappingProxyType({"auto_publish": False})}
-)
-"""Arguments an agent's call always runs with, left out of the schema it sees. `apps_test`
-publishes an app that reaches shadow unless told not to, and publishing is MANAGE (R35)."""
-
-DOMAIN_EFFECTS: Final[Mapping[str, Effect]] = MappingProxyType(
-    {
-        "list_instruments": Effect.READ,
-        "read_bars": Effect.READ,
-        "read_features": Effect.READ,
-        "calendar": Effect.READ,
-        "run_backtest": Effect.DOMAIN_WRITE,
-        "backtest_status": Effect.READ,
-        "backtest_results": Effect.READ,
-        "compare_runs": Effect.READ,
-        "qml_run": Effect.READ,
-        "node_state": Effect.READ,
-    }
-)
-"""`qmx_tools.functions.domain_functions` by name. `DOMAIN_LEFT_OUT` lists the rest."""
-
-DOMAIN_LEFT_OUT: Final[Mapping[str, str]] = MappingProxyType(
-    {
-        "library_search": "the control-plane library_search serves the same library",
-        "library_save": "the control-plane library_save serves the same library",
-        "propose_order": "the broker's propose_order is the one proposal writer",
-    }
-)
-DOMAIN_GROUPS: Final = ("data", "backtest", "research", "node")
-
-BROKER_EFFECTS: Final[Mapping[str, Effect]] = MappingProxyType(
-    {
-        "list_accounts": Effect.READ,
-        "account_state": Effect.READ,
-        "positions": Effect.READ,
-        "quotes": Effect.READ,
-        "symbol_info": Effect.READ,
-        "bars": Effect.READ,
-        "propose_order": Effect.PROPOSE_MONEY,
-    }
-)
 
 FIXED_REFS: Final[frozenset[str]] = frozenset({"qmx/chatgpt", "qmx/control-token"})
 """Fixed `qmx/*` entries every chat's guard refuses by name, besides the settings.toml ones."""
@@ -245,10 +139,8 @@ ArgsDigest = NewType("ArgsDigest", str)
 whitespace, UTF-8)."""
 
 
-def args_digest(tool_name: str, tool_input: Mapping[str, object]) -> ArgsDigest:
-    body = json.dumps(
-        [tool_name, tool_input], sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
+def args_digest(name: str, tool_input: Mapping[str, object]) -> ArgsDigest:
+    body = json.dumps([name, tool_input], sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return ArgsDigest(hashlib.sha256(body.encode()).hexdigest())
 
 
@@ -278,55 +170,153 @@ class Grants:
         return False
 
 
-def _text(result: Any) -> dict[str, Any]:
-    blocks = [
-        {"type": "text", "text": block.text}
-        for block in result.content
-        if getattr(block, "type", None) == "text"
-    ]
-    return {"content": blocks or [{"type": "text", "text": ""}]}
+NEXT_STEPS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "not_found": "check the id with the matching list tool, then call again",
+        "invalid_arguments": "fix the arguments to match this tool's input schema",
+        "unavailable": "this part of QMX is not running here; tell the operator",
+        "conflict": "read the current state, then call again with it",
+    }
+)
+DEFAULT_NEXT_STEP: Final = "read the message; call again only after changing what it names"
 
 
-def _from_fastmcp(tool: Tool, effect: Effect) -> ToolDef:
-    forced = FORCED_ARGUMENTS.get(tool.name, {})
+def failure(code: str, message: str) -> dict[str, Any]:
+    """The tool error shape: a code, the message and a next step, never a raw exception."""
+    next_step = NEXT_STEPS.get(code, DEFAULT_NEXT_STEP)
+    body = {"error": {"code": code, "message": message, "next_step": next_step}}
+    return {"content": [{"type": "text", "text": json.dumps(body)}], "is_error": True}
 
-    async def call(arguments: dict[str, Any]) -> dict[str, Any]:
-        try:
-            return _text(await tool.run({**arguments, **forced}))
-        except Exception as error:
-            return {"content": [{"type": "text", "text": str(error)}], "is_error": True}
 
+def _failure_of(error: Exception) -> dict[str, Any]:
+    """A control error arrives as its JSON document; anything else is named by its type."""
+    with contextlib.suppress(ValueError, TypeError, KeyError):
+        found = json.loads(str(error))["error"]
+        return failure(str(found["code"]), str(found["message"]))
+    if type(error).__name__ in ("ValidationError", "ToolError") and "validation" in str(error):
+        return failure("invalid_arguments", str(error))
+    return failure(type(error).__name__, str(error))
+
+
+def _text(result: Any) -> str:
+    return "".join(block.text for block in result.content if getattr(block, "type", None) == "text")
+
+
+def _paged(
+    row: OperationSpec, result: Any, arguments: Mapping[str, object], limit: int
+) -> tuple[str, dict[str, object]]:
+    """A list answer as one page with the offset of the next, and that cursor alone; or the
+    answer's own text and no cursor."""
+    structured = cast("Mapping[str, object] | None", getattr(result, "structured_content", None))
+    data = (structured or {}).get("result")
+    if not row.cursor or not isinstance(data, list):
+        return _text(result), {}
+    items = cast("list[object]", data)
+    offset = arguments.get("offset", 0)
+    start = offset if isinstance(offset, int) else 0
+    wanted = arguments.get("limit", limit)
+    full = len(items) >= (wanted if isinstance(wanted, int) else limit)
+    cursor: dict[str, object] = {"next_offset": start + len(items) if full else None}
+    return json.dumps({"items": items, **cursor}), cursor
+
+
+def wrap(row: OperationSpec, tool: Tool, save: Callable[..., Any]) -> ToolDef:
+    """One row as a tool: forced arguments left out of the schema, a list answer paged with a
+    cursor, a long answer spilled to the Library, and an error in the tool error shape."""
+    forced = dict(row.forced)
     schema = dict(tool.parameters)
+    properties = cast("dict[str, Any]", schema.get("properties", {}))
     if forced:
-        properties = cast("dict[str, object]", schema.get("properties", {}))
         schema["properties"] = {k: v for k, v in properties.items() if k not in forced}
         required = cast("list[str]", schema.get("required", []))
         schema["required"] = [name for name in required if name not in forced]
+    limit_default = cast("dict[str, Any]", properties.get("limit", {})).get("default", 100)
+
+    async def call(arguments: dict[str, Any]) -> dict[str, Any]:
+        try:
+            result = await tool.run({**arguments, **forced})
+        except Exception as error:
+            return _failure_of(error)
+        text, cursor = _paged(row, result, arguments, int(limit_default))
+        answer = await asyncio.to_thread(spill, text, row, save, cursor)
+        return {"content": [{"type": "text", "text": answer}]}
 
     metadata: dict[str, object] = {"_meta": dict(tool.meta or {})}
     if tool.annotations is not None:
         metadata["annotations"] = tool.annotations.model_dump(exclude_none=True)
     return ToolDef(
-        name=tool.name,
-        description=tool.description or tool.name,
+        toolset=row.toolset,
+        op=row.op,
+        description=row.description or tool.description or row.name,
         input_schema=schema,
-        effect=effect,
+        effect=Effect(row.approval),
         call=call,
         metadata=metadata,
         target=getattr(tool, "fn", None),
     )
 
 
-async def _listed(servers: list[FastMCP], effects: Mapping[str, Effect]) -> list[ToolDef]:
-    """The tools `effects` names, from `servers`. A row with no tool behind it raises, so a
-    renamed or removed function never drops out of the agent surface unnoticed."""
-    tools = [tool for server in servers for tool in await server.list_tools()]
-    missing = sorted(set(effects) - {tool.name for tool in tools})
+def _plain(row: OperationSpec, schema: Mapping[str, object], call: ToolCall) -> ToolDef:
+    return ToolDef(
+        toolset=row.toolset,
+        op=row.op,
+        description=row.description,
+        input_schema=schema,
+        effect=Effect(row.approval),
+        call=call,
+    )
+
+
+async def _bound(
+    found: Iterable[OperationSpec],
+    servers: list[FastMCP],
+    save: Callable[..., Any],
+    *,
+    by_name: bool = False,
+) -> list[ToolDef]:
+    """Each row as a tool from the server that serves it, by `target` or, for the control door,
+    by wire name. A row with no tool behind it raises, so a renamed or removed function never
+    drops out of the surface unnoticed."""
+    tools = {tool.name: tool for server in servers for tool in await server.list_tools()}
+    keyed = [(row.name if by_name else row.target, row) for row in found]
+    missing = sorted(key for key, _ in keyed if key not in tools)
     if missing:
-        raise ToolSurfaceError(
-            f"effect table rows are missing on their server: {', '.join(missing)}"
-        )
-    return [_from_fastmcp(tool, effects[tool.name]) for tool in tools if tool.name in effects]
+        raise ToolSurfaceError(f"catalog rows are missing on their server: {', '.join(missing)}")
+    return [wrap(row, tools[key], save) for key, row in keyed]
+
+
+type HostRead = Callable[[dict[str, Any]], Awaitable[Mapping[str, object]]]
+"""A host read the harness serves itself: the chat-slot table or a chat's journal."""
+
+HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
+    {
+        "slot_table": {"type": "object", "properties": {}},
+        "journal": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string", "description": "The chat's session id"},
+                "offset": {"type": "integer", "minimum": 0, "default": 0},
+                "limit": {"type": "integer", "minimum": 1, "default": 50},
+            },
+            "required": ["session_id"],
+        },
+    }
+)
+
+
+def _host_def(row: OperationSpec, read: HostRead) -> ToolDef:
+    async def call(arguments: dict[str, Any]) -> dict[str, Any]:
+        try:
+            found = await read(arguments)
+        except KeyError as error:
+            return failure("not_found", str(error))
+        except ValueError as error:
+            return failure("invalid_arguments", str(error))
+        except OSError as error:
+            return failure("unavailable", str(error))
+        return {"content": [{"type": "text", "text": json.dumps(found, default=str)}]}
+
+    return _plain(row, HOST_SCHEMAS[row.target], call)
 
 
 async def tool_defs(
@@ -335,22 +325,45 @@ async def tool_defs(
     broker: BrokerService,
     domain: DomainContext,
     delegate: Delegate | None,
+    host: Mapping[str, HostRead] | None = None,
 ) -> list[ToolDef]:
-    """Every QMX tool for one chat, each with its declared `Effect`: the `AGENT_OPERATIONS`
-    rows of the control plane, the broker's reads and `propose_order`, the domain functions
-    in `DOMAIN_EFFECTS`, and `delegate` when not None (a Child chat passes None). `domain`
-    shares `control`, so no second writer runs."""
+    """Every agent row of the catalog as a tool for one chat: control operations, the broker's
+    reads and `propose_order`, the domain functions, the host reads in `host` by target, and
+    `delegate` when not None (a Child chat passes None). `domain` shares `control`, so no
+    second writer runs."""
     from qmx_broker.server import create_server as broker_server  # noqa: PLC0415
     from qmx_control.server import create_mcp  # noqa: PLC0415
     from qmx_tools.servers import create_server as domain_server  # noqa: PLC0415
 
+    agent = [row for row in rows() if row.agent]
+    save = control.library_save
     domain_servers = [domain_server(group, domain) for group in DOMAIN_GROUPS]
+    reads = host or {}
     return [
-        *await _listed([create_mcp(control)], AGENT_OPERATIONS),
-        *await _listed([broker_server(broker)], BROKER_EFFECTS),
-        *await _listed(domain_servers, DOMAIN_EFFECTS),
-        *([] if delegate is None else [delegate_def(delegate)]),
+        *await _bound(
+            [row for row in agent if row.binds == "control_op"],
+            [create_mcp(control)],
+            save,
+            by_name=True,
+        ),
+        *await _bound(
+            [row for row in agent if row.binds == "broker"], [broker_server(broker)], save
+        ),
+        *await _bound([row for row in agent if row.binds == "domain_fn"], domain_servers, save),
+        *(
+            _host_def(row, reads[row.target])
+            for row in agent
+            if row.binds == "agent_tool" and row.target in reads
+        ),
+        *(
+            delegate_def(row, delegate)
+            for row in agent
+            if row.binds == "delegate" and delegate is not None
+        ),
     ]
+
+
+DOMAIN_GROUPS: Final = ("data", "backtest", "research", "node")
 
 
 type Delegate = Callable[[str, str], Awaitable[str]]
@@ -375,49 +388,36 @@ DELEGATE_SCHEMA: Final[Mapping[str, object]] = MappingProxyType(
 )
 
 
-def delegate_def(delegate: Delegate) -> ToolDef:
-    """`mcp__qmx__delegate`, the one QMX tool that adds what the SDK lacks: native sub-agents
-    cannot change provider. The helper is a full chat with its own process, relay grant,
-    qmx-control child session, asks and verbatim prompts, so every rule above holds in it."""
+def delegate_def(row: OperationSpec, delegate: Delegate) -> ToolDef:
+    """`mcp__qmx_delegate__run`, the one QMX tool that adds what the SDK lacks: native
+    sub-agents cannot change provider. The helper is a full chat with its own process, relay
+    grant, qmx-control child session, asks and verbatim prompts, so every rule above holds in it."""
 
     async def call(arguments: dict[str, Any]) -> dict[str, Any]:
         profile, prompt = arguments.get("profile"), arguments.get("prompt")
         if not isinstance(profile, str) or not isinstance(prompt, str) or not prompt.strip():
-            return _error("delegate needs a profile name and a prompt")
+            return failure("invalid_arguments", "delegate needs a profile name and a prompt")
         try:
             return {"content": [{"type": "text", "text": await delegate(profile, prompt)}]}
         except DelegateRefused as refused:
-            return _error(str(refused))
+            return failure("refused", str(refused))
 
-    return ToolDef(
-        name=DELEGATE_TOOL.removeprefix(PREFIX),
-        description=(
-            "Run a helper chat on another provider profile and return its final answer. The "
-            "helper starts fresh: put the whole task in the prompt. It cannot start helpers."
-        ),
-        input_schema=DELEGATE_SCHEMA,
-        effect=Effect.DOMAIN_WRITE,
-        call=call,
-    )
-
-
-def _error(text: str) -> dict[str, Any]:
-    return {"content": [{"type": "text", "text": text}], "is_error": True}
+    return _plain(row, DELEGATE_SCHEMA, call)
 
 
 class ToolSurfaceError(RuntimeError):
-    """The `qmx` server cannot be built from these defs."""
+    """The QMX servers cannot be built from these defs."""
 
 
 class OrderToolRefused(RuntimeError):
     """An external MCP server offers a tool whose name spells an order act."""
 
 
-def rule_rows(rows: object) -> tuple[Rule, ...]:
+def rule_rows(table: object) -> tuple[Rule, ...]:
     """His list as `Rule`s: each row a `{pattern, ...}` table or a bare pattern string, as
     `ControlService` stores `[rules]`. A row that does not parse is skipped."""
     found: list[Rule] = []
-    for row in cast("list[object]", rows) if isinstance(rows, list) else []:
+    for row in cast("list[object]", table) if isinstance(table, list) else []:
         text = cast("Mapping[str, object]", row).get("pattern") if isinstance(row, Mapping) else row
         if isinstance(text, str):
             with contextlib.suppress(ValueError):
@@ -429,30 +429,48 @@ def is_proposal_writer(target: object) -> bool:
     return getattr(target, "__func__", None) is BrokerService.propose_order
 
 
-def build_server(
+def surface(toolsets: Iterable[str] | None, defs: Iterable[ToolDef]) -> frozenset[str]:
+    """The servers a chat has switched on: `toolsets` (None is every core toolset) among the
+    toolsets `defs` serve."""
+    served = {tool.toolset for tool in defs}
+    wanted = CORE_TOOLSETS if toolsets is None else tuple(toolsets)
+    return frozenset(server_name(name) for name in wanted if name in served)
+
+
+def build_servers(
     defs: list[ToolDef],
     *,
     grants: Grants,
     domain_write: DomainWritePolicy,
     enforce_grants: bool = True,
-) -> McpSdkServerConfig:
-    """`create_sdk_mcp_server(name="qmx", ...)`. Refuses to build on a duplicate name and on
-    PROPOSE_MONEY on anything but the broker's `propose_order` (identity, not name). Every
-    asking tool's handler first consumes a grant for its exact arguments and returns an error
-    naming the rule without one.
+) -> dict[str, McpSdkServerConfig]:
+    """One `create_sdk_mcp_server(name="qmx_<toolset>")` per toolset in `defs`. Refuses to
+    build on a duplicate or unservable name and on PROPOSE_MONEY on anything but the broker's
+    `propose_order` (identity, not name). Every asking tool's handler first consumes a grant for
+    its exact arguments and returns an error naming the rule without one.
     `enforce_grants=False` exists for one live check only (`TestMode.grants`)."""
     names = [tool.name for tool in defs]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     if duplicates:
         raise ToolSurfaceError(f"duplicate QMX tool names: {', '.join(duplicates)}")
+    problems = [problem for name in names if (problem := name_problem(name)) is not None]
+    if problems:
+        raise ToolSurfaceError("; ".join(problems))
     for tool in defs:
         if tool.effect is Effect.PROPOSE_MONEY and not is_proposal_writer(tool.target):
             raise ToolSurfaceError(
                 f"{tool.name} is not the broker's propose_order and cannot propose money"
             )
-    return create_sdk_mcp_server(
-        SERVER, tools=sdk_tools(defs, grants, domain_write, enforce_grants=enforce_grants)
-    )
+    toolsets: dict[str, list[ToolDef]] = {}
+    for tool in defs:
+        toolsets.setdefault(tool.toolset, []).append(tool)
+    return {
+        server_name(toolset): create_sdk_mcp_server(
+            server_name(toolset),
+            tools=sdk_tools(found, grants, domain_write, enforce_grants=enforce_grants),
+        )
+        for toolset, found in toolsets.items()
+    }
 
 
 def sdk_tools(
@@ -462,10 +480,10 @@ def sdk_tools(
     *,
     enforce_grants: bool = True,
 ) -> list[SdkMcpTool[Any]]:
-    """The server's tools. Each asking tool's handler consumes a grant first."""
+    """A server's tools, each named by its op. Each asking tool's handler consumes a grant."""
     return [
         SdkMcpTool(
-            tool.name,
+            tool.op,
             tool.description,
             dict(tool.input_schema),
             _guarded(tool, grants)
@@ -478,17 +496,12 @@ def sdk_tools(
 
 def _guarded(tool: ToolDef, grants: Grants) -> ToolCall:
     async def call(arguments: dict[str, Any]) -> dict[str, Any]:
-        if not grants.consume(PREFIX + tool.name, args_digest(PREFIX + tool.name, arguments)):
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"{tool.name} runs only after you approve these exact "
-                        "arguments, and no approval was given",
-                    }
-                ],
-                "is_error": True,
-            }
+        if not grants.consume(tool.full, args_digest(tool.full, arguments)):
+            return failure(
+                "not_approved",
+                f"{tool.name} runs only after you approve these exact arguments, and no "
+                "approval was given",
+            )
         return await tool.call(arguments)
 
     return call
@@ -559,11 +572,13 @@ def guard_rules(
     external_unattended: frozenset[str],
     workspace: Path | None = None,
     rules: Mapping[str, object] | None = None,
+    on: frozenset[str] | None = None,
 ) -> GuardRules:
-    """Derive `GuardRules` from the same defs: `mandatory_asks` are the names where
-    `asks(effect, domain_write)`, each prefixed `mcp__qmx__`. Paths come from `home`, the OS
-    user's home and this Python's environment. `workspace` is where a recursive delete runs
-    without asking; `rules` is `settings.toml [rules]`, his two lists."""
+    """Derive `GuardRules` from the same defs: `mandatory_asks` are the full names where
+    `asks(effect, domain_write)`, and the QMX servers are each toolset's, of which `on` (None
+    is all) form the chat's surface. Paths come from `home`, the OS user's home and this
+    Python's environment. `workspace` is where a recursive delete runs without asking; `rules`
+    is `settings.toml [rules]`, his two lists."""
     personal = Path.home() / ".claude"
     protected = [
         home.plan_dir,
@@ -581,10 +596,9 @@ def guard_rules(
         home.root / "settings.toml",
     ]
     lists = rules or {}
+    servers = frozenset(server_name(tool.toolset) for tool in defs)
     return GuardRules(
-        mandatory_asks=frozenset(
-            PREFIX + tool.name for tool in defs if asks(tool.effect, domain_write)
-        ),
+        mandatory_asks=frozenset(tool.full for tool in defs if asks(tool.effect, domain_write)),
         protected_paths=_both(protected),
         qmx_homes=_both([home.root]),
         writable_paths=_both([home.workspaces_dir, home.agent_memory_dir]),
@@ -605,6 +619,8 @@ def guard_rules(
         case_insensitive=sys.platform in ("win32", "darwin"),
         unattended=unattended,
         external_unattended=external_unattended,
+        qmx_servers=servers,
+        surface=set(servers if on is None else on & servers),
     )
 
 
@@ -649,8 +665,8 @@ SERVER_NAME: Final = re.compile(r"[A-Za-z0-9-]+(?:_[A-Za-z0-9-]+)*")
 def server_config(name: str, row: Mapping[str, object]) -> McpServerConfig:
     """One settings.toml [mcp_servers] row as an SDK config: `command` with `args` and `env`
     for stdio, or `url` for HTTP. Raises ValueError naming what is wrong."""
-    if name == SERVER:
-        raise ValueError(f"the name {SERVER} belongs to QMX's own tools")
+    if is_qmx_server(name):
+        raise ValueError(f"the names {SERVER} and {SERVER}_* belong to QMX's own tools")
     if not SERVER_NAME.fullmatch(name):
         raise ValueError(
             "a server name takes letters, digits, - and single _ between them, so its tools "

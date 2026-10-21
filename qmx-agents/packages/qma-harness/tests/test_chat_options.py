@@ -320,7 +320,7 @@ def test_a_named_policy_answers_a_background_ask_in_process(home: QmxHome) -> No
         allowed = await ask("Write", {"file_path": "D:/overlay/a"}, context)
         assert denied == PermissionResultDeny(message="not declared")
         assert allowed == PermissionResultAllow(updated_input=None)
-        publish = await ask("mcp__qmx__workflows_put", {"id": "w"}, context)
+        publish = await ask("mcp__qmx_workflows__put", {"id": "w"}, context)
         assert publish == PermissionResultDeny(message="the operator did not answer in time")
         assert [(c.session_id, c.tool, dict(c.args)) for c in calls] == [
             (chat, "Bash", {"overlay": "D:/overlay"}),
@@ -337,10 +337,10 @@ def test_qmx_tools_that_do_not_ask_get_allow_rules_and_manage_tools_do_not(home:
         await harness.send(chat, OperatorText("save a draft"))
         written = (home.launch_dir(chat) / "settings.json").read_text(encoding="utf-8")
         allow = json.loads(written)["permissions"]["allow"]
-        assert "mcp__qmx__workflow_drafts_put" in allow
-        assert "mcp__qmx__workflows_get" in allow
-        assert "mcp__qmx__workflows_put" not in allow
-        assert "mcp__qmx__propose_order" not in allow
+        assert "mcp__qmx_workflows__drafts_put" in allow
+        assert "mcp__qmx_workflows__get" in allow
+        assert "mcp__qmx_workflows__put" not in allow
+        assert "mcp__qmx_node__propose_order" not in allow
 
     run(body, home)
 

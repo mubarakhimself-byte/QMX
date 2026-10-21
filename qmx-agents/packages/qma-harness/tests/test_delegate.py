@@ -1,4 +1,4 @@
-"""`mcp__qmx__delegate`: the allow-list, the full table, `unattended` inheritance, the child's
+"""`mcp__qmx_delegate__run`: the allow-list, the full table, `unattended` inheritance, the child's
 launch, and the gate's sub-agent rule."""
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from qma.harness.launch import Background, ChatKind, Child, Interactive
 from qma.harness.procs import AgentProcessCap
 from qma.harness.profiles import ProfileName, parse_profiles
 from qma.harness.routes import control_service
-from qma.harness.tools import Effect, ToolDef
+from qma.harness.tools import Effect, ToolDef, failure
 
 home = test_chat.home
 
@@ -38,13 +38,13 @@ KEY_ROW = {
 def defs(monkeypatch: pytest.MonkeyPatch) -> list[list[ToolDef]]:
     """The QMX tool list of every launch, in launch order."""
     held: list[list[ToolDef]] = []
-    real = qma.harness.chat.build_server
+    real = qma.harness.chat.build_servers
 
     def keep(found: list[ToolDef], **kwargs: Any) -> Any:
         held.append(found)
         return real(found, **kwargs)
 
-    monkeypatch.setattr(qma.harness.chat, "build_server", keep)
+    monkeypatch.setattr(qma.harness.chat, "build_servers", keep)
     return held
 
 
@@ -56,7 +56,7 @@ def settings(home: QmxHome, *, targets: list[str], **budgets: JsonValue) -> None
 
 
 def delegate_of(found: list[ToolDef]) -> ToolDef:
-    [tool] = [tool for tool in found if tool.name == "delegate"]
+    [tool] = [tool for tool in found if tool.name == "delegate_run"]
     return tool
 
 
@@ -109,16 +109,11 @@ def test_a_profile_outside_the_allow_list_is_refused_before_any_child(
 
     async def body(harness: Harness) -> None:
         await open_parent(harness)
-        assert await call(defs[0], "kimi") == {
-            "content": [
-                {
-                    "type": "text",
-                    "text": "'kimi' is not in the delegate allow-list, [providers] "
-                    "delegate_targets, which lists claude",
-                }
-            ],
-            "is_error": True,
-        }
+        assert await call(defs[0], "kimi") == failure(
+            "refused",
+            "'kimi' is not in the delegate allow-list, [providers] delegate_targets, which "
+            "lists claude",
+        )
         assert len(FakeClient.made) == 1
         assert len(control_service(home).sessions_list()) == 1
 
@@ -184,7 +179,7 @@ def test_the_child_copies_unattended_and_launches_verbatim_bounded_and_without_a
     run(body, home)
     parent_tools, child_tools = defs
     assert delegate_of(parent_tools).effect is Effect.DOMAIN_WRITE
-    assert [tool.name for tool in child_tools if tool.name == "delegate"] == []
+    assert [tool.name for tool in child_tools if tool.name == "delegate_run"] == []
 
 
 def test_a_plan_child_is_refused_while_the_overage_stop_holds(
@@ -198,17 +193,11 @@ def test_a_plan_child_is_refused_while_the_overage_stop_holds(
             rate_limit(status="rejected", rateLimitType="five_hour", overageStatus="allowed")
         )
         await settle(lambda: ("needs_you", {"reason": STOP_RULE_2}) in blocks(home, parent))
-        assert await call(defs[0], "claude") == {
-            "content": [
-                {
-                    "type": "text",
-                    "text": "the helper did not start: plan use is stopped: rule 2: the "
-                    "five_hour window is used up and paid extra usage is allowed, so the next "
-                    "request could bill",
-                }
-            ],
-            "is_error": True,
-        }
+        assert await call(defs[0], "claude") == failure(
+            "refused",
+            "the helper did not start: plan use is stopped: rule 2: the five_hour window is used "
+            "up and paid extra usage is allowed, so the next request could bill",
+        )
         assert len(FakeClient.made) == 1
         assert turn_of(home, parent) == "idle"
 
@@ -223,10 +212,9 @@ def test_a_child_whose_process_ends_mid_turn_is_a_tool_error(
 
     async def body(harness: Harness) -> None:
         await open_parent(harness)
-        assert await call(defs[0], "claude") == {
-            "content": [{"type": "text", "text": "the helper's process ended before it answered"}],
-            "is_error": True,
-        }
+        assert await call(defs[0], "claude") == failure(
+            "refused", "the helper's process ended before it answered"
+        )
 
     run(body, home)
 
@@ -285,18 +273,18 @@ def test_a_delegate_cancelled_mid_turn_still_stops_the_child_process(
     ("tool", "agent_id", "verdict"),
     [
         (
-            "mcp__qmx__delegate",
+            "mcp__qmx_delegate__run",
             "a1b2",
-            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx__delegate)"),
+            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx_delegate__run)"),
         ),
         (
-            "mcp__QMX__Delegate",
+            "mcp__QMX_Delegate__Run",
             "a1b2",
-            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx__delegate)"),
+            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx_delegate__run)"),
         ),
-        ("mcp__qmx__delegate", None, Pass()),
-        ("mcp__qmx__delegate", "", Pass()),
-        ("mcp__qmx__library_search", "a1b2", Pass()),
+        ("mcp__qmx_delegate__run", None, Pass()),
+        ("mcp__qmx_delegate__run", "", Pass()),
+        ("mcp__qmx_library__search", "a1b2", Pass()),
     ],
 )
 def test_the_gate_denies_delegate_only_inside_a_sub_agent(
