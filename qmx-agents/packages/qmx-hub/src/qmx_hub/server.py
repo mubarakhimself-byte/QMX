@@ -8,6 +8,8 @@ parse.
 
 Routes. `GET /healthz` answers the doctor. `POST /v1/op/<verb>` is one `LibraryPort` verb (or one
 replication step) as JSON. `GET|POST /v1/blob` moves blob bytes by hash. `GET /v1/blob/<hex>` too.
+`events` is the ref-log read an `event` trigger needs: the rows after a `seq`, each with the
+object's kind, fields and the principal that placed it (AD-64).
 
 The Hub monitors itself (AD-11): `hub/health` writes one `test-report` object on `refs/hub/health`
 with its ref count, claim count and store size, and the PC's doctor reads it.
@@ -205,8 +207,43 @@ class Hub:
                 )
             case "record_health":
                 return cast(JsonValue, self.record_health())
+            case "events":
+                return cast(
+                    JsonValue,
+                    self.ref_log(
+                        int(str(args.get("after") or 0)),
+                        limit=int(str(args.get("limit") or 500)),
+                    ),
+                )
             case _:
                 raise LibraryRefused("not_found", f"no verb {verb!r}")
+
+    def ref_log(self, after: int, *, limit: int = 500) -> list[JsonValue]:
+        """The ref-log rows after `after` that placed an object first, with what an `event`
+        trigger matches on: the object's kind and fields, and the principal that placed it.
+
+        This is the read a PC-side engine or an `event` trigger makes through the Hub; the row
+        order is the log's own `seq`, so a caller's cursor is a `seq` and never a wall clock.
+        """
+        found: list[JsonValue] = []
+        for row in self.store.placements(after)[:limit]:
+            object_id = str(row["new_head"])
+            manifest = self.store.manifest(object_id) or {}
+            placed = self.store.placement(object_id) or ("", "", "")
+            fields = manifest.get("fields") if manifest else None
+            found.append(
+                {
+                    "seq": int(row["seq"]),
+                    "item": str(row["item"]),
+                    "ref": str(row["ref"]),
+                    "object_id": object_id,
+                    "kind": str(row["kind"]),
+                    "producer": str(placed[1]),
+                    "at": str(placed[2]),
+                    "fields": cast(JsonValue, fields or {}),
+                }
+            )
+        return found
 
     def record_health(self) -> str:
         """One `test-report` on `refs/hub/health`, so the PC's doctor sees the Hub's lag (AD-11).
