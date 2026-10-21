@@ -1086,14 +1086,15 @@ class Supervisor:
         volume = Volume(self.home, app_id)
         lease = VolumeLease(self.home, app_id, holder=self.placement, expect=handed)
         try:
-            staging = root.parent / f"{snapshot_id}.restore"
+            # Stage beside the volume, so the swap is one move on one filesystem.
+            volume.root.parent.mkdir(parents=True, exist_ok=True)
+            staging = volume.root.parent / f".{snapshot_id}.restore"
             shutil.rmtree(staging, ignore_errors=True)
             staging.mkdir(parents=True)
             for path in _snapshot_files(root):
                 target = staging / path.relative_to(root)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, target)
-            volume.root.parent.mkdir(parents=True, exist_ok=True)
             if volume.root.is_dir():
                 replaced = self.home / MOVES / app_id / f"{snapshot_id}.replaced"
                 shutil.rmtree(replaced, ignore_errors=True)
