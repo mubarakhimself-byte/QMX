@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "d9-mini-app-pipeline",
-  "name": "Mini-app-to-mini-app pipeline",
+  "name": "Connect one mini app's output to another",
   "inputs": {
     "type": "object",
     "required": [
@@ -40,5 +40,5 @@
     "Pipeline folder and enable card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "D9", "needs": ["app-op"]}
+  "meta": {"template": "connect-mini-apps", "needs": ["app-op"]}
 }

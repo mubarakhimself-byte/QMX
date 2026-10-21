@@ -1,4 +1,4 @@
-# RK8 Incident post-mortem
+# Incident post-mortem
 
 Waits for the trading node: its event log and account reads (`needs: trading-node`).
 

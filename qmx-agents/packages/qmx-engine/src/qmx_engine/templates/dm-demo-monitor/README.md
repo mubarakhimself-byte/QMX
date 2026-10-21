@@ -1,4 +1,4 @@
-# DM Demo monitor and execution quality
+# Watch demo trades and check fill quality
 
 Waits for the trading node: its deal feed and unit adapter (`needs: trading-node`).
 

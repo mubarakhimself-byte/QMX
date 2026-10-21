@@ -1,4 +1,4 @@
-# RS6 Hypotheses from dead ends
+# Hypotheses from dead ends
 
 Waits for the real Library: its dead-end rows and workflow memory (`needs: real-library`).
 

@@ -74,5 +74,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RK8", "needs": ["trading-node"]}
+  "meta": {"template": "incident-post-mortem", "needs": ["trading-node"]}
 }

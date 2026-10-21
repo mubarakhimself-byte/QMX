@@ -1,4 +1,4 @@
-# EV Copilot eval battery
+# Copilot eval battery
 
 Built from DC-10 in `research/methodology/44-agentic-engineering-foundations.md` (engine AD-66). It tests the copilot like a workflow: a set of tasks runs three times on the model a change concerns, every answer is graded, and the report gives pass^3 per task. A task passes only when all three tries pass.
 

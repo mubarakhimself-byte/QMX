@@ -28,5 +28,5 @@
     "Rank and short list": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "RS6", "needs": ["real-library"]}
+  "meta": {"template": "hypotheses-from-dead-ends", "needs": ["real-library"]}
 }

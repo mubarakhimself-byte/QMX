@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "pp-proposal-pack",
-  "name": "Proposal pack he signs",
+  "name": "Bundle a change for me to approve",
   "inputs": {
     "type": "object",
     "properties": {"decisions": {"type": "array", "description": "the decisions to propose"}}
@@ -65,5 +65,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "PP", "needs": ["trading-node", "risk-session"]}
+  "meta": {"template": "change-bundle-for-approval", "needs": ["trading-node", "risk-session"]}
 }

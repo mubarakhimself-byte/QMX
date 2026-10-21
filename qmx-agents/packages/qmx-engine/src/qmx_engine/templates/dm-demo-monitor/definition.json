@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "dm-demo-monitor",
-  "name": "Demo monitor and execution quality",
+  "name": "Watch demo trades and check fill quality",
   "outputs": {
     "type": "object",
     "description": "one tile per demo unit: stats in R, band verdict, faults, costs, bench proposal"
@@ -55,5 +55,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "DM", "needs": ["trading-node"]}
+  "meta": {"template": "demo-trades-fill-quality", "needs": ["trading-node"]}
 }

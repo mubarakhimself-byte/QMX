@@ -1,4 +1,4 @@
-# RS8 Big-data question
+# Answer a question over a large table
 
 Waits for the `rlm` node kind and its research kernel (`needs: rlm`).
 

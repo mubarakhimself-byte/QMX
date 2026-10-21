@@ -1,4 +1,4 @@
-# T7 Trade journal review in R
+# Review my trade journal in risk units
 
 Waits for the trading node: its R journal with trade tags (`needs: trading-node`).
 

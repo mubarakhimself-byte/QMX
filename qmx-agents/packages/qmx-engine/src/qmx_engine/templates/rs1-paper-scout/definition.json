@@ -96,5 +96,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RS1"}
+  "meta": {"template": "paper-scout-to-research-note"}
 }

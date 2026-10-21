@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "rs0-idea-grill",
-  "name": "Idea grill to term sheet",
+  "name": "Question a rough idea until it is a clear test plan",
   "inputs": {
     "type": "object",
     "properties": {
@@ -56,5 +56,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RS0"}
+  "meta": {"template": "rough-idea-to-test-plan"}
 }

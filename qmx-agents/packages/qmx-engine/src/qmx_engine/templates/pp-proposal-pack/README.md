@@ -1,4 +1,4 @@
-# PP Proposal pack he signs
+# Bundle a change for me to approve
 
 Waits for the trading node's reads and the risk session's promotion rules (`needs: trading-node, risk-session`).
 

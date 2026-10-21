@@ -57,5 +57,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "DC", "needs": ["trading-node"]}
+  "meta": {"template": "decay-and-limit-report", "needs": ["trading-node"]}
 }

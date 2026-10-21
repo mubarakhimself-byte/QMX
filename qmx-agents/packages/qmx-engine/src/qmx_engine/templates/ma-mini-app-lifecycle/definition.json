@@ -50,5 +50,5 @@
     "Assemble the card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "MA", "needs": ["sandbox", "app-op"]}
+  "meta": {"template": "mini-app-lifecycle", "needs": ["sandbox", "app-op"]}
 }

@@ -1,4 +1,4 @@
-# D9 Mini-app-to-mini-app pipeline
+# Connect one mini app's output to another
 
 Waits for the host's app operations: the apps and pipelines doors (`needs: app-op`).
 

@@ -49,5 +49,5 @@
     "Assemble the head-to-head page": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "D4", "needs": ["qmb-door"]}
+  "meta": {"template": "variant-generation-and-comparison", "needs": ["qmb-door"]}
 }

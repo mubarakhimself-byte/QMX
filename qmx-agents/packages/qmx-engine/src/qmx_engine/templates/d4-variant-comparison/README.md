@@ -1,4 +1,4 @@
-# D4 Variant generation and comparison
+# Variant generation and comparison
 
 Waits for QMB's doors for agents: compile and backtest (`needs: qmb-door`).
 

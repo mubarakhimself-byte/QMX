@@ -55,5 +55,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "P1", "needs": ["trading-node", "risk-session"]}
+  "meta": {"template": "portfolio-combination-study", "needs": ["trading-node", "risk-session"]}
 }

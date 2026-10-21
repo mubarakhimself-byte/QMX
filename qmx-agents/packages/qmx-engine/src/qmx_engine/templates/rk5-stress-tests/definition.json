@@ -52,5 +52,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RK5", "needs": ["trading-node"]}
+  "meta": {"template": "stress-tests", "needs": ["trading-node"]}
 }

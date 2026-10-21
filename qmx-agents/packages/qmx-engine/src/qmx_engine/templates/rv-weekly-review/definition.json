@@ -67,5 +67,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RV"}
+  "meta": {"template": "weekly-review"}
 }

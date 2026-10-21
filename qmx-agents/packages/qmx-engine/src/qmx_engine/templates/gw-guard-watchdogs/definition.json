@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
   "id": "gw-guard-watchdogs",
-  "name": "Guard watchdogs",
+  "name": "Check that the trading guards are alive",
   "outputs": {
     "type": "object",
     "description": "the kill-line gauge, the tighten-only verdict per unit, and the alert lines"
@@ -47,5 +47,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "GW", "needs": ["trading-node"]}
+  "meta": {"template": "trading-guards-alive", "needs": ["trading-node"]}
 }

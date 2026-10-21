@@ -8,6 +8,33 @@
     "no-captions": [
       "https://www.youtube.com/watch?v=qmxFixture02",
       "note: the London open fade might work on GBPUSD too"
+    ],
+    "playlist": [
+      "https://youtube.com/playlist?list=qmxFixturePlaylist"
+    ]
+  },
+  "playlists": {
+    "https://youtube.com/playlist?list=qmxFixturePlaylist": [
+      "https://www.youtube.com/watch?v=qmxPl01",
+      "https://www.youtube.com/watch?v=qmxPl02",
+      "https://www.youtube.com/watch?v=qmxPl03",
+      "https://www.youtube.com/watch?v=qmxPl04",
+      "https://www.youtube.com/watch?v=qmxPl05",
+      "https://www.youtube.com/watch?v=qmxPl06",
+      "https://www.youtube.com/watch?v=qmxPl07",
+      "https://www.youtube.com/watch?v=qmxPl08",
+      "https://www.youtube.com/watch?v=qmxPl09",
+      "https://www.youtube.com/watch?v=qmxPl10",
+      "https://www.youtube.com/watch?v=qmxPl11",
+      "https://www.youtube.com/watch?v=qmxPl12",
+      "https://www.youtube.com/watch?v=qmxPl13",
+      "https://www.youtube.com/watch?v=qmxPl14",
+      "https://www.youtube.com/watch?v=qmxPl15",
+      "https://www.youtube.com/watch?v=qmxPl16",
+      "https://www.youtube.com/watch?v=qmxPl17",
+      "https://www.youtube.com/watch?v=qmxPl18",
+      "https://www.youtube.com/watch?v=qmxPl19",
+      "https://www.youtube.com/watch?v=qmxPl20"
     ]
   }
 }

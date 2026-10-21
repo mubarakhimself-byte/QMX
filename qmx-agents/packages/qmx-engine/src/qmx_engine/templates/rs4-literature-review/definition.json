@@ -125,5 +125,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RS4"}
+  "meta": {"template": "literature-review-on-a-topic"}
 }

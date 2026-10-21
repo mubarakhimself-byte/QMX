@@ -46,5 +46,5 @@
     "Assemble the model card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "D6", "needs": ["qmb-door", "sandbox"]}
+  "meta": {"template": "ml-training-run-with-a-holdout", "needs": ["qmb-door", "sandbox"]}
 }

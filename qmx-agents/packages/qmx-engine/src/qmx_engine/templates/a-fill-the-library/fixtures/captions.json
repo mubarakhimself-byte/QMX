@@ -2,14 +2,382 @@
   "note": "A synthetic transcript written for this template's test runs. It is not a real video; qmxFixture02 stands for a video with no captions.",
   "captions": {
     "https://www.youtube.com/watch?v=qmxFixture01": [
-      {"start": 0, "end": 15, "text": "Before we start, my course is fifty percent off this week, link below."},
-      {"start": 15, "end": 40, "text": "Today I show you the London open fade on EURUSD."},
-      {"start": 40, "end": 75, "text": "Mark the Asian session high and low on the 15 minute chart."},
-      {"start": 75, "end": 120, "text": "When price breaks the Asian high in the first hour of London and closes back inside the range, sell at the next candle open."},
-      {"start": 130, "end": 165, "text": "Put the stop five pips above the breakout wick."},
-      {"start": 165, "end": 200, "text": "I usually take profit somewhere around the middle of the range, it depends."},
-      {"start": 200, "end": 240, "text": "I only trade it from Tuesday to Thursday because Monday ranges are too small."}
+      {
+        "start": 0,
+        "end": 15,
+        "text": "Before we start, my course is fifty percent off this week, link below."
+      },
+      {
+        "start": 15,
+        "end": 40,
+        "text": "Today I show you the London open fade on EURUSD, where one pip is 0.0001 and five pips is 0.0005."
+      },
+      {
+        "start": 40,
+        "end": 75,
+        "text": "Mark the Asian session high and low on the 15 minute chart."
+      },
+      {
+        "start": 75,
+        "end": 120,
+        "text": "When price breaks the Asian high in the first hour of London, that is the first 60 minutes, and closes back inside the range, sell at the next candle open."
+      },
+      {
+        "start": 130,
+        "end": 165,
+        "text": "Put the stop five pips above the breakout wick, that is 0.0005 above it."
+      },
+      {
+        "start": 165,
+        "end": 200,
+        "text": "I usually take profit somewhere around the middle of the range, about 30 minutes later, it depends."
+      },
+      {
+        "start": 200,
+        "end": 240,
+        "text": "I only trade it from Tuesday to Thursday because Monday ranges are too small."
+      }
     ],
-    "https://www.youtube.com/watch?v=qmxFixture02": null
+    "https://www.youtube.com/watch?v=qmxFixture02": null,
+    "https://www.youtube.com/watch?v=qmxPl01": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 1 of a series on the London open fade on EURUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the EURUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl02": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 2 of a series on the Asian range breakout on GBPUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the GBPUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl03": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 3 of a series on the opening range breakout on USDJPY."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the USDJPY candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl04": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 4 of a series on the VWAP reversion on AUDUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the AUDUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl05": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 5 of a series on the session high sweep on USDCAD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the USDCAD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl06": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 6 of a series on the trend pullback on NZDUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the NZDUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl07": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 7 of a series on the news spike fade on EURGBP."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the EURGBP candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl08": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 8 of a series on the gap fill on USDCHF."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the USDCHF candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl09": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 9 of a series on the momentum continuation on EURJPY."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the EURJPY candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl10": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 10 of a series on the range compression on GBPJPY."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the GBPJPY candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl11": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 11 of a series on the London open fade on EURUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the EURUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl12": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 12 of a series on the Asian range breakout on GBPUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the GBPUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl13": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 13 of a series on the opening range breakout on USDJPY."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the USDJPY candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl14": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 14 of a series on the VWAP reversion on AUDUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the AUDUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl15": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 15 of a series on the session high sweep on USDCAD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the USDCAD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl16": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 16 of a series on the trend pullback on NZDUSD."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the NZDUSD candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl17": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 17 of a series on the news spike fade on EURGBP."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the EURGBP candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl18": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 18 of a series on the gap fill on USDCHF."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the USDCHF candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl19": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 19 of a series on the momentum continuation on EURJPY."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the EURJPY candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ],
+    "https://www.youtube.com/watch?v=qmxPl20": [
+      {
+        "start": 0,
+        "end": 20,
+        "text": "This is part 20 of a series on the range compression on GBPJPY."
+      },
+      {
+        "start": 20,
+        "end": 55,
+        "text": "Wait for the GBPJPY candle to close back inside the range, then enter on the next candle open."
+      },
+      {
+        "start": 55,
+        "end": 90,
+        "text": "Put the stop just beyond the sweep wick, and take profit at the middle of the range."
+      }
+    ]
   }
 }

@@ -1,4 +1,4 @@
-# B Build and prove, funnel stages 8 to 12
+# Turn a strategy idea into a tested strategy, ending on paper
 
 Waits for QMB's doors for agents: spec register, backtest, walk-forward and robustness (`needs: qmb-door`).
 

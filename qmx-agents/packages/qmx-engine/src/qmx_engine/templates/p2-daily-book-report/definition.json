@@ -41,5 +41,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "P2", "needs": ["broker-read-token"]}
+  "meta": {"template": "daily-book-report", "needs": ["broker-read-token"]}
 }

@@ -1,17 +1,19 @@
 """The template pack's catalogue: the 31 templates ENGINE-PLAN Appendix I lists, with their needs,
 and the copilot eval battery (engine AD-66).
 
-Each row names its plain name (ruling 35), the cards in research files 15, 16, 17 or 44 it was
-built from, what it waits for, and its folder. Since TP4 every row has one. A row with `needs`
-gets a definition naming the same `meta.needs` and installs as a validated draft; any other row is
-tested on real models and published disabled.
-`test_cost` is what the row's test run cost when its PR measured it on the cheapest test
-candidates.
+Each row names its plain title and id (ruling 35, SOLUTION-DESIGN 26.9), the cards in research
+files 15, 16, 17 or 44 it was built from, what it waits for, and its folder. Since TP4 every row
+has one. A row with `needs` gets a definition naming the same `meta.needs` and installs as a
+validated draft; any other row is tested on real models and published disabled. `test_cost` is what
+the row's test run cost when it was measured on the cheapest test candidates.
+
+The id is a plain phrase and the code prefix is gone. `ALIASES` keeps every id the pack used before
+TPL1, so an old id still finds its template and installs it.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Literal
 
@@ -38,12 +40,14 @@ class Card:
 @dataclass(frozen=True, slots=True)
 class Template:
     id: str
+    """The plain id the copilot and the CLI look a template up by; the shelf shows `name`."""
     name: str
     cards: tuple[Card, ...]
     pr: str
     needs: tuple[Need, ...] = ()
-    folder: str | None = None
-    """The workflow folder under the pack, which is also the workflow's id."""
+    folder: str = field(kw_only=True)
+    """The workflow folder under the pack, which is also the workflow's id. B-91: every row has one,
+    so it is required rather than a `None` the install path has to refuse."""
     triggers: tuple[Cron, ...] = ()
     """The card's schedule. Install adds each one disabled once the template is published; the
     manual kind is in the definition."""
@@ -60,74 +64,74 @@ QMB: Final[tuple[Need, ...]] = ("qmb-door",)
 
 CATALOG: Final[tuple[Template, ...]] = (
     Template(
-        "RS1",
+        "paper-scout-to-research-note",
         "Paper scout to research note",
         card("15", "R1"),
         "TP1",
         folder="rs1-paper-scout",
         triggers=(Cron("0 */6 * * *", "UTC"),),
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 5 haiku spans; 0k in, 10k out, 71k cache read; 47 s",
+        test_cost="TPL1 lane 2: 5 haiku turns, tokens in 10, out 20, cache read 21615; 63 s",
     ),
     Template(
-        "T3",
+        "news-and-macro-calendar-watch",
         "News and macro calendar watch",
         card("16", "T3"),
         "TP1",
         folder="t3-news-calendar-watch",
         triggers=(Cron("5 0 * * *", "UTC"),),
         test_inputs={"fixture": "surprise"},
-        test_cost="TP4 lane 2, surprise day: 1 haiku span; 0k in, 1k out, 15k cache read; 7 s",
+        test_cost="TPL1 lane 2: 1 haiku turn, tokens in 2, out 5, cache read 4207; 13 s",
     ),
     Template(
-        "RS0",
-        "Idea grill to term sheet",
+        "rough-idea-to-test-plan",
+        "Question a rough idea until it is a clear test plan",
         card("15", "R0"),
         "TP2",
         folder="rs0-idea-grill",
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 2 haiku spans; 0k in, 10k out, 33k cache read; 53 s",
+        test_cost="TPL1 lane 2: 2 haiku turns, tokens in 4, out 9, cache read 5696; 54 s",
     ),
     Template(
-        "RS2",
+        "source-to-component-card",
         "Source to component card",
         card("15", "R2", "R5", "R7"),
         "TP2",
         folder="rs2-source-to-component-card",
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 5 haiku spans; 0k in, 4k out, 92k cache read; 29 s",
+        test_cost="TPL1 lane 2: 5 haiku turns, tokens in 10, out 16, cache read 15564; 42 s",
     ),
     Template(
-        "RS4",
+        "literature-review-on-a-topic",
         "Literature review on a topic",
         card("15", "R4", "R7"),
         "TP2",
         folder="rs4-literature-review",
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 9 haiku spans; 0k in, 25k out, 163k cache read; 129 s",
+        test_cost="TPL1 lane 2: 9 haiku turns, tokens in 18, out 34, cache read 27515; 150 s",
     ),
     Template(
-        "A",
-        "Fill the Library, funnel stages 1 to 7",
+        "video-to-strategy-ideas",
+        "Turn a video, a playlist or saved posts into strategy ideas",
         card("15", "R5", "R7"),
         "TP2",
         folder="a-fill-the-library",
         test_inputs={"fixture": "one-video"},
-        test_cost="TP4 lane 2: 7 haiku spans; 0k in, 8k out, 127k cache read; 54 s",
+        test_cost="TPL1 lane 2: 8 haiku turns, tokens in 16, out 24, cache read 22218; 76 s",
     ),
     Template(
-        "RV",
+        "weekly-review",
         "Weekly review",
         card("15", "R9") + card("17", "D10"),
         "TP2",
         folder="rv-weekly-review",
         triggers=(Cron("0 6 * * 1", "UTC"),),
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 2 haiku spans; 0k in, 1k out, 33k cache read; 17 s",
+        test_cost="TPL1 lane 2: 2 haiku turns, tokens in 4, out 6, cache read 4590; 26 s",
     ),
     Template(
-        "DB",
-        "Desk brief",
+        "morning-market-brief",
+        "Morning market brief before each session",
         card("16", "T1", "T2", "T10"),
         "TP3",
         folder="db-desk-brief",
@@ -137,48 +141,53 @@ CATALOG: Final[tuple[Template, ...]] = (
             Cron("5 17 * * 1-5", "America/New_York"),
         ),
         test_inputs={"fixture": "busy"},
-        test_cost="TP4 lane 2: 1 haiku span; 0k in, 2k out, 15k cache read; 13 s",
+        test_cost="TPL1 lane 2: 1 haiku turn, tokens in 2, out 4, cache read 2295; 23 s",
     ),
     Template(
-        "T4",
+        "research-desk-overnight",
         "Research desk overnight",
         card("16", "T4"),
         "TP3",
         folder="t4-research-desk-overnight",
         triggers=(Cron("0 3 * * 0-4", "Europe/London"),),
         test_inputs={"fixture": True},
-        test_cost="TP4 lane 2: 4 haiku spans; 0k in, 12k out, 66k cache read; 50 s",
+        test_cost="TPL1 lane 2: 4 haiku turns, tokens in 8, out 17, cache read 9180; 40 s",
     ),
     Template(
-        "EV",
+        "copilot-eval-battery",
         "Copilot eval battery",
         card("44", "DC-10"),
         "EVAL",
         folder="ev-copilot-eval-battery",
         test_inputs={"fixture": True},
-        test_cost="EVAL lane 2: 4 haiku spans (3 tries and the judge); 40 s",
+        test_cost="TPL1 lane 2: 4 haiku turns, tokens in 8, out 13, cache read 9180; 41 s",
     ),
     Template(
-        "DM",
-        "Demo monitor and execution quality",
+        "demo-trades-fill-quality",
+        "Watch demo trades and check fill quality",
         card("16", "T5", "T9"),
         "TP3",
         NODE,
         folder="dm-demo-monitor",
     ),
     Template(
-        "T7",
-        "Trade journal review in R",
+        "trade-journal-in-risk-units",
+        "Review my trade journal in risk units",
         card("16", "T7"),
         "TP3",
         NODE,
         folder="t7-trade-journal-review",
     ),
     Template(
-        "GW", "Guard watchdogs", card("16", "R1", "R6"), "TP3", NODE, folder="gw-guard-watchdogs"
+        "trading-guards-alive",
+        "Check that the trading guards are alive",
+        card("16", "R1", "R6"),
+        "TP3",
+        NODE,
+        folder="gw-guard-watchdogs",
     ),
     Template(
-        "RK2",
+        "correlation-and-exposure-drift",
         "Correlation and exposure drift",
         card("16", "R2"),
         "TP3",
@@ -186,16 +195,18 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rk2-correlation-drift",
     ),
     Template(
-        "DC",
+        "decay-and-limit-report",
         "Decay and limit report",
         card("16", "R3") + card("17", "P3"),
         "TP3",
         NODE,
         folder="dc-decay-and-limit-report",
     ),
-    Template("RK5", "Stress tests", card("16", "R5"), "TP3", NODE, folder="rk5-stress-tests"),
     Template(
-        "RK8",
+        "stress-tests", "Stress tests", card("16", "R5"), "TP3", NODE, folder="rk5-stress-tests"
+    ),
+    Template(
+        "incident-post-mortem",
         "Incident post-mortem",
         card("16", "R8"),
         "TP3",
@@ -203,7 +214,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rk8-incident-post-mortem",
     ),
     Template(
-        "P1",
+        "portfolio-combination-study",
         "Portfolio combination study",
         card("17", "P1"),
         "TP3",
@@ -211,7 +222,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="p1-portfolio-combination",
     ),
     Template(
-        "P2",
+        "daily-book-report",
         "Daily book report",
         card("17", "P2"),
         "TP3",
@@ -219,23 +230,23 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="p2-daily-book-report",
     ),
     Template(
-        "PP",
-        "Proposal pack he signs",
+        "change-bundle-for-approval",
+        "Bundle a change for me to approve",
         card("16", "T6") + card("17", "P4"),
         "TP3",
         ("trading-node", "risk-session"),
         folder="pp-proposal-pack",
     ),
     Template(
-        "B",
-        "Build and prove, funnel stages 8 to 12",
+        "strategy-idea-to-paper-tested",
+        "Turn a strategy idea into a tested strategy, ending on paper",
         card("17", "D2", "D3"),
         "TP4",
         QMB,
         folder="b-build-and-prove",
     ),
     Template(
-        "RS3",
+        "source-to-a-lab-test",
         "Source to a Lab test",
         card("15", "R3") + card("16", "T8"),
         "TP4",
@@ -243,7 +254,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="rs3-source-to-lab-test",
     ),
     Template(
-        "RS6",
+        "hypotheses-from-dead-ends",
         "Hypotheses from dead ends",
         card("15", "R6"),
         "TP4",
@@ -252,18 +263,23 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("0 5 * * 1", "UTC"),),
     ),
     Template(
-        "RS8",
-        "Big-data question",
+        "question-over-a-large-table",
+        "Answer a question over a large table",
         card("15", "R8"),
         "TP4",
         ("rlm",),
         folder="rs8-big-data-question",
     ),
     Template(
-        "L1", "Idea to first result", card("17", "L1"), "TP4", QMB, folder="l1-idea-to-first-result"
+        "first-backtest-from-an-idea",
+        "Get a first backtest result from an idea",
+        card("17", "L1"),
+        "TP4",
+        QMB,
+        folder="l1-idea-to-first-result",
     ),
     Template(
-        "L4",
+        "overnight-lab-loop",
         "Overnight Lab loop",
         card("17", "L4"),
         "TP4",
@@ -272,7 +288,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("0 23 * * *", "Europe/London"),),
     ),
     Template(
-        "BC",
+        "build-a-component-or-indicator",
         "Build a component or indicator",
         card("17", "D1", "D5"),
         "TP4",
@@ -280,7 +296,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="bc-build-a-component",
     ),
     Template(
-        "D3",
+        "iterate-against-qmb-with-overfit-guards",
         "Iterate against QMB with overfit guards",
         card("17", "D3"),
         "TP4",
@@ -288,7 +304,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="d3-iterate-against-qmb",
     ),
     Template(
-        "D4",
+        "variant-generation-and-comparison",
         "Variant generation and comparison",
         card("17", "D4"),
         "TP4",
@@ -296,7 +312,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="d4-variant-comparison",
     ),
     Template(
-        "D6",
+        "ml-training-run-with-a-holdout",
         "ML training run with a holdout",
         card("17", "D6"),
         "TP4",
@@ -304,7 +320,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="d6-ml-training-run",
     ),
     Template(
-        "MA",
+        "mini-app-lifecycle",
         "Mini app lifecycle",
         card("17", "D7", "D8"),
         "TP4",
@@ -312,8 +328,8 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="ma-mini-app-lifecycle",
     ),
     Template(
-        "D9",
-        "Mini-app-to-mini-app pipeline",
+        "connect-mini-apps",
+        "Connect one mini app's output to another",
         card("17", "D9"),
         "TP4",
         ("app-op",),
@@ -321,71 +337,89 @@ CATALOG: Final[tuple[Template, ...]] = (
     ),
 )
 
-ALL_BUILT: Final = tuple(str(t.folder) for t in CATALOG)
-CALIBRATED: Final = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
-
-SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
-    "preflight/scripts/new_ids.py": ("rs1-paper-scout/scripts/new_ids.py",),
-    "paper-read/prompts/read.md": ("rs1-paper-scout/prompts/read.md",),
-    "paper-read/schemas/cards.json": ("rs1-paper-scout/schemas/cards.json",),
-    "research-harness/scripts/citation_check.py": (
-        "rs1-paper-scout/scripts/citation_check.py",
-        "rs4-literature-review/scripts/citation_check.py",
-        "_shared/understand-extract/scripts/citation_check.py",
-        "rs2-source-to-component-card/scripts/citation_check.py",
-        "a-fill-the-library/scripts/citation_check.py",
-        "t4-research-desk-overnight/scripts/citation_check.py",
-        "rk8-incident-post-mortem/scripts/citation_check.py",
-        "rs3-source-to-lab-test/scripts/citation_check.py",
-    ),
-    "render-and-grade/scripts/render_and_grade.py": tuple(
-        f"{t}/scripts/render_and_grade.py" for t in ALL_BUILT
-    ),
-    "render-and-grade/scripts/stop.py": tuple(f"{t}/scripts/stop.py" for t in ALL_BUILT),
-    "render-and-grade/scripts/deliver.py": tuple(
-        f"{t}/scripts/deliver.py" for t in ALL_BUILT if t != "a-fill-the-library"
-    ),
-    "overfit-gates/scripts/deflated_sharpe.py": tuple(
-        f"{t}/scripts/deflated_sharpe.py"
-        for t in (
-            "b-build-and-prove",
-            "l4-overnight-lab-loop",
-            "d3-iterate-against-qmb",
-            "d4-variant-comparison",
-        )
-    ),
-    "understand-extract/scripts/sections.py": (
-        "rs2-source-to-component-card/scripts/sections.py",
-        "a-fill-the-library/scripts/sections.py",
-    ),
-    "understand-extract/prompts/sections.md": (
-        "rs2-source-to-component-card/prompts/sections.md",
-        "a-fill-the-library/prompts/sections.md",
-    ),
-    "understand-extract/schemas/claims.json": (
-        "rs2-source-to-component-card/schemas/claims.json",
-        "a-fill-the-library/schemas/claims.json",
-    ),
-    "understand-extract/scripts/card_holes.py": ("a-fill-the-library/scripts/card_holes.py",),
-    "understand-extract/prompts/extract.md": ("a-fill-the-library/prompts/extract.md",),
-    "understand-extract/schemas/cards.json": ("a-fill-the-library/schemas/cards.json",),
-    **{
-        f"calibrate/{name}": tuple(f"{t}/{name}" for t in CALIBRATED)
-        for name in (
-            "scripts/basis.py",
-            "scripts/agreement.py",
-            "prompts/sample.md",
-            "schemas/votes.json",
-        )
-    },
+ALIASES: Final[dict[str, str]] = {
+    "rs1": "paper-scout-to-research-note",
+    "t3": "news-and-macro-calendar-watch",
+    "rs0": "rough-idea-to-test-plan",
+    "rs2": "source-to-component-card",
+    "rs4": "literature-review-on-a-topic",
+    "a": "video-to-strategy-ideas",
+    "rv": "weekly-review",
+    "db": "morning-market-brief",
+    "t4": "research-desk-overnight",
+    "ev": "copilot-eval-battery",
+    "dm": "demo-trades-fill-quality",
+    "t7": "trade-journal-in-risk-units",
+    "gw": "trading-guards-alive",
+    "rk2": "correlation-and-exposure-drift",
+    "dc": "decay-and-limit-report",
+    "rk5": "stress-tests",
+    "rk8": "incident-post-mortem",
+    "p1": "portfolio-combination-study",
+    "p2": "daily-book-report",
+    "pp": "change-bundle-for-approval",
+    "b": "strategy-idea-to-paper-tested",
+    "rs3": "source-to-a-lab-test",
+    "rs6": "hypotheses-from-dead-ends",
+    "rs8": "question-over-a-large-table",
+    "l1": "first-backtest-from-an-idea",
+    "l4": "overnight-lab-loop",
+    "bc": "build-a-component-or-indicator",
+    "d3": "iterate-against-qmb-with-overfit-guards",
+    "d4": "variant-generation-and-comparison",
+    "d6": "ml-training-run-with-a-holdout",
+    "ma": "mini-app-lifecycle",
+    "d9": "connect-mini-apps",
+    "rs1-paper-scout": "paper-scout-to-research-note",
+    ("t3-news-calendar-watch"): "news-and-macro-calendar-watch",
+    ("rs0-idea-grill"): "rough-idea-to-test-plan",
+    ("rs2-source-to-component-card"): "source-to-component-card",
+    ("rs4-literature-review"): "literature-review-on-a-topic",
+    ("a-fill-the-library"): "video-to-strategy-ideas",
+    ("rv-weekly-review"): "weekly-review",
+    ("db-desk-brief"): "morning-market-brief",
+    ("t4-research-desk-overnight"): "research-desk-overnight",
+    ("ev-copilot-eval-battery"): "copilot-eval-battery",
+    ("dm-demo-monitor"): "demo-trades-fill-quality",
+    ("t7-trade-journal-review"): "trade-journal-in-risk-units",
+    ("gw-guard-watchdogs"): "trading-guards-alive",
+    ("rk2-correlation-drift"): "correlation-and-exposure-drift",
+    ("dc-decay-and-limit-report"): "decay-and-limit-report",
+    ("rk5-stress-tests"): "stress-tests",
+    ("rk8-incident-post-mortem"): "incident-post-mortem",
+    ("p1-portfolio-combination"): "portfolio-combination-study",
+    ("p2-daily-book-report"): "daily-book-report",
+    ("pp-proposal-pack"): "change-bundle-for-approval",
+    ("b-build-and-prove"): "strategy-idea-to-paper-tested",
+    ("rs3-source-to-lab-test"): "source-to-a-lab-test",
+    ("rs6-hypotheses-from-dead-ends"): "hypotheses-from-dead-ends",
+    ("rs8-big-data-question"): "question-over-a-large-table",
+    ("l1-idea-to-first-result"): "first-backtest-from-an-idea",
+    ("l4-overnight-lab-loop"): "overnight-lab-loop",
+    ("bc-build-a-component"): "build-a-component-or-indicator",
+    ("d3-iterate-against-qmb"): "iterate-against-qmb-with-overfit-guards",
+    ("d4-variant-comparison"): "variant-generation-and-comparison",
+    ("d6-ml-training-run"): "ml-training-run-with-a-holdout",
+    ("ma-mini-app-lifecycle"): "mini-app-lifecycle",
+    ("d9-mini-app-pipeline"): "connect-mini-apps",
 }
-"""Each shared block file, under `_shared/`, to its copies in the templates. These copies predate
-block folders: a bundle now carries a `subworkflow` node's child folder and hashes its bytes (B-76),
-so a template may call a shared block as a child instead, and the copies can go (TPL1)."""
+"""Every id the pack answered to before TPL1, to the plain id it answers to now. The key is
+casefolded, so `RS1` and `rs1` both find it."""
+
+BY_ID: Final[dict[str, Template]] = {
+    name: template for template in CATALOG for name in (template.id, template.folder) if name
+}
+
+ALL_BUILT: Final = tuple(str(t.folder) for t in CATALOG)
 
 
 def find(template_id: str) -> Template:
-    for template in CATALOG:
-        if template.id == template_id:
-            return template
-    raise KeyError(template_id)
+    """The template that id names, by its plain id, its folder, or any id it had before TPL1."""
+    wanted = template_id.strip().casefold()
+    found = BY_ID.get(wanted)
+    if found is not None:
+        return found
+    renamed = ALIASES.get(wanted)
+    if renamed is None:
+        raise KeyError(template_id)
+    return BY_ID[renamed]

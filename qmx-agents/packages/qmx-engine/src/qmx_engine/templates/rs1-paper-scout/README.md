@@ -1,4 +1,4 @@
-# RS1 Paper scout to research note
+# Paper scout to research note
 
 Built from card R1 in `research/methodology/15-templates-researcher.md`. Every six hours it looks at the newest arXiv papers in trading, portfolio management, statistical finance and risk management. When there are new ones it keeps at most three that could be tested on price data, reads each one with a fixed question battery, checks every quoted claim against the paper, and writes a research note. When nothing is new, or nothing passes triage, the run ends silently and spends no tokens after triage.
 

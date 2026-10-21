@@ -105,5 +105,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "RS2"}
+  "meta": {"template": "source-to-component-card"}
 }

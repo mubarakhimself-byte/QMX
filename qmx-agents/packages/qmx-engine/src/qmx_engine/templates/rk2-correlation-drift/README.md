@@ -1,4 +1,4 @@
-# RK2 Correlation and exposure drift
+# Correlation and exposure drift
 
 Waits for the trading node: its unit adapter and guard reader (`needs: trading-node`).
 
