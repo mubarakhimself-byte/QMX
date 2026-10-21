@@ -11,14 +11,24 @@ import json
 import re
 import sqlite3
 import unicodedata
-from collections.abc import Generator, Iterable, Mapping
+from collections.abc import Collection, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Final, cast
 
 from pydantic import JsonValue
 
-from qmx_library.port import Hit, JsonObject, LibraryRefused
+from qmx_library.port import Hit, JsonObject, LibraryRefused, Producer, Role
+
+TRUST: Final[Mapping[Producer, int]] = {
+    "live-run": 3,
+    "operator": 2,
+    "agent": 1,
+    "run": 1,
+    "test-run": 0,
+}
+"""Library AD-8 (7): a passed live run, then his own items, then drafts and unfinished runs, then
+test runs, so fan-out test output ranks below trusted results."""
 
 SCHEMA: Final = """
 CREATE TABLE IF NOT EXISTS objects (
@@ -283,9 +293,12 @@ class Catalog:
         for object_id, item, found_kind, title, rank in rows:
             if item not in best:
                 best[str(item)] = Hit(str(object_id), str(item), str(found_kind), str(title), -rank)
-            if len(best) == limit:
-                break
-        return list(best.values())
+        return self.trusted_first(list(best.values()))[:limit]
+
+    def trusted_first(self, hits: list[Hit]) -> list[Hit]:
+        """Stable: hits of equal trust keep their text rank."""
+        trust = {h.object_id: TRUST[self.producer(h.object_id)] for h in hits}
+        return sorted(hits, key=lambda h: -trust[h.object_id])
 
     def relations_of(self, object_id: str, *, reverse: bool) -> list[tuple[str, str, str]]:
         mine, other = ("to_id", "from_id") if reverse else ("from_id", "to_id")
@@ -299,3 +312,84 @@ class Catalog:
     def aliases(self) -> list[tuple[str, str]]:
         rows = self.db.execute("SELECT alias, item FROM aliases ORDER BY length(alias) DESC")
         return [(str(alias), str(item)) for alias, item in rows]
+
+    def matching(self, spans: Collection[str]) -> list[tuple[str, str, Role]]:
+        """`(span, item, role)` for each span that is an item's title, tag or alias (`bridge`), or
+        the kind, or the old Library's kind, of an item (`filter`)."""
+        if not spans:
+            return []
+        marks = ", ".join("?" * len(spans))
+        kind = "replace(replace({}, '-', ' '), '_', ' ')"
+        rows = self.db.execute(
+            f"SELECT alias, item, 'bridge' FROM aliases WHERE alias IN ({marks}) "  # noqa: S608
+            f"UNION SELECT {kind.format('kind')}, item, 'filter' FROM items "
+            f"WHERE {kind.format('kind')} IN ({marks}) "
+            f"UNION SELECT {kind.format("json_extract(fields, '$.legacy_kind')")}, item, 'filter' "
+            f"FROM objects WHERE {kind.format("json_extract(fields, '$.legacy_kind')")} "
+            f"IN ({marks})",
+            [*spans, *spans, *spans],
+        )
+        return [(str(span), str(item), cast(Role, role)) for span, item, role in rows]
+
+    def producer(self, object_id: str) -> Producer:
+        """From the ref that first placed the object and, for a run's ref, that run's summary."""
+        row = self.db.execute(
+            "SELECT ref FROM moves WHERE new_head = ? ORDER BY seq LIMIT 1", (object_id,)
+        ).fetchone()
+        ref = "" if row is None else str(row[0])
+        if ref.startswith("refs/agents/"):
+            return "agent"
+        if not ref.startswith("refs/runs/"):
+            return "operator"
+        run = self.db.execute(
+            "SELECT json_extract(o.fields, '$.mode'), json_extract(o.fields, '$.status') "
+            "FROM moves m JOIN objects o ON o.object_id = m.new_head "
+            "WHERE m.item = ? AND m.ref = ? AND o.kind = 'workflow-run' "
+            "ORDER BY m.seq DESC LIMIT 1",
+            (ref.removeprefix("refs/runs/"), ref),
+        ).fetchone()
+        if run is not None and run[0] == "test":
+            return "test-run"
+        if run is not None and run[1] == "passed":
+            return "live-run"
+        return "run"
+
+    def citations(self, item: str) -> int:
+        """Relations into any object of `item` from objects of other active items."""
+        (count,) = self.db.execute(
+            "SELECT count(*) FROM relations r JOIN objects t ON t.object_id = r.to_id "
+            "JOIN objects f ON f.object_id = r.from_id JOIN items i ON i.item = f.item "
+            "WHERE t.item = ? AND f.item <> t.item AND i.state = 'active'",
+            (item,),
+        ).fetchone()
+        return int(count)
+
+    def texts(self, object_ids: Sequence[str]) -> dict[str, str]:
+        """Indexed text by object, in one pass: `object_id` is an unindexed FTS5 column, so each
+        lookup scans the table."""
+        found: dict[str, str] = {}
+        for start in range(0, len(object_ids), 900):
+            chunk = object_ids[start : start + 900]
+            marks = ", ".join("?" * len(chunk))
+            rows = self.db.execute(
+                f"SELECT object_id, text FROM search WHERE object_id IN ({marks})",  # noqa: S608
+                chunk,
+            )
+            found.update((str(o), str(t)) for o, t in rows)
+        return found
+
+    def placed_seq(self, object_id: str) -> int:
+        """The ref-log position of the latest move onto the object, 0 if none."""
+        (seq,) = self.db.execute(
+            "SELECT coalesce(max(seq), 0) FROM moves WHERE new_head = ?", (object_id,)
+        ).fetchone()
+        return int(seq)
+
+    def placed_refs(self, item: str) -> list[str]:
+        """The refs that ever held an object of `item`, most recently moved first."""
+        rows = self.db.execute(
+            "SELECT ref FROM moves WHERE item = ? AND ref NOT LIKE 'refs/items/%' "
+            "GROUP BY ref ORDER BY max(seq) DESC",
+            (item,),
+        )
+        return [str(ref) for (ref,) in rows]
