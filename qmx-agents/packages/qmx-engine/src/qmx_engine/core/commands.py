@@ -79,14 +79,15 @@ class Pause:
     """Which of his limits was reached, for the digest line."""
 
 
-type Rung = Literal["retry", "account", "model", "doctor"]
+type Rung = Literal["retry", "account", "model", "doctor", "park"]
 
 
 @dataclass(frozen=True, slots=True)
 class Climb:
     """Take one rung of the failure ladder for a failed slot (AD-16, SOLUTION-DESIGN 10.2). The
     driver records it as `ladder_step`; a `retry` waits `seconds` on the run's clock first, and a
-    `doctor` step asks the injected doctor and records its `doctor_verdict`."""
+    `doctor` step asks the injected doctor and records its `doctor_verdict`. A `park` rung parks
+    one fan-out partition that only joins read, and the run goes on (B-35)."""
 
     node_id: str
     iteration: int

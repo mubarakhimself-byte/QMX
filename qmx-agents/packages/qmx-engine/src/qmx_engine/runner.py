@@ -12,7 +12,8 @@ it drives the run, so no executor crosses the port (AD-20). A partition that fai
 reading it fired leaves a digest line (B-23).
 
 Every event that ruling 77 sends to the operator raises its inbox item as it is written: a provider
-failure, a system fault, or an irreversible external step of unknown outcome. While attempts run,
+failure, a system fault, or an irreversible external step of unknown outcome. His answer comes back
+through `Engine.answer` as the run's next event, which the core folds. While attempts run,
 the runner wakes every `scheduler.tick` for the stuck detector (`watchdog`, AD-16), which reads what
 each attempt shows and warns, interrupts, ends a stalled attempt, or stops a looping agent. There
 is no runaway guard and no run timeout (AD-40). A ledger write error stops the engine claiming
@@ -110,7 +111,8 @@ from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
 from qmx_engine.nodes.wait import resume_at, utc, utc_text
 from qmx_engine.ports.harness_adapter import HarnessPort
-from qmx_engine.ports.inbox import InboxPort, Raise, raised_by
+from qmx_engine.ports.inbox import Action as Answer
+from qmx_engine.ports.inbox import InboxPort, Item, Raise, answered, raised_by
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import EFFORTS, order, resolve
@@ -255,6 +257,8 @@ class Engine:
         self.harness = harness
         self.admission = Admission(harness, settings) if harness is not None else None
         self._inbox = inbox
+        if isinstance(inbox, InboxTable):
+            inbox.answers = self
         self._memory = memory
         tick = settings.get("scheduler.tick")
         self.watch_every = watch_every or (float(tick) if isinstance(tick, int | float) else 60.0)
@@ -272,8 +276,28 @@ class Engine:
     @property
     def inbox(self) -> InboxPort:
         if self._inbox is None:
-            self._inbox = InboxTable.open(self.home)
+            table = self._inbox = InboxTable.open(self.home)
+            table.answers = self
         return self._inbox
+
+    def answer(self, item: Item, action: Answer, principal: str, *, at: str) -> None:
+        """Hand his answer to its run (B-32). A run this engine drives takes it as its next event,
+        and a stop also cancels its attempts; any other run gets it in the ledger with a wake, so
+        the ticker resumes it on the answer."""
+        run = self.live.get(item.run_id)
+        if run is not None:
+            run.append(*answered(item, action, principal, run.events))
+            if action == "stop":
+                self.cancel(item.run_id)
+            return
+        with Reader.open(self.home) as reader:
+            events = reader.events(item.run_id)
+        if not events:
+            return
+        kind, data = answered(item, action, principal, events)
+        self.ledger.append(item.run_id, kind, data, at=at)
+        if action != "stop":
+            self.ledger.write(put_wake(item.run_id, at))
 
     @property
     def memory(self) -> MemoryPort:

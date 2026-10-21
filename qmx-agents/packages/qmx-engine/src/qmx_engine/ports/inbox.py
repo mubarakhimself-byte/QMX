@@ -7,11 +7,16 @@ other reason (logic, bad input or output, a stuck agent, a limit he wrote) raise
 state shows in `explain` and the run list. One item stands for every repeat of one failure in one
 run: it is keyed by `(run_id, signature)` and counts its repeats. How an item is shown or sent
 (toasts, phone, digest) is the UI's design.
+
+His answer to an item is the run's next event: `resolve` records it on the item and hands it to
+the engine, which writes it (`gate_resolved` naming the item's slot, see `answered`) and wakes the
+run, and the core folds it (AD-17, B-28, B-32). `open_trace` only opens the trace and writes
+nothing.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Literal, Protocol
@@ -96,9 +101,62 @@ class InboxPort(Protocol):
         """Open the item, or count one more repeat of it; returns its id."""
         ...
 
-    def resolve(self, item_id: str, action: Action, principal: str, *, at: str) -> Item: ...
+    def resolve(self, item_id: str, action: Action, principal: str, *, at: str) -> Item:
+        """Record his answer and hand it to the run."""
+        ...
 
     def list_items(self, *, open_only: bool = True) -> list[Item]: ...
+
+
+class Answers(Protocol):
+    """Where a recorded answer goes: the engine, which writes `gate_resolved` through its one
+    ledger writer and wakes the run."""
+
+    def answer(self, item: Item, action: Action, principal: str, *, at: str) -> None: ...
+
+
+class Recorded(Protocol):
+    @property
+    def kind(self) -> str: ...
+    @property
+    def data(self) -> Mapping[str, JsonValue]: ...
+
+
+SLOT_KEYS: Final = ("node_id", "iteration", "partition", "attempt")
+
+
+type AnswerKind = Literal["gate_resolved", "run_resumed", "run_cancelled"]
+
+
+def answered(
+    item: Item, action: Action, principal: str, events: Sequence[Recorded]
+) -> tuple[AnswerKind, dict[str, JsonValue]]:
+    """The event an answer writes. An item of a slot gets `gate_resolved` naming that slot: the
+    gate that showed the item's idempotency key, else the node's last failure with the item's
+    signature, else the node's last event. An item of the whole run, such as a crash loop, gets
+    `run_cancelled` for `stop` and `run_resumed` for any other answer."""
+    node = item.node_id
+    events = [e for e in events if all(key in e.data for key in SLOT_KEYS)]
+    gates = [
+        e.data
+        for e in events
+        if e.kind == "gate_opened" and e.data.get("idempotency_key") == item.idempotency_key
+    ]
+    failures = [
+        e.data
+        for e in events
+        if e.kind == "node_failed"
+        and e.data.get("node_id") == node
+        and e.data.get("signature") == item.signature
+    ]
+    touched = [e.data for e in events if node is not None and e.data.get("node_id") == node]
+    found = (gates if item.idempotency_key is not None else []) or failures or touched
+    answer: dict[str, JsonValue] = {"answer": action, "principal": principal, "item_id": item.id}
+    if found:
+        return "gate_resolved", {key: found[-1][key] for key in SLOT_KEYS} | answer
+    if action == "stop":
+        return "run_cancelled", {"reason": "operator"} | answer
+    return "run_resumed", {"reason": "answer"} | answer
 
 
 def raised_by(

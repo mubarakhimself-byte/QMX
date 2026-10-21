@@ -45,7 +45,7 @@ from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.runner import new_run_id
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import Caller, Refused
-from qmx_engine.service.runs import fire_after, status_of, summarize_again
+from qmx_engine.service.runs import RunView, fire_after, status_of, summarize_again
 from qmx_engine.trace_export import export
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.catchup import CatchUp
@@ -351,7 +351,10 @@ class EngineDoor:
         return versions[-1].object_id if versions else self.svc.versions.get(ref).object_id
 
     def _run(self, run_id: str) -> Mapping[str, object]:
-        view = self.svc.runs.get(run_id)
+        return self._view(self.svc.runs.get(run_id))
+
+    def _view(self, view: RunView) -> Mapping[str, object]:
+        run_id = view.run_id
         summaries = self.svc.ctx.library.objects(run_id, "workflow-run")
         if summaries:
             item = summaries[-1].fields.get("workflow_item")
@@ -511,7 +514,7 @@ class EngineDoor:
                     "SELECT run_id FROM events WHERE seq = 1"
                     " ORDER BY at DESC, run_id DESC LIMIT 200"
                 ).fetchall()
-            views = [self._run(str(run_id)) for (run_id,) in found]
+            views = [self._view(v) for v in self.svc.runs.views([str(r) for (r,) in found])]
             return [v for v in views if workflow_id is None or v["workflow_item"] == workflow_id]
 
         return self._serve_all(listed)

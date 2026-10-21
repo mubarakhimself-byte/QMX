@@ -5,17 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from flows import Flow
 from pydantic import JsonValue
 
-from qmx_engine.core.commands import Finish
-from qmx_engine.core.simulate import Simulation
 from qmx_engine.definition.expr import RuleError, RuleRefused, evaluate
 from qmx_engine.definition.model import Workflow
-from qmx_engine.nodes.base import NodeJob, NodeResult, Ok, step
-from qmx_engine.nodes.rule import Rule
-from qmx_engine.nodes.trigger import Trigger
-
-NOW = "2026-10-17T09:00:00+00:00"
+from qmx_engine.nodes.base import NodeJob, NodeResult, Ok
 
 
 @pytest.mark.parametrize(
@@ -64,7 +59,7 @@ class Branch:
         return Ok({"main": job.node_id})
 
 
-def routed(score: float) -> tuple[list[str], Finish | None]:
+def routed(tmp: Path, score: float) -> tuple[list[str], JsonValue]:
     workflow = Workflow.model_validate(
         {
             "schema": "qmx.workflow/1",
@@ -93,17 +88,15 @@ def routed(score: float) -> tuple[list[str], Finish | None]:
             },
         }
     )
-    simulation = Simulation(
-        workflow, "run-rule", step({"trigger": Trigger(), "rule": Rule(), "script": Branch()})
-    )
-    ended = simulation.start({"score": score}, NOW)
-    started = [str(e.data["node_id"]) for e in simulation.events if e.kind == "node_started"]
-    return started, ended if isinstance(ended, Finish) else None
+    flow = Flow(tmp, workflow, {"script": Branch()}, run_id=f"run-{score}")
+    ended = flow.start({"score": score})
+    started = [str(e.data["node_id"]) for e in flow.events if e.kind == "node_started"]
+    return started, ended.outputs if ended.status == "passed" else None
 
 
-def test_a_rule_runs_only_the_chosen_ports_branch() -> None:
-    assert routed(0.9) == (
+def test_a_rule_runs_only_the_chosen_ports_branch(tmp_path: Path) -> None:
+    assert routed(tmp_path, 0.9) == (
         ["start", "gate", "yes", "yes-2"],
-        Finish({"yes-2": {"main": "yes-2"}}),
+        {"yes-2": {"main": "yes-2"}},
     )
-    assert routed(0.2) == (["start", "gate", "no"], Finish({"no": {"main": "no"}}))
+    assert routed(tmp_path, 0.2) == (["start", "gate", "no"], {"no": {"main": "no"}})

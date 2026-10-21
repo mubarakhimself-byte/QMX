@@ -8,6 +8,10 @@ it, and `timeout` also once its `timeout_seconds` hold comes due. A join that st
 unmet fails. A join fires with the partitions it counted, merged in partition order; every other
 partition is late: named on the join's `node_scheduled` plan and never merged when it arrives.
 A join that fired keeps that decision on every later pass (`State.joins`).
+
+A failed partition walks the failure ladder on its own (AD-16, B-35), so `failed` holds only the
+partitions that parked: one with ladder steps left is neither arrived nor failed, and the
+watermark waits for it.
 """
 
 from __future__ import annotations

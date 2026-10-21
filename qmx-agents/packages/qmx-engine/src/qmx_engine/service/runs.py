@@ -2,8 +2,9 @@
 a live run of a version or a test run of a draft.
 
 Each run gets its own folder `<home>/engine/runs/<run_id>/workflow/`, written from the Library's
-bundle, so no two runs share files. A run's status is read from its ledger events with
-SOLUTION-DESIGN 3.1's words; nothing stores it beside them. A live run that passed fires every
+bundle, so no two runs share files. A run's status is a pure fold over its ledger events and the
+engine's live attempts, with SOLUTION-DESIGN 3.1's words; nothing stores it beside them, and
+`runs.list` reads it from there on every call (B-40, B-73). A live run that passed fires every
 `after` trigger on its workflow, whoever started it (B-60), and, run whole on real models, marks
 its version `tested-by` it, since a passed run in either mode tests its content hash (AD-11, L-56).
 A test run a wake resumed gets a fresh test report beside its fresh summary (B-61). Cancelling a run
@@ -13,11 +14,14 @@ cancels every child run under it (AD-5, B-66).
 from __future__ import annotations
 
 import copy
-from dataclasses import dataclass
+from collections.abc import Container, Mapping
+from dataclasses import dataclass, replace
 from typing import cast
 
 from pydantic import JsonValue
 
+from qmx_engine.core.replay import idempotency_key
+from qmx_engine.core.state import Slot
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
@@ -30,14 +34,13 @@ from qmx_engine.ports.library import (
     RunSummary,
     Stored,
 )
-from qmx_engine.runner import Outcome, new_run_id
+from qmx_engine.runner import Engine, Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context, Refused, State, require
 from qmx_engine.trace_export import export
 from qmx_engine.triggers.rows import After, fire_now, triggers
 
 SUBGRAPH_ENTRY = "subgraph-input"
-NODE_KINDS = frozenset({"node_scheduled", "node_started", "node_finished", "node_failed"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,49 +50,100 @@ class RunState:
     detail: str | None = None
 
 
-def status_of(events: list[Event]) -> RunState:
-    """The run's status from its events, current pass only (a `run_resumed` opens a new one)."""
+@dataclass(frozen=True, slots=True)
+class Phase:
+    """One slot's place in the current pass: `active` (scheduled or started, under `key`),
+    `waiting` (with its reason) or `done`."""
+
+    phase: str
+    reason: str | None = None
+    key: str = ""
+
+
+def status_of(events: list[Event], live: Container[str] | None = None) -> RunState:
+    """The run's status, a pure fold over its events (SOLUTION-DESIGN 3.1, B-40, B-73). A
+    `run_resumed` opens a new pass that keeps only the slots waiting on an answer. `live` holds the
+    idempotency keys of the attempts this engine runs now; an attempt left open outside it belongs
+    to an engine that died, so the run reads `interrupted` until a resume folds it. None means the
+    caller cannot see the worker, and an open attempt reads `running`."""
     ended: RunState | None = None
     paused: RunState | None = None
+    answered = False
     started = False
-    slots: dict[tuple[JsonValue, ...], tuple[str, str | None]] = {}
+    slots: dict[tuple[JsonValue, ...], Phase] = {}
     for event in events:
         data = event.data
         slot = (data.get("node_id"), data.get("iteration", 0), data.get("partition"))
         match event.kind:
             case "run_resumed":
                 ended = paused = None
-                slots = {}
+                answered = data.get("reason") == "answer"
+                slots = {s: p for s, p in slots.items() if p.reason in ("gate", "skipped")}
             case "run_finished":
                 ended = RunState("passed")
             case "run_cancelled":
                 ended = RunState("stopped", str(data.get("reason") or "operator"))
+            case "gate_resolved" if data.get("answer") == "stop":
+                ended = RunState("stopped", "operator")
+            case "gate_resolved":
+                answered = True
+                if ended is not None and ended.status == "failed":
+                    ended = None
+                if data.get("answer") == "resume":
+                    paused = None
+                if data.get("answer") == "skip_node":
+                    slots[slot] = Phase("done", "skipped")
+                elif data.get("answer") in ("retry", "stronger_model"):
+                    slots.pop(slot, None)
             case "run_paused":
                 paused = RunState("waiting", str(data.get("reason")))
-            case "ladder_step" if data.get("step") == "park":
+            case "ladder_step" if data.get("step") == "park" and data.get("scope") != "partition":
                 ended = RunState("failed", "parked", str(data.get("reason")))
             case "ladder_step" if data.get("step") == "retry":
-                slots[slot] = ("waiting", "retry")
+                slots[slot] = Phase("waiting", "retry")
             case "node_waiting":
-                slots[slot] = ("waiting", str(data.get("reason")))
-            case kind if kind in NODE_KINDS:
-                started |= kind == "node_started"
-                slots[slot] = (
-                    "active" if kind in ("node_scheduled", "node_started") else "done",
-                    None,
-                )
+                slots[slot] = Phase("waiting", str(data.get("reason")))
+            case "node_scheduled" | "node_started":
+                started |= event.kind == "node_started"
+                attempt = data.get("attempt")
+                key = attempt_key(event.run_id, data, attempt) if isinstance(attempt, int) else ""
+                slots[slot] = Phase("active", key=key)
+            case "node_finished" | "node_failed":
+                slots[slot] = Phase("done")
             case _:
                 pass
     if ended is not None:
         return ended
     if paused is not None:
         return paused
-    if any(phase == "active" for phase, _ in slots.values()):
+    active = [p for p in slots.values() if p.phase == "active"]
+    if live is not None and any(p.key not in live for p in active):
+        return RunState("interrupted", "the engine stopped with an attempt in flight")
+    if active:
         return RunState("running")
-    waits = sorted({str(why) for phase, why in slots.values() if phase == "waiting"})
+    waits = sorted({str(p.reason) for p in slots.values() if p.phase == "waiting"})
     if waits:
         return RunState("waiting", " ".join(waits))
+    if answered:
+        return RunState("waiting", "answered")
     return RunState("running" if started else "queued")
+
+
+def attempt_key(run_id: str, data: Mapping[str, JsonValue], attempt: int) -> str:
+    iteration, partition = data.get("iteration"), data.get("partition")
+    slot = Slot(
+        str(data.get("node_id")),
+        iteration if isinstance(iteration, int) else 0,
+        partition if isinstance(partition, int) else None,
+    )
+    return idempotency_key(run_id, slot, attempt)
+
+
+def live_attempts(engine: Engine) -> frozenset[str]:
+    """The idempotency keys of every attempt this engine has in flight: those its runs hold,
+    queued or started, and those its worker runs."""
+    held = (c.idempotency_key for run in engine.live.values() for c in run.inflight.values())
+    return frozenset((*held, *engine.worker.running))
 
 
 def induced(bundle: Bundle, node_ids: list[str]) -> Bundle:
@@ -350,18 +404,35 @@ class Runs:
         return self.get(outcome.run_id)
 
     def get(self, run_id: str) -> RunView:
+        [view] = self.views([run_id])
+        return view
+
+    def views(self, run_ids: list[str]) -> list[RunView]:
+        """Each run's view, its status folded from its events now, all read through one reader."""
         if not ledger_path(self.ctx.home).exists():
-            raise Refused("unknown_run", f"no run {run_id}")
+            raise Refused("unknown_run", f"no run {run_ids[0] if run_ids else ''}")
+        live = live_attempts(self.ctx.engine)
         with Reader.open(self.ctx.home) as reader:
-            events = reader.events(run_id)
-        if not events or events[0].kind != "run_created":
-            raise Refused("unknown_run", f"no run {run_id}")
-        state = status_of(events)
-        mode: Mode = "live" if events[0].data.get("mode") == "live" else "test"
-        summaries = self.ctx.library.objects(run_id, "workflow-run")
-        found = summaries[-1].fields.get("object_id") if summaries else None
-        object_id = found if isinstance(found, str) else None
-        return RunView(run_id, mode, state.status, state.reason, state.detail, object_id)
+            logs = [(run_id, reader.events(run_id)) for run_id in run_ids]
+        found: list[RunView] = []
+        for run_id, events in logs:
+            if not events or events[0].kind != "run_created":
+                raise Refused("unknown_run", f"no run {run_id}")
+            state = status_of(events, live)
+            mode: Mode = "live" if events[0].data.get("mode") == "live" else "test"
+            summaries = self.ctx.library.objects(run_id, "workflow-run")
+            object_id = summaries[-1].fields.get("object_id") if summaries else None
+            found.append(
+                RunView(
+                    run_id,
+                    mode,
+                    state.status,
+                    state.reason,
+                    state.detail,
+                    object_id if isinstance(object_id, str) else None,
+                )
+            )
+        return found
 
     def cancel(self, run_id: str, reason: str = "operator") -> list[str]:
         """End a run and every child run under it `stopped`, whether they run here, wait or
@@ -382,4 +453,13 @@ class Runs:
         return stopped
 
     def list(self, workflow_item: str, object_id: str | None = None) -> list[RunSummary]:
-        return self.ctx.library.list_runs(workflow_item, object_id)
+        """The runs' Library summaries, each with its status and reason read from the ledger now,
+        so a run resumed since its summary shows where it is."""
+        listed = self.ctx.library.list_runs(workflow_item, object_id)
+        live = live_attempts(self.ctx.engine)
+        with Reader.open(self.ctx.home) as reader:
+            states = [status_of(reader.events(found.run_id), live) for found in listed]
+        return [
+            replace(found, status=state.status, reason=state.reason)
+            for found, state in zip(listed, states, strict=True)
+        ]

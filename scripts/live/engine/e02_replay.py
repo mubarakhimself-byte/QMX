@@ -1,5 +1,6 @@
-"""EP5's live lanes and perf probe: the pure orchestrator and node-level replay, driven through
-`qmx_engine.core.simulate` with planted executors.
+"""EP5's live lanes and perf probe: the pure orchestrator and node-level replay, driven through the
+real `Engine` and its one ledger writer with planted executors (the `executors=` seam). `EngineRun`
+here is the driver the other core lanes (`e01`, `e03`, `x06`) share.
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/e02_replay.py [--base REV] [--trunk REV] [lane]`
@@ -12,25 +13,33 @@ from __future__ import annotations
 
 import argparse
 import ast
+import asyncio
+import json
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
 
 from common import Log, throwaway_home
 from ep2_lanes import ENGINE, GIT, REPO, clean_env, git
 from pydantic import JsonValue
-from qmx_engine.core.commands import Finish, Park
+from qmx_engine.core.commands import Park
 from qmx_engine.core.fold import fold
 from qmx_engine.core.ready import next_commands
-from qmx_engine.core.simulate import Entry, Simulation
 from qmx_engine.definition.expr import RuleRefused, check
 from qmx_engine.definition.model import Workflow
-from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok, step
-from qmx_engine.nodes.rule import Rule
-from qmx_engine.nodes.trigger import Trigger
+from qmx_engine.definition.validate import checked
+from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.inbox_table import InboxTable
+from qmx_engine.ledger.store import Ledger, Reader
+from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok
+from qmx_engine.runner import Engine, Outcome
+from qmx_engine.settings import DEFAULTS
+from qmx_engine.workers.local import AnyExecutor
 
 HARNESS: Final = "qmx-agents/packages/qma-harness"
 CORE: Final = ENGINE / "src" / "qmx_engine" / "core"
@@ -51,6 +60,103 @@ CORE_MAY_IMPORT: Final = (
 )
 """Everything `core` may import. A clock, entropy or environment read needs a module outside this
 list (`time`, `datetime`, `os`, `random`, `secrets`, `uuid`, `importlib`), whatever its alias."""
+ONE_TRY: Final[Mapping[str, object]] = {**DEFAULTS, "retry.max_tries": 1, "retry.backoff": (0,)}
+"""A failed attempt is not retried: it walks the rest of the ladder at once and parks."""
+POLL_S: Final = 0.01
+
+
+@dataclass(frozen=True, slots=True)
+class Entry:
+    """An event as the core reads it, for a log the ledger would not store as it stands."""
+
+    seq: int
+    run_id: str
+    at: str
+    kind: str
+    data: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+
+
+class EngineRun:
+    """One run of `definition` on the real `Engine`, in a throwaway home, on a wall clock the lane
+    moves."""
+
+    def __init__(
+        self,
+        pr: str,
+        definition: Workflow,
+        run_id: str,
+        executors: Mapping[str, AnyExecutor],
+        *,
+        settings: Mapping[str, object] = ONE_TRY,
+        now: str = NOW,
+    ) -> None:
+        self.home = throwaway_home(pr, run_id)
+        self.root = self.home / "workflow"
+        self.run_id = run_id
+        self.executors = executors
+        self.settings = settings
+        self.wall = datetime.fromisoformat(now)
+        self.write(definition)
+
+    def write(self, definition: Workflow) -> None:
+        """The run's folder now holds `definition`: an edit, once the run started."""
+        self.root.mkdir(parents=True, exist_ok=True)
+        document = definition.model_dump(mode="json", by_alias=True, exclude_none=True)
+        (self.root / "definition.json").write_text(json.dumps(document), encoding="utf-8")
+
+    def drive[T](self, scenario: Callable[[Engine], Awaitable[T]]) -> T:
+        async def go() -> T:
+            with Ledger.open(self.home) as ledger, InboxTable.open(self.home) as inbox:
+                engine = Engine(
+                    self.home,
+                    ledger,
+                    settings=self.settings,
+                    wall=lambda: self.wall,
+                    executors=self.executors,
+                    watch_every=POLL_S,
+                    inbox=inbox,
+                )
+                found = await scenario(engine)
+                await engine.settle()
+                return found
+
+        return asyncio.run(go())
+
+    async def started(self, engine: Engine, inputs: JsonValue) -> Outcome:
+        found = checked(self.root)
+        if isinstance(found, list):
+            raise SystemExit(f"BLOCKED: the lane's workflow does not validate: {found}")
+        return await engine.start(
+            self.root, found[1], mode="test", inputs=inputs, run_id=self.run_id
+        )
+
+    def start(self, inputs: JsonValue) -> Outcome:
+        return self.drive(lambda engine: self.started(engine, inputs))
+
+    def resume(self, now: str | None = None, *, reason: str = "operator") -> Outcome:
+        if now is not None:
+            self.wall = datetime.fromisoformat(now)
+        return self.drive(lambda engine: engine.resume(self.run_id, reason=reason))
+
+    def tick(self, now: str) -> Outcome:
+        """The ticker wakes the run at `now`."""
+        return self.resume(now, reason="wake")
+
+    @property
+    def events(self) -> list[Event]:
+        with Reader.open(self.home) as reader:
+            return reader.events(self.run_id)
+
+    async def seen(self, kind: str, node_id: str, partition: int | None = None) -> None:
+        """Wait until the ledger holds `kind` for the slot."""
+        while not [
+            e
+            for e in self.events
+            if e.kind == kind
+            and e.data.get("node_id") == node_id
+            and e.data.get("partition") == partition
+        ]:
+            await asyncio.sleep(POLL_S)
 
 
 class Script:
@@ -82,7 +188,11 @@ class Count:
         return Ok({"main": job.node_id})
 
 
-def chain(length: int = 5, prompts: dict[str, str] | None = None) -> Workflow:
+def chain(
+    length: int = 5, prompts: dict[str, str] | None = None, *, held: bool = False
+) -> Workflow:
+    """N1 to N`length`; with `held` a last node waits on an event, so the run stays open for an
+    edit."""
     nodes: list[dict[str, Any]] = [{"id": "n1", "name": "N1", "type": "trigger", "typeVersion": 1}]
     nodes += [
         {
@@ -94,6 +204,18 @@ def chain(length: int = 5, prompts: dict[str, str] | None = None) -> Workflow:
         }
         for i in range(2, length + 1)
     ]
+    last = length
+    if held:
+        last = length + 1
+        nodes.append(
+            {
+                "id": f"n{last}",
+                "name": f"N{last}",
+                "type": "wait",
+                "typeVersion": 1,
+                "parameters": {"event": "go"},
+            }
+        )
     return Workflow.model_validate(
         {
             "schema": "qmx.workflow/1",
@@ -102,19 +224,13 @@ def chain(length: int = 5, prompts: dict[str, str] | None = None) -> Workflow:
             "nodes": nodes,
             "connections": {
                 f"N{i}": {"main": [[{"node": f"N{i + 1}", "port": "in", "map": "one"}]]}
-                for i in range(1, length)
+                for i in range(1, last)
             },
         }
     )
 
 
-def simulation(definition: Workflow, run_id: str, script: Any) -> Simulation:
-    return Simulation(
-        definition, run_id, step({"trigger": Trigger(), "rule": Rule(), "script": script})
-    )
-
-
-def ids(events: list[Entry], kind: str, **match: JsonValue) -> list[str]:
+def ids(events: Sequence[Event], kind: str, **match: JsonValue) -> list[str]:
     return [
         str(e.data["node_id"])
         for e in events
@@ -122,37 +238,37 @@ def ids(events: list[Entry], kind: str, **match: JsonValue) -> list[str]:
     ]
 
 
-def e02_run() -> tuple[Simulation, Script, int]:
+def e02_run() -> tuple[EngineRun, Script, int]:
     """The five-node chain with node 3 failing once, started and resumed. Returns the mark where
     the resume began."""
     script = Script(failing={"n3"})
-    sim = simulation(chain(), "run-e02", script)
-    sim.start({"topic": "q-fin"}, NOW)
-    mark = len(sim.events)
-    sim.resume(LATER)
-    return sim, script, mark
+    run = EngineRun("ep5", chain(), "run-e02", {"script": script})
+    run.start({"topic": "q-fin"})
+    mark = len(run.events)
+    run.resume(LATER)
+    return run, script, mark
 
 
 def e02(log: Log) -> None:
     script = Script(failing={"n3"})
-    sim = simulation(chain(), "run-e02", script)
-    first = sim.start({"topic": "q-fin"}, NOW)
-    log(f"first pass started: {' '.join(ids(sim.events, 'node_started'))}; ended {first}")
+    run = EngineRun("ep5", chain(), "run-e02", {"script": script})
+    first = run.start({"topic": "q-fin"})
+    log(f"first pass started: {' '.join(ids(run.events, 'node_started'))}; ended {first}")
     log.check(
         "the first pass parks on node 3",
-        first == Park("node n3 failed: boom: planted failure", "n3", 0, None, 1),
+        (first.status, first.reason) == ("failed", "node n3 failed: boom: planted failure"),
         first,
     )
-    mark = len(sim.events)
-    ended = sim.resume(LATER)
-    resumed = sim.events[mark:]
+    mark = len(run.events)
+    ended = run.resume(LATER)
+    resumed = run.events[mark:]
     started, memo = ids(resumed, "node_started"), ids(resumed, "node_finished", memo=True)
     log(f"started: {' '.join(started)}")
     log(f"memo: {' '.join(memo)}")
     log.check("nodes 1 and 2 get no new node_started", not {"n1", "n2"} & set(started), started)
     log.check("node 3 reruns, then nodes 4 and 5 run once", started == ["n3", "n4", "n5"], started)
     log.check("nodes 1 and 2 settle from their memos", memo == ["n1", "n2"], memo)
-    log.check("the resumed run finishes", isinstance(ended, Finish), ended)
+    log.check("the resumed run finishes", ended.status == "passed", ended)
     log.check(
         "executor calls over both passes",
         script.calls == ["n2", "n3", "n3", "n4", "n5"],
@@ -181,13 +297,16 @@ def regression(log: Log, base: str, trunk: str) -> None:
 
 
 def edit(log: Log) -> None:
+    """Each run waits on an event after n5, so it is still open when its folder is edited."""
     script = Script()
-    sim = simulation(chain(), "run-edit", script)
-    log.check("the first run finishes", isinstance(sim.start({"topic": "q-fin"}, NOW), Finish), "")
-    mark = len(sim.events)
-    sim.resume(LATER, chain(prompts={"n4": "prompt 4, sharper"}))
-    started = ids(sim.events[mark:], "node_started")
-    memo = ids(sim.events[mark:], "node_finished", memo=True)
+    run = EngineRun("ep5", chain(held=True), "run-edit", {"script": script})
+    first = run.start({"topic": "q-fin"})
+    log.check("the first pass runs n1 to n5 and waits", first.status == "waiting", first)
+    mark = len(run.events)
+    run.write(chain(prompts={"n4": "prompt 4, sharper"}, held=True))
+    run.resume(LATER)
+    started = ids(run.events[mark:], "node_started")
+    memo = ids(run.events[mark:], "node_finished", memo=True)
     log(f"after editing n4's prompt, started: {' '.join(started)}; memo: {' '.join(memo)}")
     log.check(
         "only n4 and n5 (whose input changed with n4's output) rerun",
@@ -195,18 +314,23 @@ def edit(log: Log) -> None:
         (started, memo),
     )
     unchanged = Count()
-    sim = simulation(chain(), "run-edit-2", unchanged)
-    sim.start({"topic": "q-fin"}, NOW)
-    mark = len(sim.events)
-    sim.resume(LATER, chain(prompts={"n4": "prompt 4, sharper"}))
-    started = ids(sim.events[mark:], "node_started")
+    run = EngineRun("ep5", chain(held=True), "run-edit-2", {"script": unchanged})
+    run.start({"topic": "q-fin"})
+    mark = len(run.events)
+    run.write(chain(prompts={"n4": "prompt 4, sharper"}, held=True))
+    run.resume(LATER)
+    started = ids(run.events[mark:], "node_started")
     log(f"with an executor whose output ignores the prompt, started: {' '.join(started)}")
     log.check(
         "n4 reruns and n5 keeps its memo (its input hash is unchanged)", started == ["n4"], started
     )
 
 
-def routed(score: float, expr: str = "items.score >= 0.7") -> tuple[Simulation, Any]:
+def routed(
+    score: float, expr: str = "items.score >= 0.7", *, unchecked: bool = False
+) -> tuple[EngineRun, Outcome]:
+    """With `unchecked` the run starts from the parsed definition, past validation, so the rule
+    node's own refusal is what stops it."""
     workflow = Workflow.model_validate(
         {
             "schema": "qmx.workflow/1",
@@ -235,8 +359,14 @@ def routed(score: float, expr: str = "items.score >= 0.7") -> tuple[Simulation, 
             },
         }
     )
-    sim = simulation(workflow, f"run-rule-{score}", Count())
-    return sim, sim.start({"score": score}, NOW)
+    run = EngineRun("ep5", workflow, f"run-rule-{score}", {"script": Count()})
+    if not unchecked:
+        return run, run.start({"score": score})
+    return run, run.drive(
+        lambda engine: engine.start(
+            run.root, workflow, mode="test", inputs={"score": score}, run_id=run.run_id
+        )
+    )
 
 
 def rule(log: Log) -> None:
@@ -244,11 +374,11 @@ def rule(log: Log) -> None:
         (0.9, ["start", "gate", "keep", "keep-2"]),
         (0.2, ["start", "gate", "drop"]),
     ):
-        sim, ended = routed(score)
-        started = ids(sim.events, "node_started")
+        run, ended = routed(score)
+        started = ids(run.events, "node_started")
         log(f"score {score}: started {' '.join(started)}; ended {ended}")
         log.check(f"score {score} runs only the chosen port's branch", started == expected, started)
-        log.check(f"score {score} finishes", isinstance(ended, Finish), ended)
+        log.check(f"score {score} finishes", ended.status == "passed", ended)
 
 
 def rule_safe(log: Log) -> None:
@@ -260,12 +390,12 @@ def rule_safe(log: Log) -> None:
     except RuleRefused as error:
         refusal = str(error)
     log.check("check refuses the open call", refusal == "Call is not allowed in a rule", refusal)
-    sim, ended = routed(0.9, expr)
-    failed = [e.data for e in sim.events if e.kind == "node_failed"]
+    run, ended = routed(0.9, expr, unchecked=True)
+    failed = [e.data for e in run.events if e.kind == "node_failed"]
     log(f"run with the open rule: {failed}; ended {ended}")
     log.check(
         "the rule node fails rule_refused and the run parks",
-        [f.get("code") for f in failed] == ["rule_refused"] and isinstance(ended, Park),
+        [f.get("code") for f in failed] == ["rule_refused"] and ended.status == "failed",
         ended,
     )
     log.check("nothing was opened (refused before evaluation)", not sentinel.exists(), sentinel)
@@ -309,23 +439,28 @@ def pure(log: Log) -> None:
 
 def finished(log: Log) -> None:
     script = Script()
-    sim = simulation(chain(), "run-finished", script)
-    sim.start({"topic": "q-fin"}, NOW)
+    run = EngineRun("ep5", chain(), "run-finished", {"script": script})
+    run.start({"topic": "q-fin"})
     calls = len(script.calls)
-    mark = len(sim.events)
-    ended = sim.resume(LATER)
-    log(f"resume of a finished run: {[e.kind for e in sim.events[mark:]]}")
+    mark = len(run.events)
+    ended = run.resume(LATER)
+    log(f"resume of a finished run: {[e.kind for e in run.events[mark:]]}")
     log.check("no executor is called", len(script.calls) == calls, script.calls[calls:])
-    log.check("no node_started", ids(sim.events[mark:], "node_started") == [], "")
-    log.check("the run finishes again from memos", isinstance(ended, Finish), ended)
-    log.check("a run that already ended gets no command", next_commands(sim.state()) == [], "")
+    log.check("no node_started", ids(run.events[mark:], "node_started") == [], "")
+    log.check("the run reads passed still", ended.status == "passed", ended)
+    log.check(
+        "a run that already ended gets no command",
+        next_commands(fold(chain(), run.events)) == [],
+        "",
+    )
 
 
 def unknown_event(log: Log) -> None:
-    sim = simulation(chain(), "run-unknown", Script())
-    sim.start({"topic": "q-fin"}, NOW)
-    sim.append("node_teleported", {"node_id": "n2"})
-    commands = next_commands(sim.state())
+    run = EngineRun("ep5", chain(held=True), "run-unknown", {"script": Script()})
+    run.start({"topic": "q-fin"})
+    events = run.events
+    teleported = Entry(len(events) + 1, run.run_id, NOW, "node_teleported", {"node_id": "n2"})
+    commands = next_commands(fold(chain(held=True), [*events, teleported]))
     log(f"commands after an unknown kind: {commands}")
     log.check(
         "the fold returns Park naming the kind",
@@ -339,18 +474,23 @@ def unknown_event(log: Log) -> None:
 def chain_lane(log: Log) -> None:
     counter = Count()
     started_at = time.perf_counter()
-    sim = simulation(chain(200), "run-chain", counter)
-    ended = sim.start({"topic": "q-fin"}, NOW)
+    run = EngineRun("ep5", chain(200), "run-chain", {"script": counter})
+    ended = run.start({"topic": "q-fin"})
     elapsed = time.perf_counter() - started_at
-    starts = ids(sim.events, "node_started")
+    events = run.events
+    starts = ids(events, "node_started")
     once = len(starts) == 200 and len(set(starts)) == 200
-    log(f"200-node chain: {len(sim.events)} events, {elapsed:.2f} s, ended {type(ended).__name__}")
+    log(f"200-node chain: {len(events)} events, {elapsed:.2f} s, ended {ended.status}")
     log.check(
         "every node finishes once",
         once and counter.calls == starts[1:],
         (len(starts), len(set(starts))),
     )
-    log.check("the chain finishes", ended == Finish({"n200": {"main": "n200"}}), ended)
+    log.check(
+        "the chain finishes",
+        (ended.status, ended.outputs) == ("passed", {"n200": {"main": "n200"}}),
+        ended,
+    )
 
 
 def perf(log: Log) -> None:
