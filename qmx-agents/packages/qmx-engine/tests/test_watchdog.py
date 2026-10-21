@@ -49,7 +49,7 @@ def test_a_silent_attempt_warns_then_fails_stalled_into_the_ladder_despite_heart
         [node("start", "trigger"), step],
         {"start": {"main": [edge("step")]}},
         executors={"script": Hang()},
-        worker=LocalWorker(concurrency=3, heartbeat_seconds=0.05),
+        worker=LocalWorker(heartbeat_seconds=0.05),
         watch_every=0.2,
     )
 

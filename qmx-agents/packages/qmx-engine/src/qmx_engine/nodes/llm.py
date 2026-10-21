@@ -30,7 +30,7 @@ from qmx_engine.admission import Admission
 from qmx_engine.definition.lint import redact
 from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
 from qmx_engine.nodes.script import failed
-from qmx_engine.ports.harness_adapter import ChatsFull, HarnessPort, Refusal, Turn
+from qmx_engine.ports.harness_adapter import HarnessPort, Refusal, Turn
 from qmx_engine.prompts import Prompt, payload, static
 from qmx_engine.roles import Candidate
 
@@ -141,13 +141,14 @@ async def call(
     schema: JsonObject,
     workspace: Path,
     run_seconds: float | None = None,
+    priority: int = 0,
 ) -> NodeResult:
     """One answer from a fresh Background chat on `candidate`, with one repair turn.
-    `run_seconds` bounds only the engine's own doctor call."""
+    `run_seconds` bounds only the engine's own doctor call. `priority` orders the chat's sends
+    among those waiting for a harness slot."""
     held = await admission.check(candidate)
     if held is not None:
         return held
-    await admission.acquire()
     try:
         chat = await harness.start_chat(
             title=title,
@@ -157,12 +158,8 @@ async def call(
             workspace=workspace,
         )
     except Refusal as refusal:
-        await admission.release()
         return failed("unavailable", redact(str(refusal)), retryable=False)
-    try:
-        return await turns(harness, admission, candidate, chat, text, schema, run_seconds)
-    finally:
-        await admission.release()
+    return await turns(harness, admission, candidate, chat, text, schema, run_seconds, priority)
 
 
 async def turns(
@@ -173,16 +170,15 @@ async def turns(
     text: str,
     schema: JsonObject,
     run_seconds: float | None,
+    priority: int,
 ) -> NodeResult:
     usage = Usage(chat)
     prompt = text
     for _ in range(2):
         try:
-            await harness.send(chat, prompt)
+            await harness.send(chat, prompt, priority=priority)
         except Refusal as refusal:
             return await admission.refused(candidate, redact(str(refusal)))
-        except ChatsFull as full:
-            return with_span(failed("chats_full", redact(str(full)), retryable=True), usage)
         turn = await harness.wait_turn(chat, timeout=run_seconds)
         usage.add(turn)
         bad = ended_badly(turn, usage)
@@ -261,6 +257,7 @@ class Llm:
             text=brief(prompt, schema, job.inputs, hint if isinstance(hint, str) else None),
             schema=schema,
             workspace=self.workspace,
+            priority=job.priority,
         )
 
 

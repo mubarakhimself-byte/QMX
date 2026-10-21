@@ -83,9 +83,8 @@ async def schema(log: Log, home: Path, harness: Any) -> None:
 
 async def cache(log: Log, home: Path, harness: Any) -> None:
     workflow = folder("cache", nodes=2)
-    settings = {**DEFAULTS, "placement.pc.concurrency": 1}
     engine_home = throwaway_home(PR, "cache-engine")
-    outcome, _, spans, _ = await run(engine_home, workflow, harness, settings)
+    outcome, _, spans, _ = await run(engine_home, workflow, harness, DEFAULTS)
     ordered = sorted(model_spans(spans), key=lambda s: s.started_at)
     for span in ordered:
         log(f"span {describe(span)}")

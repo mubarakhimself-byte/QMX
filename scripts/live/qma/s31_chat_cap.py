@@ -299,7 +299,9 @@ async def wait_case(log: Log) -> None:
             ]
         routes[f"R{n}-C "] = [Turn([text("C done")])]
     fake = FakeModel([], routes=routes).start()
-    session, _ = await fake_session(log, "caph-s31-wait", fake, max_live_chats=2)
+    session, _ = await fake_session(
+        log, "caph-s31-wait", fake, max_live_chats=2, interactive_reserve=0
+    )
     taken = admissions(session)
     gaps: list[float] = []
     try:

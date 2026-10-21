@@ -6,9 +6,11 @@ first. A key-provider chat's CLI reaches its provider only through the relay on 
 `open` kills any tree a crash left behind before anything resumes. No chat CLI starts at open;
 chats connect on their first `send`.
 
-At most `live_chat_slots` CLIs run, a number derived from the machine's RAM. A send to a Cold
-chat at capacity closes the least recently used idle chat. With none idle, a Background or
-Child send waits for a slot and an Interactive one refuses with `ChatTableFull`. A reaper closes
+At most `live_chat_slots` CLIs run, a number derived from the machine's RAM. This slot table is
+the only counter of chat slots (AD-58); `slot_table` reads it. Background and Child chats leave
+`interactive_reserve` slots for Interactive ones. A send to a Cold chat at capacity closes the
+least recently used idle chat. With none idle, a Background or Child send waits for a slot, in
+priority order, and an Interactive one refuses with `ChatTableFull`. A reaper closes
 chats idle past `idle_reap_seconds`. A chat mid-turn or with a background task running is never
 idle, and a closed chat resumes its session on the next send.
 """
@@ -18,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import itertools
 import json
 import logging
 import os
@@ -102,6 +105,7 @@ from qma.harness.launch import (
     SubAgent,
     TestMode,
     assert_scrubbed,
+    background_slots,
     chat_options_refusal,
     launch_env,
     live_chat_slots,
@@ -259,6 +263,22 @@ class ChatTableFull(RuntimeError):
         )
 
 
+@dataclass(frozen=True)
+class SlotTable:
+    """`Harness.slot_table()`: chat slots are machine capacity, never usage (AD-58)."""
+
+    capacity: int
+    """`live_chat_slots`, derived from RAM."""
+    reserve: int
+    """Slots Background and Child chats leave for Interactive ones."""
+    held: tuple[SessionId, ...]
+    """Live chats and chats with a send in flight, less `delegate` children on a parent's slot."""
+    unattended: tuple[SessionId, ...]
+    """The Background and Child chats among `held`; at most `capacity - reserve` of them."""
+    waiting: tuple[SessionId, ...]
+    """Chats whose send waits for a slot, in the order they will get one."""
+
+
 @dataclass
 class PlanWatch:
     """Records each plan fact in the ledger. While the overage stop holds, every plan chat with
@@ -293,6 +313,9 @@ class Harness:
         """Chats with a send in flight. Each holds a slot, live yet or not, and is never evicted."""
         self._lenders: dict[SessionId, SessionId] = {}
         """Each `delegate` child and the parent blocked on it, whose slot the child uses."""
+        self._waiting: dict[int, tuple[tuple[int, int], SessionId]] = {}
+        """Each send waiting for a slot: its place, its serving order and its chat."""
+        self._order = itertools.count()
         self._ram_mb = machine_ram_mb()
         self._hooks: dict[SessionId, ChatHooks] = {}
         """Each chat's `NewChat.hooks`, the one option the record cannot hold. Dropped when the
@@ -439,12 +462,12 @@ class Harness:
         keeps its current launch until its next relaunch."""
         await self._chat(chat).set_packs(tuple(packs))
 
-    async def run_turn(self, chat: SessionId, prompt: Prompt) -> TurnHandle:
+    async def run_turn(self, chat: SessionId, prompt: Prompt, *, priority: int = 0) -> TurnHandle:
         """Send `prompt` and return the turn's handle. Returns once the prompt reached the CLI
         or waits for a slot (a `Queued` event says so). A refusal before either raises as
         `send` does; one after resolves the handle `failed` with its reason."""
         handle = TurnHandle(prompt.text)
-        sent = asyncio.create_task(self._dispatch(chat, prompt, handle))
+        sent = asyncio.create_task(self._dispatch(chat, prompt, handle, priority))
         queued = asyncio.create_task(handle.queued.wait())
         try:
             await asyncio.wait({sent, queued}, return_when=asyncio.FIRST_COMPLETED)
@@ -468,16 +491,20 @@ class Harness:
         sent.add_done_callback(self._background.discard)
         return handle
 
-    async def send(self, chat: SessionId, prompt: Prompt) -> None:
-        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks."""
-        await self._dispatch(chat, prompt, None)
+    async def send(self, chat: SessionId, prompt: Prompt, *, priority: int = 0) -> None:
+        """Hand a prompt to the chat. Returns once it is sent; results stream as blocks.
+        `priority` orders an unattended send among those waiting for a slot."""
+        await self._dispatch(chat, prompt, None, priority)
 
-    async def _dispatch(self, chat: SessionId, prompt: Prompt, handle: TurnHandle | None) -> None:
+    async def _dispatch(
+        self, chat: SessionId, prompt: Prompt, handle: TurnHandle | None, priority: int
+    ) -> None:
         """`send`, feeding the turn's handle when `run_turn` asked.
         `InjectedText` into an Interactive chat raises `UntrustedPrompt`. A plan chat refuses
         while the overage stop holds, with a `needs_you` block. An unattended plan chat refuses
         at a `background_cap` only when the operator wrote one. A Cold chat needs a slot first
-        (`_take_slot`)."""
+        (`_take_slot`): an Interactive chat may take any slot, while a Background or Child chat
+        leaves `interactive_reserve` of them free and waits in `priority` order."""
         found = self._chat(chat)
         kind = found.record.config.kind
         if not admits(kind, prompt):
@@ -498,8 +525,8 @@ class Harness:
                         f"the five-hour window is {used:.0%} used, at or over your "
                         f"[budgets] background_cap of {share:.0%}"
                     )
-        slots = live_chat_slots(budgets, self._ram_mb)
-        await self._take_slot(chat, slots, wait=not isinstance(kind, Interactive), handle=handle)
+        wait = not isinstance(kind, Interactive)
+        await self._take_slot(chat, budgets, wait=wait, handle=handle, priority=priority)
         try:
             await found.send(prompt, handle)
         finally:
@@ -511,48 +538,100 @@ class Harness:
             del self._sending[chat]
         self._freed.set()
 
+    def _held(self) -> tuple[list[Chat], set[SessionId], set[SessionId]]:
+        """The live chats, the chats holding a slot, and the `delegate` children using their
+        parent's slot."""
+        live = [found for found in self._chats.values() if found.is_live]
+        held = {found.session_id for found in live} | self._sending.keys()
+        lent = {child for child, parent in self._lenders.items() if parent in held}
+        return live, held, lent
+
+    def _unattended(self, chats: set[SessionId]) -> set[SessionId]:
+        return {
+            sid
+            for sid in chats
+            if (found := self._chats.get(sid)) is not None
+            and not isinstance(found.record.config.kind, Interactive)
+        }
+
+    def slot_table(self) -> SlotTable:
+        """The one chat-slot reading (AD-58): what the table holds and who waits for it. The
+        engine reads it to tell an attempt queued for a slot from one that stopped moving."""
+        budgets = parse_budgets(self._deps.control.settings_get("budgets"))
+        _, held, lent = self._held()
+        return SlotTable(
+            capacity=live_chat_slots(budgets, self._ram_mb),
+            reserve=budgets.interactive_reserve,
+            held=tuple(sorted(held - lent)),
+            unattended=tuple(sorted(self._unattended(held - lent))),
+            waiting=tuple(chat for _, chat in sorted(self._waiting.values())),
+        )
+
     async def _take_slot(
-        self, chat: SessionId, cap: int, *, wait: bool, handle: TurnHandle | None = None
+        self,
+        chat: SessionId,
+        budgets: Budgets,
+        *,
+        wait: bool,
+        handle: TurnHandle | None = None,
+        priority: int = 0,
     ) -> None:
         """Hold a slot for `chat` while a send to it runs, closing the least recently used
         idle chat when the table is full. A chat being sent to is never evicted. With no chat
-        idle, `wait` waits until a slot frees; otherwise this raises `ChatTableFull`. A
-        `delegate` child uses the slot of the parent blocked on it (42 N5), so a parent never
-        waits on a child that waits on the parent's slot. Admission is one critical section,
-        so two sends never both take the last slot. A waiting send wakes when a turn ends, a
-        CLI ends or another send lets go; nothing polls."""
-        while True:
-            async with self._admit:
-                while True:
-                    live = [found for found in self._chats.values() if found.is_live]
-                    held = {found.session_id for found in live} | self._sending.keys()
-                    lent = {child for child, parent in self._lenders.items() if parent in held}
-                    if chat in held or chat in lent or len(held - lent) < cap:
-                        self._sending[chat] += 1
-                        return
-                    idle = sorted(
-                        (
-                            found
-                            for found in live
-                            if found.idle_seconds > 0 and found.session_id not in self._sending
-                        ),
-                        key=lambda found: found.idle_seconds,
-                        reverse=True,
-                    )
-                    if not idle:
-                        self._freed.clear()
-                        break
-                    for found in idle:
-                        if await found.close_if_idle(0):
+        idle, `wait` waits until a slot frees; otherwise this raises `ChatTableFull`. A waiting
+        (Background or Child) send also leaves `interactive_reserve` slots to Interactive chats:
+        unattended chats hold at most `background_slots` between them. Waiting sends are served
+        by `priority`, higher first, then by when they began to wait. A `delegate` child uses
+        the slot of the parent blocked on it (42 N5), so a parent never waits on a child that
+        waits on the parent's slot. Admission is one critical section, so two sends never both
+        take the last slot. A waiting send wakes when a turn ends, a CLI ends or another send
+        lets go; nothing polls."""
+        cap = live_chat_slots(budgets, self._ram_mb)
+        own = background_slots(budgets, self._ram_mb)
+        place = next(self._order)
+        if wait:
+            self._waiting[place] = ((-priority, place), chat)
+        try:
+            while True:
+                async with self._admit:
+                    while True:
+                        live, held, lent = self._held()
+                        if chat in held or chat in lent:
+                            self._sending[chat] += 1
+                            return
+                        first = not wait or min(self._waiting.values())[0][1] == place
+                        crowded = wait and len(self._unattended(held - lent)) >= own
+                        if first and not crowded and len(held - lent) < cap:
+                            self._sending[chat] += 1
+                            return
+                        idle = sorted(
+                            (
+                                found
+                                for found in live
+                                if found.idle_seconds > 0
+                                and found.session_id not in self._sending
+                                and (not crowded or self._unattended({found.session_id}))
+                            ),
+                            key=lambda found: found.idle_seconds,
+                            reverse=True,
+                        )
+                        if not first or not idle:
+                            self._freed.clear()
                             break
-                if not wait:
-                    busy = sorted(held - lent)
-                    full = ChatTableFull(cap, tuple(busy))
-                    await self._needs_you(chat, str(full), busy=busy)
-                    raise full
-            if handle is not None:
-                handle.on_queued()
-            await self._freed.wait()
+                        for found in idle:
+                            if await found.close_if_idle(0):
+                                break
+                    if not wait:
+                        busy = sorted(held - lent)
+                        full = ChatTableFull(cap, tuple(busy))
+                        await self._needs_you(chat, str(full), busy=busy)
+                        raise full
+                if handle is not None:
+                    handle.on_queued()
+                await self._freed.wait()
+        finally:
+            if self._waiting.pop(place, None) is not None:
+                self._freed.set()
 
     async def _delegate(self, parent: SessionId, profile: str, prompt: str) -> str:
         """Backs `mcp__qmx__delegate`. Refuses a profile outside `Profiles.delegate_targets`.
@@ -904,9 +983,7 @@ class Harness:
         and connects first, as a send does. Raises `RewindRefused` mid-turn or for an id with
         no checkpoint."""
         found = self._chat(chat)
-        await self._take_slot(
-            chat, live_chat_slots(await self._budgets(), self._ram_mb), wait=False
-        )
+        await self._take_slot(chat, await self._budgets(), wait=False)
         try:
             await found.rewind(message_id)
         finally:

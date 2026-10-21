@@ -13,7 +13,9 @@ rows the role names itself (a provider-proof lane), then the plan's cheap end `c
 
 QMX sets no usage limit of its own (ruling 106, AD-40): there is no runaway guard, no turn,
 tool-call or run-time ceiling and no background share here. `timeout.*` and `loop.*` feed the stuck
-detector, which asks whether an attempt still moves, never how much it used.
+detector, which asks whether an attempt still moves, never how much it used. `placement.pc.*_slots`
+are machine capacity per resource class (AD-58); chat slots and the Interactive reserve live in the
+harness slot table, the only chat-slot counter, under `[budgets]`.
 """
 
 from __future__ import annotations
@@ -41,7 +43,6 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "scheduler.lease_seconds": 300,  # Claude's default, UI-editable
         "scheduler.heartbeat": 60,  # Claude's default, UI-editable
         "scheduler.grace": 900,  # Claude's default, UI-editable
-        "limits.interactive_reserve": 2,  # Claude's default, UI-editable
         "limits.slack": 60,  # Claude's default, UI-editable
         "limits.alert_after": 21_600,  # Claude's default, UI-editable
         "chunk.size": 10,  # Claude's default, UI-editable
@@ -63,7 +64,9 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "crash_loop.restarts": 3,  # Claude's default, UI-editable
         "subworkflow.max_depth": 3,  # Claude's default, UI-editable
         "inline_limit_bytes": 65_536,  # Claude's default, UI-editable
-        "placement.pc.concurrency": 3,  # Claude's default, UI-editable
+        "placement.pc.cpu_slots": None,  # Claude's default, UI-editable; unset is cores minus one
+        "placement.pc.container_slots": 3,  # Claude's default, UI-editable
+        "placement.pc.gpu_slots": None,  # Claude's default, UI-editable; unset is no GPU
         "context_window": 200_000,  # Claude's default, UI-editable
         "roles.triage": _CHEAP,  # Claude's default, UI-editable
         "roles.clarifier": _CHEAP,  # Claude's default, UI-editable

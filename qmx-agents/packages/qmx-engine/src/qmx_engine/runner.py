@@ -16,7 +16,9 @@ work and raises a `black` item.
 
 An `agent` chunk is held at dispatch behind the warm-first gate until the first chunk of its node
 ends a turn (AD-9): it is scheduled but not started, so it writes no `node_started` and the stuck
-detector sees it as a recorded wait.
+detector sees it as a recorded wait. Capacity is the worker's table per resource class (AD-58);
+the run's `priority`, recorded on `run_created` and passed to its subworkflows, orders its waiting
+work against other runs'.
 
 A `limits` block he wrote is recorded on `run_created`; the core holds new attempts once one is
 reached and the run pauses. For `wall_seconds` the runner records the run's active time, outside
@@ -53,7 +55,7 @@ from pydantic import JsonValue
 from qma.harness import Pulse
 from qmx_ledger.journal import fingerprint
 
-from qmx_engine.admission import Admission
+from qmx_engine.admission import Admission, Capacity
 from qmx_engine.core.commands import (
     Climb,
     Finish,
@@ -226,10 +228,7 @@ class Engine:
         self.home = home
         self.ledger = ledger
         self.settings = settings
-        concurrency = settings.get("placement.pc.concurrency")
-        self.worker = worker or LocalWorker(
-            concurrency=concurrency if isinstance(concurrency, int) else 1
-        )
+        self.worker = worker or LocalWorker(Capacity.of(settings))
         self.wall = wall
         self.executors = executors or {}
         self.doctor = doctor
@@ -272,8 +271,10 @@ class Engine:
         parent_run_id: str | None = None,
         call_depth: int = 0,
         fake: bool = False,
+        priority: int = 0,
     ) -> Outcome:
-        """`fake` is the per-run switch that answers model nodes with the fake provider."""
+        """`fake` is the per-run switch that answers model nodes with the fake provider.
+        `priority` orders the run's waiting work against other runs', higher first (AD-58)."""
         if not self.claiming:
             raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
@@ -281,7 +282,16 @@ class Engine:
             with Reader.open(self.home) as reader:
                 if reader.events(run_id):
                     raise Refused(f"run {run_id} already exists")
-        run = Run(self, root, workflow, run_id, mode=mode, call_depth=call_depth, fake=fake)
+        run = Run(
+            self,
+            root,
+            workflow,
+            run_id,
+            mode=mode,
+            call_depth=call_depth,
+            fake=fake,
+            priority=priority,
+        )
         run.create(inputs, parent_run_id)
         return await run.drive()
 
@@ -302,6 +312,7 @@ class Engine:
             raise Refused(f"the run's folder no longer runs: {codes}")
         mode: Mode = "live" if created.get("mode") == "live" else "test"
         depth = created.get("call_depth")
+        priority = created.get("priority")
         run = Run(
             self,
             root,
@@ -310,6 +321,7 @@ class Engine:
             mode=mode,
             call_depth=depth if isinstance(depth, int) else 0,
             fake=created.get("fake") is True,
+            priority=priority if isinstance(priority, int) else 0,
         )
         run.events = events
         run.woke = woke
@@ -338,9 +350,11 @@ class Run:
         mode: Mode,
         call_depth: int,
         fake: bool = False,
+        priority: int = 0,
     ) -> None:
         self.engine = engine
         self.fake = fake
+        self.priority = priority
         self.root = root.resolve()
         self.definition = workflow
         self.run_id = run_id
@@ -386,6 +400,7 @@ class Run:
                 parent_run_id=self.run_id,
                 call_depth=self.call_depth + 1,
                 fake=self.fake,
+                priority=self.priority,
             )
 
         built: dict[str, AnyExecutor] = {
@@ -497,6 +512,7 @@ class Run:
                 "content_hash": content_hash(load(self.root)),
                 "parent_run_id": parent_run_id,
                 "call_depth": self.call_depth,
+                "priority": self.priority,
             },
         )
         self.write("run_input", {"inputs": inputs})
@@ -737,6 +753,7 @@ class Run:
             resolved_model=self.resolved(node, command.ladder),
             pinned_outputs=pinned_outputs(pinned) if pinned is not None else None,
             session=session,
+            priority=self.priority,
         )
         executor = self.executors.get(kind.name if kind is not None else "")
         gate = executor.hold(job) if isinstance(executor, Agent) else None

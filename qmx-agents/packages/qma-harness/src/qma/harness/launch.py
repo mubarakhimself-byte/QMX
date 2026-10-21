@@ -291,7 +291,9 @@ class Budgets:
     QMX sets no usage limit of its own (ruling 106): `background_cap`, `max_turns` and
     `max_budget_usd` stay unset unless the operator writes them, and then bound Background and
     Child chats only. `max_live_chats` is machine capacity, not usage: `live_chat_slots`
-    derives it from RAM, and a value written here may only lower it (AD-30)."""
+    derives it from RAM, and a value written here may only lower it (AD-30).
+    `interactive_reserve` is how many of those slots Background and Child chats leave for
+    Interactive ones (AD-58)."""
 
     max_live_chats: int | None = None
     session_mb: int = 1536
@@ -302,6 +304,7 @@ class Budgets:
     """The operator's own share of the plan's five-hour window, above 0 and at most 1."""
     max_turns: int | None = None
     max_budget_usd: float | None = None
+    interactive_reserve: int = 2
 
 
 def live_chat_slots(budgets: Budgets, ram_mb: int) -> int:
@@ -309,6 +312,12 @@ def live_chat_slots(budgets: Budgets, ram_mb: int) -> int:
     `max_live_chats`."""
     derived = max(1, (ram_mb - budgets.overhead_mb) // budgets.session_mb)
     return derived if budgets.max_live_chats is None else min(derived, budgets.max_live_chats)
+
+
+def background_slots(budgets: Budgets, ram_mb: int) -> int:
+    """The slots a Background or Child chat may hold: `live_chat_slots` less the reserve, and at
+    least 1, so unattended work on a small machine still runs one chat at a time."""
+    return max(1, live_chat_slots(budgets, ram_mb) - budgets.interactive_reserve)
 
 
 def machine_ram_mb() -> int:
@@ -337,6 +346,11 @@ def parse_budgets(raw: Mapping[str, object]) -> Budgets:
         log.warning("[budgets] %s = %r is out of range; using %s", name, value, fallback)
         return fallback
 
+    found, reserve = raw.get("interactive_reserve"), default.interactive_reserve
+    if isinstance(found, int) and not isinstance(found, bool) and found >= 0:
+        reserve = found
+    elif found is not None:
+        log.warning("[budgets] interactive_reserve = %r is out of range; using %s", found, reserve)
     return Budgets(
         max_live_chats=number("max_live_chats", whole=True),
         session_mb=number("session_mb", whole=True),
@@ -346,6 +360,7 @@ def parse_budgets(raw: Mapping[str, object]) -> Budgets:
         background_cap=number("background_cap", at_most=1),
         max_turns=number("max_turns", whole=True),
         max_budget_usd=number("max_budget_usd"),
+        interactive_reserve=reserve,
     )
 
 

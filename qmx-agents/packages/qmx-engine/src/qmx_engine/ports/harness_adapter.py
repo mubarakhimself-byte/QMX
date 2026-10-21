@@ -15,7 +15,8 @@ the caller reconciles against what the hooks reported.
 
 `activity` is what the stuck detector reads while a turn runs: the tool calls the session blocks
 show since the latest send, with their arguments and results, whether the turn still runs, and the
-chat's CLI process, whose children run its tools.
+chat's CLI process, whose children run its tools. `queued` tells it a send that waits for a slot
+in the harness slot table, so that wait is never judged idle.
 """
 
 from __future__ import annotations
@@ -34,7 +35,6 @@ from qma.harness import (
     AskId,
     Background,
     ChatHooks,
-    ChatTableFull,
     Harness,
     InjectedText,
     LaunchRefused,
@@ -66,10 +66,6 @@ class Refusal(Exception):
 
 class CompactRefused(Refusal):
     """The harness refused the chat's `compact_at` or `hooks`; nothing was launched."""
-
-
-class ChatsFull(Exception):
-    """Every live chat slot was busy, so the send could not run."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,7 +155,14 @@ class HarnessPort(Protocol):
         hooks: ChatHooks | None = None,
     ) -> str: ...
 
-    async def send(self, chat: str, text: str) -> None: ...
+    async def send(self, chat: str, text: str, *, priority: int = 0) -> None:
+        """Returns once the prompt is sent. A send waits in the harness slot table, the only
+        chat-slot counter, served by `priority` and then age (AD-58)."""
+        ...
+
+    def queued(self, chat: str) -> bool:
+        """Whether the chat's send waits for a slot: a recorded wait, never an idle attempt."""
+        ...
 
     async def wait_turn(
         self, chat: str, *, timeout: float | None = None, idle: float | None = None
@@ -243,14 +246,15 @@ class HarnessAdapter:
         except LaunchRefused as refused:
             raise Refusal(str(refused)) from None
 
-    async def send(self, chat: str, text: str) -> None:
+    async def send(self, chat: str, text: str, *, priority: int = 0) -> None:
         self.marks[chat] = (self._last_event(chat), len(self._journal(chat)))
         try:
-            await self.harness.send(SessionId(chat), InjectedText(text))
+            await self.harness.send(SessionId(chat), InjectedText(text), priority=priority)
         except LaunchRefused as refused:
             raise Refusal(str(refused)) from None
-        except ChatTableFull as full:
-            raise ChatsFull(str(full)) from None
+
+    def queued(self, chat: str) -> bool:
+        return SessionId(chat) in self.harness.slot_table().waiting
 
     async def wait_turn(
         self, chat: str, *, timeout: float | None = None, idle: float | None = None

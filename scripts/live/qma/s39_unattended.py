@@ -55,7 +55,7 @@ async def run(log: Log) -> None:
     ).start()
     root = throwaway_home("hp11-s39")
     put_providers(root, {"fake": direct_row(fake.url)})
-    put_budgets(root, max_live_chats=2, unattended_ask_seconds=ASK_S)
+    put_budgets(root, max_live_chats=2, interactive_reserve=0, unattended_ask_seconds=ASK_S)
     session = await Session.start(
         root,
         model="opus",
