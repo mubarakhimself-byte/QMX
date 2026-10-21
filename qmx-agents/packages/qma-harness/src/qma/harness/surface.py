@@ -52,6 +52,7 @@ from qma.harness.launch import (
     Interactive,
     SubAgent,
 )
+from qma.harness.packs import View, views_in
 
 if TYPE_CHECKING:
     from qma.harness.home import QmxHome
@@ -260,6 +261,10 @@ class SlotSource(Protocol):
         """QMX's own skills by `plugin:skill` name, each with its one-line description."""
         ...
 
+    def plugin_views(self, packs: Sequence[str]) -> tuple[View, ...]:
+        """The verified pack views for a chat whose set is `packs`, plus `library-skills`."""
+        ...
+
 
 def _contents(paths: Sequence[Path]) -> str:
     return "\n\n".join(
@@ -320,6 +325,11 @@ class HomeSlots:
         found = sorted((self.home.plugin_dir / "skills").glob("*/SKILL.md"))
         return {f"qmx:{path.parent.name}": _description(path) for path in found}
 
+    def plugin_views(self, packs: Sequence[str]) -> tuple[View, ...]:
+        """The pack set's views whose bytes still hold, plus `library-skills`. A view that no
+        longer holds is left out here and named by one doctor line (AD-55)."""
+        return views_in(self.home.packs_dir, packs)
+
 
 @dataclass(frozen=True)
 class Supply:
@@ -352,6 +362,10 @@ class Surface:
     agents: Mapping[str, SubAgent]
     skills: tuple[str, ...]
     plugins: tuple[Path, ...]
+    views: tuple[View, ...]
+    """The pack views this launch loads, and `library-skills` when it was materialised. Their
+    names are the `plugin:skill` prefixes the CLI reports, so the launch's own allow-list is
+    read from here rather than from a fixed pair of names (AD-55)."""
     slots: tuple[Slot, ...]
     spills: Mapping[str, str]
     """Each spilled slot's skill folder name and its `SKILL.md` text."""
@@ -373,6 +387,7 @@ class Surface:
             "agents": sorted(self.agents),
             "skills": list(self.skills),
             "plugins": [path.as_posix() for path in self.plugins],
+            "views": [view.name for view in self.views],
             "slots": {
                 slot.name: {"chars": len(slot.text), "full": slot.size, "spilled": slot.spilled}
                 for slot in self.slots
@@ -591,9 +606,14 @@ def build(
     workspace: Path,
     parent: Surface | None = None,
 ) -> Surface:
-    """Everything one launch of a chat gets. Pure but for reading slot texts."""
+    """Everything one launch of a chat gets. Reads slot texts and the pack views on disk."""
     own = supply.slots.skills()
+    views = supply.slots.plugin_views(packs)
     skills = list(_skills(wanted, own, parent))
+    from_views = [f"{view.name}:{name}" for view in views for name in view.skills]
+    if parent is not None:
+        from_views = [name for name in from_views if name in parent.skills]
+    skills += from_views
     builtins = _builtins(kind, wanted, bool(skills), parent)
     toolsets = _toolsets(kind, home, wanted, supply, parent)
     texts = _texts(kind, home, packs, wanted, supply, toolsets, skills, own, workspace)
@@ -609,7 +629,7 @@ def build(
         slots.append(slot)
         if spilled is not None:
             spills[name] = spilled
-    plugins = supply.plugins
+    plugins = (*supply.plugins, *(view.folder for view in views))
     if spills:
         plugins = (*plugins, supply.spill_dir.parent)
         skills += [f"{SLOTS_PLUGIN}:{name}" for name in spills]
@@ -634,6 +654,7 @@ def build(
         agents=MappingProxyType(agents),
         skills=tuple(skills),
         plugins=plugins,
+        views=views,
         slots=tuple(slots),
         spills=MappingProxyType(spills),
         hooks=tuple(

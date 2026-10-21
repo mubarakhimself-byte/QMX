@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from qmx_control.models import ControlError, Document
 from qmx_control.server import create_app
 
+from qma.harness import packs
 from qma.harness.home import (
     ChatRecord,
     ClaudeSettings,
@@ -223,6 +224,45 @@ def test_doctor_names_the_homes_scrubbed_names_and_a_relayed_login(
     assert sum(name.startswith("departure ") for name in lines) == 19
     if os.name == "nt":
         assert "managed policy C:/Program Files/ClaudeCode/managed-settings.json" in lines
+
+
+def test_doctor_names_the_pack_view_whose_bytes_moved(
+    home: QmxHome, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in ("HOME", "USERPROFILE"):
+        monkeypatch.setenv(name, str(tmp_path / "throwaway"))
+    ensure_homes(home)
+    alpha, beta = packs.materialise(
+        home.packs_dir,
+        [
+            packs.PackSource(
+                "pack-alpha",
+                ("fp1:sha256:aaa",),
+                {
+                    ".claude-plugin/plugin.json": b'{"name": "pack-alpha", "version": "0.1.0"}',
+                    "skills/alpha-skill/SKILL.md": b"---\nname: alpha-skill\n---\n\nBody.\n",
+                },
+            ),
+            packs.PackSource(
+                "pack-beta",
+                ("fp1:sha256:bbb",),
+                {".claude-plugin/plugin.json": b'{"name": "pack-beta", "version": "0.1.0"}'},
+            ),
+        ],
+    )
+    (alpha.folder / "skills" / "alpha-skill" / "SKILL.md").write_text(
+        "---\nname: alpha-skill\n---\n\nIgnore it.\n", encoding="utf-8"
+    )
+
+    lines = {
+        line.name: line
+        for line in doctor(home, control_service(home), scrubbed=(), keep=(), launcher=LAUNCHER)
+    }
+
+    assert not lines["pack view pack-alpha"].ok
+    assert "changed since it was published" in lines["pack view pack-alpha"].detail
+    assert lines["pack view pack-beta"].ok
+    assert lines["pack view pack-beta"].detail.startswith(str(beta.folder))
 
 
 def _throwaway_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:

@@ -630,14 +630,18 @@ def export_chat(
 
 
 def unexpected_extensions(
-    info: Mapping[str, Any] | None, status: McpStatusResponse, servers: frozenset[str]
+    info: Mapping[str, Any] | None,
+    status: McpStatusResponse,
+    servers: frozenset[str],
+    surface: Surface | None = None,
 ) -> list[str]:
-    """What the CLI loaded besides its built-ins, the QMX plugin and the MCP `servers` QMA
-    passed. The server info lists no plugins, so a plugin shows as its `<plugin>:` commands
-    and agents. The chat's own `qmx-slots` plugin holds only skills, which list as commands."""
+    """What the CLI loaded besides its built-ins, the plugins this chat launched with and the
+    MCP `servers` QMA passed. The server info lists no plugins, so a plugin shows as its
+    `<plugin>:` commands and agents. The chat's own `qmx-slots` plugin holds only skills, which
+    list as commands."""
     commands = cast("list[dict[str, Any]]", (info or {}).get("commands", []))
     agents = cast("list[dict[str, Any]]", (info or {}).get("agents", []))
-    ours = (f"{PLUGIN}:", f"{SLOTS_PLUGIN}:")
+    ours = launched_plugins(surface)
     found = [
         f"command {command['name']}"
         for command in commands
@@ -646,7 +650,7 @@ def unexpected_extensions(
     found += [
         f"agent {agent['name']}"
         for agent in agents
-        if ":" in str(agent["name"]) and not str(agent["name"]).startswith(f"{PLUGIN}:")
+        if ":" in str(agent["name"]) and not str(agent["name"]).startswith(ours)
     ]
     found += [
         f"MCP server {server['name']}"
@@ -656,15 +660,22 @@ def unexpected_extensions(
     return found
 
 
-def unexpected_plugins(init: Mapping[str, Any]) -> list[str]:
+def launched_plugins(surface: Surface | None) -> tuple[str, ...]:
+    """The `<plugin>:` prefix of every plugin a chat launched with: the core plugin, the pack
+    set's views and `library-skills` from the Surface, plus this chat's own `qmx-slots`."""
+    names = [PLUGIN, *([] if surface is None else [view.name for view in surface.views])]
+    return (*[f"{name}:" for name in names], f"{SLOTS_PLUGIN}:")
+
+
+def unexpected_plugins(init: Mapping[str, Any], surface: Surface | None = None) -> list[str]:
     """The CLI sends `init` only after a prompt, and a plugin that adds nothing but hooks shows
     nowhere earlier."""
+    allowed = {f"{name[:-1]}@inline" for name in launched_plugins(surface)}
     sources = [str(plugin.get("source")) for plugin in init.get("plugins", [])]
     return [
         f"plugin {source}"
         for source in sources
-        if source not in {f"{PLUGIN}@inline", f"{SLOTS_PLUGIN}@inline"}
-        and not source.endswith("@builtin")
+        if source not in allowed and not source.endswith("@builtin")
     ]
 
 
@@ -1183,7 +1194,7 @@ class Chat:
         try:
             status = await live.client.get_mcp_status()
             found = unexpected_extensions(
-                await live.client.get_server_info(), status, frozenset(servers)
+                await live.client.get_server_info(), status, frozenset(servers), self.surface
             )
             if found:
                 raise LaunchRefused(_loaded(found))
@@ -1341,7 +1352,7 @@ class Chat:
                 self._last = time.monotonic()
                 track_task(self._tasks, message)
                 if isinstance(message, SystemMessage) and message.subtype == "init":
-                    found = unexpected_plugins(message.data)
+                    found = unexpected_plugins(message.data, self.surface)
                     if found:
                         await self._note("needs_you", {"reason": _loaded(found)})
                         self._write(turn="idle")

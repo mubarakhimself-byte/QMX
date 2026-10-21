@@ -44,6 +44,7 @@ from qmx_control.context import AttachedRef
 from qmx_router.ids import SessionId
 
 from qma.boot import banned_fragment
+from qma.harness import packs
 from qma.harness.guard import SECRET_SHAPES
 from qma.harness.launch import (
     ARGV_BUDGET,
@@ -76,31 +77,23 @@ if TYPE_CHECKING:
 PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
 """`qmx-agents/plugin/`, QMX's shipped skills, agents, commands and rules."""
 
-PLUGIN_SHA256: Final = "f7609bea559d247cc95eb762707d739efeebd9bcefed3bc6c25262fb39672185"
-"""`plugin_digest(PLUGIN_DIR)` as shipped. The CLI reloads the plugin at every launch and
-only bypassable rules guard its folder, so a launch refuses any other content. Update this
-with any edit to the plugin."""
 
-
-def plugin_digest(folder: Path) -> str:
-    """sha256 over each file's path relative to `folder` and its bytes, CRLF read as LF so a
-    Windows checkout hashes as the commit does."""
-    digest = hashlib.sha256()
-    files = sorted((path.relative_to(folder).as_posix(), path) for path in folder.rglob("*"))
-    for name, path in files:
-        if path.is_file():
-            digest.update(name.encode() + b"\0" + path.read_bytes().replace(b"\r\n", b"\n"))
-    return digest.hexdigest()
+plugin_digest: Final = packs.folder_digest
+"""The digest of a plugin folder, under the name the live lanes call it by."""
 
 
 def plugin_refusal(home: QmxHome) -> str | None:
     """Why this launch may not load `home.plugin_dir`, or None. A `!` shell line in a command,
-    skill or agent body runs outside every hook, so the gate never sees it."""
+    skill or agent body runs outside every hook, so the gate never sees it. Otherwise the folder
+    is checked against its manifest, or against `plugin_sha256` when a lane is testing a plugin
+    of its own."""
     folder = home.plugin_dir
     for path in sorted(folder.rglob("*.md")):
         if "!`" in path.read_text(encoding="utf-8", errors="replace"):
             name = path.relative_to(folder).as_posix()
             return f"the QMX plugin runs shell lines outside every hook ({name})"
+    if home.plugin_sha256 is None:
+        return packs.manifest_refusal(folder)
     found = plugin_digest(folder)
     if found != home.plugin_sha256:
         return (
@@ -120,12 +113,19 @@ def session_id(text: str) -> SessionId:
 class QmxHome:
     root: Path
     plugin_dir: Path = PLUGIN_DIR
-    plugin_sha256: str = PLUGIN_SHA256
-    """What `plugin_digest(plugin_dir)` must be at each launch."""
+    plugin_sha256: str | None = None
+    """What `plugin_digest(plugin_dir)` must be at each launch. None checks the shipped
+    `plugin.manifest.json` instead, which names the file that changed; a live lane testing a
+    plugin of its own passes that folder's own digest here."""
 
     @property
     def plan_dir(self) -> Path:
         return self.root / "claude"
+
+    @property
+    def packs_dir(self) -> Path:
+        """Where each pack's materialised plugin view sits, one folder per pack."""
+        return self.root / "plugins"
 
     @property
     def relayed_dir(self) -> Path:
@@ -955,6 +955,22 @@ def _home_lines(home: QmxHome) -> list[DoctorLine]:
     return lines
 
 
+def _pack_lines(home: QmxHome) -> list[DoctorLine]:
+    """One line per materialised pack view: whether its bytes still match what was published.
+    A view that no longer holds is not loaded, and this is the line that names it."""
+    found = packs.survey(home.packs_dir, packs.names(home.packs_dir))
+    lines = [
+        DoctorLine(
+            f"pack view {view.name}",
+            True,
+            f"{view.folder}, {len(view.skills)} skills, {len(view.objects)} objects",
+        )
+        for view in found.views
+    ]
+    lines += [DoctorLine(f"pack view {name}", False, reason) for name, reason in found.refusals]
+    return lines
+
+
 def _hooks_outline(hooks: dict[str, list[dict[str, Any]]], launcher: Path) -> dict[str, Any]:
     fixed = config_change_hook(launcher)
     return {
@@ -1035,6 +1051,7 @@ def doctor(
         DoctorLine("sdk", True, f"claude-agent-sdk {sdk}"),
         DoctorLine("cli", cli_ok, f"bundled CLI {cli}, floor {'.'.join(map(str, CLI_FLOOR))}"),
         *_home_lines(home),
+        *_pack_lines(home),
     ]
     try:
         user = parse_claude_settings(control.settings_get("claude"))
