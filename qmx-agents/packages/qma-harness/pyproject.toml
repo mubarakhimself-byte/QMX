@@ -10,6 +10,7 @@ dependencies = [
     "qmx-broker",
     "qma-core",
     "qmx-ledger",
+    "qmx-router",
     "keyring==25.7.0",
     "httpx==0.28.1",
     "pyjwt[crypto]==2.15.1",
@@ -40,6 +41,7 @@ qmx-tools = { workspace = true }
 qmx-broker = { workspace = true }
 qma-core = { workspace = true }
 qmx-ledger = { workspace = true }
+qmx-router = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -67,7 +69,7 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests"]
-extraPaths = ["src"]
+extraPaths = ["src", "../qmx-router/src"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 

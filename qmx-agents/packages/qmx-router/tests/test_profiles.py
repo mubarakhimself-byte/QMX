@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from qma.harness.profiles import (
+from qmx_router.profiles import (
     PLAN,
     BaseUrl,
     ClaudePlan,

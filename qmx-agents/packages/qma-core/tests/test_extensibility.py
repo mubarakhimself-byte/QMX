@@ -148,6 +148,7 @@ def test_qma_ui_contract_placeholder_is_not_shipped() -> None:
         "packages/qmx-engine",
         "packages/qmx-host",
         "packages/qmx-library",
+        "packages/qmx-router",
     }
     assert "packages/qma-ui-contract" not in members
     assert "qma-ui-contract" in text

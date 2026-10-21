@@ -10,6 +10,7 @@ import pytest
 from claude_agent_sdk import AssistantMessage, TextBlock
 from claude_agent_sdk._internal.message_parser import parse_message
 from qmx_ledger.journal import RunJournal
+from qmx_router.readings import usage_page
 
 from qma.harness.home import DoctorLine
 from qma.harness.project import (
@@ -27,7 +28,6 @@ from qma.harness.usage import (
     plan_row,
     token_sums,
     usage_lines,
-    usage_page,
 )
 
 T0 = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)

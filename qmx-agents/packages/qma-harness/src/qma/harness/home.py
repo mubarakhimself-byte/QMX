@@ -37,9 +37,10 @@ from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import PermissionResultDeny
+from qmx_router.ids import SessionId
 
 from qma.boot import banned_fragment
 from qma.harness.guard import SECRET_SHAPES
@@ -70,8 +71,6 @@ if TYPE_CHECKING:
     from qmx_control.models import Document
     from qmx_control.service import ControlService
 
-SessionId = NewType("SessionId", str)
-"""The qmx-control session UUID, also the SDK session id and the launcher's chat id."""
 
 PLUGIN_DIR: Final = Path(__file__).resolve().parents[5] / "plugin"
 """`qmx-agents/plugin/`, QMX's shipped skills, agents, commands and rules."""

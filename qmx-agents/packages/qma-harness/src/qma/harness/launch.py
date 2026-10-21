@@ -36,10 +36,10 @@ from typing import TYPE_CHECKING, Any, Final, Literal, cast
 import psutil
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
+from qmx_router.profiles import TIER_ENV, ProfileName
 
 from qma.boot import banned_fragment
 from qma.harness import guard
-from qma.harness.profiles import TIER_ENV, ProfileName
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpServerConfig
@@ -52,9 +52,9 @@ if TYPE_CHECKING:
         HookJSONOutput,
         SystemPromptPreset,
     )
+    from qmx_router.relay import RelayGrant
 
     from qma.harness.home import QmxHome, SessionId
-    from qma.harness.relay import RelayGrant
     from qma.harness.surface import Surface
 
 type PermissionMode = Literal[

@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from itertools import groupby
 from operator import itemgetter
-from typing import Any, Final, Literal, cast, get_args
+from typing import Any, Final, Literal, cast
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -46,6 +46,17 @@ from claude_agent_sdk.types import (
     TaskUpdatedMessage,
 )
 from qmx_control.service import SessionBlock
+from qmx_router.readings import (
+    STATUSES,
+    WINDOWS,
+    Limits,
+    LimitStatus,
+    PlanFact,
+    PlanMeter,
+    Reading,
+    UnreadableLimits,
+    Window,
+)
 
 TOKEN_PATTERN: Final = re.compile(r"sk-ant-[A-Za-z0-9_-]+")
 """Any Claude credential (`sk-ant-oat`, `sk-ant-ort`, `sk-ant-api`). Broader than the relay's
@@ -193,71 +204,6 @@ class TurnUsage:
     model_usage: dict[str, dict[str, int | float]]
     total_cost_usd: float | None
     num_turns: int
-
-
-type LimitStatus = Literal["allowed", "allowed_warning", "rejected"]
-type Window = Literal[
-    "five_hour",
-    "seven_day",
-    "seven_day_opus",
-    "seven_day_sonnet",
-    "seven_day_overage_included",
-    "overage",
-]
-"""The `rateLimitType` values in Claude Code 2.1.296's `rate_limit_info` schema."""
-STATUSES: Final[frozenset[str]] = frozenset(get_args(LimitStatus.__value__))
-WINDOWS: Final[frozenset[str]] = frozenset(get_args(Window.__value__))
-
-
-@dataclass(frozen=True)
-class Reading:
-    """How much of a plan window is used, as a fraction from 0 to 1."""
-
-    window: str
-    utilization: float
-    resets_at: datetime | None
-
-
-@dataclass(frozen=True)
-class Limits:
-    """From `RateLimitEvent`. Every field the SDK's `RateLimitInfo` models, plus what the CLI
-    sends in `raw` that the SDK does not model."""
-
-    window: Window | None
-    status: LimitStatus
-    utilization: float | None
-    resets_at: datetime | None
-    overage_status: LimitStatus | None
-    overage_resets_at: datetime | None
-    overage_disabled_reason: str | None
-    using_overage: bool | None
-    """True if `raw["isUsingOverage"]` or `raw["overageInUse"]` is True; None when both are
-    absent."""
-    overage_enabled: bool | None
-    """`raw["overageEnabled"]`."""
-    credits_required: bool
-    """`raw["errorCode"]` is `credits_required`, or `raw` has a `credits_required` key."""
-    readings: tuple[Reading, ...] = ()
-    """`raw["unifiedWindows"]`: the five-hour and weekly use the CLI reports on any window's
-    event."""
-
-
-@dataclass(frozen=True)
-class UnreadableLimits:
-    """A rate-limit event this code cannot read. The overage stop treats it as paid use."""
-
-    reason: str
-
-
-@dataclass(frozen=True)
-class PlanMeter:
-    """The plan's use as the CLI's `/usage` text states it: the session as `five_hour`, the
-    all-models week as `seven_day`."""
-
-    readings: tuple[Reading, ...]
-
-
-type PlanFact = Limits | UnreadableLimits | PlanMeter
 
 
 @dataclass(frozen=True)

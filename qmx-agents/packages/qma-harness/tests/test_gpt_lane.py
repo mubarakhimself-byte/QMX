@@ -14,18 +14,24 @@ from typing import Any
 
 import httpx
 import pytest
+import qmx_router.relay
 import test_chat
+from qmx_router.gpt import probe
+from qmx_router.gpt.probe import (
+    PROBE_FILE,
+    ProbePassed,
+    ProbeRun,
+    stored_result,
+    translator_version,
+)
+from qmx_router.gpt.siwc import Record, SiwcSession
+from qmx_router.profiles import GptPlan, ProfileName, parse_profiles
+from qmx_router.relay import GrantRefused, Relay, RelayUsage
 from test_chat import run
 
 import qma.harness.harness
-import qma.harness.relay
-from qma.gpt import probe
-from qma.gpt.probe import PROBE_FILE, ProbePassed, ProbeRun, stored_result, translator_version
-from qma.gpt.siwc import Record, SiwcSession
 from qma.harness import Harness, LaunchRefused, NewChat, QmxHome
 from qma.harness.home import SessionId, read_record
-from qma.harness.profiles import GptPlan, ProfileName, parse_profiles
-from qma.harness.relay import GrantRefused, Relay, RelayUsage
 from qma.harness.routes import control_service
 
 CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
@@ -442,7 +448,7 @@ class SlowOpenAI(OpenAI):
 def test_a_stalled_stream_gets_pings_and_still_completes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(qma.harness.relay, "PING_S", 0.1)
+    monkeypatch.setattr(qmx_router.relay, "PING_S", 0.1)
 
     async def body() -> None:
         async with rig(tmp_path, SlowOpenAI()) as found:
