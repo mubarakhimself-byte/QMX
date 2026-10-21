@@ -10,7 +10,8 @@ data keys when present: on `node_started` `parent_span_id role profile account m
 placement effect idempotency_key`; on the ending event `tokens cost_estimate_usd signature verdict
 same_family uncached_resend`; on `compacted` `trigger at_fraction`. A `tool_called` event writes
 one `tool` span (AD-34), a child of its attempt's span, from its `tool` object: `id name
-duration_ms error`.
+duration_ms error`. An attempt's span counts the secrets the ledger redacted from any of its events
+(`redactions`, AD-37); it never records a value.
 """
 
 from __future__ import annotations
@@ -69,6 +70,7 @@ class Span:
     """A tool span's tool."""
     duration_ms: int | None = None
     error: str | None = None
+    redactions: int = 0
 
     @property
     def duration_seconds(self) -> float | None:
@@ -216,21 +218,26 @@ def _run_mode(connection: sqlite3.Connection, run_id: str) -> str | None:
     return mode if isinstance(mode, str) else None
 
 
-def apply(connection: sqlite3.Connection, event: Event) -> None:
-    """Write the span change `event` makes, if any. Runs on the writer thread."""
+def apply(connection: sqlite3.Connection, event: Event, redactions: int = 0) -> None:
+    """Write the span change `event` makes, if any, and add the event's `redactions` to its
+    attempt's span. Runs on the writer thread."""
     key = attempt_of(event.data)
     if key is None:
         return
     if event.kind == "node_started":
-        _save(connection, started(event, key, _run_mode(connection, event.run_id)))
+        made = started(event, key, _run_mode(connection, event.run_id))
+        _save(connection, replace(made, redactions=redactions))
         return
-    if event.kind == "tool_called":
-        if (child := tool(event, key)) is not None:
-            _save(connection, child)
-        return
-    if event.kind not in ENDINGS and event.kind != "compacted":
+    if event.kind == "tool_called" and (child := tool(event, key)) is not None:
+        _save(connection, replace(child, redactions=redactions))
+    changes = event.kind in ENDINGS or event.kind == "compacted"
+    if not changes and redactions == 0:
         return
     span = _load(connection, span_id(event.run_id, key))
     if span is None:
         return
-    _save(connection, ended(span, event) if event.kind in ENDINGS else compacted(span, event))
+    if event.kind in ENDINGS:
+        span = ended(span, event)
+    elif event.kind == "compacted":
+        span = compacted(span, event)
+    _save(connection, replace(span, redactions=span.redactions + redactions))

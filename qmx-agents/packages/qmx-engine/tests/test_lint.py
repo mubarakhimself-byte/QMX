@@ -151,3 +151,31 @@ def test_only_a_limit_he_wrote_below_one_is_refused(tmp_path: Path) -> None:
         ("limit_below_one", "settings.limits.wall_seconds"),
         ("limit_below_one", "nodes[1].limits.tool_calls"),
     ]
+
+
+def with_credentials(tmp_path: Path, credentials: dict[str, str]) -> Path:
+    folder = Path(shutil.copytree(FIXTURES / "script-chain", tmp_path / "wf"))
+    path = folder / "definition.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["nodes"][1]["credentials"] = credentials
+    path.write_text(json.dumps(document), encoding="utf-8")
+    return folder
+
+
+def test_a_node_names_only_a_tool_key(tmp_path: Path) -> None:
+    refused = with_credentials(
+        tmp_path / "refused", {"broker": "qmx/ctrader", "llm": "qmx/openrouter"}
+    )
+    allowed = with_credentials(tmp_path / "allowed", {"search": "qmx/tool/serp"})
+
+    assert problems(refused) == [
+        ("credential_not_tool_key", "nodes[1].credentials.broker"),
+        ("credential_not_tool_key", "nodes[1].credentials.llm"),
+    ]
+    assert problems(allowed) == []
+
+
+def test_a_key_glued_to_a_word_is_refused_as_a_literal(tmp_path: Path) -> None:
+    folder = with_parameters(tmp_path, {"note": "key_sk-or-" + "v1-" + "f0" * 32})
+
+    assert problems(folder) == [("secret_literal", "nodes[1].parameters.note")]

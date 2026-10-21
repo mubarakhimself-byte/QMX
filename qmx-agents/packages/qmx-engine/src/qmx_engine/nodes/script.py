@@ -27,6 +27,7 @@ from typing import Final
 
 from pydantic import JsonValue
 
+from qmx_engine.ledger.redact import redact
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
 from qmx_engine.workers.effects import idempotency_key
@@ -143,7 +144,8 @@ async def run_process(
 def failed(
     code: str, message: str, *, retryable: bool, effect_state: EffectState = "before"
 ) -> Failed:
-    message = message[-MESSAGE_LIMIT:]
+    """Redacted before it is cut to its tail, so a cut never leaves half a key no shape matches."""
+    message = redact(message)[-MESSAGE_LIMIT:]
     return Failed(code, message, signature(code, message), retryable, effect_state)
 
 

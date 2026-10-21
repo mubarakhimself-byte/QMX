@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from qmx_engine.ledger.events import JsonObject
+from qmx_engine.ledger.redact import redact, register
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, Transaction
 
 AT = "2026-10-17T09:00:00+00:00"
@@ -182,3 +183,68 @@ def test_a_span_row_per_attempt_from_its_start_and_end(tmp_path: Path) -> None:
         ("n1", 1, "failed", 4.0, "test", "haiku", {"in": 10, "out": 2}),
         ("n1", 2, None, None, "test", None, {}),
     ]
+
+
+HEX = "0123456789abcdef" * 4
+"""Planted fakes, built from parts so no source line holds a whole key shape."""
+
+
+@pytest.mark.parametrize(
+    ("provider", "text", "expected"),
+    [
+        (
+            "openrouter",
+            "upstream 401 for key_sk-or-" + "v1-" + HEX,
+            "upstream 401 for key_[redacted]",
+        ),
+        ("anthropic", "apikeysk-ant-" + "api03-" + "Zx9" * 14, "apikey[redacted]"),
+        ("openai project", "sk-proj-" + "Ab3" * 14 + " rejected", "[redacted] rejected"),
+        ("openai, deepseek, qwen", "Bearer sk-" + HEX[:32], "Bearer [redacted]"),
+        ("kimi", "token=sk-" + "kM2" * 16, "token=[redacted]"),
+        ("glued generic", "secret_sk-" + HEX[:32], "secret_[redacted]"),
+        ("glm", "auth " + HEX[:32] + ".AbCdEfGh12345678 bad", "auth [redacted] bad"),
+        ("google", "AIza" + "Sy" + "x7" * 16 + "q", "[redacted]"),
+        ("github", "ghp_" + "a1" * 18, "[redacted]"),
+        ("aws", "AKIA" + "ABCDEFGH" + "23456789", "[redacted]"),
+        (
+            "chatgpt jwt",
+            "eyJ" + "hbGciOiJIUzI1" + ".eyJ" + "zdWIiOiIxMjM0" + ".sIg-x_9",
+            "[redacted]",
+        ),
+        (
+            "pem",
+            "-----BEGIN " + "PRIVATE KEY-----\nMIIBVgIB\n-----END " + "PRIVATE KEY-----",
+            "[redacted]",
+        ),
+        ("not a key", "risk-adjusted-returns-model-2026 and mask-0123456789abcdefghij", None),
+    ],
+)
+def test_redact_masks_every_bundled_provider_key_shape(
+    provider: str, text: str, expected: str | None
+) -> None:
+    assert redact(text) == (text if expected is None else expected), provider
+
+
+def test_an_event_with_a_key_commits_redacted_and_its_span_counts_it(tmp_path: Path) -> None:
+    planted = "sk-or-" + "v1-" + HEX
+    register("qmx/tool/feed", "feed-value-" + HEX[:16])
+    attempt: JsonObject = {"node_id": "call", "attempt": 1}
+    failure: JsonObject = {"message": f"401 key_{planted}", "echo": ["feed-value-" + HEX[:16]]}
+    with Ledger.open(tmp_path) as ledger:
+        ledger.append("run", "node_started", attempt, at=AT)
+        returned = ledger.append("run", "node_failed", attempt | failure, at=AT)
+
+    with Reader.open(tmp_path) as reader:
+        [_, stored] = reader.events("run")
+        [span] = reader.spans("run")
+    assert (
+        stored.data
+        == returned.data
+        == attempt
+        | {
+            "message": "401 key_[redacted]",
+            "echo": ["[redacted:qmx/tool/feed]"],
+        }
+    )
+    assert span.redactions == 2
+    assert planted not in (tmp_path / "engine" / "engine.sqlite").read_bytes().decode("latin-1")

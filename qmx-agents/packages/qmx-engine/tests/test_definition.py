@@ -145,8 +145,17 @@ def test_roles_placements_and_credentials_resolve_by_name(tmp_path: Path) -> Non
     }
     (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")
 
-    assert codes(folder) == ["role_unknown", "placement_unknown", "credential_not_ref"]
-    assert codes(folder, roles=frozenset({"poet"})) == ["placement_unknown", "credential_not_ref"]
+    assert codes(folder) == [
+        "role_unknown",
+        "placement_unknown",
+        "credential_not_ref",
+        "credential_not_tool_key",
+    ]
+    assert codes(folder, roles=frozenset({"poet"})) == [
+        "placement_unknown",
+        "credential_not_ref",
+        "credential_not_tool_key",
+    ]
 
 
 def test_an_old_runaway_block_and_run_timeout_fold_to_nothing(tmp_path: Path) -> None:

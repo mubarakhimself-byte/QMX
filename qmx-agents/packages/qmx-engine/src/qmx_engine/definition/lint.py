@@ -1,7 +1,8 @@
 """SOLUTION-DESIGN 2.4 step 4: what no definition may hold, whoever wrote it.
 
 No node writes Settings or creates a trigger, no parameter names a money act (PROMPT-ENGINE
-rule 6, AD-8), no token-shaped literal appears anywhere, a list never fans into a model node by
+rule 6, AD-8), no token-shaped literal appears anywhere (the shapes of `ledger.redact`, AD-37), a
+node's credentials name only `qmx/tool/<name>` keys, a list never fans into a model node by
 `broadcast`, a loop names its `max_iterations` (so every loop ends), and a `human_gate` sits only
 in front of an `irreversible_external` effect. No limit is ever required: QMX sets no usage limit
 of its own (ruling 106, AD-40), and a `limits` value he wrote is refused only below 1.
@@ -26,28 +27,17 @@ from qma.core.barriers.money_path import (
 from qmx_engine.definition.folder import Problem
 from qmx_engine.definition.model import Limits, Workflow, edges
 from qmx_engine.definition.registry import Registry
+from qmx_engine.ledger.redact import SHAPES, redact
+
+__all__ = ["lint", "redact"]
 
 SETTINGS_WRITE: Final = frozenset({"settings_write", "settings_put", "settings_update"})
 TRIGGER_CREATION: Final = frozenset(
     {"workflow_triggers_create", "triggers_create", "trigger_create", "create_trigger"}
 )
-TOKEN_SHAPES: Final = re.compile(
-    r"(?<![A-Za-z0-9_-])(?:"
-    + "|".join(
-        (
-            r"sk-(?=[A-Za-z_-]*[0-9])[A-Za-z0-9_-]{20,}",
-            r"AKIA[0-9A-Z]{16}",
-            r"AIza[0-9A-Za-z_-]{35}",
-            r"xox[baprs]-[0-9A-Za-z-]{10,}",
-            r"gh[pousr]_[A-Za-z0-9]{36,}",
-            r"github_pat_[A-Za-z0-9_]{22,}",
-            r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.",
-            r"-----BEGIN[A-Z ]*PRIVATE KEY-----",
-        )
-    )
-    + ")"
-)
-"""Provider key shapes, each starting a word, so `risk-adjusted-returns` is not an `sk-` key."""
+TOOL_KEY: Final = re.compile(r"qmx/tool/[a-z0-9][a-z0-9_-]{0,39}")
+"""The only credential a node may name: a tool key a Settings `[credentials.tools]` row declares
+(AD-24). Provider keys stay relay-only (AD-28) and broker keys never reach a node."""
 SEGMENTS: Final = re.compile(r"__|[.:]")
 CAMEL: Final = re.compile(r"([a-z0-9])([A-Z])")
 BARE_NOUNS: Final = frozenset(
@@ -63,7 +53,18 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
     yield from (
         Problem("secret_literal", path, "a token-shaped literal; name a qmx/* keyring ref instead")
         for path, text in strings(workflow.model_dump(mode="json", by_alias=True), "")
-        if TOKEN_SHAPES.search(text)
+        if SHAPES.search(text)
+    )
+    # A value that is no qmx/* ref at all is validate's `credential_not_ref`.
+    yield from (
+        Problem(
+            "credential_not_tool_key",
+            f"nodes[{i}].credentials.{name}",
+            "a node names only a qmx/tool/<name> key; provider and broker keys never reach it",
+        )
+        for i, node in enumerate(workflow.nodes)
+        for name, ref in node.credentials.items()
+        if ref.startswith("qmx/") and not TOOL_KEY.fullmatch(ref)
     )
     yield from below_one(workflow.settings.limits, "settings.limits")
     for i, node in enumerate(workflow.nodes):
@@ -125,10 +126,6 @@ def below_one(limits: Limits | None, path: str) -> Iterator[Problem]:
             yield Problem(
                 "limit_below_one", f"{path}.{name}", f"{name} is {value}; a limit is 1 or more"
             )
-
-
-def redact(text: str) -> str:
-    return TOKEN_SHAPES.sub("[redacted]", text)
 
 
 def effect(registry: Registry, type_name: str, declared: str | None) -> str | None:

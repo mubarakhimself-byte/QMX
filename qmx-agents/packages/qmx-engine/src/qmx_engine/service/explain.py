@@ -3,6 +3,9 @@
 For each node, in the order it first appears: its attempts (from the node events), its spans, its
 ladder steps, its waits and its cost so far. For the run: its status and reason from SOLUTION-DESIGN
 3.1, the park's or the wait's detail, and the cost so far. `text` renders it for the CLI.
+
+Every string passes the one redaction (AD-37). The ledger already stores redacted text; this
+covers a ledger written before the seam, since a failure message is quoted verbatim (L-52).
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ from typing import Final, cast
 from pydantic import JsonValue
 
 from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.redact import redact_json
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ports.library import JsonObject
 from qmx_engine.service.runs import status_of
@@ -106,7 +110,7 @@ def explain(events: list[Event], spans: list[Span]) -> JsonObject:
     for node in nodes.values():
         node.cost = cost(totals([], [s for s in spans if s.node_id == node.node_id]))
     state = status_of(events)
-    return {
+    document: JsonObject = {
         "run_id": events[0].run_id if events else None,
         "workflow_id": created.get("workflow_id"),
         "mode": created.get("mode"),
@@ -117,6 +121,7 @@ def explain(events: list[Event], spans: list[Span]) -> JsonObject:
         "cost": cost(totals(events, spans)),
         "nodes": [cast(JsonValue, asdict(node)) for node in nodes.values()],
     }
+    return cast(JsonObject, redact_json(document)[0])
 
 
 def cost(summed: JsonObject) -> JsonObject:

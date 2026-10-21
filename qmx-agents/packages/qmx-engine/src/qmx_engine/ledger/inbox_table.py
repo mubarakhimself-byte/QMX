@@ -3,7 +3,8 @@
 It is its own file, not a table in `engine.sqlite`, because the one fault that most needs an item,
 a ledger that cannot be written, must still be able to raise it (SOLUTION-DESIGN 10.3). The
 engine is the only process that writes it. The category column is checked against the closed set,
-so no other kind of item can be stored.
+so no other kind of item can be stored. An item's title, cause and what was tried pass the one
+redaction (AD-37) before they are stored, so a provider message that echoes a key never lands here.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final, Self, cast
 
+from qmx_engine.ledger.redact import redact
 from qmx_engine.ports.inbox import ACTIONS, SEVERITY, Action, Category, Item, Raise, Severity
 
 BUSY_TIMEOUT_S: Final = 5.0
@@ -89,10 +91,10 @@ class InboxTable:
                 item.signature,
                 item.category.value,
                 item.severity or SEVERITY[item.category],
-                item.title,
-                item.cause,
+                redact(item.title),
+                redact(item.cause),
                 item.node_id,
-                json.dumps(list(item.tried)),
+                json.dumps([redact(step) for step in item.tried]),
                 item.idempotency_key,
                 int(item.blocks_run),
                 json.dumps(list(ACTIONS[item.category])),
