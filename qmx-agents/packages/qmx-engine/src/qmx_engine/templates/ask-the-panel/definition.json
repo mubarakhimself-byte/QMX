@@ -1,0 +1,73 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "ask-the-panel",
+  "name": "Ask several model families and show the spread",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "question": {"type": "string", "description": "the open question the panel answers"},
+      "fixture": {"type": "string", "description": "replay the recorded panel"}
+    }
+  },
+  "outputs": {"type": "object", "description": "the members, their families, where they agree and disagree, and which disagreement matters"},
+  "settings": {
+    "timezone": "Europe/London",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Ask the panel", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "plan", "name": "Seat the panel", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/plan.py"}},
+    {"id": "member_macro", "name": "Macro member", "type": "llm", "typeVersion": 1,
+     "position": [440, -120], "role": "triage", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/macro.md", "schema_ref": "schemas/answer.json",
+                    "recording_ref": "fixtures/recorded/macro.json"}},
+    {"id": "member_positioning", "name": "Positioning member", "type": "llm", "typeVersion": 1,
+     "position": [440, 0], "role": "searcher", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/positioning.md", "schema_ref": "schemas/answer.json",
+                    "recording_ref": "fixtures/recorded/positioning.json"}},
+    {"id": "member_sentiment", "name": "Sentiment member", "type": "llm", "typeVersion": 1,
+     "position": [440, 120], "role": "reviewer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/sentiment.md", "schema_ref": "schemas/answer.json",
+                    "recording_ref": "fixtures/recorded/sentiment.json"}},
+    {"id": "spread", "name": "Build the spread", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/spread.py"}},
+    {"id": "judge", "name": "Judge the panel", "type": "llm", "typeVersion": 1,
+     "position": [880, 0], "role": "judge", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/judge.md", "schema_ref": "schemas/judge.json",
+                    "recording_ref": "fixtures/recorded/judge.json"}},
+    {"id": "assemble", "name": "Assemble the panel card", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1540, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Ask the panel": {"main": [[{"node": "Seat the panel", "port": "in", "map": "one"}]]},
+    "Seat the panel": {"main": [[{"node": "Macro member", "port": "in", "map": "one"},
+                                  {"node": "Positioning member", "port": "in", "map": "one"},
+                                  {"node": "Sentiment member", "port": "in", "map": "one"},
+                                  {"node": "Build the spread", "port": "in", "map": "one"}]]},
+    "Macro member": {"main": [[{"node": "Build the spread", "port": "in", "map": "one"}]]},
+    "Positioning member": {"main": [[{"node": "Build the spread", "port": "in", "map": "one"}]]},
+    "Sentiment member": {"main": [[{"node": "Build the spread", "port": "in", "map": "one"}]]},
+    "Build the spread": {"main": [[{"node": "Judge the panel", "port": "in", "map": "one"},
+                                    {"node": "Assemble the panel card", "port": "in", "map": "one"}]]},
+    "Judge the panel": {"main": [[{"node": "Assemble the panel card", "port": "in", "map": "one"}]]},
+    "Assemble the panel card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {
+      "pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    }
+  },
+  "meta": {"template": "ask-the-panel"}
+}

@@ -1,0 +1,7 @@
+{
+  "labels": [
+    {"item_id": "b-01", "label": "method"},
+    {"item_id": "b-11", "label": "reference"},
+    {"item_id": "b-21", "label": "data"}
+  ]
+}

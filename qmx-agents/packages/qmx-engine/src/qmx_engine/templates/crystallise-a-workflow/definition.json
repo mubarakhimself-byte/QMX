@@ -1,0 +1,77 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "crystallise-a-workflow",
+  "name": "Replace a settled agent step with a script",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "fixture": {"type": "string", "description": "replay the recorded replays and batch"}
+    }
+  },
+  "outputs": {"type": "object", "description": "the rule the replays agree on, its equivalence, the sampling rate and the fallback lines"},
+  "settings": {
+    "timezone": "Europe/London",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Crystallise the step", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "replays", "name": "Read the recorded replays", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/replays.py", "fixture_ref": "fixtures/replays.json"}},
+    {"id": "agree", "name": "Does the script agree on all of them?", "type": "script",
+     "typeVersion": 1, "position": [440, 0], "effect": "none",
+     "parameters": {"script": "scripts/agree.py"}},
+    {"id": "batch", "name": "Classify the batch by the rule", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none",
+     "parameters": {"script": "scripts/batch.py", "batch_ref": "fixtures/batch.json"}},
+    {"id": "sample", "name": "Is anything sampled back to the agent?", "type": "rule",
+     "typeVersion": 1, "position": [880, 0], "effect": "none", "parameters": {"expr": "items.any_sampled"}},
+    {"id": "agent_check", "name": "Ask the agent about the sample", "type": "llm", "typeVersion": 1,
+     "position": [1100, 0], "role": "triage", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/sample.md", "schema_ref": "schemas/sample.json",
+                    "recording_ref": "fixtures/recorded/sample.json"}},
+    {"id": "measure", "name": "Measure script against agent", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/measure.py"}},
+    {"id": "assemble", "name": "Assemble the crystallise card", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1760, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1980, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1980, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Crystallise the step": {"main": [[{"node": "Read the recorded replays", "port": "in",
+                                         "map": "one"}]]},
+    "Read the recorded replays": {"main": [[{"node": "Does the script agree on all of them?",
+                                              "port": "in", "map": "one"}]]},
+    "Does the script agree on all of them?": {"main": [
+      [{"node": "Classify the batch by the rule", "port": "in", "map": "one"},
+       {"node": "Assemble the crystallise card", "port": "in", "map": "one"}]]},
+    "Classify the batch by the rule": {"main": [
+      [{"node": "Is anything sampled back to the agent?", "port": "in", "map": "one"},
+       {"node": "Measure script against agent", "port": "in", "map": "one"}]]},
+    "Is anything sampled back to the agent?": {
+      "true": [[{"node": "Ask the agent about the sample", "port": "in", "map": "one"}]],
+      "false": [[{"node": "Measure script against agent", "port": "in", "map": "one"}]]
+    },
+    "Ask the agent about the sample": {"main": [[{"node": "Measure script against agent",
+                                                   "port": "in", "map": "one"}]]},
+    "Measure script against agent": {"main": [[{"node": "Assemble the crystallise card", "port": "in",
+                                                 "map": "one"}]]},
+    "Assemble the crystallise card": {"main": [[{"node": "Render and grade", "port": "in",
+                                                  "map": "one"}]]},
+    "Render and grade": {
+      "pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    }
+  },
+  "meta": {"template": "crystallise-a-workflow"}
+}

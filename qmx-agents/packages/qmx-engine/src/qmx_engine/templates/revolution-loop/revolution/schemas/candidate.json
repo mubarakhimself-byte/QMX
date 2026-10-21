@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "required": ["idea", "entry", "exit", "threshold", "metric", "stop", "evidence"],
+  "properties": {
+    "idea": {"type": "string", "minLength": 1, "maxLength": 300},
+    "entry": {"type": "string", "minLength": 1, "maxLength": 300},
+    "exit": {"type": "string", "minLength": 1, "maxLength": 300},
+    "threshold": {"type": "number"},
+    "metric": {"enum": ["sharpe", "hit-rate", "expectancy", "profit-factor"]},
+    "stop": {"type": "string", "minLength": 1, "maxLength": 300},
+    "evidence": {"type": "string", "minLength": 1, "maxLength": 120}
+  }
+}

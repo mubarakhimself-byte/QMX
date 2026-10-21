@@ -1,0 +1,67 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "morning-digest",
+  "name": "Morning digest of everything since you last looked",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "fixture": {"type": "string", "description": "replay the recorded digest"}
+    }
+  },
+  "outputs": {"type": "object", "description": "what ran, what landed and what needs him, since his last look"},
+  "settings": {
+    "timezone": "Europe/London",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Every morning at seven", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "cursor", "name": "Where his last look ended", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/cursor.py"}},
+    {"id": "collect", "name": "What landed since", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/collect.py"}},
+    {"id": "write", "name": "Write the digest", "type": "llm", "typeVersion": 1,
+     "position": [660, 0], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/digest.md", "schema_ref": "schemas/digest.json",
+                    "recording_ref": "fixtures/recorded/digest.json"}},
+    {"id": "assemble", "name": "Assemble the digest", "type": "script", "typeVersion": 1,
+     "position": [880, 0], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
+    {"id": "cited", "name": "Every line names what it read", "type": "grader", "typeVersion": 1,
+     "position": [1010, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/cited.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "advance", "name": "Move his cursor forward", "type": "script", "typeVersion": 1,
+     "position": [1540, 0], "effect": "compensable", "parameters": {"script": "scripts/advance.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1320, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Every morning at seven": {"main": [[{"node": "Where his last look ended", "port": "in",
+                                          "map": "one"}]]},
+    "Where his last look ended": {"main": [[{"node": "What landed since", "port": "in",
+                                             "map": "one"}]]},
+    "What landed since": {"main": [[{"node": "Write the digest", "port": "in", "map": "one"},
+                                     {"node": "Assemble the digest", "port": "in", "map": "one"}]]},
+    "Write the digest": {"main": [[{"node": "Assemble the digest", "port": "in", "map": "one"}]]},
+    "Assemble the digest": {"main": [[{"node": "Every line names what it read", "port": "in",
+                                        "map": "one"}]]},
+    "Every line names what it read": {
+      "pass": [[{"node": "Render and grade", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    },
+    "Render and grade": {
+      "pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    },
+    "Deliver": {"main": [[{"node": "Move his cursor forward", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "morning-digest"}
+}

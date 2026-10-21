@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["summary", "figures", "new", "held"],
+  "x-prose": ["summary"],
+  "properties": {
+    "summary": {"type": "string", "minLength": 1},
+    "figures": {
+      "type": "object",
+      "required": ["new", "seen", "scanned"],
+      "properties": {
+        "new": {"type": "integer"},
+        "seen": {"type": "integer"},
+        "scanned": {"type": "integer"}
+      }
+    },
+    "new": {"type": "array"},
+    "held": {"type": "array"},
+    "notes": {"type": "array"}
+  }
+}

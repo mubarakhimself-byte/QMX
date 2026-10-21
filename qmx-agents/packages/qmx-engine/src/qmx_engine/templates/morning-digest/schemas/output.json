@@ -1,0 +1,28 @@
+{
+  "type": "object",
+  "required": ["summary", "figures", "opening", "landed", "needs_you", "quiet", "read_from"],
+  "x-prose": ["summary", "opening", "lines", "moved", "needs_you"],
+  "properties": {
+    "summary": {"type": "string", "minLength": 1},
+    "figures": {
+      "type": "object",
+      "required": ["landed", "ran", "failed"],
+      "properties": {
+        "landed": {"type": "integer"},
+        "ran": {"type": "integer"},
+        "failed": {"type": "integer"}
+      }
+    },
+    "opening": {"type": "string"},
+    "landed": {"type": "array"},
+    "lines": {"type": "array"},
+    "moved": {"type": "array"},
+    "ran": {"type": "array"},
+    "failed": {"type": "array"},
+    "needs_you": {"type": "array"},
+    "quiet": {"type": "boolean"},
+    "read_from": {"type": "integer"},
+    "cursor_to": {"type": "integer"},
+    "problems": {"type": "array"}
+  }
+}

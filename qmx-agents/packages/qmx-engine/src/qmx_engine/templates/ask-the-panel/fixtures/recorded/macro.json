@@ -1,0 +1,9 @@
+{
+  "stance": "bullish",
+  "answer": "The macro backdrop still leans long the euro: the rate path is priced for cuts while the ECB has said it sees no case for another one. Candidates are a long spot position or a call spread; the pick is the call spread, because the range of outcomes is wide. The range I would rely on is a drift of one to two percent over the week, at moderate coverage.",
+  "claims": [
+    {"text": "The rate path is priced for cuts the ECB has not promised", "basis": "retrieved"},
+    {"text": "The euro tends to firm when the rate differential stops widening", "basis": "inferred"},
+    {"text": "A call spread keeps the outcome range bounded", "basis": "inferred"}
+  ]
+}

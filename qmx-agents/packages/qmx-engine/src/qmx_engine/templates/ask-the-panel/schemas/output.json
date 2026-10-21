@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "required": ["summary", "figures", "members", "agreement", "disagreement", "matters_most"],
+  "x-prose": ["summary", "matters_most"],
+  "properties": {
+    "summary": {"type": "string", "minLength": 1},
+    "figures": {
+      "type": "object",
+      "required": ["members", "present", "families", "agreement", "disagreement"],
+      "properties": {
+        "members": {"type": "integer"},
+        "present": {"type": "integer"},
+        "families": {"type": "integer"},
+        "agreement": {"type": "integer"},
+        "disagreement": {"type": "integer"}
+      }
+    },
+    "question": {"type": ["string", "null"]},
+    "members": {"type": "array"},
+    "absent": {"type": "array"},
+    "families": {"type": "array"},
+    "agreement": {"type": "array"},
+    "disagreement": {"type": "array"},
+    "matters_most": {"type": "string"},
+    "agreement_points": {"type": "array"},
+    "disagreement_points": {"type": "array"},
+    "judge": {"type": ["object", "null"]},
+    "judge_same_family_as": {"type": "array"}
+  }
+}

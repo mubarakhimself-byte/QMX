@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["points_of_agreement", "points_of_disagreement", "matters_most"],
+  "properties": {
+    "points_of_agreement": {"type": "array", "maxItems": 5,
+                            "items": {"type": "string", "minLength": 1}},
+    "points_of_disagreement": {"type": "array", "maxItems": 5,
+                               "items": {"type": "string", "minLength": 1}},
+    "matters_most": {"type": "string", "minLength": 1, "maxLength": 600}
+  }
+}

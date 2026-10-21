@@ -1,0 +1,14 @@
+{
+  "notes": [
+    {
+      "name": "london-breakout.md",
+      "summary": "The note argues that a tight overnight range before the London open makes the open's expansion more likely, and that the expansion follows range compression rather than the news. It gives no out-of-sample check.",
+      "hypothesis": "We could test whether a tight overnight range predicts a larger London-open expansion than a wide one."
+    },
+    {
+      "name": "funding-basis.md",
+      "summary": "Negative perpetual funding with a firm spot price is read as crowded shorts, not as a directional signal.",
+      "hypothesis": "We could test whether negative funding with a firm basis precedes a short squeeze."
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "revolution-loop",
+  "name": "Loop a subworkflow until the idea plateaus",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "idea": {"type": "string", "description": "the idea every revolution works on"},
+      "fixture": {"enum": ["first-pass", "plateau"], "description": "replay a recorded revolution"}
+    }
+  },
+  "outputs": {"type": "object", "description": "each revolution, the kept candidate, every negative result and the plateau line"},
+  "settings": {
+    "timezone": "Europe/London",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Start a revolution loop", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "outer", "name": "Each revolution", "type": "loop", "typeVersion": 1,
+     "position": [220, 0], "parameters": {"max_iterations": 3, "predicate": "items.plateau"}},
+    {"id": "revolution", "name": "One revolution", "type": "subworkflow", "typeVersion": 1,
+     "position": [440, 0], "parameters": {"workflow": "revolution"}},
+    {"id": "judge", "name": "Plateau?", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/judge.py"}},
+    {"id": "summary", "name": "Assemble the loop card", "type": "script", "typeVersion": 1,
+     "position": [880, 0], "effect": "none", "parameters": {"script": "scripts/summary.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [1320, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "Start a revolution loop": {"main": [[{"node": "Each revolution", "port": "in", "map": "one"}]]},
+    "Each revolution": {
+      "body": [[{"node": "One revolution", "port": "in", "map": "one"}]],
+      "done": [[{"node": "Assemble the loop card", "port": "in", "map": "one"}]]
+    },
+    "One revolution": {"main": [[{"node": "Plateau?", "port": "in", "map": "one"}]]},
+    "Plateau?": {"main": [[{"node": "Each revolution", "port": "next", "map": "one"}]]},
+    "Assemble the loop card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {
+      "pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+      "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]
+    }
+  },
+  "meta": {"template": "revolution-loop"}
+}
