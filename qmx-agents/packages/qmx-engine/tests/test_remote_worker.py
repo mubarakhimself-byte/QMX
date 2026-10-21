@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from typing import Any
 
 from qmx_ledger.journal import fingerprint
@@ -18,6 +19,7 @@ from qmx_engine.workers.remote import (
     attempt_bundle,
     result_from_document,
     sessions_of,
+    text_hash,
 )
 
 PASS = "pass_" + "a" * 48
@@ -210,5 +212,32 @@ def test_a_wire_result_round_trips_every_ending() -> None:
 def test_a_bundle_carries_files_by_hash() -> None:
     files = {"count.py": "print('{\"count\": 3}')\n"}
     bundle = attempt_bundle(job(), files=files)
-    assert bundle["file_hashes"] == {"count.py": fingerprint(files["count.py"])}
+    assert bundle["file_hashes"] == {"count.py": text_hash(files["count.py"])}
     assert bundle["files"] == files
+
+
+def test_runs_on_in_the_definition_selects_the_machine() -> None:
+    provider = FakeProvider()
+    local = job("pc")
+    routed = replace(local, node_definition={**local.node_definition, "runs_on": "contabo"})
+    result, _ = run(
+        worker(FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}), provider),
+        routed,
+    )
+
+    assert isinstance(result, Ok)
+    assert provider.bundle is not None
+    assert provider.bundle["definition"]["job"]["placement"] == "contabo"
+
+
+def test_a_placed_job_with_code_passes_the_provider_envelope() -> None:
+    provider = FakeProvider()
+    placed = worker(
+        FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}), provider
+    )
+    placed.code = lambda _job: {"count.py": "print('{\"count\": 1}')\n"}
+    result, _ = run(placed, job())
+
+    assert isinstance(result, Ok)
+    assert provider.bundle is not None
+    assert list(provider.bundle["files"]) == ["count.py"]

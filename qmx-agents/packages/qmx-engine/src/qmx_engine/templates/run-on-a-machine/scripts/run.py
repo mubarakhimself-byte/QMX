@@ -12,17 +12,27 @@ import sys
 
 DEFAULT_TIMEOUT = 900
 TAIL = 4_000
+FAILURE = "[QMX_FAILURE]"
+
+
+def given() -> dict:
+    """The node's inputs. A script node reads the payload on its `in` port, and the trigger's
+    edition of the run inputs already carries it; both shapes are accepted."""
+    found = json.load(sys.stdin)
+    if isinstance(found, dict) and isinstance(found.get("in"), dict):
+        return found["in"]
+    return found if isinstance(found, dict) else {}
 
 
 def main() -> int:
-    inputs = json.load(sys.stdin)
+    inputs = given()
     command = inputs.get("command")
     if (
         not isinstance(command, list)
         or not command
         or not all(isinstance(part, str) for part in command)
     ):
-        print("QMX_FAILURE inputs.command must be a non-empty argv list")
+        print(f"{FAILURE} inputs.command must be a non-empty argv list")
         return 0
     timeout = inputs.get("timeout_seconds", DEFAULT_TIMEOUT)
     try:
@@ -34,7 +44,7 @@ def main() -> int:
             check=False,
         )
     except subprocess.TimeoutExpired:
-        print(f"QMX_FAILURE the job ran past {timeout} s")
+        print(f"{FAILURE} the job ran past {timeout} s")
         return 0
     print(
         json.dumps(
@@ -46,7 +56,7 @@ def main() -> int:
         )
     )
     if done.returncode:
-        print(f"QMX_FAILURE the job exited {done.returncode}: {done.stderr.strip()[-TAIL:]}")
+        print(f"{FAILURE} the job exited {done.returncode}: {done.stderr.strip()[-TAIL:]}")
     return 0
 
 

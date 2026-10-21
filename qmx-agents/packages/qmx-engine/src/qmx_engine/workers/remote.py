@@ -23,15 +23,17 @@ job's placement and defers every other attempt to the local table.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
 from qmx_ledger.journal import fingerprint
 from qmx_remote.models import Document, RemoteError, Resources, RunBundle
 
-from qmx_engine.ledger.events import EventKind
+from qmx_engine.ledger.events import KINDS, EventKind
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import Failed, Gate, NodeJob, NodeResult, Ok, Waiting
 from qmx_engine.settings import DEFAULTS
@@ -43,6 +45,10 @@ SESSION_MB: Final = 1_536
 HEARTBEAT_TIMEOUT: Final = 30.0
 """Three missed sidecar beats: slow is not lost, and lost is not a retry until the effect folds."""
 POLL_SECONDS: Final = 0.25
+RELAYED: Final = KINDS - {"node_started", "node_finished", "node_failed", "node_waiting"}
+"""The sidecar's rows the ledger takes as they are. Its start and finish are the adapter's own
+rows (`node_started` here, the ending from the result), so relaying them would double them; a
+runner-side `attempt_started` is the sidecar's bookkeeping and is not a ledger kind."""
 PASS_ENV: Final = "QMX_RUN_PASS"  # noqa: S105 - an environment name, not a credential
 
 
@@ -134,7 +140,7 @@ def attempt_bundle(
                 "priority": job.priority,
             },
             "files": code,
-            "file_hashes": {name: fingerprint(text) for name, text in code.items()},
+            "file_hashes": {name: text_hash(text) for name, text in code.items()},
             "secrets": sorted(refs),
             "resources": {
                 "cpus": resources.cpus,
@@ -144,6 +150,44 @@ def attempt_bundle(
             },
         },
     )
+
+
+def placement_of(job: NodeJob) -> str:
+    """The placement this attempt belongs to.
+
+    The runner builds the job from the node's definition but leaves `NodeJob.placement` at its
+    `pc` default, so the adapter reads `runs_on` from the definition slice it already carries. A
+    list names its placements in preference order; health is preflight's question (AD-20), so the
+    first one is the one this attempt is for.
+    """
+    found = job.node_definition.get("runs_on")
+    if isinstance(found, str) and found:
+        return found
+    if isinstance(found, list) and found:
+        return str(found[0])
+    return job.placement
+
+
+def text_hash(text: str) -> str:
+    """A file's content hash, the same raw sha256 the sidecar checks on the runner host."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def run_files(job: NodeJob) -> Mapping[str, str]:
+    """The run's code copy, which the sidecar materialises before the attempt.
+
+    A remote executor resolves the node's scripts on its own side (L-42), so the bundle carries
+    them by content hash. Files are read as text: a workflow's code folder is scripts and data,
+    and a binary file is a build artifact the run should have put in its output zone instead.
+    """
+    code = Path(job.workspace or "") / "code"
+    if job.workspace is None or not code.is_dir():
+        return {}
+    return {
+        path.relative_to(code).as_posix(): path.read_text("utf-8", errors="replace")
+        for path in sorted(code.rglob("*"))
+        if path.is_file()
+    }
 
 
 def attempt_keys(job: NodeJob) -> dict[str, Any]:
@@ -240,7 +284,7 @@ class PlacementWorker(LocalWorker):
         self.heartbeat_timeout = heartbeat_timeout
         self.poll_seconds = poll_seconds
         self.clock = clock
-        self.code: Callable[[NodeJob], Mapping[str, str]] = code or (lambda _job: dict[str, str]())
+        self.code: Callable[[NodeJob], Mapping[str, str]] = code or run_files
         self.handles: dict[str, tuple[Any, Any]] = {}
         """Run id to `(provider, handle)` of the attempt in flight, so `cancel` reaches it."""
 
@@ -248,14 +292,16 @@ class PlacementWorker(LocalWorker):
         return placement in self.remote
 
     async def run(self, job: NodeJob, emit: Emit) -> NodeResult:
-        if not self.routes(job.placement):
+        placement = placement_of(job)
+        if not self.routes(placement):
             return await super().run(job, emit)
-        provider = self.providers.get(job.placement)
+        provider = self.providers.get(placement)
         if provider is None:
-            message = f"no provider serves placement {job.placement}"
+            message = f"no provider serves placement {placement}"
             return Failed("placement", message, signature("placement", message), False, "before")
-        bundle = attempt_bundle(job, settings=self.settings, files=self.code(job))
-        return await self.dispatch(job, provider, bundle, emit)
+        placed = replace(job, placement=placement)
+        bundle = attempt_bundle(placed, settings=self.settings, files=self.code(placed))
+        return await self.dispatch(placed, provider, bundle, emit)
 
     async def dispatch(
         self, job: NodeJob, provider: Any, bundle: Document, emit: Emit
@@ -286,7 +332,7 @@ class PlacementWorker(LocalWorker):
                     kind = str(row.get("kind") or "")
                     if kind == "heartbeat":
                         last_beat = self.clock()
-                    if kind and kind != "attempt_finished":
+                    if kind in RELAYED:
                         emit(cast(EventKind, kind), _event_data(row))
                 seen = len(rows)
                 result = self.gateway.result(job.run_id)
@@ -294,6 +340,11 @@ class PlacementWorker(LocalWorker):
                     return result_from_document(result)
                 status = provider.status(handle)
                 if status in {"failed", "stopped", "interrupted"}:
+                    # A runner that ends between the two reads is a success whose result arrived
+                    # one poll late; only no result at all is the unknown fold.
+                    ended = self.gateway.result(job.run_id)
+                    if ended is not None:
+                        return result_from_document(ended)
                     message = "the runner was lost mid-attempt; its effect is unknown"
                     return Failed(
                         "heartbeat_lost",
@@ -336,11 +387,12 @@ def _as_bundle(bundle: Document, placement: str) -> RunBundle:
     run's code by hash; the provider ships the definition and files together."""
     definition = {**bundle, "placement": placement}
     files = cast(Mapping[str, str], bundle["files"])
+    hashes = {name: text_hash(text) for name, text in files.items()}
     return RunBundle(
         kind="workflow",
         definition=definition,
-        definition_hash=fingerprint({"definition": definition, "files": files}),
-        files={name: fingerprint(text) for name, text in files.items()},
+        definition_hash=fingerprint({"definition": definition, "files": hashes}),
+        files=hashes,
         resources=Resources.model_validate(bundle["resources"]),
     )
 

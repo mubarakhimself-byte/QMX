@@ -469,6 +469,7 @@ def execute(bundle: Mapping[str, Any], root: Path, hub: HubPort | None = None) -
     beater.start()
     try:
         sidecar.emit("attempt_started", {"placement": attempt.placement, "mode": attempt.mode})
+        sidecar.emit("log", {"line": f"sidecar started the attempt on {attempt.placement}"})
         try:
             body = run_attempt(attempt, sidecar, root / "work")
         except BundleError as error:

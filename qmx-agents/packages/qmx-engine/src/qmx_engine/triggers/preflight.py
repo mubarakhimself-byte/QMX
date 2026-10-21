@@ -194,11 +194,11 @@ def placement_state(
         return "configured"
     if placement_kind(settings, placement) in PROVIDER_KINDS:
         return "authorized"
-    if seen is not None and placement not in seen:
-        return "reachable"
+    if seen is None:
+        return "authorized"
     if healthy is not None and placement in healthy:
         return "healthy"
-    return "reachable" if seen is None or placement in seen else "authorized"
+    return "reachable" if placement in seen else "authorized"
 
 
 def plan_on_provider(

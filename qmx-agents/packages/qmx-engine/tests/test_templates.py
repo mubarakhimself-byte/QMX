@@ -288,6 +288,7 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "clippings-into-research",
         "morning-digest",
         "crystallise-a-workflow",
+        "run-one-job-on-his-server",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -552,7 +553,7 @@ def test_install_publishes_15_disabled_saves_22_drafts_and_a_second_install_chan
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 37
+    assert [i.action for i in second] == ["unchanged"] * 38
     assert library_after == seen
     assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 15
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)

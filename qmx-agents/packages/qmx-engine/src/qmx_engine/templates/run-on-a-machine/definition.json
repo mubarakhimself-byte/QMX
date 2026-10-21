@@ -26,5 +26,5 @@
   "connections": {
     "On request": {"main": [[{"node": "Run the job on its placement", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "run-on-a-machine", "needs": ["sandbox"]}
+  "meta": {"template": "run-one-job-on-his-server", "needs": ["sandbox"]}
 }
