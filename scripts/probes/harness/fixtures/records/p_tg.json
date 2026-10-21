@@ -1,0 +1,53 @@
+{
+  "off_during_connect": {
+    "status_when_sent": null,
+    "settled": {
+      "qmx": "connected",
+      "pack_x": "disabled"
+    },
+    "offered": [
+      "mcp__qmx__core_ping"
+    ],
+    "reply": "NO-TOOL"
+  },
+  "on": {
+    "status": "connected",
+    "offered": [
+      "mcp__pack_x__x_ping",
+      "mcp__qmx__core_ping"
+    ],
+    "reply": "X-RAN",
+    "calls": [
+      "x_ping"
+    ]
+  },
+  "off": {
+    "status": "disabled",
+    "offered": [
+      "mcp__qmx__core_ping"
+    ],
+    "reply": "NO-TOOL",
+    "calls": [
+      "x_ping"
+    ]
+  },
+  "model_turns": 4,
+  "second_chat": {
+    "qmx": "connected",
+    "pack_x": "connected"
+  },
+  "resumed": {
+    "qmx": "connected",
+    "pack_x": "connected"
+  },
+  "forty": {
+    "connect_s": 0.58,
+    "settle_after_connect_s": 0.12,
+    "total_s": 0.7,
+    "connected": 40,
+    "statuses": [
+      "connected"
+    ]
+  },
+  "plan_turns": 4
+}

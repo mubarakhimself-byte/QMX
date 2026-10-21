@@ -1,0 +1,237 @@
+{
+  "a": {
+    "steps": {
+      "A1": {
+        "call": "toolu_018hAuMb4D7YQBwVyzje3roX",
+        "tool_uses": [
+          "Write"
+        ],
+        "result": {
+          "id": "toolu_018hAuMb4D7YQBwVyzje3roX",
+          "is_error": false,
+          "text": "File created successfully at: D:/QMX-worktrees/qma-ship/build/homes/prb-h-perm-a-run/attempt-1/result.txt (file state is current in your context \u2014 no need to Read it back)"
+        },
+        "model_turns": 2
+      },
+      "A2": {
+        "call": "toolu_0119bTaRneQUhsLXUSbDvEgN",
+        "tool_uses": [
+          "Write"
+        ],
+        "result": {
+          "id": "toolu_0119bTaRneQUhsLXUSbDvEgN",
+          "is_error": true,
+          "text": "engine policy: writes only under the attempt overlay"
+        },
+        "model_turns": 2
+      },
+      "A3": {
+        "call": "toolu_01S5K2P6AEF18sPw1ryvwMFi",
+        "tool_uses": [
+          "Bash"
+        ],
+        "result": {
+          "id": "toolu_01S5K2P6AEF18sPw1ryvwMFi",
+          "is_error": false,
+          "text": "a3-undeclared"
+        },
+        "model_turns": 2
+      },
+      "A3W": {
+        "call": "toolu_01Vd8HF8BCWEuvEbSxrgZpmh",
+        "tool_uses": [
+          "Bash"
+        ],
+        "result": {
+          "id": "toolu_01Vd8HF8BCWEuvEbSxrgZpmh",
+          "is_error": false,
+          "text": "(Bash completed with no output)"
+        },
+        "model_turns": 2
+      },
+      "A4": {
+        "call": "toolu_01FRLP5LUFfMEJbMv7JUTFot",
+        "tool_uses": [
+          "mcp__qmx__peek"
+        ],
+        "result": {
+          "id": "toolu_01FRLP5LUFfMEJbMv7JUTFot",
+          "is_error": true,
+          "text": "engine policy: mcp__qmx__peek is not declared by this node"
+        },
+        "model_turns": 2
+      },
+      "A5": {
+        "call": "toolu_018YqemwUDWnNbv74Q64Ysh7",
+        "tool_uses": [
+          "mcp__qmx__notify"
+        ],
+        "result": {
+          "id": "toolu_018YqemwUDWnNbv74Q64Ysh7",
+          "is_error": false,
+          "text": "NOTIFY-RAN"
+        },
+        "model_turns": 2
+      }
+    },
+    "calls": {
+      "toolu_018hAuMb4D7YQBwVyzje3roX": {
+        "tool": "Write",
+        "guard_at": 109454.6797771,
+        "guard": "pass",
+        "asked_at": null,
+        "policy": null,
+        "reason": null,
+        "waited": null,
+        "ran": true
+      },
+      "toolu_0119bTaRneQUhsLXUSbDvEgN": {
+        "tool": "Write",
+        "guard_at": 109458.1453631,
+        "guard": "pass",
+        "asked_at": 109458.1601789,
+        "policy": "deny",
+        "reason": "engine policy: writes only under the attempt overlay",
+        "waited": null,
+        "ran": false
+      },
+      "toolu_01S5K2P6AEF18sPw1ryvwMFi": {
+        "tool": "Bash",
+        "guard_at": 109461.7968713,
+        "guard": "pass",
+        "asked_at": null,
+        "policy": null,
+        "reason": null,
+        "waited": null,
+        "ran": true
+      },
+      "toolu_01Vd8HF8BCWEuvEbSxrgZpmh": {
+        "tool": "Bash",
+        "guard_at": 109465.9887723,
+        "guard": "pass",
+        "asked_at": null,
+        "policy": null,
+        "reason": null,
+        "waited": null,
+        "ran": true
+      },
+      "toolu_01FRLP5LUFfMEJbMv7JUTFot": {
+        "tool": "mcp__qmx__peek",
+        "guard_at": 109469.2984299,
+        "guard": "pass",
+        "asked_at": 109469.3028095,
+        "policy": "deny",
+        "reason": "engine policy: mcp__qmx__peek is not declared by this node",
+        "waited": null,
+        "ran": false
+      },
+      "toolu_018YqemwUDWnNbv74Q64Ysh7": {
+        "tool": "mcp__qmx__notify",
+        "guard_at": 109472.0809151,
+        "guard": "pass",
+        "asked_at": 109472.0835803,
+        "policy": "defer->allow",
+        "reason": null,
+        "waited": 3.01,
+        "ran": true
+      }
+    },
+    "server_calls": [
+      "notify"
+    ],
+    "committed": [
+      "result.txt"
+    ],
+    "files": [
+      "attempt-1/a3.txt",
+      "attempt-1/result.txt",
+      "work/result.txt"
+    ],
+    "allow_rule": "Edit(//d/QMX-worktrees/qma-ship/build/homes/prb-h-perm-a-run/attempt-1/**)"
+  },
+  "b": {
+    "steps": {
+      "B1": {
+        "call": "toolu_01CYvqZb3KYFHevt6GCbzqax",
+        "tool_uses": [
+          "Bash"
+        ],
+        "result": {
+          "id": "toolu_01CYvqZb3KYFHevt6GCbzqax",
+          "is_error": false,
+          "text": "(Bash completed with no output)"
+        },
+        "model_turns": 2
+      },
+      "B2": {
+        "call": "toolu_01U9myeuj4Vq8gCox3QHb5m3",
+        "tool_uses": [
+          "Bash"
+        ],
+        "result": {
+          "id": "toolu_01U9myeuj4Vq8gCox3QHb5m3",
+          "is_error": true,
+          "text": "PreToolUse:Bash hook error: guard: no write into a QMX store"
+        },
+        "model_turns": 2
+      }
+    },
+    "calls": {
+      "toolu_01CYvqZb3KYFHevt6GCbzqax": {
+        "tool": "Bash",
+        "guard_at": 109479.4577143,
+        "guard": "pass",
+        "asked_at": 109479.5194403,
+        "policy": "allow",
+        "reason": null,
+        "waited": null,
+        "ran": true
+      },
+      "toolu_01U9myeuj4Vq8gCox3QHb5m3": {
+        "tool": "Bash",
+        "guard_at": 109484.3052202,
+        "guard": "guard: no write into a QMX store",
+        "asked_at": null,
+        "policy": null,
+        "reason": null,
+        "waited": null,
+        "ran": false
+      }
+    },
+    "server_calls": [],
+    "committed": [],
+    "files": [
+      "outside-bash.txt"
+    ],
+    "allow_rule": "Edit(//d/QMX-worktrees/qma-ship/build/homes/prb-h-perm-b-run/attempt-1/**)"
+  },
+  "plan_turns": 16,
+  "bash_mechanism": [
+    {
+      "bash": "read-only",
+      "edit_allow_rule": false,
+      "reached_can_use_tool": false,
+      "wrote": []
+    },
+    {
+      "bash": "write in the folder",
+      "edit_allow_rule": false,
+      "reached_can_use_tool": true,
+      "wrote": []
+    },
+    {
+      "bash": "write in the folder",
+      "edit_allow_rule": true,
+      "reached_can_use_tool": false,
+      "wrote": [
+        "a.txt"
+      ]
+    },
+    {
+      "bash": "write outside",
+      "edit_allow_rule": true,
+      "reached_can_use_tool": true,
+      "wrote": []
+    }
+  ]
+}
