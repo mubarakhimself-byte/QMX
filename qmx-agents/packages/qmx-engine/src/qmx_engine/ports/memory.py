@@ -1,11 +1,22 @@
-"""The memory port (SOLUTION-DESIGN 8.1a, AD-18) and the stub that stands in until the memory
-packet: an empty snapshot, nothing recalled, built or dead-ended, `note` storing a `run`-scope row
-in the Library, and `consolidate` a no-op that logs."""
+"""The memory port (SOLUTION-DESIGN 8.1a, AD-18) and the object the engine receives for it.
+
+The port is what a node or an agent has: an empty-or-full snapshot, a recall, the already-built
+and dead-end checks, one `note` write, `consolidate` and `feedback` at the run's edges, and a
+model-free search over run summaries. `forget`, `rebuild` and `reflect` are the host's, on the same
+object, because a chat's `memory_forget` reaches the store the host owns.
+
+`MemoryStub` is the port as the engine composes it: the host installs the real engine (AD-59's
+provider, `qmx_memory.RecallEngine`) before the door opens, and the stub answers every verb until
+it does. Nothing here imports the memory package: it depends on this one, so the seam is a
+registration the host makes and this module reads.
+"""
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 from pydantic import JsonValue
@@ -41,10 +52,19 @@ class Consolidated:
 
 
 class MemoryPort(Protocol):
-    def snapshot(self, scopes: tuple[str, ...], budget_tokens: int) -> Snapshot: ...
+    def snapshot(
+        self, scopes: tuple[str, ...], budget_tokens: int, questions: tuple[str, ...] = ()
+    ) -> Snapshot: ...
 
     def recall(
-        self, query: str, scopes: tuple[str, ...], budget: int, tags: tuple[str, ...] = ()
+        self,
+        query: str,
+        scopes: tuple[str, ...],
+        budget: int,
+        tags: tuple[str, ...] = (),
+        *,
+        now: datetime | None = None,
+        regime: tuple[str, ...] = (),
     ) -> list[Hit]: ...
 
     def check_built(self, intent_key: str) -> list[str]: ...
@@ -61,34 +81,112 @@ class MemoryPort(Protocol):
 
     def search_runs(self, query: str, workflow: str | None = None) -> list[Hit]: ...
 
+    def forget(self, row_ids: tuple[str, ...]) -> int:
+        """Archive the rows and take them out of the index, for good (AD-18)."""
+        ...
+
+    def rebuild(self, scope: str = "all") -> str:
+        """Re-index from the Library. A forgotten row is archived, so it stays out."""
+        ...
+
+    def reflect(self, question: str, tags: tuple[str, ...] = ()) -> tuple[str, list[str]]:
+        """A provider that can answer a question itself, with the rows it cited."""
+        ...
+
+
+INSTALLED: list[MemoryPort] = []
+"""The engine the host installed. A host serves one home, so one provider answers here; the list
+holds at most one entry and `install(None)` clears it."""
+
+
+def install(provider: MemoryPort | None) -> None:
+    """Called by the host at composition, before the engine's door opens. `None` uninstalls."""
+    INSTALLED.clear()
+    if provider is not None:
+        INSTALLED.append(provider)
+
+
+def installed() -> MemoryPort | None:
+    """The provider the host installed, if any."""
+    return INSTALLED[0] if INSTALLED else None
+
 
 class MemoryStub:
+    """The port the engine is handed: the installed provider's answers, or the empty ones that
+    stood in for memory before this packet. A verb with no provider does nothing and says so
+    once in the log, never a refusal: memory is not a step's gate."""
+
     def __init__(self, library: LibraryPort) -> None:
         self.library = library
+        self.provider = installed()
 
-    def snapshot(self, scopes: tuple[str, ...], budget_tokens: int) -> Snapshot:
-        return Snapshot()
+    def snapshot(
+        self, scopes: tuple[str, ...], budget_tokens: int, questions: tuple[str, ...] = ()
+    ) -> Snapshot:
+        found = self.provider
+        return Snapshot() if found is None else found.snapshot(scopes, budget_tokens, questions)
 
     def recall(
-        self, query: str, scopes: tuple[str, ...], budget: int, tags: tuple[str, ...] = ()
+        self,
+        query: str,
+        scopes: tuple[str, ...],
+        budget: int,
+        tags: tuple[str, ...] = (),
+        *,
+        now: datetime | None = None,
+        regime: tuple[str, ...] = (),
     ) -> list[Hit]:
-        return []
+        found = self.provider
+        if found is None:
+            return []
+        return found.recall(query, scopes, budget, tags, now=now, regime=regime)
 
     def check_built(self, intent_key: str) -> list[str]:
-        return []
+        found = self.provider
+        return [] if found is None else found.check_built(intent_key)
 
     def check_dead_end(self, query: str) -> list[Hit]:
-        return []
+        found = self.provider
+        return [] if found is None else found.check_dead_end(query)
 
     def note(self, run_id: str, row: JsonObject) -> str:
+        provider = self.provider
+        if provider is not None:
+            return provider.note(run_id, row)
         return self.library.put_memory_row(run_id, row, principal=f"run:{run_id}").object_id
 
     def consolidate(self, run_id: str, into_scope: str) -> Consolidated:
-        LOG.info("memory consolidation of %s into %s skipped: memory is a stub", run_id, into_scope)
+        provider = self.provider
+        if provider is not None:
+            return provider.consolidate(run_id, into_scope)
+        LOG.info("memory consolidation of %s into %s skipped: no provider", run_id, into_scope)
         return Consolidated()
 
     def feedback(self, row_ids: tuple[str, ...], outcome: str) -> None:
-        return None
+        provider = self.provider
+        if provider is not None:
+            provider.feedback(row_ids, outcome)
 
     def search_runs(self, query: str, workflow: str | None = None) -> list[Hit]:
-        return []
+        provider = self.provider
+        return [] if provider is None else provider.search_runs(query, workflow)
+
+    def forget(self, row_ids: tuple[str, ...]) -> int:
+        provider = self.provider
+        return 0 if provider is None else provider.forget(row_ids)
+
+    def rebuild(self, scope: str = "all") -> str:
+        provider = self.provider
+        return "" if provider is None else provider.rebuild(scope)
+
+    def reflect(self, question: str, tags: tuple[str, ...] = ()) -> tuple[str, list[str]]:
+        provider = self.provider
+        if provider is None:
+            return "", []
+        return provider.reflect(question, tags)
+
+
+def rows_of(row: JsonObject) -> Iterable[str]:
+    """The refs a row names, for a caller that reports where a note came from."""
+    found = row.get("refs")
+    return [str(one) for one in found] if isinstance(found, list) else []

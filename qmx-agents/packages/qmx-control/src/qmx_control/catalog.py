@@ -393,6 +393,64 @@ which hands the harness one read per target for each chat (`Harness.context_read
 attaching writes that chat's own record. A harness with no Library serves none of these rows."""
 
 
+MEMORY_ROWS: Final = (
+    _row(
+        "memory",
+        "recall",
+        "agent_tool",
+        "memory_recall",
+        "read",
+        "Recall what was learnt before: the rows that answer a question, each with its tag and "
+        "the Library objects it cites. Read this before rebuilding something or repeating a dead "
+        "end. A row outside its validity window is not returned unless you ask as of a date.",
+    ),
+    _row(
+        "memory",
+        "note",
+        "agent_tool",
+        "memory_note",
+        "domain_write",
+        "Write one memory row so a later chat or run finds it: a lesson, a dead end, a procedure "
+        "or a preference, with the objects it is about in `refs`. Use it for what is worth "
+        "keeping, not for narration.",
+        reversibility="reversible",
+    ),
+    _row(
+        "memory",
+        "check",
+        "agent_tool",
+        "memory_check",
+        "read",
+        "Check an intent key before building: whether it was already built (and what to link), "
+        "and whether it is a known dead end. Exact, no model, no spend.",
+    ),
+    _row(
+        "memory",
+        "forget",
+        "agent_tool",
+        "memory_forget",
+        "manage",
+        "Forget rows for good: each row's Library item is archived and the row leaves every "
+        "index, so neither a recall nor a rebuild brings it back. Give the row ids recall "
+        "returned. This is the operator's act on his own memory.",
+        reversibility="irreversible",
+    ),
+    _row(
+        "memory",
+        "rebuild",
+        "agent_tool",
+        "memory_rebuild",
+        "manage",
+        "Re-index the memory rows from the Library, for one scope or every scope. What the "
+        "index lost comes back; what was forgotten stays forgotten.",
+        reversibility="reversible",
+    ),
+)
+"""The `memory` toolset (AD-18, AD-27). The host serves these rows from the engine it installed
+(`HO/host.py`), so a harness with no memory engine serves none of them. `forget` archives, which
+is why it asks: memory is the operator's record, not a chat's scratch space."""
+
+
 ROUTER_ROWS: Final = (
     _row(
         "router",
@@ -504,6 +562,7 @@ def rows(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
         *DOMAIN_ROWS,
         *HOST_ROWS,
         *CONTEXT_ROWS,
+        *MEMORY_ROWS,
         *ROUTER_ROWS,
         *apps,
     )

@@ -1,6 +1,6 @@
 {
   "kind": "memory-row",
-  "schema_version": 1,
+  "schema_version": 2,
   "class": "record",
   "retired": false,
   "identity": "manifest",
@@ -27,6 +27,15 @@
       },
       "refs": {
         "type": "array"
+      },
+      "valid_from": {
+        "type": "string"
+      },
+      "valid_to": {
+        "type": [
+          "string",
+          "null"
+        ]
       }
     }
   },
@@ -41,7 +50,8 @@
     "u",
     "source_run_ids",
     "learned_at",
-    "occurred_at"
+    "occurred_at",
+    "regime"
   ],
   "preview": {
     "card": [
