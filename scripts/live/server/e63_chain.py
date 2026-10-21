@@ -232,7 +232,7 @@ def fixture_workflow(folder: Path) -> Path:
         "\n"
         "found = json.load(sys.stdin)\n"
         "event = found.get('event')\n"
-        "assert event is None or event.get('output') == 'bias', f\"no bias on the signal: {found}\"\n"
+        "assert event is None or event.get('output') == 'bias', f'not a bias: {found}'\n"
         "print(json.dumps({'signal': 'ran', 'object_id': (event or {}).get('object_id')}))\n",
         encoding="utf-8",
     )
