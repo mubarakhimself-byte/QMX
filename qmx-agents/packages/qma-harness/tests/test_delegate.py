@@ -1,27 +1,26 @@
-"""`mcp__qmx_delegate__run`: the allow-list, the full table, `unattended` inheritance, the child's
-launch, and the gate's sub-agent rule."""
+"""`delegate` v2: the handle at once, the report between turns, steer and stop, and a helper
+never wider than its parent (AD-41, AD-62)."""
 
 from __future__ import annotations
 
 import asyncio
+import json
+import sys
 from typing import Any
 
-import anyio
 import pytest
 import test_chat
 from claude_agent_sdk import Message
 from pydantic import JsonValue
-from test_chat import STOP_RULE_2, FakeClient, blocks, rate_limit, result, run, settle, turn_of
-from test_guard import RULES
+from test_chat import FakeClient, result, run, settle, turn_of
 from test_table import read_plan
 
 import qma.harness.chat
+import qma.harness.harness
 from qma.harness import Harness, InjectedText, NewChat, OperatorText, QmxHome, SessionId
 from qma.harness.guard import Deny, Pass, guard
 from qma.harness.home import read_record
-from qma.harness.launch import Background, ChatKind, Child, Interactive
-from qma.harness.procs import AgentProcessCap
-from qma.harness.profiles import ProfileName, parse_profiles
+from qma.harness.launch import Background, Child, Interactive
 from qma.harness.routes import control_service
 from qma.harness.tools import Effect, ToolDef, failure
 
@@ -48,58 +47,196 @@ def defs(monkeypatch: pytest.MonkeyPatch) -> list[list[ToolDef]]:
     return held
 
 
-def settings(home: QmxHome, *, targets: list[str], **budgets: JsonValue) -> None:
+@pytest.fixture
+def keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A keyring read answers, so a key profile's grant needs no real credential."""
+
+    def granted(_reference: str) -> str:
+        return "test-value"
+
+    monkeypatch.setattr(qma.harness.harness, "keyring_secret", granted)
+
+
+def settings(home: QmxHome, *, targets: list[str], **written: JsonValue) -> None:
     control = control_service(home)
-    providers = {"kimi": KEY_ROW, "delegate_targets": targets}
-    control.settings_put("providers", providers)  # pyright: ignore[reportArgumentType]
-    control.settings_put("budgets", dict(budgets))
+    control.settings_put(
+        "providers",
+        {"kimi": KEY_ROW, "delegate_targets": targets},  # pyright: ignore[reportArgumentType]
+    )
+    control.settings_put("budgets", dict(written))
 
 
-def delegate_of(found: list[ToolDef]) -> ToolDef:
-    [tool] = [tool for tool in found if tool.name == "delegate_run"]
+def tool_of(found: list[ToolDef], name: str) -> ToolDef:
+    [tool] = [tool for tool in found if tool.name == name]
     return tool
 
 
+def answer(reply: dict[str, Any]) -> Any:
+    return json.loads(reply["content"][0]["text"])
+
+
+async def call(
+    found: list[ToolDef], name: str, arguments: dict[str, Any], *, release: bool = True
+) -> dict[str, Any]:
+    """Run one `delegate` tool now, releasing each fake CLI that appears as it launches, so a
+    helper's own turn runs only when the test lets it."""
+    made = len(FakeClient.made)
+    task = asyncio.ensure_future(tool_of(found, name).call(arguments))
+    while not task.done():
+        if release:
+            for client in FakeClient.made[made:]:
+                client.go.set()
+        await asyncio.sleep(0.01)
+    return task.result()
+
+
 def helper_says(text: str) -> None:
-    """The parent's turn stays open; a helper's prompt gets `text` as its final result."""
+    """A helper's prompt gets `text` as its final result; the parent's turn stays open."""
 
     def script(prompt: str) -> list[Message | None]:
-        return [result(result=text)] if prompt.startswith("help:") else []
+        return [] if prompt == "go" else [result(result=text)]
 
     FakeClient.script = script
 
 
-async def open_parent(harness: Harness, kind: ChatKind | None = None) -> SessionId:
+async def open_parent(harness: Harness, kind: Any = None) -> SessionId:
     """A plan parent whose turn is running, as it is while it calls a tool."""
     parent = await harness.start_chat(
         NewChat(title="parent", model="haiku", kind=kind or Interactive())
     )
     first = OperatorText("go") if kind is None else InjectedText("go")
     await harness.send(parent, first)
-    FakeClient.made[-1].go.set()
     return parent
 
 
-async def call(found: list[ToolDef], profile: str, prompt: str = "help: count") -> dict[str, Any]:
-    """Run the parent's delegate tool, releasing each helper's fake CLI as it launches."""
+async def started(found: list[ToolDef], arguments: dict[str, Any]) -> tuple[str, FakeClient]:
+    """Start a helper and return its handle and the fake CLI that got its task, without letting
+    its turn end: the handle must be there before the answer is."""
     made = len(FakeClient.made)
-    task = asyncio.ensure_future(delegate_of(found).call({"profile": profile, "prompt": prompt}))
-    while not task.done():
-        for client in FakeClient.made[made:]:
-            client.go.set()
-        await asyncio.sleep(0.01)
-    return task.result()
+    reply = await call(found, "delegate_run", arguments, release=False)
+    await settle(lambda: any(client.queries for client in FakeClient.made[made:]))
+    [client] = [client for client in FakeClient.made[made:] if client.queries]
+    return str(answer(reply)["handle"]), client
 
 
-def test_delegate_targets_parse_from_the_providers_section() -> None:
-    profiles = parse_profiles({"kimi": KEY_ROW, "delegate_targets": ["kimi", "claude"]})
-    assert profiles.delegate_targets == frozenset({ProfileName("kimi"), ProfileName("claude")})
-    assert sorted(profiles.by_name) == ["claude", "kimi"]
-    assert profiles.delegate_refusal("kimi") is None
-    assert parse_profiles({"kimi": KEY_ROW}).delegate_targets == frozenset()
-    assert parse_profiles({"delegate_targets": "kimi"}).errors == {
-        "delegate_targets": "[providers] delegate_targets must be a list of names"
-    }
+def test_a_helper_returns_its_handle_before_it_answers(
+    home: QmxHome, defs: list[list[ToolDef]]
+) -> None:
+    settings(home, targets=["claude"])
+    helper_says("the folder holds 3 files")
+
+    async def body(harness: Harness) -> None:
+        parent = await open_parent(harness)
+        handle, child = await started(defs[0], {"task": "count the files", "profile": "claude"})
+        assert child.queries == ["count the files"]
+        assert child.disconnected is False
+        listed = answer(await call(defs[0], "delegate_list", {}))
+        assert [(row["handle"], row["state"]) for row in listed["helpers"]] == [(handle, "running")]
+        assert turn_of(home, parent) == "running"
+        child.go.set()
+        await settle(lambda: control_service(home).delegate_completions_all(parent) != [])
+        [stored] = control_service(home).delegate_completions_all(parent).__iter__()
+        assert (stored["handle"], stored["state"]) == (handle, "done")
+        assert "the folder holds 3 files" in str(stored["summary"])
+        assert stored["delivered_at"] is None
+
+    run(body, home)
+
+
+def test_a_completion_is_delivered_once_even_across_a_restart(
+    home: QmxHome, defs: list[list[ToolDef]]
+) -> None:
+    settings(home, targets=["claude"])
+    helper_says("the answer is 3")
+    parent: list[SessionId] = []
+
+    async def first(harness: Harness) -> None:
+        parent.append(await open_parent(harness))
+        _, child = await started(defs[0], {"task": "count", "profile": "claude"})
+        child.go.set()
+        await settle(lambda: control_service(home).delegate_completions_all(parent[0]) != [])
+        assert FakeClient.made[1] is child
+
+    run(first, home)
+    assert FakeClient.made[1].disconnected is True
+
+    async def second(harness: Harness) -> None:
+        await harness.send(parent[0], OperatorText("what did you find"))
+        report = FakeClient.made[-1].queries
+        assert len(report) == 1
+        assert report[0].startswith("Helper reports, which arrived between your turns:")
+        assert "the answer is 3" in report[0]
+        assert report[0].endswith("what did you find")
+        await harness.send(parent[0], OperatorText("and now"))
+        assert FakeClient.made[-1].queries[-1] == "and now"
+        assert "Helper reports" not in FakeClient.made[-1].queries[-1]
+        assert len(FakeClient.made[-1].queries) == 2
+
+    run(second, home)
+
+
+def test_steer_reaches_a_running_helper_and_stop_ends_another(
+    home: QmxHome, defs: list[list[ToolDef]]
+) -> None:
+    settings(home, targets=["claude"])
+    helper_says("done with what I had")
+
+    async def body(harness: Harness) -> None:
+        parent = await open_parent(harness)
+        one, first_client = await started(defs[0], {"task": "first job", "profile": "claude"})
+        two, second_client = await started(defs[0], {"task": "second job", "profile": "claude"})
+        assert answer(
+            await call(defs[0], "delegate_steer", {"handle": one, "text": "count the folders too"})
+        ) == {"handle": one, "steer": "queued_for_checkpoint", "state": "running"}
+        first_client.go.set()
+        await settle(lambda: len(first_client.queries) == 2)
+        assert first_client.queries[1] == "A note from your parent: count the folders too"
+        assert answer(
+            await call(defs[0], "delegate_stop", {"handle": two, "reason": "not needed"})
+        ) == {"handle": two, "state": "stopped", "reason": "not needed"}
+        await settle(lambda: len(control_service(home).delegate_completions_all(parent)) == 2)
+        rows = {
+            str(row["handle"]): row
+            for row in control_service(home).delegate_completions_all(parent)
+        }
+        assert (rows[one]["state"], "1 steer read" in str(rows[one]["summary"])) == ("done", True)
+        assert (rows[two]["state"], "not needed" in str(rows[two]["summary"])) == ("stopped", True)
+        await settle(lambda: second_client.disconnected)
+
+    run(body, home)
+
+
+def test_a_helper_surface_is_inside_its_parents(home: QmxHome, defs: list[list[ToolDef]]) -> None:
+    settings(home, targets=["claude"])
+    helper_says("read it")
+
+    async def body(harness: Harness) -> None:
+        parent = await open_parent(harness)
+        _, plain = await started(defs[0], {"task": "skim it", "profile": "claude"})
+        _, judged = await started(
+            defs[0], {"task": "judge it", "profile": "claude", "role": "judge"}
+        )
+        children = [
+            SessionId(str(row["id"]))
+            for row in control_service(home).sessions_list()
+            if row.get("parent_id") == parent
+        ]
+        parent_surface = harness.surface(parent)
+        plain_surface = harness.surface(children[0])
+        judged_surface = harness.surface(children[1])
+        assert parent_surface is not None and plain_surface is not None
+        assert judged_surface is not None
+        assert set(plain_surface.toolsets) == set(parent_surface.toolsets) - {"delegate"}
+        assert judged_surface.toolsets == ()
+        assert set(plain_surface.tools) <= set(parent_surface.tools)
+        assert "Agent" not in plain_surface.builtins
+        servers = plain.options.mcp_servers
+        assert isinstance(servers, dict) and "qmx_delegate" not in servers
+        assert {name for name, on in judged.toggled if not on} == {
+            f"qmx_{name}" for name in set(parent_surface.toolsets) - {"delegate"}
+        }
+
+    run(body, home)
 
 
 def test_a_profile_outside_the_allow_list_is_refused_before_any_child(
@@ -109,7 +246,7 @@ def test_a_profile_outside_the_allow_list_is_refused_before_any_child(
 
     async def body(harness: Harness) -> None:
         await open_parent(harness)
-        assert await call(defs[0], "kimi") == failure(
+        assert await call(defs[0], "delegate_run", {"task": "x", "profile": "kimi"}) == failure(
             "refused",
             "'kimi' is not in the delegate allow-list, [providers] delegate_targets, which "
             "lists claude",
@@ -120,151 +257,80 @@ def test_a_profile_outside_the_allow_list_is_refused_before_any_child(
     run(body, home)
 
 
-@pytest.mark.parametrize("kind", [None, Background()], ids=["interactive", "background"])
-def test_a_child_borrows_its_blocked_parents_slot_under_one_live_chat(
-    home: QmxHome, defs: list[list[ToolDef]], kind: ChatKind | None
-) -> None:
-    settings(home, targets=["claude"], max_live_chats=1)
-    helper_says("the folder holds 3 files")
-
-    async def body(harness: Harness) -> None:
-        parent = await open_parent(harness, kind)
-        reply = await asyncio.wait_for(call(defs[0], "claude"), 5)
-        assert reply == {"content": [{"type": "text", "text": "the folder holds 3 files"}]}
-        assert len(FakeClient.made) == 2
-        FakeClient.made[0].inbox.put_nowait(result())
-        await settle(lambda: turn_of(home, parent) == "idle")
-        other = await harness.start_chat(NewChat(title="next", model="haiku", kind=Background()))
-        await asyncio.wait_for(harness.send(other, InjectedText("next")), 5)
-        assert len(FakeClient.made) == 3
-
-    run(body, home)
-
-
-@pytest.mark.parametrize(
-    ("kind", "unattended"), [(None, False), (Background(), True)], ids=["interactive", "background"]
-)
-def test_the_child_copies_unattended_and_launches_verbatim_bounded_and_without_agents(
-    home: QmxHome, defs: list[list[ToolDef]], kind: ChatKind | None, unattended: bool
+def test_a_helper_is_bounded_verbatim_and_copies_its_parent(
+    home: QmxHome, defs: list[list[ToolDef]]
 ) -> None:
     settings(home, targets=["claude"], max_turns=7, max_budget_usd=0.25)
     helper_says("the folder holds 3 files")
 
     async def body(harness: Harness) -> None:
         read_plan(harness, 0.1)
-        parent = await open_parent(harness, kind)
-        assert await call(defs[0], "claude") == {
-            "content": [{"type": "text", "text": "the folder holds 3 files"}]
-        }
-        [child] = [
+        parent = await open_parent(harness, Background())
+        handle, child = await started(defs[0], {"task": "help: count", "profile": "claude"})
+        session = next(
             row["id"]
             for row in control_service(home).sessions_list()
             if row.get("parent_id") == parent
-        ]
-        record = read_record(home, SessionId(str(child)))
+        )
+        record = read_record(home, SessionId(str(session)))
         assert record is not None
-        assert record.config.kind == Child(parent, unattended=unattended)
+        assert record.config.kind == Child(parent, unattended=True)
         assert (record.config.profile, record.config.model) == ("claude", "haiku")
-        options = FakeClient.made[1].options
-        assert FakeClient.made[1].queries == ["help: count"]
+        options = child.options
         assert (options.verbatim_prompts, options.max_turns, options.max_budget_usd) == (
             True,
             7,
             0.25,
         )
         assert options.disallowed_tools[:2] == ["Agent", "Task"]
-        assert FakeClient.made[1].disconnected is True
-        assert not harness._chat(SessionId(str(child))).is_live  # pyright: ignore[reportPrivateUsage]
+        child.go.set()
+        await settle(lambda: control_service(home).delegate_completions_all(parent) != [])
+        assert answer(await call(defs[0], "delegate_list", {}))["helpers"][0]["handle"] == handle
 
     run(body, home)
-    parent_tools, child_tools = defs
-    assert delegate_of(parent_tools).effect is Effect.DOMAIN_WRITE
-    assert [tool.name for tool in child_tools if tool.name == "delegate_run"] == []
 
 
-def test_a_plan_child_is_refused_while_the_overage_stop_holds(
-    home: QmxHome, defs: list[list[ToolDef]]
+def test_a_cli_helper_asks_on_its_first_version_then_runs_under_its_grant(
+    home: QmxHome, defs: list[list[ToolDef]], keys: None
 ) -> None:
-    settings(home, targets=["claude"])
+    settings(home, targets=["claude", "kimi"])
+    control = control_service(home)
+    program = "import sys; print('cli answer: ' + sys.stdin.read().strip())"
+    control.settings_put(
+        "agents",
+        {"cli_helper": [sys.executable, "-c", program]},  # pyright: ignore[reportArgumentType]
+    )
 
     async def body(harness: Harness) -> None:
         parent = await open_parent(harness)
-        FakeClient.made[0].inbox.put_nowait(
-            rate_limit(status="rejected", rateLimitType="five_hour", overageStatus="allowed")
+        ask = await call(
+            defs[0], "delegate_run", {"task": "count", "profile": "kimi", "target": "cli"}
         )
-        await settle(lambda: ("needs_you", {"reason": STOP_RULE_2}) in blocks(home, parent))
-        assert await call(defs[0], "claude") == failure(
-            "refused",
-            "the helper did not start: plan use is stopped: rule 2: the five_hour window is used "
-            "up and paid extra usage is allowed, so the next request could bill",
+        message = json.loads(ask["content"][0]["text"])["error"]["message"]
+        assert "allow_cli=true" in message
+        reply = await call(
+            defs[0],
+            "delegate_run",
+            {"task": "count the files", "profile": "kimi", "target": "cli", "allow_cli": True},
         )
-        assert len(FakeClient.made) == 1
-        assert turn_of(home, parent) == "idle"
-
-    run(body, home)
-
-
-def test_a_child_whose_process_ends_mid_turn_is_a_tool_error(
-    home: QmxHome, defs: list[list[ToolDef]]
-) -> None:
-    settings(home, targets=["claude"])
-    FakeClient.script = lambda prompt: [None] if prompt.startswith("help:") else []
-
-    async def body(harness: Harness) -> None:
-        await open_parent(harness)
-        assert await call(defs[0], "claude") == failure(
-            "refused", "the helper's process ended before it answered"
+        handle = str(answer(reply)["handle"])
+        await settle(
+            lambda: (
+                [
+                    row
+                    for row in control_service(home).delegate_completions_all(parent)
+                    if row["handle"] == handle
+                ]
+                != []
+            )
         )
-
-    run(body, home)
-
-
-def test_a_delegate_cancelled_mid_turn_still_stops_the_child_process(
-    home: QmxHome, defs: list[list[ToolDef]], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The SDK cancels an interrupted tool call through an anyio cancel scope, which cancels
-    every await again, including the CLI disconnect in the child's teardown."""
-    settings(home, targets=["claude"])
-    FakeClient.script = lambda _: []
-    stopped: list[str] = []
-    real = AgentProcessCap.stop_chat
-
-    def stop_chat(self: AgentProcessCap, chat: str) -> None:
-        stopped.append(chat)
-        real(self, chat)
-
-    monkeypatch.setattr(AgentProcessCap, "stop_chat", stop_chat)
-    disconnect = FakeClient.disconnect
-
-    async def slow_disconnect(self: FakeClient) -> None:
-        await asyncio.sleep(0.05)
-        await disconnect(self)
-
-    monkeypatch.setattr(FakeClient, "disconnect", slow_disconnect)
-
-    async def body(harness: Harness) -> None:
-        parent = await open_parent(harness)
-        scope = anyio.CancelScope()
-
-        async def interrupted() -> None:
-            with scope:
-                await delegate_of(defs[0]).call({"profile": "claude", "prompt": "help: wait"})
-
-        task = asyncio.create_task(interrupted())
-        while len(FakeClient.made) < 2:
-            await asyncio.sleep(0.01)
-        scope.cancel()
-        await task
-        assert scope.cancelled_caught is True
-        [child] = [
-            SessionId(str(row["id"]))
-            for row in control_service(home).sessions_list()
-            if row.get("parent_id") == parent
+        [stored] = [
+            row
+            for row in control_service(home).delegate_completions_all(parent)
+            if row["handle"] == handle
         ]
-        await settle(lambda: child in stopped)
-        assert stopped == [child]
-        assert FakeClient.made[1].disconnected is True
-        assert not harness._chat(child).is_live  # pyright: ignore[reportPrivateUsage]
+        assert stored["state"] == "done"
+        assert "cli answer: count the files" in str(stored["summary"])
 
     run(body, home)
 
@@ -277,25 +343,51 @@ def test_a_delegate_cancelled_mid_turn_still_stops_the_child_process(
             "a1b2",
             Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx_delegate__run)"),
         ),
-        (
-            "mcp__QMX_Delegate__Run",
-            "a1b2",
-            Deny("guard: a sub-agent cannot start a helper chat (mcp__qmx_delegate__run)"),
-        ),
         ("mcp__qmx_delegate__run", None, Pass()),
-        ("mcp__qmx_delegate__run", "", Pass()),
-        ("mcp__qmx_library__search", "a1b2", Pass()),
+        ("mcp__qmx_delegate__list", "a1b2", Pass()),
     ],
 )
-def test_the_gate_denies_delegate_only_inside_a_sub_agent(
+def test_the_gate_refuses_a_helper_from_inside_a_native_sub_agent(
     tool: str, agent_id: str | None, verdict: Deny | Pass
 ) -> None:
+    from test_guard import RULES
+
     found = guard(
         tool,
-        {"profile": "kimi", "prompt": "x"},
+        {"task": "x"},
         RULES,
         cwd="/d/w",
         agent_id=agent_id,
         permission_mode="default",
     )
     assert found == verdict
+
+
+def test_a_handle_of_another_chat_is_refused(home: QmxHome, defs: list[list[ToolDef]]) -> None:
+    settings(home, targets=["claude"])
+
+    async def body(harness: Harness) -> None:
+        await open_parent(harness)
+        await harness.start_chat(NewChat(title="other", model="haiku", kind=Background()))
+        assert await call(defs[0], "delegate_stop", {"handle": "h-nope"}) == failure(
+            "refused", "no helper of this chat has the handle 'h-nope'"
+        )
+        assert answer(await call(defs[0], "delegate_list", {})) == {"helpers": []}
+
+    run(body, home)
+
+
+def test_the_start_tool_declares_its_effect_and_the_three_others_their_own(
+    home: QmxHome, defs: list[list[ToolDef]]
+) -> None:
+    settings(home, targets=["claude"])
+
+    async def body(harness: Harness) -> None:
+        await open_parent(harness)
+        found = {tool.name: tool.effect for tool in defs[0]}
+        assert found["delegate_run"] is Effect.DOMAIN_WRITE
+        assert found["delegate_list"] is Effect.READ
+        assert found["delegate_steer"] is Effect.DOMAIN_WRITE
+        assert found["delegate_stop"] is Effect.DOMAIN_WRITE
+
+    run(body, home)

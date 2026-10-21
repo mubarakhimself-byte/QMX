@@ -9,8 +9,9 @@ import sqlite3
 import threading
 import tomllib
 import uuid
-from collections.abc import AsyncIterator, Callable, Generator, Mapping
+from collections.abc import AsyncIterator, Callable, Generator, Mapping, Sequence
 from contextlib import closing, contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal, NoReturn, Protocol, cast
 from urllib.parse import urlsplit
@@ -36,6 +37,7 @@ from qmx_control.cache import read_cache
 from qmx_control.catalog import operation
 from qmx_control.library import Library
 from qmx_control.models import ControlError as ControlError  # noqa: PLC0414 - public re-export
+from qmx_control.models import DelegateCompletion as DelegateCompletion  # noqa: PLC0414
 from qmx_control.models import Document, MemoKey
 from qmx_control.models import LibraryInput as LibraryInput  # noqa: PLC0414 - public re-export
 from qmx_control.runs import RunIndex
@@ -246,6 +248,10 @@ class ControlService:
                     data TEXT NOT NULL, PRIMARY KEY(kind, id));
                 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT,
                     topic TEXT NOT NULL, subject TEXT NOT NULL, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS delegate_completions (handle TEXT PRIMARY KEY,
+                    parent_session TEXT NOT NULL, data TEXT NOT NULL, delivered_at TEXT);
+                CREATE INDEX IF NOT EXISTS delegate_pending
+                    ON delegate_completions(parent_session, delivered_at);
             """)
             db.execute("BEGIN IMMEDIATE")
             legacy_catalog = db.execute(
@@ -524,6 +530,66 @@ class ControlService:
             if db.execute("SELECT 1 FROM sessions WHERE id=?", (session_id,)).fetchone() is None:
                 raise ControlError("not_found", "Session does not exist.", 404)
         return self.events("sessions", after, session_id, limit)
+
+    def delegate_completion_save(self, completion: DelegateCompletion) -> Document:
+        """Store one helper's answer before it is announced or delivered (AD-41). Saving the
+        same handle twice keeps one row and one delivery."""
+        with self._lock, self._connect() as db:
+            data: Document = {
+                "created": datetime.now(UTC).isoformat(),
+                **completion.model_dump(mode="json"),
+            }
+            db.execute(
+                "INSERT INTO delegate_completions(handle,parent_session,data,delivered_at) "
+                "VALUES(?,?,?,NULL) ON CONFLICT(handle) DO UPDATE SET data=excluded.data",
+                (completion.handle, completion.parent_session, json.dumps(data)),
+            )
+            self._event(
+                db,
+                "sessions",
+                completion.parent_session,
+                {
+                    "type": "delegate_completion",
+                    "handle": completion.handle,
+                    "state": completion.state,
+                },
+            )
+        return data
+
+    def delegate_completions_pending(self, parent_session: str) -> list[Document]:
+        """The answers this parent has not been handed yet, oldest first."""
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT data FROM delegate_completions WHERE parent_session=? "
+                "AND delivered_at IS NULL ORDER BY rowid",
+                (parent_session,),
+            ).fetchall()
+        return [_document(row[0]) for row in rows]
+
+    def delegate_completions_all(self, parent_session: str) -> list[Document]:
+        """Every answer stored for this parent, oldest first, each with its `delivered_at`."""
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT data,delivered_at FROM delegate_completions WHERE parent_session=? "
+                "ORDER BY rowid",
+                (parent_session,),
+            ).fetchall()
+        return [{**_document(row[0]), "delivered_at": row[1]} for row in rows]
+
+    def delegate_completions_claim(self, handles: Sequence[str]) -> int:
+        """Mark these answers delivered in one write, and say how many that was. A second claim
+        marks nothing, so a completion reaches its parent once even across a restart."""
+        with self._lock, self._connect() as db:
+            now = datetime.now(UTC).isoformat()
+            marked = 0
+            for handle in handles:
+                cursor = db.execute(
+                    "UPDATE delegate_completions SET delivered_at=? "
+                    "WHERE handle=? AND delivered_at IS NULL",
+                    (now, handle),
+                )
+                marked += cursor.rowcount
+        return marked
 
     def attach_library_mirror(self, mirror: LibraryMirror) -> None:
         """Start the dual write: every save and link from now on also reaches `mirror`."""
