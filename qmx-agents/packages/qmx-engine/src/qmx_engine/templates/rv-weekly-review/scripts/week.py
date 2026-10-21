@@ -3,10 +3,11 @@ run started in the last seven days (this review's own run left out) with its sta
 each failed step or failed check, and every open inbox item. A parked run is one whose status says
 so. A run started with `{"fixture": true}` reads `fixtures/week.json`, a synthetic week, instead.
 
-The run's write zone is `<home>/workspaces/wf-<id>/runs/<run_id>`, so the zone names this run and
-the home is three folders above it."""
+The run context names this run (`QMX_RUN_ID`), and the home is found from the run's shared zone
+(`QMX_WORK_SHARED`)."""
 
 import json
+import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,6 +18,7 @@ from qmx_engine.ports.clock import WallClock
 from qmx_engine.service.inbox import Inbox
 from qmx_engine.service.runs import status_of
 from qmx_engine.trace_export import totals
+from qmx_engine.workers.zones import home_of
 
 DAYS = 7
 MESSAGE_CHARS = 200
@@ -27,8 +29,8 @@ if given.get("fixture"):
     print(json.dumps(found["week"] | {"source": "fixture"}))
     raise SystemExit(0)
 
-home = Path.cwd().parents[3]
-own = Path.cwd().name
+home = home_of(Path(os.environ["QMX_WORK_SHARED"]))
+own = os.environ["QMX_RUN_ID"]
 now = datetime.now(UTC)
 since = (now - timedelta(days=DAYS)).isoformat()
 runs, parked, failures = [], [], []

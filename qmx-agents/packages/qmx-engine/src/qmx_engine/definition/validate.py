@@ -8,18 +8,21 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Collection, Iterator, Sequence
-from pathlib import Path
+from itertools import combinations
+from pathlib import Path, PurePosixPath
 from typing import Final
 
 from pydantic import ValidationError
 
 from qmx_engine.definition.folder import Problem, WorkflowFolder, load
 from qmx_engine.definition.lint import lint, redact
-from qmx_engine.definition.model import Node, Workflow, edges
+from qmx_engine.definition.model import Node, OutputFile, Workflow, edges
 from qmx_engine.definition.registry import LOOP_BACK_PORT, NOTE, REGISTRY, Kind, Registry, RoleRule
 from qmx_engine.settings import DEFAULTS
 
 PLACEMENTS: Final = frozenset({"pc", "contabo", "qmb"})
+STAGING: Final = ".staging"
+"""The folder under a run's `work/` where commits are staged; no declared output may touch it."""
 NOT_ROLES: Final = frozenset({"test_only", "test_order", "live_order"})
 DEFAULT_ROLES: Final = frozenset(
     role
@@ -69,6 +72,7 @@ def problems(
         )
     yield from graph(workflow, registry, publish=publish)
     yield from names(workflow, registry, roles, placements)
+    yield from writers(workflow, registry)
     yield from lint(workflow, registry)
 
 
@@ -247,3 +251,92 @@ def names(
                     f"nodes[{i}].credentials.{name}",
                     "a credential is a qmx/* keyring reference, never a value",
                 )
+
+
+def leaves_work(path: str) -> bool:
+    """True for an output path that could leave a run's `work/` or touch its staging folder."""
+    pure = PurePosixPath(path)
+    return (
+        not pure.parts
+        or "\\" in path
+        or pure.is_absolute()
+        or ":" in pure.parts[0]
+        or ".." in pure.parts
+        or pure.parts[0] == STAGING
+    )
+
+
+def writers(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
+    """AD-51: two writers that may run at once never share a declared path, unless it is
+    partition-templated or both name the same merge. Two partitions of one node may run at once,
+    and so may two nodes with no path between them."""
+    index = {node.name: i for i, node in enumerate(workflow.nodes)}
+    forward: dict[str, set[str]] = defaultdict(set)
+    fanned: set[str] = set()
+    ones: dict[str, set[str]] = defaultdict(set)
+    for edge in edges(workflow):
+        forward[edge.source].add(edge.target.node)
+        if edge.target.map == "one":
+            ones[edge.source].add(edge.target.node)
+        else:
+            fanned.add(edge.target.node)
+    partitioned = set(fanned)
+    frontier = list(fanned)
+    while frontier:
+        for target in ones[frontier.pop()]:
+            kind = registry.kind(workflow.nodes[index[target]].type) if target in index else None
+            if target not in partitioned and (kind is None or kind.name != "join"):
+                partitioned.add(target)
+                frontier.append(target)
+    declared: list[tuple[int, Node, int, OutputFile]] = []
+    for i, node in enumerate(workflow.nodes):
+        files = node.outputs.files if node.outputs is not None and not node.disabled else []
+        for j, output in enumerate(files):
+            path = f"nodes[{i}].outputs.files[{j}].path"
+            if leaves_work(output.path.replace("<partition>", "0")):
+                yield Problem("output_path_invalid", path, "an output path must stay inside work/")
+            elif (
+                node.name in partitioned
+                and output.merge == "replace"
+                and "<partition>" not in output.path
+            ):
+                yield Problem(
+                    "zone_writer_concurrent",
+                    path,
+                    "two partitions of this node write this path; template it with <partition> "
+                    "or name a merge",
+                )
+            declared.append((i, node, j, output))
+    for (_, a, _, first), (i, b, j, second) in combinations(declared, 2):
+        if a.name == b.name or not overlap(first.path, second.path):
+            continue
+        if first.merge == second.merge != "replace":
+            continue
+        if reaches(forward, a.name, b.name) or reaches(forward, b.name, a.name):
+            continue
+        yield Problem(
+            "zone_writer_concurrent",
+            f"nodes[{i}].outputs.files[{j}].path",
+            f"nodes[{index[a.name]}] may run at the same time and writes this path too",
+        )
+
+
+def overlap(first: str, second: str) -> bool:
+    return (
+        first == second
+        or PurePosixPath(first).full_match(second)
+        or PurePosixPath(second).full_match(first)
+    )
+
+
+def reaches(forward: dict[str, set[str]], start: str, goal: str) -> bool:
+    seen: set[str] = set()
+    frontier = [start]
+    while frontier:
+        name = frontier.pop()
+        if name == goal:
+            return True
+        if name not in seen:
+            seen.add(name)
+            frontier.extend(forward[name])
+    return False

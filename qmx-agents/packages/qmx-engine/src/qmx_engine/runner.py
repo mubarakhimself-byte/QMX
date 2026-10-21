@@ -102,7 +102,8 @@ from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers.rows import put_wake
 from qmx_engine.watchdog import MAX_TICKS, Action, Kind, Meter, Watchdog, Watched, ledger_fault
 from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
-from qmx_engine.workers.local import AnyExecutor, LocalWorker
+from qmx_engine.workers.local import AnyExecutor, LocalWorker, sweep
+from qmx_engine.workers.zones import RunZone
 
 TICK: Final = timedelta(seconds=1)
 LADDER_SETTINGS: Final = ("retry.max_tries", "retry.backoff")
@@ -255,8 +256,9 @@ class Engine:
         return self._memory
 
     def banned_values(self) -> tuple[str, ...]:
-        """Where the plan login lives; no script's environment may point there."""
-        found = [str(self.home.resolve() / "claude"), os.environ.get("CLAUDE_CONFIG_DIR", "")]
+        """The home and the plan login; no script's environment may point at or under them."""
+        home = self.home.resolve()
+        found = [str(home), str(home / "claude"), os.environ.get("CLAUDE_CONFIG_DIR", "")]
         return tuple(value for value in found if value)
 
     async def start(
@@ -361,13 +363,16 @@ class Run:
         """The run's active seconds, for a `wall_seconds` limit."""
         self.woke: str | None = None
         """The reset the ticker last woke this run at."""
-        self.zone = workspace(engine.home, workflow.id) / "runs" / run_id
+        self.zone = RunZone.of(engine.home, run_id)
         self.executors = self.build_executors()
 
     def build_executors(self) -> dict[str, AnyExecutor]:
         settings = self.engine.settings
         max_depth = settings.get("subworkflow.max_depth")
-        host = self.host = HostScript(self.root, None, self.engine.banned_values())
+        manifest = self.zone.prepare_code(self.root)
+        host = self.host = HostScript(
+            self.zone.code, None, self.engine.banned_values(), fake=self.fake, manifest=manifest
+        )
 
         def launch(
             root: Path, workflow: Workflow, inputs: JsonValue, run_id: str
@@ -727,7 +732,7 @@ class Run:
             inputs=command.inputs,
             now=command.now,
             mode=self.mode,
-            workspace=str(self.zone),
+            workspace=str(self.zone.root),
             timeouts=timeouts,
             resolved_model=self.resolved(node, command.ladder),
             pinned_outputs=pinned_outputs(pinned) if pinned is not None else None,
@@ -797,7 +802,15 @@ class Run:
 
     def recover(self, reason: str = "operator") -> None:
         """Fold what a dead engine left in flight, then open a new pass. A slot whose step may have
-        reached the outside world waits on its gate, and the fold keeps it waiting over the pass."""
+        reached the outside world waits on its gate, and the fold keeps it waiting over the pass.
+        First the run's zone: scripts that escaped the Job object are stopped, a complete staged
+        commit rolls forward and an overlay the dead engine left is deleted (AD-51)."""
+        sweep(self.zone)
+        recorded = [e.data for e in self.events if e.kind == "zone_committed"]
+        for commit in self.zone.recover():
+            if (commit.sha256 or commit.deleted) and commit.data() not in recorded:
+                self.append("zone_committed", commit.data())
+            self.zone.finish(commit)
         state = self.state()
         if state.ended in ("passed", "stopped"):
             return

@@ -44,6 +44,7 @@ IGNORED: Final = frozenset(
         "gate_opened",
         "gate_resolved",
         "compacted",
+        "zone_committed",
         "memory_written",
     }
 )

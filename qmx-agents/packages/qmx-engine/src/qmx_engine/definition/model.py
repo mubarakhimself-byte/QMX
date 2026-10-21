@@ -103,6 +103,25 @@ class RunLimits(Limits):
     wall_seconds: int | None = None
 
 
+type Merge = Literal["replace", "append", "keyed"]
+
+
+class OutputFile(Strict):
+    """A path an attempt commits from its overlay into the run's shared zone `work/` (AD-51).
+    `path` is a glob relative to `work/`, and `<partition>` in it stands for the attempt's
+    partition. `append` adds the attempt's bytes to the shared file and `keyed` merges a JSON
+    object into it, so concurrent writers may share the path. `delete` is a tombstone: the
+    matching shared files are removed at commit."""
+
+    path: str
+    merge: Merge = "replace"
+    delete: bool = False
+
+
+class Outputs(Strict):
+    files: list[OutputFile] = Field(default_factory=list[OutputFile])
+
+
 class Node(Strict):
     id: str
     name: str
@@ -117,6 +136,8 @@ class Node(Strict):
     limits: Limits | None = None
     runs_on: str | list[str] = "pc"
     credentials: dict[str, str] = Field(default_factory=dict[str, str])
+    outputs: Outputs | None = Field(default=None, exclude_if=lambda value: value is None)
+    """Left out of a dump when unset, so a node keeps the memo key it had before outputs."""
     disabled: bool = False
     notes: str | None = None
 
