@@ -80,10 +80,11 @@ def as_prbs(command: str) -> str:
 
 
 def archive_head(target: str) -> None:
-    """Send the PR head's committed tree to `target`, with no `.git` and no virtualenv in it.
+    """Send the PR head's committed tree to `target` as one gzipped tar, once per head.
 
     `git archive` rather than rsync because a Windows builder has no rsync, and the head SHA is
-    what the lane is proving; the tree is handed to `tar` over the same ssh channel.
+    what the lane is proving. The tarball is 18 MB where the tree is a few hundred, and a second
+    lane at the same head reuses what the first one left, marker and all.
     """
     git = shutil.which("git")
     if git is None:
@@ -91,14 +92,21 @@ def archive_head(target: str) -> None:
     head = subprocess.run(
         [git, "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
     ).stdout.strip()
+    marker = f"{target}/.lib4-head"
+    if ssh(f"cat {marker} 2>/dev/null || true") == head:
+        return
     archive = subprocess.run(
-        [git, "-C", str(ROOT), "archive", "--format=tar", head],
+        [git, "-C", str(ROOT), "archive", "--format=tar.gz", head],
         capture_output=True,
         check=True,
         timeout=600,
     ).stdout
     result = subprocess.run(
-        [*server_ssh(), f"install -d -m 0755 {target} && tar -xf - -C {target}"],
+        [
+            *server_ssh(),
+            f"rm -rf {target} && install -d -m 0755 {target} && tar -xzf - -C {target} "
+            f"&& printf %s {head} > {marker}",
+        ],
         input=archive,
         capture_output=True,
         timeout=3600,
