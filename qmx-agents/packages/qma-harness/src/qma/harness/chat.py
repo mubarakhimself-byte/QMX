@@ -45,6 +45,7 @@ import functools
 import json
 import logging
 import os
+import shutil
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
@@ -104,7 +105,6 @@ from qma.harness.launch import (
     launch_env,
     parse_budgets,
     resets_cache,
-    system_text,
     unattended,
     verbatim,
 )
@@ -130,6 +130,15 @@ from qma.harness.project import (
     redacted,
 )
 from qma.harness.relay import GrantRefused
+from qma.harness.surface import (
+    SLOTS_PLUGIN,
+    HomeSlots,
+    Supply,
+    Surface,
+    build,
+    declaration,
+    surface_files,
+)
 from qma.harness.tools import (
     Grant,
     Grants,
@@ -143,7 +152,7 @@ from qma.harness.tools import (
     domain_write_policy,
     guard_rules,
     keyring_refs,
-    surface,
+    server_name,
     tool_defs,
     unvetted_tools,
     vet_mcp_servers,
@@ -625,13 +634,14 @@ def unexpected_extensions(
 ) -> list[str]:
     """What the CLI loaded besides its built-ins, the QMX plugin and the MCP `servers` QMA
     passed. The server info lists no plugins, so a plugin shows as its `<plugin>:` commands
-    and agents."""
+    and agents. The chat's own `qmx-slots` plugin holds only skills, which list as commands."""
     commands = cast("list[dict[str, Any]]", (info or {}).get("commands", []))
     agents = cast("list[dict[str, Any]]", (info or {}).get("agents", []))
+    ours = (f"{PLUGIN}:", f"{SLOTS_PLUGIN}:")
     found = [
         f"command {command['name']}"
         for command in commands
-        if not command.get("builtin") and not str(command["name"]).startswith(f"{PLUGIN}:")
+        if not command.get("builtin") and not str(command["name"]).startswith(ours)
     ]
     found += [
         f"agent {agent['name']}"
@@ -653,7 +663,8 @@ def unexpected_plugins(init: Mapping[str, Any]) -> list[str]:
     return [
         f"plugin {source}"
         for source in sources
-        if source != f"{PLUGIN}@inline" and not source.endswith("@builtin")
+        if source not in {f"{PLUGIN}@inline", f"{SLOTS_PLUGIN}@inline"}
+        and not source.endswith("@builtin")
     ]
 
 
@@ -684,6 +695,8 @@ def _loaded(found: list[str]) -> str:
 class _Live:
     client: ClaudeSDKClient
     grant: RelayGrant | None
+    served: frozenset[str] = frozenset()
+    """The QMX toolset servers this process was launched with, on or off."""
     reader: asyncio.Task[None] | None = None
     keeper: asyncio.Task[None] | None = None
     ending: bool = False
@@ -751,6 +764,8 @@ class Chat:
         self._grants = Grants()
         self._gate: GuardRules | None = None
         self._defs: list[ToolDef] = []
+        self.surface: Surface | None = None
+        """What the current launch gave the model; None until the first launch."""
         self._asks: dict[int, _Ask] = {}
         self._settled: dict[int, AnswerStatus] = {}
         self._usage: tuple[RunJournal, Totals] | None = None
@@ -798,13 +813,17 @@ class Chat:
             await self._relist()
 
     async def _relist(self) -> None:
-        """Switch the live chat's toolset servers to its record's surface, with no relaunch
-        (probe P-TG). The guard's surface changes first, so a removed tool is refused even if
-        the CLI still lists it. A Cold chat launches with the new surface."""
+        """Switch the live chat's toolset servers to the Surface of its record, with no
+        relaunch (probe P-TG), and record the new digest. The guard's surface changes first, so
+        a removed tool is refused even if the CLI still lists it. A Cold chat launches with the
+        new surface."""
         live, gate = self._live, self._gate
-        if live is None or gate is None or self.record.config.tools == ():
+        if live is None or gate is None or not live.served:
             return
-        wanted = set(surface(self.record.config.toolsets, self._defs))
+        found = await self._surface(self._defs)
+        self.surface = found
+        self._record_digest(found.digest)
+        wanted = {server_name(name) for name in found.toolsets} & live.served
         before = set(gate.surface)
         gate.surface.intersection_update(wanted)
         for name in sorted(before - wanted):
@@ -1121,23 +1140,27 @@ class Chat:
         launch = await self._routing(settings())
         grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
-            servers, gate, vetted, allow = await self._tools(launch, user.external_tools_unattended)
+            servers, gate, vetted, allow, found = await self._tools(
+                launch, user.external_tools_unattended
+            )
             files = deps.home.launch_dir(chat)
             settings_file, system_file = files / "settings.json", files / "system.md"
+            await asyncio.to_thread(shutil.rmtree, files / SLOTS_PLUGIN, ignore_errors=True)
             await asyncio.to_thread(
                 _write_files,
                 {
                     settings_file: settings(allow=(*allow, *config.permissions.allow)),
-                    system_file: system_text(deps.home, config),
+                    system_file: found.append,
+                    **surface_files(found, files),
                 },
             )
             env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
             options = build_options(
                 config,
+                found,
                 session_id=chat,
                 transcript_exists=exists,
                 env=env,
-                home=deps.home,
                 settings_file=settings_file,
                 system_file=system_file,
                 launcher=deps.launcher,
@@ -1149,8 +1172,10 @@ class Chat:
                 test=deps.test,
             )
             assert_argv_fits(options)
-            live = _Live(ClaudeSDKClient(options), grant)
+            live = _Live(ClaudeSDKClient(options), grant, frozenset(servers) & gate.qmx_servers)
             await live.client.connect()
+            self.surface = found
+            self._record_digest(found.digest)
         except BaseException:
             if grant is not None:
                 await deps.relay.revoke(grant)
@@ -1196,15 +1221,21 @@ class Chat:
     async def _tools(
         self, launch: Launch, external_unattended: frozenset[str]
     ) -> tuple[
-        dict[str, McpServerConfig], GuardRules, Mapping[str, frozenset[str]], tuple[str, ...]
+        dict[str, McpServerConfig],
+        GuardRules,
+        Mapping[str, frozenset[str]],
+        tuple[str, ...],
+        Surface,
     ]:
-        """The QMX toolset servers, the vetted external servers (the operator's and the chat's own),
-        the guard's rules, each vetted server's tool names, and the allow rules for every QMX
-        tool whose Effect does not ask (H20), so a READ or an allowed DOMAIN_WRITE never asks
-        in any mode. A refused external server gets a `needs_you` block and is left out; the
-        chat still starts. `external_unattended` is the operator's allow-list for external
-        tools in an unattended chat or mode. A chat with `tools=()` gets no server at all."""
-        deps = self._deps
+        """The QMX toolset servers, the vetted external servers, the guard's rules, each vetted
+        server's tool names, the allow rules for every QMX tool whose Effect does not ask (H20),
+        so a READ or an allowed DOMAIN_WRITE never asks in any mode, and the chat's Surface,
+        whose toolsets are the servers switched on. A chat that declares its toolsets gets an
+        external server only when it names it as `mcp:<server>`. A refused external server gets
+        a `needs_you` block and is left out; the chat still starts. `external_unattended` is
+        the operator's allow-list for external tools in an unattended chat or mode. A chat
+        whose Surface has no built-in and no toolset gets no server at all."""
+        deps, config = self._deps, self.record.config
         control = deps.control
         delegate = (
             None
@@ -1219,6 +1250,7 @@ class Chat:
             host=deps.host,
         )
         self._defs = defs
+        found = await self._surface(defs)
         policy = domain_write_policy(await asyncio.to_thread(control.settings_get, "agents"))
         try:
             qmx = build_servers(
@@ -1229,8 +1261,14 @@ class Chat:
             )
         except ToolSurfaceError as refused:
             raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
-        declared = await asyncio.to_thread(control.settings_get, "mcp_servers")
-        vetted = await vet_mcp_servers({**declared, **self.record.config.mcp_servers}, deps.vetted)
+        empty = not found.builtins and not found.toolsets
+        declared = {} if empty else await asyncio.to_thread(control.settings_get, "mcp_servers")
+        external = {**declared, **config.mcp_servers}
+        if config.toolsets is not None:
+            external = {
+                name: row for name, row in external.items() if f"mcp:{name}" in config.toolsets
+            }
+        vetted = await vet_mcp_servers(external, deps.vetted)
         for name, reason in vetted.refused.items():
             await self._note(
                 "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
@@ -1243,18 +1281,43 @@ class Chat:
             if isinstance(launch, PlanLaunch)
             else deps.home.relayed_dir,
             keyring_names=await asyncio.to_thread(keyring_refs, control),
-            unattended=unattended(self.record.config.kind),
+            unattended=unattended(config.kind),
             external_unattended=external_unattended,
-            workspace=self.record.config.workspace,
+            workspace=config.workspace,
             rules=await asyncio.to_thread(control.settings_get, "rules"),
-            on=surface(self.record.config.toolsets, defs),
+            on=frozenset(server_name(name) for name in found.toolsets),
         )
         self._gate = gate
-        if self.record.config.tools == ():
-            gate.surface.clear()
-            return {}, gate, {}, ()
+        if empty:
+            return {}, gate, {}, (), found
         allow = tuple(tool.full for tool in defs if not asks(tool.effect, policy))
-        return {**qmx, **vetted.configs}, gate, vetted.tools, allow
+        return {**qmx, **vetted.configs}, gate, vetted.tools, allow, found
+
+    async def _surface(self, defs: list[ToolDef]) -> Surface:
+        """The Surface of this chat's record over the tools the host serves now (AD-62)."""
+        deps, config = self._deps, self.record.config
+        settings = await asyncio.to_thread(deps.control.settings_get, "agents")
+        supply = Supply(
+            tools=tuple(defs),
+            slots=HomeSlots(deps.home),
+            settings=settings,
+            plugins=(deps.home.plugin_dir,),
+            spill_dir=deps.home.launch_dir(self.session_id) / SLOTS_PLUGIN / "skills",
+        )
+        return await asyncio.to_thread(
+            build,
+            config.kind,
+            config.home,
+            config.packs,
+            declaration(config),
+            supply,
+            workspace=config.workspace,
+        )
+
+    def _record_digest(self, digest: str) -> None:
+        """One digest per launch whose surface differs from the last one recorded."""
+        if self.record.digests[-1:] != (digest,):
+            self._write(digests=(*self.record.digests, digest))
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile

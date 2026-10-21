@@ -1,6 +1,6 @@
-"""Prompt layout for the cache: the chunks of one agent node share a byte-identical prefix, the
-first chunk ends a turn before the others send, and recalled text cannot break out of its
-fence."""
+"""Prompt layout for the cache: the chunks of one agent node share a byte-identical system text
+and send only their payload, the first chunk ends a turn before the others send, and recalled text
+cannot break out of its fence."""
 
 from __future__ import annotations
 
@@ -40,12 +40,14 @@ def test_chunks_share_a_byte_identical_prefix_and_the_first_warms_the_cache_alon
     outcome = asyncio.run(drive(root, tmp_path / "home", port, ["a", "b", "c", "d"]))
 
     first, second = sorted(text for _, text in port.sent)
-    head, _, items = first.partition("Input:\n")
+    systems = {chat["system"] for chat in port.chats}
+    declared = {(chat["tools"], chat["toolsets"], chat["skills"]) for chat in port.chats}
     assert outcome.status == "passed"
     assert seen == [1, 2]
-    assert second == f'{head}Input:\n{{"in": ["c", "d"]}}'
-    assert items == '{"in": ["a", "b"]}'
-    assert head.startswith("Skills to apply: paper-question-battery.\n\nCount the items")
+    assert (first, second) == ('Input:\n{"in": ["a", "b"]}', 'Input:\n{"in": ["c", "d"]}')
+    assert len(port.chats) == 2 and len(systems) == 1
+    assert str(systems.pop()).startswith("Count the items you are given.\n\nReply with exactly")
+    assert declared == {(("Read", "Grep"), ("library",), ("paper-question-battery",))}
 
 
 def test_recalled_text_holding_the_fence_cannot_close_it() -> None:

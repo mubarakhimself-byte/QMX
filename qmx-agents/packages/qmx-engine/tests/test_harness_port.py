@@ -109,6 +109,9 @@ def test_a_chat_is_born_with_its_tools_policy_and_sink_and_a_turn_maps_to_the_tu
             effort=None,
             workspace=tmp_path / "wf",
             tools=("Read", "Grep"),
+            toolsets=("library", "research"),
+            skills=("qmx:qmx-overview",),
+            system="Read the papers.",
             compact_at=0.4,
         )
         adapter.listen(chat, listener)
@@ -120,6 +123,11 @@ def test_a_chat_is_born_with_its_tools_policy_and_sink_and_a_turn_maps_to_the_tu
 
     [spec] = stub.specs
     assert (spec.tools, spec.compact_at, spec.hook_sink) == (("Read", "Grep"), 0.4, "engine")
+    assert (spec.toolsets, spec.skills, spec.append_system_prompt) == (
+        ("library", "research"),
+        ("qmx:qmx-overview",),
+        "Read the papers.",
+    )
     assert spec.permissions.policy == "engine"
     assert dict(spec.policy_args) == {"tools": ["Read", "Grep"]}
     assert stub.policies == {"engine": engine_policy}

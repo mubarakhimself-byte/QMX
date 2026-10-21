@@ -1,12 +1,15 @@
 """The `agent` node (AD-25, AD-34, SOLUTION-DESIGN 2.3): one harness Background chat per chunk,
 which reads, uses tools and answers with one JSON document validated like an `llm` node's.
 
-The chat gets exactly the built-in tools the node declares (H2, B-51), and the `engine` policy
-answers its asks: in its read-only form it denies every write and every undeclared tool with a
-reason the agent reads (AD-60). An agent has no turn, tool-call or run-time ceiling (AD-40): the
-runner's stuck detector (AD-16) reads `look` every tick and calls `stop` when the attempt stopped
-moving, loops or does not converge. A stopped chat is interrupted; a looping or flailing one then
-gets one summary turn and ends `stalled` with that summary.
+The chat's Surface (AD-62) is built from what the node declares: its built-in `tools` (H2, B-51),
+its `toolsets` and its `skills` filter, with nothing else offered. The brief and the output schema
+ride the chat's system text as its last slot, so every chunk reads them from the cache and each turn
+sends only its payload. Every span carries the digest of the surface the chat launched with. The
+`engine` policy answers its asks: in its read-only form it denies every write and every undeclared
+tool with a reason the agent reads (AD-60). An agent has no turn, tool-call or run-time ceiling
+(AD-40): the runner's stuck detector (AD-16) reads `look` every tick and calls `stop` when the
+attempt stopped moving, loops or does not converge. A stopped chat is interrupted; a looping or
+flailing one then gets one summary turn and ends `stalled` with that summary.
 
 The warm-first gate is the runner's, at dispatch (AD-9): `hold` returns the event a chunk waits on
 before it starts, so a held chunk writes no `node_started` and is never an idle attempt. The first
@@ -29,7 +32,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Callable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Final
 
@@ -54,7 +57,7 @@ from qmx_engine.nodes.llm import (
 from qmx_engine.nodes.script import failed
 from qmx_engine.ports.harness_adapter import HarnessPort, Refusal, ToolCall, Turn
 from qmx_engine.ports.memory import MemoryPort
-from qmx_engine.prompts import Prompt, payload, static
+from qmx_engine.prompts import payload, static
 from qmx_engine.roles import DEFAULT_WINDOW, Candidate
 from qmx_engine.sink import HookData
 
@@ -77,6 +80,15 @@ type Record = Callable[[EventKind, JsonObject], None]
 def names(parameters: JsonObject, key: str) -> list[str]:
     found = parameters.get(key)
     return [str(n) for n in found] if isinstance(found, list) else []
+
+
+@dataclass(frozen=True, slots=True)
+class Declared:
+    """What an agent node declares for its chat's Surface; each unset field is empty."""
+
+    tools: tuple[str, ...]
+    toolsets: tuple[str, ...]
+    skills: tuple[str, ...]
 
 
 class Agent:
@@ -151,9 +163,15 @@ class Agent:
         held = await self.admission.check(candidate)
         if held is not None:
             return held
-        text = static(brief, [], schema, names(parameters, "skills"))
-        tools = tuple(names(parameters, "tools"))
-        attempt = Attempt(self, job, candidate, text, schema, tools, warming)
+        node = job.node_definition
+        declared = Declared(
+            tuple(names(parameters, "tools")),
+            tuple(names(node, "toolsets")),
+            tuple(names(node, "skills")),
+        )
+        attempt = Attempt(
+            self, job, candidate, static(brief, [], schema), schema, declared, warming
+        )
         self.attempts[job.idempotency_key] = attempt
         try:
             return await attempt.run()
@@ -176,18 +194,18 @@ class Attempt:
         agent: Agent,
         job: NodeJob,
         candidate: Candidate,
-        text: str,
+        system: str,
         schema: JsonObject,
-        tools: tuple[str, ...],
+        declared: Declared,
         warming: asyncio.Event | None = None,
     ) -> None:
         self.agent = agent
         self.warming = warming
         self.job = job
         self.candidate = candidate
-        self.static = text
+        self.system = system
         self.schema = schema
-        self.declared = tools
+        self.declared = declared
         self.compact_at = setting(agent.settings, "agent.compact_at", 0.4)
         self.window = candidate.context_window or DEFAULT_WINDOW
         self.usage = Usage()
@@ -218,8 +236,7 @@ class Attempt:
 
     def prompt(self) -> str:
         hint = (self.job.resolved_model or {}).get("hint")
-        found = payload(self.job.inputs, hint=hint if isinstance(hint, str) else None)
-        return Prompt(self.static, found).text
+        return payload(self.job.inputs, hint=hint if isinstance(hint, str) else None)
 
     async def run(self) -> NodeResult:
         harness = self.agent.harness
@@ -291,7 +308,12 @@ class Attempt:
         return self.ended(replace(result, span={"stalled": why, "output": summary}))
 
     def span(self) -> JsonObject:
-        return self.usage.span() | {"tool_calls": len(self.tools), "compactions": self.compactions}
+        digest = self.agent.harness.surface_digest(self.chat) if self.chat else None
+        return self.usage.span() | {
+            "tool_calls": len(self.tools),
+            "compactions": self.compactions,
+            "surface_digest": digest,
+        }
 
     def ended(self, result: NodeResult) -> NodeResult:
         if isinstance(result, Failed | Waiting):
@@ -307,7 +329,10 @@ class Attempt:
                 model=candidate.model,
                 effort=candidate.effort,
                 workspace=self.agent.workspace,
-                tools=self.declared,
+                tools=self.declared.tools,
+                toolsets=self.declared.toolsets,
+                skills=self.declared.skills,
+                system=self.system,
                 compact_at=self.compact_at,
             )
         except Refusal as refusal:

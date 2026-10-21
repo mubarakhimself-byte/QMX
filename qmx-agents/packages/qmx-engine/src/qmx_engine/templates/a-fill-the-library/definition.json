@@ -51,7 +51,7 @@
     {"id": "quotes", "name": "Quotes check", "type": "grader", "typeVersion": 1,
      "position": [2640, 0], "effect": "none",
      "parameters": {"mode": "deterministic", "script": "scripts/citation_check.py"}},
-    {"id": "extract", "name": "Reconcile and extract cards", "type": "agent", "typeVersion": 1,
+    {"id": "extract", "name": "Reconcile and extract cards", "type": "agent", "typeVersion": 1, "toolsets": ["library"],
      "position": [2860, 0], "role": "extractor", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/extract.md", "output_schema_ref": "schemas/cards.json",

@@ -11,7 +11,7 @@ import pytest
 
 from qmx_engine.__main__ import main
 from qmx_engine.definition.folder import content_hash, load
-from qmx_engine.definition.model import Workflow, dropped, json_schema
+from qmx_engine.definition.model import Node, Workflow, dropped, json_schema
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import DEFAULT_ROLES, runnable, validate
 
@@ -221,3 +221,12 @@ def test_no_output_echoes_a_key_pasted_into_a_ref_a_role_or_a_name(
         "secret_literal",
         "secret_literal",
     ]
+
+
+def test_an_agent_node_declares_known_toolsets_and_a_wrong_name_is_refused() -> None:
+    node = {"id": "read", "name": "Read", "type": "agent", "typeVersion": 1}
+    good = Node.model_validate(node | {"toolsets": ["library", "mcp:firecrawl"], "skills": ["a"]})
+    assert (good.toolsets, good.skills) == (["library", "mcp:firecrawl"], ["a"])
+    assert "toolsets" not in Node.model_validate(node).model_dump(by_alias=True)
+    with pytest.raises(ValueError, match=r"unknown toolsets \['libary', 'mcp:'\]"):
+        Node.model_validate(node | {"toolsets": ["libary", "mcp:"]})

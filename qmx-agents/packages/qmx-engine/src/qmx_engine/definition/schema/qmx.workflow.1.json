@@ -339,6 +339,21 @@
           "default": "pc",
           "title": "Runs On"
         },
+        "skills": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skills"
+        },
         "timeout": {
           "anyOf": [
             {
@@ -349,6 +364,21 @@
             }
           ],
           "default": null
+        },
+        "toolsets": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Toolsets"
         },
         "type": {
           "title": "Type",

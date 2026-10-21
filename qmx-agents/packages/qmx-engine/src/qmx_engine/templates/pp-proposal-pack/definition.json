@@ -24,7 +24,7 @@
      "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/evidence.py"}},
     {"id": "checklist", "name": "Checklist verdict", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/checklist.py"}},
-    {"id": "validate", "name": "Independent validator", "type": "agent", "typeVersion": 1,
+    {"id": "validate", "name": "Independent validator", "type": "agent", "typeVersion": 1, "toolsets": ["library", "backtest", "data"],
      "position": [660, -120], "role": "reviewer", "effect": "none", "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/validate.md",
                     "output_schema_ref": "schemas/findings.json", "tools": []}},

@@ -73,6 +73,9 @@ def test_an_invalid_answer_gets_one_repair_turn_in_the_same_chat(tmp_path: Path)
             "profile": "claude",
             "model": "haiku",
             "tools": (),
+            "toolsets": (),
+            "skills": (),
+            "system": None,
             "compact_at": None,
         }
     ]

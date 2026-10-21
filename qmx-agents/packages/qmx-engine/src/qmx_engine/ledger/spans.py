@@ -7,14 +7,14 @@ node event carries (AD-15; the store refuses one without them). The ending event
 Span status is derived only: `ok`, `failed` and `waiting` from those endings, `gate` from
 `gate_opened` until its `gate_resolved` (a `node_waiting` on the gate keeps it `gate`), and
 `cancelled` from a `node_failed` with code `cancelled` or from `run_cancelled`, which closes every
-span of the run still open (B-18). An ending event for an attempt that never started, such as
-a hold the core asked for (attempt 0), has no span to close. The other span fields are read from
-these data keys when present: on `node_started` `parent_span_id role profile account model effort
-placement effect idempotency_key`; on the ending event `tokens cost_estimate_usd signature verdict
-same_family uncached_resend`; on `compacted` `trigger at_fraction`. A `tool_called` event writes
-one `tool` span (AD-34), a child of its attempt's span, from its `tool` object: `id name
-duration_ms error`. An attempt's span counts the secrets the ledger redacted from any of its events
-(`redactions`, AD-37); it never records a value.
+span of the run still open (B-18). An ending event for an attempt that never started, such as a hold
+the core asked for (attempt 0), has no span to close. The other span fields are read from these data
+keys when present: on `node_started` `parent_span_id role profile account model effort placement
+effect idempotency_key`; on the ending event `tokens cost_estimate_usd signature verdict same_family
+uncached_resend surface_digest` (AD-62: what an agent's chat was offered); on `compacted` `trigger
+at_fraction`. A `tool_called` event writes one `tool` span (AD-34), a child of its attempt's span,
+from its `tool` object: `id name duration_ms error`. An attempt's span counts the secrets the ledger
+redacted from any of its events (`redactions`, AD-37); it never records a value.
 """
 
 from __future__ import annotations
@@ -85,6 +85,7 @@ class Span:
     verdict: str | None = None
     same_family: bool | None = None
     uncached_resend: bool = False
+    surface_digest: str | None = None
     events: list[JsonObject] = field(default_factory=list[JsonObject])
     name: str | None = None
     """A tool span's tool."""
@@ -184,6 +185,7 @@ def ended(span: Span, event: Event) -> Span:
         verdict=_text(data, "verdict"),
         same_family=_flag(data, "same_family"),
         uncached_resend=_flag(data, "uncached_resend") or False,
+        surface_digest=_text(data, "surface_digest"),
     )
 
 

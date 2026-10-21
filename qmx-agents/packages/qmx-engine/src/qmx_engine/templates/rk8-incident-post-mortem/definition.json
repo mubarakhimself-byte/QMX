@@ -24,7 +24,7 @@
      "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/incident.py"}},
     {"id": "impact", "name": "Impact in R and dollars", "type": "script", "typeVersion": 1,
      "position": [440, 120], "effect": "none", "parameters": {"script": "scripts/impact.py"}},
-    {"id": "draft", "name": "Draft the post-mortem", "type": "agent", "typeVersion": 1,
+    {"id": "draft", "name": "Draft the post-mortem", "type": "agent", "typeVersion": 1, "toolsets": ["library"],
      "position": [660, 0], "role": "synthesiser", "effect": "none", "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/draft.md", "output_schema_ref": "schemas/draft.json",
                     "tools": []}},

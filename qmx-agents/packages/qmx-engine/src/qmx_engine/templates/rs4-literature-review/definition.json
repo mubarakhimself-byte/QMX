@@ -30,7 +30,7 @@
                     "recording_ref": "fixtures/recorded/plan.json"}},
     {"id": "brief", "name": "Brief each source", "type": "script", "typeVersion": 1,
      "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/brief.py"}},
-    {"id": "search", "name": "Search each chunk of sources", "type": "agent", "typeVersion": 1,
+    {"id": "search", "name": "Search each chunk of sources", "type": "agent", "typeVersion": 1, "toolsets": ["library", "research"],
      "position": [880, 0], "role": "searcher", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/search.md", "output_schema_ref": "schemas/findings.json",

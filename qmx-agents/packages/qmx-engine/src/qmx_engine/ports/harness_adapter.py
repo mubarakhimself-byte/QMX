@@ -2,7 +2,8 @@
 turn call (AD-53).
 
 Every engine chat is a Background chat titled with its attempt's idempotency key. It is born with
-exactly the built-in tools its node declares (`()` is none, H2), the `engine` permission policy,
+exactly the built-in tools, toolsets and skills its node declares (each `()` is none, H2, AD-62),
+its static prompt as the system text's last slot, the `engine` permission policy,
 which answers its asks in-process, and the `engine` hook sink. All three and `compact_at` are on
 the chat record, so a chat reloaded after a host restart keeps them (H19). Every prompt goes as
 `InjectedText`. A turn ends when its handle's `result()` resolves: nothing polls.
@@ -134,8 +135,15 @@ class HarnessPort(Protocol):
         effort: str | None,
         workspace: Path,
         tools: tuple[str, ...] = (),
+        toolsets: tuple[str, ...] = (),
+        skills: tuple[str, ...] = (),
+        system: str | None = None,
         compact_at: float | None = None,
     ) -> str: ...
+
+    def surface_digest(self, chat: str) -> str | None:
+        """The digest of the surface the chat's latest launch had, once it launched (AD-62)."""
+        ...
 
     def listen(self, chat: str, listener: Listener | None) -> None:
         """Hand the chat's hook events to `listener` from now on; None stops them."""
@@ -241,6 +249,9 @@ class HarnessAdapter:
         effort: str | None,
         workspace: Path,
         tools: tuple[str, ...] = (),
+        toolsets: tuple[str, ...] = (),
+        skills: tuple[str, ...] = (),
+        system: str | None = None,
         compact_at: float | None = None,
     ) -> str:
         workspace.mkdir(parents=True, exist_ok=True)
@@ -254,6 +265,9 @@ class HarnessAdapter:
                 kind=Background(),
                 compact_at=compact_at,
                 tools=tools,
+                toolsets=toolsets,
+                skills=skills,
+                append_system_prompt=system,
                 hook_sink=ENGINE,
                 permissions=ChatPermissions(policy=ENGINE),
                 policy_args={"tools": list(tools)},
@@ -261,6 +275,9 @@ class HarnessAdapter:
             return str(await self.harness.start_chat(spec))
         except LaunchRefused as refused:
             raise Refusal(str(refused)) from None
+
+    def surface_digest(self, chat: str) -> str | None:
+        return self.harness.surface_digest(SessionId(chat))
 
     def listen(self, chat: str, listener: Listener | None) -> None:
         self.sink.listen(chat, listener)

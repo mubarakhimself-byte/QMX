@@ -44,6 +44,7 @@ from qma.harness.launch import COMPACT_PCT_ENV as COMPACT
 from qma.harness.launch import Budgets, ChatConfig, ChatKind, build_options
 from qma.harness.profiles import PLAN
 from qma.harness.routes import control_service
+from qma.harness.surface import HomeSlots, Supply, build, declaration
 
 home = test_chat.home
 
@@ -78,12 +79,15 @@ def options(
 ) -> Any:
     plugin = tmp_path / "plugin"
     plugin.mkdir(exist_ok=True)
+    home = QmxHome(tmp_path / "qmx", plugin_dir=plugin)
+    config = ChatConfig(PLAN, "haiku", None, "default", tmp_path, kind, compact_at, hooks)
+    supply = Supply((), HomeSlots(home), {}, (plugin,), tmp_path / "qmx-slots" / "skills")
     return build_options(
-        ChatConfig(PLAN, "haiku", None, "default", tmp_path, kind, compact_at, hooks),
+        config,
+        build(kind, config.home, (), declaration(config), supply, workspace=tmp_path),
         session_id=CHAT,
         transcript_exists=False,
         env={"CLAUDE_CONFIG_DIR": "D:/qmx/claude"},
-        home=QmxHome(tmp_path / "qmx", plugin_dir=plugin),
         settings_file=tmp_path / "settings.json",
         system_file=tmp_path / "system.md",
         launcher=Path("D:/venv/Scripts/qma-cli-launcher.exe"),

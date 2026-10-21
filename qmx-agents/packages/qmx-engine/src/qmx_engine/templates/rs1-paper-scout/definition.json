@@ -40,7 +40,7 @@
      "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/select.py"}},
     {"id": "kept", "name": "Anything kept?", "type": "rule", "typeVersion": 1,
      "position": [1540, 0], "effect": "none", "parameters": {"expr": "items != []"}},
-    {"id": "read", "name": "Read each paper", "type": "agent", "typeVersion": 1,
+    {"id": "read", "name": "Read each paper", "type": "agent", "typeVersion": 1, "toolsets": ["library", "research"],
      "position": [1760, 0], "role": "reader", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/read.md", "output_schema_ref": "schemas/cards.json",
