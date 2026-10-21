@@ -138,8 +138,9 @@ def hub_url(home: Path) -> str | None:
 class HubClient:
     """One HTTP call per verb, on the tailnet, with the pairing key as its bearer.
 
-    It is the PC's `Peer` for `qmx_hub.replicate`: `refs`, `blob`, `manifest`, `put_blob`,
-    `put_manifest`, `advance` and `apply_purge` are all the Hub exposes.
+    It is the PC's `Peer` for `qmx_hub.replicate`: `refs`, `object_ids`, `manifest`, `blob_ids`,
+    `blob`, `store_blob`, `ingest`, `mirror`, `ancestry`, `tombstone` and `apply_purge` are what
+    the Hub exposes for a sync.
     """
 
     url: str
@@ -178,7 +179,11 @@ class HubClient:
             with urllib.request.urlopen(request, timeout=self.timeout) as answer:  # noqa: S310
                 document = cast(dict[str, JsonValue], json.loads(answer.read()))
         except urllib.error.HTTPError as error:
-            document = cast(dict[str, JsonValue], json.loads(error.read()))
+            payload = error.read()
+            try:
+                document = cast(dict[str, JsonValue], json.loads(payload))
+            except ValueError:
+                raise LibraryRefused("storage_failure", f"the hub answered {error.code}") from None
             if document.get("ok") is False:
                 raise LibraryRefused(
                     str(document.get("code", "storage_failure")), str(document.get("message", ""))
@@ -265,9 +270,6 @@ class HubClient:
         )
         with urllib.request.urlopen(request, timeout=self.timeout) as answer:  # noqa: S310
             return str(cast(dict[str, JsonValue], json.loads(answer.read()))["blob_id"])
-
-    def advance(self, item: str, ref: str, new_head: str, *, expected_head: str | None) -> None:
-        self.call("advance", item=item, ref=ref, new_head=new_head, expected_head=expected_head)
 
     def apply_purge(self, blob_id: str, *, reason: str, at: str) -> None:
         self.call("apply_purge", blob_id=blob_id, reason=reason, at=at)
