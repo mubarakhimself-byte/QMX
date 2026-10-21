@@ -1,4 +1,5 @@
-"""Rebuildable run projections over immutable P08 journal records."""
+"""Rebuildable projections of the control plane's remote runs over their immutable journals.
+They stay until the remote worker adapter replaces them (RUN1b)."""
 
 from __future__ import annotations
 
@@ -26,6 +27,21 @@ class RunIndex:
                 CREATE TABLE IF NOT EXISTS journals(path TEXT PRIMARY KEY,digest TEXT NOT NULL,
                     size INTEGER NOT NULL);
             """)
+            for run_id, raw in db.execute("SELECT id,data FROM runs").fetchall():
+                data = cast(Document, json.loads(raw))
+                if self.is_chat(run_id, data):
+                    db.execute("DELETE FROM runs WHERE id=?", (run_id,))
+                    db.execute("DELETE FROM journals WHERE path=?", (data["journal"],))
+
+    def is_chat(self, run_id: str, data: Document) -> bool:
+        """A chat journal under `runs/` is keyed by its own session. A background run's journal
+        lives there too, but its owner published it with a separate child session."""
+        journal = data.get("journal")
+        return (
+            isinstance(journal, str)
+            and Path(journal).is_relative_to(self.home / "runs")
+            and data.get("session_id") in (None, run_id)
+        )
 
     def record(self, run_id: str, data: Document) -> Document:
         with closing(sqlite3.connect(self.home / "runs.db", timeout=5)) as db, db:
@@ -53,14 +69,19 @@ class RunIndex:
         return result
 
     def refresh(self) -> list[Document]:
+        """Project the remote runs' journals, and the journals of runs an owner published under
+        `runs/<id>/` (background runs). Chat journals there are not runs (B-67): every unit of
+        work QMX starts is an engine run, listed by the engine (engine AD-57)."""
         changed: list[Document] = []
+        with closing(sqlite3.connect(self.home / "runs.db", timeout=5)) as db:
+            owned = {row[0] for row in db.execute("SELECT id FROM runs")}
         paths = sorted(
             {
-                *self.home.glob("runs/**/*.jsonl"),
                 *self.home.glob("journals/**/*.jsonl"),
+                *(self.home / "runs" / run_id / "journal.jsonl" for run_id in owned),
             }
         )
-        for path in paths:
+        for path in (path for path in paths if path.is_file()):
             body = path.read_bytes()
             # A live writer may be between write() calls; only project complete records.
             complete = body[: body.rfind(b"\n") + 1]

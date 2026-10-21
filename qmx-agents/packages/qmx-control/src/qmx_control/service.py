@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qmx_apps.backup import BackupSettings, backup, restore
 from qmx_apps.backup_schedule import BackupSchedule
 from qmx_apps.docker import DockerSupervisor
+from qmx_apps.errors import AppError
 from qmx_apps.manifest import Trust
 from qmx_apps.road.models import Stage
 from qmx_apps.supervisor import Supervisor
@@ -93,6 +94,32 @@ class SessionBlock(BaseModel):
 
 def _document(value: str) -> Document:
     return cast(Document, json.loads(value))
+
+
+def app_workflow_id(app_id: str) -> str:
+    """The workflow that runs an app's scheduled job. It lives beside the app until packs hold
+    their own workflows (PACK)."""
+    return f"{app_id}-schedule"
+
+
+def app_workflow(item: str, app_id: str, job: str) -> Document:
+    """A trigger and one `app_op` node that runs `job` in the app's supervised process."""
+
+    def node(node_id: str, name: str, kind: str, x: int) -> JsonValue:
+        return {"id": node_id, "name": name, "type": kind, "typeVersion": 1, "position": [x, 0]}
+
+    run: Document = {"parameters": {"app": app_id, "job": job}}
+    edge: JsonValue = {"node": "Run job", "port": "in", "map": "one"}
+    return {
+        "schema": "qmx.workflow/1",
+        "id": item,
+        "name": f"{app_id} schedule",
+        "nodes": [
+            node("t", "Start", "trigger", 0),
+            cast(Document, node("a", "Run job", "app_op", 200)) | run,
+        ],
+        "connections": {"Start": {"main": [[edge]]}},
+    }
 
 
 RULE_LISTS = ("always_allow", "never_allow")
@@ -200,7 +227,10 @@ class ControlService:
             if legacy_catalog:
                 db.execute("DROP TABLE library")
             for work_id, raw in db.execute("SELECT id,data FROM work WHERE kind='runs'").fetchall():
-                self.run_index.record(work_id, _document(raw))
+                if self.run_index.is_chat(work_id, _document(raw)):
+                    db.execute("DELETE FROM work WHERE kind='runs' AND id=?", (work_id,))
+                else:
+                    self.run_index.record(work_id, _document(raw))
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:
@@ -888,6 +918,54 @@ class ControlService:
     def apps_restart(self, app_id: str) -> Document:
         """Restart the selected immutable definition, retaining its volume."""
         return self.app_runtime().restart(app_id)
+
+    @operation(
+        "apps_admin",
+        "enable",
+        "manage",
+        rest=("POST", "/api/apps/{app_id}/enable"),
+        agent=False,
+        left_out="his act from the UI: it publishes and enables a workflow (engine AD-11)",
+    )
+    def apps_enable(self, app_id: str) -> Document:
+        """Start an app and turn its suggested trigger into an enabled engine trigger."""
+        owner = self.app_runtime()
+        manifest = cast(Document, owner.get(app_id)["definition"])
+        app = owner.start(app_id)
+        suggested = manifest.get("suggested_trigger")
+        if not isinstance(suggested, dict):
+            return {"app": app, "trigger": None}
+        engine = self._engine("apps.enable")
+        item = app_workflow_id(app_id)
+        found = engine.workflow_triggers_list(item)
+        if found:
+            trigger_id = str(found[0]["id"])
+        else:
+            entrypoints = cast(Document, manifest["entrypoints"])
+            job = suggested.get("job") or cast(list[JsonValue], entrypoints["jobs"])[0]
+            engine.workflow_drafts_put(item, app_workflow(item, app_id, str(job)))
+            tested = cast(Document, engine.workflow_tests_run(item, None, False)["run"])
+            if tested.get("status") != "passed":
+                raise ControlError(
+                    "app_test_failed",
+                    f"The test run {tested.get('run_id')} of {item} reads {tested.get('status')}; "
+                    "enable again once it passes.",
+                    409,
+                )
+            published = engine.workflows_put(item, {})
+            if "card" in published:
+                return published
+            spec = {key: suggested[key] for key in ("kind", "seconds", "expr", "zone")}
+            trigger_id = str(engine.workflow_triggers_create(item, spec)["id"])
+        return {"app": app, "trigger": engine.workflow_triggers_enable(trigger_id)}
+
+    def app_job(self, app_id: str, job: str) -> Document:
+        """Run one of an app's jobs in its supervised process; the engine's `app_op` node
+        calls this when the app's trigger fires (engine AD-57)."""
+        try:
+            return self.app_runtime().run_job(app_id, job)
+        except AppError as error:
+            raise ControlError(error.code, str(error), error.status) from error
 
     @operation("apps_admin", "registry", "read", rest=("GET", "/api/apps/registry"))
     def apps_registry(self) -> list[Document]:

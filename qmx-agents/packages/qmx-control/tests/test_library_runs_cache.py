@@ -226,7 +226,7 @@ def append(path: Path, run_id: str, seq: int, event: str, payload: dict[str, Any
 
 
 def test_run_projection_validates_journal_and_updates_events(tmp_path: Path) -> None:
-    path = tmp_path / "runs" / "r1.jsonl"
+    path = tmp_path / "journals" / "remote-r1.jsonl"
     append(path, "r1", 1, "run_start", {"kind": "workflow", "target": "laptop", "node": "local"})
     append(
         path,
@@ -307,3 +307,40 @@ def test_library_run_and_aggregate_doors_match(tmp_path: Path) -> None:
                 assert rest.get("/api/runs/missing", headers=HEADERS).status_code == 404
 
     asyncio.run(exercise())
+
+
+def test_the_run_index_never_lists_a_chat_journal(tmp_path: Path) -> None:
+    chat = tmp_path / "runs" / "chat-1" / "journal.jsonl"
+    append(chat, "chat-1", 1, "run_start", {"kind": "agent", "session_id": "chat-1"})
+    remote = tmp_path / "journals" / "remote-r2.jsonl"
+    append(remote, "r2", 1, "run_start", {"kind": "job", "target": "contabo"})
+    with closing(sqlite3.connect(tmp_path / "runs.db")) as db, db:
+        db.execute("CREATE TABLE runs(id TEXT PRIMARY KEY,data TEXT NOT NULL)")
+        db.execute(
+            "INSERT INTO runs VALUES(?,?)",
+            ("chat-0", json.dumps({"id": "chat-0", "journal": str(chat.with_name("old.jsonl"))})),
+        )
+    service = ControlService(tmp_path)
+    assert [run["id"] for run in service.runs_list()] == ["r2"]
+    with pytest.raises(ControlError, match="Unknown run id"):
+        service.runs_get("chat-1")
+
+
+def test_a_background_run_keeps_its_model_and_a_mirrored_chat_stays_out(tmp_path: Path) -> None:
+    ControlService(tmp_path).close()
+    chat = tmp_path / "runs" / "chat-1" / "journal.jsonl"
+    append(chat, "chat-1", 1, "run_start", {"agent": "primary", "session_id": "chat-1"})
+    row = {"id": "chat-1", "kind": "agent", "session_id": "chat-1", "journal": str(chat)}
+    with closing(sqlite3.connect(tmp_path / "control.db")) as db, db:
+        db.execute("INSERT INTO work VALUES('runs','chat-1',?)", (json.dumps(row),))
+    service = ControlService(tmp_path)
+    service.record_work("runs", "bg-1", {"session_id": "child-1", "status": "running"})
+    background = tmp_path / "runs" / "bg-1" / "journal.jsonl"
+    append(background, "bg-1", 1, "run_start", {"agent": "builder", "session_id": "child-1"})
+    append(background, "bg-1", 2, "model_call", {"agent": "builder", "model": "fake:model"})
+    append(background, "bg-1", 3, "run_end", {"status": "completed"})
+    assert service.runs_get("bg-1")["model"] == {"builder": "fake:model"}
+    service.close()
+    service = ControlService(tmp_path)
+    assert [run["id"] for run in service.runs_list()] == ["bg-1"]
+    assert service.runs_get("bg-1")["status"] == "completed"

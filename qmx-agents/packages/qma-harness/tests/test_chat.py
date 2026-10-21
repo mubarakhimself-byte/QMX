@@ -1284,8 +1284,6 @@ def test_relay_usage_lands_in_the_run_journal_through_one_held_writer(home: QmxH
         "cache_read_tokens": 7,
         "cache_write_tokens": 8,
     }
-    indexed = control_service(home).run_index.refresh()
-    assert [(run["id"], run["model"]) for run in indexed] == [(chat, {"primary": "m"})]
 
 
 def test_open_reaps_the_journal_lock_a_crash_left(home: QmxHome) -> None:

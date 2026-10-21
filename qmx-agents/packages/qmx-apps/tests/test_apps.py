@@ -133,7 +133,7 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
         assert limits["cpu_percent"] == 50
         assert limits["kill_on_close"] is True
     else:
-        assert limits["fallback"] == "RLIMIT_AS/RLIMIT_CPU and psutil"
+        assert limits["fallback"] == "RLIMIT_AS and psutil"
     registry = supervisor.registry()
     assert registry[0]["transport"] == "stdio"
     assert "ping" in [document(tool)["name"] for tool in cast(list[object], registry[0]["tools"])]
@@ -152,16 +152,12 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
     if sys.platform == "win32":
         before_cpu = cast(
             float,
-            document(document(supervisor.status("exchange-status")["metrics"])["budget_used"])[
-                "cpu_seconds"
-            ],
+            document(supervisor.status("exchange-status")["metrics"])["cpu_seconds"],
         )
         supervisor.call("exchange-status", "child_cpu", {})
         after_cpu = cast(
             float,
-            document(document(supervisor.status("exchange-status")["metrics"])["budget_used"])[
-                "cpu_seconds"
-            ],
+            document(supervisor.status("exchange-status")["metrics"])["cpu_seconds"],
         )
         assert after_cpu >= before_cpu + 0.30, "Exited child CPU must remain in the job budget"
     stopped = supervisor.stop("exchange-status")
@@ -309,20 +305,17 @@ def test_actual_subprocess_refuses_outside_writes(
     }
 
 
-def test_budget_breaker_stops_actual_process(supervisor: Supervisor, fixture_app: Path) -> None:
+def test_no_usage_budget_stops_an_app(supervisor: Supervisor, fixture_app: Path) -> None:
     path = fixture_app / "app.toml"
     path.write_text(path.read_text().replace("runs = 100", "runs = 1"))
     install(supervisor, fixture_app)
-    pid = cast(int, supervisor.start("exchange-status")["pid"])
-    supervisor.call("exchange-status", "ping", {})
-    with pytest.raises(AppError) as caught:
-        supervisor.call("exchange-status", "ping", {})
-    assert caught.value.code == "budget_exceeded"
-    dead(pid)
+    supervisor.start("exchange-status")
+    for _ in range(3):
+        assert supervisor.call("exchange-status", "ping", {})["result"] == {"pong": True}
     status = supervisor.status("exchange-status")
-    assert status["status"] == "tripped"
-    assert document(status["breaker"])["reason"] == "run_budget"
-    assert any(item["event"] == "breaker_open" for item in supervisor.logs("exchange-status"))
+    assert status["status"] == "running"
+    assert document(status["metrics"])["runs"] == 3
+    supervisor.stop("exchange-status")
 
 
 def test_heartbeat_breaker_stops_actual_process(supervisor: Supervisor, fixture_app: Path) -> None:
@@ -337,19 +330,53 @@ def test_heartbeat_breaker_stops_actual_process(supervisor: Supervisor, fixture_
     )
 
 
-def test_scheduled_jobs_are_metered_and_stopped(supervisor: Supervisor, fixture_app: Path) -> None:
+def with_job(fixture_app: Path, body: str) -> None:
     path = fixture_app / "app.toml"
     text = path.read_text().replace('mcp = "server.py"', 'mcp = "server.py"\njobs = ["job.py"]')
-    text = text.replace("runs = 100", "runs = 1") + "\n[schedule]\ninterval_seconds = 0.5\n"
-    path.write_text(text)
-    (fixture_app / "job.py").write_text(
-        'from pathlib import Path\ndef run():\n    Path("data/job.txt").write_text("scheduled")\n'
+    path.write_text(text + "\n[schedule]\ninterval_seconds = 0.5\n")
+    (fixture_app / "job.py").write_text(body)
+
+
+def test_the_supervisor_schedules_nothing_and_runs_a_job_when_asked(
+    supervisor: Supervisor, fixture_app: Path
+) -> None:
+    with_job(
+        fixture_app,
+        "from pathlib import Path\n"
+        "def run():\n"
+        "    path = Path('data/job.txt')\n"
+        "    path.write_text(str(int(path.read_text()) + 1) if path.exists() else '1')\n",
     )
     install(supervisor, fixture_app)
+    supervisor.start("exchange-status")
+    marker = supervisor.home / "apps/exchange-status/data/job.txt"
+    time.sleep(2)
+    assert not marker.exists(), "the old half-second schedule must not run the job"
+    assert supervisor.run_job("exchange-status", "job.py")["job"] == "job.py"
+    assert supervisor.run_job("exchange-status", "job.py")["job"] == "job.py"
+    assert marker.read_text() == "2"
+    with pytest.raises(AppError) as caught:
+        supervisor.run_job("exchange-status", "other.py")
+    assert caught.value.code == "job_not_found"
+    supervisor.stop("exchange-status")
+    with pytest.raises(AppError) as stopped:
+        supervisor.run_job("exchange-status", "job.py")
+    assert (stopped.value.code, str(stopped.value)) == ("not_running", "The app is stopped.")
+
+
+def test_failing_jobs_still_trip_the_crash_breaker(
+    supervisor: Supervisor, fixture_app: Path
+) -> None:
+    with_job(fixture_app, "def run():\n    raise RuntimeError('boom')\n")
+    install(supervisor, fixture_app)
     pid = cast(int, supervisor.start("exchange-status")["pid"])
+    for _ in range(3):
+        with pytest.raises(AppError) as caught:
+            supervisor.run_job("exchange-status", "job.py")
+        assert caught.value.code in {"job_failed", "not_running"}
     dead(pid)
-    assert (supervisor.home / "apps/exchange-status/data/job.txt").read_text() == "scheduled"
-    assert document(supervisor.status("exchange-status")["breaker"])["reason"] == "run_budget"
+    status = supervisor.status("exchange-status")
+    assert (status["status"], document(status["breaker"])["reason"]) == ("tripped", "error_limit")
 
 
 @pytest.mark.serial

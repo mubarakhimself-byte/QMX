@@ -32,10 +32,11 @@ class WindowsJob:
             info = self.api.QueryInformationJobObject(
                 self.handle, self.api.JobObjectExtendedLimitInformation
             )
-            info["BasicLimitInformation"]["LimitFlags"] = (
-                self.api.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | self.api.JOB_OBJECT_LIMIT_JOB_MEMORY
-            )
-            info["JobMemoryLimit"] = budget.memory_mb * 1024 * 1024
+            flags = self.api.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if budget.memory_mb is not None:
+                flags |= self.api.JOB_OBJECT_LIMIT_JOB_MEMORY
+                info["JobMemoryLimit"] = budget.memory_mb * 1024 * 1024
+            info["BasicLimitInformation"]["LimitFlags"] = flags
             self.api.SetInformationJobObject(
                 self.handle, self.api.JobObjectExtendedLimitInformation, info
             )
@@ -56,13 +57,14 @@ class WindowsJob:
             ]
             kernel.QueryInformationJobObject.restype = wintypes.BOOL
             self.kernel = kernel
-            rate = CpuRate(
-                5, budget.cpu_percent * 100
-            )  # ENABLE | HARD_CAP, hundredths of a percent.
-            if not kernel.SetInformationJobObject(
-                int(self.handle), 15, ctypes.byref(rate), ctypes.sizeof(rate)
-            ):
-                raise ctypes.WinError(ctypes.get_last_error())
+            if budget.cpu_percent is not None:
+                rate = CpuRate(
+                    5, budget.cpu_percent * 100
+                )  # ENABLE | HARD_CAP, hundredths of a percent.
+                if not kernel.SetInformationJobObject(
+                    int(self.handle), 15, ctypes.byref(rate), ctypes.sizeof(rate)
+                ):
+                    raise ctypes.WinError(ctypes.get_last_error())
         except BaseException:
             self.handle.Close()
             raise
@@ -78,13 +80,13 @@ class WindowsJob:
             int(self.handle), 15, ctypes.byref(rate), ctypes.sizeof(rate), None
         ):
             raise ctypes.WinError(ctypes.get_last_error())
+        flags = info["BasicLimitInformation"]["LimitFlags"]
         return {
-            "memory_mb": info["JobMemoryLimit"] // (1024 * 1024),
-            "cpu_percent": rate.CpuRate // 100,
-            "kill_on_close": bool(
-                info["BasicLimitInformation"]["LimitFlags"]
-                & self.api.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-            ),
+            "memory_mb": info["JobMemoryLimit"] // (1024 * 1024)
+            if flags & self.api.JOB_OBJECT_LIMIT_JOB_MEMORY
+            else None,
+            "cpu_percent": rate.CpuRate // 100 if rate.ControlFlags else None,
+            "kill_on_close": bool(flags & self.api.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE),
         }
 
     def cpu_seconds(self) -> float:

@@ -86,10 +86,9 @@ def main() -> None:
         # FastMCP may already have created the subprocess session.
         if os.getsid(os.getpid()) != os.getpid():
             os.setsid()
-        memory = int(config["memory_mb"]) * 1024 * 1024
-        resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
-        cpu = max(1, int(config["cpu_seconds"]) + 1)
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
+        if config.get("memory_mb"):
+            memory = int(config["memory_mb"]) * 1024 * 1024
+            resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
 
     def check(path: Any) -> None:
         if isinstance(path, int):
@@ -190,25 +189,46 @@ def main() -> None:
                 pass
             time.sleep(0.25)
 
+    declared = cast("list[str]", config["jobs"])
+    queue = volume / "data" / "jobs"
+
+    def run_job(job: str) -> dict[str, Any]:
+        with lock:
+            counts["job_runs"] += 1
+        try:
+            if job not in declared:
+                raise ValueError("The job is not declared.")
+            namespace = runpy.run_path(str(image / job), run_name="qmx_job")
+            run = namespace.get("run")
+            if not callable(run):
+                raise ValueError("A job script must define run().")
+            run()
+        except Exception as error:
+            with lock:
+                counts["job_errors"] += 1
+            print(json.dumps({"event": "job_error", "job": job}), file=sys.stderr)
+            return {"ok": False, "error": type(error).__name__}
+        return {"ok": True}
+
     def jobs() -> None:
+        """Answer the host's job requests one at a time, oldest first; the host's engine
+        trigger decides when a job runs (engine AD-57)."""
         while True:
-            time.sleep(float(config["interval_seconds"]))
-            for job in cast("list[str]", config["jobs"]):
-                with lock:
-                    counts["job_runs"] += 1
+            time.sleep(0.25)
+            for request in sorted(queue.glob("*.request.json")) if queue.is_dir() else []:
                 try:
-                    namespace = runpy.run_path(str(image / job), run_name="qmx_job")
-                    run = namespace.get("run")
-                    if not callable(run):
-                        raise ValueError("A scheduled job script must define run().")
-                    run()
-                except Exception:
-                    with lock:
-                        counts["job_errors"] += 1
-                    print(json.dumps({"event": "job_error", "job": job}), file=sys.stderr)
+                    job = str(json.loads(request.read_text(encoding="utf-8"))["job"])
+                except OSError:
+                    continue  # The host withdrew it.
+                answer = run_job(job)
+                name = request.name.removesuffix(".request.json")
+                staged = queue / f"{name}.answer"
+                staged.write_text(json.dumps(answer), encoding="utf-8")
+                staged.replace(queue / f"{name}.done.json")
+                request.unlink(missing_ok=True)
 
     threading.Thread(target=pulse, name="qmx-heartbeat", daemon=True).start()
-    if config["interval_seconds"]:
+    if declared:
         threading.Thread(target=jobs, name="qmx-jobs", daemon=True).start()
     runpy.run_path(str(image / config["mcp"]), run_name="__main__")
 
