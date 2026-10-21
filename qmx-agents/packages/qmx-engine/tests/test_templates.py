@@ -39,6 +39,7 @@ A = PACK / "a-fill-the-library"
 RV = PACK / "rv-weekly-review"
 DB = PACK / "db-desk-brief"
 T4 = PACK / "t4-research-desk-overnight"
+EV = PACK / "ev-copilot-eval-battery"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.folder and t.needs]
 
 
@@ -81,6 +82,8 @@ def answers(
         "You propose edits for QMX's": recorded(RV, "edits.json"),
         "You are the writer of the trader's desk brief": recorded(DB, "brief.json"),
         "You are the coordinator of QMX's overnight": recorded(T4, "lines.json"),
+        "You are the copilot under evaluation": recorded(EV, "answers.json"),
+        "You grade answers in QMX's copilot eval battery": recorded(EV, "verdicts.json"),
     } | (planted or {})
     chunked: dict[str, Callable[[str], str]] = {
         "You are the paper reader": lambda c: mine([RS1], "cards.json", "cards", "paper_id", c),
@@ -141,15 +144,15 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_31_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_32_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 31
-    assert len(set(ids)) == 31
-    assert all(t.cards and all(c.file in ("15", "16", "17") and c.card for c in t.cards)
+    assert len(ids) == 32
+    assert len(set(ids)) == 32
+    assert all(t.cards and all(c.file in ("15", "16", "17", "44") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
-        "RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4",
+        "RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4", "EV",
     ]  # fmt: skip
     assert find("P1").needs == ("trading-node", "risk-session")
     assert all(t.folder for t in CATALOG)
@@ -400,7 +403,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_nine_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_ten_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -412,7 +415,7 @@ def test_install_publishes_nine_disabled_saves_22_drafts_and_a_second_install_ch
     with Reader.open(tmp_path) as reader:
         triggers = rows.triggers(reader.connection)
 
-    built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4"]
+    built = ["RS1", "T3", "RS0", "RS2", "RS4", "A", "RV", "DB", "T4", "EV"]
     drafts = [
         "DM", "T7", "GW", "RK2", "DC", "RK5", "RK8", "P1", "P2", "PP", "B", "RS3", "RS6", "RS8",
         "L1", "L4", "BC", "D3", "D4", "D6", "MA", "D9",
@@ -420,9 +423,9 @@ def test_install_publishes_nine_disabled_saves_22_drafts_and_a_second_install_ch
     assert [(i.template.id, i.action) for i in first] == [(t, "published") for t in built] + [
         (t, "saved draft") for t in drafts
     ]
-    assert [i.action for i in second] == ["unchanged"] * 31
+    assert [i.action for i in second] == ["unchanged"] * 32
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 9
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 10
     assert status["GW"] == ("validated draft, needs: trading-node", None)
     assert status["P2"] == ("validated draft, needs: broker-read-token", None)
     assert status["PP"] == ("validated draft, needs: trading-node, risk-session", None)

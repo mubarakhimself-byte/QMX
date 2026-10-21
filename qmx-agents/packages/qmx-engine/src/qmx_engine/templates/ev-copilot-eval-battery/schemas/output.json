@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "required": ["tasks", "passed", "total"],
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "graded_by", "tries", "pass3", "why"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "graded_by": {"enum": ["code", "judge"]},
+          "tries": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "boolean"}},
+          "pass3": {"type": "boolean"},
+          "why": {"type": "array", "items": {"type": ["string", "null"]}}
+        }
+      }
+    },
+    "passed": {"type": "integer", "minimum": 0},
+    "total": {"type": "integer", "minimum": 1}
+  }
+}

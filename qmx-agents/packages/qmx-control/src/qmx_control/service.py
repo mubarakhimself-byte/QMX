@@ -12,7 +12,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable, Generator, Mapping
 from contextlib import closing, contextmanager
 from pathlib import Path
-from typing import Literal, NoReturn, Protocol, cast
+from typing import Final, Literal, NoReturn, Protocol, cast
 from urllib.parse import urlsplit
 
 import keyring
@@ -62,6 +62,35 @@ HOST_SECTIONS: frozenset[SettingsSection] = frozenset({"claude", "environment"})
 ENGINE = "an attached workflow engine"
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
 type WorkKind = Literal["runs", "jobs"]
+EVAL_TASK: Final = "eval-task"
+"""The tag of a copilot eval battery task (engine AD-66). A new failure becomes a task with one
+`library_save` carrying it: content `{id, prompt, grade, source}`, `grade` either
+`{by: code, checks}` or `{by: judge, rubric}`."""
+EVAL_RUN: Final = "eval-run"
+"""The tag of a battery result, the item a change card reads."""
+SLOT_KINDS: Final = frozenset({"persona", "methodology", "skill"})
+"""The Library kinds whose drafts the battery tests before he publishes them."""
+
+
+def model_subject(current: str | None, new: str) -> str:
+    """The battery subject of switching the copilot's default model from `current` to `new`."""
+    return f"copilot-model:{current or 'unset'}->{new}"
+
+
+def draft_subject(artifact_id: str) -> str:
+    """The battery subject of a persona, methodology or skill draft."""
+    return f"draft:{artifact_id}"
+
+
+def eval_run_input(result: Document) -> LibraryInput:
+    """A battery result as the Library item its change card reads."""
+    return LibraryInput(
+        title=f"Eval battery: {result['subject']}"[:200],
+        kind=EVAL_RUN,
+        content=result,
+        tags=[EVAL_RUN],
+        source="ev-copilot-eval-battery",
+    )
 
 
 class LibraryMirror(Protocol):
@@ -523,6 +552,88 @@ class ControlService:
     def library_get(self, artifact_id: str) -> Document:
         """Read an artifact with its verified blob content."""
         return self.library.get(artifact_id)
+
+    def _tagged(self, tag: str) -> list[Document]:
+        """The latest version of every item carrying `tag`."""
+        found: dict[str, Document] = {}
+        for item in self.library.search(f'tags:"{tag}"', limit=1000):
+            if tag not in cast(list[str], item["tags"]):
+                continue
+            root = str(item["root_id"])
+            if root not in found or cast(int, found[root]["version"]) < cast(int, item["version"]):
+                found[root] = item
+        return sorted(found.values(), key=lambda item: str(item["created"]))
+
+    @operation("library", "eval_tasks", "read", rest=("GET", "/api/eval/tasks"))
+    def library_eval_tasks(self) -> list[Document]:
+        """The copilot eval battery's tasks: the latest version of every item tagged eval-task.
+        A new failure becomes a task with one library_save tagged eval-task."""
+        return [cast(Document, item["content"]) for item in self._tagged(EVAL_TASK)]
+
+    def _battery(self, subject: str) -> Document:
+        """The card's battery field: the latest result for `subject`, or `not run`. Reading it
+        never starts or waits on a battery."""
+        ran = [
+            i
+            for i in self._tagged(EVAL_RUN)
+            if cast(Document, i["content"]).get("subject") == subject
+        ]
+        if not ran:
+            return {"battery": {"status": "not run", "subject": subject}, "surface_digest": None}
+        result = cast(Document, ran[-1]["content"])
+        sides = {name: cast(Document, result[name]) for name in ("candidate", "baseline")}
+        field: Document = {
+            "status": "ran",
+            "subject": subject,
+            "result_id": ran[-1]["id"],
+            "mode": result.get("mode"),
+            "judge": result.get("judge"),
+            "per_task": result.get("per_task"),
+        }
+        for name, side in sides.items():
+            field[name] = {
+                key: side.get(key)
+                for key in ("model", "run_id", "status", "fell_back", "passed", "total")
+            }
+        before, after = sides["baseline"]["surface_digest"], sides["candidate"]["surface_digest"]
+        digest: Document = {"from": before, "to": after, "changed": before != after}
+        return {"battery": field, "surface_digest": digest}
+
+    @operation(
+        "settings_read", "model_card", "read", rest=("GET", "/api/settings/agents/model-card")
+    )
+    def settings_model_card(self, model: str) -> Document:
+        """The Settings change card for switching the copilot's default model
+        (`[agents] copilot_model`) to `model`: the eval battery's pass^3 per task on the new
+        model and the current one, and the surface digest on each side. Writes nothing."""
+        current = self.settings_get("agents").get("copilot_model")
+        current = current if isinstance(current, str) else None
+        change: Document = {
+            "section": "agents",
+            "key": "copilot_model",
+            "from": current,
+            "to": model,
+        }
+        return {"change": change, **self._battery(model_subject(current, model))}
+
+    @operation(
+        "library", "publish_card", "read", rest=("GET", "/api/library/{artifact_id}/publish-card")
+    )
+    def library_publish_card(self, artifact_id: str) -> Document:
+        """The publish card of a persona, methodology or skill draft: the eval battery's pass^3
+        per task with the draft against the published text, both on the copilot's default
+        model, and the surface digest change. Publishing stays his click."""
+        item = self.library.get(artifact_id)
+        if item["kind"] not in SLOT_KINDS:
+            raise ControlError(
+                "not_a_slot_item", "Only persona, methodology and skill drafts have a publish card."
+            )
+        change: Document = {
+            "kind": item["kind"],
+            "item": artifact_id,
+            "replaces": item["previous_id"],
+        }
+        return {"change": change, **self._battery(draft_subject(artifact_id))}
 
     def memoized_backtest(self, identity: MemoKey, produce: Callable[[], LibraryInput]) -> Document:
         """Reuse a deterministic backtest artifact, recording newly computed results."""
