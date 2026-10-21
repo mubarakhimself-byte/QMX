@@ -64,6 +64,16 @@ type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settin
 type WorkKind = Literal["runs", "jobs"]
 
 
+class LibraryMirror(Protocol):
+    """The Library store's side of the dual write (MIGRATION step 5,
+    `qmx_library.migrate.from_library_b.DualWrite`). Each call returns a refusal code, or None
+    when the store holds the save."""
+
+    def saved(self, document: Document) -> str | None: ...
+
+    def linked(self, source_id: str, target_id: str) -> str | None: ...
+
+
 class SessionInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=200)
@@ -194,6 +204,7 @@ class ControlService:
         self.node = node
         self.secret_getter = secret_getter
         self.library = Library(self.home)
+        self._mirror: LibraryMirror | None = None
         self.run_index = RunIndex(self.home)
         self._aggregate = read_cache(ttl=5)(self._aggregate_read)
         with self._connect() as db:
@@ -485,12 +496,22 @@ class ControlService:
                 raise ControlError("not_found", "Session does not exist.", 404)
         return self.events("sessions", after, session_id, limit)
 
+    def attach_library_mirror(self, mirror: LibraryMirror) -> None:
+        """Start the dual write: every save and link from now on also reaches `mirror`."""
+        self._mirror = mirror
+
+    def _mirrored(self, data: Document) -> Document:
+        event: Document = {"type": "saved", "item_id": data["id"]}
+        if self._mirror is not None:
+            event["mirror"] = self._mirror.saved(data) or "ok"
+        return event
+
     @operation("library", "save", "domain_write", rest=("POST", "/api/library"))
     def library_save(self, item: LibraryInput) -> Document:
         """Save an immutable artifact, optionally a new version or URL/date result."""
         with self._lock, self._connect() as db:
             data = self.library.save(item)
-            self._event(db, "library", str(data["id"]), {"type": "saved", "item_id": data["id"]})
+            self._event(db, "library", str(data["id"]), self._mirrored(data))
         return data
 
     @operation("library", "search", "read", rest=("GET", "/api/library"), cursor=True)
@@ -517,12 +538,8 @@ class ControlService:
             result = self.library.memoized(identity, compute)
             if produced:
                 with self._connect() as db:
-                    self._event(
-                        db,
-                        "library",
-                        str(result["id"]),
-                        {"type": "saved", "item_id": result["id"], "memo_key": result["memo_key"]},
-                    )
+                    event = self._mirrored(result) | {"memo_key": result["memo_key"]}
+                    self._event(db, "library", str(result["id"]), event)
         return result
 
     @operation("library", "versions", "read", rest=("GET", "/api/library/{artifact_id}/versions"))
@@ -535,7 +552,10 @@ class ControlService:
         """Link two existing artifacts without changing their contents."""
         with self._lock, self._connect() as db:
             data = self.library.link(source_id, target_id, relation)
-            self._event(db, "library", source_id, {"type": "linked", **data})
+            event: Document = {"type": "linked", **data}
+            if self._mirror is not None:
+                event["mirror"] = self._mirror.linked(source_id, target_id) or "ok"
+            self._event(db, "library", source_id, event)
         return data
 
     @operation("library", "links", "read", rest=("GET", "/api/library/{artifact_id}/links"))

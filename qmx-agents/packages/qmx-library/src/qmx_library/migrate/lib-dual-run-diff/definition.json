@@ -1,0 +1,35 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "lib-dual-run-diff",
+  "name": "Nightly diff of the two Libraries",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "home": {"type": "string", "description": "the QMX home whose library.db is diffed"},
+      "store": {"type": "string", "description": "the Library store root, <home>/library by default"}
+    },
+    "required": ["home"]
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the diff: counts, missing versions, other bytes, stale heads, and clean"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Every night", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "diff", "name": "Diff library.db against the store", "type": "script",
+     "typeVersion": 1, "position": [220, 0], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/diff.py"}}
+  ],
+  "connections": {
+    "Every night": {"main": [[{"node": "Diff library.db against the store", "port": "in",
+                              "map": "one"}]]}
+  },
+  "meta": {"template": "LIBM"}
+}
