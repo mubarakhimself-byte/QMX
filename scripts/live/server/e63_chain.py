@@ -264,12 +264,12 @@ def fixture_workflow(folder: Path) -> Path:
     return root
 
 
-def land_bias(server: Path, library: Any, run_id: str) -> tuple[str, float]:
+def land_bias(source: Path, home: Path, library: Any, run_id: str) -> tuple[str, float]:
     """The macro fixture app's own landing path, on the server, for one bias object."""
     from qmx_apps.artifacts import Artifacts, Landing  # noqa: PLC0415
     from qmx_apps.manifest import Definition  # noqa: PLC0415
 
-    definition = Definition.load(server / "examples/apps/macro-daily-bias")
+    definition = Definition.load(source / "examples/apps/macro-daily-bias")
     made: list[str] = []
 
     def sink(found: Landing) -> str:
@@ -285,7 +285,7 @@ def land_bias(server: Path, library: Any, run_id: str) -> tuple[str, float]:
         made.append(str(landed.object_id))
         return str(landed.object_id)
 
-    store = Artifacts(server / "macro-app", library=sink)
+    store = Artifacts(home, library=sink)
     started = time.time()
     store.save(
         definition,
@@ -406,7 +406,9 @@ async def _drive(
     expect = int(payload.get("expect", 1))
     if mode == "e63":
         run_id = f"trg2b-e63-{int(time.time())}"
-        object_id, spent = land_bias(Path(str(payload["source"])), library, run_id)
+        object_id, spent = land_bias(
+            Path(str(payload["source"])), folder / "macro-app", library, run_id
+        )
         emit(event="landed", object_id=object_id, save_s=round(spent, 3))
     else:
         emit(event="watching", cursor=cursor)
