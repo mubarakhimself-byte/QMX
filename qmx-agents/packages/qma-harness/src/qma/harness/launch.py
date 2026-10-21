@@ -37,6 +37,8 @@ import psutil
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 from qmx_router.profiles import TIER_ENV, ProfileName
+from qmx_router.registry import bundled
+from qmx_router.server import PORT_FILE
 
 from qma.boot import banned_fragment
 from qma.harness import guard
@@ -485,13 +487,25 @@ class RelayedLaunch:
 type Launch = PlanLaunch | RelayedLaunch
 
 LOOPBACK: Final = "127.0.0.1,localhost"
+MIN_API_TIMEOUT_S: Final = 780.0
+"""Appendix H's floor. A 1M-token row waits 120 s plus 60 s per 100k before its first token."""
+API_MARGIN_S: Final = 60.0
+"""Above the largest row's own first-token bound, so the CLI never resends a slow prefill."""
+
+
+def api_timeout_ms() -> int:
+    """`API_TIMEOUT_MS` for a routed launch: above the largest row's first-token bound plus 60 s,
+    and never below 780 s (AD-50 (8), Appendix H)."""
+    rows = bundled().rows()
+    longest = max((row.first_token_timeout(row.window) for row in rows), default=0.0)
+    return round(max(longest + API_MARGIN_S, MIN_API_TIMEOUT_S) * 1000)
 
 
 def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str) -> dict[str, str]:
     """The names this launch needs plus `CONSTANT_ENV`. A relayed launch adds the relay URL,
-    the grant secret (never a provider key), the four pinned tiers, `NO_PROXY` for loopback and
-    the profile's env quirks. The `QMA_*` names are the launcher's inputs, which it strips
-    before the CLI starts."""
+    the grant secret (never a provider key), the four pinned tiers, `NO_PROXY` for loopback,
+    the profile's env quirks and, while the router's port is pinned, `API_TIMEOUT_MS`. The
+    `QMA_*` names are the launcher's inputs, which it strips before the CLI starts."""
     routing: dict[str, str]
     match launch:
         case PlanLaunch():
@@ -506,6 +520,8 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
                 **{name: getattr(tiers, tier) for tier, name in TIER_ENV.items()},
                 "NO_PROXY": LOOPBACK,
             }
+            if (home.root / PORT_FILE).is_file():
+                routing["API_TIMEOUT_MS"] = str(api_timeout_ms())
     return {
         **CONSTANT_ENV,
         **routing,

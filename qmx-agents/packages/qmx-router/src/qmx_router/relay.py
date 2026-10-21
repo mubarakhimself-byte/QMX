@@ -25,6 +25,13 @@ read `qmx/*` keyring entries as the same OS user.
 Plan traffic never comes here. `grant` accepts only a `KeyProvider` or the `GptPlan`, and a
 relayed CLI runs in the relayed home, which holds no login.
 
+Every request is routed by its own `model` field, never by the grant's main profile alone
+(AD-29, AD-38). A tier alias belongs to the main profile; any other id is looked up in the model
+registry and goes to the provider, wire and key row it names, so one Kimi-main chat runs a
+DeepSeek sub-agent and a GLM judge in the same process. An id no row holds is refused, never
+guessed, and a provider outside the grant's `model_scope` is refused. Each request is normalised
+for its target row before it leaves (AD-50, `qmx_router.normalise`).
+
 - Binds 127.0.0.1 on an ephemeral port, never 0.0.0.0.
 - A request whose bearer is not a live grant gets 401 before the body is read. Only a counter
   moves, unless the bearer is itself a Claude token.
@@ -70,7 +77,7 @@ from collections.abc import (
 )
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final, NewType, Protocol, cast
-from urllib.parse import unquote_plus
+from urllib.parse import unquote_plus, urlsplit
 
 import httpx
 import keyring
@@ -80,6 +87,7 @@ from qmx_router.gpt import translate
 from qmx_router.gpt.probe import ProbePassed, ProbeRun, stored_result, translator_version
 from qmx_router.gpt.siwc import SignInError, SiwcSession
 from qmx_router.ids import SessionId
+from qmx_router.normalise import classify, normalise, refuse_retry
 from qmx_router.profiles import (
     GptPlan,
     KeyProvider,
@@ -88,8 +96,10 @@ from qmx_router.profiles import (
     ProfileName,
     family_refusal,
     gpt_refusal,
+    normalize,
     resolve_model,
 )
+from qmx_router.registry import ModelRow, QmxId, Registry, bundled
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -138,7 +148,10 @@ document would raise `RecursionError` mid-request."""
 START_WAIT_S: Final = 120.0
 STOP_WAIT_S: Final = 5.0
 CLIENT_GONE: Final = 499
-UPSTREAM_TIMEOUT: Final = httpx.Timeout(connect=30.0, read=600.0, write=60.0, pool=30.0)
+UPSTREAM_TIMEOUT: Final = httpx.Timeout(connect=30.0, read=None, write=60.0, pool=30.0)
+"""No read bound on the upstream. A legal 1M-token prefill waits 720 s before its first token,
+so a fixed read timeout would cut the very request AD-50 (8) sizes for. The first event is
+bounded per row in `_events`, and the CLI bounds the whole request by `API_TIMEOUT_MS`."""
 PING_S: Final = 15.0
 """A GPT stream silent this long gets an Anthropic `ping`, as Anthropic's own streams do."""
 
@@ -161,12 +174,19 @@ def keyring_secret(reference: str) -> str:
 @dataclass(frozen=True)
 class RelayGrant:
     """What one relayed CLI launch needs. Minted only by `Relay.grant` and revoked by the chat
-    that holds it when its CLI goes, so a secret left in an old transcript opens nothing."""
+    that holds it when its CLI goes, so a secret left in an old transcript opens nothing.
+
+    `profile` is the chat's main, which owns a tier alias and the GPT sign-in. `model_scope` is
+    every provider the chat may address under this grant (H14), so a Kimi-main chat reaches the
+    DeepSeek row and nothing outside its scope. `agent_id` is the launching agent, journalled
+    with every row (H36); empty when the launcher names none."""
 
     base_url: str
     secret: GrantSecret
     session_id: SessionId
     profile: KeyProvider | GptPlan
+    model_scope: frozenset[ProfileName] = frozenset()
+    agent_id: str = ""
 
 
 class GrantRefused(RuntimeError):
@@ -204,6 +224,8 @@ class RelayUsage:
     output_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
+    agent_id: str = ""
+    """The launching agent (H36), empty when the launcher names none."""
 
 
 class EgressTest(Protocol):
@@ -246,6 +268,57 @@ class Reply:
     finish: Callable[[], Awaitable[None]] | None = None
 
 
+@dataclass(frozen=True)
+class _KeyLaneRequest:
+    """A request for a row on the Anthropic wire: the provider to lease and the row's id."""
+
+    provider: KeyProvider
+    row: ModelRow | None
+    pinned: str
+
+
+@dataclass(frozen=True)
+class _GptLaneRequest:
+    """A request for a GPT row, through the process's one ChatGPT sign-in."""
+
+    profile: GptPlan
+    pinned: str
+    row: ModelRow | None
+
+
+@dataclass(frozen=True)
+class _Refused:
+    """A refusal worded here, alerted by `handle`, or a finished reply when one is already
+    built."""
+
+    reason: str | None = None
+    reply: Reply | None = None
+
+
+type _Routed = _KeyLaneRequest | _GptLaneRequest | _Refused
+
+NO_OUTPUT_LIMIT: Final = 2**31 - 1
+"""A settings row no bundled profile describes clamps nothing: no one declared a limit."""
+
+
+def _unknown_row(profile: KeyProvider, pinned: str) -> ModelRow:
+    """The row for a provider that exists only in `settings.toml`: the identity rules still
+    apply, every beta is dropped, the capabilities are kept, and `max_tokens` is not clamped."""
+    return ModelRow(
+        qmx_id=QmxId(f"{profile.name}/{pinned}"),
+        provider=profile.name,
+        native=ModelId(pinned),
+        tool_search=(
+            "native" if profile.quirks.env.get("ENABLE_TOOL_SEARCH") == "true" else "none"
+        ),
+        cache_ttl="1h",
+        vision=True,
+        pdf=True,
+        audio=True,
+        max_output=NO_OUTPUT_LIMIT,
+    )
+
+
 async def _once(data: bytes) -> AsyncGenerator[bytes]:
     yield data
 
@@ -257,6 +330,16 @@ def _dumps(document: object) -> bytes:
 def _error(status: int, kind: str, message: str) -> Reply:
     error = {"type": "error", "error": {"type": kind, "message": message}}
     return Reply(status, [("content-type", "application/json")], _once(json.dumps(error).encode()))
+
+
+def _ping() -> bytes:
+    """One SSE ping, only for a row that opted into keepalive."""
+    return translate.SseEvent("ping", {"type": "ping"}).encode()
+
+
+def _prompt_tokens(row: ModelRow, body: bytes) -> int:
+    """A prompt estimate from the bytes, at the row's own chars_per_token (AD-34)."""
+    return max(0, int(len(body) / row.chars_per_token))
 
 
 class _ClientGone(Exception):
@@ -278,6 +361,20 @@ class _Upstream:
     path: str
     response: httpx.Response
     served: str
+    row: ModelRow | None = None
+    provider: ProfileName | None = None
+    """The provider the request went to, which differs from the main on a mixed chat."""
+    start_wait: float = START_WAIT_S
+    """The row's no-progress bound on the first event, or the Claude default when no row
+    describes the target (AD-50 (8), Appendix H)."""
+    deadline: float | None = None
+    """When that bound runs out, on the loop clock, measured from before the request was sent.
+    A provider that sends its SSE headers late spends the same window, so a slow prefill cannot
+    hide behind the headers."""
+    keepalive: bool = False
+    """Per-row opt-in, off by default: nothing is sent to the CLI before the upstream's first
+    event, so a late error keeps its own status (42 N3)."""
+    error_class: str = ""
     journal_status: int | None = None
     usage: dict[str, Any] = field(default_factory=dict[str, Any])
     finished: bool = False
@@ -292,7 +389,9 @@ class _Upstream:
         with contextlib.suppress(Exception):
             await self.response.aclose()
         status = self.journal_status or self.response.status_code
-        await self.relay.write_row(self.held, self.path, status, self.served, self.usage)
+        await self.relay.write_row(
+            self.held, self.path, status, self.served, self.usage, self.provider
+        )
 
 
 @dataclass
@@ -306,6 +405,9 @@ class Relay:
     alert: AlertSink
     profiles: Callable[[], Profiles]
     """Re-reads `settings.toml [providers]` on each call, so a grant uses the row as it is."""
+    registry: Callable[[], Registry] = bundled
+    """The model rows a request's `model` field resolves through. Bundled by default; a host
+    passes its user-overridden load."""
     test: EgressTest | None = None
     transport: httpx.AsyncBaseTransport | None = None
     """Tests only: an in-process upstream."""
@@ -336,49 +438,101 @@ class Relay:
     _client: httpx.AsyncClient | None = None
     _server: _Server | None = None
     _task: asyncio.Task[None] | None = None
+    _loop: asyncio.AbstractEventLoop | None = None
+    """The loop that serves this relay. Its own thread's loop when the host runs one
+    (`qmx_router.server`); the caller's loop otherwise. Every mutation happens on it."""
 
     @property
     def egress_stop(self) -> bool:
         return self.test is None or self.test.relay_egress_stop
 
     async def start(self) -> Relay:
-        """Bind 127.0.0.1:0 and serve. No grants yet."""
+        """Serve on 127.0.0.1 and own a loop. The host's router service adopts the socket and
+        serving task on its own thread's loop when one is running; otherwise this loop binds an
+        ephemeral port. No grants yet either way."""
+        from qmx_router.server import adoptable  # noqa: PLC0415  (server imports this module)
+
+        service = adoptable()
+        if service is not None and await service.adopt(self):
+            return self
         listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             listener.bind(("127.0.0.1", 0))
-            self.base_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
-            self._client = httpx.AsyncClient(
-                transport=self.transport, timeout=UPSTREAM_TIMEOUT, trust_env=False
-            )
-            config = uvicorn.Config(
-                self.asgi,
-                interface="asgi3",
-                lifespan="off",
-                proxy_headers=False,
-                access_log=False,
-                log_config=None,
-                timeout_graceful_shutdown=int(STOP_WAIT_S),
-            )
-            self._server = _Server(config)
-            self._task = asyncio.create_task(self._server.serve(sockets=[listener]))
-            while not self._server.started:
-                if self._task.done():
-                    self._task.result()
-                await asyncio.sleep(0.01)
+            await self.serve_on(listener)
         except BaseException:
             listener.close()
-            if self._client is not None:
-                await self._client.aclose()
-            self._server = self._task = self._client = None
+            await self.stop_serving()
             raise
         return self
 
+    async def serve_on(self, listener: socket.socket) -> None:
+        """Create one loop's client and serving task on `listener`, and wait until it serves."""
+        self._loop = asyncio.get_running_loop()
+        self.base_url = f"http://127.0.0.1:{listener.getsockname()[1]}"
+        self._client = httpx.AsyncClient(
+            transport=self.transport, timeout=UPSTREAM_TIMEOUT, trust_env=False
+        )
+        config = uvicorn.Config(
+            self.asgi,
+            interface="asgi3",
+            lifespan="off",
+            proxy_headers=False,
+            access_log=False,
+            log_config=None,
+            timeout_graceful_shutdown=int(STOP_WAIT_S),
+        )
+        self._server = _Server(config)
+        self._task = asyncio.create_task(self._server.serve(sockets=[listener]))
+        while not self._server.started:
+            if self._task.done():
+                self._task.result()
+            await asyncio.sleep(0.01)
+
+    async def stop_serving(self) -> None:
+        """Stop serving and forget the loop-bound client, so a restarted thread can bind again."""
+        if self._server is not None:
+            self._server.should_exit = True
+        if self._task is not None:
+            with contextlib.suppress(Exception):
+                await self._task
+        if self._client is not None:
+            with contextlib.suppress(Exception):
+                await self._client.aclose()
+        self._server = self._task = self._client = None
+        self._loop = None
+
+    async def _on_loop[T](self, work: Coroutine[Any, Any, T]) -> T:
+        """Run `work` on the loop that serves this relay, so its tables keep one writer and no
+        lock, whichever loop the caller holds."""
+        loop = self._loop
+        if loop is None or loop is asyncio.get_running_loop():
+            return await work
+        return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(work, loop))
+
     async def grant(
-        self, session_id: SessionId, profile: ProfileName, *, unattended: bool = False
+        self,
+        session_id: SessionId,
+        profile: ProfileName,
+        *,
+        unattended: bool = False,
+        agent_id: str = "",
     ) -> RelayGrant:
         """Mint a fresh secret bound to this session and the provider row as it is now. A
         second grant for the same session revokes the first. A GPT grant needs the GPT lane
-        open and, for an unattended chat, the sign-in's background consent."""
+        open and, for an unattended chat, the sign-in's background consent. `agent_id` is
+        journalled with every row this grant makes (H36)."""
+        return await self._on_loop(
+            self._grant(session_id, profile, unattended=unattended, agent_id=agent_id)
+        )
+
+    async def _grant(
+        self,
+        session_id: SessionId,
+        profile: ProfileName,
+        *,
+        unattended: bool = False,
+        agent_id: str = "",
+    ) -> RelayGrant:
         try:
             found = self.profiles().get(profile)
         except ProfileError as error:
@@ -404,7 +558,7 @@ class Relay:
                     )
             case _:
                 raise GrantRefused(f"{profile} is the plan; plan traffic never passes the relay")
-        return await self._mint(session_id, found)
+        return await self._mint(session_id, found, agent_id)
 
     async def _pass_holds(self, passed: ProbePassed) -> bool:
         version = translator_version()
@@ -414,14 +568,31 @@ class Relay:
             return True
         return await asyncio.to_thread(stored_result, self.probe_state, version) == passed
 
-    async def _mint(self, session_id: SessionId, profile: KeyProvider | GptPlan) -> RelayGrant:
+    async def _mint(
+        self, session_id: SessionId, profile: KeyProvider | GptPlan, agent_id: str = ""
+    ) -> RelayGrant:
         for older in [held for held in self._grants.values() if held.session_id == session_id]:
             await self.revoke(older)
         minted = RelayGrant(
-            self.base_url, GrantSecret(secrets.token_urlsafe(32)), session_id, profile
+            self.base_url,
+            GrantSecret(secrets.token_urlsafe(32)),
+            session_id,
+            profile,
+            self._scope(profile),
+            agent_id,
         )
         self._grants[minted.secret] = minted
         return minted
+
+    def _scope(self, main: KeyProvider | GptPlan) -> frozenset[ProfileName]:
+        """Every provider a chat under this relay may address (H14). The default is every
+        configured provider: a chat narrows its own scope only when it says so, and the plan is
+        never in it because no request here reaches the plan."""
+        try:
+            names = set(self.profiles().by_name) - {ProfileName("claude")}
+        except Exception:
+            names = {main.name}
+        return frozenset(names)
 
     async def probe_grant(
         self, run: ProbeRun, session: SiwcSession, profile: GptPlan
@@ -429,6 +600,11 @@ class Relay:
         """A grant for probes P2 to P7 while the GPT lane may still be closed. Bound to one
         `ProbeRun` (minted only by `qmx_router.gpt.probe`) and revoked when the run ends, so a spent
         grant answers 401. A run gets one grant only."""
+        return await self._on_loop(self._probe_grant(run, session, profile))
+
+    async def _probe_grant(
+        self, run: ProbeRun, session: SiwcSession, profile: GptPlan
+    ) -> RelayGrant:
         if run.run_id in self._probe_runs:
             raise GrantRefused(f"probe run {run.run_id} already had its grant")
         self._probe_runs.add(run.run_id)
@@ -439,6 +615,9 @@ class Relay:
     async def open_gpt_lane(self, passed: ProbePassed, session: SiwcSession) -> GptLane:
         """The only way to open the GPT lane for chats. The pass is keyed to `translate.py`'s
         version hash, so a pass for a changed translator is refused."""
+        return await self._on_loop(self._open_gpt_lane(passed, session))
+
+    async def _open_gpt_lane(self, passed: ProbePassed, session: SiwcSession) -> GptLane:
         if passed.translator_version != translator_version():
             raise GrantRefused("the GPT probe passed for another translator version; re-probe")
         self.siwc = session
@@ -448,6 +627,9 @@ class Relay:
     async def close_gpt_lane(self) -> None:
         """Close the lane and revoke every GPT chat grant. Probe grants belong to their run.
         Idempotent."""
+        await self._on_loop(self._close_gpt_lane())
+
+    async def _close_gpt_lane(self) -> None:
         self.gpt = None
         for held in [
             held
@@ -459,6 +641,9 @@ class Relay:
     async def revoke(self, grant: RelayGrant) -> None:
         """Drop exactly this grant, stop its in-flight streams, then close its session's
         journal writer. Idempotent."""
+        await self._on_loop(self._revoke(grant))
+
+    async def _revoke(self, grant: RelayGrant) -> None:
         if self._grants.get(grant.secret) == grant:
             del self._grants[grant.secret]
             self._probes.pop(grant.secret, None)
@@ -472,17 +657,14 @@ class Relay:
 
     async def close(self) -> None:
         """Stop every stream, stop listening and close every journal writer. Idempotent."""
+        await self._on_loop(self._close())
+
+    async def _close(self) -> None:
         self._grants.clear()
         self._probes.clear()
         self.gpt = None
         await self._stop(list(self._streams))
-        if self._server is not None and self._task is not None:
-            self._server.should_exit = True
-            with contextlib.suppress(Exception):
-                await self._task
-        if self._client is not None:
-            await self._client.aclose()
-        self._server = self._task = self._client = None
+        await self.stop_serving()
         for session in {*self._journals, *self._writes.values()}:
             await self._close_journal(session)
 
@@ -600,25 +782,134 @@ class Relay:
         requested = document.get("model")
         if not isinstance(requested, str):
             return _error(400, "invalid_request_error", "the request names no model")
-        profile = held.profile
-        if isinstance(profile, GptPlan):
-            return await self._gpt(held, profile, path, document, requested)
-        refusal = _routing_refusal(profile, document) or family_refusal(requested)
+        match self._route(held, requested):
+            case _Refused(reason=reason, reply=reply):
+                if reason is None:
+                    return cast("Reply", reply)
+                return await self._refuse(held, reason)
+            case _GptLaneRequest(profile=route_profile, pinned=pinned, row=row):
+                return await self._gpt(held, route_profile, path, document, pinned, row)
+            case _KeyLaneRequest(provider=provider, row=row, pinned=pinned):
+                refusal = _routing_refusal(provider, document)
+                if refusal:
+                    self.counters.family += 1
+                    return await self._refuse(held, f"family guard: {refusal}")
+                if pinned != requested:
+                    document["model"] = pinned
+                    body = _dumps(document)
+                return await self._forward(
+                    held,
+                    provider,
+                    path,
+                    query,
+                    headers,
+                    body,
+                    pinned,
+                    row,
+                    streamed=document.get("stream") is True,
+                )
+
+    def _route(self, held: RelayGrant, requested: str) -> _Routed:
+        """The lane and provider one request's `model` field names (AD-29, AD-38). A tier alias
+        belongs to the grant's main; any other id goes through the registry; anything left is a
+        refusal, never a guess."""
+        main = held.profile
+        pinned = resolve_model(main, requested)
+        if pinned is not None:
+            if isinstance(main, GptPlan):
+                return _GptLaneRequest(main, pinned, self._row_for(main, pinned))
+            return _KeyLaneRequest(main, self._row_for(main, pinned), pinned)
+        row = self._registry_row(requested)
+        if (
+            row is not None
+            and row.provider != ProfileName("claude")
+            and (row.provider != main.name or requested == row.qmx_id)
+        ):
+            return self._by_row(held, row)
+        if isinstance(main, GptPlan):
+            return self._tier_reply(held, requested)
+        refusal = family_refusal(requested)
         if refusal:
             self.counters.family += 1
-            return await self._refuse(held, f"family guard: {refusal}")
-        pinned = resolve_model(profile, requested)
-        if pinned is None:
-            return await self._tier_refusal(held, requested)
-        if pinned != requested:
-            document["model"] = pinned
-            body = json.dumps(document, ensure_ascii=False, separators=(",", ":")).encode()
-        return await self._forward(held, profile, path, query, headers, body, pinned)
+            return self._family_reply(requested, refusal)
+        return self._tier_reply(held, requested)
 
-    async def _tier_refusal(self, held: RelayGrant, requested: str) -> Reply:
+    def _registry_row(self, requested: str) -> ModelRow | None:
+        """The row whose `qmx_id` or native id is `requested`, or None. Two rows that both claim
+        it are an ambiguity the request gets to keep: None."""
+        rows = self.registry().rows()
+        norm = normalize(requested)
+        found = [
+            row
+            for row in rows
+            if requested in (row.qmx_id, row.native)
+            or norm in (normalize(row.qmx_id), normalize(row.native))
+        ]
+        return found[0] if len(found) == 1 else None
+
+    def _row_for(self, main: KeyProvider | GptPlan, pinned: str) -> ModelRow | None:
+        """The row describing `pinned` under the grant's main provider, so the normaliser uses
+        the row's own quirks rather than a profile-wide guess."""
+        registry = self.registry()
+        provider = registry.providers.get(main.name)
+        if provider is None and isinstance(main, KeyProvider):
+            provider = registry.for_host(urlsplit(main.base_url).hostname or "")
+        if provider is not None:
+            row = next((row for row in provider.models if row.native == pinned), None)
+            if row is not None:
+                return row
+        if isinstance(main, GptPlan):
+            return None
+        return _unknown_row(main, pinned)
+
+    def _by_row(self, held: RelayGrant, row: ModelRow) -> _Routed:
+        """A row the registry holds, on the wire it names. The scope check comes first so a
+        grant never reaches a provider it was not given."""
+        if held.model_scope and row.provider not in held.model_scope:
+            return _Refused(
+                reply=_error(
+                    403,
+                    "permission_error",
+                    f"{row.provider} is outside this chat's model_scope",
+                )
+            )
+        try:
+            target = self.profiles().get(row.provider)
+        except ProfileError as error:
+            return _Refused(reply=_error(400, "invalid_request_error", f"family guard: {error}"))
+        match (target, row.wire):
+            case (KeyProvider(), "anthropic"):
+                return _KeyLaneRequest(target, row, row.native)
+            case (GptPlan(), "responses"):
+                return _GptLaneRequest(target, row.native, row)
+            case (_, "openai_chat"):
+                return _Refused(
+                    reply=_error(
+                        400,
+                        "invalid_request_error",
+                        f"{row.qmx_id} speaks chat completions, whose lane has not landed (RTR3)",
+                    )
+                )
+            case _:
+                return _Refused(
+                    reply=_error(
+                        400,
+                        "invalid_request_error",
+                        f"family guard: {row.qmx_id} is a {row.wire} row on a "
+                        f"{target.name} provider",
+                    )
+                )
+
+    def _family_reply(self, requested: str, refusal: str) -> _Refused:
+        message = f"family guard: {refusal}"
+        if "is a claude model" in refusal:
+            message += f"; reach {requested} through `delegate` on a plan profile"
+        return _Refused(reason=message)
+
+    def _tier_reply(self, held: RelayGrant, requested: str) -> _Refused:
         self.counters.tier += 1
-        return await self._refuse(
-            held, f"tier guard: {requested} is not one of {held.profile.name}'s tier models"
+        return _Refused(
+            reason=f"tier guard: {requested} is not one of {held.profile.name}'s tier models"
         )
 
     def _gpt_route(self, held: RelayGrant) -> GptRoute | None:
@@ -632,19 +923,22 @@ class Relay:
         profile: GptPlan,
         path: str,
         document: dict[str, object],
-        requested: str,
+        pinned: str,
+        row: ModelRow | None,
     ) -> Reply:
-        """The GPT lane: tier pin, translation, the sign-in's token, then the stream back."""
+        """The GPT lane: the sign-in's token, the normalised body, translation, the stream back."""
         route = self._gpt_route(held)
         if route is None:
             self.counters.bearer += 1
             return _error(401, "authentication_error", "the GPT lane is closed")
-        pinned = resolve_model(profile, requested)
-        if pinned is None:
-            return await self._tier_refusal(held, requested)
         if path != MESSAGES:
             count = {"input_tokens": translate.estimate_tokens(document)}
             return Reply(200, [("content-type", "application/json")], _once(_dumps(count)))
+        if row is not None:
+            document = cast(
+                "dict[str, object]",
+                json.loads(normalise(row, _dumps(document), {}).body),
+            )
         try:
             translation = translate.to_responses(document, model=pinned)
         except translate.RefusedRequest as error:
@@ -676,7 +970,7 @@ class Relay:
         except asyncio.CancelledError:
             await self.tee(held, path, CLIENT_GONE, pinned, {})
             raise
-        upstream = _Upstream(self, held, path, response, pinned)
+        upstream = _Upstream(self, held, path, response, pinned, provider=held.profile.name)
         state = translate.StreamState(translation, pinned)
         try:
             if response.status_code != 200:
@@ -790,7 +1084,9 @@ class Relay:
         query: str,
         headers: Mapping[str, str],
         body: bytes,
-        model: ModelId,
+        model: str,
+        row: ModelRow | None,
+        streamed: bool = False,
     ) -> Reply:
         if self._client is None:
             raise RuntimeError("the relay is not started")
@@ -800,23 +1096,45 @@ class Relay:
             reason = _keyring_refusal(profile.credential, error)
             await self._alert(held.session_id, reason)
             return _error(401, "authentication_error", reason)
+        if row is None:
+            egress, out_headers = body, dict(headers)
+        else:
+            normalised = normalise(row, body, headers)
+            egress, out_headers = normalised.body, normalised.headers
         request = self._client.build_request(
             "POST",
             f"{profile.base_url}{path}" + (f"?{query}" if query else ""),
-            headers=swap_auth(headers, key, profile.quirks.wire.auth_header),
-            content=apply_wire_quirks(profile, body),
+            headers=swap_auth(out_headers, key, profile.quirks.wire.auth_header),
+            content=apply_wire_quirks(profile, egress),
         )
         del key
         self.counters.upstream += 1
+        loop = asyncio.get_running_loop()
+        wait = START_WAIT_S if row is None else row.first_token_timeout(_prompt_tokens(row, body))
+        deadline = loop.time() + wait
         try:
-            response = await self._client.send(request, stream=True)
+            async with asyncio.timeout_at(deadline):
+                response = await self._client.send(request, stream=True)
+        except TimeoutError:
+            return await self._late(held, path, model, profile, wait, streamed)
         except httpx.HTTPError as error:
-            await self.tee(held, path, 502, model, {})
+            await self.tee(held, path, 502, model, {}, profile.name)
             return _error(502, "api_error", f"the provider did not answer: {type(error).__name__}")
         except asyncio.CancelledError:
-            await self.tee(held, path, CLIENT_GONE, model, {})
+            await self.tee(held, path, CLIENT_GONE, model, {}, profile.name)
             raise
-        upstream = _Upstream(self, held, path, response, model)
+        upstream = _Upstream(
+            self,
+            held,
+            path,
+            response,
+            model,
+            row,
+            provider=profile.name,
+            start_wait=wait,
+            deadline=deadline,
+            keepalive=bool(row is not None and row.keepalive),
+        )
         try:
             reply = await self._reply(upstream)
         except BaseException:
@@ -825,6 +1143,25 @@ class Relay:
         if reply.finish is None:
             await upstream.finish()
         return reply
+
+    async def _late(
+        self,
+        held: RelayGrant,
+        path: str,
+        model: str,
+        profile: KeyProvider,
+        wait: float,
+        streamed: bool,
+    ) -> Reply:
+        """No headers inside the row's bound. Nothing was answered, so nothing is retried: one
+        request was sent and the CLI gets an error event it stops on."""
+        reason = f"no message_start in {wait:.0f} s"
+        await self.tee(held, path, 504, model, {}, profile.name)
+        await self._alert(held.session_id, reason)
+        if streamed:
+            headers = [("content-type", "text/event-stream"), ("cache-control", "no-cache")]
+            return Reply(200, headers, _once(_error_event(reason)))
+        return _error(504, "api_error", reason)
 
     async def _reply(self, upstream: _Upstream) -> Reply:
         response, path = upstream.response, upstream.path
@@ -848,6 +1185,8 @@ class Relay:
         document = cast("dict[str, Any]", parsed) if isinstance(parsed, dict) else {}
         usage = document.get("usage")
         upstream.usage = cast("dict[str, Any]", usage) if isinstance(usage, dict) else {}
+        if not response.is_success:
+            kept += list(refuse_retry(response.status_code, document or data).items())
         if path == MESSAGES and response.is_success:
             served = document.get("model")
             if not isinstance(served, str):
@@ -862,16 +1201,23 @@ class Relay:
     async def _events(self, upstream: _Upstream, *, guarded: bool) -> AsyncGenerator[bytes]:
         held, errors, pending, started = b"", b"", b"", not guarded
         chunks = cast("AsyncGenerator[bytes]", upstream.response.aiter_bytes())
-        deadline = asyncio.get_running_loop().time() + START_WAIT_S
+        loop = asyncio.get_running_loop()
+        deadline = upstream.deadline or (loop.time() + upstream.start_wait)
         try:
             while True:
                 try:
-                    async with asyncio.timeout_at(None if started else deadline):
+                    limit = None if started else deadline
+                    if not started and upstream.keepalive:
+                        limit = min(deadline, loop.time() + PING_S)
+                    async with asyncio.timeout_at(limit):
                         chunk = await anext(chunks)
                 except StopAsyncIteration:
                     break
                 except TimeoutError:
-                    reason = f"no message_start in {START_WAIT_S:.0f} s"
+                    if not started and upstream.keepalive and loop.time() < deadline:
+                        yield _ping()
+                        continue
+                    reason = f"no message_start in {upstream.start_wait:.0f} s"
                     yield await self._stop_stream(upstream, reason)
                     return
                 pending += chunk
@@ -902,6 +1248,7 @@ class Relay:
                         held += event
                         if kind == "error":
                             errors += event
+                            upstream.error_class = classify(500, data)
                     else:
                         reason = f"the provider sent {kind} before message_start"
                         yield await self._stop_stream(upstream, reason)
@@ -914,6 +1261,10 @@ class Relay:
                 if pending:
                     yield pending
             elif errors:
+                await self._alert(
+                    upstream.held.session_id,
+                    f"the provider answered with an error event ({upstream.error_class})",
+                )
                 yield errors
             else:
                 reason = "the provider stream ended without message_start"
@@ -933,9 +1284,17 @@ class Relay:
             await self.alert(session_id, reason)
 
     async def tee(
-        self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]
+        self,
+        held: RelayGrant,
+        path: str,
+        status: int,
+        model: str,
+        usage: Mapping[str, Any],
+        provider: ProfileName | None = None,
     ) -> None:
-        await self.settle(held.session_id, self.write_row(held, path, status, model, usage))
+        await self.settle(
+            held.session_id, self.write_row(held, path, status, model, usage, provider)
+        )
 
     async def settle(self, session_id: SessionId, work: Coroutine[Any, Any, None]) -> None:
         """Runs `work` to the end even when the caller is cancelled, and lets `_close_journal`
@@ -946,10 +1305,17 @@ class Relay:
         await asyncio.shield(task)
 
     async def write_row(
-        self, held: RelayGrant, path: str, status: int, model: str, usage: Mapping[str, Any]
+        self,
+        held: RelayGrant,
+        path: str,
+        status: int,
+        model: str,
+        usage: Mapping[str, Any],
+        provider: ProfileName | None = None,
     ) -> None:
-        """One journal row for one upstream request. A failure alerts the chat and drops the
-        writer, so the next request opens a fresh one."""
+        """One journal row for one upstream request, naming the provider that served it rather
+        than the chat's main. A failure alerts the chat and drops the writer, so the next request
+        opens a fresh one."""
 
         def count(name: str) -> int:
             value = usage.get(name)
@@ -957,7 +1323,7 @@ class Relay:
 
         row = RelayUsage(
             session_id=held.session_id,
-            profile=held.profile.name,
+            profile=provider or held.profile.name,
             path=path,
             status=status,
             model=model,
@@ -965,6 +1331,7 @@ class Relay:
             output_tokens=count("output_tokens"),
             cache_read_tokens=count("cache_read_input_tokens"),
             cache_write_tokens=count("cache_creation_input_tokens"),
+            agent_id=held.agent_id,
         )
         try:
             async with self._opening:
