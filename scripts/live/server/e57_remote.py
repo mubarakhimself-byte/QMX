@@ -220,7 +220,7 @@ def run_one(index: int, log: Any) -> dict[str, Any]:
     outputs = result.outputs
     assert outputs["main"]["doubled"] == index * 2, outputs
     assert returned.get("output_hash") == fingerprint(returned.get("outputs")), returned
-    assert any(kind in {"heartbeat", "attempt_started"} for kind, _ in emitted), emitted
+    assert any(kind in {"heartbeat", "log"} for kind, _ in emitted), emitted
     return {"delay": delay, "run_id": run_id, "outputs": outputs}
 
 
