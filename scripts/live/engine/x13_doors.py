@@ -41,7 +41,7 @@ import statistics
 import subprocess
 import sys
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import Any, Final
 
@@ -61,18 +61,18 @@ PARENT_TREE: Final = Path("D:/Temp/host-parent")
 LANE_HOST: Final = Path(__file__).with_name("lane_host.py")
 CHAIN: Final = ENGINE / "tests" / "fixtures" / "workflows" / "script-chain"
 START_S: Final = 90.0
+LIBRARY: Final = "library"
 PERF_STARTS: Final = 5
 
 
 def principals(home: Path, item: str) -> list[tuple[str, str, str]]:
-    """`(kind, ref, principal)` of each Library object stored for `item`, oldest first."""
-    from qmx_engine.ports.library_fake import LibraryFake  # noqa: PLC0415
+    """`(kind, ref, principal)` of each move of `item` in the home's Library store, oldest first.
+    Opened once the host has stopped, since the host holds the store's writer lock."""
+    from qmx_engine.ledger import redact  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
 
-    with LibraryFake.open(home) as library:
-        found = library.db.execute(
-            "SELECT kind, ref, principal FROM objects WHERE item = ? ORDER BY seq", (item,)
-        )
-        return [(str(kind), str(ref), str(who)) for kind, ref, who in found]
+    with Store.open(home / LIBRARY, redactor=redact) as store:
+        return store.history(item)
 
 
 def chain(item: str) -> dict[str, Any]:
@@ -302,9 +302,20 @@ def door_host(lane: Any, engine: Any) -> Any:
     return DoorHost
 
 
-async def tools_chat(log: Log, lane: Any, fake_model: Any, money: Any) -> None:
+@contextlib.asynccontextmanager
+async def library_door(control: Any) -> AsyncIterator[Any]:
+    """The engine on `control`'s home over the home's Library store, as `qmx_host` builds it."""
     from qmx_engine.control_door import EngineDoor  # noqa: PLC0415
+    from qmx_engine.ledger import redact  # noqa: PLC0415
+    from qmx_library.adapter import EngineLibraryAdapter  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
 
+    with Store.open(Path(control.home) / LIBRARY, redactor=redact) as store:
+        async with EngineDoor.open(control, library=EngineLibraryAdapter(store)) as engine:
+            yield engine
+
+
+async def tools_chat(log: Log, lane: Any, fake_model: Any, money: Any) -> None:
     quiet = ["mcp__qmx_workflows__drafts_put", "mcp__qmx_workflows__tests_run"]
     calls = [
         (quiet[0], {"workflow_id": "chain", "graph": chain("chain")}),
@@ -318,7 +329,7 @@ async def tools_chat(log: Log, lane: Any, fake_model: Any, money: Any) -> None:
         live.put_claude(root, {"permissions": {"allow": quiet}})
         workspace = live.SCRATCH / "ep13-tools-ws"
         workspace.mkdir(parents=True, exist_ok=True)
-        async with EngineDoor.open(session.control) as engine:
+        async with library_door(session.control) as engine:
             async with door_host(lane, engine)(session) as served:
                 made = await served.http.post(
                     "/api/chats",

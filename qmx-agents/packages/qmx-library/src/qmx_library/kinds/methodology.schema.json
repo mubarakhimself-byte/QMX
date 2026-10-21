@@ -1,0 +1,49 @@
+{
+  "kind": "methodology",
+  "schema_version": 1,
+  "class": "definition",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {}
+  },
+  "blobs": {
+    "body.md": {
+      "media_type": "text/markdown"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "semver"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "body.md",
+      "renderer": "markdown",
+      "source": "blobs.body.md"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

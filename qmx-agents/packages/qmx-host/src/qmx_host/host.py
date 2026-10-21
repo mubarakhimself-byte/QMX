@@ -4,11 +4,13 @@ workflow engine and the control doors on one port behind one bearer.
 `serve` builds, in order: the home's single-instance lock, `ControlService` (the one settings
 reader), the `Harness` (which starts the model relay on its own thread), the engine with its
 scheduler, and the control app with the chat, engine and control routes behind the principal
-door. The Library writer is `ControlService.library` and the apps supervisor is
-`ControlService.app_runtime()`, as they are today. The engine's permission policy and hook sink
-are registered on the harness, both named `engine`, before the engine resumes any run, so a chat
-reloaded after a restart finds them. On stop the engine drains, then the harness
-closes, which stops the relay.
+door. The host is the one writer of the home's Library store `<home>/library/` (Library AD-5): it
+opens the store with the engine's one redaction (AD-37) and the engine reads and writes it through
+`EngineLibraryAdapter`. The control's own `library.db` stays `ControlService.library` until the
+old Libraries are imported, and the apps supervisor is `ControlService.app_runtime()`. The
+engine's permission policy and hook sink are registered on the harness, both named `engine`, before
+the engine resumes any run, so a chat reloaded after a restart finds them. On stop the engine
+drains, the Library store closes, then the harness closes, which stops the relay.
 
 The lock is an OS lock on `<home>/engine.lock` (AD-3, L-64, L-70): the OS releases it when the
 process dies, so a crashed host never blocks the next one, and two hosts cannot both take it.
@@ -36,14 +38,18 @@ from fastapi import APIRouter, FastAPI
 from qma.harness import Harness, QmxHome, chat_routes, control_service
 from qmx_control.service import ControlService
 from qmx_engine.control_door import EngineDoor
+from qmx_engine.ledger import redact
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.service.rest import engine_router
+from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.store import Store
 
 from qmx_host.door import PrincipalDoor
 
 type Role = Literal["pc", "node"]
 
 LOCK: Final = "engine.lock"
+LIBRARY: Final = "library"
 STATE: Final = "control-process.json"
 """The running host's pid, port and start time, for `status`, `stop` and the refusal line."""
 START_S: Final = 30.0
@@ -135,12 +141,16 @@ async def serve(
     control = control_service(qmx_home)
     harness = await Harness.open(qmx_home, control=control)
     try:
-        async with EngineDoor.open(control, harness=HarnessAdapter(harness)) as engine:
-            harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
-            origin = ui_origin if role == "pc" else ""
-            app = compose(control, engine, harness_api, qmx_control.server.local_token(), origin)
-            server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
-            await server.serve()
+        with Store.open(home / LIBRARY, redactor=redact) as store:
+            async with EngineDoor.open(
+                control, harness=HarnessAdapter(harness), library=EngineLibraryAdapter(store)
+            ) as engine:
+                harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
+                origin = ui_origin if role == "pc" else ""
+                bearer = qmx_control.server.local_token()
+                app = compose(control, engine, harness_api, bearer, origin)
+                server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
+                await server.serve()
     finally:
         await harness.close()
 

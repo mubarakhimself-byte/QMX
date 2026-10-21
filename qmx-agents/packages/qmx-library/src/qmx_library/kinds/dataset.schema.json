@@ -1,0 +1,61 @@
+{
+  "kind": "dataset",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "type": "string"
+      },
+      "instruments": {
+        "type": "array"
+      },
+      "window": {
+        "type": "object"
+      },
+      "world": {
+        "type": "string"
+      },
+      "split_fp": {
+        "type": "string"
+      },
+      "licence": {
+        "type": "string"
+      },
+      "partition_digests": {
+        "type": "array"
+      }
+    }
+  },
+  "blobs": {},
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

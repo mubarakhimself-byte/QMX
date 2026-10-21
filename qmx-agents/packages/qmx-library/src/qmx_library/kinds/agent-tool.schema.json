@@ -1,0 +1,58 @@
+{
+  "kind": "agent-tool",
+  "schema_version": 1,
+  "class": "definition",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "review": {
+        "enum": [
+          "unreviewed",
+          "reviewed"
+        ]
+      }
+    }
+  },
+  "blobs": {
+    "tools/*": {
+      "media_type": "text/x-python"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "tools/*",
+      "renderer": "code",
+      "source": "blobs.tools/*"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

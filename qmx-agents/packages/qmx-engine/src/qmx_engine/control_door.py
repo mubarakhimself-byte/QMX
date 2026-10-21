@@ -40,7 +40,7 @@ from qmx_engine.nodes.app_op import AppOp
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
-from qmx_engine.ports.library import Bundle, Draft, LibraryRefused
+from qmx_engine.ports.library import Bundle, Draft, LibraryPort, LibraryRefused
 from qmx_engine.ports.settings import ControlSettings, SettingsPort
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.runner import new_run_id
@@ -249,6 +249,7 @@ class EngineDoor:
         control: ControlService,
         *,
         harness: HarnessPort | None = None,
+        library: LibraryPort | None = None,
         settings: SettingsPort | None = None,
         clock: Clock | None = None,
         wait_seconds: float = WAIT_SECONDS,
@@ -256,9 +257,10 @@ class EngineDoor:
     ) -> AsyncGenerator[EngineDoor]:
         """The engine on `control`'s home, attached for as long as the block runs, with the
         scheduler ticking (a limit-paused run wakes only while it ticks). `principal` names the
-        caller of a door, read on the caller's thread."""
+        caller of a door, read on the caller's thread. `library` is the fake unless given."""
         with EngineService.open(
             control.home,
+            library=library,
             settings=settings or ControlSettings(control),
             harness=harness,
             clock=clock,

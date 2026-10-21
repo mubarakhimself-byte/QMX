@@ -1,0 +1,72 @@
+{
+  "kind": "workflow",
+  "schema_version": 1,
+  "class": "definition",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "content_hash": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "publish": {
+        "enum": [
+          "auto",
+          "hold"
+        ]
+      }
+    }
+  },
+  "blobs": {
+    "definition": {
+      "media_type": "application/json",
+      "required": true
+    },
+    "files/*": {
+      "media_type": "application/octet-stream"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "semver",
+    "state"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "definition",
+      "renderer": "json",
+      "source": "blobs.definition"
+    },
+    {
+      "tab": "files/*",
+      "renderer": "text",
+      "source": "blobs.files/*"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

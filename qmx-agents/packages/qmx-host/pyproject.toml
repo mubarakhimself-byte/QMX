@@ -7,6 +7,7 @@ dependencies = [
     "qma-harness",
     "qmx-control",
     "qmx-engine",
+    "qmx-library",
     "fastapi==0.142.2",
     "httpx==0.28.1",
     "psutil>=7,<9",
@@ -21,6 +22,7 @@ build-backend = "uv_build"
 qma-harness = { workspace = true }
 qmx-control = { workspace = true }
 qmx-engine = { workspace = true }
+qmx-library = { workspace = true }
 
 [dependency-groups]
 dev = [

@@ -24,6 +24,7 @@ def main() -> int:
     harness = agents / "packages/qma-harness"
     engine = agents / "packages/qmx-engine"
     host = agents / "packages/qmx-host"
+    library = agents / "packages/qmx-library"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
         (agents, ["sync", "--frozen", "--all-packages", "--all-groups"]),
@@ -41,6 +42,7 @@ def main() -> int:
         harness,
         engine,
         host,
+        library,
     ):
         for task in ("fmt-check", "lint", "types"):
             commands.append((workspace, ["run", "--no-sync", "python", "-m", "poethepoet", task]))

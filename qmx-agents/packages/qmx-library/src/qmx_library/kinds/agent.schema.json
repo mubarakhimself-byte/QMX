@@ -1,0 +1,57 @@
+{
+  "kind": "agent",
+  "schema_version": 1,
+  "class": "definition",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {}
+  },
+  "blobs": {
+    "persona.md": {
+      "media_type": "text/markdown"
+    },
+    "files/*": {
+      "media_type": "application/octet-stream"
+    }
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "semver"
+  ],
+  "preview": {
+    "card": [
+      "title",
+      "summary"
+    ],
+    "badge": "state"
+  },
+  "detail": [
+    {
+      "tab": "Fields",
+      "renderer": "json",
+      "source": "fields"
+    },
+    {
+      "tab": "persona.md",
+      "renderer": "markdown",
+      "source": "blobs.persona.md"
+    },
+    {
+      "tab": "files/*",
+      "renderer": "text",
+      "source": "blobs.files/*"
+    },
+    {
+      "tab": "Used in",
+      "renderer": "graph",
+      "source": "walk:*:both"
+    }
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}
