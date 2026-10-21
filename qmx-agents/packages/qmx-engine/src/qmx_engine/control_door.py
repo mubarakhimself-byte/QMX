@@ -1,26 +1,24 @@
 """The engine behind `ControlService`'s workflow doors (SOLUTION-DESIGN 13, AD-21).
 
-`EngineDoor.open` builds the engine service, its scheduler and the Library watcher on the running
-loop and attaches the door to a `ControlService`, so REST, `/mcp` and the copilot's `qmx` tools all
-reach one engine. The doors are synchronous and arrive on worker threads (FastAPI and fastmcp run
-sync handlers there); each one hops onto the engine's loop, where the Library and the runs live.
+`EngineDoor.open` builds the engine service and its scheduler on the running loop and attaches the
+door to a `ControlService`, so REST, `/mcp` and the copilot's `qmx` tools all reach one engine. The
+doors are synchronous and arrive on worker threads (FastAPI and fastmcp run sync handlers there);
+each one hops onto the engine's loop, where the Library and the runs live.
 
-Callers. A DOMAIN_WRITE door (draft save, test run) acts as an agent. A MANAGE door (publish, live
-run, archive, cancel, resume, the trigger writes) acts as the operator: the harness asked him
-before the call, or it came over REST with his bearer.
+Callers. Every door acts as the principal `qmx_host`'s door set for the call (AD-52): `user` for the
+UI bearer, `agent:<session_id>` for a chat's tool call, `workflow:<run_id>` for work a run started.
+Publish, enable and a live start are `user` acts (AD-11): any other caller gets a card whose button
+makes the same call as `user`, and nothing changes.
 
 Runs. A start returns when the run ends or after `wait_seconds`, whichever comes first; the run goes
 on in the background and `workflow_runs_get` follows it. Every document and error a door returns
 has token-shaped text redacted, because explain and failure messages are verbatim (EP9).
-
-Fallback (H17's safety path). A `workflow` object saved with `library_save` is imported into
-`refs/drafts/<id>`, and test-run when its `meta.test_requested` nonce changed and it validates.
 """
 
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import contextvars
 import dataclasses
 import enum
 import json
@@ -29,7 +27,6 @@ import threading
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
@@ -42,12 +39,12 @@ from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
-from qmx_engine.ports.library import Bundle, Draft, JsonObject, LibraryRefused
+from qmx_engine.ports.library import Bundle, Draft, LibraryRefused
 from qmx_engine.ports.settings import ControlSettings, SettingsPort
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.runner import new_run_id
 from qmx_engine.service.api import EngineService
-from qmx_engine.service.context import OPERATOR, Caller, Refused
+from qmx_engine.service.context import Caller, Refused
 from qmx_engine.service.runs import status_of, summarize_again
 from qmx_engine.trace_export import export
 from qmx_engine.triggers import rows
@@ -57,15 +54,15 @@ from qmx_engine.triggers.cron import Cron, Interval, stamp
 from qmx_engine.triggers.preflight import configured_refs, shipped_skills
 from qmx_engine.triggers.ticker import ENDING, Scheduler
 
-AGENT: Final = Caller("agent", "qmx-control")
-LIBRARY: Final = Caller("agent", "library")
+UNNAMED: Final = Caller("agent", "unnamed")
+"""A call no door named. It is never `user`, so a missed door refuses rather than publishes."""
+PRINCIPAL: Final = contextvars.ContextVar[Caller]("qmx_principal", default=UNNAMED)
 WAIT_SECONDS: Final = 20.0
 ENDED: Final = frozenset({"passed", "stopped"})
 NOT_FOUND: Final = frozenset(
     {"unknown_run", "unknown_workflow", "unknown_trigger", "unknown_version", "no_draft"}
 )
 EVENT_POLL_S: Final = 0.25
-CURSOR: Final = Path("engine") / "library-watch.cursor"
 LOG = logging.getLogger(__name__)
 
 type Failure = Refused | LibraryRefused | EngineRefused | InboxRefused | ValueError
@@ -124,9 +121,22 @@ def bundle_of(graph: Mapping[str, JsonValue]) -> Bundle:
     return Bundle(dict(definition), {ref: text.encode() for ref, text in texts.items()})
 
 
-def nonce(bundle: Bundle) -> JsonValue:
-    meta = bundle.definition.get("meta")
-    return cast(JsonObject, meta).get("test_requested") if isinstance(meta, dict) else None
+def card(act: str, title: str, method: str, path: str, body: Document) -> Document:
+    """What a non-`user` caller gets for a `user` act: the button the UI shows him, which makes
+    the same call over REST with his bearer."""
+    return {
+        "card": act,
+        "title": title,
+        "message": f"Only you can {act} this. Press the button to {act} it.",
+        "button": {"method": method, "path": path, "body": body},
+    }
+
+
+def as_run(run_id: str) -> contextvars.Context:
+    """A context whose principal is the run, so a chat its agent node opens acts as the run."""
+    context = contextvars.copy_context()
+    context.run(PRINCIPAL.set, Caller("workflow", run_id))
+    return context
 
 
 def next_semver(taken: list[str]) -> str:
@@ -226,11 +236,13 @@ class EngineDoor:
         svc: EngineService,
         scheduler: Scheduler,
         wait_seconds: float,
+        principal: Callable[[], Caller],
     ) -> None:
         self.control = control
         self.svc = svc
         self.scheduler = scheduler
         self.wait_seconds = wait_seconds
+        self.principal = principal
         self.loop = asyncio.get_running_loop()
         self.thread = threading.get_ident()
         self.live: dict[str, asyncio.Task[object]] = {}
@@ -246,9 +258,11 @@ class EngineDoor:
         settings: SettingsPort | None = None,
         clock: Clock | None = None,
         wait_seconds: float = WAIT_SECONDS,
+        principal: Callable[[], Caller] = PRINCIPAL.get,
     ) -> AsyncGenerator[EngineDoor]:
         """The engine on `control`'s home, attached for as long as the block runs, with the
-        scheduler ticking (a limit-paused run wakes only while it ticks) and the Library watched."""
+        scheduler ticking (a limit-paused run wakes only while it ticks). `principal` names the
+        caller of a door, read on the caller's thread."""
         with EngineService.open(
             control.home,
             settings=settings or ControlSettings(control),
@@ -258,12 +272,9 @@ class EngineDoor:
             scheduler = Scheduler(
                 svc.ctx, credentials=configured_refs(control), skills=shipped_skills()
             )
-            door = cls(control, svc, scheduler, wait_seconds)
+            door = cls(control, svc, scheduler, wait_seconds, principal)
             stop = asyncio.Event()
-            workers = [
-                asyncio.create_task(scheduler.serve(stop)),
-                asyncio.create_task(door.watch(stop)),
-            ]
+            ticking = asyncio.create_task(scheduler.serve(stop), context=contextvars.Context())
             control.attach_workflow_engine(door)
             try:
                 yield door
@@ -273,15 +284,18 @@ class EngineDoor:
                 going = [*door.live.values(), *scheduler.fires.values(), *scheduler.waking.values()]
                 for task in going:
                     task.cancel()
-                await asyncio.gather(*workers, *going, return_exceptions=True)
+                await asyncio.gather(ticking, *going, return_exceptions=True)
 
     def _call[T](self, work: Callable[[], Coroutine[Any, Any, T]]) -> T:
+        """`work` on the engine's loop in an empty context, so nothing it starts inherits the
+        caller's principal; a door that needs the caller reads it first, on this thread."""
         if threading.get_ident() == self.thread:
             raise ControlError(
                 "wrong_thread", "a workflow door was called on the engine's loop", 500
             )
+        hop = contextvars.Context().run(asyncio.run_coroutine_threadsafe, work(), self.loop)
         try:
-            return asyncio.run_coroutine_threadsafe(work(), self.loop).result()
+            return hop.result()
         except FAILURES as error:
             raise control_error(error) from error
 
@@ -298,7 +312,7 @@ class EngineDoor:
         return [cast(Document, plain(found)) for found in self._call(hop)]
 
     def _spawn(self, run_id: str, work: Coroutine[Any, Any, object]) -> asyncio.Task[object]:
-        task = asyncio.create_task(work)
+        task = asyncio.create_task(work, context=as_run(run_id))
         self.live[run_id] = task
         task.add_done_callback(lambda done: self._ended(run_id, done))
         return task
@@ -346,8 +360,22 @@ class EngineDoor:
     def _run(self, run_id: str) -> Mapping[str, object]:
         view = self.svc.runs.get(run_id)
         summaries = self.svc.ctx.library.objects(run_id, "workflow-run")
-        item = summaries[-1].fields.get("workflow_item") if summaries else None
+        if summaries:
+            item = summaries[-1].fields.get("workflow_item")
+        else:
+            item = self._created_item(run_id)
         return dataclasses.asdict(view) | {"workflow_item": item, "in_flight": run_id in self.live}
+
+    def _created_item(self, run_id: str) -> str | None:
+        """The workflow id `run_created` names. A run has no summary until it ends, so this is an
+        in-flight run's item (L-68)."""
+        with Reader.open(self.svc.ctx.home) as reader:
+            found = reader.connection.execute(
+                "SELECT json_extract(data, '$.workflow_id') FROM events"
+                " WHERE run_id = ? AND seq = 1",
+                (run_id,),
+            ).fetchone()
+        return None if found is None or found[0] is None else str(found[0])
 
     def _trigger_row(self, trigger_id: str) -> rows.Trigger:
         with Reader.open(self.svc.ctx.home) as reader:
@@ -391,11 +419,16 @@ class EngineDoor:
                 "with workflow_drafts_put"
             )
             raise ControlError("publish_only", message, 422) from error
+        caller = self.principal()
+        if caller.kind != "user":
+            body: Document = {} if wanted.semver is None else {"semver": wanted.semver}
+            title = f"Publish {workflow_id}"
+            return card("publish", title, "PUT", f"/api/workflows/{workflow_id}", body)
 
         def publish() -> object:
             versions = self.svc.versions
             semver = wanted.semver or next_semver([v.semver for v in versions.list(workflow_id)])
-            return versions.get(versions.publish(workflow_id, semver, caller=OPERATOR))
+            return versions.get(versions.publish(workflow_id, semver, caller=caller))
 
         return self._serve(publish)
 
@@ -412,11 +445,16 @@ class EngineDoor:
         return self._serve(check)
 
     def workflows_run(self, workflow_id: str) -> Document:
+        caller = self.principal()
+        if caller.kind != "user":
+            path = f"/api/workflows/{workflow_id}/run"
+            return card("run", f"Run {workflow_id} live", "POST", path, {})
+
         async def start() -> object:
             object_id = self._version_id(workflow_id)
             run_id = self._new_run_id()
             runs = self.svc.runs
-            await self._launch(run_id, runs.start(object_id, caller=OPERATOR, run_id=run_id))
+            await self._launch(run_id, runs.start(object_id, caller=caller, run_id=run_id))
             return self._run(run_id)
 
         return cast(Document, plain(self._call(start)))
@@ -425,6 +463,8 @@ class EngineDoor:
         return self._serve(lambda: self._draft_view(workflow_id))
 
     def workflow_drafts_put(self, workflow_id: str, graph: Document) -> Document:
+        caller = self.principal()
+
         def save() -> object:
             bundle = bundle_of(graph)
             expected = graph.get("expected_revision") if "definition" in graph else None
@@ -433,7 +473,7 @@ class EngineDoor:
                 expected = 0 if current is None else current.revision
             if not isinstance(expected, int):
                 raise ValueError("expected_revision is a whole number")
-            self.svc.drafts.put(workflow_id, bundle, expected, caller=AGENT)
+            self.svc.drafts.put(workflow_id, bundle, expected, caller=caller)
             return self._draft_view(workflow_id)
 
         return self._serve(save)
@@ -441,10 +481,12 @@ class EngineDoor:
     def workflow_tests_run(
         self, workflow_id: str, subgraph: list[str] | None, fake: bool
     ) -> Document:
+        caller = self.principal()
+
         async def test() -> object:
             run_id = self._new_run_id()
             work = self.svc.tests.run(
-                workflow_id, caller=AGENT, subgraph=subgraph, fake=fake, run_id=run_id
+                workflow_id, caller=caller, subgraph=subgraph, fake=fake, run_id=run_id
             )
             report = await self._launch(run_id, work)
             return {"run": self._run(run_id), "report": report}
@@ -456,12 +498,13 @@ class EngineDoor:
 
     def workflow_versions_archive(self, workflow_id: str, version: int) -> Document:
         """`version` counts the workflow's versions from 1, in publish order."""
+        caller = self.principal()
 
         def archive() -> object:
             versions = self.svc.versions.list(workflow_id)
             if not 1 <= version <= len(versions):
                 raise Refused("unknown_version", f"{workflow_id} has {len(versions)} versions")
-            return self.svc.versions.archive(versions[version - 1].object_id, caller=OPERATOR)
+            return self.svc.versions.archive(versions[version - 1].object_id, caller=caller)
 
         return self._serve(archive)
 
@@ -565,7 +608,8 @@ class EngineDoor:
         return self._serve_all(listed)
 
     def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document:
-        """The trigger starts disabled; enabling it is its own MANAGE door."""
+        """The trigger starts disabled; enabling it is its own `user` act."""
+        caller = self.principal()
 
         def create() -> object:
             wanted = TriggerIn.model_validate(trigger)
@@ -579,7 +623,7 @@ class EngineDoor:
                 workflow_item=workflow_id,
                 pinned_object=object_id,
                 spec=wanted.spec(now),
-                caller=OPERATOR,
+                caller=caller,
                 now=now,
                 follow_champion=wanted.follow_champion,
                 precheck_ref=wanted.precheck_ref,
@@ -595,21 +639,39 @@ class EngineDoor:
 
     def workflow_triggers_enable(self, trigger_id: str) -> Document:
         """Enable the trigger and, when it is not yet, its pinned version, which must be tested."""
+        caller = self.principal()
+        if caller.kind != "user":
+            path = f"/api/triggers/{trigger_id}/enable"
+            return card("enable", f"Enable trigger {trigger_id}", "POST", path, {})
 
         def enable() -> object:
             found = self._trigger_row(trigger_id)
             versions = self.svc.versions
             if versions.get(found.pinned_object).state != "enabled":
-                versions.enable(found.pinned_object, caller=OPERATOR)
+                versions.enable(found.pinned_object, caller=caller)
             self.svc.ctx.engine.ledger.write(set_enabled(trigger_id, True))
             return self._trigger_view(self._trigger_row(trigger_id))
 
         return self._serve(enable)
 
     def workflow_triggers_disable(self, trigger_id: str) -> Document:
+        """Disable the trigger, and its pinned version once no enabled trigger pins it, since a
+        version is enabled only through its triggers (AD-10, B-68)."""
+        caller = self.principal()
+
         def disable() -> object:
-            self._trigger_row(trigger_id)
-            self.svc.ctx.engine.ledger.write(set_enabled(trigger_id, False))
+            found = self._trigger_row(trigger_id)
+            ledger = self.svc.ctx.engine.ledger
+            ledger.write(set_enabled(trigger_id, False))
+            with Reader.open(self.svc.ctx.home) as reader:
+                pinning = rows.triggers(
+                    reader.connection,
+                    "WHERE pinned_object = ? AND enabled = 1",
+                    found.pinned_object,
+                )
+            versions = self.svc.versions
+            if not pinning and versions.get(found.pinned_object).state == "enabled":
+                versions.disable(found.pinned_object, caller=caller)
             return self._trigger_view(self._trigger_row(trigger_id))
 
         return self._serve(disable)
@@ -628,8 +690,9 @@ class EngineDoor:
         return self._serve_all(self.svc.inbox.list)
 
     def inbox_resolve(self, item_id: str, action: Action) -> Document:
-        """The operator's, from the UI; no agent tool reaches it."""
-        return self._serve(lambda: self.svc.inbox.resolve(item_id, action, caller=OPERATOR))
+        """The operator's, from the UI; the service refuses any other caller."""
+        caller = self.principal()
+        return self._serve(lambda: self.svc.inbox.resolve(item_id, action, caller=caller))
 
     async def events(self, run_id: str, after: int, max_events: int) -> AsyncIterator[Document]:
         """The run's ledger events after `after`, in `seq` order, as they are written."""
@@ -649,44 +712,3 @@ class EngineDoor:
                 if max_events and sent >= max_events:
                     return
             await asyncio.sleep(EVENT_POLL_S)
-
-    async def watch(self, stop: asyncio.Event) -> None:
-        """Import each `workflow` object `library_save` stores, from a cursor kept in the home, so
-        a restart neither replays old saves nor misses one made while the host was down."""
-        cursor = self.svc.ctx.home / CURSOR
-        after = int(cursor.read_text(encoding="utf-8")) if cursor.exists() else 0
-        while not stop.is_set():
-            for event in self.control.events("library", after, limit=1000):
-                data = event["data"]
-                if isinstance(data, dict) and data.get("type") == "saved":
-                    try:
-                        await self.import_draft(str(data.get("item_id")))
-                    except (ControlError, *FAILURES) as e:
-                        LOG.warning("library object %s not imported: %s", data, redact(str(e)))
-                after = cast(int, event["id"])
-                cursor.parent.mkdir(parents=True, exist_ok=True)
-                cursor.write_text(str(after), encoding="utf-8")
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), timeout=1)
-
-    async def import_draft(self, artifact_id: str) -> None:
-        saved = self.control.library_get(artifact_id)
-        if saved.get("kind") != "workflow":
-            return
-        content = saved.get("content")
-        if not isinstance(content, dict):
-            raise ValueError(f"workflow object {artifact_id} holds no definition")
-        bundle = bundle_of(content)
-        item = bundle.definition.get("id")
-        if not isinstance(item, str) or not item:
-            raise ValueError(f"workflow object {artifact_id} has no id")
-        current = self._draft(item)
-        if current is not None and current.bundle == bundle:
-            return
-        before = None if current is None else nonce(current.bundle)
-        revision = 0 if current is None else current.revision
-        self.svc.drafts.put(item, bundle, revision, caller=LIBRARY)
-        asked = nonce(bundle)
-        if asked is not None and asked != before and not self.svc.drafts.problems(bundle):
-            run_id = self._new_run_id()
-            self._spawn(run_id, self.svc.tests.run(item, caller=LIBRARY, run_id=run_id))

@@ -16,12 +16,12 @@ from typing import Any
 from fastapi.testclient import TestClient
 from flows import CHAIN
 from qmx_control import ControlService, create_app
-from qmx_control.service import LibraryInput
 
 from qmx_engine.control_door import EngineDoor
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.inbox import Category, Raise
 from qmx_engine.ports.library import Bundle
+from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.rest import engine_router
 from qmx_engine.triggers.rows import put_wake
 
@@ -58,7 +58,7 @@ def served(home: Path) -> Generator[tuple[TestClient, EngineDoor]]:
     ready, stop = threading.Event(), threading.Event()
 
     async def main() -> None:
-        async with EngineDoor.open(control) as door:
+        async with EngineDoor.open(control, principal=lambda: OPERATOR) as door:
             opened.append(door)
             ready.set()
             while not stop.is_set():
@@ -176,23 +176,41 @@ async def raise_item(door: EngineDoor) -> str:
     return door.svc.ctx.inbox.raise_item(raised, at="2026-10-17T09:00:00+00:00")
 
 
-def test_a_workflow_saved_with_library_save_is_tested_on_its_own(tmp_path: Path) -> None:
+def test_a_run_still_going_is_listed_under_its_workflow(tmp_path: Path) -> None:
     with served(tmp_path) as (rest, _):
-        content = chain("fallback")
-        content["definition"]["meta"] = {"test_requested": "n-1"}
-        item = LibraryInput(title="fallback", kind="workflow", content=content)
-        rest.post("/api/library", json=item.model_dump(), headers=BEARER)
-        deadline, runs = time.monotonic() + 30, []
-        while not runs and time.monotonic() < deadline:
-            time.sleep(0.2)
-            found = rest.get(
-                "/api/workflow-runs", params={"workflow_id": "fallback"}, headers=BEARER
-            )
-            runs = [r for r in found.json() if r["status"] == "passed"]
-        draft = rest.get("/api/workflows/fallback/draft", headers=BEARER).json()
+        rest.put("/api/workflows/hold/draft", json=waiting("hold"), headers=BEARER)
+        run = rest.post("/api/workflows/hold/test", headers=BEARER).json()["run"]
+        listed = rest.get("/api/workflow-runs", params={"workflow_id": "hold"}, headers=BEARER)
 
-    assert [r["mode"] for r in runs] == ["test"]
-    assert draft["state"] == "tested"
+    assert [(r["run_id"], r["status"]) for r in listed.json()] == [(run["run_id"], "waiting")]
+
+
+def test_disabling_the_last_enabled_trigger_disables_its_version(tmp_path: Path) -> None:
+    with served(tmp_path) as (rest, _):
+        rest.put("/api/workflows/chain/draft", json=chain("chain"), headers=BEARER)
+        rest.post("/api/workflows/chain/test", headers=BEARER)
+        rest.put("/api/workflows/chain", json={}, headers=BEARER)
+        ids = [
+            rest.post(
+                "/api/triggers",
+                params={"workflow_id": "chain"},
+                json={"kind": "manual"},
+                headers=BEARER,
+            ).json()["id"]
+            for _ in range(2)
+        ]
+        states: list[str] = []
+        for path in (
+            f"{ids[0]}/enable",
+            f"{ids[1]}/enable",
+            f"{ids[0]}/disable",
+            f"{ids[1]}/disable",
+        ):
+            rest.post(f"/api/triggers/{path}", headers=BEARER)
+            versions = rest.get("/api/workflows/chain/versions", headers=BEARER).json()
+            states.append(versions[0]["state"])
+
+    assert states == ["enabled", "enabled", "enabled", "disabled"]
 
 
 def test_a_trigger_starts_disabled_and_enabling_it_enables_its_version(tmp_path: Path) -> None:

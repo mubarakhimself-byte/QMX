@@ -51,7 +51,7 @@ def test_broker_settings_and_portfolio_queue_rest_mcp_parity(tmp_path: Path) -> 
                 assert (
                     await client.call_tool("settings_get", {"section": "brokers"})
                 ).data == written.json()
-                broker = BrokerService(tmp_path)
+                broker = BrokerService(tmp_path, brokers=lambda: service.settings_get("brokers"))
                 assert broker.list_accounts()["accounts"][0]["currency"] == "USD"
                 broker.propose_order(
                     OrderProposal(

@@ -50,12 +50,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
-import uvicorn
 from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qmx_control.models import ControlError, Document
-from qmx_control.server import create_app, local_token
 from qmx_control.service import ControlService
 
 from qma.boot import KeepListRefused, parse_keep_names
@@ -433,41 +431,16 @@ def router(
     return api
 
 
-def serve(
-    *,
-    root: Path,
-    port: int,
-    ui_origin: str,
-    scrubbed: Sequence[str],
-    keep: Sequence[str],
-) -> None:
-    """Called by `qma.serve` after the boot scrub. The harness and the server
-    share one event loop, so a route resolves the harness's futures on their own loop."""
-    asyncio.run(_serve(root=root, port=port, ui_origin=ui_origin, scrubbed=scrubbed, keep=keep))
-
-
-async def _serve(
-    *,
-    root: Path,
-    port: int,
-    ui_origin: str,
-    scrubbed: Sequence[str],
-    keep: Sequence[str],
-) -> None:
-    home = QmxHome(root)
-    control = control_service(home)
-    harness = await Harness.open(home, control=control)
-    harness.control_port = port
-    extra = router(
-        home,
-        control,
+def chat_routes(
+    harness: Harness, *, scrubbed: Sequence[str], keep: Sequence[str]
+) -> list[APIRouter]:
+    """The doctor, Claude settings and chat routes on `harness`, for `qmx_host` to mount behind
+    its bearer. Starts nothing; the routes run on the loop the harness was opened on."""
+    doctor_routes = router(
+        harness.home,
+        harness.control,
         scrubbed=scrubbed,
         keep=keep,
         harness_lines=lambda probe: harness.doctor(probe=probe),
     )
-    app = create_app(control, local_token(), ui_origin, extra_routers=[extra, chat_router(harness)])
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
-    try:
-        await server.serve()
-    finally:
-        await harness.close()
+    return [doctor_routes, chat_router(harness)]
