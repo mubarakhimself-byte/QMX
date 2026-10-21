@@ -91,5 +91,6 @@ def start(
             return status
     folder = fetch(supervisor.home, definition_hash, sources)
     if definition_hash not in known:
-        supervisor.install(folder, trust=trust, expected_id=app_id, expected_hash=definition_hash)
+        # A machine that never held the app has no candidate head, so the install names none.
+        supervisor.install(folder, trust=trust, expected_id=app_id)
     return supervisor.start(app_id, definition_hash=definition_hash, profile=profile)

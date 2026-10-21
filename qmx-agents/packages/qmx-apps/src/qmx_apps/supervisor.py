@@ -295,7 +295,8 @@ class Supervisor:
                 )
             image = self.home / "definitions" / definition.hash
             image.mkdir(parents=True, exist_ok=True)
-            if not existing:
+            if not existing and definition.root.resolve() != image.resolve():
+                # A bundle fetched from another store already sits at its own hash.
                 for source in image_files(definition.root):
                     target = image / source.relative_to(definition.root)
                     target.parent.mkdir(parents=True, exist_ok=True)
