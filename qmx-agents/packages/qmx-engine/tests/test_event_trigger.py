@@ -28,7 +28,7 @@ def artifact(object_id: str, output: str, producer: str, principal: str = "engin
         kind="artifact",
         item=f"app-{producer}",
         ref="refs/runs/run-1",
-        fields={"type": output, "metadata": {"ref": {"producer_app": producer}}},
+        fields={"type": output, "metadata": {"producer_app": producer, "output": output}},
         principal=principal,
         at="2026-10-21T09:00:00.000000+00:00",
     )
@@ -244,6 +244,20 @@ def test_a_report_matches_by_its_writer_and_an_artifact_by_its_app() -> None:
     assert found == event.Landing(7, "r1", "test-report", None, "hub")
     assert found.matches(event.Filter(producer="hub"))
     assert not found.matches(event.Filter(output="bias"))
+
+
+def test_a_hand_landed_artifact_names_its_app_under_ref() -> None:
+    stored = Stored(
+        object_id="h1",
+        kind="artifact",
+        item="app-macro",
+        ref="refs/runs/run-9",
+        fields={"type": "bias", "metadata": {"ref": {"producer_app": "macro-daily-bias"}}},
+        principal="run:run-9",
+        at="2026-10-21T09:00:00.000000+00:00",
+    )
+
+    assert event.producer_of(stored) == "macro-daily-bias"
 
 
 def test_a_tick_fires_a_landing_and_starts_the_run(tmp_path: Path) -> None:

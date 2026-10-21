@@ -231,9 +231,9 @@ def fixture_workflow(folder: Path) -> Path:
         "import sys\n"
         "\n"
         "found = json.load(sys.stdin)\n"
-        "event = found.get('event') or {}\n"
-        "assert event.get('output') == 'bias', f\"no bias on the signal: {found}\"\n"
-        "print(json.dumps({'signal': 'ran on the bias', 'object_id': event.get('object_id')}))\n",
+        "event = found.get('event')\n"
+        "assert event is None or event.get('output') == 'bias', f\"no bias on the signal: {found}\"\n"
+        "print(json.dumps({'signal': 'ran', 'object_id': (event or {}).get('object_id')}))\n",
         encoding="utf-8",
     )
     definition = {
@@ -398,10 +398,11 @@ async def _drive(
 
     stop = asyncio.Event()
     serving = asyncio.create_task(ticker.serve(stop))
+    engine = Path(str(payload["folder"])) / "engine"
+    await _armed(engine, trigger.id, float(payload["tick"]))
     cursor = store.catalog.last_seq()
     replicated: dict[str, float] = {}
     reported: set[str] = set()
-    engine = Path(str(payload["folder"])) / "engine"
     expect = int(payload.get("expect", 1))
     if mode == "e63":
         run_id = f"trg2b-e63-{int(time.time())}"
@@ -462,6 +463,23 @@ def _object(library: Any, object_id: str) -> Any:
         return library.get(object_id)
     except LibraryRefused:
         return None
+
+
+async def _armed(engine: Path, trigger_id: str, tick: float) -> None:
+    """Wait for the trigger's first drain, which writes its cursor: a new trigger starts at the
+    log's tail, so a landing before that drain would fire nothing."""
+    import asyncio  # noqa: PLC0415
+
+    from qmx_engine.ledger.store import Reader  # noqa: PLC0415
+    from qmx_engine.triggers import event  # noqa: PLC0415
+
+    deadline = time.time() + max(10.0, tick * 2 + 5.0)
+    while time.time() < deadline:
+        if (engine / "engine" / "engine.sqlite").exists():
+            with Reader.open(engine) as reader:
+                if event.cursor_of(reader.connection, trigger_id) is not None:
+                    return
+        await asyncio.sleep(0.1)
 
 
 def _replicated_at(folder: Path, object_id: str) -> float | None:

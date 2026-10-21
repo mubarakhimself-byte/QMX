@@ -157,14 +157,22 @@ def _text(found: JsonObject, name: str) -> str | None:
 
 
 def producer_of(stored: Stored) -> str:
-    """Who produced the object: an artifact names its app, anything else its writer."""
+    """Who produced the object: an artifact names its app, anything else its writer.
+
+    An app's landing carries the app as `fields.metadata.producer_app` (the `ArtifactRef` shape the
+    apps package writes); a nested `fields.metadata.ref.producer_app` is read too, because a
+    hand-landed artifact or a mirror may carry that shape."""
     metadata = stored.fields.get("metadata")
     if isinstance(metadata, dict):
-        ref = cast(dict[str, object], metadata).get("ref")
+        table = cast(dict[str, object], metadata)
+        app = table.get("producer_app")
+        if isinstance(app, str) and app:
+            return app
+        ref = table.get("ref")
         if isinstance(ref, dict):
-            app = cast(dict[str, object], ref).get("producer_app")
-            if isinstance(app, str) and app:
-                return app
+            nested = cast(dict[str, object], ref).get("producer_app")
+            if isinstance(nested, str) and nested:
+                return nested
     return stored.principal
 
 
