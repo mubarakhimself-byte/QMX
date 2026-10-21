@@ -15,6 +15,13 @@ file or reply.
 
 Background use needs express consent (SIWC terms). The flag is stored here and enforced at
 grant time: `Relay.grant(..., unattended=True)` refuses a GPT grant without it (B17).
+
+Several sign-ins (AD-12, RTR4). Each sign-in is its own entry and its own held-out slot:
+`qmx/chatgpt` is the first, `qmx/chatgpt-2` to `qmx/chatgpt-4` are the next three. Any number
+would do; four is what a caller may scan without asking the secret store for entries that were
+never written. Each record carries the one machine that owns it: a second sign-in of an account
+an entry on this machine already holds is refused, because two logins of one ChatGPT account
+share one token family upstream and the older is revoked.
 """
 
 from __future__ import annotations
@@ -48,6 +55,8 @@ AGENT_NAME: Final = "QMA"
 REGISTRATION_CLIENT: Final = "dynamic_agent_client"
 ENTRY: Final = "qmx/chatgpt"
 ENTRY_USER: Final = "chatgpt"
+SLOTS: Final = 4
+"""How many sign-ins this machine looks for: `qmx/chatgpt` and `qmx/chatgpt-2` to `-4`."""
 CALLBACK_PATH: Final = "/auth/callback"
 CALLBACK_PORTS: Final = (1455, 1456, 1457, 1458)
 REFRESH_MARGIN_S: Final = 300.0
@@ -71,7 +80,7 @@ class SignInError(RuntimeError):
 
 @dataclass(frozen=True)
 class Record:
-    """The `qmx/chatgpt` entry. HP2's records lack the last two fields."""
+    """One `qmx/chatgpt*` entry. HP2's records lack the last two fields."""
 
     client_id: str
     host_id: str
@@ -80,6 +89,9 @@ class Record:
     earliest_refresh_at: float | None = None
     account: str | None = None
     background_consent: bool = False
+    owner: str = ""
+    """The one machine that owns this sign-in (AD-12). Empty on a record written before
+    ownership existed, which reads as this machine's."""
 
     def dumps(self) -> str:
         return json.dumps(asdict(self) | {"scopes": list(self.scopes)})
@@ -95,7 +107,13 @@ class Record:
             earliest_refresh_at=_epoch(data.get("earliest_refresh_at")),
             account=data.get("account"),
             background_consent=data.get("background_consent") is True,
+            owner=str(data.get("owner") or ""),
         )
+
+
+def entry_for(slot: int = 0) -> str:
+    """The secret-store entry one sign-in slot uses."""
+    return ENTRY if slot == 0 else f"{ENTRY}-{slot + 1}"
 
 
 class Vault(Protocol):
@@ -104,13 +122,17 @@ class Vault(Protocol):
 
 
 class KeyringVault:
-    """The OS secret store entry `qmx/chatgpt`."""
+    """The OS secret store entry for one sign-in slot."""
+
+    def __init__(self, entry: str = ENTRY, user: str = ENTRY_USER) -> None:
+        self.entry = entry
+        self.user = user
 
     def get(self) -> str | None:
-        return keyring.get_password(ENTRY, ENTRY_USER)
+        return keyring.get_password(self.entry, self.user)
 
     def set(self, value: str) -> None:
-        keyring.set_password(ENTRY, ENTRY_USER, value)
+        keyring.set_password(self.entry, self.user, value)
 
 
 def _epoch(value: object) -> float | None:
@@ -137,8 +159,8 @@ def token_error(response: httpx.Response) -> str:
 
 @dataclass
 class SiwcSession:
-    """One ChatGPT sign-in, shared by every GPT chat in this process. The lock is the one real
-    single-writer rule here: refresh tokens rotate, so two refreshes must never race."""
+    """One ChatGPT sign-in, shared by every GPT chat this machine routes to it. The lock is the
+    one real single-writer rule here: refresh tokens rotate, so two refreshes must never race."""
 
     record: Record
     vault: Vault = field(repr=False)
@@ -151,6 +173,8 @@ class SiwcSession:
     store_error: str | None = None
     """Why the last rotated refresh token could not be stored, if it could not. The session
     keeps working from memory until this process ends."""
+    slot: int = 0
+    """Which sign-in slot this session came from: 0 is `qmx/chatgpt`."""
     _access: str | None = field(default=None, repr=False)
     _expires_at: float = 0.0
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -161,6 +185,16 @@ class SiwcSession:
     @property
     def background_consent(self) -> bool:
         return self.record.background_consent
+
+    @property
+    def owner(self) -> str:
+        """The machine that owns this sign-in, empty when no record said."""
+        return self.record.owner
+
+    @property
+    def account(self) -> str | None:
+        """The ChatGPT account id, from the token claims. Never a token."""
+        return self.record.account
 
     @property
     def scopes(self) -> tuple[str, ...]:
@@ -268,13 +302,46 @@ async def list_models(session: SiwcSession) -> list[str]:
 
 
 def load(vault: Vault | None = None) -> SiwcSession | None:
-    """The stored sign-in, or None when there is none. Makes no network call."""
-    vault = vault or KeyringVault()
+    """The stored sign-in in slot 0, or None when there is none. Makes no network call."""
+    return _one(0, vault or KeyringVault())
+
+
+def load_all(
+    *, machine: str = "", vaults: Mapping[int, Vault] | None = None
+) -> tuple[SiwcSession, ...]:
+    """Every sign-in this machine holds, one per slot that carries a record. A record whose
+    `owner` names another machine is not this machine's to use and is skipped, because two
+    logins of one ChatGPT account revoke each other (AD-12). No network call, no token read."""
+    found: list[SiwcSession] = []
+    for slot in range(SLOTS):
+        session = _one(slot, (vaults or {}).get(slot) or KeyringVault(entry_for(slot)))
+        if session is None:
+            continue
+        if session.owner and machine and session.owner != machine:
+            continue
+        found.append(session)
+    return tuple(found)
+
+
+def _one(slot: int, vault: Vault) -> SiwcSession | None:
     raw = vault.get()
     if raw is None:
         return None
     record = Record.loads(raw)
-    return SiwcSession(record, vault) if record.refresh_token else None
+    return SiwcSession(record, vault, slot=slot) if record.refresh_token else None
+
+
+def owned_by(
+    account: str, *, machine: str = "", vaults: Mapping[int, Vault] | None = None
+) -> int | None:
+    """The slot whose sign-in is `account`, or None. The one-owner-machine rule reads this."""
+    for slot in range(SLOTS):
+        session = _one(slot, (vaults or {}).get(slot) or KeyringVault(entry_for(slot)))
+        if session is None or session.account != account:
+            continue
+        if not session.owner or not machine or session.owner == machine:
+            return slot
+    return None
 
 
 def pkce_pair() -> tuple[str, str]:
@@ -409,13 +476,20 @@ async def sign_in(
     vault: Vault | None = None,
     *,
     open_page: Callable[[str], object],
+    slot: int = 0,
+    machine: str = "",
     timeout_s: float = SIGN_IN_TIMEOUT_S,
     keys: Keys = jwks_keys,
+    vaults: Mapping[int, Vault] | None = None,
 ) -> SiwcSession:
     """Opens OpenAI's page with `open_page`; the operator approves "QMA". A stored registration
     is reused (issued client id, same host id, same account), so a second sign-in does not
-    register a second client. Refuses a grant without `chatgpt.tokens.use.direct`."""
-    vault = vault or KeyringVault()
+    register a second client. Refuses a grant without `chatgpt.tokens.use.direct`.
+
+    `slot` picks the entry (0 is `qmx/chatgpt`), so a second sign-in lands beside the first.
+    `machine` records the one machine that owns it. A sign-in of an account another slot on this
+    machine already holds is refused, because the two token families revoke each other."""
+    vault = vault or KeyringVault(entry_for(slot))
     raw = await asyncio.to_thread(vault.get)
     saved = Record.loads(raw) if raw else None
     asked_with = saved.client_id if saved else REGISTRATION_CLIENT
@@ -459,6 +533,12 @@ async def sign_in(
     )
     if DIRECT_SCOPE not in str(tokens.get("scope", "")).split():
         raise SignInError(f"OpenAI did not grant {DIRECT_SCOPE}; this plan cannot use it")
+    elsewhere = await asyncio.to_thread(owned_by, account, machine=machine, vaults=vaults)
+    if elsewhere is not None and elsewhere != slot:
+        raise SignInError(
+            f"this ChatGPT account is already signed in in slot {elsewhere}; two sign-ins of "
+            "one account revoke each other, so sign out of one first"
+        )
     record = Record(
         client_id=callback.client_id,
         host_id=host_id,
@@ -466,7 +546,8 @@ async def sign_in(
         scopes=(),
         account=account,
         background_consent=saved.background_consent if saved else False,
+        owner=machine or (saved.owner if saved else ""),
     )
-    session = SiwcSession(record, vault)
+    session = SiwcSession(record, vault, slot=slot)
     await session.accept(tokens)
     return session

@@ -49,6 +49,7 @@ CORE_TOOLSETS: Final = (
     "delegate",
     "settings_read",
     "ops",
+    "router",
 )
 CORE_PACK: Final = "qmx"
 APP_PREFIX: Final = "app:"
@@ -359,6 +360,33 @@ which hands the harness one read per target for each chat (`Harness.context_read
 attaching writes that chat's own record. A harness with no Library serves none of these rows."""
 
 
+ROUTER_ROWS: Final = (
+    _row(
+        "router",
+        "accounts",
+        "agent_tool",
+        "accounts",
+        "read",
+        "Read the account pool: each account's provider, state, live leases, last reading and "
+        "the models it is cooling for. No key is ever shown; a secret is a keyring name.",
+    ),
+    _row(
+        "router",
+        "llm_complete",
+        "agent_tool",
+        "llm_complete",
+        "domain_write",
+        "Ask one model for one answer through the router with no CLI process: a role or a model "
+        "id, the messages, and an optional JSON schema the answer must hold to. A plan row is "
+        "refused, because only the CLI holds that sign-in.",
+        reversibility="reversible",
+    ),
+)
+"""The account pool and the one-shot model call (AD-56, AD-12, AD-19). `llm_complete(role)` is
+what a mini app or a workflow asks for a model call: the router leases an account, normalises,
+classifies and journals the request, and no key ever reaches the app."""
+
+
 def control_rows() -> tuple[OperationSpec, ...]:
     """Every `@operation` row on `ControlService`, in definition order."""
     from qmx_control.service import ControlService  # noqa: PLC0415
@@ -437,7 +465,15 @@ def dispatch_refusal(row: OperationSpec, *, depth: int, ceiling: int | None) -> 
 def rows(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
     """The catalog: the core rows, then every enabled app's `[operations]` rows the caller hands
     in, all checked together."""
-    found = (*control_rows(), *BROKER_ROWS, *DOMAIN_ROWS, *HOST_ROWS, *CONTEXT_ROWS, *apps)
+    found = (
+        *control_rows(),
+        *BROKER_ROWS,
+        *DOMAIN_ROWS,
+        *HOST_ROWS,
+        *CONTEXT_ROWS,
+        *ROUTER_ROWS,
+        *apps,
+    )
     check(found)
     return found
 
