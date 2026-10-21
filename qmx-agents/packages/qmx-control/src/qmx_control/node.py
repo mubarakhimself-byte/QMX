@@ -22,11 +22,12 @@ import shlex
 import shutil
 import socket
 import subprocess
+import sys
 import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Final, cast
 
 import uvicorn
 
@@ -56,6 +57,69 @@ def read_secret(vault: Path, service: str, username: str) -> str | None:
     if os.name == "posix" and path.stat().st_mode & 0o077:
         raise PermissionError("Node vault files must be owner-only (chmod 600).")
     return path.read_text(encoding="utf-8").strip()
+
+
+PLAN_HOME: Final = "plan"
+"""A node's own plan home, `<home>/plan`: Contabo's plan lane reads only this one (AD-38)."""
+VAULT_STORE: Final = "vault-store.json"
+"""The sealed entries the PC published, written here by `qmx node vault install`. The same file
+name is the router's (`qmx_router.server`), which reads it when the `node` role starts; the two
+packages do not depend on each other, so the name is written once on each side."""
+PLAN_MARKER: Final = "home.toml"
+
+
+def plan_login(home: Path, vault: Path, machine: str) -> tuple[bool, str]:
+    """`qmx node login`: give this node its own plan home.
+
+    Nothing is copied and no token is read. The server has no browser, so a plan sign-in there is
+    his act on the host itself; this command prepares the home and reports what it found. The
+    vault is asked by name only (the file's presence), which is why no token can reach a log.
+    """
+    plan = home / PLAN_HOME
+    plan.mkdir(parents=True, exist_ok=True, mode=0o700)
+    (plan / PLAN_MARKER).write_text(
+        f'machine = "{machine}"\nhome = "{plan.as_posix()}"\n', encoding="utf-8"
+    )
+    if not (vault / "plan-token").exists():
+        return False, "not run, no server sign-in"
+    return True, f"plan home {plan} installed"
+
+
+def vault_install(home: Path, document: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """`qmx node vault install`: write the sealed entries the PC published.
+
+    The document has a public key and one row per replicable entry; the values themselves are
+    ciphertext this machine cannot open. Nothing here reads, writes or prints a key value. The
+    rows are checked for shape only, because the router validates them again on the way in.
+    """
+    try:
+        parsed: object = json.loads(document)
+    except ValueError as error:
+        raise RuntimeError(f"the vault document is not JSON: {error}") from error
+    if not isinstance(parsed, dict):
+        raise RuntimeError("the vault document needs a key and an entries list")
+    data = cast("dict[str, Any]", parsed)
+    rows = data.get("entries")
+    if not isinstance(rows, list):
+        raise RuntimeError("the vault document needs a key and an entries list")
+    names: list[str] = []
+    gone: list[str] = []
+    for raw in cast("list[object]", rows):
+        if not isinstance(raw, dict):
+            continue
+        row = cast("dict[str, Any]", raw)
+        name = row.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        (gone if row.get("deleted") else names).append(name)
+    home.mkdir(parents=True, exist_ok=True)
+    target = home / VAULT_STORE
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(json.dumps(parsed, sort_keys=True), encoding="utf-8")
+    if os.name == "posix":
+        temporary.chmod(0o600)
+    temporary.replace(target)
+    return tuple(sorted(names)), tuple(sorted(gone))
 
 
 def bootstrap_script(revision: str, *, hindsight: bool = False, hub_port: int = 0) -> str:
@@ -215,6 +279,15 @@ def main() -> int:
     check = commands.add_parser("verify")
     check.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     check.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    login = commands.add_parser("login")
+    login.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    login.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    login.add_argument("--machine", default="")
+    vault_command = commands.add_parser("vault")
+    vault_commands = vault_command.add_subparsers(dest="vault_command", required=True)
+    vault_install_command = vault_commands.add_parser("install")
+    vault_install_command.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    vault_install_command.add_argument("--document", type=Path, default=None)
     serve = commands.add_parser("serve")
     serve.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     serve.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
@@ -310,6 +383,22 @@ def main() -> int:
             print(f"{'PASS' if passed else 'FAIL'} {name}")
         print(f"primary: {library_primary(args.home)}")
         return int(not all(checks.values()))
+    if args.command == "login":
+        machine = cast(str, args.machine) or socket.gethostname()
+        signed_in, line = plan_login(cast(Path, args.home), cast(Path, args.vault), machine)
+        print(f"{'PASS' if signed_in else 'not run, '}{line}")
+        return 0
+    if args.command == "vault":
+        home = cast(Path, args.home)
+        source = cast(Path | None, args.document)
+        document = source.read_text(encoding="utf-8") if source else sys.stdin.read()
+        names, gone = vault_install(home, document)
+        print(f"PASS vault installed: {len(names)} entries, {len(gone)} tombstones")
+        for name in names:
+            print(f"  entry {name}")
+        for name in gone:
+            print(f"  deleted {name}")
+        return 0
     address = run(["tailscale", "ip", "-4"]).splitlines()[0]
     if not address.startswith("100."):
         raise RuntimeError("Node control binds only to a Tailscale IPv4 address.")

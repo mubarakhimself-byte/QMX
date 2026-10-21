@@ -24,7 +24,7 @@ import math
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
-from typing import Final, Literal
+from typing import Any, Final, Literal, cast
 
 type FactState = Literal["open", "cooling", "probing", "benched"]
 TYPE_ORDER: Final[tuple[FactState, ...]] = ("benched", "cooling", "probing", "open")
@@ -103,45 +103,43 @@ class State:
         place a fact off the tailnet is trusted, and a skipped row is better than a raised one."""
         if not isinstance(document, dict):
             return cls()
-        facts = tuple(
-            fact
-            for row in _rows(document.get("facts"))
-            if (fact := _fact(row)) is not None
-        )
+        data = cast("dict[str, Any]", document)
+        facts = tuple(fact for row in _rows(data.get("facts")) if (fact := _fact(row)) is not None)
         leases = tuple(
             row
-            for item in _rows(document.get("leases"))[: MAX_LEASES_PER_ACCOUNT * 8]
+            for item in _rows(data.get("leases"))[: MAX_LEASES_PER_ACCOUNT * 8]
             if (row := _lease(item)) is not None
         )
         return cls(facts=facts, leases=leases)
 
 
 def _rows(value: object) -> list[object]:
-    return list(value) if isinstance(value, list) else []
+    return cast("list[object]", value) if isinstance(value, list) else []
 
 
 def _fact(row: object) -> Fact | None:
     if not isinstance(row, dict):
         return None
-    account = row.get("account")
-    state = row.get("state")
-    observed_at = row.get("observed_at")
+    data = cast("dict[str, Any]", row)
+    account = data.get("account")
+    state = data.get("state")
+    observed_at = data.get("observed_at")
     if not isinstance(account, str) or not account:
         return None
     if state not in TYPE_ORDER:
         return None
-    if not isinstance(observed_at, (int, float)) or not math.isfinite(observed_at):
+    if not isinstance(observed_at, int | float) or not math.isfinite(observed_at):
         return None
-    model = row.get("model")
-    until = row.get("until")
-    reading = row.get("reading")
-    site = row.get("site")
+    model = data.get("model")
+    until = data.get("until")
+    reading = data.get("reading")
+    site = data.get("site")
     return Fact(
         account=account,
         model=model if isinstance(model, str) else EVERY_MODEL,
         state=state,
-        until=float(until) if isinstance(until, (int, float)) else None,
-        reading=float(reading) if isinstance(reading, (int, float)) else None,
+        until=float(until) if isinstance(until, int | float) else None,
+        reading=float(reading) if isinstance(reading, int | float) else None,
         observed_at=float(observed_at),
         site=site if isinstance(site, str) else "",
     )
@@ -150,12 +148,13 @@ def _fact(row: object) -> Fact | None:
 def _lease(row: object) -> LeaseRow | None:
     if not isinstance(row, dict):
         return None
-    account = row.get("account")
-    holder = row.get("holder")
-    expires_at = row.get("expires_at")
+    data = cast("dict[str, Any]", row)
+    account = data.get("account")
+    holder = data.get("holder")
+    expires_at = data.get("expires_at")
     if not isinstance(account, str) or not account or not isinstance(holder, str):
         return None
-    if not isinstance(expires_at, (int, float)) or not math.isfinite(expires_at):
+    if not isinstance(expires_at, int | float) or not math.isfinite(expires_at):
         return None
     return LeaseRow(account=account, holder=holder, expires_at=float(expires_at))
 
@@ -199,7 +198,9 @@ class FactStore:
             self.hold(row.account, row.holder, row.expires_at)
         return taken
 
-    def state(self, account: str, model: str, now: float | None = None) -> tuple[FactState, float | None]:
+    def state(
+        self, account: str, model: str, now: float | None = None
+    ) -> tuple[FactState, float | None]:
         """The account's state for `model`: the model's own fact when it has one, else the
         account-wide fact, else open. A passed deadline reads `probing`, the same way the pool's
         own close table does, so the next real request sets the new state."""
@@ -287,8 +288,16 @@ def _rank(state: FactState) -> str:
     return f"{TYPE_ORDER.index(state)}"
 
 
-def close(account: str, model: str, state: FactState, *, until: float | None = None,
-          reading: float | None = None, site: str = "", clock: Callable[[], float] = time.time) -> Fact:
+def close(
+    account: str,
+    model: str,
+    state: FactState,
+    *,
+    until: float | None = None,
+    reading: float | None = None,
+    site: str = "",
+    clock: Callable[[], float] = time.time,
+) -> Fact:
     """One fact to publish after a real request: the shape a caller wants most of the time."""
     return Fact(
         account=account,

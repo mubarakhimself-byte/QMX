@@ -80,9 +80,18 @@ from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
 from qmx_router import complete as router_complete
+from qmx_router.passes import PassAuthority, RevocationList
 from qmx_router.pool import NoAccount
 from qmx_router.relay import Relay
-from qmx_router.server import RouterService
+from qmx_router.server import (
+    LOOPBACK,
+    NODE_PORT_FILE,
+    TAILNET,
+    VAULT_STORE,
+    NodeState,
+    RouterService,
+    node_app,
+)
 
 from qmx_host.door import PrincipalDoor
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
@@ -308,15 +317,56 @@ def _extractor(control: ControlService) -> tuple[ProfileName, str]:
     return ProfileName(""), ""
 
 
+async def node_sidecar(home: Path) -> None:
+    """The `node` role's tailnet app (AD-12, AD-41): the facts this machine holds, the vault
+    ciphertext it was given, and the pass list. It binds every interface on an ephemeral port,
+    pinned in `<home>/node.port`, and every route but health needs a pass."""
+    authority = PassAuthority(revocations=RevocationList(home / "passes" / "revoked.json"))
+    state = NodeState(site=socket.gethostname(), passes=authority)
+    stored = home / VAULT_STORE
+    if stored.exists():
+        # The entries `qmx node vault install` wrote. A file that does not parse is skipped: the
+        # next install rewrites it, and a node with no ciphertext still serves facts and passes.
+        with suppress(OSError, ValueError):
+            state.vault.sync(json.loads(stored.read_text(encoding="utf-8")))
+    config = uvicorn.Config(
+        node_app(state),
+        host=TAILNET,
+        port=0,
+        lifespan="off",
+        access_log=False,
+        log_config=None,
+    )
+    server = uvicorn.Server(config)
+    serving = asyncio.create_task(server.serve())
+    while not server.started:
+        if serving.done():
+            serving.result()
+        await asyncio.sleep(0.01)
+    port = 0
+    for listener in server.servers[0].sockets if server.servers else ():
+        if listener.family == socket.AF_INET:
+            port = listener.getsockname()[1]
+            break
+    (home / NODE_PORT_FILE).write_text(f"{port}\n", encoding="utf-8")
+    try:
+        await serving
+    finally:
+        server.should_exit = True
+
+
 async def serve(
     home: Path, port: int, role: Role, ui_origin: str, scrubbed: Sequence[str], keep: Sequence[str]
 ) -> None:
     """Assumes the caller scrubbed the environment and holds the home's lock."""
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
-    router = await RouterService(home).start()
+    router = await RouterService(home, bind=TAILNET if role == "node" else LOOPBACK).start()
     # Its own thread and loop, pinned in `<home>/router.port`; the harness's relay adopts it.
+    # The `node` role binds the tailnet instead of the loopback: that machine is reached over
+    # Tailscale or not at all, and its relay is still the only caller on that port (AD-12).
     supervising = asyncio.create_task(router.supervise())
+    sidecar = asyncio.create_task(node_sidecar(home)) if role == "node" else None
     try:
         harness = await RecordedHarness.open(
             qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
@@ -359,6 +409,10 @@ async def serve(
         supervising.cancel()
         with suppress(asyncio.CancelledError):
             await supervising
+        if sidecar is not None:
+            sidecar.cancel()
+            with suppress(asyncio.CancelledError):
+                await sidecar
         await router.close()
 
 

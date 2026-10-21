@@ -32,6 +32,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Final, Literal
 
 from qmx_router.classify import Classification
+from qmx_router.facts import Fact, FactState, FactStore
 from qmx_router.profiles import ProfileName, SecretRef
 
 type Strategy = Literal["fill_first", "round_robin", "least_used"]
@@ -50,6 +51,10 @@ ALERT_AFTER_S: Final = 0.0
 a delay on a message, never a limit on work."""
 EVERY_MODEL: Final = ""
 """The close-table key for a whole account, as opposed to one model's."""
+LEASE_TTL_S: Final = 900.0
+"""How long one live lease counts on the other machine when a pool is attached to a shared
+`FactStore`. A lease that lapsed there stops counting, so a machine that died mid-request does
+not hold a key's concurrency forever."""
 
 
 @dataclass(frozen=True)
@@ -84,6 +89,8 @@ class Lease:
     provider: ProfileName
     model: str
     affinity: str | None = None
+    id: str = ""
+    """This lease on the shared store. Empty when the pool has no store to publish to."""
 
 
 @dataclass(frozen=True)
@@ -136,12 +143,21 @@ class NoAccount(RuntimeError):
         self.alert = alert
 
 
+class OwnedElsewhere(RuntimeError):
+    """A GPT sign-in this machine does not own. Two sign-ins of one ChatGPT account revoke each
+    other, so the second machine is refused rather than allowed to take the first one down
+    (AD-12, one owner machine per sign-in)."""
+
+
 @dataclass
 class _Close:
     until: datetime | None
     """None for a bench that no clock lifts."""
     kind: str
     reason: str
+    observed_at: float = 0.0
+    """When the machine that learned it saw it. A fact older than this loses, which is what keeps
+    a late message from reopening an account the other side already closed."""
 
 
 @dataclass
@@ -153,6 +169,8 @@ class _Held:
     served: int = 0
     """The pool's own counter of when this account last took a lease. Two leases inside one
     clock tick still have an order, which wall time cannot give."""
+    tokens: list[str] = field(default_factory=lambda: [])
+    """The lease ids this account holds locally, so a release drops the right shared row."""
     strikes: dict[str, int] = field(default_factory=lambda: {})
     """Generic-429 strikes per model, so the same account gets one retry before a cooldown."""
     closed: dict[str, _Close] = field(default_factory=lambda: {})
@@ -172,12 +190,22 @@ class AccountPool:
         strategy: Strategy = DEFAULT_STRATEGY,
         clock: Callable[[], datetime] = _now,
         alert_after: float = ALERT_AFTER_S,
+        site: str = "",
+        shared: FactStore | None = None,
     ) -> None:
         self.strategy = strategy
         self.clock = clock
         self.alert_after = alert_after
+        self.site = site
+        """This machine's name in the shared store: facts carry it, leases are held under it."""
+        self.shared = shared
+        """The other machine's facts and live leases. None means a single host, which is how
+        every caller ran before the server phase."""
         self._accounts: dict[str, _Held] = {}
         self._affinity: dict[str, Lease] = {}
+        self._owners: dict[str, str] = {}
+        """The one machine that owns each GPT sign-in, seeded from the rows and moved by
+        `claim_sign_in`."""
         self._preferred: dict[str, str] = {}
         """The account each affinity started on: it returns there when that account serves the
         model again, which is what a chat's turn start does after a cooldown."""
@@ -197,6 +225,10 @@ class AccountPool:
                 self._accounts[account_id] = _Held(spec)
             else:
                 held.spec = spec
+            if spec.owner:
+                self._owners[account_id] = spec.owner
+            elif account_id not in self._owners:
+                self._owners.pop(account_id, None)
 
     @property
     def accounts(self) -> tuple[AccountSpec, ...]:
@@ -237,8 +269,7 @@ class AccountPool:
         chosen = self._choose(name, model)
         if chosen is None:
             raise self._no_account(name, model)
-        self._serve(chosen)
-        return Lease(chosen, name, model)
+        return Lease(chosen, name, model, id=self._serve(chosen))
 
     def _lease_affinity(self, provider: ProfileName, model: str, affinity: str) -> Lease:
         held = self._affinity.get(affinity)
@@ -258,25 +289,34 @@ class AccountPool:
             chosen = self._choose(provider, model)
         if chosen is None:
             raise self._no_account(provider, model)
-        self._serve(chosen)
         self._preferred.setdefault(affinity, chosen.id)
-        minted = Lease(chosen, provider, model, affinity)
+        minted = Lease(chosen, provider, model, affinity, id=self._serve(chosen))
         self._affinity[affinity] = minted
         return minted
 
-    def _serve(self, spec: AccountSpec) -> None:
-        """One account takes one lease now: the count and the rotation clock move together."""
+    def _serve(self, spec: AccountSpec) -> str:
+        """One account takes one lease now: the count and the rotation clock move together, and
+        the lease is published so the other machine counts it."""
         self._served += 1
         held = self._accounts[spec.id]
         held.leases += 1
         held.served = self._served
         held.last_used = self.clock()
+        lease_id = f"{self.site}:{self._served}"
+        held.tokens.append(lease_id)
+        if self.shared is not None:
+            self.shared.hold(spec.id, lease_id, self.clock().timestamp() + LEASE_TTL_S)
+        return lease_id
 
     def release(self, lease: Lease) -> None:
         """Give the account back. Idempotent, and never below zero."""
         held = self._accounts.get(lease.account.id)
         if held is not None and held.leases > 0:
             held.leases -= 1
+            if lease.id and lease.id in held.tokens:
+                held.tokens.remove(lease.id)
+                if self.shared is not None:
+                    self.shared.drop(lease.account.id, lease.id)
         if lease.affinity is not None and self._affinity.get(lease.affinity) == lease:
             del self._affinity[lease.affinity]
 
@@ -321,6 +361,91 @@ class AccountPool:
         self._alerted = False
         return notice
 
+    def facts(self) -> tuple[Fact, ...]:
+        """Every close and reading this pool carries, as facts the other machine can apply. One
+        fact per account and model, stamped with this machine's name and its own clock."""
+        now = self.clock().timestamp()
+        found: list[Fact] = []
+        for held in self._accounts.values():
+            state, until = self.state(held.spec.id)
+            if held.closed or held.reading is not None:
+                found.append(
+                    Fact(
+                        account=held.spec.id,
+                        model=EVERY_MODEL,
+                        state=state,
+                        until=until.timestamp() if until else None,
+                        reading=held.reading,
+                        observed_at=now,
+                        site=self.site,
+                    )
+                )
+            for model, closed in held.closed.items():
+                if not model:
+                    continue
+                found.append(
+                    Fact(
+                        account=held.spec.id,
+                        model=model,
+                        state=_fact_state(closed),
+                        until=closed.until.timestamp() if closed.until else None,
+                        reading=None,
+                        observed_at=now,
+                        site=self.site,
+                    )
+                )
+        return tuple(found)
+
+    def apply_facts(self, incoming: Iterable[Fact]) -> int:
+        """Take the other machine's facts, newest first. A fact about an account this pool does
+        not know is dropped: a row arriving before the settings do is not an account."""
+        taken = 0
+        for fact in incoming:
+            held = self._accounts.get(fact.account)
+            if held is None:
+                continue
+            key = fact.model or EVERY_MODEL
+            existing = held.closed.get(key)
+            if existing is not None and existing.observed_at > fact.observed_at:
+                continue
+            if fact.state == "open":
+                if existing is not None:
+                    del held.closed[key]
+                if fact.reading is not None:
+                    held.reading = fact.reading
+                taken += 1
+                continue
+            until = datetime.fromtimestamp(fact.until, UTC) if fact.until is not None else None
+            held.closed[key] = _Close(until, fact.state, f"learned from {fact.site or 'a peer'}")
+            held.closed[key].observed_at = fact.observed_at
+            if fact.reading is not None:
+                held.reading = fact.reading
+            taken += 1
+        return taken
+
+    def gpt_owners(self) -> dict[str, str]:
+        """The one machine that owns each GPT sign-in, by account id. The host reads this before
+        it starts a sign-in, and `qmx_router.gpt.siwc` refuses an account this names another
+        machine for."""
+        return dict(self._owners)
+
+    def owner_of(self, account_id: str) -> str:
+        """The owner of one sign-in, empty when no row names one."""
+        return self._owners.get(account_id, "")
+
+    def claim_sign_in(self, account_id: str, machine: str) -> None:
+        """Record this machine as the owner of a sign-in, or refuse when another machine owns it.
+        A second sign-in of one ChatGPT account revokes the first, so this is a refusal and not a
+        warning (AD-12)."""
+        owner = self._owners.get(account_id, "")
+        if owner and machine and owner != machine:
+            raise OwnedElsewhere(
+                f"the ChatGPT sign-in {account_id} belongs to {owner}, not {machine}; "
+                "signing it in here would revoke the one there"
+            )
+        if machine:
+            self._owners[account_id] = machine
+
     def accounts_view(self) -> tuple[AccountView, ...]:
         """Every account as the usage page and the Accounts screen read it."""
         return tuple(self._view(held) for held in self._accounts.values())
@@ -351,6 +476,12 @@ class AccountPool:
             return False
         held = self._accounts[account_id]
         if held.spec.ceiling is not None and held.leases >= held.spec.ceiling:
+            return False
+        if (
+            self.shared is not None
+            and held.spec.ceiling is not None
+            and not self.shared.room(account_id, held.spec.ceiling)
+        ):
             return False
         return self._share_room(held)
 
@@ -481,6 +612,11 @@ def _priority_key(spec: AccountSpec) -> tuple[int, int]:
     if spec.priority is None:
         return (1, 0)
     return (0, spec.priority)
+
+
+def _fact_state(closed: _Close) -> FactState:
+    """The state a close publishes: a bench has no deadline, a cooling row has one."""
+    return "benched" if closed.until is None else "cooling"
 
 
 def _reason(error: Classification) -> str:

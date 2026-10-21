@@ -27,9 +27,9 @@ import os
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Final, Protocol
+from typing import Any, Final, Protocol, cast
 
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -84,8 +84,6 @@ class VaultKey:
         """The 32 bytes to keep in Credential Manager. Nothing else in this module writes it."""
         if self._private is None:
             raise WrongKey("this is a public-only vault key")
-        from cryptography.hazmat.primitives import serialization
-
         return self._private.private_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PrivateFormat.Raw,
@@ -94,8 +92,6 @@ class VaultKey:
 
     def public_bytes(self) -> bytes:
         if self._private is not None:
-            from cryptography.hazmat.primitives import serialization
-
             return self._private.public_key().public_bytes(
                 encoding=serialization.Encoding.Raw,
                 format=serialization.PublicFormat.Raw,
@@ -125,7 +121,7 @@ class VaultKey:
             raise WrongKey(f"the ciphertext carries no usable key: {error}") from error
         try:
             return AESGCM(_derive(shared)).decrypt(nonce, body, name.encode("utf-8"))
-        except Exception as error:  # noqa: BLE001  (the AEAD's own exception hierarchy varies)
+        except Exception as error:
             raise WrongKey(f"{name} was not sealed for this vault") from error
 
     def _recipient(self) -> X25519PublicKey:
@@ -158,7 +154,7 @@ class Source(Protocol):
 class MemorySource:
     """A stand-in for Credential Manager, for lanes and tests only."""
 
-    values: dict[str, str] = field(default_factory=dict)
+    values: dict[str, str] = field(default_factory=lambda: {})
 
     def names(self) -> Iterable[str]:
         return tuple(self.values)
@@ -200,23 +196,25 @@ class VaultEntry:
         """Parse one entry off the tailnet. A row that does not fit is dropped, not raised."""
         if not isinstance(document, dict):
             return None
-        name = document.get("name")
+        data = cast("dict[str, Any]", document)
+        name = data.get("name")
         if not isinstance(name, str) or not name:
             return None
+        sealed_text = data.get("sealed")
         try:
-            sealed = base64.b64decode(str(document.get("sealed", "")), validate=True)
-        except (ValueError, TypeError):
+            sealed = base64.b64decode(str(sealed_text or ""), validate=True)
+        except ValueError, TypeError:
             return None
-        updated_at = document.get("updated_at")
-        if not isinstance(updated_at, (int, float)):
+        updated_at = data.get("updated_at")
+        if not isinstance(updated_at, int | float):
             return None
         return cls(
             name=name,
-            replicable=bool(document.get("replicable", False)),
+            replicable=bool(data.get("replicable", False)),
             sealed=sealed,
-            fingerprint=str(document.get("fingerprint", "")),
+            fingerprint=str(data.get("fingerprint", "")),
             updated_at=float(updated_at),
-            deleted=bool(document.get("deleted", False)),
+            deleted=bool(data.get("deleted", False)),
         )
 
 
@@ -251,7 +249,9 @@ class Vault:
     def install(self, name: str, value: str, *, replicable: bool | None = None) -> VaultEntry:
         """Enter or rotate one value. `replicable` defaults to the name's own answer, and a
         broker credential's is False whatever the caller says."""
-        allowed = is_replicable(name) and (self.replicable(name) if replicable is None else replicable)
+        allowed = is_replicable(name) and (
+            self.replicable(name) if replicable is None else replicable
+        )
         self.source.write(name, value)
         fingerprint = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
         entry = VaultEntry(
@@ -329,14 +329,16 @@ class VaultStore:
         message, which the next sync fixes."""
         if not isinstance(document, dict):
             return 0
-        key = document.get("key")
+        data = cast("dict[str, Any]", document)
+        key = data.get("key")
         if isinstance(key, str) and key:
             try:
                 self.public_key = base64.b64decode(key)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 return 0
         taken = 0
-        for row in document.get("entries", []):  # type: ignore[union-attr]
+        rows = data.get("entries")
+        for row in cast("list[object]", rows) if isinstance(rows, list) else []:
             entry = VaultEntry.from_document(row)
             if entry is None:
                 continue
@@ -420,8 +422,9 @@ def install_from_document(
     entered. Only names whose value the source can still answer for are installed."""
     if not isinstance(document, dict):
         return 0
+    rows = cast("dict[str, Any]", document).get("names")
     installed = 0
-    for row in document.get("names", []):  # type: ignore[union-attr]
+    for row in cast("list[object]", rows) if isinstance(rows, list) else []:
         name = str(row)
         value = value_of(name) if value_of is not None else vault.source.read(name)
         if value is None:

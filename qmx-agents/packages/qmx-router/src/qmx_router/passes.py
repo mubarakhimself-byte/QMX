@@ -29,9 +29,10 @@ import hmac
 import json
 import os
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Final, Literal
+from typing import Any, Final, Literal, cast
 
 type Code = Literal[
     "absent",
@@ -85,10 +86,11 @@ class Pass:
 
 @dataclass(frozen=True)
 class Ask:
-    """One request a bearer wants a pass to cover. Empty fields are not asked about."""
+    """One request a bearer wants a pass to cover. Empty fields are not asked about, which is why
+    `attempt` defaults to 0 and not 1: 1 is an attempt number, and every pass would fail it."""
 
     run: str = ""
-    attempt: int = 1
+    attempt: int = 0
     placement: str = ""
     read: str = ""
     write: str = ""
@@ -108,9 +110,19 @@ class Refusal:
         return f"{self.code}: {self.detail}"
 
 
-def canonical(pass_id: str, run: str, attempt: int, placement: str, read_scope: tuple[str, ...],
-             write_prefix: str, key_scope: tuple[str, ...], model_scope: tuple[str, ...],
-             issued_at: float, expires_at: float, handle: str) -> bytes:
+def canonical(
+    pass_id: str,
+    run: str,
+    attempt: int,
+    placement: str,
+    read_scope: tuple[str, ...],
+    write_prefix: str,
+    key_scope: tuple[str, ...],
+    model_scope: tuple[str, ...],
+    issued_at: float,
+    expires_at: float,
+    handle: str,
+) -> bytes:
     """The bytes the MAC covers, in one fixed order. JSON with sorted keys and no spaces, so a
     pass minted on one Python and checked on another signs the same bytes."""
     return json.dumps(
@@ -164,7 +176,7 @@ class RevocationList:
             return
         try:
             document = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return
         self._passes = {str(item) for item in document.get("passes", [])}
         self._runs = {str(item) for item in document.get("runs", [])}
@@ -199,9 +211,11 @@ class RevocationList:
         self._load()
         return tuple(sorted(self._runs))
 
-    def holds(self, pass_id: str, run_id: str) -> bool:
+    def holds(self, pass_id: str) -> bool:
+        """True when this pass id was revoked. A run's end is not a revocation: it reads
+        `owner_ended`, which is the honest name for it in a journal."""
         self._load()
-        return pass_id in self._passes or run_id in self._runs
+        return pass_id in self._passes
 
 
 @dataclass
@@ -212,11 +226,10 @@ class PassAuthority:
 
     secret: bytes = field(default_factory=lambda: os.urandom(32))
     revocations: RevocationList = field(default_factory=RevocationList)
-    clock: object = time.time
+    clock: Callable[[], float] = time.time
 
     def _now(self) -> float:
-        clock = self.clock
-        return float(clock()) if callable(clock) else time.time()
+        return float(self.clock())
 
     def fingerprint(self) -> str:
         return hashlib.sha256(self.secret).hexdigest()[:16]
@@ -284,28 +297,29 @@ class PassAuthority:
             body = _unb64(parts[1])
             mac = _unb64(parts[2])
             document = json.loads(body)
-        except (ValueError, TypeError, json.JSONDecodeError):
+        except ValueError, TypeError, json.JSONDecodeError:
             return _blank(), Refusal("malformed", "the bearer does not decode")
         if not isinstance(document, dict):
             return _blank(), Refusal("malformed", "the bearer is not an object")
+        data = cast("dict[str, Any]", document)
         wanted = hmac.new(self.secret, body, hashlib.sha256).digest()
         if not hmac.compare_digest(mac, wanted):
             return _blank(), Refusal("bad_mac", "the bearer was not signed by this router")
         try:
             minted = Pass(
-                id=str(document["id"]),
-                run=str(document["run"]),
-                attempt=int(document["attempt"]),
-                placement=str(document["placement"]),
-                read_scope=tuple(str(item) for item in document["read_scope"]),
-                write_prefix=str(document["write_prefix"]),
-                key_scope=tuple(str(item) for item in document["key_scope"]),
-                model_scope=tuple(str(item) for item in document["model_scope"]),
-                issued_at=float(document["issued_at"]),
-                expires_at=float(document["expires_at"]),
-                handle=str(document.get("handle", "")),
+                id=str(data["id"]),
+                run=str(data["run"]),
+                attempt=int(data["attempt"]),
+                placement=str(data["placement"]),
+                read_scope=tuple(str(item) for item in data["read_scope"]),
+                write_prefix=str(data["write_prefix"]),
+                key_scope=tuple(str(item) for item in data["key_scope"]),
+                model_scope=tuple(str(item) for item in data["model_scope"]),
+                issued_at=float(data["issued_at"]),
+                expires_at=float(data["expires_at"]),
+                handle=str(data.get("handle", "")),
             )
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             return _blank(), Refusal("malformed", "the bearer is missing a scope")
         return minted, None
 
@@ -324,9 +338,9 @@ class PassAuthority:
         refusal, because E25 asks each scope separately and a lane reads them all."""
         now = self._now()
         found: list[Refusal] = []
-        if self.revocations.holds(minted.id, minted.run):
-            found.append(Refusal("revoked", f"pass {minted.id} or run {minted.run} was revoked"))
-        if ask.run and minted.run in self.revocations.runs():
+        if self.revocations.holds(minted.id):
+            found.append(Refusal("revoked", f"pass {minted.id} was revoked"))
+        if minted.run in self.revocations.runs():
             found.append(Refusal("owner_ended", f"run {minted.run} ended"))
         if now >= minted.expires_at:
             found.append(Refusal("expired", f"expired at {minted.expires_at:.0f}, now {now:.0f}"))
@@ -351,9 +365,7 @@ class PassAuthority:
                 )
             )
         if ask.read and not _readable(minted.read_scope, ask.read):
-            found.append(
-                Refusal("read_scope", f"{minted.read_scope} does not cover {ask.read}")
-            )
+            found.append(Refusal("read_scope", f"{minted.read_scope} does not cover {ask.read}"))
         if ask.write and not _under(minted.write_prefix, ask.write):
             found.append(
                 Refusal("write_scope", f"{minted.write_prefix!r} does not cover {ask.write}")
@@ -361,9 +373,7 @@ class PassAuthority:
         if ask.key and not _scoped(minted.key_scope, ask.key):
             found.append(Refusal("key_scope", f"{minted.key_scope} does not cover {ask.key}"))
         if ask.model and not _scoped(minted.model_scope, ask.model):
-            found.append(
-                Refusal("model_scope", f"{minted.model_scope} does not cover {ask.model}")
-            )
+            found.append(Refusal("model_scope", f"{minted.model_scope} does not cover {ask.model}"))
         return tuple(found)
 
     def end_run(self, run_id: str) -> None:
