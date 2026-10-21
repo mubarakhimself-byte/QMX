@@ -18,6 +18,7 @@ from qmx_engine.ports.library import Bundle
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Caller, Refused
+from qmx_engine.settings import DEFAULTS
 
 SETTINGS = """
 [engine]
@@ -49,7 +50,7 @@ def test_engine_and_roles_settings_override_the_defaults_without_a_write(tmp_pat
 
     assert (values["scheduler.tick"], values["retry.backoff"]) == (5, (1, 2))
     assert (values["roles.writer"], values["roles.scout"]) == (("claude/opus",), ("claude/haiku",))
-    assert (values["roles.judge"], "unknown" in values) == (("claude/haiku",), False)
+    assert (values["roles.judge"], "unknown" in values) == (DEFAULTS["roles.judge"], False)
     assert control.puts == []
 
 

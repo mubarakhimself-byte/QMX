@@ -1,6 +1,11 @@
 """What EP10's model lanes share: the OpenRouter row on a throwaway home, the engine driven over the
 harness adapter, workflow folders made from the `one-llm` fixture, and the spend estimate.
 
+A test run takes the OpenRouter row only where a role names it (ruling 105), so lanes on the
+OpenRouter home run with `PROVIDER_PROOF`, which names it first in every role. Run this module
+itself for the provider-proof lane: one `one-llm` run on the OpenRouter home whose span must record
+the row (HYG0 lane 8).
+
 No lane reads a key or the plan login. The relay reads `qmx/openrouter` in-process, by reference,
 and the plan turns run through the ship home's CLI login under the lane lock (`plan_harness`).
 Spend is estimated from the relay's journal rows at the Kimi row's list prices, counting cache
@@ -9,6 +14,7 @@ reads as full input, so the figure is an upper bound.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -18,7 +24,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Final
 
-from common import ENGINE_STORE, boot, opened, throwaway_home
+from common import ENGINE_STORE, Log, boot, opened, throwaway_home
 
 os.environ.setdefault("QMA_LIVE_SCRATCH", str(ENGINE_STORE / "homes" / "ep10-scratch"))
 
@@ -40,6 +46,17 @@ OPENROUTER_ROW: Final[dict[str, Any]] = {
     "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), KIMI),
 }
 """`scripts/live/qma/switch_lane.py`'s row, restated: that module imports another `common`."""
+ROLE_KEYS: Final = tuple(
+    k
+    for k in DEFAULTS
+    if k.startswith("roles.")
+    and k not in {"roles.test_only", "roles.test_order", "roles.live_order"}
+)
+PROVIDER_PROOF: Final[Mapping[str, object]] = {
+    **DEFAULTS,
+    **{k: (KIMI_ROW, *v) for k in ROLE_KEYS if isinstance(v := DEFAULTS[k], tuple)},
+}
+"""The defaults with the OpenRouter row named first in every role: the provider-proof settings."""
 KIMI_USD_PER_TOKEN: Final = (0.5e-6, 2.5e-6)
 """Input and output list prices of the Kimi row (`switch_lane.KIMI_PRICES`)."""
 ONE_LLM: Final = (
@@ -98,7 +115,7 @@ async def run(
     engine_home: Path,
     workflow: Path,
     harness: Any,
-    settings: Mapping[str, object] = DEFAULTS,
+    settings: Mapping[str, object] = PROVIDER_PROOF,
     *,
     mode: Mode = "test",
     fake: bool = False,
@@ -150,3 +167,29 @@ def relay_usd(home: Path) -> float:
                 + payload.get("output_tokens", 0) * (KIMI_USD_PER_TOKEN[1])
             )
     return total
+
+
+async def provider_proof() -> int:
+    log = Log(PR, "ep10-provider-proof")
+    home = openrouter_home("provider-proof")
+    log(f"provider proof: every role names {KIMI_ROW} first; it is a test-only row")
+    async with harnessed(home) as found:
+        outcome, _, spans, _ = await run(
+            throwaway_home(PR, "provider-proof-engine"), folder("proof"), found.harness
+        )
+    turns = model_spans(spans)
+    for span in turns:
+        log(f"span {describe(span)}")
+    log(f"run {outcome.run_id}: {outcome.status} {outcome.reason or ''}")
+    log.check(
+        "the provider-proof run spans the named OpenRouter row and one call answers",
+        outcome.status == "passed"
+        and [(s.profile, s.model, s.status) for s in turns] == [("openrouter", KIMI, "ok")],
+        [(s.profile, s.model, s.status, s.tokens) for s in turns],
+    )
+    log(f"OpenRouter spend estimate (upper bound): ${relay_usd(home):.4f}")
+    return log.verdict()
+
+
+if __name__ == "__main__":
+    raise SystemExit(asyncio.run(provider_proof()))

@@ -53,7 +53,12 @@ def parser() -> argparse.ArgumentParser:
     stats.add_argument("--home", type=Path, required=True)
     run = commands.add_parser("run", help="start one run from a workflow folder")
     run.add_argument("folder", type=Path)
-    run.add_argument("--mode", choices=("test", "live"), default="test")
+    run.add_argument(
+        "--mode",
+        choices=("test",),
+        default="test",
+        help="test only; a live run starts through the engine service (AD-11)",
+    )
     run.add_argument("--home", type=Path, help="the QMX home; a fresh temporary one when left out")
     run.add_argument("--inputs", default="null", help="the run's inputs as JSON")
     run.add_argument("--run-id")
@@ -100,7 +105,7 @@ async def start(args: argparse.Namespace) -> int:
         return 1
     home: Path = args.home or Path(tempfile.mkdtemp(prefix="qmx-engine-"))
     run_id = args.run_id or new_run_id(datetime.now(UTC))
-    print(f"run {run_id} home {home}", flush=True)
+    print(f"run {run_id} home {home} mode: {args.mode}", flush=True)
     harness: Harness | None = None
     settings: Mapping[str, Setting] = DEFAULTS
     if not args.fake and model_bearing(found[1]):

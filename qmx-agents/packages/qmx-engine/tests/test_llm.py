@@ -106,19 +106,14 @@ def run(home: Path, port: FakePort | None, *, fake: bool = False) -> tuple[Outco
         return outcome, next(s for s in reader.spans(outcome.run_id) if s.node_id == "capital")
 
 
-def test_a_test_run_spans_the_resolved_openrouter_candidate_and_its_tokens(tmp_path: Path) -> None:
+def test_a_test_run_spans_the_plan_haiku_candidate_and_its_tokens(tmp_path: Path) -> None:
     port = FakePort(GOOD)
 
     outcome, span = run(tmp_path, port)
 
     assert outcome.status == "passed"
     assert outcome.outputs == {"capital": {"main": {"country": "France", "capital": "Paris"}}}
-    assert (span.role, span.profile, span.model, span.status) == (
-        "triage",
-        "openrouter",
-        "moonshotai/kimi-k2.5",
-        "ok",
-    )
+    assert (span.role, span.profile, span.model, span.status) == ("triage", "claude", "haiku", "ok")
     assert span.tokens == TOKENS
     assert port.chats[0]["title"] == span.idempotency_key
 
