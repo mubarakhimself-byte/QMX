@@ -1,0 +1,920 @@
+"""The guard (engine AD-54): one PreToolUse callback that runs first on every tool call, in every
+mode and inside sub-agents, and fails closed on its own error.
+
+Agents have no path to money (ruling 116), so the guard holds no money vocabulary. It keeps the
+protections that are real: sign-ins and key files, the OS keyring, QMX's own stores and his own
+`~/.claude`, plus a floor of destructive and evasive commands, then his never-allow list. His
+always-allow list never lifts a floor row, a never row, or a QMX tool that always asks.
+
+The guard reads tool inputs as text, so a determined command gets around it (variable
+expansion, string building, a script file). It stops the model's own mistakes and the obvious
+forms; the OS user boundary stays the known gap (engine AD-22).
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import functools
+import itertools
+import json
+import os
+import posixpath
+import re
+import unicodedata
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Final, cast
+from urllib.parse import unquote
+
+if TYPE_CHECKING:
+    from claude_agent_sdk.types import HookCallback, HookContext, HookInput, HookJSONOutput
+
+SHELL_TOOLS: Final[frozenset[str]] = frozenset({"Bash", "PowerShell", "Monitor"})
+"""Every built-in tool whose input is a command line (02a section 15 for Monitor)."""
+
+READ_TOOLS: Final[frozenset[str]] = frozenset({"Read", "Grep", "Glob"})
+WRITE_TOOLS: Final[frozenset[str]] = frozenset({"Edit", "Write", "NotebookEdit"})
+PATH_FIELDS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
+    {
+        "Read": ("file_path",),
+        "Grep": ("path",),
+        "Glob": ("path",),
+        "Edit": ("file_path",),
+        "Write": ("file_path",),
+        "NotebookEdit": ("notebook_path",),
+    }
+)
+
+LOGIN_NAME: Final = ".credentials.json"
+"""The plan login's file name. A file of this name is a secret in any folder."""
+
+SHELL_WORDS: Final[tuple[str, ...]] = (
+    ".credentials",
+    "claude_config_dir",
+    "claude code-credentials",
+)
+"""Fragments a shell command may not contain, casefolded. The last is the macOS Keychain item."""
+
+CREDENTIAL_READERS: Final = re.compile(
+    r"(?<![\w-])(cmdkey|vaultcmd|get-storedcredential|get-secret|keyring|win32cred|credread\w*"
+    r"|credenumerate\w*|passwordvault|secret-tool|find-generic-password|find-internet-password"
+    r"|dump-keychain)(?![\w-])"
+)
+"""Programs, modules and cmdlets that read an OS credential store, matched as whole words in
+casefolded command text, whatever the entry name."""
+
+SECRET_SHAPES: Final = re.compile(
+    "|".join(
+        (
+            r"sk-(?:or-v1|ant|proj|svcacct|admin)-[A-Za-z0-9_-]{16,}",
+            r"AKIA[0-9A-Z]{16}",
+            r"gh[pousr]_[A-Za-z0-9]{36,}",
+            r"github_pat_[A-Za-z0-9_]{22,}",
+            r"xox[abposr]-[0-9A-Za-z-]{10,}",
+            r"AIza[0-9A-Za-z_-]{35}",
+            r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*",
+            r"-----BEGIN[A-Z ]*PRIVATE KEY-----",
+            r"(?<![A-Za-z0-9_-])sk-(?=[A-Za-z_-]*[0-9])[A-Za-z0-9_-]{20,}",
+            r"(?<![0-9a-f])[0-9a-f]{32}\.[A-Za-z0-9]{16}(?![A-Za-z0-9])",
+        )
+    )
+)
+"""The key shapes of SEC1A's one redaction seam (`qmx_engine.ledger.redact.SHAPES`), held here
+because the engine imports the harness, not the other way round."""
+
+SWEEP: Final = re.compile(
+    r"(?<![\w-])(find|rg|fd|tree|du|locate|gci|get-childitem|dir)(?![\w-])"
+    r"|(?<=\s)(-[a-z]*r[a-z]*|--recursive|/s|/r)(?![\w-])"
+)
+"""A command that walks a folder tree. Aimed at a drive root or a user home, it searches the
+operator's whole account (a model ran `find / -name .claude` in HP1)."""
+
+EVALUATED: Final = re.compile(
+    r"(?<![\w-])(-enc|-enco|-encod|-encode|-encoded|-encodedc\w*|iex|invoke-expression)"
+    r"(?![\w-])|(\$\{env:)"
+    r"|(?<![\w-])(?:powershell|pwsh)(?:\.exe)?(?![\w-]).*?\s(-e|-ec|-en)(?![\w-])"
+)
+"""Text the guard cannot read: an encoded PowerShell command, a string evaluated as code, or a
+`${env:...}` reference the expander does not follow. Casefolded text."""
+
+DISK_AND_REGISTRY: Final = frozenset(
+    {
+        "diskpart", "format", "format.com", "fdisk", "gdisk", "sgdisk", "parted", "wipefs",
+        "mkfs", "mkswap", "dd", "bcdedit", "format-volume", "clear-disk", "initialize-disk",
+        "new-partition", "remove-partition", "resize-partition", "set-partition",
+        "set-disk", "reg", "regedit", "regedt32", "regini",
+    }
+)  # fmt: skip
+"""Disk, format and registry programs and cmdlets, refused at command position."""
+
+REGISTRY_PATH: Final = re.compile(r"(?<![\w-])(hklm|hkcu|hkcr|hku|hkcc):|registry::|hkey_")
+"""A registry path a PowerShell item cmdlet would write through. Casefolded text."""
+
+INVISIBLE_CATEGORIES: Final = frozenset({"Cf", "Co", "Cs"})
+"""Format characters (zero width, bidirectional controls, tag characters), private use and
+surrogates. None belongs in a command."""
+
+CHANGES_FOLDER: Final = re.compile(
+    r"(?<![\w-])(?:cd|pushd|chdir|set-location|sl|push-location)\s+([^\s;&|)]+)", re.IGNORECASE
+)
+TO_HOME: Final = re.compile(
+    r"(?<![\w-])(?:cd|pushd|chdir|set-location|sl|push-location)(?=\s*(?:$|[;&|)]))",
+    re.IGNORECASE,
+)
+FOLDER_OPTION: Final = re.compile(
+    r"(?<![\w-])(?:(?:-C|--chdir|--directory|--work-tree|(?i:-wo\w*))(?:=|\s+)|-C(?=[~/\\$%.]))"
+    r"([^\s;&|)]+)"
+)
+"""An option that runs a program in another folder (`git -C`, `tar -C~`, `env --chdir`). `-C`
+is case-sensitive, so `python -c` is not one, and joined to its target only before a path
+character, so `grep -C3` is not one."""
+
+DRIVE_RELATIVE: Final = re.compile(r"^[A-Za-z]:(?![/\\])")
+SHELL_DRIVE_RELATIVE: Final = re.compile(r"^[A-Za-z]:(?![/\\])(?:$|[^/\\\s]*[/\\.])")
+"""`DRIVE_RELATIVE` in shell text, only where the word looks like a path."""
+
+GLOB: Final = re.compile(r"[*?\[]")
+
+MAX_SHELL_TEXT: Final = 256 * 1024
+"""Bytes of shell text the guard reads. Longer text is denied, not scanned."""
+MAX_SHELL_BASES: Final = 32
+MAX_SHELL_PATHS: Final = 2048
+"""Each path lookup stats the file system (`canonical`), so more is denied rather than left to
+run past the hook timeout."""
+
+DENY_PREFIX: Final = "guard: "
+
+ATTENDED_MODES: Final[frozenset[str]] = frozenset({"default", "acceptEdits", "plan"})
+"""Permission modes in which the CLI asks before an MCP tool runs."""
+
+QMX_SERVER: Final = "qmx"
+DELEGATE_TOOL: Final = f"mcp__{QMX_SERVER}__delegate"
+
+_RULE: Final = re.compile(r"\s*([^\s()]+)\s*(?:\((.*)\))?\s*", re.DOTALL)
+
+
+@dataclass(frozen=True)
+class Rule:
+    """One row of his always-allow or never-allow list: `Tool` or `Tool(glob)`. The tool part
+    is a glob on the tool name; the glob in parentheses is matched on the call's normalised
+    candidates (`candidates`)."""
+
+    tool: str
+    pattern: str | None
+
+    @classmethod
+    def parse(cls, text: str) -> Rule:
+        found = _RULE.fullmatch(text)
+        if found is None:
+            raise ValueError(f"{text!r} is not Tool or Tool(pattern)")
+        return cls(found.group(1), found.group(2))
+
+    def __str__(self) -> str:
+        return self.tool if self.pattern is None else f"{self.tool}({self.pattern})"
+
+    def names(self, tool_name: str, case_insensitive: bool) -> bool:
+        if case_insensitive:
+            return fnmatch.fnmatchcase(tool_name.casefold(), self.tool.casefold())
+        return fnmatch.fnmatchcase(tool_name, self.tool)
+
+
+@dataclass(frozen=True)
+class GuardRules:
+    """Everything the guard needs, fixed at launch. Built by `tools.guard_rules`. Paths are in
+    the POSIX form `normalize_path` gives with `case_insensitive=False`, each one both as
+    written and as the OS resolves it, so a junction or link to either form matches."""
+
+    mandatory_asks: frozenset[str]
+    """QMX tools that always ask (MANAGE and `propose_order`), derived from their Effect."""
+    protected_paths: tuple[str, ...]
+    """QMX stores: both Claude homes, chats, procs, state, the engine folder, the databases,
+    settings.toml and the plugin folder. No file-tool write, and no shell command names them."""
+    qmx_homes: tuple[str, ...]
+    """The QMX home. No writes anywhere in it outside `writable_paths`."""
+    writable_paths: tuple[str, ...]
+    """`workspaces/` and `agent-memory/` in the QMX home."""
+    install_paths: tuple[str, ...]
+    """The Python environment QMX runs from. No file-tool write. Shell text may name it, since
+    every command that runs its Python does."""
+    secret_paths: tuple[str, ...]
+    """No reads and no writes: the plan login under each QMX Claude home and his `~/.claude`,
+    his `~/.claude.json`, and the QMX home's `settings.toml` and `rclone.conf`."""
+    personal_homes: tuple[str, ...]
+    """His `~/.claude`, as written and as resolved."""
+    keyring_names: frozenset[str]
+    """Exact `qmx/<name>` entries, casefolded. Whole names, so his repo path never trips."""
+    delete_zones: tuple[str, ...]
+    """Where a recursive delete runs without the floor: the chat's working folder or worktree
+    (for an engine attempt, its overlay)."""
+    variables: Mapping[str, str]
+    """Values the guard expands in paths and commands: HOME, USERPROFILE, CLAUDE_CONFIG_DIR."""
+    case_insensitive: bool
+    unattended: bool
+    """No operator: a recursive delete outside `delete_zones` is refused instead of asked, and
+    no external MCP tool runs unless `external_unattended` lists it."""
+    external_unattended: frozenset[str]
+    """`settings.toml [claude] external_tools_unattended`: `server/tool` and `server/*`."""
+    never: tuple[Rule, ...] = ()
+    always: tuple[Rule, ...] = ()
+    dropped_servers: set[str] = field(default_factory=set[str])
+    """External MCP servers the chat left out after launch. The only field that changes once
+    the chat runs."""
+
+    @functools.cached_property
+    def folded(self) -> _Folded:
+        """The paths in the form `guard` compares, built once per chat, not per call."""
+        return _Folded.of(self)
+
+
+@dataclass(frozen=True)
+class Pass:
+    """No opinion. The CLI's own rules, mode and `can_use_tool` decide."""
+
+
+@dataclass(frozen=True)
+class Ask:
+    reason: str
+
+
+@dataclass(frozen=True)
+class Deny:
+    reason: str
+
+
+@dataclass(frozen=True)
+class Allow:
+    """Only from his always-allow list, after every floor row passed."""
+
+    reason: str
+
+
+type Verdict = Pass | Ask | Deny | Allow
+
+
+def _deny(reason: str) -> Deny:
+    return Deny(DENY_PREFIX + reason)
+
+
+def mcp_server(tool_name: str) -> str | None:
+    """The server of an `mcp__<server>__<tool>` name."""
+    if not tool_name.startswith("mcp__"):
+        return None
+    server, separator, _ = tool_name.removeprefix("mcp__").partition("__")
+    return server if separator else None
+
+
+def _external_unattended(tool_name: str, server: str, rules: GuardRules, mode: str | None) -> bool:
+    if server == QMX_SERVER or (mode in ATTENDED_MODES and not rules.unattended):
+        return False
+    bare = tool_name.removeprefix(f"mcp__{server}__")
+    return not {f"{server}/{bare}", f"{server}/*"} & rules.external_unattended
+
+
+_VARIABLE = re.compile(r"\$\{(\w+)\}|\$env:(\w+)|\$(\w+)|%(\w+)%", re.IGNORECASE)
+_DRIVE = re.compile(r"^([A-Za-z]):(?:/|$)")
+
+
+def expand(text: str, variables: Mapping[str, str]) -> str:
+    """Replace `$NAME`, `${NAME}`, `$env:NAME` and `%NAME%` for the names in `variables`."""
+
+    def value(match: re.Match[str]) -> str:
+        name = next(group for group in match.groups() if group is not None)
+        return variables.get(name.upper(), match.group(0))
+
+    return _VARIABLE.sub(value, text)
+
+
+def normalize_path(
+    raw: str,
+    *,
+    cwd: str,
+    home: str,
+    case_insensitive: bool,
+    variables: Mapping[str, str] = MappingProxyType({}),
+) -> str:
+    """Pure. Expand `~` and the known variables, resolve against `cwd`, convert to the POSIX
+    form the CLI matches on (`C:\\Users\\x` becomes `/c/Users/x`), and casefold when
+    `case_insensitive`."""
+    text = expand(raw.strip().strip("'\""), variables).replace("\\", "/")
+    if text == "~" or text.startswith("~/"):
+        text = home.replace("\\", "/") + text[1:]
+    drive = _DRIVE.match(text)
+    if drive:
+        text = f"/{drive.group(1).lower()}/{text[3:]}"
+    elif not text.startswith("/"):
+        text = f"{_base(cwd, home)}/{text}"
+    text = posixpath.normpath(re.sub(r"^/+", "/", text))
+    return text.casefold() if case_insensitive else text
+
+
+@functools.lru_cache(maxsize=256)
+def _base(cwd: str, home: str) -> str:
+    """`cwd` normalised once: every relative word of a call resolves against the same few."""
+    return normalize_path(cwd, cwd="/", home=home, case_insensitive=False)
+
+
+def within(path: str, base: str) -> bool:
+    return path == base or path.startswith(base.rstrip("/") + "/")
+
+
+_POSIX_DRIVE = re.compile(r"^/([A-Za-z])(?:/|$)")
+
+
+def canonical(path: str) -> str:
+    """The path the OS opens for `path`, a `normalize_path` result with case kept. Follows
+    links and junctions, expands 8.3 names. Stats the file system, so not pure."""
+    drive = _POSIX_DRIVE.match(path)
+    if os.name == "nt":
+        if drive is None:
+            return path
+        native = f"{drive.group(1)}:/{path[3:]}"
+    else:
+        native = path
+    try:
+        resolved = os.path.realpath(native)
+    except OSError, ValueError:
+        return path
+    return normalize_path(resolved, cwd="/", home="/", case_insensitive=False)
+
+
+_REMOTE = re.compile(r"^//(?:[?.]/|[^/]+/)")
+_DRIVE_STREAM = re.compile(r"^[A-Za-z]:.*:")
+
+
+def remote_form(raw: str) -> str | None:
+    """An NT device or network prefix (`\\\\?\\`, `\\\\.\\`, `\\\\host\\share`), or an NTFS
+    stream after a drive. The guard never stats a network path."""
+    text = raw.strip().strip("'\"").replace("\\", "/")
+    if _REMOTE.match(text):
+        return "a device or network path"
+    if _DRIVE_STREAM.match(text):
+        return "an NTFS stream"
+    return None
+
+
+def odd_form(raw: str) -> str | None:
+    """`remote_form`, a drive-relative path, a stream, an 8.3 short segment, or a segment
+    ending in a dot or a space, which Windows drops. File-tool paths only."""
+    found = remote_form(raw)
+    if found is not None:
+        return found
+    if DRIVE_RELATIVE.match(raw.strip().strip("'\"")):
+        return "a drive-relative path"
+    text = raw.strip().strip("'\"").replace("\\", "/")
+    segments = text.split("/")
+    if ":" in re.sub(r"^[A-Za-z]:", "", text):
+        return "an NTFS stream"
+    if any(re.search(r"~\d", segment) for segment in segments):
+        return "an 8.3 short name"
+    if any(s not in {".", ".."} and s.endswith((".", " ")) for s in segments):
+        return "a segment ending in a dot or a space"
+    return None
+
+
+@dataclass(frozen=True)
+class _Folded:
+    """The rules' paths in the form `guard` compares, built once per call."""
+
+    protected: tuple[str, ...]
+    qmx_homes: tuple[str, ...]
+    writable: tuple[str, ...]
+    install: tuple[str, ...]
+    secrets: tuple[str, ...]
+    personal: tuple[str, ...]
+    zones: tuple[str, ...]
+    home: str
+    fold: Callable[[str], str]
+
+    @classmethod
+    def of(cls, rules: GuardRules) -> _Folded:
+        fold: Callable[[str], str] = str.casefold if rules.case_insensitive else str
+        return cls(
+            tuple(map(fold, rules.protected_paths)),
+            tuple(map(fold, rules.qmx_homes)),
+            tuple(map(fold, rules.writable_paths)),
+            tuple(map(fold, rules.install_paths)),
+            tuple(map(fold, rules.secret_paths)),
+            tuple(map(fold, rules.personal_homes)),
+            tuple(map(fold, rules.delete_zones)),
+            fold(rules.variables.get("HOME", "/")),
+            fold,
+        )
+
+    def protects(self, path: str) -> bool:
+        if any(within(path, p) for p in self.protected):
+            return True
+        return any(within(path, h) for h in self.qmx_homes) and not any(
+            within(path, w) for w in self.writable
+        )
+
+    def in_zone(self, path: str) -> bool:
+        return any(within(path, zone) for zone in self.zones)
+
+
+def _forms(raw: str, *, cwd: str, rules: GuardRules, folded: _Folded) -> tuple[str, ...]:
+    """`raw` as written and as the OS resolves it, each in the form the rules compare."""
+    literal = normalize_path(
+        raw,
+        cwd=cwd,
+        home=rules.variables.get("HOME", "/"),
+        case_insensitive=False,
+        variables=rules.variables,
+    )
+    return tuple(dict.fromkeys(map(folded.fold, (literal, canonical(literal)))))
+
+
+def _secret(path: str, folded: _Folded) -> bool:
+    return path in folded.secrets or posixpath.basename(path).casefold() == LOGIN_NAME
+
+
+def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:
+    if _secret(path, folded):
+        return _deny(f"agents cannot read or write a login file or a key file ({path})")
+    if any(within(path, home) for home in folded.personal):
+        return _deny(f"agents cannot read or write the operator's own Claude home ({path})")
+    if folder and any(within(target, path) for target in (*folded.secrets, *folded.personal)):
+        return _deny(f"{path} holds a login file or the operator's own Claude home")
+    return None
+
+
+def _file_tool(
+    tool_name: str, tool_input: Mapping[str, object], rules: GuardRules, cwd: str
+) -> Deny | None:
+    folded = rules.folded
+    folder = tool_name in {"Grep", "Glob"}
+    raw = [tool_input.get(field) for field in PATH_FIELDS[tool_name]]
+    paths = [value for value in raw if isinstance(value, str) and value] or (
+        [cwd] if folder else []
+    )
+    if folder:
+        loose = [str(value) for key, value in tool_input.items() if key in {"pattern", "glob"}]
+        if any(".credentials" in value.casefold() for value in loose):
+            return _deny("agents cannot search for login files")
+        pattern = tool_input.get("pattern")
+        if tool_name == "Glob" and isinstance(pattern, str):
+            fixed = re.split(r"[*?\[{]", pattern, maxsplit=1)[0]
+            if fixed:
+                paths.append(posixpath.dirname(fixed.replace("\\", "/")) or ".")
+    for raw_path in paths:
+        odd = odd_form(expand(raw_path, rules.variables))
+        if odd is not None:
+            return _deny(f"agents cannot use {odd} ({raw_path})")
+        for path in _forms(raw_path, cwd=cwd, rules=rules, folded=folded):
+            found = _read_target(path, folded, folder=folder)
+            if found is not None:
+                return found
+            if tool_name in WRITE_TOOLS and folded.protects(path):
+                return _deny(f"agents cannot write QMX state ({path})")
+            if tool_name in WRITE_TOOLS and any(within(path, p) for p in folded.install):
+                return _deny(f"agents cannot write into the QMX install ({path})")
+    return None
+
+
+_CANDIDATE = re.compile(r"""[^\s'"`;&|<>(){}=,]+""")
+_QUOTED = re.compile(r"""'([^']*)'|"([^"]*)\"""")
+_BOUND = re.compile(r"^-[A-Za-z][\w-]*:(.+)$")
+_FILE_URLS = re.compile(r"""file:(?:[^\s'"`;&|<>(){}=,]|(?<=[A-Za-z])\|)+""", re.IGNORECASE)
+
+
+def _candidates(text: str) -> Iterator[str]:
+    """Path-like words of a command: every bare word, every quoted string, every `file:` URL,
+    and the value of a PowerShell parameter bound with a colon (`-Path:C:x`)."""
+    for match in _QUOTED.finditer(text):
+        yield match.group(1) if match.group(1) is not None else match.group(2)
+    yield from _FILE_URLS.findall(text)
+    for word in _CANDIDATE.findall(text):
+        yield word
+        bound = _BOUND.match(word)
+        if bound is not None:
+            yield bound.group(1)
+
+
+_URL_DRIVE = re.compile(r"^([A-Za-z])[:|]")
+
+
+def _unurl(word: str) -> str:
+    """A `file:` URL in any form as the local path it opens, percent escapes decoded."""
+    if word[:5].casefold() != "file:":
+        return word
+    rest = unquote(word[5:])
+    if rest.startswith("//") and not _URL_DRIVE.match(rest[2:]):
+        rest = "/" + rest[2:].partition("/")[2]
+    if _URL_DRIVE.match(rest.lstrip("/")):
+        rest = _URL_DRIVE.sub(r"\1:", rest.lstrip("/"), count=1)
+    return rest
+
+
+def _pathlike(word: str) -> bool:
+    return bool(word) and ("/" in word or "\\" in word or word[0] in "~$%.")
+
+
+def _roots(folded: _Folded) -> set[str]:
+    home = folded.home.rstrip("/") or "/"
+    return {"/", home, posixpath.dirname(home), "/home", "/users"}
+
+
+def _bases(expanded: str, *, cwd: str, rules: GuardRules, home_after_cd: bool = True) -> list[str]:
+    """Folders a relative word may resolve against: the call's cwd, after a `cd` also the user
+    home (a `cd` that fails or a bare `cd` leaves the shell there), and every target of a `cd`
+    or a folder option reached from an earlier base. A delete is judged without the home after
+    a `cd` to a target, so `cd sub && rm -rf build` stays in the chat's folder."""
+    moves = [match.group(1) for match in CHANGES_FOLDER.finditer(expanded)]
+    options = [match.group(1) for match in FOLDER_OPTION.finditer(expanded)]
+    home = rules.variables.get("HOME", "/")
+    targets = [target.strip("'\"") for target in (*moves, *options)]
+    to_home = TO_HOME.search(expanded) is not None or (bool(moves) and home_after_cd)
+    bases = [cwd, home] if to_home else [cwd]
+    for target in targets:
+        bases += [
+            normalize_path(
+                target, cwd=base, home=home, case_insensitive=False, variables=rules.variables
+            )
+            for base in bases
+        ]
+        bases = list(dict.fromkeys(bases))
+        if len(bases) > MAX_SHELL_BASES:
+            break
+    return bases
+
+
+def _word(word: str, *, base: str, rules: GuardRules, folded: _Folded, sweep: bool) -> Deny | None:
+    glob = GLOB.search(word)
+    if glob is not None:
+        folder = posixpath.dirname(word[: glob.start()].replace("\\", "/")) or "."
+        for path in _forms(folder, cwd=base, rules=rules, folded=folded):
+            found = _read_target(path, folded, folder=True)
+            if found is not None:
+                return found
+            if folded.protects(path):
+                return _deny(f"agents cannot touch QMX state from a shell ({path})")
+        return None
+    forms = (
+        _forms(word, cwd=base, rules=rules, folded=folded)
+        if _pathlike(word)
+        else (
+            folded.fold(normalize_path(word, cwd=base, home=folded.home, case_insensitive=False)),
+        )
+    )
+    roots = _roots(folded)
+    for path in forms:
+        found = _read_target(path, folded, folder=False)
+        if found is not None:
+            return found
+        if folded.protects(path):
+            return _deny(f"agents cannot touch QMX state from a shell ({path})")
+        if sweep and (path in roots or re.fullmatch(r"/[a-z]", path)):
+            return _deny(f"agents cannot sweep a drive root or a user home ({path})")
+    return None
+
+
+_SEPARATORS = re.compile(r"\|\||&&|[;|&\n()]")
+_TOKEN = re.compile(r""""[^"]*"|'[^']*'|\S+""")
+_PREFIX_WORDS: Final = frozenset({"sudo", "command", "exec", "nohup", "call", "&", "."})
+DELETE_COMMANDS: Final = frozenset(
+    {"rm", "rmdir", "rd", "del", "erase", "remove-item", "ri", "rimraf", "rmtree"}
+)
+
+
+def _words_hint(names: frozenset[str]) -> re.Pattern[str]:
+    """Any of `names` as a whole word in casefolded text: a cheap test before tokenising."""
+    alternation = "|".join(sorted(map(re.escape, names), key=len, reverse=True))
+    return re.compile(rf"(?<![\w-])(?:{alternation})(?![\w-])")
+
+
+_DELETE_HINT = _words_hint(DELETE_COMMANDS | {"-delete"})
+_FLOOR_HINT = _words_hint(DISK_AND_REGISTRY)
+_RECURSIVE = re.compile(r"-[fivdI]*[rR][fivdIR]*|--recursive|(?i:-rec(?:u(?:r(?:se?)?)?)?|/s)")
+"""`-r`, `-rf`, `-fR`, `--recursive`, PowerShell's `-Recurse` and its prefixes, `rd /s`. Not
+`-Force`, which only looks like a cluster."""
+_FLAG = re.compile(r"-.*|/[A-Za-z?]{1,2}")
+"""An option word: `-x`, `--x`, or a Windows switch (`/s`, `/q`). `/tmp` is a path."""
+
+
+def _program(token: str) -> str:
+    name = posixpath.basename(token.strip("'\"").replace("\\", "/")).casefold()
+    return name.removesuffix(".exe")
+
+
+@functools.lru_cache(maxsize=256)
+def segments(text: str) -> tuple[tuple[str, ...], ...]:
+    """The simple commands of `text` as token tuples, separators dropped; a quoted token
+    holding a whole command (`bash -c '...'`, `powershell -Command "..."`) is read as one more.
+    Pure, so a call's several readers share one split."""
+    found: list[tuple[str, ...]] = []
+    for part in _SEPARATORS.split(text):
+        tokens = tuple(_TOKEN.findall(part))
+        if not tokens:
+            continue
+        found.append(tokens)
+        for token in tokens:
+            if token[:1] in "'\"" and " " in token:
+                found += segments(token[1:-1])
+    return tuple(found)
+
+
+def _command_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
+    """`tokens` without leading prefixes (`sudo`, `env X=1`, `&`)."""
+    start = 0
+    while start < len(tokens) and (
+        _program(tokens[start]) in _PREFIX_WORDS
+        or re.fullmatch(r"\w+=\S*", tokens[start]) is not None
+    ):
+        start += 1
+    return tokens[start:]
+
+
+def _delete_targets(tokens: tuple[str, ...]) -> list[str] | None:
+    """The target words of a recursive delete in one simple command, or None when it is not
+    one. `[]` means the targets come from elsewhere (`xargs rm -rf`)."""
+    programs = [_program(token) for token in tokens]
+    if programs and programs[0] == "find" and "-delete" in programs:
+        roots = itertools.takewhile(lambda t: not t.startswith(("-", "(", "!")), tokens[1:])
+        return [root.strip("'\"") for root in roots] or ["."]
+    at = next((i for i, name in enumerate(programs) if name in DELETE_COMMANDS), None)
+    if at is None:
+        return None
+    rest = tokens[at + 1 :]
+    if programs[at] not in {"rimraf", "rmtree"} and not any(
+        _RECURSIVE.fullmatch(token) for token in rest
+    ):
+        return None
+    return [token.strip("'\"") for token in rest if not _FLAG.fullmatch(token)]
+
+
+def _outside_zone(word: str, base: str, rules: GuardRules, folded: _Folded) -> bool:
+    """`word` resolved against `base` leaves the zones as written, or, when it exists and stays
+    in as written, as the OS resolves it (a junction in the chat's folder pointing out). A
+    target that does not exist deletes nothing, so it is not resolved."""
+    literal = normalize_path(
+        word,
+        cwd=base,
+        home=rules.variables.get("HOME", "/"),
+        case_insensitive=False,
+        variables=rules.variables,
+    )
+    if not folded.in_zone(folded.fold(literal)):
+        return True
+    drive = _POSIX_DRIVE.match(literal)
+    native = f"{drive.group(1)}:/{literal[3:]}" if os.name == "nt" and drive else literal
+    return os.path.lexists(native) and not folded.in_zone(folded.fold(canonical(literal)))
+
+
+def _delete_outside(
+    text: str, parts: tuple[tuple[str, ...], ...], *, cwd: str, rules: GuardRules, folded: _Folded
+) -> str | None:
+    """The first recursive-delete target outside `delete_zones`, or a note when the targets
+    cannot be read. A target left with an unknown `$NAME` counts as outside."""
+    bases: list[str] | None = None
+    for tokens in parts:
+        targets = _delete_targets(tokens)
+        if targets is None:
+            continue
+        if not targets:
+            return "targets the guard cannot see"
+        bases = bases or _bases(text, cwd=cwd, rules=rules, home_after_cd=False)
+        for target in targets:
+            glob = GLOB.search(target)
+            word = posixpath.dirname(target[: glob.start()].replace("\\", "/")) if glob else target
+            if re.search(r"[$%`]", word):
+                return target
+            if any(_outside_zone(word or ".", base, rules, folded) for base in bases):
+                return target
+    return None
+
+
+def _floor_command(parts: tuple[tuple[str, ...], ...]) -> Deny | None:
+    """Disk, format and registry programs at command position."""
+    for tokens in parts:
+        command = _command_tokens(tokens)
+        if command and _program(command[0]) in DISK_AND_REGISTRY:
+            name = _program(command[0])
+            if name != "reg" or (len(command) > 1 and command[1].casefold() != "query"):
+                return _deny(f"agents cannot run disk, format or registry tools ({name})")
+    return None
+
+
+def invisible(text: str) -> str | None:
+    """The first invisible or bidirectional character in `text`, as `U+XXXX`, or None."""
+    if text.isascii():
+        return None
+    for character in text:
+        if unicodedata.category(character) in INVISIBLE_CATEGORIES:
+            return f"U+{ord(character):04X}"
+    return None
+
+
+def _shell(tool_input: Mapping[str, object], rules: GuardRules, cwd: str) -> Deny | Ask | None:
+    text = " ".join(
+        str(value) for key, value in tool_input.items() if key != "description" and value
+    )
+    size = len(text.encode())
+    if size > MAX_SHELL_TEXT:
+        return _deny(f"the command is too long to check ({size} bytes)")
+    hidden = invisible(text)
+    if hidden is not None:
+        return _deny(f"agents cannot run a command holding an invisible character ({hidden})")
+    if SECRET_SHAPES.search(text):
+        return _deny("agents cannot put a key into a command")
+    expanded = expand(text, rules.variables)
+    lowered = expanded.casefold()
+    evaluated = EVALUATED.search(f"{text.casefold()} {lowered}")
+    if evaluated:
+        found = next(group for group in evaluated.groups() if group)
+        return _deny(f"agents cannot run encoded or evaluated commands ({found})")
+    for word in SHELL_WORDS:
+        if word in lowered or word in text.casefold():
+            return _deny(f"agents cannot touch the Claude login or its home ({word})")
+    reader = CREDENTIAL_READERS.search(lowered)
+    if reader:
+        return _deny(f"agents cannot read the OS credential store ({reader.group(1)})")
+    for name in rules.keyring_names:
+        if name in lowered:
+            return _deny(f"agents cannot name a QMX credential ({name})")
+    parts = segments(expanded)
+    floor = _floor_command(parts) if _FLOOR_HINT.search(lowered) else None
+    if floor is not None:
+        return floor
+    registry = REGISTRY_PATH.search(lowered)
+    if registry:
+        return _deny(f"agents cannot touch the registry ({registry.group(0)})")
+    folded = rules.folded
+    sweep = SWEEP.search(f" {lowered}") is not None
+    bases = _bases(expanded, cwd=cwd, rules=rules)
+    if len(bases) > MAX_SHELL_BASES:
+        return _deny(f"the command changes folder too often to check ({len(bases)} folders)")
+    words = list(dict.fromkeys(map(_unurl, _candidates(expanded))))
+    paths = sum(map(_pathlike, words)) * len(bases)
+    if paths > MAX_SHELL_PATHS:
+        return _deny(f"the command names too many paths to check ({paths} path lookups)")
+    for word in words:
+        remote = remote_form(word) if _pathlike(word) else None
+        if remote is not None:
+            return _deny(f"agents cannot use {remote} ({word})")
+        if SHELL_DRIVE_RELATIVE.match(word):
+            return _deny(f"agents cannot use a drive-relative path ({word})")
+        for base in bases:
+            found = _word(word, base=base, rules=rules, folded=folded, sweep=sweep)
+            if found is not None:
+                return found
+    outside = (
+        _delete_outside(expanded, parts, cwd=cwd, rules=rules, folded=folded)
+        if _DELETE_HINT.search(lowered)
+        else None
+    )
+    if outside is None:
+        return None
+    reason = f"a recursive delete outside this chat's folder ({outside})"
+    return _deny(f"agents cannot run {reason}") if rules.unattended else Ask(f"This is {reason}")
+
+
+def candidates(
+    tool_name: str, tool_input: Mapping[str, object], rules: GuardRules, cwd: str
+) -> tuple[list[str], bool]:
+    """What his rules' globs are matched on, and whether an always-allow row must match every
+    one: each simple command of a shell call (all must match, so `git status; rm -rf x` is not
+    lifted by `Bash(git *)`); a file tool's path as written and normalised; a WebFetch URL;
+    else the input as JSON."""
+    if tool_name in SHELL_TOOLS:
+        text = str(tool_input.get("command") or "")
+        parts = [" ".join(tokens) for tokens in segments(text)] or [text.strip()]
+        return [" ".join(text.split()), *parts], True
+    if tool_name in PATH_FIELDS:
+        raw = [tool_input.get(name) for name in PATH_FIELDS[tool_name]]
+        found = [value for value in raw if isinstance(value, str) and value]
+        home = rules.variables.get("HOME", "/")
+        return [
+            *found,
+            *(normalize_path(value, cwd=cwd, home=home, case_insensitive=False) for value in found),
+        ], False
+    if tool_name == "WebFetch":
+        return [str(tool_input.get("url", ""))], False
+    return [json.dumps(tool_input, sort_keys=True, ensure_ascii=False)], False
+
+
+def _pattern(pattern: str, rules: GuardRules, cwd: str) -> str:
+    """A path-looking pattern in the same normalised form as a path candidate."""
+    if _DRIVE.match(pattern.replace("\\", "/")) or pattern.startswith("~"):
+        home = rules.variables.get("HOME", "/")
+        return normalize_path(pattern, cwd=cwd, home=home, case_insensitive=False)
+    return pattern
+
+
+def _matches(rule: Rule, found: list[str], rules: GuardRules, cwd: str, *, every: bool) -> bool:
+    """`rule`, whose tool part already names the call, matches its candidates."""
+    fold: Callable[[str], str] = str.casefold if rules.case_insensitive else str
+    if rule.pattern is None:
+        return True
+    pattern = fold(_pattern(rule.pattern, rules, cwd))
+    hits = [fnmatch.fnmatchcase(fold(candidate), pattern) for candidate in found]
+    if every:
+        return all(hits[1:]) if len(hits) > 1 else any(hits)
+    return any(hits)
+
+
+def guard(
+    tool_name: str,
+    tool_input: Mapping[str, object],
+    rules: GuardRules,
+    *,
+    cwd: str,
+    agent_id: str | None,
+    permission_mode: str | None,
+) -> Verdict:
+    """Fast, no network and no writes; it stats paths only to resolve them (`canonical`).
+    Total over every tool name, built-in or MCP, main agent or sub-agent.
+
+    Order: the floor (Deny), then his never-allow list (Deny), then a recursive delete outside
+    the chat's folder in an attended chat (Ask), then a QMX tool that always asks (Ask), then his
+    always-allow list (Allow), else Pass. Nothing after the floor lifts it.
+    """
+    if agent_id and tool_name.casefold() == DELEGATE_TOOL:
+        return _deny("a sub-agent cannot start a helper chat (mcp__qmx__delegate)")
+    server = mcp_server(tool_name)
+    if server is not None and server in rules.dropped_servers:
+        return _deny(f"the MCP server {server} was left out of this chat ({tool_name})")
+    if server is not None and _external_unattended(tool_name, server, rules, permission_mode):
+        return _deny(
+            "agents cannot call an external MCP tool in an unattended chat unless [claude] "
+            f"external_tools_unattended lists it ({tool_name})"
+        )
+    found: Deny | Ask | None = None
+    if tool_name in PATH_FIELDS:
+        found = _file_tool(tool_name, tool_input, rules, cwd)
+    elif tool_name in SHELL_TOOLS:
+        found = _shell(tool_input, rules, cwd)
+    elif tool_name == "WebFetch" and SECRET_SHAPES.search(str(tool_input.get("url", ""))):
+        found = _deny("agents cannot put a key into a URL")
+    if isinstance(found, Deny):
+        return found
+    never = [rule for rule in rules.never if rule.names(tool_name, rules.case_insensitive)]
+    always = [rule for rule in rules.always if rule.names(tool_name, rules.case_insensitive)]
+    words, every = (
+        candidates(tool_name, tool_input, rules, cwd)
+        if any(rule.pattern is not None for rule in (*never, *always))
+        else ([], False)
+    )
+    for rule in never:
+        if _matches(rule, words, rules, cwd, every=False):
+            return _deny(f"your never-allow list refuses this ({rule})")
+    if found is not None:
+        return found
+    if tool_name in rules.mandatory_asks:
+        return Ask(f"{tool_name} always asks you")
+    for rule in always:
+        if _matches(rule, words, rules, cwd, every=every):
+            return Allow(f"your always-allow list allows this ({rule})")
+    return Pass()
+
+
+def hook_output(verdict: Verdict) -> dict[str, Any]:
+    match verdict:
+        case Pass():
+            return {}
+        case Ask(reason=reason):
+            decision = "ask"
+        case Deny(reason=reason):
+            decision = "deny"
+        case Allow(reason=reason):
+            decision = "allow"
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    }
+
+
+def pre_tool_use(rules: GuardRules) -> HookCallback:
+    """Adapter from `guard` to the SDK hook output shape. Any exception inside `guard` returns
+    deny (fail closed). The callback does no I/O and awaits nothing."""
+
+    async def callback(
+        hook_input: HookInput, tool_use_id: str | None, context: HookContext
+    ) -> HookJSONOutput:
+        del tool_use_id, context
+        data = cast("Mapping[str, Any]", hook_input)
+        try:
+            verdict = guard(
+                str(data["tool_name"]),
+                data.get("tool_input") or {},
+                rules,
+                cwd=str(data.get("cwd") or "/"),
+                agent_id=data.get("agent_id"),
+                permission_mode=data.get("permission_mode"),
+            )
+        except Exception as error:
+            verdict = _deny(f"the guard failed ({type(error).__name__}), so the call is blocked")
+        return cast("HookJSONOutput", hook_output(verdict))
+
+    return callback
+
+
+def deny_rules(rules: GuardRules) -> list[str]:
+    """Claude Code rule strings for `disallowed_tools`: the login and secret files only, in the
+    `//c/Users/...` form Windows matching needs. The guard holds everything else."""
+    found: list[str] = []
+    for secret in (*rules.secret_paths, f"/**/{LOGIN_NAME}"):
+        found += [f"{tool}(/{secret})" for tool in ("Read", "Edit", "Write")]
+    return found

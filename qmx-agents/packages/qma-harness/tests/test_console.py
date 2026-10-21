@@ -93,10 +93,9 @@ def host(
             return httpx.Response(200, json=page)
         seen.append((request.method, path, body))
         routes: dict[tuple[str, str], Any] = {
-            ("GET", "/api/usage"): {"readings": {}, "tokens": {}, "money": {}},
-            ("POST", "/api/usage/meter"): {"readings": {}, "tokens": {}, "money": {}},
+            ("GET", "/api/usage"): {"readings": {}, "tokens": {}},
+            ("POST", "/api/usage/meter"): {"readings": {}, "tokens": {}},
             ("GET", "/api/doctor"): DOCTOR,
-            ("POST", "/api/doctor/probe"): DOCTOR,
             ("GET", f"/api/chats/{CHAT}"): ENTRY,
             ("GET", "/api/chats"): [ENTRY],
             ("POST", f"/api/sessions/{CHAT}/quote"): QUOTE,
@@ -141,7 +140,6 @@ def console(
             [("POST", "/api/usage/meter", None), ("GET", f"/api/chats/{CHAT}", None)],
         ),
         ("/doctor", [], [("GET", "/api/doctor", None)]),
-        ("/doctor probe", [], [("POST", "/api/doctor/probe", None)]),
         (
             "/model sonnet",
             ["y"],
@@ -282,8 +280,8 @@ def test_a_turn_prints_each_tool_step_and_then_the_answer() -> None:
     ]
 
 
-def test_a_money_denial_shows_the_rule_from_the_tool_error() -> None:
-    denied = "PreToolUse:Bash hook error: money rule: agents cannot place orders"
+def test_a_guard_denial_shows_the_rule_from_the_tool_error() -> None:
+    denied = "PreToolUse:Bash hook error: guard: agents cannot read the OS credential store"
     events = [
         block(
             1,
@@ -398,7 +396,6 @@ def test_usage_lines_name_the_window_the_tokens_and_the_cap() -> None:
             }
         },
         "hard_stop": None,
-        "money": {"posture": "SPEED_BUMP", "note": "no proof"},
     }
     chat = {
         "openrouter": {
@@ -415,7 +412,6 @@ def test_usage_lines_name_the_window_the_tokens_and_the_cap() -> None:
         "  Claude plan 7-day window: no reading yet (try /usage refresh)",
         "  tokens, this chat, openrouter: in 5  out 1  cache read 0  cache write 0  (2 calls)",
         "  tokens, all chats, claude: in 9  out 2  cache read 300  cache write 4  (1 calls)",
-        "  money posture SPEED_BUMP: no proof",
     ]
 
 

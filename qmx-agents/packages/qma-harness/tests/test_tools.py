@@ -14,8 +14,9 @@ from qmx_control.service import ControlService
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
 
+from qma.harness.guard import Ask, Deny, guard, normalize_path
 from qma.harness.home import QmxHome
-from qma.harness.money import Ask, Deny, MoneySurfaceError, gate, normalize_path
+from qma.harness.money_words import named_money_act
 from qma.harness.tools import (
     AGENT_OPERATIONS,
     DOMAIN_EFFECTS,
@@ -24,6 +25,7 @@ from qma.harness.tools import (
     Effect,
     Grant,
     Grants,
+    OrderToolRefused,
     ToolDef,
     ToolSurfaceError,
     VetCache,
@@ -31,7 +33,7 @@ from qma.harness.tools import (
     asks,
     build_server,
     domain_write_policy,
-    gate_rules,
+    guard_rules,
     keyring_refs,
     sdk_tools,
     server_config,
@@ -138,11 +140,10 @@ def test_s28_a_tool_with_no_effect_does_not_construct() -> None:
         ToolDef("read_x", "read", {}, bad, nothing)
 
 
-def test_s28_a_tool_named_place_order_refuses_the_build() -> None:
-    with pytest.raises(MoneySurfaceError, match="Money-path act refused: place_order"):
-        build_server(
-            [plain("read_bars"), plain("place_order")], grants=Grants(), domain_write="allow"
-        )
+def test_no_agent_operation_names_an_order_act() -> None:
+    assert [name for name in AGENT_OPERATIONS if named_money_act(name)] == []
+    assert [name for name in DOMAIN_EFFECTS if named_money_act(name)] == []
+    assert named_money_act("place_order") == "submit_order"
 
 
 def test_s28_a_second_propose_money_tool_refuses_the_build(tmp_path: Path) -> None:
@@ -150,7 +151,7 @@ def test_s28_a_second_propose_money_tool_refuses_the_build(tmp_path: Path) -> No
     real = plain("propose_order", Effect.PROPOSE_MONEY, broker.propose_order)
     impostor = plain("stage_trade", Effect.PROPOSE_MONEY, lambda: None)
     build_server([real], grants=Grants(), domain_write="allow")
-    with pytest.raises(MoneySurfaceError, match="stage_trade is not the broker's propose_order"):
+    with pytest.raises(ToolSurfaceError, match="stage_trade is not the broker's propose_order"):
         build_server([real, impostor], grants=Grants(), domain_write="allow")
 
 
@@ -206,7 +207,7 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
         "propose_order"
     ]
     build_server(defs, grants=Grants(), domain_write="ask")
-    rules = gate_rules(
+    rules = guard_rules(
         defs,
         domain_write="allow",
         home=home,
@@ -215,7 +216,6 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
         unattended=False,
         external_unattended=frozenset(),
     )
-    assert rules.proposal_tools == {"mcp__qmx__propose_order"}
     assert {"mcp__qmx__apps_publish", "mcp__qmx__propose_order"} <= rules.mandatory_asks
     assert "mcp__qmx__read_bars" not in rules.mandatory_asks
     assert "mcp__qmx__library_save" not in rules.mandatory_asks
@@ -280,7 +280,7 @@ def test_vetting_starts_the_server_and_checks_its_tools(
     script.write_text(SERVER.format(name=tool), encoding="utf-8")
     row = {"command": sys.executable, "args": [str(script)]}
     if refused:
-        with pytest.raises(MoneySurfaceError, match="Money-path act refused: submitOrder"):
+        with pytest.raises(OrderToolRefused, match="submitOrder is submit_order"):
             asyncio.run(vet_server("ext", row, VetCache()))
     else:
         vetted = asyncio.run(vet_server("ext", row, VetCache()))
@@ -296,7 +296,7 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
     real.mkdir()
     link = tmp_path / "linked-home"
     _winapi.CreateJunction(str(real), str(link))  # pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue]
-    rules = gate_rules(
+    rules = guard_rules(
         [],
         domain_write="allow",
         home=QmxHome(link),
@@ -310,7 +310,7 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
             str(root / "control.db"), cwd="/", home="/", case_insensitive=False
         )
         assert database in rules.protected_paths
-        found = gate(
+        found = guard(
             "Edit",
             {"file_path": str(root / "control.db")},
             rules,
@@ -318,7 +318,7 @@ def test_rules_hold_a_home_behind_a_junction_in_both_spellings(tmp_path: Path) -
             agent_id=None,
             permission_mode="default",
         )
-        assert found == Deny(f"money rule: agents cannot write QMX state ({database.casefold()})")
+        assert found == Deny(f"guard: agents cannot write QMX state ({database.casefold()})")
 
 
 class RecordingRoad:
@@ -411,27 +411,14 @@ def test_no_read_or_domain_write_operation_publishes_an_app(tmp_path: Path) -> N
 @pytest.mark.parametrize(
     ("target", "verdict"),
     [
-        (
-            "place_order",
-            Deny(
-                "money rule: agents cannot place, change or cancel orders "
-                "(apps_call target place_order is submit_order)"
-            ),
-        ),
-        (
-            "cancelAllOrders",
-            Deny(
-                "money rule: agents cannot place, change or cancel orders "
-                "(apps_call target cancelAllOrders is cancel_order)"
-            ),
-        ),
-        ("get_quote", Ask("mcp__qmx__apps_call always asks you")),
+        (target, Ask("mcp__qmx__apps_call always asks you"))
+        for target in ("place_order", "get_quote")
     ],
 )
-def test_apps_call_checks_the_app_tool_it_names(
+def test_apps_call_asks_whatever_app_tool_it_names(
     tmp_path: Path, target: str, verdict: Deny | Ask
 ) -> None:
-    rules = gate_rules(
+    rules = guard_rules(
         [plain("apps_call", Effect.MANAGE)],
         domain_write="allow",
         home=QmxHome(tmp_path / "home"),
@@ -442,7 +429,7 @@ def test_apps_call_checks_the_app_tool_it_names(
     )
     arguments: dict[str, object] = {"app_id": "broker-app", "tool": target, "arguments": {}}
     assert (
-        gate(
+        guard(
             "mcp__qmx__apps_call",
             arguments,
             rules,
@@ -458,7 +445,7 @@ def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
     tmp_path: Path,
 ) -> None:
     home = QmxHome(tmp_path / "home")
-    rules = gate_rules(
+    rules = guard_rules(
         [],
         domain_write="allow",
         home=home,
@@ -484,7 +471,7 @@ def test_the_whole_qmx_home_is_protected_except_workspaces_and_agent_memory(
         (
             tool,
             type(
-                gate(tool, args, rules, cwd="/", agent_id=None, permission_mode="default")
+                guard(tool, args, rules, cwd="/", agent_id=None, permission_mode="default")
             ).__name__.casefold(),
         )
         for tool, args, _ in calls
@@ -509,15 +496,15 @@ server.run()
 @pytest.mark.parametrize(
     ("name", "doc", "refusal"),
     [
-        ("submitOrder", "Reads a value.", "Money-path act refused: submitOrder"),
-        ("get_quote", "Places a market order for the symbol.", "description of get_quote"),
+        ("submitOrder", "Reads a value.", "it offers an order tool (submitOrder is submit_order)"),
+        ("get_bars", "Places a market order for the symbol.", None),
         ("get_bars", "Reads bars.", None),
         ("get_bars", "Returns the font size. Upload a file and transfer it to S3.", None),
         ("get_bars", "Get the current book mode.", None),
         ("get_bars", "Should I buy an umbrella?", None),
     ],
 )
-def test_vetting_reads_every_page_and_every_description(
+def test_vetting_reads_every_page_and_judges_tool_names_only(
     tmp_path: Path, name: str, doc: str, refusal: str | None
 ) -> None:
     script = tmp_path / "server.py"

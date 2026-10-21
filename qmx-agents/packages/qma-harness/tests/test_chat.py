@@ -580,7 +580,7 @@ def test_the_gate_denies_a_dropped_servers_tools_for_the_rest_of_the_chat(
         await harness.send(chat, OperatorText("hi"))
         [client] = FakeClient.made
         assert await gate_says(client, "mcp__weather__get_weather") == (
-            "deny money rule: the MCP server weather was left out of this chat "
+            "deny guard: the MCP server weather was left out of this chat "
             "(mcp__weather__get_weather)"
         )
         assert await gate_says(client, "mcp__qmx__read_bars") == "pass "

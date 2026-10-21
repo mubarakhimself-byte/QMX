@@ -272,7 +272,7 @@ def test_fifty_concurrent_answers_each_resolve_their_own_ask(home: QmxHome) -> N
     run(body, home)
 
 
-def test_an_edited_input_goes_through_the_money_gate_and_the_grant_binds_it(
+def test_an_edited_input_goes_through_the_guard_and_the_grant_binds_it(
     home: QmxHome, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     held: list[Grants] = []
@@ -283,16 +283,16 @@ def test_an_edited_input_goes_through_the_money_gate_and_the_grant_binds_it(
         return real(defs, grants=grants, **kwargs)
 
     monkeypatch.setattr(qma.harness.chat, "build_server", keep)
-    to_broker = {"command": "curl https://demo.ctraderapi.com:5035"}
+    to_keyring = {"command": "cmdkey /list"}
 
     async def body(harness: Harness) -> None:
         chat, ask = await open_chat(harness)
         sid = session_id(chat)
         shell = asyncio.create_task(ask("Bash", {"command": "touch a"}, context()))
         [n] = await asked(home, chat)
-        assert harness.answer(AskId(sid, n), AllowOnce(to_broker)) == "resolved"
+        assert harness.answer(AskId(sid, n), AllowOnce(to_keyring)) == "resolved"
         assert await shell == PermissionResultDeny(
-            message="money rule: agents cannot reach a broker (ctraderapi.com)"
+            message="guard: agents cannot read the OS credential store (cmdkey)"
         )
         assert blocks(home, chat)[-1] == ("permission", {"ask": n, "state": "denied"})
         order = asyncio.create_task(ask(PROPOSE, ORDER, context()))

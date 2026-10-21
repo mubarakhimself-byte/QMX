@@ -27,8 +27,8 @@ consumes. AllowAlways on any other tool saves the CLI's suggested allow rules fo
 workspace and hands them back to the CLI for this process. An Interactive chat waits like
 Claude Code. A Background or Child chat with a named policy has the policy answer in-process;
 without one it waits at most `[budgets] unattended_ask_seconds`, then rejects.
-The money gate runs before any of this, so no answer or remembered rule reaches a call it denied,
-and an input the operator edits passes the gate again before it runs.
+The guard runs before any of this, so no answer or remembered rule reaches a call it denied, and
+an input the operator edits passes the guard again before it runs.
 
 Prompts. Who wrote the text is in its type. `OperatorText` is what the operator typed; slash
 commands and `@path` work, as in Claude Code. `InjectedText` is anything QMA built from news,
@@ -71,6 +71,7 @@ from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 
+from qma.harness.guard import Deny, guard
 from qma.harness.home import (
     ChatRecord,
     QmxHome,
@@ -107,8 +108,6 @@ from qma.harness.launch import (
     unattended,
     verbatim,
 )
-from qma.harness.money import Deny, MoneySurfaceError
-from qma.harness.money import gate as money_gate
 from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,
@@ -142,7 +141,7 @@ from qma.harness.tools import (
     asks,
     build_server,
     domain_write_policy,
-    gate_rules,
+    guard_rules,
     keyring_refs,
     tool_defs,
     unvetted_tools,
@@ -158,7 +157,7 @@ if TYPE_CHECKING:
     from qmx_control.service import ControlService
     from qmx_tools.service import DomainContext
 
-    from qma.harness.money import GateRules
+    from qma.harness.guard import GuardRules
     from qma.harness.procs import AgentProcessCap
     from qma.harness.relay import Relay, RelayGrant
 
@@ -278,7 +277,7 @@ class PolicyCall:
 
 
 type Policy = Callable[[PolicyCall], Awaitable[Answer]]
-"""Answers with AllowOnce (an edited input passes the money gate again) or Reject. It may take
+"""Answers with AllowOnce (an edited input passes the guard again) or Reject. It may take
 as long as it needs, such as a deferral to the inbox. One that raises denies the call."""
 
 type AnswerStatus = Literal["resolved", "already_answered", "expired", "invalid", "unknown"]
@@ -487,8 +486,8 @@ async def _keep_off(client: ClaudeSDKClient, servers: frozenset[str]) -> None:
     """Switch `servers` off whenever the CLI reports one connected, for the life of the chat.
     A switch-off sent while a server is still connecting reads `disabled` at once, and the
     server connects anyway when its start finishes (measured, S35), so no state is final. The
-    SDK raises on its control-request timeout; the keeper logs it and polls again, and the gate
-    denies the servers' tools meanwhile (`GateRules.dropped_servers`)."""
+    SDK raises on its control-request timeout; the keeper logs it and polls again, and the guard
+    denies the servers' tools meanwhile (`GuardRules.dropped_servers`)."""
     failures = 0
     while True:
         try:
@@ -747,7 +746,7 @@ class Chat:
         self._children: dict[str, str] = {}
         self._stream = _Stream()
         self._grants = Grants()
-        self._gate: GateRules | None = None
+        self._gate: GuardRules | None = None
         self._asks: dict[int, _Ask] = {}
         self._settled: dict[int, AnswerStatus] = {}
         self._usage: tuple[RunJournal, Totals] | None = None
@@ -1168,10 +1167,10 @@ class Chat:
     async def _tools(
         self, launch: Launch, external_unattended: frozenset[str]
     ) -> tuple[
-        dict[str, McpServerConfig], GateRules, Mapping[str, frozenset[str]], tuple[str, ...]
+        dict[str, McpServerConfig], GuardRules, Mapping[str, frozenset[str]], tuple[str, ...]
     ]:
         """The `qmx` server, the vetted external servers (the operator's and the chat's own),
-        the gate's rules, each vetted server's tool names, and the allow rules for every QMX
+        the guard's rules, each vetted server's tool names, and the allow rules for every QMX
         tool whose Effect does not ask (H20), so a READ or an allowed DOMAIN_WRITE never asks
         in any mode. A refused external server gets a `needs_you` block and is left out; the
         chat still starts. `external_unattended` is the operator's allow-list for external
@@ -1194,7 +1193,7 @@ class Chat:
                 domain_write=policy,
                 enforce_grants=deps.test is None or deps.test.grants,
             )
-        except (MoneySurfaceError, ToolSurfaceError) as refused:
+        except ToolSurfaceError as refused:
             raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
         declared = await asyncio.to_thread(control.settings_get, "mcp_servers")
         vetted = await vet_mcp_servers({**declared, **self.record.config.mcp_servers}, deps.vetted)
@@ -1202,7 +1201,7 @@ class Chat:
             await self._note(
                 "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
             )
-        gate = gate_rules(
+        gate = guard_rules(
             defs,
             domain_write=policy,
             home=deps.home,
@@ -1212,6 +1211,8 @@ class Chat:
             keyring_names=await asyncio.to_thread(keyring_refs, control),
             unattended=unattended(self.record.config.kind),
             external_unattended=external_unattended,
+            workspace=self.record.config.workspace,
+            rules=await asyncio.to_thread(control.settings_get, "rules"),
         )
         self._gate = gate
         if self.record.config.tools == ():
@@ -1439,14 +1440,14 @@ class Chat:
         return ask.reply.result()
 
     def _edit_refused(self, tool: str, edited: dict[str, Any]) -> str | None:
-        """The money gate's reason to deny an input the operator edited, or None. The CLI ran
-        the gate on the model's input only, so the edit gets the same check before it runs."""
+        """The guard's reason to deny an input the operator edited, or None. The CLI ran the
+        guard on the model's input only, so the edit gets the same check before it runs."""
         if self._deps.test is not None and not self._deps.test.gate_hook:
             return None
         if self._gate is None:
-            return "the money gate has no rules for this chat, so the edited call is blocked"
+            return "the guard has no rules for this chat, so the edited call is blocked"
         try:
-            verdict = money_gate(
+            verdict = guard(
                 tool,
                 edited,
                 self._gate,
@@ -1455,7 +1456,7 @@ class Chat:
                 permission_mode=self.record.config.mode,
             )
         except Exception as error:
-            return f"the gate failed ({type(error).__name__}), so the edited call is blocked"
+            return f"the guard failed ({type(error).__name__}), so the edited call is blocked"
         return verdict.reason if isinstance(verdict, Deny) else None
 
     async def _resolve(

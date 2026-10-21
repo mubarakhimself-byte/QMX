@@ -368,9 +368,7 @@ async def console_lane(harness: Any, home: Any, control: Any, args: argparse.Nam
         def capture_signals(self) -> Any:
             yield
 
-    extra = router(
-        home, control, scrubbed=(), keep=(), harness_lines=lambda probe: harness.doctor(probe=probe)
-    )
+    extra = router(home, control, scrubbed=(), keep=(), harness_lines=harness.doctor)
     app = create_app(control, local_token(), UI_ORIGIN, extra_routers=[extra, chat_router(harness)])
     server = Server(uvicorn.Config(app, host="127.0.0.1", port=PORT, log_level="warning"))
     serving = asyncio.create_task(server.serve())

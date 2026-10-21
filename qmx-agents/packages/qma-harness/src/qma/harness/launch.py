@@ -2,8 +2,8 @@
 
 Everything not set here is the vanilla CLI default, which is the operator's floor.
 
-- `tools` and `system_prompt` use the `claude_code` presets. The money rule is not enforced
-  by removing tools: the gate callback and the deny rules (`money`) run on every call.
+- `tools` and `system_prompt` use the `claude_code` presets. Tools are not removed to keep
+  agents safe: the guard callback and the deny rules (`guard`) run on every call.
 - `permission_mode` is always passed. Omitting it can start the session in `auto`.
 - Settings in code. `setting_sources=[]`, so the CLI loads no settings file from any home, and
   every Claude setting arrives through one per-chat file QMX writes at each launch
@@ -38,7 +38,7 @@ from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
 
 from qma.boot import banned_fragment
-from qma.harness import money
+from qma.harness import guard
 from qma.harness.profiles import TIER_ENV, ProfileName
 
 if TYPE_CHECKING:
@@ -117,7 +117,7 @@ type ChatHook = Callable[[HookInput], Awaitable[None]]
 @dataclass(frozen=True)
 class ChatHooks:
     """Observe-only SDK hook callbacks for one Background or Child chat, each given the SDK's
-    hook input. They run after the money gate and cannot allow, deny or change anything: a
+    hook input. They run after the guard and cannot allow, deny or change anything: a
     callback's result is dropped, its exception is logged, and one still running after
     `OBSERVER_TIMEOUT_S` is cancelled, so an observer never blocks a tool call."""
 
@@ -216,7 +216,7 @@ class ChatConfig:
     """Background and Child only: after the harness's own system text."""
     hook_sink: str | None = None
     """Background and Child only: the name of a sink the host registered, which observes this
-    chat's hook events after the money gate."""
+    chat's hook events after the guard."""
     permissions: ChatPermissions = ChatPermissions()
     policy_args: JsonMap = MappingProxyType({})
     """Handed to the named policy with every ask."""
@@ -396,7 +396,7 @@ LAUNCHER: Final = Path(sys.executable).parent / (
 """The `qma-cli-launcher` console script installed next to this Python."""
 
 GATE_TIMEOUT_S: Final = 10.0
-"""Explicit `HookMatcher.timeout` for the money gate. A PreToolUse SDK callback that exceeds
+"""Explicit `HookMatcher.timeout` for the guard. A PreToolUse SDK callback that exceeds
 its timeout blocks the tool call."""
 
 COMPACT_PCT_ENV: Final = "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE"
@@ -577,16 +577,16 @@ def build_options(
     launcher: Path,
     can_use_tool: CanUseTool,
     mcp_servers: Mapping[str, McpServerConfig],
-    gate: money.GateRules,
+    gate: guard.GuardRules,
     budgets: Budgets,
     sink: HookSink | None = None,
     test: TestMode | None = None,
 ) -> ClaudeAgentOptions:
     """One chat's `ClaudeAgentOptions`. Resume is keyed on the JSONL on disk, never on
-    `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The money
-    gate runs as a PreToolUse callback on every tool, with an explicit timeout, and the deny
+    `ChatRecord.started`. `mcp_servers` is `qmx` plus the vetted external servers. The guard
+    runs first as a PreToolUse callback on every tool, with an explicit timeout, and the deny
     rules ride in `disallowed_tools`; `test` switches either off for a layer check. The chat's
-    own observe-only hooks and its named `sink` are appended after the gate, and `compact_at`
+    own observe-only hooks and its named `sink` are appended after the guard, and `compact_at`
     becomes the CLI's auto-compact percentage for this chat alone.
 
     Claude settings and the system text go by file path (probes P-SET and P-SYS), so neither
@@ -599,7 +599,7 @@ def build_options(
     hooks: dict[HookEvent, list[HookMatcher]] = (
         {
             "PreToolUse": [
-                HookMatcher(matcher=None, hooks=[money.pre_tool_use(gate)], timeout=GATE_TIMEOUT_S)
+                HookMatcher(matcher=None, hooks=[guard.pre_tool_use(gate)], timeout=GATE_TIMEOUT_S)
             ]
         }
         if gate_hook
@@ -644,7 +644,7 @@ def build_options(
         hooks=hooks or None,
         disallowed_tools=[
             *(CHILD_DENIED if isinstance(config.kind, Child) else ()),
-            *(money.deny_rules(gate) if rules_on else ()),
+            *(guard.deny_rules(gate) if rules_on else ()),
         ],
         can_use_tool=can_use_tool,
         session_id=None if transcript_exists else session_id,

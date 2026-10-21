@@ -40,7 +40,7 @@ CALLS = 201
 async def timeout_part(log: Log) -> None:
     from qma.harness import (  # noqa: PLC0415
         TestMode,
-        money,
+        guard,
     )
     from qma.harness.launch import GATE_TIMEOUT_S  # noqa: PLC0415
 
@@ -50,7 +50,7 @@ async def timeout_part(log: Log) -> None:
     marker.unlink(missing_ok=True)
     target = workspace / "notes.txt"
     target.write_text("before\n", encoding="utf-8")
-    real = money.pre_tool_use
+    real = guard.pre_tool_use
 
     def sleepy(rules: Any) -> Any:
         async def callback(*args: Any) -> Any:
@@ -59,7 +59,7 @@ async def timeout_part(log: Log) -> None:
 
         return callback
 
-    money.pre_tool_use = sleepy
+    guard.pre_tool_use = sleepy
     calls = [
         Call(
             "Bash past the timeout",
@@ -89,7 +89,7 @@ async def timeout_part(log: Log) -> None:
             workspace=workspace,
         )
     finally:
-        money.pre_tool_use = real
+        guard.pre_tool_use = real
     try:
         for call in (calls[0], calls[2]):
             kind, said = outcomes[call.label]
@@ -110,11 +110,11 @@ async def perf_part(log: Log) -> None:
         NewChat,
         OperatorText,
         TestMode,
-        money,
+        guard,
     )
 
     timings: list[float] = []
-    real = money.pre_tool_use
+    real = guard.pre_tool_use
 
     def timed(rules: Any) -> Any:
         inner = real(rules)
@@ -127,7 +127,7 @@ async def perf_part(log: Log) -> None:
 
         return callback
 
-    money.pre_tool_use = timed
+    guard.pre_tool_use = timed
     fake = FakeModel(
         [
             Turn([tool_use("Bash", {"command": f"echo s38 {n}", "description": "echo"})])
@@ -180,7 +180,7 @@ async def perf_part(log: Log) -> None:
         log.check("every scripted call went through the gate", len(ordered) >= CALLS, len(ordered))
         log.check(f"p99 at most {P99_LIMIT_MS} ms", p99 <= P99_LIMIT_MS, f"{p99:.3f} ms")
     finally:
-        money.pre_tool_use = real
+        guard.pre_tool_use = real
         await session.harness.close()
         fake.stop()
 

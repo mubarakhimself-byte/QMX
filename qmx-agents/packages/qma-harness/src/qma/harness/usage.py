@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any, Final, Literal
 
 from qma.harness.home import DoctorLine, QmxHome, SessionId
-from qma.harness.money import ExposureReport, MoneyPosture
 from qma.harness.profiles import PLAN
 from qma.harness.project import (
     STATUSES,
@@ -349,70 +348,6 @@ def token_sums(runs: Path, chat: str = "*") -> dict[str, dict[str, int]]:
 
 
 @dataclass(frozen=True)
-class PostureView:
-    """The money posture as the usage page and the doctor show it."""
-
-    posture: MoneyPosture
-    unproven: tuple[str, ...]
-    """Entries that count as broker credentials and have no S27 proof."""
-    exposure: ExposureReport | None
-    """None until the first probe ran."""
-
-    def note(self) -> str:
-        if self.posture is MoneyPosture.STRUCTURAL:
-            return (
-                "STRUCTURAL: every broker credential on this PC has a stored proof that the "
-                "broker refuses it an order."
-            )
-        return (
-            f"SPEED_BUMP: no stored proof that these credentials cannot trade: "
-            f"{', '.join(self.unproven)}. Agent Bash runs as your OS user, so the money rule's "
-            "guards stop the model's own tool calls, not a determined command. Only a broker "
-            "credential the broker refuses for scope (check S27) makes this structural. While "
-            "the trading node shares this PC, this stays SPEED_BUMP, as you accepted."
-        )
-
-    def readable(self) -> tuple[str, ...]:
-        return () if self.exposure is None else self.exposure.readable()
-
-    def document(self) -> dict[str, Any]:
-        return {
-            "posture": self.posture.name,
-            "unproven": list(self.unproven),
-            "readable_from_agent_bash": list(self.readable()),
-            "note": self.note(),
-            "exposure": None if self.exposure is None else self.exposure.document(),
-        }
-
-    def lines(self) -> list[DoctorLine]:
-        structural = self.posture is MoneyPosture.STRUCTURAL
-        lines = [DoctorLine("money posture", structural, self.note())]
-        if self.exposure is None:
-            lines.append(
-                DoctorLine("exposure probe", False, "not run yet; POST /api/doctor/probe runs it")
-            )
-            return lines
-        readable = ", ".join(self.readable()) or "nothing"
-        lines.append(
-            DoctorLine(
-                "exposure probe",
-                True,
-                f"run {self.exposure.at.isoformat()} on CLI {self.exposure.cli_version}; "
-                f"agent Bash can read: {readable}",
-            )
-        )
-        lines += [
-            DoctorLine(
-                f"exposure {finding.target.kind} {finding.target.value}",
-                finding.reachable is False,
-                finding.detail,
-            )
-            for finding in self.exposure.findings
-        ]
-        return lines
-
-
-@dataclass(frozen=True)
 class UsagePage:
     """What `Harness.usage()` returns and `GET /api/usage` serves."""
 
@@ -422,7 +357,6 @@ class UsagePage:
     """Per profile: input, output, cache read and cache write tokens, and `calls`."""
     hard_stop: str | None
     extra_usage_on: bool | None
-    money: PostureView
 
     def document(self) -> dict[str, Any]:
         return {
@@ -446,7 +380,6 @@ class UsagePage:
             "hard_stop": self.hard_stop,
             "extra_usage_on": self.extra_usage_on,
             "extra_usage_note": EXTRA_USAGE_ON if self.extra_usage_on else None,
-            "money": self.money.document(),
         }
 
 
@@ -503,10 +436,8 @@ def _saved_limits(saved: dict[str, Any]) -> Limits:
 def usage_page(
     ledger: UsageLedger,
     tokens: Mapping[str, Mapping[str, int]],
-    money: PostureView,
 ) -> UsagePage:
     return UsagePage(
-        money=money,
         windows=ledger.windows(),
         readings=ledger.readings(),
         tokens=tokens,

@@ -67,7 +67,6 @@ def test_s16_is_skipped_and_says_so_when_hp16_is_parked() -> None:
     reasons = run_all.skip_reasons(run_all.CHECKS, gpt_parked=True, no_login=False, skip=["S36"])
     assert reasons == {
         "S16 lanes": "HP16 is parked",
-        "S27": "only the operator runs it",
         "S36": "skipped on the command line",
     }
 
@@ -78,7 +77,7 @@ def test_without_a_login_only_fake_model_checks_run() -> None:
     assert reasons["S8 rows"] == "needs the OpenRouter key"
     assert reasons["S20 settings"] == "needs a running qma.serve host, this PC's keyring"
     assert run == [
-        "S5", "S6a", "S6a agent", "S6b", "S9", "S11 nested", "S11 background", "S11 model", "S11 tools",
+        "S5", "E56 fake", "E56 delete", "S6a", "S6a agent", "S6b", "S9", "S11 nested", "S11 background", "S11 model", "S11 tools",
         "S11 subagent", "S11 full", "S11 allowlist", "S11 unattended", "S12 bash", "S15 wire",
         "S15 restart", "S15 concurrent", "S15 question", "S21", "S21ab", "S21c", "S21e", "S22",
         "S23", "S24 key", "S28", "S29", "S29a", "S31 idle", "S31 busy", "S32", "S33", "S34",
@@ -89,13 +88,13 @@ def test_without_a_login_only_fake_model_checks_run() -> None:
 def test_the_checks_run_in_design_section_5_order_and_each_script_exists() -> None:
     ids = list(dict.fromkeys(found.id for found in run_all.CHECKS))
     assert ids == [
-        "S1", "S2", "S3", "S4", "S5", "S6", "S6a", "S6b", "S7", "S8", "S9", "S10", "S11", "S12",
+        "S1", "S2", "S3", "S4", "S5", "E56", "S6a", "S6b", "S7", "S8", "S9", "S10", "S11", "S12",
         "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S21ab", "S21c", "S21d",
-        "S21e", "S22", "S23", "S24", "S25", "S26", "S27", "S28", "S29", "S29a", "S30", "S30b",
+        "S21e", "S22", "S23", "S24", "S25", "S28", "S29", "S29a", "S30", "S30b",
         "S31", "S32", "S33", "S34", "S35", "S35u", "S36", "S37", "S38", "S39", "S40", "S41",
     ]  # fmt: skip
     labels = [found.label for found in run_all.CHECKS]
-    assert len(labels) == len(set(labels)) == 75
+    assert len(labels) == len(set(labels)) == 71
     assert [
         found.script for found in run_all.CHECKS if not (RUN_ALL.parent / found.script).exists()
     ] == []
@@ -103,7 +102,7 @@ def test_the_checks_run_in_design_section_5_order_and_each_script_exists() -> No
 
 @pytest.mark.parametrize(
     ("args", "label"),
-    [(("bypass",), "S6 bypass"), (("--bash",), "S6"), ((), "S6")],
+    [(("fake",), "E56 fake"), (("--bash",), "E56"), ((), "E56")],
 )
 def test_a_row_is_named_by_its_id_and_first_argument(args: tuple[str, ...], label: str) -> None:
-    assert run_all.check("S6", "s06_money.py", *args).label == label
+    assert run_all.check("E56", "e56_guard.py", *args).label == label

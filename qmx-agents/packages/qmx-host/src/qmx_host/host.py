@@ -132,7 +132,6 @@ async def serve(
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
     harness = await Harness.open(qmx_home, control=control)
-    harness.control_port = port
     try:
         async with EngineDoor.open(control, harness=HarnessAdapter(harness)) as engine:
             harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)

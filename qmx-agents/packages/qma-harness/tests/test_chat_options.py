@@ -30,7 +30,7 @@ from qma.harness import (
     PolicyCall,
     Reject,
     SubAgent,
-    money,
+    guard,
 )
 from qma.harness.home import (
     ChatRecord,
@@ -47,17 +47,16 @@ from qma.harness.routes import control_service
 
 home = test_chat.home
 
-GATE = money.GateRules(
-    proposal_tools=frozenset(),
+GATE = guard.GuardRules(
     mandatory_asks=frozenset(),
-    dispatch_targets={},
     protected_paths=("/d/qmx/settings.toml",),
     qmx_homes=(),
     writable_paths=(),
+    install_paths=(),
     secret_paths=(),
     personal_homes=("/c/Users/Op/.claude",),
     keyring_names=frozenset(),
-    broker_hosts=frozenset(),
+    delete_zones=(),
     variables={},
     case_insensitive=True,
     unattended=True,
@@ -152,7 +151,7 @@ def test_the_harness_launches_each_chat_with_only_its_own_options(home: QmxHome)
     assert sorted(plain.options.hooks or {}) == ["PreToolUse"]
 
 
-def test_chat_hooks_run_after_the_money_gate_and_cannot_decide(tmp_path: Path) -> None:
+def test_chat_hooks_run_after_the_guard_and_cannot_decide(tmp_path: Path) -> None:
     seen: list[str] = []
 
     async def record(data: Any) -> None:
@@ -177,15 +176,15 @@ def test_chat_hooks_run_after_the_money_gate_and_cannot_decide(tmp_path: Path) -
         "SubagentStop": 1,
     }
     gate, observer = built["PreToolUse"]
-    money_act = {
+    keyring_call = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
         "tool_input": {"command": "cmdkey /list"},
         "cwd": "/d/work",
     }
-    decision = call(gate.hooks[0], money_act)["hookSpecificOutput"]["permissionDecision"]
+    decision = call(gate.hooks[0], keyring_call)["hookSpecificOutput"]["permissionDecision"]
     assert decision == "deny"
-    assert call(observer.hooks[0], money_act) == {}
+    assert call(observer.hooks[0], keyring_call) == {}
     for event in ("PostToolUse", "PreCompact", "Stop", "SubagentStop"):
         data = {"hook_event_name": event, "tool_name": "Read" if event == "PostToolUse" else ""}
         assert call(built[event][0].hooks[0], data) == {}
