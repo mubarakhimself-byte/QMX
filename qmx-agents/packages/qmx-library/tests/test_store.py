@@ -156,8 +156,20 @@ def test_there_is_no_delete_and_archive_only_hides(store: Store) -> None:
         store.archive(ALICE, "plan", "mine now")
 
     verbs = {name for name in dir(LibraryPort) if not name.startswith("_")}
-    assert not verbs & {"delete", "remove", "purge", "drop"}
-    assert not any(hasattr(store, name) for name in ("delete", "remove", "purge"))
+    assert not verbs & {"delete", "remove", "drop"}
+    assert not any(hasattr(store, name) for name in ("delete", "remove"))
+    # AD-6's one exception (LIB4): `purge` exists, is the operator's alone, and tombstones.
+    assert "purge" in verbs
+    planted = store.put(
+        OPERATOR, note("the vault code is 4411", "planted"), on="main", expected_head=None
+    )
+    blob_id = store.get(OPERATOR, planted.object_id).blobs["body.md"].blob_id
+    with pytest.raises(LibraryRefused, match=r"^purge_refused:"):
+        store.purge(ALICE, blob_id, "a vault code")
+    assert store.purge(OPERATOR, blob_id, "a vault code").ref == (
+        f"refs/purges/{blob_id.removeprefix('sha256:')}"
+    )
+    assert store.purged(blob_id) is True
     assert store.search(OPERATOR, "old plan") == []
     assert [h.object_id for h in store.search(OPERATOR, "old plan", include_archived=True)] == [
         kept.object_id

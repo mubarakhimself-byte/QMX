@@ -7,9 +7,12 @@ set `CODES`, never a raw exception.
 
 There is no delete verb (AD-6, ruling 9): an item is archived, a version is superseded by a new
 object, and nothing stored is ever removed. `get`, `search`, `walk` and `resolve` take an
-optional `as_of`, a time or a ref-log position, answered from the ref log (46 K-26). `claim`,
-`release`, `purge` and `adopt` are not here yet: claims come with their own store, and `adopt`
-and `purge` need the server.
+optional `as_of`, a time or a ref-log position, answered from the ref log (46 K-26).
+
+Three verbs landed with the Hub (LIB4). `claim` and `release` are AD-24's compare-and-swap on
+`refs/claims/<intent_key>`, called only by engine instances. `purge` is AD-6's one exception to
+archive-never-delete: the operator alone, for a blob that holds a secret, a tombstone on every
+copy. `adopt` is still absent; it needs the operator's recovery flow beside the Hub.
 """
 
 from __future__ import annotations
@@ -33,6 +36,11 @@ type BlobId = str
 """`sha256:<hex>` of the blob's bytes."""
 type Class = Literal["record", "definition", "governed"]
 type Strategy = Literal["auto", "ff-only"]
+type StoreRole = Literal["writer", "replica", "cache"]
+"""What one store is for (AD-19): the `writer` is the primary store and the only one that moves
+refs; a `replica` mirrors the primary's refs and objects and sends its writes to it; a `cache`
+does the same and is allowed to drop a durable blob once two verified remote copies exist
+(AD-10)."""
 type AsOf = datetime | int
 """A time, or a ref-log position (the `seq` of a move): the store as it stood then."""
 type Relation = tuple[str, ObjectId] | tuple[str, ObjectId, JsonObject]
@@ -55,6 +63,10 @@ CODES: Final = frozenset(
         "invalid_search",
         "annotation_not_accepted",
         "secret_in_blob",
+        "read_only_replica",
+        "invalid_claim",
+        "purge_refused",
+        "blob_purged",
     }
 )
 
@@ -174,6 +186,8 @@ class ObjectView:
     annotations: JsonObject
     locators: Mapping[ObjectId, JsonObject] = field(default_factory=dict[ObjectId, JsonObject])
     """The locator of each at-birth relation that carries one, by its target."""
+    purged: frozenset[str] = frozenset()
+    """The blob slots an operator purge tombstoned; each reads `blob_purged` (AD-6)."""
     data: Mapping[str, bytes] = field(default_factory=dict[str, bytes])
     """The blob bytes by slot, filled only by `get(..., blobs="fetch")`."""
 
@@ -255,6 +269,27 @@ class MergeResult:
     """The new head of `into`, or the `merge-conflict` object when the outcome is a conflict."""
 
 
+@dataclass(frozen=True, slots=True)
+class Claim:
+    """AD-24's answer: `granted`, or `held_by(run_id, expires)` when another live run holds it and
+    a claim past its `expires` may be taken by the next caller."""
+
+    granted: bool
+    run_id: str | None
+    expires: datetime | None
+    """When the caller's own claim runs out, or when the holder's does."""
+
+
+@dataclass(frozen=True, slots=True)
+class PurgeResult:
+    """AD-6's one exception: the blob's bytes are gone on this store and a tombstone names why."""
+
+    blob_id: BlobId
+    ref: str
+    """The transient ref the purge is recorded on, `refs/purges/<hex>`."""
+    tombstone: Path
+
+
 class LibraryPort(Protocol):
     def resolve(
         self, who: Principal, item: str, ref: str = "main", *, as_of: AsOf | None = None
@@ -330,3 +365,9 @@ class LibraryPort(Protocol):
     def archive(
         self, who: Principal, item: str, reason: str, *, replaced_by: str | None = None
     ) -> None: ...
+
+    def claim(self, who: Principal, intent_key: str, run_id: str, ttl: int) -> Claim: ...
+
+    def release(self, who: Principal, intent_key: str, run_id: str) -> None: ...
+
+    def purge(self, who: Principal, blob_id: BlobId, reason: str) -> PurgeResult: ...

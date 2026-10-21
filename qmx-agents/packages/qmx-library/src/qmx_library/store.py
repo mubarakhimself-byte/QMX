@@ -6,7 +6,9 @@ Evidence is the files under the store's root:
     objects/ab/cd/<hex>.json    one canonical identity manifest per object, written once
     blobs/ab/cd/<hex>           the bytes of a durable blob, written once
     blobs/transient/<hex>       a transient blob (checkpoints), kept on this store only
+    blobs/tombstones/<hex>.json an operator purge: the bytes are gone, this names why (AD-6)
     refs/log.jsonl              every ref move, append-only
+    refs/claims.json            the live intent claims, prunable and never bucketed (AD-24)
     edges/<store>.jsonl         after-birth relations, append-only, one stream per writer
     annotations/log.jsonl       tags, authorship and other annotations, append-only
     kinds/<kind>.schema.json    the kinds this store was written with
@@ -14,12 +16,19 @@ Evidence is the files under the store's root:
 `catalog.db` is rebuilt from those files whenever it is missing or behind them. One process
 writes a store: `open` takes an OS lock on `writer.lock` and refuses a second writer. Every put
 passes the redactor first, so the stored bytes are the only bytes (engine AD-37).
+
+A store has a `role` (AD-19). The `writer` is the primary and the only one that moves refs. A
+`replica` mirrors the primary's refs and objects and sends its writes to it; a `cache` does the
+same and fetches a missing durable blob from its `upstream` and keeps it (AD-10). Claims live in
+`refs/claims.json` rather than the append-only log because AD-24 declares them transient and
+prunes them when released or expired, which the log can never do.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import threading
@@ -29,7 +38,7 @@ from collections import deque
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
 from typing import IO, Any, Final, Literal, Protocol, Self, cast
@@ -44,6 +53,7 @@ from qmx_library.port import (
     AsOf,
     BlobRef,
     BlobView,
+    Claim,
     Class,
     Commit,
     Draft,
@@ -54,8 +64,10 @@ from qmx_library.port import (
     MergeResult,
     ObjectId,
     ObjectView,
+    PurgeResult,
     Relation,
     Step,
+    StoreRole,
     Strategy,
     normalised,
 )
@@ -65,6 +77,9 @@ MANIFEST: Final = "qmx.library.object/1"
 CHECKOUT_FILE: Final = ".checkout.json"
 TEXT_LIMIT: Final = 1_000_000
 """Bytes of one text blob read into the search index."""
+CLAIMS: Final = "claims.json"
+CLAIM_KEY: Final = re.compile(r"[A-Za-z0-9_.:+-]{1,200}")
+"""An intent key is a fingerprint; a path segment it must also be, so `/` is out."""
 
 
 class Redactor(Protocol):
@@ -75,6 +90,12 @@ class Redactor(Protocol):
     def redact_json(self, value: object) -> tuple[JsonValue, int]: ...
 
     def holds_value(self, data: bytes) -> bool: ...
+
+
+class BlobSource(Protocol):
+    """Where a replica or a cache fetches a durable blob it does not hold (AD-10)."""
+
+    def fetch(self, blob_id: str) -> bytes | None: ...
 
 
 def canonical(value: object) -> bytes:
@@ -180,12 +201,16 @@ class Store:
         name: str,
         redactor: Redactor,
         wall: Callable[[], datetime],
+        role: StoreRole = "writer",
+        upstream: BlobSource | None = None,
     ) -> None:
         self.root = root
         self.name = name
         self.engine = Principal("engine", name)
         self.redactor = redactor
         self.wall = wall
+        self.role: StoreRole = role
+        self.upstream = upstream
         self._handle = handle
         self._mutex = threading.RLock()
         self.catalog = Catalog(root / "catalog.db")
@@ -205,6 +230,8 @@ class Store:
         redactor: Redactor,
         name: str = "pc",
         wall: Callable[[], datetime] | None = None,
+        role: StoreRole = "writer",
+        upstream: BlobSource | None = None,
     ) -> Store:
         root.mkdir(parents=True, exist_ok=True)
         handle = (root / "writer.lock").open("a+b")
@@ -223,7 +250,13 @@ class Store:
                 shutil.copyfile(schema, target)
         try:
             return cls(
-                root, handle, name=name, redactor=redactor, wall=wall or (lambda: datetime.now(UTC))
+                root,
+                handle,
+                name=name,
+                redactor=redactor,
+                wall=wall or (lambda: datetime.now(UTC)),
+                role=role,
+                upstream=upstream,
             )
         except BaseException:
             handle.close()
@@ -250,6 +283,14 @@ class Store:
     @property
     def annotation_log(self) -> Path:
         return self.root / "annotations" / "log.jsonl"
+
+    @property
+    def claims_path(self) -> Path:
+        return self.root / "refs" / CLAIMS
+
+    @property
+    def tombstones(self) -> Path:
+        return self.root / "blobs" / "tombstones"
 
     def _object_path(self, object_id: ObjectId) -> Path:
         return _sharded(self.root / "objects", object_id.rsplit(":", 1)[-1], ".json")
@@ -307,6 +348,7 @@ class Store:
         *,
         reason: str | None = None,
         replaced_by: str | None = None,
+        at: str | None = None,
     ) -> Commit:
         found = self.catalog.head(item, ref)
         prev = None if found is None else found[0]
@@ -318,7 +360,7 @@ class Store:
             "principal": str(who),
             "prev_head": prev,
             "new_head": new_head,
-            "at": self._now(),
+            "at": at or self._now(),
         }
         if reason is not None:
             move["reason"] = reason
@@ -369,6 +411,12 @@ class Store:
     def _check_owner(self, who: Principal, ref: str, act: Act) -> None:
         if not may_advance(who, ref, act, store=self.name):
             raise LibraryRefused("ref_not_owned", f"{who} may not {act} onto {ref}")
+
+    def _check_writer(self, act: str) -> None:
+        if self.role != "writer":
+            raise LibraryRefused(
+                "read_only_replica", f"this store is a {self.role}; {act} goes to the primary"
+            )
 
     def _active(self, item: str) -> None:
         if self.catalog.state(item) == "archived":
@@ -422,6 +470,7 @@ class Store:
     ) -> Commit:
         """A new object on `on`, which `who` owns. `expected_head` is the head the caller read,
         None for a ref the item does not have yet; any other head refuses `stale_head`."""
+        self._check_writer("put")
         self._check_owner(who, on, "put")
         spec = kind(draft.kind)
         if spec.retired:
@@ -444,6 +493,7 @@ class Store:
             return self._move(who, item, on, object_id)
 
     def relate(self, who: Principal, from_id: ObjectId, relation: str, to_id: ObjectId) -> str:
+        self._check_writer("relate")
         name = normalised(relation)
         if name not in RELATIONS:
             raise LibraryRefused("unknown_relation", f"{relation!r} is not a relation")
@@ -472,6 +522,7 @@ class Store:
         return edge_id
 
     def branch(self, who: Principal, item: str, *, from_ref: str, name: str) -> Commit:
+        self._check_writer("branch")
         self._check_owner(who, name, "put")
         with self._writing():
             if self.catalog.head(item, name) is not None:
@@ -481,6 +532,7 @@ class Store:
     def annotate(self, who: Principal, object_id: ObjectId, values: JsonObject) -> None:
         """Annotation fields the object's kind accepts; no new version (AD-2). The operator and
         the engine annotate anything, another principal only objects on refs it owns."""
+        self._check_writer("annotate")
         with self._writing():
             row = self._require(object_id)
             spec = kind(str(row[2]))
@@ -501,6 +553,7 @@ class Store:
         self, who: Principal, item: str, reason: str, *, replaced_by: str | None = None
     ) -> None:
         """Archive, never delete (AD-6): a move of `refs/items/<item>/state`; no object changes."""
+        self._check_writer("archive")
         self._check_owner(who, state_ref(item), "state")
         with self._writing():
             if self.catalog.state(item) is None:
@@ -523,6 +576,7 @@ class Store:
         cannot merge cleanly becomes a `merge-conflict` object; a conflict never picks a side.
         The engine merges only to land a run's objects: records onto `main`, every other class
         onto `refs/drafts/<item>` (AD-18)."""
+        self._check_writer("merge")
         act: Act = "land" if who == self.engine else "merge"
         self._check_owner(who, into, act)
         with self._writing():
@@ -783,20 +837,45 @@ class Store:
         if blobs == "meta":
             return view
         spec = kind(view.kind)
-        data = {
-            slot: self.read_blob(blob.blob_id, transient=spec.slot(slot).transient)
-            for slot, blob in view.blobs.items()
-        }
-        return replace(view, data=data)
+        data: dict[str, bytes] = {}
+        purged: set[str] = set()
+        for slot, blob in view.blobs.items():
+            try:
+                data[slot] = self.read_blob(blob.blob_id, transient=spec.slot(slot).transient)
+            except LibraryRefused as refused:
+                if refused.code != "blob_purged":
+                    raise
+                purged.add(slot)
+        return replace(view, data=data, purged=frozenset(purged))
 
     def read_blob(self, blob_id: str, *, transient: bool = False) -> bytes:
+        """The blob's bytes. A purge tombstone refuses `blob_purged` (AD-6); on a replica or a
+        cache a durable blob it does not hold comes from `upstream` and stays cached (AD-10)."""
+        if (self.tombstones / f"{blob_id.removeprefix('sha256:')}.json").exists():
+            raise LibraryRefused("blob_purged", f"{blob_id} was purged by the operator")
         path = self._blob_path(blob_id, transient=transient)
         if not path.exists():
-            raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
+            if transient or self.upstream is None:
+                raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
+            fetched = self.upstream.fetch(blob_id)
+            if fetched is None:
+                raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
+            if f"sha256:{sha256(fetched).hexdigest()}" != blob_id:
+                raise LibraryRefused("corrupt_blob", f"{blob_id} does not hash to its name")
+            _write_once(path, fetched)
+            return fetched
         data = path.read_bytes()
         if f"sha256:{sha256(data).hexdigest()}" != blob_id:
             raise LibraryRefused("corrupt_blob", f"{blob_id} does not hash to its name")
         return data
+
+    def has_blob(self, blob_id: str) -> bool:
+        """Whether the bytes are here, for a replicator deciding what to copy."""
+        return self._blob_path(blob_id, transient=False).exists()
+
+    def purged(self, blob_id: str) -> bool:
+        """Whether an operator purge tombstoned `blob_id` on this store (AD-6)."""
+        return (self.tombstones / f"{blob_id.removeprefix('sha256:')}.json").exists()
 
     def search(
         self,
@@ -906,6 +985,7 @@ class Store:
     def mark(self, who: Principal, item: str, quarantined: bool, reason: str) -> None:
         """Set or clear `quarantined` on `item`: a move of `refs/items/<item>/marks`, by the
         operator alone (AD-22)."""
+        self._check_writer("mark")
         if who.who != "operator":
             raise LibraryRefused("ref_not_owned", f"{who} may not mark {item}; the operator marks")
         with self._writing():
@@ -1043,6 +1123,7 @@ class Store:
         expected_head: ObjectId | None,
     ) -> Commit:
         """Move `ref` to an object already stored, by compare-and-swap (AD-2)."""
+        self._check_writer("advance")
         self._check_owner(who, ref, "put")
         with self._writing():
             self._require(new_head)
@@ -1057,9 +1138,250 @@ class Store:
     def put_transient(self, who: Principal, ref: str, data: bytes) -> str:
         """A transient blob (a checkpoint) for a run that owns `ref`: kept on this store only,
         never bucketed (AD-6)."""
+        self._check_writer("put_transient")
         self._check_owner(who, ref, "put")
         with self._mutex:
             data = self._redacted(data)
             blob_id = f"sha256:{sha256(data).hexdigest()}"
             _write_once(self._blob_path(blob_id, transient=True), data)
             return blob_id
+
+    def claim(self, who: Principal, intent_key: str, run_id: str, ttl: int) -> Claim:
+        """AD-24's compare-and-swap on the transient ref `refs/claims/<intent_key>`: grant unless
+        another live run holds it; a claim past its `expires` may be taken.
+
+        Only an engine instance claims, and only on its own store (`engine:<store>` owns the ref),
+        which is why the ownership check is here rather than in `principal.may_advance`: claims
+        were added to the store with the Hub, and the second caller (the Hub's batch renewal) is
+        the same principal. A replica may claim: AD-24 has it fall back to its own store when the
+        primary is unreachable, and a claim is not a ref move or a copy of one.
+        """
+        if who.who != "engine" or who.id != self.name:
+            raise LibraryRefused("ref_not_owned", f"{who} may not claim on {self.name}")
+        if not CLAIM_KEY.fullmatch(intent_key) or not run_id or ttl < 1:
+            raise LibraryRefused("invalid_claim", f"{intent_key!r} with ttl {ttl} is no claim")
+        now = self.wall().astimezone(UTC)
+        expires = now + timedelta(seconds=ttl)
+        with self._mutex:
+            claims = self._claims()
+            current = claims.get(intent_key)
+            if current and current["run_id"] != run_id:
+                held = datetime.fromisoformat(str(current["expires"]))
+                if held > now:
+                    return Claim(False, str(current["run_id"]), held)
+            claims[intent_key] = {
+                "ref": f"refs/claims/{intent_key}",
+                "run_id": run_id,
+                "store": self.name,
+                "expires": expires.isoformat(),
+            }
+            self._save_claims(claims)
+        return Claim(True, run_id, expires)
+
+    def release(self, who: Principal, intent_key: str, run_id: str) -> None:
+        """Drop a claim this run holds. Another run's claim is left alone; its holder's death is
+        what the ttl is for, so a release never steals."""
+        if who.who != "engine" or who.id != self.name:
+            raise LibraryRefused("ref_not_owned", f"{who} may not release on {self.name}")
+        with self._mutex:
+            claims = self._claims()
+            current = claims.get(intent_key)
+            if current is None or current["run_id"] != run_id:
+                return
+            del claims[intent_key]
+            self._save_claims(claims)
+
+    def renew_claims(self, who: Principal, run_id: str, ttl: int) -> list[str]:
+        """Extend every claim `run_id` holds, one call per heartbeat (AD-24, engine AD-65)."""
+        if who.who != "engine" or who.id != self.name:
+            raise LibraryRefused("ref_not_owned", f"{who} may not renew on {self.name}")
+        if ttl < 1:
+            raise LibraryRefused("invalid_claim", f"ttl {ttl} is no claim")
+        now = self.wall().astimezone(UTC)
+        expires = (now + timedelta(seconds=ttl)).isoformat()
+        with self._mutex:
+            claims = self._claims()
+            renewed = sorted(key for key, held in claims.items() if held["run_id"] == run_id)
+            for key in renewed:
+                claims[key]["expires"] = expires
+            if renewed:
+                self._save_claims(claims)
+        return renewed
+
+    def sweep_claims(self) -> int:
+        """Prune released and expired claims; they are never bucketed (AD-24)."""
+        with self._mutex:
+            claims = self._claims()
+            now = self.wall().astimezone(UTC)
+            live = {
+                key: held
+                for key, held in claims.items()
+                if datetime.fromisoformat(str(held["expires"])) > now
+            }
+            if len(live) != len(claims):
+                self._save_claims(live)
+        return len(claims) - len(live)
+
+    def live_claims(self) -> dict[str, str]:
+        """Each live intent key and the run that holds it, for the heartbeat row (AD-65)."""
+        now = self.wall().astimezone(UTC)
+        with self._mutex:
+            return {
+                key: str(held["run_id"])
+                for key, held in self._claims().items()
+                if datetime.fromisoformat(str(held["expires"])) > now
+            }
+
+    def claim_holder(self, intent_key: str) -> tuple[str, str] | None:
+        """The run holding `intent_key` and when that lapses, or None when nobody does."""
+        with self._mutex:
+            entry = self._claims().get(intent_key)
+        if entry is None:
+            return None
+        return str(entry["run_id"]), str(entry["expires"])
+
+    def _claims(self) -> dict[str, dict[str, Any]]:
+        if not self.claims_path.exists():
+            return {}
+        return cast(dict[str, dict[str, Any]], json.loads(self.claims_path.read_text("utf-8")))
+
+    def _save_claims(self, claims: Mapping[str, Mapping[str, object]]) -> None:
+        """One file, replaced whole: claims are transient, so they are not in the ref log."""
+        path = self.claims_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}")
+        temp.write_text(json.dumps(claims, sort_keys=True), encoding="utf-8")
+        os.replace(temp, path)
+
+    def purge(self, who: Principal, blob_id: str, reason: str) -> PurgeResult:
+        """AD-6's one exception to archive-never-delete: the operator, for a blob holding a
+        secret, drops the bytes on this store and records why on `refs/purges/<hex>`; every
+        replica applies the tombstone when it mirrors that ref."""
+        self._check_writer("purge")
+        if who.who != "operator":
+            raise LibraryRefused("purge_refused", f"{who} may not purge; the operator purges")
+        if not reason.strip():
+            raise LibraryRefused("purge_refused", "a purge names the secret it removes")
+        if not blob_id.startswith("sha256:"):
+            raise LibraryRefused("purge_refused", f"{blob_id!r} is not a blob id")
+        hexdigest = blob_id.removeprefix("sha256:")
+        path = self._blob_path(blob_id, transient=False)
+        with self._mutex:
+            if path.exists():
+                data = path.read_bytes()
+                if f"sha256:{sha256(data).hexdigest()}" != blob_id:
+                    raise LibraryRefused("corrupt_blob", f"{blob_id} does not hash to its name")
+            elif not self.purged(blob_id):
+                raise LibraryRefused("not_found", f"no blob {blob_id}")
+            with self._writing():
+                tombstone = self._tombstone(blob_id, reason, who)
+                path.unlink(missing_ok=True)
+                ref = f"refs/purges/{hexdigest}"
+                found = self.catalog.head(f"purge:{hexdigest}", ref)
+                if found is None or found[0] != "purged":
+                    self._move(who, f"purge:{hexdigest}", ref, "purged", reason=reason)
+        return PurgeResult(blob_id, f"refs/purges/{hexdigest}", tombstone)
+
+    def apply_purge(self, blob_id: str, *, reason: str, at: str) -> bool:
+        """A replica's side of `purge`: same tombstone, same missing bytes, no ref move of its
+        own. True when this call was the one that removed something."""
+        if self.role == "writer":
+            raise LibraryRefused("ref_not_owned", "the writer purges; a replica applies")
+        if not blob_id.startswith("sha256:"):
+            raise LibraryRefused("purge_refused", f"{blob_id!r} is not a blob id")
+        if self.purged(blob_id):
+            return False
+        with self._mutex:
+            self._tombstone(blob_id, reason, Principal("operator"), at=at)
+            self._blob_path(blob_id, transient=False).unlink(missing_ok=True)
+        return True
+
+    def _tombstone(
+        self, blob_id: str, reason: str, who: Principal, *, at: str | None = None
+    ) -> Path:
+        path = self.tombstones / f"{blob_id.removeprefix('sha256:')}.json"
+        entry = {
+            "blob_id": blob_id,
+            "reason": reason,
+            "principal": str(who),
+            "at": at or self._now(),
+        }
+        _write_once(path, canonical(entry))
+        return path
+
+    def mirror(
+        self,
+        item: str,
+        ref: str,
+        new_head: str,
+        *,
+        expected_head: str | None,
+        who: str = "hub",
+        at: str | None = None,
+    ) -> Commit:
+        """Record another store's move: the ref it owns has a new head here (AD-11, AD-14).
+
+        A mirror is not an act (`may_advance` decides acts), so any role takes one; what it
+        cannot do is overwrite a head the caller did not read, which is the compare-and-swap
+        AD-14 asks for. `who` is the principal the owner recorded, so the local ref log names the
+        true writer.
+        """
+        with self._writing():
+            found = self.catalog.head(item, ref)
+            head = None if found is None else found[0]
+            if head == new_head:
+                return Commit(new_head, item, ref, head, self._seq)
+            if head != expected_head:
+                raise LibraryRefused("stale_head", f"{ref} of {item} is at {head}")
+            return self._move(Principal.parse(who), item, ref, new_head, reason="mirror", at=at)
+
+    def ingest(self, manifest: Mapping[str, Any]) -> ObjectId:
+        """Copy one immutable object from a peer, and its blobs as they arrive (AD-11). Objects
+        are ownerless, so any role takes one; a collision is a name that does not hash to its
+        bytes."""
+        object_id = fp1(manifest)
+        _write_once(self._object_path(object_id), canonical(manifest))
+        with self._writing():
+            self._index_object(object_id, manifest)
+        return object_id
+
+    def store_blob(self, data: bytes) -> str:
+        """Copy one durable blob from a peer, verified by its hash (AD-10)."""
+        blob_id = f"sha256:{sha256(data).hexdigest()}"
+        _write_once(self._blob_path(blob_id, transient=False), data)
+        return blob_id
+
+    def object_ids(self) -> list[ObjectId]:
+        with self._mutex:
+            rows = self.catalog.db.execute("SELECT object_id FROM objects ORDER BY object_id")
+            return [str(object_id) for (object_id,) in rows]
+
+    def manifest(self, object_id: ObjectId) -> dict[str, Any]:
+        """The object's identity manifest, as it was written."""
+        path = self._object_path(object_id)
+        if not path.exists():
+            raise LibraryRefused("not_found", f"no object {object_id}")
+        return cast(dict[str, Any], json.loads(path.read_bytes()))
+
+    def blob_ids(self) -> list[str]:
+        """Every durable blob this store holds; transient blobs are never replicated."""
+        return sorted(
+            f"sha256:{path.name}"
+            for path in (self.root / "blobs").glob("??/??/*")
+            if path.is_file()
+        )
+
+    def refs(self) -> list[tuple[str, str, str, str, str]]:
+        """Every ref's head, when it last moved and under which principal, `(item, ref, head,
+        at, principal)`, ordered by ref."""
+        with self._mutex:
+            rows = self.catalog.db.execute(
+                "SELECT m.item, m.ref, m.new_head, m.at, m.principal FROM moves m WHERE m.seq = "
+                "(SELECT max(seq) FROM moves WHERE item = m.item AND ref = m.ref) "
+                "ORDER BY m.item, m.ref"
+            )
+            return [(str(i), str(r), str(h), str(a), str(p)) for i, r, h, a, p in rows]
+
+    def ancestry_of(self, object_id: ObjectId) -> set[ObjectId]:
+        """Every ancestor of `object_id`, itself included: the parent-hash order AD-14 means."""
+        return set(self._ancestry(object_id))
