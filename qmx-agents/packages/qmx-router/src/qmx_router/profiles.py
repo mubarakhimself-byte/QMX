@@ -16,7 +16,8 @@ Claude home of that one process.
 - `GptPlan` is GPT through the operator's ChatGPT sign-in, through the relay's GPT lane. Its
   row holds only the four tiers, each a GPT model, and its quirks are fixed.
 
-Rows come from `settings.toml [providers]`.
+Rows come from `settings.toml [providers]`. A row's quirk defaults come from the bundled
+profile for its host (`qmx_router.registry`).
 """
 
 from __future__ import annotations
@@ -145,29 +146,9 @@ QUIRK_ENV_KEYS: Final = frozenset(
     }
 )
 
-HOST_QUIRKS: Final[Mapping[str, Quirks]] = {
-    "openrouter.ai": Quirks(env={"ENABLE_TOOL_SEARCH": "false"}),
-    "api.meta.ai": Quirks(
-        env={"ENABLE_TOOL_SEARCH": "true", "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1"},
-        wire=WireQuirks(
-            strip_fields=frozenset(
-                {"stop_sequences", "top_k", "container", "inference_geo", "context_management"}
-            )
-        ),
-    ),
-    "api.moonshot.ai": Quirks(
-        env={"ENABLE_TOOL_SEARCH": "true"}, wire=WireQuirks(cache_markers="top_level_only")
-    ),
-}
-"""Defaults a row's own `quirks` override. OpenRouter keeps tool search off: with it on, every
-chat's `qmx` tools go out deferred, and OpenRouter answers 400 "Deferred custom tools are only
-supported on Anthropic models" for `moonshotai/kimi-k2.5` (HP12 check 8) and
-`deepseek-v4-flash-0731` (HP1). With it off, Kimi K2.5 ran a Bash call (HP12 check 8) and
-`deepseek/deepseek-v4.1-flash` answered (HP12 fix round; HP1's B1 Bash call ran with it off).
-Meta and the Moonshot API are the vendors' documented
-rejections, not yet probed with a key; their `true` may hit the same 400."""
 KEY_QUIRKS: Final = Quirks(env={"ENABLE_TOOL_SEARCH": "true"})
-"""Tool search is off by default behind a base URL."""
+"""For a host no bundled profile names. The CLI turns tool search off behind any base URL, so
+an unknown host gets it back on."""
 
 FORBIDDEN_ON_KEY: Final = ("claude", "anthropic", "gpt", "openai", "chatgpt", "codex")
 OPENAI_REASONING_SEGMENT: Final = re.compile(r"^o\d+($|-)")
@@ -315,7 +296,7 @@ def _key_provider(name: str, row: object, allow_loopback_http: bool) -> KeyProvi
             raise ProfileError(f"tiers.{tier}: {refusal}")
         models[tier] = ModelId(model)
     host = urlsplit(base_url).hostname or ""
-    quirks = _quirks(table.get("quirks"), HOST_QUIRKS.get(host, KEY_QUIRKS))
+    quirks = _quirks(table.get("quirks"), host_quirks(host))
     return KeyProvider(
         name=ProfileName(name),
         base_url=base_url,
@@ -323,6 +304,15 @@ def _key_provider(name: str, row: object, allow_loopback_http: bool) -> KeyProvi
         tiers=TierMap(**models),
         quirks=quirks,
     )
+
+
+def host_quirks(host: str) -> Quirks:
+    """The defaults a row's own `quirks` override: those the bundled profile for `host` reads
+    from its model rows, else `KEY_QUIRKS`."""
+    from qmx_router.registry import bundled  # noqa: PLC0415  (the registry imports this module)
+
+    provider = bundled().for_host(host)
+    return KEY_QUIRKS if provider is None else provider.quirks()
 
 
 def _gpt_plan(row: object) -> GptPlan:

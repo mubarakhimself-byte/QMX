@@ -1,0 +1,32 @@
+# Alibaba Model Studio. Pay-as-you-go needs his workspace id in the URL, so a user file adds that
+# region. The Token Plan's `auto` model is never a row: every row pins a real id.
+aliases = ["alibaba", "dashscope"]
+base_url = { token_plan = "https://token-plan.ap-southeast-1.maas.aliyuncs.com/apps/anthropic", coding_plan = "https://coding-intl.dashscope.aliyuncs.com/apps/anthropic" }
+region = "token_plan"
+auth = "bearer"
+credentials = ["qmx/qwen"]
+cheap_aux = "qwen/qwen3.6-flash"
+terms_note = "The Coding Plan is for AI coding tools only, with no batch or non-interactive use."
+
+[defaults]
+window = 1_000_000
+
+[[models]]
+qmx_id = "qwen/qwen3.8-max"
+native = "qwen3.8-max"
+class = "strong"
+
+[[models]]
+qmx_id = "qwen/qwen3.7-plus"
+native = "qwen3.7-plus"
+class = "mid"
+
+[[models]]
+qmx_id = "qwen/qwen3.8-flash"
+native = "qwen3.8-flash"
+class = "mid"
+
+[[models]]
+qmx_id = "qwen/qwen3.6-flash"
+native = "qwen3.6-flash"
+class = "cheap"

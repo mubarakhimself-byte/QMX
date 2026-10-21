@@ -1,0 +1,45 @@
+# OpenCode Go. MiniMax and Qwen are on its Anthropic route; GLM, Kimi and DeepSeek only on
+# chat completions, so their rows wait for the chat lane (RTR3). Its own session header is
+# forwarded and the User-Agent is never rewritten. Its Claude Haiku is not a row: no Claude model
+# runs behind a key.
+aliases = ["opencode"]
+base_url = { go = "https://opencode.ai/inference/go/anthropic" }
+auth = "bearer"
+credentials = ["qmx/opencode-go"]
+cheap_aux = "opencode-go/qwen3.8-flash"
+
+[defaults]
+forward_headers = ["x-opencode-session"]
+
+[[models]]
+qmx_id = "opencode-go/minimax-m3"
+native = "minimax-m3"
+class = "strong"
+
+[[models]]
+qmx_id = "opencode-go/qwen3.8-max"
+native = "qwen3.8-max"
+class = "strong"
+
+[[models]]
+qmx_id = "opencode-go/qwen3.8-flash"
+native = "qwen3.8-flash"
+class = "cheap"
+
+[[models]]
+qmx_id = "opencode-go/glm-5.3"
+native = "glm-5.3"
+wire = "openai_chat"
+class = "mid"
+
+[[models]]
+qmx_id = "opencode-go/kimi-k3"
+native = "kimi-k3"
+wire = "openai_chat"
+class = "strong"
+
+[[models]]
+qmx_id = "opencode-go/deepseek-v4.1-flash"
+native = "deepseek-v4.1-flash"
+wire = "openai_chat"
+class = "cheap"

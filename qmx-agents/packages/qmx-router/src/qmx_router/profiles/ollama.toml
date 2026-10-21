@@ -1,0 +1,22 @@
+# Ollama Cloud. Bearer only; no prompt caching, no count_tokens and no tool-choice forcing, so
+# every turn is a full-price resend.
+aliases = ["ollama-cloud"]
+base_url = { cloud = "https://ollama.com" }
+auth = "bearer"
+credentials = ["qmx/ollama"]
+
+[defaults]
+window = 256_000
+prompt_cache = "none"
+cache_ttl = "none"
+count_tokens = false
+
+[[models]]
+qmx_id = "ollama/glm-5.3"
+native = "glm-5.3"
+class = "mid"
+
+[[models]]
+qmx_id = "ollama/kimi-k3"
+native = "kimi-k3"
+class = "strong"
