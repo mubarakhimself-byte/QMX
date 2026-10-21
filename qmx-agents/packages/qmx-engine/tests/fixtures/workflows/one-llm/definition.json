@@ -5,8 +5,7 @@
   "nodes": [
     {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "parameters": {"kinds": ["manual"]}},
     {"id": "capital", "name": "Capital", "type": "llm", "typeVersion": 1, "role": "triage",
-     "parameters": {"prompt_ref": "prompts/capital.md", "schema_ref": "schemas/capital.json"},
-     "timeout": {"run_seconds": 180}}
+     "parameters": {"prompt_ref": "prompts/capital.md", "schema_ref": "schemas/capital.json"}}
   ],
   "connections": {
     "Start": {"main": [[{"node": "Capital", "port": "in", "map": "one"}]]}

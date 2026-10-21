@@ -4,8 +4,7 @@
   "name": "Research harness: searchers by chunk, a synthesiser, then a citation grader",
   "settings": {
     "on_error": "park",
-    "caller_policy": "workflows_only",
-    "runaway": {"agents": 8, "tool_calls": 100, "wall_seconds": 3600, "on_runaway": "pause"}
+    "caller_policy": "workflows_only"
   },
   "nodes": [
     {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
@@ -16,7 +15,7 @@
     {"id": "search", "name": "Search each chunk of sources", "type": "agent", "typeVersion": 1,
      "position": [440, 0], "role": "searcher", "effect": "none",
      "parameters": {"brief_ref": "prompts/search.md", "output_schema_ref": "schemas/findings.json",
-                    "tools": [], "max_turns": 4}},
+                    "tools": []}},
     {"id": "findings", "name": "All findings", "type": "join", "typeVersion": 1,
      "position": [660, 0], "parameters": {}},
     {"id": "synthesise", "name": "Synthesise", "type": "llm", "typeVersion": 1,

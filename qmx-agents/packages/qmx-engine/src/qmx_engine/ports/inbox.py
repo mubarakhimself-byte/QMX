@@ -1,11 +1,12 @@
 """The inbox port (SOLUTION-DESIGN 8.2, 10.4; AD-17 as ruling 77 narrowed it).
 
 Only three kinds of trouble reach the operator, a closed set: a provider failure, a system fault
-(a harness-level or engine-level error), and an irreversible external step whose outcome is
-unknown. A run parked for any other reason (logic, bad input or output, a runaway pause) raises no
-item; its state shows in `explain` and the run list. One item stands for every repeat of one
-failure in one run: it is keyed by `(run_id, signature)` and counts its repeats. How an item is
-shown or sent (toasts, phone, digest) is the UI's design.
+(a harness-level or engine-level error, or a crash loop: the engine dying mid-run again and
+again), and an irreversible external step whose outcome is unknown. A run parked or paused for any
+other reason (logic, bad input or output, a stuck agent, a limit he wrote) raises no item; its
+state shows in `explain` and the run list. One item stands for every repeat of one failure in one
+run: it is keyed by `(run_id, signature)` and counts its repeats. How an item is shown or sent
+(toasts, phone, digest) is the UI's design.
 """
 
 from __future__ import annotations
@@ -132,6 +133,16 @@ def raised_by(
                 node,
                 tried=tried,
                 idempotency_key=key,
+                blocks_run=True,
+            )
+        case "ladder_step" if data.get("step") == "park" and "crash_loop" in data:
+            reason = str(data.get("reason"))
+            return Raise(
+                run_id,
+                "crash_loop",
+                Category.SYSTEM_FAULT,
+                "the engine keeps stopping during this run",
+                reason,
                 blocks_run=True,
             )
         case _:

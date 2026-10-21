@@ -12,8 +12,6 @@
   "outputs": {"type": "object", "description": "the graded Library entry: inventory, cards, sources"},
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 400000, "agents": 4, "tool_calls": 40, "wall_seconds": 5400,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -27,7 +25,6 @@
     {"id": "capture", "name": "Capture captions and text", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none",
      "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 900},
      "parameters": {"script": "scripts/capture.py", "fixture_ref": "fixtures/captions.json"}},
     {"id": "prefilter", "name": "Pre-filter", "type": "script", "typeVersion": 1,
      "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/prefilter.py"}},
@@ -58,7 +55,7 @@
      "position": [2860, 0], "role": "extractor", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/extract.md", "output_schema_ref": "schemas/cards.json",
-                    "tools": [], "max_turns": 4}},
+                    "tools": []}},
     {"id": "holes", "name": "Keep the holes", "type": "script", "typeVersion": 1,
      "position": [3080, 0], "effect": "none", "parameters": {"script": "scripts/card_holes.py"}},
     {"id": "headlines", "name": "Rules to calibrate", "type": "script", "typeVersion": 1,

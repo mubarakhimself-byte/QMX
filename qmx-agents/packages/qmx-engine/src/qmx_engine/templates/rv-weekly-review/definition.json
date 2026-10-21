@@ -12,8 +12,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 120000, "agents": 1, "tool_calls": 10, "wall_seconds": 1800,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}

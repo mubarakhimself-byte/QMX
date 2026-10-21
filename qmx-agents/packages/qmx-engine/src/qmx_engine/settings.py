@@ -10,6 +10,10 @@ its place and is never resolved until the registry names its model (RTR5). `role
 the class order a live run sorts by. `roles.test_order` is how a test run builds its list: test-only
 rows the role names itself (a provider-proof lane), then the plan's cheap end `claude/haiku`
 (ruling 105), then the role's other rows from the cheap end.
+
+QMX sets no usage limit of its own (ruling 106, AD-40): there is no runaway guard, no turn,
+tool-call or run-time ceiling and no background share here. `timeout.*` and `loop.*` feed the stuck
+detector, which asks whether an attempt still moves, never how much it used.
 """
 
 from __future__ import annotations
@@ -43,23 +47,20 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "chunk.size": 10,  # Claude's default, UI-editable
         "chunk.fill": 0.3,  # Claude's default, UI-editable
         "agent.compact_at": 0.4,  # Claude's default, UI-editable
-        "agent.max_tool_calls": 200,  # Claude's default, UI-editable
-        "agent.max_turns": 12,  # Claude's default, UI-editable
-        "runaway.tokens": 400_000,  # Claude's default, UI-editable
-        "runaway.agents": 12,  # Claude's default, UI-editable
-        "runaway.wall_seconds": 7_200,  # Claude's default, UI-editable
-        "runaway.usd": None,  # Claude's default, UI-editable
-        "on_runaway": "pause",  # Claude's default, UI-editable
-        "pool.accounts.*.background_share": 0.5,  # Claude's default, UI-editable
         "pool.accounts.*.ceiling": None,  # Claude's default, UI-editable
         "pool.accounts.*.cooldown": 300,  # Claude's default, UI-editable
-        "pool.strategy": "fill-first",  # Claude's default, UI-editable
-        "budgets.max_live_chats": 6,  # Claude's default, UI-editable
+        "pool.strategy": "least_used",  # Claude's default, UI-editable
         "retry.max_tries": 3,  # Claude's default, UI-editable
         "retry.backoff": (30, 120, 600),  # Claude's default, UI-editable
-        "timeout.agent.run": 1_800,  # Claude's default, UI-editable
         "timeout.agent.idle": 300,  # Claude's default, UI-editable
-        "timeout.script.run": 600,  # Claude's default, UI-editable
+        "timeout.script.idle": 600,  # Claude's default, UI-editable
+        "timeout.in_tool": 1_200,  # Claude's default, UI-editable
+        "timeout.grace": 120,  # Claude's default, UI-editable
+        "timeout.warn_at": 0.8,  # Claude's default, UI-editable
+        "loop.repeat": 5,  # Claude's default, UI-editable
+        "loop.window": 8,  # Claude's default, UI-editable
+        "loop.no_convergence": 6,  # Claude's default, UI-editable
+        "crash_loop.restarts": 3,  # Claude's default, UI-editable
         "subworkflow.max_depth": 3,  # Claude's default, UI-editable
         "inline_limit_bytes": 65_536,  # Claude's default, UI-editable
         "placement.pc.concurrency": 3,  # Claude's default, UI-editable

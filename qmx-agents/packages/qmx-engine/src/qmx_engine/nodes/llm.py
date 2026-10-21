@@ -8,6 +8,10 @@ then the attempt fails `bad_output`, retryable, with a message that does not quo
 two failures in a row share a signature and reach the doctor. Tokens, cache reads and cache writes
 come from the chat's journal rows and land on the ending event, which the span reads.
 
+An `llm` node has no run timeout (AD-40). While its turn runs a model request is in flight, which
+the stuck detector counts as progress; a request that never yields a first token is the router's
+to end (AD-50).
+
 A provider's failure text can carry a key, so every message from the harness is redacted before
 it reaches the ledger or the inbox.
 """
@@ -24,13 +28,12 @@ from pydantic import JsonValue
 
 from qmx_engine.admission import Admission
 from qmx_engine.definition.lint import redact
-from qmx_engine.nodes.base import EffectState, Failed, NodeJob, NodeResult, Ok, Waiting
+from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
 from qmx_engine.nodes.script import failed
 from qmx_engine.ports.harness_adapter import ChatsFull, HarnessPort, Refusal, Turn
 from qmx_engine.prompts import Prompt, payload, static
 from qmx_engine.roles import Candidate
 
-DEFAULT_RUN_SECONDS: Final = 600.0
 BAD_OUTPUT: Final = "the answer did not match the node's schema after one repair turn"
 TOOL_LESS: Final = "This task has no tools. Do not call any tool; answer from this message alone."
 AUTH_WORDS: Final = ("401", "unauthorized", "authentication", "invalid api key")
@@ -119,8 +122,6 @@ def ended_badly(turn: Turn, usage: Usage) -> NodeResult | None:
     if turn.needs_you is None:
         return None
     reason = redact(turn.needs_you)
-    if "max_budget" in reason:
-        return Waiting("runaway", span=usage.span() | {"detail": reason})
     if any(word in reason.lower() for word in AUTH_WORDS):
         return with_span(failed("auth", reason, retryable=False), usage)
     return with_span(failed("chat_failed", reason, retryable=True), usage)
@@ -139,9 +140,10 @@ async def call(
     text: str,
     schema: JsonObject,
     workspace: Path,
-    run_seconds: float,
+    run_seconds: float | None = None,
 ) -> NodeResult:
-    """One answer from a fresh Background chat on `candidate`, with one repair turn."""
+    """One answer from a fresh Background chat on `candidate`, with one repair turn.
+    `run_seconds` bounds only the engine's own doctor call."""
     held = await admission.check(candidate)
     if held is not None:
         return held
@@ -170,7 +172,7 @@ async def turns(
     chat: str,
     text: str,
     schema: JsonObject,
-    run_seconds: float,
+    run_seconds: float | None,
 ) -> NodeResult:
     usage = Usage(chat)
     prompt = text
@@ -227,8 +229,19 @@ class Llm:
         self.harness = harness
         self.admission = admission
         self.workspace = workspace
+        self.running: set[str] = set()
+
+    def look(self, key: str) -> Look:
+        return Look(0, in_flight=key in self.running)
 
     async def run(self, job: NodeJob) -> NodeResult:
+        self.running.add(job.idempotency_key)
+        try:
+            return await self.answer(job)
+        finally:
+            self.running.discard(job.idempotency_key)
+
+    async def answer(self, job: NodeJob) -> NodeResult:
         candidate = candidate_of(job.resolved_model)
         if isinstance(candidate, str):
             return failed("unavailable", candidate, retryable=False)
@@ -240,7 +253,6 @@ class Llm:
             message = "an llm node needs a readable prompt_ref and a JSON schema_ref"
             return failed("bad_definition", message, retryable=False)
         hint = (job.resolved_model or {}).get("hint")
-        run_seconds = (job.timeouts or {}).get("run_seconds")
         return await call(
             self.harness,
             self.admission,
@@ -249,9 +261,6 @@ class Llm:
             text=brief(prompt, schema, job.inputs, hint if isinstance(hint, str) else None),
             schema=schema,
             workspace=self.workspace,
-            run_seconds=float(run_seconds)
-            if isinstance(run_seconds, int | float)
-            else DEFAULT_RUN_SECONDS,
         )
 
 

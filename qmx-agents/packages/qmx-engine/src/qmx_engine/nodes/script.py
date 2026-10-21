@@ -4,8 +4,10 @@ A trusted script from the workflow folder runs as `python -I` in a subprocess. I
 built from an allow-list with `qma.boot`'s banned fragments, so no provider key, no
 `CLAUDE_CONFIG_DIR` and no plan path reaches it. Its cwd is the run's write zone, its inputs
 arrive as JSON on stdin, and its stdout, parsed as JSON, is its output on `main`. The process tree
-is killed on timeout and on cancel. A node that declares credentials is refused: resolving a
-`qmx/*` ref into a host script is not built yet.
+is killed on cancel. A node script has no run timeout (AD-40): the stuck detector reads its
+process through `look` and stops it only after `timeout.script.idle` with no CPU and no IO, so a
+long backtest runs on. A trigger's own check script keeps a timeout. A node that declares
+credentials is refused: resolving a `qmx/*` ref into a host script is not built yet.
 """
 
 from __future__ import annotations
@@ -18,15 +20,15 @@ import re
 import signal
 import subprocess
 import sys
-from collections.abc import Collection, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
 from pydantic import JsonValue
 
 from qmx_engine.ledger.signature import signature
-from qmx_engine.nodes.base import EffectState, Failed, NodeJob, NodeResult, Ok
+from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
 from qmx_engine.workers.effects import idempotency_key
 
 BANNED_FRAGMENTS: Final = ("PROXY", "ANTHROPIC", "OPENAI", "AWS", "NODE_", "SSL_", "CLAUDE")
@@ -102,9 +104,16 @@ class Done:
 
 
 async def run_process(
-    argv: list[str], *, cwd: Path, env: dict[str, str], stdin: bytes, timeout: float
+    argv: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    stdin: bytes,
+    timeout: float | None,
+    started: Callable[[int], None] | None = None,
 ) -> Done:
-    """Run to exit, or kill the whole tree at `timeout` or when the awaiting task is cancelled."""
+    """Run to exit, or kill the whole tree at `timeout` or when the awaiting task is cancelled.
+    `started` is told the process id once it runs."""
     windows = sys.platform == "win32"
     process = await asyncio.create_subprocess_exec(
         *argv,
@@ -116,6 +125,8 @@ async def run_process(
         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if windows else 0,
         start_new_session=not windows,
     )
+    if started is not None:
+        started(process.pid)
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(stdin), timeout)
     except TimeoutError:
@@ -139,11 +150,17 @@ def failed(
 @dataclass(frozen=True, slots=True)
 class HostScript:
     """What every script-family executor of one run shares: the workflow folder its scripts come
-    from, the default timeout and the values no script may see."""
+    from, its timeout (None for a node's script) and the values no script may see."""
 
     folder: Path
-    timeout_seconds: float
+    timeout_seconds: float | None
     banned_values: tuple[str, ...]
+    processes: dict[str, int] = field(default_factory=dict[str, int])
+    """The running script's process id, by attempt idempotency key."""
+
+    def look(self, key: str) -> Look:
+        pid = self.processes.get(key)
+        return Look(0, pid=pid) if pid is not None else Look(0, waiting=True)
 
     def path(self, job: NodeJob, parameter: str) -> Path | Failed:
         parameters = job.node_definition.get("parameters")
@@ -171,20 +188,22 @@ class HostScript:
             return path
         if job.workspace is None:
             return failed("no_workspace", "the job names no write zone", retryable=False)
-        timeouts = job.timeouts or {}
-        limit = timeouts.get("run_seconds")
-        seconds = float(limit) if isinstance(limit, int | float) else self.timeout_seconds
-        done = await run_process(
-            [sys.executable, "-I", str(path)],
-            cwd=Path(job.workspace),
-            env=script_env(os.environ, self.banned_values, idempotency_key(job)),
-            stdin=json.dumps(job.inputs).encode(),
-            timeout=seconds,
-        )
+        key = job.idempotency_key
+        try:
+            done = await run_process(
+                [sys.executable, "-I", str(path)],
+                cwd=Path(job.workspace),
+                env=script_env(os.environ, self.banned_values, idempotency_key(job)),
+                stdin=json.dumps(job.inputs).encode(),
+                timeout=self.timeout_seconds,
+                started=lambda pid: self.processes.__setitem__(key, pid),
+            )
+        finally:
+            self.processes.pop(key, None)
         if done.code is None:
             return failed(
                 "timeout",
-                f"the script ran past its {seconds:g} s timeout",
+                f"the script ran past its {self.timeout_seconds:g} s timeout",
                 retryable=True,
                 effect_state="unknown",
             )

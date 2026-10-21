@@ -24,13 +24,13 @@
     }
   },
   "outputs": {"type": "object", "description": "the reproduced findings with their evidence pack, or the cost card above his number"},
-  "settings": {"timezone": "UTC", "runaway": {"tokens": 400000, "agents": 1, "tool_calls": 200, "wall_seconds": 10800, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "estimate", "name": "Estimate sub-calls and cost", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/estimate.py"}, "effect": "none"},
     {"id": "within", "name": "Within his ask-above number?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.within"}, "effect": "none"},
-    {"id": "kernel", "name": "Root model in the research kernel", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/kernel.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
-    {"id": "reproduce", "name": "Reproduce from the snapshot", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/reproduce.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "kernel", "name": "Root model in the research kernel", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/kernel.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
+    {"id": "reproduce", "name": "Reproduce from the snapshot", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/reproduce.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
     {"id": "findings", "name": "Keep reproduced findings", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/findings.py"}, "effect": "none"},
     {"id": "write", "name": "Write the explainer", "type": "llm", "typeVersion": 1, "position": [1320, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
     {"id": "assemble", "name": "Assemble the explainer", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},

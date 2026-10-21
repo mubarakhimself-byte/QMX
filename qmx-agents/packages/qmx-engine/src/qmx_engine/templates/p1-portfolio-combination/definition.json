@@ -12,8 +12,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 30000, "agents": 1, "tool_calls": 5, "wall_seconds": 1800,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -23,11 +21,9 @@
      "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "streams", "name": "Load the return streams", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 300}, "parameters": {"script": "scripts/streams.py"}},
+     "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/streams.py"}},
     {"id": "combine", "name": "Correlate, combine and stress", "type": "script",
-     "typeVersion": 1, "position": [440, 0], "effect": "none",
-     "timeout": {"run_seconds": 900}, "parameters": {"script": "scripts/combine.py"}},
+     "typeVersion": 1, "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/combine.py"}},
     {"id": "write", "name": "Write the study", "type": "llm", "typeVersion": 1,
      "position": [660, 0], "role": "writer", "effect": "none",
      "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/study.json"}},

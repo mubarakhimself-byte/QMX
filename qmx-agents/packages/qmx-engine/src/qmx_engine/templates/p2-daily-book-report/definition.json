@@ -8,8 +8,6 @@
   },
   "settings": {
     "timezone": "America/New_York",
-    "runaway": {"tokens": 1000, "agents": 1, "tool_calls": 1, "wall_seconds": 300,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -19,8 +17,7 @@
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
     {"id": "broker", "name": "Preflight and broker reads", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120}, "parameters": {"script": "scripts/broker.py"}},
+     "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/broker.py"}},
     {"id": "report", "name": "Book report", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/report.py"}},
     {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,

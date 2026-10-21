@@ -76,7 +76,7 @@ def posting(tmp_path: Path, effect: str, timeout: int | None = None) -> tuple[Pa
     post = node("post", "script", script="scripts/post.py")
     post["effect"] = effect
     if timeout is not None:
-        post["timeout"] = {"run_seconds": timeout}
+        post["timeout"] = {"idle_seconds": timeout}
     root = folder(
         tmp_path / "wf",
         [START, post],
@@ -124,10 +124,11 @@ def test_a_step_of_unknown_outcome_after_a_crash_waits_on_its_gate_over_two_resu
     assert_gated(tmp_path, asyncio.run(die_mid_attempt()))
 
 
-def test_an_external_step_past_its_timeout_waits_on_its_gate(tmp_path: Path) -> None:
+def test_an_external_step_the_stuck_detector_stops_waits_on_its_gate(tmp_path: Path) -> None:
     root, _ = posting(tmp_path, "irreversible_external", timeout=1)
+    quick = {"timeout.grace": 1, "scheduler.tick": 0.2}
 
-    outcome, _ = run_folder(root, tmp_path / "home")
+    outcome, _ = run_folder(root, tmp_path / "home", None, **quick)
 
     assert outcome.status == "waiting"
     assert_gated(tmp_path, outcome.run_id)

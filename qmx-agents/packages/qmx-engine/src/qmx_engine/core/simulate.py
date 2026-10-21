@@ -23,7 +23,6 @@ from qmx_ledger.journal import fingerprint
 from qmx_engine.core.commands import (
     Climb,
     Command,
-    Degrade,
     Finish,
     Hold,
     Park,
@@ -33,7 +32,7 @@ from qmx_engine.core.commands import (
     Wait,
 )
 from qmx_engine.core.fold import fold
-from qmx_engine.core.ladder import NO_DOCTOR, runaway_line, step_data
+from qmx_engine.core.ladder import NO_DOCTOR, limits_line, step_data
 from qmx_engine.core.partitions import RUN_SETTINGS
 from qmx_engine.core.ready import next_commands
 from qmx_engine.core.state import JsonObject, State
@@ -177,14 +176,11 @@ class Simulation:
                     data |= {"skipped": True, "reason": NO_DOCTOR}
                 self.append("ladder_step", data)
                 return None
-            case Degrade():
-                self.append("log", runaway_line(command.detail, "degrade"))
-                return None
             case Park():
                 self.append("ladder_step", step_data(command))
             case Pause():
                 if command.detail is not None:
-                    self.append("log", runaway_line(command.detail, "pause"))
+                    self.append("log", limits_line(command.detail))
                 self.append(
                     "run_paused", {"reason": command.reason, "resume_at": command.resume_at}
                 )

@@ -4,8 +4,7 @@
   "name": "Paper read: one batched question battery per chunk of papers",
   "settings": {
     "on_error": "park",
-    "caller_policy": "workflows_only",
-    "runaway": {"agents": 6, "tool_calls": 60, "wall_seconds": 3600, "on_runaway": "pause"}
+    "caller_policy": "workflows_only"
   },
   "nodes": [
     {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
@@ -16,7 +15,7 @@
     {"id": "read", "name": "Read each chunk of papers", "type": "agent", "typeVersion": 1,
      "position": [440, 0], "role": "reader", "effect": "none",
      "parameters": {"brief_ref": "prompts/read.md", "output_schema_ref": "schemas/cards.json",
-                    "tools": [], "max_turns": 4}},
+                    "tools": []}},
     {"id": "cards", "name": "All cards", "type": "join", "typeVersion": 1, "position": [660, 0],
      "parameters": {}}
   ],

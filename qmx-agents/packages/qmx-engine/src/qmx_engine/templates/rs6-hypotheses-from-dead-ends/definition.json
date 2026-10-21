@@ -3,10 +3,10 @@
   "id": "rs6-hypotheses-from-dead-ends",
   "name": "Hypotheses from dead ends",
   "outputs": {"type": "object", "description": "a short list of up to five hypothesis cards, each with the dead ends behind it"},
-  "settings": {"timezone": "UTC", "runaway": {"tokens": 150000, "agents": 10, "tool_calls": 10, "wall_seconds": 3600, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "Weekly", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
-    {"id": "library", "name": "Load dead ends from the Library", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/library.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "library", "name": "Load dead ends from the Library", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/library.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
     {"id": "cluster", "name": "Cluster the new dead ends", "type": "script", "typeVersion": 1, "position": [440, 0], "parameters": {"script": "scripts/cluster.py"}, "effect": "none"},
     {"id": "wake", "name": "Five or more new dead ends?", "type": "rule", "typeVersion": 1, "position": [660, 0], "parameters": {"expr": "items != []"}, "effect": "none"},
     {"id": "propose", "name": "Propose per cluster", "type": "llm", "typeVersion": 1, "position": [880, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/propose.md", "schema_ref": "schemas/hypotheses.json"}, "effect": "none"},

@@ -69,6 +69,8 @@ class Failure:
     signature: str
     retryable: bool
     effect_state: str
+    stalled: str | None = None
+    """Which stuck rule ended the attempt (`idle`, `loop`, `no_convergence`), when one did."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,10 +123,21 @@ class State:
     """The partitions each join merged the first time it fired, over every pass, so a resume
     merges the same ones (AD-7) and a late arrival never gets in."""
     walks: Mapping[Slot, Walk] = field(default_factory=dict[Slot, Walk])
-    runaway: Mapping[str, JsonValue] = field(default_factory=dict[str, JsonValue])
-    """The runaway guard `run_created` recorded: limits, `deadline` and `on_runaway`."""
-    tool_calls: int = 0
-    degraded: bool = False
+    limits: Mapping[str, int] = field(default_factory=dict[str, int])
+    """The limits he wrote, as `run_created` recorded them: `tokens`, `turns`, `tool_calls` and
+    `wall_seconds` for the run, `<node id>.<name>` for a node. Empty by default (AD-40)."""
+    turns: Mapping[Slot, int] = field(default_factory=dict[Slot, int])
+    """Model turns the slot's attempts reported on their ending events, over every pass."""
+    tools: Mapping[Slot, int] = field(default_factory=dict[Slot, int])
+    """Tool calls the slot's attempts recorded as they ran, over every pass."""
+    active_seconds: int = 0
+    """The run's active time, outside recorded waits, backoff and host sleep, as the driver last
+    recorded it."""
+    allowance: Mapping[str, int] = field(default_factory=dict[str, int])
+    """What had been used when he last resumed the run from a limits pause; a limit counts from
+    there, so a resume gives the run the same allowance again."""
+    restarts: int = 0
+    """Passes opened because the engine died with attempts in flight."""
 
 
 @dataclass(frozen=True, slots=True)

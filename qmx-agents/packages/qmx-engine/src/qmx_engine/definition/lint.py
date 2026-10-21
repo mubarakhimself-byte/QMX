@@ -2,10 +2,9 @@
 
 No node writes Settings or creates a trigger, no parameter names a money act (PROMPT-ENGINE
 rule 6, AD-8), no token-shaped literal appears anywhere, a list never fans into a model node by
-`broadcast`, an agent names its `max_turns`, a loop names its `max_iterations` (so every loop
-ends), and a `human_gate` sits only in front of an
-`irreversible_external` effect. A missing runaway guard is not an error: it takes the defaults,
-and no USD figure is ever asked for (ruling 27).
+`broadcast`, a loop names its `max_iterations` (so every loop ends), and a `human_gate` sits only
+in front of an `irreversible_external` effect. No limit is ever required: QMX sets no usage limit
+of its own (ruling 106, AD-40), and a `limits` value he wrote is refused only below 1.
 """
 
 from __future__ import annotations
@@ -25,9 +24,8 @@ from qma.core.barriers.money_path import (
 )
 
 from qmx_engine.definition.folder import Problem
-from qmx_engine.definition.model import Runaway, Settings, Workflow, edges
+from qmx_engine.definition.model import Limits, Workflow, edges
 from qmx_engine.definition.registry import Registry
-from qmx_engine.settings import DEFAULTS
 
 SETTINGS_WRITE: Final = frozenset({"settings_write", "settings_put", "settings_update"})
 TRIGGER_CREATION: Final = frozenset(
@@ -67,8 +65,10 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
         for path, text in strings(workflow.model_dump(mode="json", by_alias=True), "")
         if TOKEN_SHAPES.search(text)
     )
+    yield from below_one(workflow.settings.limits, "settings.limits")
     for i, node in enumerate(workflow.nodes):
         kind = registry.kind(node.type)
+        yield from below_one(node.limits, f"nodes[{i}].limits")
         for path, text in [
             (f"nodes[{i}].type", node.type),
             *strings(node.parameters, f"nodes[{i}].parameters"),
@@ -83,12 +83,6 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
                 yield Problem("money_act", path, f"names the money act {act!r}; money is read-only")
         if kind is None:
             continue
-        if kind.name == "agent":
-            turns = node.parameters.get("max_turns")
-            if not isinstance(turns, int) or isinstance(turns, bool) or turns < 1:
-                yield Problem(
-                    "agent_max_turns_missing", f"nodes[{i}].parameters", "an agent needs max_turns"
-                )
         if kind.name == "loop":
             cap = node.parameters.get("max_iterations")
             if not isinstance(cap, int) or isinstance(cap, bool) or cap < 1:
@@ -120,6 +114,16 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
                 "chunk_required",
                 edge.path,
                 f"a list into a {kind.name} node uses map: chunk, not broadcast",
+            )
+
+
+def below_one(limits: Limits | None, path: str) -> Iterator[Problem]:
+    if limits is None:
+        return
+    for name, value in limits.model_dump(exclude_none=True).items():
+        if value < 1:
+            yield Problem(
+                "limit_below_one", f"{path}.{name}", f"{name} is {value}; a limit is 1 or more"
             )
 
 
@@ -195,13 +199,3 @@ def word_act(text: str) -> str | None:
     if verb and noun and not MONEY_PATH_NON_MONEY_OBJECTS & set(words):
         return f"{verb}_{noun}"
     return None
-
-
-def effective_runaway(settings: Settings) -> Runaway:
-    """The run's runaway guard: the definition's own limits, the defaults for the rest."""
-    defaults = Runaway.model_validate(
-        {k: DEFAULTS[f"runaway.{k}"] for k in ("tokens", "agents", "wall_seconds")}
-        | {"on_runaway": DEFAULTS["on_runaway"]}
-    )
-    own = settings.runaway or Runaway()
-    return defaults.model_copy(update=own.model_dump(exclude_none=True))

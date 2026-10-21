@@ -23,10 +23,10 @@ from typing import Final
 
 from pydantic import JsonValue, ValidationError
 
-from qmx_engine.core.commands import Command, Degrade, Finish, Hold, Park, Pause, Wait
+from qmx_engine.core.commands import Command, Finish, Hold, Park, Pause, Wait
 from qmx_engine.core.edges import MAPS, FanError, fan
 from qmx_engine.core.joins import Fired, JoinSpec, Unmet, close
-from qmx_engine.core.ladder import admit, climb, runaway
+from qmx_engine.core.ladder import admit, climb
 from qmx_engine.core.loops import LoopError, LoopSpec, stop
 from qmx_engine.core.partitions import ChunkError
 from qmx_engine.core.replay import dispatch
@@ -35,7 +35,7 @@ from qmx_engine.core.waits import WaitSpec, due
 from qmx_engine.definition.model import Edge, Node, Workflow, edges
 from qmx_engine.definition.registry import LOOP_BACK_PORT, REGISTRY
 
-PAUSING: Final = frozenset({"limit", "runaway"})
+PAUSING: Final = frozenset({"limit"})
 
 type Shape = int | None
 """A node's partition count in one iteration; None when it runs as one slot."""
@@ -505,17 +505,12 @@ def next_commands(state: State) -> list[Command]:
         return [Park(found.park)]
     wanted: list[Command] = [*found.holds, *dispatch(state, found.ready)]
     commands, detail = admit(state, wanted)
-    paused: list[Command] = []
-    if detail is not None and len(commands) < len(wanted):
-        paused = runaway(state, detail, wanted)
-        if isinstance(paused[0], Degrade):
-            return paused
     inflight = any(run.phase in ("scheduled", "started") for run in state.nodes.values())
     if commands or inflight:
         return commands
-    if paused:
-        return paused
     waiting = {s: run for s, run in state.nodes.items() if run.phase == "waiting"}
+    if detail is not None and (len(commands) < len(wanted) or waiting or found.held):
+        return [Pause("limits", None, detail)]
     if waiting or found.held:
         times = [run.resume_at for run in waiting.values()] + [at for _, at in found.held]
         reasons = {run.reason or "" for run in waiting.values()}

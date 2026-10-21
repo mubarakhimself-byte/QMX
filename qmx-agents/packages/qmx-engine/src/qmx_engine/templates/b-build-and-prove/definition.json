@@ -29,12 +29,12 @@
     }
   },
   "outputs": {"type": "object", "description": "the funnel scorecard: the sealed spec, every overfit gate, the verdict and the paper card"},
-  "settings": {"timezone": "UTC", "runaway": {"tokens": 60000, "agents": 1, "tool_calls": 4, "wall_seconds": 7200, "on_runaway": "pause"}, "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "spec", "name": "Seal the experiment spec", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/spec.py"}, "effect": "none"},
     {"id": "sealed", "name": "Spec checks pass?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
-    {"id": "qmb", "name": "Register and backtest on QMB", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/qmb.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "timeout": {"run_seconds": 600}, "effect": "none"},
+    {"id": "qmb", "name": "Register and backtest on QMB", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/qmb.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
     {"id": "dsr", "name": "Deflated Sharpe over the family", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/deflated_sharpe.py"}, "effect": "none"},
     {"id": "gates", "name": "Overfit gates", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/gates.py"}, "effect": "none"},
     {"id": "card", "name": "Paper card or dead end", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/card.py"}, "effect": "none"},

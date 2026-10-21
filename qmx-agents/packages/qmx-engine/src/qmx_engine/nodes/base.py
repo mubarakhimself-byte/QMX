@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from pydantic import JsonValue
+from qma.harness import StuckCall
 from qmx_ledger.journal import fingerprint
 
 from qmx_engine.core.commands import StartNode
@@ -36,7 +37,6 @@ class NodeJob:
     inputs: JsonValue
     now: str | None
     mode: Mode = "test"
-    runaway_remaining: JsonObject | None = None
     resolved_model: JsonObject | None = None
     credentials: Mapping[str, str] = field(default_factory=dict[str, str])
     workspace: str | None = None
@@ -79,6 +79,22 @@ class Waiting:
     resume_at: str | None = None
     event: str | None = None
     span: JsonObject = field(default_factory=dict[str, JsonValue])
+
+
+@dataclass(frozen=True, slots=True)
+class Look:
+    """What an attempt in flight shows the stuck detector at one tick (AD-16): a count that moves
+    with its progress, a model request in flight, a recorded wait, an open tool call, the process
+    whose CPU and IO count as the tool's progress, and an agent's finished tool calls."""
+
+    progress: int
+    in_flight: bool = False
+    waiting: bool = False
+    tool_open: bool = False
+    pid: int | None = None
+    children_only: bool = False
+    """Only the processes under `pid` do the attempt's work; `pid` itself is a chat's CLI."""
+    calls: tuple[StuckCall, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

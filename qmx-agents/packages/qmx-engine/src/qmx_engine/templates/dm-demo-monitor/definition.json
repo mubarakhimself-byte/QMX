@@ -8,8 +8,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 30000, "agents": 1, "tool_calls": 5, "wall_seconds": 600,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["run", "workflow"]}
@@ -20,7 +18,6 @@
     {"id": "deals", "name": "New deals?", "type": "monitor", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 3, "backoff_seconds": [60, 300], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 60},
      "parameters": {"source": "scripts/deals.py", "wake_when": "changed"}},
     {"id": "stats", "name": "Stats and costs", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/stats.py"}},

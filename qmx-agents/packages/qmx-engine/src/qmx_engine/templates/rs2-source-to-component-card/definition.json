@@ -13,8 +13,6 @@
   "outputs": {"type": "object", "description": "the graded component card, holes kept"},
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 200000, "agents": 2, "tool_calls": 30, "wall_seconds": 3600,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -40,7 +38,7 @@
      "position": [1320, 0], "role": "extractor", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/component.md",
-                    "output_schema_ref": "schemas/component.json", "tools": [], "max_turns": 4}},
+                    "output_schema_ref": "schemas/component.json", "tools": []}},
     {"id": "holes", "name": "Keep the holes", "type": "script", "typeVersion": 1,
      "position": [1540, 0], "effect": "none", "parameters": {"script": "scripts/keep_holes.py"}},
     {"id": "headlines", "name": "Items to calibrate", "type": "script", "typeVersion": 1,

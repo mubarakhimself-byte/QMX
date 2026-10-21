@@ -21,8 +21,9 @@ from qmx_engine.definition.model import Node
 
 def node_definition(node: Node) -> JsonObject:
     """The slice that keys a node's memo. `position` is left out, so moving a node reruns
-    nothing."""
-    return node.model_dump(mode="json", by_alias=True, exclude={"position"})
+    nothing, and so is an unset `limits`, so a node keeps the key it had before limits existed."""
+    unset = {"limits"} if node.limits is None else set[str]()
+    return node.model_dump(mode="json", by_alias=True, exclude={"position", *unset})
 
 
 def memo_key(

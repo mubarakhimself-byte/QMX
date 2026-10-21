@@ -96,7 +96,6 @@ async def main() -> int:
                 brief_ref="prompts/brief.md",
                 output_schema_ref="schemas/out.json",
                 tools=[],
-                max_turns=12,
             ),
             node("all", "join"),
         ],

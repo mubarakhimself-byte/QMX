@@ -3,9 +3,15 @@ which reads, uses tools and answers with one JSON document validated like an `ll
 
 The prompt states the node's brief, its skills, its tool list and its write zone, static part
 first so every chunk of the node reads it from the cache (`prompts`). Every ask is rejected, so an
-agent node writes nothing on the host until the sandbox packet (L6). The turn cap is the harness's
-global Background `max_turns` until H2; the engine enforces the run and idle timeouts and the
-`max_tool_calls` runaway limit by interrupting the chat.
+agent node writes nothing on the host until the sandbox packet (L6). An agent has no turn,
+tool-call or run-time ceiling (AD-40): the runner's stuck detector (AD-16) reads `look` every tick
+and calls `stop` when the attempt stopped moving, loops or does not converge. A stopped chat is
+interrupted; a looping or flailing one then gets one summary turn and ends `stalled` with that
+summary.
+
+The warm-first gate is the runner's, at dispatch (AD-9): `hold` returns the event a chunk waits on
+before it starts, so a held chunk writes no `node_started` and is never an idle attempt. The first
+chunk of a node's iteration sets it when its first turn ends, so the others read its prompt cache.
 
 Each chat starts with `compact_at` and per-chat hooks (H15, H16). PostToolUse records each tool
 call as a child span as it happens, PreCompact writes the working state with `memory_note` and
@@ -30,12 +36,13 @@ from pathlib import Path
 from typing import Final
 
 from pydantic import JsonValue
-from qma.harness import ChatHooks
+from qma.harness import ChatHooks, StuckCall, stuck_call
 
 from qmx_engine.admission import Admission, setting
 from qmx_engine.definition.lint import redact
 from qmx_engine.ledger.events import EventKind
-from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok, Waiting
+from qmx_engine.ledger.signature import signature
+from qmx_engine.nodes.base import Failed, Look, NodeJob, NodeResult, Ok, Waiting
 from qmx_engine.nodes.llm import (
     BAD_OUTPUT,
     Usage,
@@ -70,7 +77,12 @@ SUMMARISE: Final = (
     "Your context is nearly full and this chat will be replaced. Write down your working state: "
     "what you read, what you found, and what is left to do. Reply with that summary only."
 )
-IDLE: Final = "the agent showed no progress for its idle limit"
+STALLED: Final = "stalled"
+IDLE: Final = "the agent showed no progress past its idle timeout"
+STUCK_SUMMARY: Final = (
+    "Stop now and call no tool. In a few sentences, say what you tried, what keeps happening, and "
+    "what you would try next. Reply with that summary only."
+)
 
 type JsonObject = dict[str, JsonValue]
 type Record = Callable[[EventKind, JsonObject], None]
@@ -88,11 +100,6 @@ def rules(tools: list[str], zone: str) -> list[str]:
 def names(parameters: JsonObject, key: str) -> list[str]:
     found = parameters.get(key)
     return [str(n) for n in found] if isinstance(found, list) else []
-
-
-def seconds(timeouts: JsonObject | None, key: str, default: float) -> float:
-    found = (timeouts or {}).get(key)
-    return float(found) if isinstance(found, int | float) else default
 
 
 class Agent:
@@ -118,19 +125,36 @@ class Agent:
         """Set once the first chunk of a node's iteration has ended a turn. Chunks sent together
         would each write the prompt cache and none would read it (measured on the plan), so the
         other chunks wait for the first."""
+        self.firsts: dict[str, asyncio.Event] = {}
+        """The event each first chunk sets, by its attempt's idempotency key."""
+        self.attempts: dict[str, Attempt] = {}
+
+    def hold(self, job: NodeJob) -> asyncio.Event | None:
+        """The event this chunk waits on before it is started, or None when it may start now."""
+        key = (job.node_id, job.iteration)
+        if key not in self.warm:
+            self.warm[key] = self.firsts[job.idempotency_key] = asyncio.Event()
+            return None
+        found = self.warm[key]
+        return None if found.is_set() else found
+
+    def look(self, key: str) -> Look:
+        attempt = self.attempts.get(key)
+        return Look(0, waiting=True) if attempt is None else attempt.look()
+
+    async def stop(self, key: str, why: str) -> None:
+        attempt = self.attempts.get(key)
+        if attempt is not None:
+            await attempt.halt(why)
 
     async def run(self, job: NodeJob) -> NodeResult:
-        key = (job.node_id, job.iteration)
-        first = key not in self.warm
-        if first:
-            self.warm[key] = asyncio.Event()
-        else:
-            await self.warm[key].wait()
+        warming = self.firsts.pop(job.idempotency_key, None)
         try:
-            return await self.attempt(job, self.warm[key] if first else None)
+            return await self.attempt(job, warming)
         finally:
-            if first:
-                self.warm[key].set()
+            if warming is not None:
+                warming.set()
+            self.attempts.pop(job.idempotency_key, None)
 
     async def attempt(self, job: NodeJob, warming: asyncio.Event | None) -> NodeResult:
         found = job.node_definition.get("parameters")
@@ -156,8 +180,10 @@ class Agent:
             schema,
             names(parameters, "skills"),
         )
-        attempt = Attempt(self, job, candidate, text, schema, parameters, warming)
+        attempt = Attempt(self, job, candidate, text, schema, warming)
+        self.attempts[job.idempotency_key] = attempt
         await self.admission.acquire()
+        attempt.queued = False
         try:
             return await attempt.run()
         except asyncio.CancelledError:
@@ -180,7 +206,6 @@ class Attempt:
         candidate: Candidate,
         text: str,
         schema: JsonObject,
-        parameters: JsonObject,
         warming: asyncio.Event | None = None,
     ) -> None:
         self.agent = agent
@@ -189,19 +214,8 @@ class Attempt:
         self.candidate = candidate
         self.static = text
         self.schema = schema
-        settings = agent.settings
-        cap = parameters.get("max_tool_calls")
-        self.cap = (
-            cap if isinstance(cap, int) else int(setting(settings, "agent.max_tool_calls", 200))
-        )
-        self.compact_at = setting(settings, "agent.compact_at", 0.4)
+        self.compact_at = setting(agent.settings, "agent.compact_at", 0.4)
         self.window = candidate.context_window or DEFAULT_WINDOW
-        self.run_seconds = seconds(
-            job.timeouts, "run_seconds", setting(settings, "timeout.agent.run", 1800)
-        )
-        self.idle_seconds = seconds(
-            job.timeouts, "idle_seconds", setting(settings, "timeout.agent.idle", 300)
-        )
         self.usage = Usage()
         self.chat = ""
         self.tools: dict[str, str] = {}
@@ -214,8 +228,17 @@ class Attempt:
         self.context: int | None = None
         self.fallback: str | None = None
         """Why the chat runs without `compact_at` and hooks, when it does."""
-        self.runaway = False
-        self.pending: set[asyncio.Task[None]] = set()
+        self.queued = True
+        """Waiting for an engine chat slot: a recorded wait, not an idle attempt."""
+        self.halted: str | None = None
+        """Why the stuck detector stopped the attempt, once it did."""
+        self.calls: dict[str, StuckCall] = {}
+        """Each finished tool call of the current turn, as the stuck detector compares it."""
+        self.judged = False
+        """Whether `calls` belong to a turn the detector may judge: off from a halt until the next
+        send, so a stop is not repeated over the calls that caused it."""
+        zone = job.workspace or str(agent.workspace)
+        self.masks = (zone, str(agent.workspace))
 
     def write(self, kind: EventKind, data: JsonObject) -> None:
         keys: JsonObject = {
@@ -251,12 +274,8 @@ class Attempt:
             turn = await self.turn(text)
             if not isinstance(turn, Turn):
                 return turn
-            if self.runaway:
-                detail = f"tool calls passed agent.max_tool_calls {self.cap}"
-                return Waiting("runaway", span=self.span() | {"detail": detail})
-            if turn.idle:
-                timeout = failed("timeout", IDLE, retryable=True)
-                return self.ended(replace(timeout, effect_state="unknown"))
+            if self.halted is not None:
+                return await self.stalled(self.halted)
             bad = ended_badly(turn, self.usage)
             if bad is not None:
                 return self.ended(bad)
@@ -265,6 +284,44 @@ class Attempt:
                 return Ok({"main": document}, span=self.span() | {"repaired": self.usage.turns > 1})
             text = repair(problem)
         return self.ended(failed("bad_output", BAD_OUTPUT, retryable=True))
+
+    def look(self) -> Look:
+        if self.queued or not self.chat:
+            return Look(0, waiting=self.queued, in_flight=not self.queued)
+        activity = self.agent.harness.activity(self.chat)
+        for step in activity.steps:
+            if step.result is not None and step.id not in self.calls:
+                self.calls[step.id] = stuck_call(
+                    step.name, step.arguments, step.result, error=step.error, masks=self.masks
+                )
+        return Look(
+            hash((self.usage.turns, activity.blocks, self.compactions)),
+            in_flight=activity.running and not activity.tool_open,
+            tool_open=activity.tool_open,
+            pid=activity.cli,
+            children_only=True,
+            calls=tuple(self.calls.values()) if self.judged else None,
+        )
+
+    async def halt(self, why: str) -> None:
+        """Interrupt the chat. Called again while the summary turn runs, it ends that turn too,
+        so a chat that loops through its summary turn still stops."""
+        self.halted = self.halted or why
+        self.judged = False
+        if self.chat:
+            await self.agent.harness.interrupt(self.chat)
+
+    async def stalled(self, why: str) -> NodeResult:
+        """The stuck detector stopped this attempt. A loop or a fixer that does not converge
+        gets one summary turn, which becomes the failure's output."""
+        if why == "idle":
+            result = failed(STALLED, IDLE, retryable=True, effect_state="unknown")
+            return self.ended(replace(result, span={"stalled": why}))
+        turn = await self.turn(STUCK_SUMMARY)
+        summary = (turn.text or "").strip() if isinstance(turn, Turn) else ""
+        summary = redact(summary) or "The agent wrote no summary."
+        result = Failed(STALLED, f"{why}: {summary}", signature(STALLED, why), retryable=False)
+        return self.ended(replace(result, span={"stalled": why, "output": summary}))
 
     def span(self) -> JsonObject:
         found = self.usage.span() | {"tool_calls": len(self.tools), "compactions": self.compactions}
@@ -315,7 +372,8 @@ class Attempt:
             return await self.agent.admission.refused(self.candidate, redact(str(refusal)))
         except ChatsFull as full:
             return self.ended(failed("chats_full", redact(str(full)), retryable=True))
-        turn = await harness.wait_turn(self.chat, timeout=self.run_seconds, idle=self.idle_seconds)
+        self.calls, self.judged = {}, True
+        turn = await harness.wait_turn(self.chat)
         if self.warming is not None:
             self.warming.set()
         self.usage.add(turn)
@@ -327,8 +385,6 @@ class Attempt:
             self.write("compacted", {"trigger": compaction(trigger), "at_fraction": None})
         self.compacted, self.hooked = bool(turn.compactions), 0
         self.context = turn.context
-        if len(self.tools) > self.cap:
-            self.runaway = True
         return turn
 
     def fraction(self, context: int | None) -> float | None:
@@ -399,11 +455,6 @@ class Attempt:
             return
         took = duration if isinstance(duration, int) else None
         self.called(ToolCall(tool_id, str(data.get("tool_name"))), took, "hook")
-        if len(self.tools) > self.cap and not self.runaway:
-            self.runaway = True
-            task = asyncio.get_running_loop().create_task(self.agent.harness.interrupt(self.chat))
-            self.pending.add(task)
-            task.add_done_callback(self.pending.discard)
 
     async def on_compact(self, data: Mapping[str, object]) -> None:
         trigger = compaction(data.get("trigger"))

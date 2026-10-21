@@ -14,8 +14,6 @@
   },
   "settings": {
     "timezone": "Europe/London",
-    "runaway": {"tokens": 300000, "agents": 8, "tool_calls": 20, "wall_seconds": 3600,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -26,7 +24,6 @@
     {"id": "news", "name": "Anything new?", "type": "monitor", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 180},
      "parameters": {"source": "scripts/news.py", "wake_when": "changed",
                     "fixture_ref": "fixtures/news.json"}},
     {"id": "items", "name": "Watchlist items", "type": "script", "typeVersion": 1,

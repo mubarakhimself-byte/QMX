@@ -12,8 +12,6 @@
   },
   "settings": {
     "timezone": "UTC",
-    "runaway": {"tokens": 400000, "agents": 6, "tool_calls": 60, "wall_seconds": 3600,
-                "on_runaway": "pause"},
     "on_error": "park",
     "caller_policy": "any",
     "memory": {"scopes": ["workflow"]}
@@ -24,7 +22,6 @@
     {"id": "feed", "name": "New paper ids?", "type": "monitor", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120},
      "parameters": {"source": "scripts/feed_ids.py", "wake_when": "changed",
                     "fixture_ref": "fixtures/feed.json"}},
     {"id": "new", "name": "Only the new ids", "type": "script", "typeVersion": 1,
@@ -32,7 +29,6 @@
     {"id": "fetch", "name": "Fetch titles and abstracts", "type": "script", "typeVersion": 1,
      "position": [660, 0], "effect": "none",
      "retry": {"max_tries": 4, "backoff_seconds": [300, 900, 1800], "retry_on": ["script_exit"]},
-     "timeout": {"run_seconds": 120},
      "parameters": {"script": "scripts/fetch.py", "fixture_ref": "fixtures/papers.json"}},
     {"id": "any", "name": "Any new papers?", "type": "rule", "typeVersion": 1,
      "position": [880, 0], "effect": "none", "parameters": {"expr": "items != []"}},
@@ -48,7 +44,7 @@
      "position": [1760, 0], "role": "reader", "effect": "none",
      "retry": {"max_tries": 2},
      "parameters": {"brief_ref": "prompts/read.md", "output_schema_ref": "schemas/cards.json",
-                    "tools": [], "max_turns": 4}},
+                    "tools": []}},
     {"id": "cards", "name": "All cards", "type": "join", "typeVersion": 1,
      "position": [1980, 0], "parameters": {}},
     {"id": "cite", "name": "Citations check", "type": "grader", "typeVersion": 1,

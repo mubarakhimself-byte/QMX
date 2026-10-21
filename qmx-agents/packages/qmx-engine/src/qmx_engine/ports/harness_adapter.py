@@ -12,6 +12,10 @@ An agent chat also passes `compact_at` and per-chat `ChatHooks` (H15, H16). The 
 both when it builds the `NewChat`, before any launch, and that refusal is `CompactRefused`, so the
 caller can fall back. A turn reports the tool calls and compactions its session blocks show, which
 the caller reconciles against what the hooks reported.
+
+`activity` is what the stuck detector reads while a turn runs: the tool calls the session blocks
+show since the latest send, with their arguments and results, whether the turn still runs, and the
+chat's CLI process, whose children run its tools.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import asyncio
 import contextlib
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal, Protocol, cast
@@ -38,6 +42,7 @@ from qma.harness import (
     Reject,
     SessionId,
 )
+from qma.launcher import pid_path, read_pid_record
 
 from qmx_engine.roles import PLAN
 
@@ -107,12 +112,36 @@ class Turn:
     """The context the turn's last model call read: input plus cache read and cache write."""
 
 
+@dataclass(frozen=True, slots=True)
+class ToolStep:
+    """One tool call the session shows: `result` is None while the call is open."""
+
+    id: str
+    name: str
+    arguments: JsonValue
+    result: str | None = None
+    error: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class Activity:
+    blocks: int
+    """Blocks the session wrote since the latest send."""
+    steps: tuple[ToolStep, ...] = ()
+    running: bool = False
+    """The turn has not ended."""
+    cli: int | None = None
+    """The chat's CLI process id, when it runs."""
+
+    @property
+    def tool_open(self) -> bool:
+        return any(step.result is None for step in self.steps)
+
+
 class HarnessPort(Protocol):
     def profiles(self) -> frozenset[str]:
         """The profiles a chat can run on now: the plan and every configured provider row."""
         ...
-
-    def max_live_chats(self) -> int: ...
 
     async def plan_use(self) -> PlanUse:
         """The plan's use, metered first when the ledger holds no five-hour reading (HG2)."""
@@ -132,12 +161,21 @@ class HarnessPort(Protocol):
 
     async def send(self, chat: str, text: str) -> None: ...
 
-    async def wait_turn(self, chat: str, *, timeout: float, idle: float | None = None) -> Turn: ...
+    async def wait_turn(
+        self, chat: str, *, timeout: float | None = None, idle: float | None = None
+    ) -> Turn:
+        """The turn once it ends. `timeout` and `idle` interrupt it; an engine attempt passes
+        neither, since the stuck detector decides when an attempt stopped moving."""
+        ...
 
     async def interrupt(self, chat: str) -> None: ...
 
     def context(self, chat: str) -> int | None:
         """The context the chat's latest model call read, as `Turn.context`."""
+        ...
+
+    def activity(self, chat: str) -> Activity:
+        """What the chat shows since the latest send, while its turn runs."""
         ...
 
 
@@ -150,10 +188,6 @@ class HarnessAdapter:
     def profiles(self) -> frozenset[str]:
         rows = self.harness.control.settings_get("providers")
         return frozenset({PLAN, *rows})
-
-    def max_live_chats(self) -> int:
-        found = self.harness.control.settings_get("budgets").get("max_live_chats", 4)
-        return found if isinstance(found, int) and not isinstance(found, bool) else 4
 
     async def plan_use(self) -> PlanUse:
         page = await self.harness.usage()
@@ -218,10 +252,12 @@ class HarnessAdapter:
         except ChatTableFull as full:
             raise ChatsFull(str(full)) from None
 
-    async def wait_turn(self, chat: str, *, timeout: float, idle: float | None = None) -> Turn:
+    async def wait_turn(
+        self, chat: str, *, timeout: float | None = None, idle: float | None = None
+    ) -> Turn:
         after, rows = self.marks.get(chat, (0, 0))
         answered: set[int] = set()
-        deadline = time.monotonic() + timeout
+        deadline = None if timeout is None else time.monotonic() + timeout
         seen, quiet_since = 0, time.monotonic()
         while True:
             blocks = self._blocks(chat, after)
@@ -241,7 +277,7 @@ class HarnessAdapter:
                 seen, quiet_since = len(blocks), now
             idled = idle is not None and now - quiet_since > idle
             done = self._turn(chat) == "idle"
-            if done or now > deadline or idled:
+            if done or (deadline is not None and now > deadline) or idled:
                 break
             await asyncio.sleep(POLL_SECONDS)
         if not done:
@@ -276,6 +312,17 @@ class HarnessAdapter:
 
     def context(self, chat: str) -> int | None:
         return context_of(self._journal(chat))
+
+    def activity(self, chat: str) -> Activity:
+        after, _ = self.marks.get(chat, (0, 0))
+        blocks = self._blocks(chat, after)
+        record = read_pid_record(pid_path(self.harness.home.procs_dir, chat))
+        return Activity(
+            len(blocks),
+            tool_steps(blocks),
+            self._turn(chat) != "idle",
+            None if record is None else record.cli_pid,
+        )
 
     def _turn(self, chat: str) -> str | None:
         path = self.harness.home.chats_dir / f"{chat}.json"
@@ -335,6 +382,27 @@ def tool_calls(blocks: list[JsonObject]) -> tuple[ToolCall, ...]:
         elif state == "error":
             errors[tool_id] = str(content.get("result", ""))[:200]
     return tuple(ToolCall(i, n, errors.get(i)) for i, n in names.items())
+
+
+def tool_steps(blocks: list[JsonObject]) -> tuple[ToolStep, ...]:
+    """Each tool call the `tool` blocks show, in the order it started, with its result once a
+    later block with the same id ended it."""
+    started: dict[str, ToolStep] = {}
+    for block in blocks:
+        content = block.get("content")
+        if block.get("type") != "tool" or not isinstance(content, dict):
+            continue
+        tool_id, state = content.get("id"), content.get("state")
+        if not isinstance(tool_id, str):
+            continue
+        name = content.get("name")
+        if state == "started" and isinstance(name, str):
+            started.setdefault(tool_id, ToolStep(tool_id, name, content.get("arguments")))
+        elif state in ("finished", "error") and tool_id in started:
+            result = content.get("result")
+            text = result if isinstance(result, str) else json.dumps(result)
+            started[tool_id] = replace(started[tool_id], result=text, error=state == "error")
+    return tuple(started.values())
 
 
 def model_calls(lines: list[str]) -> list[JsonObject]:

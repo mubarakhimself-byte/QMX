@@ -71,9 +71,14 @@ def test_a_script_sees_no_key_no_claude_name_and_no_plan_path(
     assert ("qmx/" in values, plan.lower() in values.lower()) == (False, False)
 
 
-def test_a_script_past_its_timeout_is_killed_and_fails_retryable(tmp_path: Path) -> None:
+QUICK = {"timeout.grace": 1, "scheduler.tick": 0.2}
+
+
+def test_a_script_with_no_cpu_or_io_past_its_idle_window_is_killed_and_fails_retryable(
+    tmp_path: Path,
+) -> None:
     sleeper = node("sleep", "script", script="scripts/sleep.py")
-    sleeper["timeout"] = {"run_seconds": 1}
+    sleeper["timeout"] = {"idle_seconds": 1}
     sleeper["retry"] = {"max_tries": 1}
     root = folder(
         tmp_path / "wf",
@@ -83,12 +88,12 @@ def test_a_script_past_its_timeout_is_killed_and_fails_retryable(tmp_path: Path)
     )
     began = time.monotonic()
 
-    outcome, events = run_folder(root, tmp_path / "home")
+    outcome, events = run_folder(root, tmp_path / "home", None, **QUICK)
 
     failed = next(e.data for e in events if e.kind == "node_failed")
     assert outcome.status == "failed"
     assert (failed["code"], failed["retryable"], failed["effect_state"]) == (
-        "timeout",
+        "stalled",
         True,
         "unknown",
     )
