@@ -338,7 +338,7 @@ ignore = [
 # QMB composition-root sandbox runner: stdlib process management (B-5).
 # Dynamically-evasive bots are out of V1 scope; this is not a restricted interpreter.
 "qmb/src/qmb/host/runner.py" = ["S404"]
-# QMB host CLI door spawns python -m qma.daemon (Story 67.1). Not qmb.host (CT-33).
+# QMB host CLI door runs python -m qmx_host. Not qmb.host (CT-33).
 "qmb/src/qmb/doors/cli/host.py" = ["S404"]
 # QMB orchestrator is the one impure owner of stdlib process-per-run spawn (B-5).
 "qmb/src/qmb/orchestrator/*" = ["S404"]
