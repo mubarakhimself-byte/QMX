@@ -56,7 +56,9 @@ class FakeRuntime(Supervisor):
     def _install_environment(self, definition: Definition, image: Path) -> None:
         pass
 
-    def start(self, app_id: str, *, definition_hash: str | None = None) -> Document:
+    def start(
+        self, app_id: str, *, definition_hash: str | None = None, profile: str | None = None
+    ) -> Document:
         self.running = definition_hash
         return self.status(app_id)
 
