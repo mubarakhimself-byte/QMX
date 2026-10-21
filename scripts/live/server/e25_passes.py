@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import http.client
+import json
 import subprocess
 import time
-import urllib.error
-import urllib.request
+import urllib.parse
 from pathlib import Path
 
 SERVER: str = "root@qmx-server"
@@ -28,7 +29,8 @@ ADDRESS: str = "100.105.172.63"
 SRC: str = "/srv/qmx/bld/rtrp/src"
 NODE_LOG: str = "/srv/qmx/bld/rtrp/logs/e25-node.log"
 PORT: int = 18201
-WAIT_S: float = 30.0
+UNIT: str = "rtrp-e25"
+WAIT_S: float = 90.0
 
 
 def log(path: Path, line: str) -> None:
@@ -38,13 +40,19 @@ def log(path: Path, line: str) -> None:
     print(line, flush=True)
 
 
-def ssh(command: str, *, check: bool = False) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["ssh", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", SERVER, command],
-        capture_output=True,
-        text=True,
-        check=check,
-    )
+def ssh(command: str) -> subprocess.CompletedProcess[str]:
+    """One remote command with a hard deadline. ssh without one can wait on a channel a
+    background process still holds, which is the failure that once lost this lane a run."""
+    try:
+        return subprocess.run(
+            ["ssh", "-i", SSH_KEY, "-o", "StrictHostKeyChecking=no", SERVER, command],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as expired:
+        return subprocess.CompletedProcess([], 1, "", f"ssh timed out: {expired}")
 
 
 def serve(port: int, secret: str, path: Path) -> int:
@@ -65,31 +73,35 @@ def serve(port: int, secret: str, path: Path) -> int:
 
 
 def ask(url: str, *, bearer: str = "", method: str = "GET", body: str = "") -> tuple[int, str]:
-    request = urllib.request.Request(url, method=method)
-    if bearer:
-        request.add_header("authorization", f"Bearer {bearer}")
-    if body:
-        request.add_header("content-type", "application/json")
-        request.data = body.encode("utf-8")
+    """One HTTP request with its own connection and its own deadline. `http.client` and not
+    `urllib`: the opener's proxy and redirect machinery adds paths that can wait past a timeout."""
+    target = urllib.parse.urlsplit(url)
+    connection = http.client.HTTPConnection(target.hostname or "", target.port or 80, timeout=8)
+    headers = {"authorization": f"Bearer {bearer}"} if bearer else {}
     try:
-        with urllib.request.urlopen(request, timeout=10) as answer:
-            return answer.status, answer.read().decode("utf-8")
-    except urllib.error.HTTPError as error:
-        return error.code, error.read().decode("utf-8")
+        connection.request(method, target.path, body=body or None, headers=headers)
+        answer = connection.getresponse()
+        return answer.status, answer.read().decode("utf-8")
+    finally:
+        connection.close()
 
 
 def wait_for_health(url: str, path: Path) -> bool:
     deadline = time.monotonic() + WAIT_S
+    last = "no attempt yet"
     while time.monotonic() < deadline:
         try:
-            status, _ = ask(url)
-        except OSError:
+            status, body = ask(url)
+        except OSError as error:
+            last = f"{type(error).__name__}: {error}"
             time.sleep(0.5)
             continue
         if status == 200:
+            log(path, f"health 200 after {WAIT_S - (deadline - time.monotonic()):.1f} s")
             return True
+        last = f"status {status}: {body[:120]}"
         time.sleep(0.5)
-    log(path, f"FAIL the node never answered {url}")
+    log(path, f"FAIL the node never answered {url} (last: {last})")
     return False
 
 
@@ -111,14 +123,20 @@ def main() -> int:
     authority = PassAuthority(secret=secret)
     base = f"http://{ADDRESS}:{args.port}"
     ssh(f"mkdir -p {Path(NODE_LOG).parent} && rm -f {NODE_LOG}")
+    log(path, f"run {time.strftime('%Y-%m-%dT%H:%M:%S')} port {args.port}")
+    # A transient systemd unit, not a shell background job: ssh keeps its channel open for any
+    # process that inherited it, and `setsid`/`nohup` did not release it here. systemd-run returns
+    # in a second, runs the node as `prbs`, and gives the lane one word to stop it with.
+    ssh(f"systemctl stop {UNIT} 2>/dev/null || true")
     started = ssh(
-        f"cd {SRC} && QMX_PASS_SECRET={secret.hex()} nohup runuser -u prbs -- env "
-        f"HOME=/srv/qmx/bld/rtrp/home /srv/qmx/bld/rtrp/src/qmx-agents/.venv/bin/python "
-        f"scripts/live/server/e25_passes.py --serve --port {args.port} --log {NODE_LOG} "
-        ">/dev/null 2>&1 & echo started"
+        f"systemd-run --collect --uid=prbs --gid=prbs --working-directory={SRC} "
+        "--setenv=HOME=/srv/qmx/bld/rtrp/home "
+        f"--setenv=QMX_PASS_SECRET={secret.hex()} --unit={UNIT} "
+        "/srv/qmx/bld/rtrp/src/qmx-agents/.venv/bin/python "
+        f"scripts/live/server/e25_passes.py --serve --port {args.port} --log {NODE_LOG}"
     )
-    if "started" not in started.stdout:
-        log(path, f"FAIL the node end did not start: {started.stderr.strip()}")
+    if "Running as unit" not in started.stdout + started.stderr:
+        log(path, f"FAIL the node end did not start: {started.stdout} {started.stderr}")
         return 1
     try:
         if not wait_for_health(f"{base}/v1/health", path):
@@ -139,6 +157,12 @@ def main() -> int:
         minted, bearer = mint()
         status, _ = ask(f"{base}/v1/health")
         checks = []
+        # Each misuse gets its own run, because an ended run ends every pass that names it.
+        _, admin = mint(
+            run="run-e25-admin",
+            read_scope=("facts", "vault", "passes", "runs"),
+            write_prefix="",
+        )
         checks.append(("allowed pass reads facts", ask(f"{base}/v1/facts", bearer=bearer)[0] == 200))
         checks.append(("absent", ask(f"{base}/v1/facts")[0] == 403))
         checks.append(("malformed", ask(f"{base}/v1/facts", bearer="qmx1.nope")[0] == 403))
@@ -146,10 +170,22 @@ def main() -> int:
         checks.append(
             ("bad_mac", ask(f"{base}/v1/facts", bearer=other.bearer(minted))[0] == 403)
         )
-        authority.revocations.revoke(minted.id)
-        checks.append(("revoked", ask(f"{base}/v1/facts", bearer=bearer)[0] == 403))
-        authority.end_run("run-e25")
-        checks.append(("owner_ended", ask(f"{base}/v1/facts", bearer=bearer)[0] == 403))
+        revoked_pass, revoked_bearer = mint(run="run-e25-revoked")
+        ask(
+            f"{base}/v1/passes",
+            bearer=admin,
+            method="POST",
+            body=json.dumps({"revoke": revoked_pass.id}),
+        )
+        checks.append(("revoked", ask(f"{base}/v1/facts", bearer=revoked_bearer)[0] == 403))
+        ended_pass, ended_bearer = mint(run="run-e25-ended")
+        ask(
+            f"{base}/v1/passes",
+            bearer=admin,
+            method="POST",
+            body=json.dumps({"end_run": "run-e25-ended"}),
+        )
+        checks.append(("owner_ended", ask(f"{base}/v1/facts", bearer=ended_bearer)[0] == 403))
         _, short = mint(ttl_s=-1.0)
         checks.append(("expired", ask(f"{base}/v1/facts", bearer=short)[0] == 403))
         _, outside = mint(read_scope=("vault",))
@@ -181,7 +217,7 @@ def main() -> int:
         log(path, f"health {status}")
         return 0 if not codes else 1
     finally:
-        ssh("pkill -f 'e25_passes.py --serve' || true")
+        ssh(f"systemctl stop {UNIT} 2>/dev/null || true")
         tail = ssh(f"tail -n 20 {NODE_LOG}")
         if tail.stdout.strip():
             for line in tail.stdout.strip().splitlines():
