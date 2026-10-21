@@ -478,6 +478,29 @@ what a mini app or a workflow asks for a model call: the router leases an accoun
 classifies and journals the request, and no key ever reaches the app."""
 
 
+INSTANCE_ROWS: Final = (
+    OperationSpec(
+        toolset="apps_admin",
+        op="move",
+        binds="app_server",
+        target="move",
+        approval="manage",
+        description=(
+            "Move one app instance to another machine: snapshot its volume, restore it there, "
+            "flip its home and hand the volume lease over, so its next run happens on the "
+            "machine it moved to."
+        ),
+        reversibility="irreversible",
+        state="instance",
+    ),
+)
+"""The move (AD-64). It is served against the app's own volume by the apps supervisor's
+`snapshot_instance` and `restore_instance`, which is why it binds to the app server and not to a
+control method: the snapshot, the restore, the home flip and the lease handover are one act on one
+volume. A caller reaches it as `apps_admin_move`, `MANAGE` because a move takes the instance away
+from the machine that had it."""
+
+
 def control_rows() -> tuple[OperationSpec, ...]:
     """Every `@operation` row on `ControlService`, in definition order."""
     from qmx_control.service import ControlService  # noqa: PLC0415
@@ -564,6 +587,7 @@ def rows(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
         *CONTEXT_ROWS,
         *MEMORY_ROWS,
         *ROUTER_ROWS,
+        *INSTANCE_ROWS,
         *apps,
     )
     check(found)

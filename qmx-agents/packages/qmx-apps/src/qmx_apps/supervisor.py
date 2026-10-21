@@ -30,21 +30,54 @@ from pydantic import JsonValue
 from qma.core.barriers.descriptors import check_descriptor
 
 from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
+from qmx_apps.backup import checksum, snapshot
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust, image_files, image_hash
 from qmx_apps.road import Road
 from qmx_apps.store import open_store
-from qmx_apps.volume import Volume, VolumeLease
+from qmx_apps.volume import Lease, Volume, VolumeLease
 from qmx_apps.windows_job import WindowsJob
 
 T = TypeVar("T")
 type EventSink = Callable[[str, Document], None]
+
+
+def _snapshot_files(root: Path) -> list[Path]:
+    """Every file a move carries, in one order, leaving out its own manifest."""
+    return [path for path in sorted(root.rglob("*")) if path.is_file() and path.name != SNAPSHOT]
+
+
+def _verify_snapshot(root: Path, app_id: str, snapshot_id: str) -> Document:
+    """A snapshot's manifest, after its identity and every checksum is checked."""
+    try:
+        manifest = cast(Document, json.loads((root / SNAPSHOT).read_text(encoding="utf-8")))
+        if manifest["app_id"] != app_id or manifest["snapshot_id"] != snapshot_id:
+            raise ValueError("snapshot identity differs")
+        actual = {
+            path.relative_to(root).as_posix(): checksum(path) for path in _snapshot_files(root)
+        }
+        if actual != manifest["checksums"] or not actual:
+            raise ValueError("snapshot checksums differ")
+        if not isinstance(manifest.get("lease"), dict):
+            raise ValueError("snapshot carries no lease")
+    except OSError, ValueError, KeyError, TypeError:
+        raise AppError(
+            "invalid_snapshot", "Snapshot identity, checksums or lease failed.", 409
+        ) from None
+    return manifest
+
+
 JOB_QUEUE: Final = "data/jobs"
 """Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
 JOB_POLL_SECONDS: Final = 0.25
 PROFILES: Final = "profiles"
 """One folder per profile under the app's own `data/` (AD-64). The host's files, the heartbeat
 and the job queue, stay at `data/` because the app's bootstrap writes them there."""
+MOVES: Final = "moves"
+"""Where a move's snapshot waits for the machine that takes the instance: `moves/<app>/<id>`."""
+SNAPSHOT: Final = "snapshot.json"
+"""A move's manifest: the app, the machine it came from and will go to, the lease generation and
+one checksum per file. It is left out of its own checksums."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +101,39 @@ class Pin:
             if isinstance(pack, str) and isinstance(version, str):
                 return cls(pack, version)
         raise AppError("invalid_pin", "A pin is {pack, version}, two strings.")
+
+
+@dataclass(frozen=True, slots=True)
+class Move:
+    """One instance's snapshot on its way from the machine that held it to the machine that takes
+    it (AD-64). `lease` is the handover the receiving machine must present before it writes."""
+
+    app_id: str
+    snapshot_id: str
+    folder: Path
+    origin: str
+    to: str
+    definition_hash: str
+    lease: Lease
+    files: int
+    bytes: int
+
+    @property
+    def generation(self) -> int:
+        return self.lease.generation
+
+    def document(self) -> Document:
+        return {
+            "app_id": self.app_id,
+            "snapshot_id": self.snapshot_id,
+            "folder": str(self.folder),
+            "from": self.origin,
+            "to": self.to,
+            "definition_hash": self.definition_hash,
+            "lease": self.lease.document(),
+            "files": self.files,
+            "bytes": self.bytes,
+        }
 
 
 @dataclass
@@ -147,11 +213,13 @@ class Supervisor:
         proof_mode: str = "",
         call_depth: int | None = None,
         library: LibrarySink | None = None,
+        placement: str = "pc",
     ) -> None:
         """`call_depth` is the host's bound on a ring of asks (AD-64): the longest chain of app
         operations that may sit behind one ask. There is no default number, and a host that sets
         none is unbounded. `library` is where an app's landings go; without one they stay in the
-        volume and the index here."""
+        volume and the index here. `placement` is the machine this store is: the home every app
+        instance here runs on, and the machine a move hands a volume to or takes it from."""
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.catalog = self.home / "apps.db"
@@ -160,6 +228,7 @@ class Supervisor:
         self.secret_getter = secret_getter
         self.proof_mode = proof_mode
         self.call_depth = call_depth
+        self.placement = placement
         self._proof_images: dict[str, Definition] = {}
         self.environments = self.home / "environments"
         self.road = Road(self)
@@ -174,7 +243,8 @@ class Supervisor:
                 "UNIQUE(id,version)); CREATE TABLE IF NOT EXISTS selected "
                 "(id TEXT PRIMARY KEY, hash TEXT); CREATE TABLE IF NOT EXISTS runtime "
                 "(id TEXT PRIMARY KEY, data TEXT); CREATE TABLE IF NOT EXISTS active "
-                "(id TEXT PRIMARY KEY, hash TEXT, revision TEXT);"
+                "(id TEXT PRIMARY KEY, hash TEXT, revision TEXT); CREATE TABLE IF NOT EXISTS homes "
+                "(id TEXT PRIMARY KEY, placement TEXT, generation INTEGER, moved_at TEXT);"
             )
 
     def attach_library(self, library: LibrarySink | None) -> None:
@@ -406,6 +476,13 @@ class Supervisor:
                 return existing.document()
             definition = self._definition(app_id)
             self.check_profile(definition, profile)
+            home = self.home_of(app_id)
+            if home != self.placement:
+                raise AppError(
+                    "not_home",
+                    f"{app_id} lives on {home}; this machine is {self.placement}.",
+                    409,
+                )
             if definition_hash is None and not self.proof_mode:
                 from qmx_apps.road.history import history, project  # noqa: PLC0415
 
@@ -426,7 +503,9 @@ class Supervisor:
                 definition = checked_definition(self.home, app_id, definition_hash)
             volume = Volume(self.home, app_id)
             lease = VolumeLease(self.home, app_id)
-            instance = Instance(definition, volume, lease, tier=self.tier, profile=profile)
+            instance = Instance(
+                definition, volume, lease, tier=self.tier, profile=profile, node=self.placement
+            )
             try:
                 volume.create(agents=bool(definition.manifest.entrypoints.agents))
                 instance.data.mkdir(parents=True, exist_ok=True)
@@ -919,6 +998,134 @@ class Supervisor:
         if found is None:
             raise AppError("unknown_output", f"{app_id} has not landed {output}.", 404)
         return found
+
+    def home_of(self, app_id: str) -> str:
+        """The one machine that owns this app instance's volume (AD-64): the placement a move
+        recorded for it, or this machine when nothing has moved it."""
+        with closing(sqlite3.connect(self.catalog)) as db:
+            row = db.execute("SELECT placement FROM homes WHERE id=?", (app_id,)).fetchone()
+        return str(row[0]) if row else self.placement
+
+    def snapshot_instance(self, app_id: str, *, to: str) -> Move:
+        """Stop the instance and write a verified snapshot of its volume for the machine `to`,
+        then hand it the volume lease and record it as the instance's home. The old machine's copy
+        stays where it is and is never resumed: it lost the lease by a generation."""
+        definition = self._definition(app_id)
+        here = self.home_of(app_id)
+        if here != self.placement:
+            raise AppError("not_home", f"{app_id} is homed on {here}, not {self.placement}.", 409)
+        self.stop(app_id)
+        volume = Volume(self.home, app_id)
+        if not volume.check_write("app.db").is_file():
+            raise AppError("volume_missing", "Start the app once before moving it.", 409)
+        snapshot_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ") + "-" + uuid.uuid4().hex[:8]
+        folder = self.home / MOVES / app_id / snapshot_id
+        shutil.rmtree(folder, ignore_errors=True)
+        snapshot(volume, folder)
+        road_lease = VolumeLease(self.home / "road-locks", app_id)
+        try:
+            # The authority journal and blobs must travel at one serialized point.
+            if (volume.root / "road").is_dir():
+                shutil.copytree(
+                    volume.root / "road", folder / "road", ignore=shutil.ignore_patterns("*.lock")
+                )
+        finally:
+            road_lease.close()
+        files = _snapshot_files(folder)
+        manifest: Document = {
+            "app_id": app_id,
+            "snapshot_id": snapshot_id,
+            "definition_hash": definition.hash,
+            "from": self.placement,
+            "to": to,
+            "created_at": datetime.now(UTC).isoformat(),
+            "checksums": {path.relative_to(folder).as_posix(): checksum(path) for path in files},
+        }
+        (folder / SNAPSHOT).write_text(json.dumps(manifest), encoding="utf-8")
+        lease = VolumeLease(self.home, app_id)
+        try:
+            handed = lease.handover(to)
+        finally:
+            lease.close()
+        manifest["lease"] = handed.document()
+        (folder / SNAPSHOT).write_text(json.dumps(manifest), encoding="utf-8")
+        self._record_home(app_id, to, handed.generation)
+        self._log(
+            app_id,
+            "moved",
+            {
+                "snapshot_id": snapshot_id,
+                "from": self.placement,
+                "to": to,
+                "generation": handed.generation,
+            },
+        )
+        return Move(
+            app_id,
+            snapshot_id,
+            folder,
+            self.placement,
+            to,
+            definition.hash,
+            handed,
+            len(files),
+            sum(path.stat().st_size for path in files),
+        )
+
+    def restore_instance(self, app_id: str, snapshot_id: str, *, folder: str | Path) -> Document:
+        """Take one instance's snapshot as this machine's volume: verify every checksum, take the
+        lease generation the old machine handed over, and record this machine as the home. A
+        snapshot for another app, or a lease another machine has already taken, is refused."""
+        self._definition(app_id)
+        root = Path(folder)
+        manifest = _verify_snapshot(root, app_id, snapshot_id)
+        handed = Lease.parse(cast("Document", manifest["lease"]))
+        if handed is None:
+            raise AppError("invalid_snapshot", "The snapshot carries no lease.", 409)
+        volume = Volume(self.home, app_id)
+        lease = VolumeLease(self.home, app_id, holder=self.placement, expect=handed)
+        try:
+            staging = root.parent / f"{snapshot_id}.restore"
+            shutil.rmtree(staging, ignore_errors=True)
+            staging.mkdir(parents=True)
+            for path in _snapshot_files(root):
+                target = staging / path.relative_to(root)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(path, target)
+            volume.root.parent.mkdir(parents=True, exist_ok=True)
+            if volume.root.is_dir():
+                replaced = self.home / MOVES / app_id / f"{snapshot_id}.replaced"
+                shutil.rmtree(replaced, ignore_errors=True)
+                replaced.parent.mkdir(parents=True, exist_ok=True)
+                volume.root.replace(replaced)
+            staging.replace(volume.root)
+        finally:
+            lease.close()
+        generation = handed.generation
+        self._record_home(app_id, self.placement, generation)
+        files = _snapshot_files(volume.root)
+        self._log(
+            app_id,
+            "restored",
+            {"snapshot_id": snapshot_id, "placement": self.placement, "generation": generation},
+        )
+        return {
+            "app_id": app_id,
+            "snapshot_id": snapshot_id,
+            "placement": self.placement,
+            "generation": generation,
+            "files": len(files),
+            "bytes": sum(path.stat().st_size for path in files),
+        }
+
+    def _record_home(self, app_id: str, placement: str, generation: int) -> None:
+        with closing(sqlite3.connect(self.catalog)) as db, db:
+            db.execute(
+                "INSERT INTO homes VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                "placement=excluded.placement, generation=excluded.generation, "
+                "moved_at=excluded.moved_at",
+                (app_id, placement, generation, datetime.now(UTC).isoformat()),
+            )
 
     def contract_problems(
         self, definition: Definition, previous: Definition | None = None
