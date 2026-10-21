@@ -32,10 +32,11 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import PermissionResultDeny
@@ -47,10 +48,13 @@ from qma.harness.launch import (
     Budgets,
     ChatConfig,
     ChatKind,
+    ChatPermissions,
     Child,
+    Home,
     Interactive,
     LaunchRefused,
     PlanLaunch,
+    SubAgent,
     argv_length,
     build_options,
     launch_env,
@@ -144,6 +148,11 @@ class QmxHome:
     @property
     def agent_memory_dir(self) -> Path:
         return self.root / "agent-memory"
+
+    def launch_dir(self, chat: SessionId) -> Path:
+        """The settings and system text files of the chat's current launch. Under `chats/`,
+        which the gate protects, so no agent edits what its next launch reads."""
+        return self.chats_dir / chat
 
     def memory_dir(self, workspace: Path) -> Path:
         """Auto memory for launches in `workspace`. Not a protected path, so agents read and
@@ -414,34 +423,154 @@ def config_change_hook(launcher: Path) -> dict[str, object]:
 
 
 def code_settings(
-    user: ClaudeSettings, *, launcher: Path, workspace: Path, memory_dir: Path
+    user: ClaudeSettings,
+    *,
+    launcher: Path,
+    workspace: Path,
+    memory_dir: Path,
+    allow: Sequence[str] = (),
+    deny: Sequence[str] = (),
+    claude_hooks: Mapping[str, object] = MappingProxyType({}),
+    auto_memory: bool = True,
 ) -> str:
-    """The one inline JSON string for the SDK `settings` option, rendered per launch. Pure.
-    The operator's keys, the workspace's remembered rules, then the fixed values, which win."""
+    """The settings document of one launch, as JSON, rendered per launch. Pure.
+    The operator's keys, the workspace's remembered rules and the chat's own `allow`, `deny`
+    and `claude_hooks`, then the fixed values, which win."""
     document: dict[str, Any] = {
         key: value
         for key, value in json.loads(json.dumps(user.raw)).items()
         if key not in QMX_ONLY_KEYS
     }
-    remembered = user.remembered(workspace)
-    if remembered:
-        permissions: dict[str, Any] = document.setdefault("permissions", {})
-        allow: list[str] = permissions.setdefault("allow", [])
-        allow.extend(rule for rule in remembered if rule not in allow)
+    for name, rules in (("allow", [*user.remembered(workspace), *allow]), ("deny", deny)):
+        if rules:
+            permissions: dict[str, Any] = document.setdefault("permissions", {})
+            listed: list[str] = permissions.setdefault(name, [])
+            listed.extend(rule for rule in rules if rule not in listed)
     document["env"] = {
         "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": SPAWN_DEPTH_DEFAULT,
         **document.get("env", {}),
     }
-    document["hooks"] = {
-        **document.get("hooks", {}),
-        "ConfigChange": [config_change_hook(launcher)],
+    hooks: dict[str, list[Any]] = {
+        event: list(groups) for event, groups in document.get("hooks", {}).items()
     }
+    for event, groups in json.loads(json.dumps(dict(claude_hooks))).items():
+        hooks.setdefault(event, []).extend(groups)
+    document["hooks"] = {**hooks, "ConfigChange": [config_change_hook(launcher)]}
     document |= {
         "forceLoginMethod": "claudeai",
         "cleanupPeriodDays": CLEANUP_PERIOD_DAYS,
         "autoMemoryDirectory": memory_dir.as_posix(),
     }
+    if not auto_memory:
+        document["autoMemoryEnabled"] = False
     return json.dumps(document, sort_keys=True, separators=(",", ":"))
+
+
+def check_hooks(value: Mapping[str, object]) -> None:
+    """Refuse hooks outside the settings `hooks` shape or with a key `HOOK_KEYS` does not list."""
+    _hooks(dict(value))
+
+
+def check_rules(rules: Sequence[str], key: str) -> None:
+    """Refuse an entry that is not a permission rule."""
+    _strings(list(rules), key, _RULE)
+
+
+SECRET_SHAPES: Final = re.compile(
+    "|".join(
+        (
+            r"sk-(?:or-v1|ant|proj|svcacct|admin)-[A-Za-z0-9_-]{16,}",
+            r"AKIA[0-9A-Z]{16}",
+            r"gh[pousr]_[A-Za-z0-9]{36,}",
+            r"github_pat_[A-Za-z0-9_]{22,}",
+            r"xox[abposr]-[0-9A-Za-z-]{10,}",
+            r"AIza[0-9A-Za-z_-]{35}",
+            r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]*",
+            r"-----BEGIN[A-Z ]*PRIVATE KEY-----",
+            r"(?<![A-Za-z0-9_-])sk-(?=[A-Za-z_-]*[0-9])[A-Za-z0-9_-]{20,}",
+            r"(?<![0-9a-f])[0-9a-f]{32}\.[A-Za-z0-9]{16}(?![A-Za-z0-9])",
+        )
+    )
+)
+"""The key shapes of SEC1A's one redaction seam (`qmx_engine.ledger.redact.SHAPES`), held here
+because the engine imports the harness, not the other way round."""
+CREDENTIAL_NAME: Final = re.compile(r"(?i)key|token|secret|passw|auth|credential|bearer|cookie")
+"""A name under which a value is a credential, so the value must be a keyring reference."""
+KEYRING_REF: Final = re.compile(r"qmx/[A-Za-z0-9._/-]+")
+MASK: Final = "[redacted]"
+
+
+def _secret_paths(value: object, path: str) -> Iterator[str]:
+    """Where in `value` a string, key or value, has a key's shape."""
+    match value:
+        case str() if SECRET_SHAPES.search(value):
+            yield path
+        case Mapping():
+            for key, item in cast("Mapping[object, object]", value).items():
+                yield from _secret_paths(str(key), path)
+                yield from _secret_paths(item, f"{path}.{key}")
+        case list() | tuple():
+            for n, item in enumerate(cast("Sequence[object]", value)):
+                yield from _secret_paths(item, f"{path}[{n}]")
+        case _:
+            return
+
+
+def _literal_credentials(table: object, path: str) -> Iterator[str]:
+    """Credential-named entries of `table` whose value is not a `qmx/*` keyring reference."""
+    if not isinstance(table, Mapping):
+        return
+    for name, value in cast("Mapping[object, object]", table).items():
+        if CREDENTIAL_NAME.search(str(name)) and not (
+            isinstance(value, str) and KEYRING_REF.fullmatch(value)
+        ):
+            yield f"{path}.{name}"
+
+
+def check_secrets(
+    mcp_servers: Mapping[str, object],
+    policy_args: Mapping[str, object],
+    claude_hooks: Mapping[str, object],
+) -> None:
+    """Refuse chat options that would put a literal secret on the chat record: any string with
+    a key's shape, and any credential-named server `env` or `headers` entry, server
+    `credential_ref` or policy argument that is not a `qmx/*` keyring reference."""
+    found = [
+        *_secret_paths(dict(mcp_servers), "mcp_servers"),
+        *_secret_paths(dict(policy_args), "policy_args"),
+        *_secret_paths(dict(claude_hooks), "claude_hooks"),
+        *_literal_credentials(policy_args, "policy_args"),
+    ]
+    for name, row in mcp_servers.items():
+        if isinstance(row, Mapping):
+            server = cast("Mapping[str, object]", row)
+            for table in ("env", "headers"):
+                found += _literal_credentials(server.get(table), f"mcp_servers.{name}.{table}")
+            if "credential_ref" in server:
+                found += _literal_credentials(
+                    {"credential_ref": server["credential_ref"]}, f"mcp_servers.{name}"
+                )
+    if found:
+        raise LaunchRefused(
+            f"{', '.join(sorted(set(found)))} would store a secret on the chat record; name a "
+            "qmx/* keyring reference instead"
+        )
+
+
+def _masked(value: Any) -> Any:
+    """`value` with every key-shaped string masked, the record's second guard."""
+    match value:
+        case str():
+            return SECRET_SHAPES.sub(MASK, value)
+        case Mapping():
+            return {
+                _masked(str(key)): _masked(item)
+                for key, item in cast("Mapping[object, object]", value).items()
+            }
+        case list() | tuple():
+            return [_masked(item) for item in cast("Sequence[object]", value)]
+        case _:
+            return value
 
 
 def claude_section(raw: Mapping[str, object], current: Mapping[str, object]) -> dict[str, object]:
@@ -591,6 +720,7 @@ def _kind(document: Mapping[str, Any]) -> ChatKind:
 
 def _record_document(record: ChatRecord) -> dict[str, object]:
     config = record.config
+    permissions = config.permissions
     return {
         "session_id": record.session_id,
         "config": {
@@ -600,6 +730,29 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
             "mode": config.mode,
             "workspace": str(config.workspace),
             "kind": _kind_document(config.kind),
+            "compact_at": config.compact_at,
+            "tools": None if config.tools is None else list(config.tools),
+            "home": {"kind": config.home.kind, "project_id": config.home.project_id},
+            "packs": list(config.packs),
+            "agents": {
+                name: {
+                    "description": agent.description,
+                    "prompt": _masked(agent.prompt),
+                    "tools": None if agent.tools is None else list(agent.tools),
+                    "model": agent.model,
+                }
+                for name, agent in config.agents.items()
+            },
+            "mcp_servers": _masked(config.mcp_servers),
+            "append_system_prompt": _masked(config.append_system_prompt),
+            "hook_sink": config.hook_sink,
+            "permissions": {
+                "policy": permissions.policy,
+                "allow": list(permissions.allow),
+                "deny": list(permissions.deny),
+            },
+            "policy_args": _masked(config.policy_args),
+            "claude_hooks": _masked(config.claude_hooks),
         },
         "started": record.started,
         "turn": record.turn,
@@ -607,9 +760,14 @@ def _record_document(record: ChatRecord) -> dict[str, object]:
 
 
 def _record(document: Mapping[str, Any]) -> ChatRecord:
+    """A record written before an option existed reads that option's default."""
     config = document["config"]
     if document["turn"] not in ("idle", "running"):
         raise ValueError(f"unknown turn state {document['turn']!r}")
+    home = cast("dict[str, Any]", config.get("home") or {})
+    permissions = cast("dict[str, Any]", config.get("permissions") or {})
+    agents = cast("dict[str, dict[str, Any]]", config.get("agents") or {})
+    tools = config.get("tools")
     return ChatRecord(
         session_id=session_id(document["session_id"]),
         config=ChatConfig(
@@ -619,6 +777,31 @@ def _record(document: Mapping[str, Any]) -> ChatRecord:
             mode=config["mode"],
             workspace=Path(config["workspace"]),
             kind=_kind(config["kind"]),
+            compact_at=config.get("compact_at"),
+            tools=None if tools is None else tuple(tools),
+            home=Home(home.get("kind", "general"), home.get("project_id")),
+            packs=tuple(config.get("packs", ())),
+            agents=MappingProxyType(
+                {
+                    name: SubAgent(
+                        agent["description"],
+                        agent["prompt"],
+                        None if agent.get("tools") is None else tuple(agent["tools"]),
+                        agent.get("model"),
+                    )
+                    for name, agent in agents.items()
+                }
+            ),
+            mcp_servers=MappingProxyType(config.get("mcp_servers") or {}),
+            append_system_prompt=config.get("append_system_prompt"),
+            hook_sink=config.get("hook_sink"),
+            permissions=ChatPermissions(
+                permissions.get("policy"),
+                tuple(permissions.get("allow", ())),
+                tuple(permissions.get("deny", ())),
+            ),
+            policy_args=MappingProxyType(config.get("policy_args") or {}),
+            claude_hooks=MappingProxyType(config.get("claude_hooks") or {}),
         ),
         started=bool(document["started"]),
         turn=document["turn"],
@@ -802,14 +985,16 @@ async def _no_tools(
 DOCTOR_CHAT: Final = session_id("00000000-0000-4000-8000-000000000000")
 
 
-def _argv_line(home: QmxHome, workspace: Path, settings: str, launcher: Path) -> DoctorLine:
+def _argv_line(home: QmxHome, workspace: Path, launcher: Path) -> DoctorLine:
+    files = home.launch_dir(DOCTOR_CHAT)
     options = build_options(
         ChatConfig(PLAN, "opus", None, "default", workspace, Interactive()),
         session_id=DOCTOR_CHAT,
         transcript_exists=False,
         env=launch_env(PlanLaunch(), home=home, session_id=DOCTOR_CHAT, cap=""),
         home=home,
-        settings_json=settings,
+        settings_file=files / "settings.json",
+        system_file=files / "system.md",
         launcher=launcher,
         can_use_tool=_no_tools,
         mcp_servers={},
@@ -866,12 +1051,12 @@ def doctor(
     shown = json.dumps(document, sort_keys=True, separators=(",", ":"))
     lines.append(
         DoctorLine(
-            "inline settings",
-            len(settings) < ARGV_BUDGET,
-            f"{len(settings)} characters for {workspace}: {shown}",
+            "launch settings",
+            True,
+            f"{len(settings)} characters, passed by file, for {workspace}: {shown}",
         )
     )
-    lines.append(_argv_line(home, workspace, settings, launcher))
+    lines.append(_argv_line(home, workspace, launcher))
     auth = plan_auth_method(home, settings)
     lines.append(
         DoctorLine(

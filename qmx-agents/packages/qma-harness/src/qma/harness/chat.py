@@ -15,13 +15,18 @@ while a tool runs is folded into the running turn and gets no turn of its own (m
 the outcome is unknown: the chat shows a `needs_you` block and continues only when the operator
 sends the next message.
 
+Turns. A send may carry a `TurnHandle` (`Harness.run_turn`). The reader feeds it the facts it
+writes to the session and resolves it at the turn's `ResultMessage`, or `unknown` when the
+process ends first; `next_end` is the bare form of the same signal.
+
 Asks. `can_use_tool` (tool approvals and AskUserQuestion) writes a `permission` or `question`
 block and parks a future in this chat's own table under that block's seq, so an `AskId` is
 unique across restarts and the answer route needs no index. The answer resolves it. AllowOnce
 on an asking QMX tool records a `Grant` for the exact final input, which the tool handler
 consumes. AllowAlways on any other tool saves the CLI's suggested allow rules for this
 workspace and hands them back to the CLI for this process. An Interactive chat waits like
-Claude Code; an unattended one waits at most `[budgets] unattended_ask_seconds`, then rejects.
+Claude Code. A Background or Child chat with a named policy has the policy answer in-process;
+without one it waits at most `[budgets] unattended_ask_seconds`, then rejects.
 The money gate runs before any of this, so no answer or remembered rule reaches a call it denied,
 and an input the operator edits passes the gate again before it runs.
 
@@ -48,6 +53,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import (
+    AssistantMessage,
     ClaudeSDKClient,
     Message,
     PermissionResultAllow,
@@ -57,6 +63,7 @@ from claude_agent_sdk import (
     TaskNotificationMessage,
     TaskStartedMessage,
     TaskUpdatedMessage,
+    UserMessage,
 )
 from claude_agent_sdk._errors import MessageParseError
 from claude_agent_sdk._internal import message_parser
@@ -81,6 +88,8 @@ from qma.harness.launch import (
     ChatConfig,
     ChatKind,
     Child,
+    HookSink,
+    Interactive,
     Launch,
     LaunchRefused,
     PlanLaunch,
@@ -94,6 +103,7 @@ from qma.harness.launch import (
     launch_env,
     parse_budgets,
     resets_cache,
+    system_text,
     unattended,
     verbatim,
 )
@@ -122,12 +132,14 @@ from qma.harness.project import (
 )
 from qma.harness.relay import GrantRefused
 from qma.harness.tools import (
+    PREFIX,
     SERVER,
     Grant,
     Grants,
     ToolSurfaceError,
     VetCache,
     args_digest,
+    asks,
     build_server,
     domain_write_policy,
     gate_rules,
@@ -136,6 +148,7 @@ from qma.harness.tools import (
     unvetted_tools,
     vet_mcp_servers,
 )
+from qma.harness.turns import TurnHandle
 from qma.harness.usage import Totals, journal_path, plan_base, plan_row
 
 if TYPE_CHECKING:
@@ -250,6 +263,23 @@ class Answers:
 
 
 type Answer = AllowOnce | AllowAlways | Reject | Answers
+
+
+@dataclass(frozen=True)
+class PolicyCall:
+    """One ask of a Background or Child chat, handed to its named policy."""
+
+    session_id: SessionId
+    tool: str
+    input: dict[str, Any]
+    args: Mapping[str, Any]
+    """The chat's `policy_args`."""
+    reason: str | None
+
+
+type Policy = Callable[[PolicyCall], Awaitable[Answer]]
+"""Answers with AllowOnce (an edited input passes the money gate again) or Reject. It may take
+as long as it needs, such as a deferral to the inbox. One that raises denies the call."""
 
 type AnswerStatus = Literal["resolved", "already_answered", "expired", "invalid", "unknown"]
 """A second answer to the same ask is `already_answered`. An ask whose process ended or whose
@@ -416,6 +446,12 @@ class ChatDeps:
     """`Harness._delegate`, called with the calling chat's id, a profile and a prompt."""
     test: TestMode | None = None
     """Live checks only; None is every layer on."""
+    sinks: dict[str, HookSink] = field(default_factory=dict[str, HookSink])
+    """`Harness.register_sink`'s table, shared by reference."""
+    policies: dict[str, Policy] = field(default_factory=dict[str, Policy])
+    """`Harness.register_policy`'s table, shared by reference."""
+    on_free: Callable[[], None] = lambda: None
+    """Told when this chat's turn or process ends, so a send waiting for a slot wakes."""
 
     @property
     def redaction(self) -> bool:
@@ -680,6 +716,26 @@ class _Stream:
             self.close(target)
 
 
+INVALID: Final = "the permission policy gave an answer that does not fit this ask"
+
+
+async def _ask_policy(policy: Policy, call: PolicyCall) -> Answer:
+    try:
+        return await policy(call)
+    except Exception as error:
+        log.exception("a permission policy failed; the call is denied")
+        return Reject(f"the permission policy failed ({type(error).__name__})")
+
+
+def _write_files(files: Mapping[Path, str]) -> None:
+    """Each file replaced whole, so a launch never reads one half written."""
+    for path, text in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        staged = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        staged.write_text(text, encoding="utf-8")
+        staged.replace(path)
+
+
 class Chat:
     """Owned by `Harness`. Never shared across event loops."""
 
@@ -702,13 +758,18 @@ class Chat:
         """Prompts sent since this object was made. A quote from an older epoch is stale."""
         self._quotes: dict[str, Quote] = {}
         self._ends: list[asyncio.Future[TurnEnded | None]] = []
+        self._turn: list[TurnHandle] = []
+        """Handles of the turn that runs, or of the next one when the chat was idle at send."""
+        self._later: list[TurnHandle] = []
+        """Handles sent while a turn ran: each joins that turn when the CLI replays its prompt,
+        or the next turn when the CLI opens one first."""
         self._teardowns: set[asyncio.Task[None]] = set()
 
     @property
     def session_id(self) -> SessionId:
         return self.record.session_id
 
-    async def send(self, prompt: Prompt) -> None:
+    async def send(self, prompt: Prompt, handle: TurnHandle | None = None) -> None:
         """Connect if Cold, write the `user` block and turn "running", then `client.query`.
         While a turn runs, the SDK queues the message, like typing into Claude Code. The
         harness has already checked that this chat admits the prompt."""
@@ -718,8 +779,14 @@ class Chat:
             self._last = time.monotonic()
             self._epoch += 1
             await self._note("user", {"text": prompt.text})
+            if handle is not None:
+                (self._later if self.record.turn == "running" else self._turn).append(handle)
             self._write(turn="running")
             await live.client.query(prompt.text)
+
+    async def set_packs(self, packs: tuple[str, ...]) -> None:
+        async with self._lock:
+            self._write(config=replace(self.record.config, packs=packs))
 
     async def quote(self, new: ChatConfig) -> Quote:
         """The steps, the warning and the counts `apply` will hold the chat to. The harness has
@@ -803,14 +870,15 @@ class Chat:
 
     async def _set_effort(self, live: _Live, effort: str) -> None:
         """`/effort` replies with a synthetic result and no model call (HP0 S37)."""
+        end = self.next_end()
         self._write(turn="running")
         await live.client.query(f"/effort {effort}")
-        loop = asyncio.get_running_loop()
-        deadline = loop.time() + EFFORT_WAIT_S
-        while self.record.turn == "running" and self._live is live:
-            if loop.time() > deadline:
-                raise LaunchRefused(f"/effort {effort} got no reply in {EFFORT_WAIT_S:.0f} s")
-            await asyncio.sleep(0.05)
+        try:
+            await asyncio.wait_for(asyncio.shield(end), EFFORT_WAIT_S)
+        except TimeoutError:
+            raise LaunchRefused(f"/effort {effort} got no reply in {EFFORT_WAIT_S:.0f} s") from None
+        finally:
+            end.cancel()
 
     def next_end(self) -> asyncio.Future[TurnEnded | None]:
         """Resolves with the next turn's end, or None when the process ends first."""
@@ -823,6 +891,22 @@ class Chat:
         for end in ends:
             if not end.done():
                 end.set_result(ended)
+        handles, self._turn = self._turn, []
+        if ended is None:
+            handles, self._later = handles + self._later, []
+        for handle in handles:
+            handle.finish(ended)
+        self._deps.on_free()
+
+    def _join(self, prompt: str | None) -> None:
+        """A turn opened (`prompt` None) or the CLI replayed a prompt: the handles waiting for
+        it join the running turn and hear that it started."""
+        joining = [h for h in self._later if prompt is None or h.prompt == prompt]
+        self._later = [h for h in self._later if h not in joining]
+        self._turn += joining
+        for handle in self._turn:
+            if not handle.attached:
+                handle.on_started()
 
     @property
     def idle_seconds(self) -> float:
@@ -985,13 +1069,23 @@ class Chat:
                 f"the Claude home has plugin {', '.join(planted)} installed besides the QMX "
                 "plugin; remove it from the Claude home"
             )
+        sink = None if config.hook_sink is None else deps.sinks.get(config.hook_sink)
+        if config.hook_sink is not None and sink is None:
+            raise LaunchRefused(f"no hook sink named {config.hook_sink!r} is registered")
+        policy = config.permissions.policy
+        if policy is not None and policy not in deps.policies:
+            raise LaunchRefused(f"no permission policy named {policy!r} is registered")
         user = parse_claude_settings(await asyncio.to_thread(deps.control.settings_get, "claude"))
         budgets = parse_budgets(await asyncio.to_thread(deps.control.settings_get, "budgets"))
-        settings = code_settings(
+        settings = functools.partial(
+            code_settings,
             user,
             launcher=deps.launcher,
             workspace=config.workspace,
             memory_dir=deps.home.memory_dir(config.workspace),
+            deny=config.permissions.deny,
+            claude_hooks=config.claude_hooks,
+            auto_memory=isinstance(config.kind, Interactive),
         )
         assert_scrubbed(os.environ)
         exists = transcript(deps.home, chat) is not None
@@ -999,10 +1093,19 @@ class Chat:
             raise LaunchRefused(
                 "this chat's transcript is gone from the plan home; start a new chat"
             )
-        launch = await self._routing(settings)
+        launch = await self._routing(settings())
         grant = launch.grant if isinstance(launch, RelayedLaunch) else None
         try:
-            servers, gate, vetted = await self._tools(launch, user.external_tools_unattended)
+            servers, gate, vetted, allow = await self._tools(launch, user.external_tools_unattended)
+            files = deps.home.launch_dir(chat)
+            settings_file, system_file = files / "settings.json", files / "system.md"
+            await asyncio.to_thread(
+                _write_files,
+                {
+                    settings_file: settings(allow=(*allow, *config.permissions.allow)),
+                    system_file: system_text(deps.home, config),
+                },
+            )
             env = launch_env(launch, home=deps.home, session_id=chat, cap=deps.procs.handle_name)
             options = build_options(
                 config,
@@ -1010,12 +1113,14 @@ class Chat:
                 transcript_exists=exists,
                 env=env,
                 home=deps.home,
-                settings_json=settings,
+                settings_file=settings_file,
+                system_file=system_file,
                 launcher=deps.launcher,
                 can_use_tool=self._can_use_tool,
                 mcp_servers=servers,
                 gate=gate,
                 budgets=budgets,
+                sink=sink,
                 test=deps.test,
             )
             assert_argv_fits(options)
@@ -1062,11 +1167,15 @@ class Chat:
 
     async def _tools(
         self, launch: Launch, external_unattended: frozenset[str]
-    ) -> tuple[dict[str, McpServerConfig], GateRules, Mapping[str, frozenset[str]]]:
-        """The `qmx` server, the vetted external servers, the gate's rules and each vetted
-        server's tool names. A refused external server gets a `needs_you` block and is left
-        out; the chat still starts. `external_unattended` is the operator's allow-list for
-        external tools in an unattended chat or mode."""
+    ) -> tuple[
+        dict[str, McpServerConfig], GateRules, Mapping[str, frozenset[str]], tuple[str, ...]
+    ]:
+        """The `qmx` server, the vetted external servers (the operator's and the chat's own),
+        the gate's rules, each vetted server's tool names, and the allow rules for every QMX
+        tool whose Effect does not ask (H20), so a READ or an allowed DOMAIN_WRITE never asks
+        in any mode. A refused external server gets a `needs_you` block and is left out; the
+        chat still starts. `external_unattended` is the operator's allow-list for external
+        tools in an unattended chat or mode. A chat with `tools=()` gets no server at all."""
         deps = self._deps
         control = deps.control
         delegate = (
@@ -1087,9 +1196,8 @@ class Chat:
             )
         except (MoneySurfaceError, ToolSurfaceError) as refused:
             raise LaunchRefused(f"the QMX tools cannot start: {refused}") from None
-        vetted = await vet_mcp_servers(
-            await asyncio.to_thread(control.settings_get, "mcp_servers"), deps.vetted
-        )
+        declared = await asyncio.to_thread(control.settings_get, "mcp_servers")
+        vetted = await vet_mcp_servers({**declared, **self.record.config.mcp_servers}, deps.vetted)
         for name, reason in vetted.refused.items():
             await self._note(
                 "needs_you", {"reason": f"the MCP server {name} was refused: {reason}"}
@@ -1106,9 +1214,10 @@ class Chat:
             external_unattended=external_unattended,
         )
         self._gate = gate
-        if not self.record.config.tools:
-            return {}, gate, {}
-        return {SERVER: qmx, **vetted.configs}, gate, vetted.tools
+        if self.record.config.tools == ():
+            return {}, gate, {}, ()
+        allow = tuple(PREFIX + tool.name for tool in defs if not asks(tool.effect, policy))
+        return {SERVER: qmx, **vetted.configs}, gate, vetted.tools, allow
 
     async def _routing(self, settings: str) -> Launch:
         """The plan only after its login reports the subscription method. Any other profile
@@ -1138,6 +1247,8 @@ class Chat:
                         self._write(turn="idle")
                         return
                     self._write(turn="running")
+                    self._join(None)
+                self._feed(message)
                 for fact in project(message, redact_tokens=self._deps.redaction):
                     await self._route(fact)
         except MessageParseError as error:
@@ -1150,6 +1261,18 @@ class Chat:
         finally:
             if not live.ending:
                 await self._lost(live)
+
+    def _feed(self, message: Message) -> None:
+        """What the turn's handles read straight off the SDK message: the reply usage, which
+        the session blocks do not carry, and the replayed prompts."""
+        match message:
+            case AssistantMessage(parent_tool_use_id=None, message_id=str(reply), usage=dict(used)):
+                for handle in self._turn:
+                    handle.on_reply(reply, used)
+            case UserMessage(parent_tool_use_id=None, content=str(text)) if self._later:
+                self._join(text)
+            case _:
+                pass
 
     async def _lost(self, live: _Live) -> None:
         async with self._lock:
@@ -1168,6 +1291,14 @@ class Chat:
         self,
         fact: Block | Delta | StreamEnded | TurnUsage | PlanFact | TurnEnded | Compacted,
     ) -> None:
+        for handle in self._turn:
+            match fact:
+                case Delta():
+                    handle.on_delta()
+                case Compacted(trigger=trigger):
+                    handle.on_compaction(trigger)
+                case _:
+                    pass
         match fact:
             case Block(target=target, block=block):
                 await self._append(target, block)
@@ -1216,6 +1347,9 @@ class Chat:
     async def _append(self, target: Target, block: SessionBlock) -> None:
         session = self.session_id if isinstance(target, Here) else await self._child(target)
         await asyncio.to_thread(self._deps.control.sessions_append, session, block)
+        if isinstance(target, Here):
+            for handle in self._turn:
+                handle.on_block(block)
 
     async def _child(self, target: InChild) -> str:
         child = self._children.get(target.tool_use_id)
@@ -1253,21 +1387,47 @@ class Chat:
             content["workspace"] = str(self.record.config.workspace)
         if self._deps.redaction:
             content = redacted(content)
+        policy = None if asking_qmx else self._policy()
+        if policy is not None:
+            content["policy"] = self.record.config.permissions.policy
+        block = SessionBlock.model_validate({"type": kind, "content": content})
         # Appended on the loop, not in a thread, so the ask is in the table before any client
         # can read its seq and answer it.
-        written = self._deps.control.sessions_append(
-            self.session_id, SessionBlock.model_validate({"type": kind, "content": content})
-        )
+        written = self._deps.control.sessions_append(self.session_id, block)
+        for handle in self._turn:
+            handle.on_block(block)
         n = int(cast("int", written["seq"]))
         reply: asyncio.Future[Answer | _Expired] = asyncio.get_running_loop().create_future()
         ask = self._asks[n] = _Ask(tool_name, tool_input, asking_qmx, rules, reply)
         try:
+            if policy is not None:
+                call = PolicyCall(
+                    self.session_id,
+                    tool_name,
+                    tool_input,
+                    self.record.config.policy_args,
+                    context.decision_reason,
+                )
+                answer = await _ask_policy(policy, call)
+                if n in self._asks:
+                    status = "already_answered" if ask.fits(answer) else "invalid"
+                    self._settle(n, status, answer if ask.fits(answer) else Reject(INVALID))
             resolved = await self._wait(n, ask)
         except asyncio.CancelledError:
             if n in self._asks:
                 self._settle(n, "expired", _Expired(ENDED))
             raise
         return await self._resolve(n, ask, kind, resolved)
+
+    def _policy(self) -> Policy | None:
+        """The named policy of a Background or Child chat. It never answers an asking QMX tool
+        (MANAGE and `propose_order`), which still waits for the operator. The launch refused an
+        unregistered name, so a missing one here means the host dropped it since: the ask then
+        waits as an unattended ask does."""
+        name = self.record.config.permissions.policy
+        if name is None or isinstance(self.record.config.kind, Interactive):
+            return None
+        return self._deps.policies.get(name)
 
     async def _wait(self, n: int, ask: _Ask) -> Answer | _Expired:
         if not unattended(self.record.config.kind):
