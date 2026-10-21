@@ -4,8 +4,10 @@ a live run of a version or a test run of a draft.
 Each run gets its own folder `<home>/engine/runs/<run_id>/workflow/`, written from the Library's
 bundle, so no two runs share files. A run's status is read from its ledger events with
 SOLUTION-DESIGN 3.1's words; nothing stores it beside them. A live run that passed fires every
-`after` trigger on its workflow, whoever started it (B-60). Cancelling a run cancels every child
-run under it (AD-5, B-66).
+`after` trigger on its workflow, whoever started it (B-60), and, run whole on real models, marks
+its version `tested-by` it, since a passed run in either mode tests its content hash (AD-11, L-56).
+A test run a wake resumed gets a fresh test report beside its fresh summary (B-61). Cancelling a run
+cancels every child run under it (AD-5, B-66).
 """
 
 from __future__ import annotations
@@ -150,7 +152,8 @@ async def run_bundle(
     found = checked(root)
     if isinstance(found, list):
         codes = " ".join(sorted({p.code for p in found}))
-        raise Refused("not_runnable", f"the workflow does not run: {codes}")
+        needs = [p.message for p in found if p.code == "needs_unmet"]
+        raise Refused("not_runnable", "; ".join([f"the workflow does not run: {codes}", *needs]))
     try:
         outcome = await ctx.engine.start(
             root, found[1], mode=mode, inputs=inputs, run_id=run_id, fake=fake, pins=pins
@@ -160,8 +163,31 @@ async def run_bundle(
     await ctx.engine.settle()
     stored = summarize(ctx, outcome, item, object_id, mode, caller.principal)
     if mode == "live":
+        if outcome.status == "passed" and subgraph is None and not fake:
+            principal = f"run:{outcome.run_id}"
+            ctx.library.link(object_id, "tested-by", stored.object_id, principal=principal)
         fire_after(ctx, outcome, item)
     return outcome, stored
+
+
+def report(
+    ctx: Context, outcome: Outcome, summary: Stored, content_hash: str, fields: JsonObject
+) -> Stored:
+    """Write the `test-report` of a test run bound to `content_hash`, with the run's status and
+    reason over `fields`, and link the draft it names `tested-by` the run when the whole draft
+    passed on real models."""
+    principal = f"run:{outcome.run_id}"
+    written: JsonObject = fields | {
+        "run_id": outcome.run_id,
+        "status": outcome.status,
+        "reason": summary.fields.get("reason"),
+    }
+    stored = ctx.library.put_test_report(content_hash, written, principal=principal)
+    whole = written.get("subgraph") is None and written.get("fake") is not True
+    draft = written.get("draft_object_id")
+    if outcome.status == "passed" and whole and isinstance(draft, str):
+        ctx.library.link(draft, "tested-by", summary.object_id, principal=principal)
+    return stored
 
 
 def fire_after(ctx: Context, outcome: Outcome, item: str | None = None) -> None:
@@ -235,14 +261,20 @@ def summarize_again(ctx: Context, outcome: Outcome) -> Stored | None:
         return None
     last = found[-1].fields
     mode: Mode = "live" if last.get("mode") == "live" else "test"
-    return summarize(
-        ctx,
-        outcome,
-        str(last.get("workflow_item")),
-        str(last.get("object_id")),
-        mode,
-        str(last.get("started_by")),
+    item = str(last.get("workflow_item"))
+    stored = summarize(
+        ctx, outcome, item, str(last.get("object_id")), mode, str(last.get("started_by"))
     )
+    reports = [
+        r
+        for r in ctx.library.objects(item, "test-report")
+        if r.fields.get("run_id") == outcome.run_id
+    ]
+    if reports:
+        earlier = reports[-1].fields
+        kept = {k: v for k, v in earlier.items() if k not in ("content_hash", "status", "reason")}
+        report(ctx, outcome, stored, str(earlier.get("content_hash")), kept)
+    return stored
 
 
 @dataclass(frozen=True, slots=True)

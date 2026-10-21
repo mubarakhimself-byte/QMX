@@ -6,17 +6,23 @@ editor can mark them all at once. An empty list means the folder is in the `vali
 
 from __future__ import annotations
 
+import ast
+import json
 from collections import defaultdict
 from collections.abc import Collection, Iterator, Sequence
 from itertools import combinations
 from pathlib import Path, PurePosixPath
 from typing import Final
 
-from pydantic import ValidationError
+from pydantic import BaseModel, JsonValue, ValidationError
 
-from qmx_engine.definition.folder import Problem, WorkflowFolder, load
+from qmx_engine.core.joins import JoinSpec
+from qmx_engine.core.loops import LoopSpec
+from qmx_engine.core.waits import WaitSpec
+from qmx_engine.definition.expr import RuleRefused, check
+from qmx_engine.definition.folder import DEFINITION, Problem, WorkflowFolder, load
 from qmx_engine.definition.lint import lint, redact
-from qmx_engine.definition.model import Node, OutputFile, Workflow, edges
+from qmx_engine.definition.model import Edge, Node, OutputFile, Workflow, edges
 from qmx_engine.definition.registry import LOOP_BACK_PORT, NOTE, REGISTRY, Kind, Registry, RoleRule
 from qmx_engine.settings import DEFAULTS
 
@@ -29,6 +35,12 @@ DEFAULT_ROLES: Final = frozenset(
     for key in DEFAULTS
     if key.startswith("roles.") and (role := key.removeprefix("roles.")) not in NOT_ROLES
 )
+SPECS: Final[dict[str, type[BaseModel]]] = {"loop": LoopSpec, "join": JoinSpec, "wait": WaitSpec}
+"""The kinds whose parameters the core parses; validation parses them the same way (B-22)."""
+EXPRESSIONS: Final = {"rule": "expr", "loop": "predicate"}
+"""The parameter that holds each kind's `definition.expr` expression (B-90)."""
+EXPRESSION_NAMES: Final = frozenset({"items", "inputs"})
+"""The names an expression may read: `items` is the `in` port, `inputs` every port."""
 
 
 def validate(
@@ -71,6 +83,9 @@ def problems(
             "resolve the variant over its parent first; only a full snapshot validates",
         )
     yield from graph(workflow, registry, publish=publish)
+    yield from nesting(workflow, registry)
+    yield from parameters(workflow, registry)
+    yield from blocks(folder, workflow)
     yield from names(workflow, registry, roles, placements)
     yield from writers(workflow, registry)
     yield from lint(workflow, registry)
@@ -228,6 +243,182 @@ def cycles(forward: dict[str, list[str]], index: dict[str, int]) -> Iterator[Pro
                 stack.append(iter(forward[child]))
 
 
+def kind_name(registry: Registry, node: Node) -> str | None:
+    found = registry.kind(node.type)
+    return found.name if found is not None else None
+
+
+def partitioned(workflow: Workflow, registry: Registry) -> set[str]:
+    """The nodes that run one slot per partition: each node a fanning edge feeds, and what reads
+    one through `one` edges, up to a `join`, which collects the partitions back into one slot, or
+    a `loop`, which `nesting` refuses on fanned input."""
+    by_name = {node.name: node for node in workflow.nodes}
+    ones: dict[str, set[str]] = defaultdict(set)
+    fanned: set[str] = set()
+    for edge in edges(workflow):
+        if edge.target.map == "one":
+            ones[edge.source].add(edge.target.node)
+        else:
+            fanned.add(edge.target.node)
+    found = set(fanned)
+    frontier = list(fanned)
+    while frontier:
+        for target in ones[frontier.pop()]:
+            node = by_name.get(target)
+            stops = node is not None and kind_name(registry, node) in ("join", "loop")
+            if target not in found and not stops:
+                found.add(target)
+                frontier.append(target)
+    return found
+
+
+def nesting(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
+    """AD-5: v1 fans out one level deep. A fanning edge out of a node that already runs per
+    partition, a loop fed by such a node, and a loop inside another loop's body are refused here
+    rather than parked at run time (B-20). A loop body may call a `subworkflow` whose child holds
+    its own loop: the child runs in its own ledger namespace, so that nesting is allowed."""
+    index = {node.name: i for i, node in enumerate(workflow.nodes)}
+    by_name = {node.name: node for node in workflow.nodes}
+    split = partitioned(workflow, registry)
+    for edge in edges(workflow):
+        target = by_name.get(edge.target.node)
+        if edge.source not in split or target is None:
+            continue
+        where = f"nodes[{index[target.name]}]"
+        source = by_name[edge.source].id
+        if kind_name(registry, target) == "loop":
+            yield Problem(
+                "nesting_unsupported",
+                where,
+                f"loop {target.id} reads {source}, which runs per partition; a loop over fanned "
+                "input is not run in v1",
+            )
+        elif edge.target.map != "one":
+            yield Problem(
+                "nesting_unsupported",
+                where,
+                f"node {target.id} fans out what {source} already fanned out; nested fan-out is "
+                "not run in v1",
+            )
+    for outer in workflow.nodes:
+        if kind_name(registry, outer) != "loop":
+            continue
+        for name in sorted(body(workflow, outer), key=index.__getitem__):
+            inner = by_name[name]
+            if kind_name(registry, inner) == "loop":
+                yield Problem(
+                    "nesting_unsupported",
+                    f"nodes[{index[name]}]",
+                    f"loop {inner.id} sits in the body of loop {outer.id}; a loop inside a loop "
+                    "body is not run in v1 (call a subworkflow that holds it)",
+                )
+
+
+def body(workflow: Workflow, loop: Node) -> set[str]:
+    """The names of the nodes the loop's `body` port reaches, edges back into a loop left out."""
+    forward: dict[str, list[Edge]] = defaultdict(list)
+    for edge in edges(workflow):
+        forward[edge.source].append(edge)
+    reached: set[str] = set()
+    frontier = [e.target.node for e in forward[loop.name] if e.port == "body"]
+    while frontier:
+        name = frontier.pop()
+        if name in reached or name == loop.name:
+            continue
+        reached.add(name)
+        frontier.extend(e.target.node for e in forward[name] if e.target.port != LOOP_BACK_PORT)
+    return reached
+
+
+def parameters(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
+    """The parameters the core and the executors read: loop, join and wait specs and a join's one
+    inbound `one` edge (B-22), every expression (B-90), and a mode the registry marks as not
+    built yet (B-46)."""
+    into: dict[str, list[Edge]] = defaultdict(list)
+    for edge in edges(workflow):
+        into[edge.target.node].append(edge)
+    for i, node in enumerate(workflow.nodes):
+        kind = registry.kind(node.type)
+        if kind is None or node.disabled:
+            continue
+        here = f"nodes[{i}].parameters"
+        spec = SPECS.get(kind.name)
+        if spec is not None:
+            try:
+                spec.model_validate(node.parameters)
+            except ValidationError as error:
+                for found in error.errors():
+                    if kind.name == "loop" and found["loc"] == ("max_iterations",):
+                        continue  # the lint names a missing max_iterations
+                    yield Problem(
+                        "parameters_invalid",
+                        f"{here}.{where(found['loc'])}".rstrip("."),
+                        f"node {node.id}: {found['msg']}",
+                    )
+        if kind.name == "join":
+            inbound = into.get(node.name, [])
+            if len(inbound) != 1 or inbound[0].target.map != "one":
+                yield Problem(
+                    "join_inbound_invalid",
+                    f"nodes[{i}]",
+                    f"join {node.id} takes exactly one inbound one-edge, found {len(inbound)} "
+                    "edge(s)",
+                )
+        name = EXPRESSIONS.get(kind.name)
+        expr = node.parameters.get(name) if name is not None else None
+        if isinstance(expr, str):
+            yield from expression(expr, f"{here}.{name}", node)
+        mode = node.parameters.get("mode")
+        if isinstance(mode, str) and mode in kind.unavailable_modes:
+            yield Problem(
+                "mode_unavailable",
+                f"{here}.mode",
+                f"node {node.id}: a {kind.name} in mode {mode} cannot run yet",
+            )
+
+
+def expression(expr: str, path: str, node: Node) -> Iterator[Problem]:
+    try:
+        tree = check(expr)
+    except RuleRefused as refused:
+        yield Problem("expression_invalid", path, f"node {node.id}: {refused}")
+        return
+    for name in sorted({n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}):
+        if name not in EXPRESSION_NAMES:
+            yield Problem(
+                "expression_invalid",
+                path,
+                f"node {node.id}: the expression reads {name!r}; it may read only "
+                f"{' and '.join(sorted(EXPRESSION_NAMES))}",
+            )
+
+
+def blocks(folder: WorkflowFolder, workflow: Workflow) -> Iterator[Problem]:
+    """A child a `subworkflow` names inside this folder admits this caller (AD-5, B-27): its
+    `caller_policy` is checked here whenever the child resolves, and again at dispatch."""
+    for i, node in enumerate(workflow.nodes):
+        block = node.parameters.get("workflow")
+        if node.type != "subworkflow" or not isinstance(block, str):
+            continue
+        path = f"nodes[{i}].parameters.workflow"
+        text = folder.refs.get(f"{PurePosixPath(block).as_posix()}/{DEFINITION}")
+        if text is None:
+            continue
+        try:
+            child: JsonValue = json.loads(text)
+        except ValueError:
+            yield Problem("subworkflow_invalid", path, f"node {node.id}: the child is not JSON")
+            continue
+        settings = child.get("settings") if isinstance(child, dict) else None
+        policy = settings.get("caller_policy") if isinstance(settings, dict) else None
+        if policy == "none":
+            yield Problem(
+                "caller_refused",
+                path,
+                f"node {node.id}: the child's caller_policy admits no caller",
+            )
+
+
 def names(
     workflow: Workflow, registry: Registry, roles: Collection[str], placements: Collection[str]
 ) -> Iterator[Problem]:
@@ -278,22 +469,9 @@ def writers(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
     and so may two nodes with no path between them."""
     index = {node.name: i for i, node in enumerate(workflow.nodes)}
     forward: dict[str, set[str]] = defaultdict(set)
-    fanned: set[str] = set()
-    ones: dict[str, set[str]] = defaultdict(set)
     for edge in edges(workflow):
         forward[edge.source].add(edge.target.node)
-        if edge.target.map == "one":
-            ones[edge.source].add(edge.target.node)
-        else:
-            fanned.add(edge.target.node)
-    partitioned = set(fanned)
-    frontier = list(fanned)
-    while frontier:
-        for target in ones[frontier.pop()]:
-            kind = registry.kind(workflow.nodes[index[target]].type) if target in index else None
-            if target not in partitioned and (kind is None or kind.name != "join"):
-                partitioned.add(target)
-                frontier.append(target)
+    split = partitioned(workflow, registry)
     declared: list[tuple[int, Node, int, OutputFile]] = []
     for i, node in enumerate(workflow.nodes):
         files = node.outputs.files if node.outputs is not None and not node.disabled else []
@@ -302,7 +480,7 @@ def writers(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
             if leaves_work(output.path.replace("<partition>", "0")):
                 yield Problem("output_path_invalid", path, "an output path must stay inside work/")
             elif (
-                node.name in partitioned
+                node.name in split
                 and output.merge == "replace"
                 and "<partition>" not in output.path
             ):

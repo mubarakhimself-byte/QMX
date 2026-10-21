@@ -1,12 +1,15 @@
 """One span row per node attempt, derived from `node_started` and its ending event (SOLUTION-DESIGN
 10.1), written inside the same transaction as the event that changes it.
 
-An attempt is named by the data keys `node_id`, `iteration` (default 0), `partition` (default none)
-and `attempt`; `node_started` must carry `node_id` and `attempt`. The ending events
-`node_finished`, `node_failed` and `node_waiting` close the attempt's span, and `compacted` adds to
-its `events`. An ending event for an attempt that never started, such as a `node_waiting` the core
-writes when no lease was admitted, has no span to close. The other span fields are read from these
-data keys when present: on `node_started` `parent_span_id role profile account model effort
+An attempt is named by the data keys `node_id`, `iteration`, `partition` and `attempt`, which every
+node event carries (AD-15; the store refuses one without them). The ending events `node_finished`,
+`node_failed` and `node_waiting` close the attempt's span, and `compacted` adds to its `events`.
+Span status is derived only: `ok`, `failed` and `waiting` from those endings, `gate` from
+`gate_opened` until its `gate_resolved` (a `node_waiting` on the gate keeps it `gate`), and
+`cancelled` from a `node_failed` with code `cancelled` or from `run_cancelled`, which closes every
+span of the run still open (B-18). An ending event for an attempt that never started, such as
+a hold the core asked for (attempt 0), has no span to close. The other span fields are read from
+these data keys when present: on `node_started` `parent_span_id role profile account model effort
 placement effect idempotency_key`; on the ending event `tokens cost_estimate_usd signature verdict
 same_family uncached_resend`; on `compacted` `trigger at_fraction`. A `tool_called` event writes
 one `tool` span (AD-34), a child of its attempt's span, from its `tool` object: `id name
@@ -35,6 +38,23 @@ ENDINGS: Final[dict[str, SpanStatus]] = {
     "node_failed": "failed",
     "node_waiting": "waiting",
 }
+NODE_EVENTS: Final = frozenset(
+    {
+        "node_scheduled",
+        "node_started",
+        "node_finished",
+        "node_failed",
+        "node_waiting",
+        "gate_opened",
+        "gate_resolved",
+        "compacted",
+        "tool_called",
+        "doctor_verdict",
+    }
+)
+"""The kinds that are always about one attempt. `heartbeat`, `log` and `ladder_step` may also be
+run-level; when one names a `node_id` it carries the whole key too."""
+KEYS: Final = ("node_id", "iteration", "partition", "attempt")
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +113,11 @@ def attempt_of(data: JsonObject) -> AttemptKey | None:
     return node_id, iteration, None if partition is None else str(partition), attempt
 
 
+def keyed(data: JsonObject) -> bool:
+    """True when the event names its attempt in full (AD-15)."""
+    return all(name in data for name in KEYS) and attempt_of(data) is not None
+
+
 def span_id(run_id: str, key: AttemptKey) -> str:
     return fingerprint([run_id, *key])[:32]
 
@@ -144,10 +169,15 @@ def started(event: Event, key: AttemptKey, mode: str | None) -> Span:
 def ended(span: Span, event: Event) -> Span:
     data = event.data
     cost = data.get("cost_estimate_usd")
+    status = ENDINGS[event.kind]
+    if event.kind == "node_failed" and data.get("code") == "cancelled":
+        status = "cancelled"
+    elif event.kind == "node_waiting" and span.status == "gate":
+        status = "gate"
     return replace(
         span,
         ended_at=event.at,
-        status=ENDINGS[event.kind],
+        status=status,
         tokens=_tokens(data.get("tokens")),
         cost_estimate_usd=float(cost) if isinstance(cost, int | float) else None,
         error_signature=_text(data, "signature"),
@@ -221,6 +251,9 @@ def _run_mode(connection: sqlite3.Connection, run_id: str) -> str | None:
 def apply(connection: sqlite3.Connection, event: Event, redactions: int = 0) -> None:
     """Write the span change `event` makes, if any, and add the event's `redactions` to its
     attempt's span. Runs on the writer thread."""
+    if event.kind == "run_cancelled":
+        cancel_open(connection, event)
+        return
     key = attempt_of(event.data)
     if key is None:
         return
@@ -230,7 +263,7 @@ def apply(connection: sqlite3.Connection, event: Event, redactions: int = 0) -> 
         return
     if event.kind == "tool_called" and (child := tool(event, key)) is not None:
         _save(connection, replace(child, redactions=redactions))
-    changes = event.kind in ENDINGS or event.kind == "compacted"
+    changes = event.kind in ENDINGS or event.kind in ("compacted", "gate_opened", "gate_resolved")
     if not changes and redactions == 0:
         return
     span = _load(connection, span_id(event.run_id, key))
@@ -240,4 +273,19 @@ def apply(connection: sqlite3.Connection, event: Event, redactions: int = 0) -> 
         span = ended(span, event)
     elif event.kind == "compacted":
         span = compacted(span, event)
+    elif event.kind == "gate_opened":
+        span = replace(span, status="gate")
+    elif event.kind == "gate_resolved" and span.status == "gate":
+        span = replace(span, status="waiting" if span.ended_at is not None else None)
     _save(connection, replace(span, redactions=span.redactions + redactions))
+
+
+def cancel_open(connection: sqlite3.Connection, event: Event) -> None:
+    """`run_cancelled` closes every span of the run that has not ended, as `cancelled`."""
+    rows = connection.execute(
+        "SELECT record FROM spans WHERE trace_id = ?", (event.run_id,)
+    ).fetchall()
+    for (record,) in rows:
+        span = from_record(record)
+        if span.ended_at is None:
+            _save(connection, replace(span, ended_at=event.at, status="cancelled"))

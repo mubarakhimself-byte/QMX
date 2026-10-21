@@ -68,7 +68,7 @@ def test_the_paper_scout_fixture_validates_and_prints_its_hash(
         ("bad-unknown-type-version", ["type_version_unknown"]),
         ("bad-two-triggers", ["trigger_count"]),
         ("bad-unreachable", ["node_unreachable", "node_unreachable"]),
-        ("bad-keyed-join-no-key", ["keyed_join_without_key"]),
+        ("bad-keyed-join-no-key", ["keyed_join_without_key", "join_inbound_invalid"]),
         ("bad-cartesian-not-explicit", ["cartesian_not_explicit"]),
         ("bad-ref-escape", ["ref_escapes_folder"]),
     ],

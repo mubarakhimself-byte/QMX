@@ -1,5 +1,9 @@
 """The engine's import rules (E15, AD-1, AD-3, AD-6), read from the source tree with `ast`.
 
+AD-6 bans every clock in core and definition, `monotonic` and `perf_counter` too (L-20), and the
+rules see through an alias, `importlib` and `__import__`, and the `uuid4`, `urandom` and `secrets`
+entropy sources (L-22).
+
 Each rule returns its offenders as `(file, name)` pairs, the file relative to the source root, so a
 failure names the file to open.
 """
@@ -33,6 +37,16 @@ PURE_FROM_LEDGER = ("qmx_engine.ledger.redact",)
 CLOCK_ENTROPY_ENVIRONMENT = (
     "time.time",
     "time.time_ns",
+    "time.monotonic",
+    "time.monotonic_ns",
+    "time.perf_counter",
+    "time.perf_counter_ns",
+    "uuid.uuid1",
+    "uuid.uuid4",
+    "os.urandom",
+    "secrets",
+    "importlib",
+    "__import__",
     "datetime.now",
     "datetime.utcnow",
     "datetime.today",
@@ -93,10 +107,29 @@ def dotted(node: ast.expr) -> str | None:
     return None
 
 
+def aliases(source: Source) -> dict[str, str]:
+    """Each name an import binds under another name, to the full dotted path it stands for."""
+    found: dict[str, str] = {}
+    for node in ast.walk(source.tree):
+        if isinstance(node, ast.Import):
+            found |= {a.asname: a.name for a in node.names if a.asname}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found |= {a.asname: f"{node.module}.{a.name}" for a in node.names if a.asname}
+    return found
+
+
 def references(source: Source) -> set[str]:
-    """Import targets plus every `a.b.c` attribute chain the module mentions."""
-    chains = {dotted(node) for node in ast.walk(source.tree) if isinstance(node, ast.Attribute)}
-    return targets(source) | {chain for chain in chains if chain is not None}
+    """Import targets plus every `a.b.c` attribute chain and bare name the module mentions, an
+    aliased head read as the path it stands for."""
+    named = aliases(source)
+    resolved: set[str] = set()
+    for node in ast.walk(source.tree):
+        chain = dotted(node) if isinstance(node, ast.Attribute | ast.Name) else None
+        if chain is None:
+            continue
+        head, _, rest = chain.partition(".")
+        resolved.add(f"{named[head]}.{rest}".rstrip(".") if head in named else chain)
+    return targets(source) | resolved
 
 
 def reads_clock_entropy_or_environment(name: str) -> bool:
@@ -309,6 +342,7 @@ def test_core_and_definition_read_no_clock_randomness_or_environment(tmp_path: P
 
     assert clock_entropy_or_environment_in_pure_layers(found) == [
         ("qmx_engine/core/tick.py", "datetime.datetime.now"),
+        ("qmx_engine/core/tick.py", "time.monotonic"),
         ("qmx_engine/core/tick.py", "time.time"),
         ("qmx_engine/definition/seed.py", "os.environ"),
         ("qmx_engine/definition/seed.py", "random"),
@@ -326,3 +360,26 @@ def test_test_mode_is_built_nowhere_in_the_source(tmp_path: Path) -> None:
     )
 
     assert builds_test_mode(found) == ["qmx_engine/service/tests.py", "qmx_engine/settings.py"]
+
+
+def test_l20_l22_an_alias_importlib_and_every_entropy_source_are_caught(tmp_path: Path) -> None:
+    found = plant(
+        tmp_path,
+        {
+            "core/hidden.py": (
+                "import time as t\nimport importlib\nfrom os import urandom as u\n"
+                "import uuid\nt.perf_counter()\nuuid.uuid4()\n__import__('random')\n"
+            ),
+            "definition/ids.py": "import secrets\nsecrets.token_hex(4)\n",
+        },
+    )
+
+    assert clock_entropy_or_environment_in_pure_layers(found) == [
+        ("qmx_engine/core/hidden.py", "__import__"),
+        ("qmx_engine/core/hidden.py", "importlib"),
+        ("qmx_engine/core/hidden.py", "os.urandom"),
+        ("qmx_engine/core/hidden.py", "time.perf_counter"),
+        ("qmx_engine/core/hidden.py", "uuid.uuid4"),
+        ("qmx_engine/definition/ids.py", "secrets"),
+        ("qmx_engine/definition/ids.py", "secrets.token_hex"),
+    ]

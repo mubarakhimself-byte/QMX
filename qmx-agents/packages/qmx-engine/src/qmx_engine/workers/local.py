@@ -1,5 +1,10 @@
 """The in-process worker on the PC (SOLUTION-DESIGN 5.2, AD-20).
 
+The runner reaches every worker through `WorkerPort`: `run(job, emit)` and `cancel(key, reason)`.
+No executor crosses the port (L-42): this local adapter holds each run's executor table, which the
+runner hands it with `serve` while the run is driven, and a remote adapter resolves executors on
+its own side.
+
 `run` carries out one attempt: it takes the capacity its kind uses from the host's table
 (`admission.Capacity`, AD-58), waiting by priority then age, writes `node_started`, opens the
 attempt's overlay for a script-family node, runs the executor while a `heartbeat` goes out every
@@ -26,10 +31,10 @@ import os
 import signal
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, Literal, Protocol, cast
 
 import psutil
 
@@ -52,6 +57,16 @@ RESOLVED: Final = ("role", "profile", "model", "effort", "candidate", "test_only
 
 type Emit = Callable[[EventKind, JsonObject], None]
 type AnyExecutor = Executor | AsyncExecutor
+type CancelReason = Literal["stop", "stalled"]
+
+
+class WorkerPort(Protocol):
+    """Where an attempt runs (AD-20). `emit` is the sink for the attempt's `node_started`, `log`,
+    `heartbeat`, `tool_called` and commit events; the result is its ending."""
+
+    async def run(self, job: NodeJob, emit: Emit) -> NodeResult: ...
+
+    def cancel(self, idempotency_key: str, reason: CancelReason = "stop") -> bool: ...
 
 
 def kill_tree(pid: int) -> None:
@@ -202,14 +217,28 @@ class LocalWorker:
         self.running: dict[str, asyncio.Task[object]] = {}
         self.cancelled: dict[str, Failed] = {}
         """Key to the failure a cancelled attempt ends with."""
+        self.tables: dict[str, Mapping[str, AnyExecutor]] = {}
+        """Run id to the executor of each kind its attempts run on."""
 
-    async def run(self, job: NodeJob, executor: AnyExecutor, emit: Emit) -> NodeResult:
+    def serve(self, run_id: str, executors: Mapping[str, AnyExecutor]) -> None:
+        self.tables[run_id] = executors
+
+    def release(self, run_id: str) -> None:
+        self.tables.pop(run_id, None)
+
+    async def run(self, job: NodeJob, emit: Emit) -> NodeResult:
+        kind = REGISTRY.kind(str(job.node_definition.get("type")))
+        name = kind.name if kind is not None else ""
+        executor = self.tables.get(job.run_id, {}).get(name)
+        if executor is None:
+            message = f"no executor serves kind {name or 'unknown'} for this run"
+            return Failed(
+                "executor_missing", message, signature("executor_missing", message), False
+            )
         task = asyncio.current_task()
         if task is not None:
             self.running[job.idempotency_key] = cast(asyncio.Task[object], task)
         try:
-            kind = REGISTRY.kind(str(job.node_definition.get("type")))
-            name = kind.name if kind is not None else ""
             async with self.capacity.held(name, job.placement, job.priority):
                 return await self.attempt(job, executor, emit)
         except asyncio.CancelledError:
@@ -220,14 +249,14 @@ class LocalWorker:
         finally:
             self.running.pop(job.idempotency_key, None)
 
-    def cancel(self, idempotency_key: str, *, stalled: bool = False) -> bool:
+    def cancel(self, idempotency_key: str, reason: CancelReason = "stop") -> bool:
         """Stop the attempt with this key; False when it is not running here. A stalled attempt
-        fails `stalled` and retryable, so the ladder takes it (SOLUTION-DESIGN 10.3). Any other
-        cancel is a stop: its outcome is unknown, and the runner never retries it (B-37)."""
+        fails `stalled` and retryable, so the ladder takes it (SOLUTION-DESIGN 10.3). A stop's
+        outcome is unknown, and the runner never retries it (B-37)."""
         task = self.running.get(idempotency_key)
         if task is None:
             return False
-        if stalled:
+        if reason == "stalled":
             failure = Failed(STALLED, STALLED_MESSAGE, signature(STALLED, STALLED_MESSAGE), True)
         else:
             message = "the attempt was cancelled"

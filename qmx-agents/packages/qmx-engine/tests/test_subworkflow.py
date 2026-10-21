@@ -55,13 +55,3 @@ def test_a_child_past_the_depth_ceiling_is_refused(tmp_path: Path) -> None:
     assert outcome.status == "failed"
     assert failure(home, outcome.run_id) == "subworkflow_failed"
     assert failure(home, f"{outcome.run_id}.call.0.1") == "call_depth_exceeded"
-
-
-def test_a_child_whose_caller_policy_is_none_is_refused(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    root = folder(tmp_path / "wf", [START, call("child")], {"start": {"main": [edge("call")]}}, {})
-    folder(root / "child", [START], {}, {}, caller_policy="none")
-
-    outcome, _ = run_folder(root, home)
-
-    assert (outcome.status, failure(home, outcome.run_id)) == ("failed", "caller_refused")

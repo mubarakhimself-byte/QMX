@@ -5,15 +5,15 @@ each iteration's slots carry `iteration = k`.
 Before iteration k the core decides from the ledger whether a typed stop fires, checked in this
 order: `max_iterations` (k has reached it), `budget` (the body's attempts have reported that many
 tokens), `predicate` (a `qmx_engine.definition.expr` expression over the last value handed back,
-true means stop) and `no_progress_rounds` (the `metric` key of the values handed back has not risen
-for that many rounds in a row). The decision is an input of the loop's slot, so it is memoised and
-recorded, and iteration state never lives in a node result.
+true means stop) and `no_progress_rounds` (the `metric` key of the values handed back has not moved
+in its `direction`, `up` by default, for that many rounds in a row). The decision is an input of
+the loop's slot, so it is memoised and recorded, and iteration state never lives in a node result.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
@@ -33,6 +33,8 @@ class LoopSpec(BaseModel):
     predicate: str | None = None
     no_progress_rounds: int | None = Field(default=None, gt=0)
     metric: str | None = None
+    direction: Literal["up", "down"] = "up"
+    """Which way the metric moves when the loop makes progress (B-23)."""
 
     @model_validator(mode="after")
     def _stops(self) -> Self:
@@ -48,11 +50,11 @@ def _metric(value: JsonValue, name: str) -> float:
     return found
 
 
-def flat_rounds(metrics: Sequence[float]) -> int:
-    """Rounds in a row, counted back from the last, in which the metric did not rise."""
+def flat_rounds(metrics: Sequence[float], direction: Literal["up", "down"] = "up") -> int:
+    """Rounds in a row, counted back from the last, in which the metric did not move its way."""
     count = 0
     for before, after in zip(metrics[-2::-1], metrics[::-1], strict=False):
-        if after > before:
+        if (after > before) if direction == "up" else (after < before):
             break
         count += 1
     return count
@@ -72,6 +74,6 @@ def stop(spec: LoopSpec, k: int, values: Sequence[JsonValue], spent: int) -> str
             raise LoopError(f"predicate: {error}") from None
     if spec.no_progress_rounds is not None and spec.metric is not None:
         metrics = [_metric(value, spec.metric) for value in values]
-        if flat_rounds(metrics) >= spec.no_progress_rounds:
+        if flat_rounds(metrics, spec.direction) >= spec.no_progress_rounds:
             return "no_progress_rounds"
     return None

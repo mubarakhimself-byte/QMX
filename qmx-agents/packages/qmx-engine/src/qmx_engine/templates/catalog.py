@@ -370,8 +370,9 @@ SHARED_COPIES: Final[dict[str, tuple[str, ...]]] = {
         )
     },
 }
-"""Each shared block file, under `_shared/`, to its copies in the templates. A run holds only its
-own folder's files, so a template carries a byte-identical copy of each block file it uses."""
+"""Each shared block file, under `_shared/`, to its copies in the templates. These copies predate
+block folders: a bundle now carries a `subworkflow` node's child folder and hashes its bytes (B-76),
+so a template may call a shared block as a child instead, and the copies can go (TPL1)."""
 
 
 def find(template_id: str) -> Template:

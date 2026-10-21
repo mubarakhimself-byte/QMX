@@ -1,0 +1,116 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-loop-in-loop",
+  "name": "bad-loop-in-loop",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "outer",
+      "name": "Outer",
+      "type": "loop",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "max_iterations": 2
+      }
+    },
+    {
+      "id": "inner",
+      "name": "Inner",
+      "type": "loop",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "max_iterations": 2
+      }
+    },
+    {
+      "id": "step",
+      "name": "Step",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "expr": "True"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Outer",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Outer": {
+      "body": [
+        [
+          {
+            "node": "Inner",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Inner": {
+      "body": [
+        [
+          {
+            "node": "Step",
+            "port": "in",
+            "map": "one"
+          }
+        ]
+      ],
+      "done": [
+        [
+          {
+            "node": "Outer",
+            "port": "next",
+            "map": "one"
+          }
+        ]
+      ]
+    },
+    "Step": {
+      "true": [
+        [
+          {
+            "node": "Inner",
+            "port": "next",
+            "map": "one"
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "nesting_unsupported"
+    ]
+  }
+}

@@ -3,9 +3,13 @@
 `Run.drive` folds the run's events, carries out the commands the core returns, and folds again.
 Every event goes through the one `Ledger` writer before the next fold, so a worker's result is in
 the ledger before the core sees it. The runner writes what SOLUTION-DESIGN 3.2 gives the core:
-`node_scheduled`, a hold's `node_waiting`, a memo's `node_finished`, `ladder_step`, the doctor's
-`doctor_verdict`, `run_paused` and `run_finished`. The worker writes `node_started` and
-heartbeats, and the runner writes each attempt's ending from the result the worker returns.
+`node_scheduled` (with the attempt's input hash), a hold's `node_waiting`, a memo's
+`node_finished`, `ladder_step`, the doctor's `doctor_verdict`, `run_paused` and `run_finished`.
+Every node event carries its attempt key (AD-15). The worker writes `node_started` and heartbeats,
+and the runner writes each attempt's ending from the result the worker returns. The runner reaches
+the worker only through `WorkerPort.run(job, emit)`; it serves the worker its executor table while
+it drives the run, so no executor crosses the port (AD-20). A partition that fails after a join
+reading it fired leaves a digest line (B-23).
 
 Every event that ruling 77 sends to the operator raises its inbox item as it is written: a provider
 failure, a system fault, or an irreversible external step of unknown outcome. While attempts run,
@@ -46,6 +50,8 @@ way (AD-10), so only the ticker resumes it on time.
 A run's settings are read from the port as it opens and kept for the pass (B-42), with a trigger's
 role and effort pins over them. `Engine.cancel` stops a run and every live run under it: each
 records `run_cancelled`, its attempts are cancelled and it ends `stopped` (AD-5, B-66).
+A `subworkflow` child that ends `waiting` leaves its parent's node waiting on it; when that child
+later ends, it resumes the parent, whose next attempt takes the child up again (B-27).
 """
 
 from __future__ import annotations
@@ -77,11 +83,11 @@ from qmx_engine.core.commands import (
 from qmx_engine.core.fold import fold, slot_of
 from qmx_engine.core.ladder import CANCELLED, NO_DOCTOR, limits_line, step_data
 from qmx_engine.core.partitions import RUN_SETTINGS
-from qmx_engine.core.ready import next_commands
+from qmx_engine.core.ready import graph, next_commands, plan
 from qmx_engine.core.replay import idempotency_key, node_definition
 from qmx_engine.core.state import Slot, State
 from qmx_engine.definition.folder import content_hash, load
-from qmx_engine.definition.model import Node, Workflow, dropped
+from qmx_engine.definition.model import Node, Workflow, dropped, edges
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
@@ -302,10 +308,8 @@ class Engine:
         if not self.claiming:
             raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
-        if ledger_path(self.home).exists():
-            with Reader.open(self.home) as reader:
-                if reader.events(run_id):
-                    raise Refused(f"run {run_id} already exists")
+        if self.exists(run_id):
+            raise Refused(f"run {run_id} already exists")
         run = Run(
             self,
             root,
@@ -327,16 +331,8 @@ class Engine:
         """`reason` is what `run_resumed` records when nothing was left in flight. The ticker
         passes `wake` with the instant `woke` it woke the run at; a run a usage limit paused then
         records `limit`."""
-        with Reader.open(self.home) as reader:
-            events = reader.events(run_id)
-        if not events or events[0].kind != "run_created":
-            raise Refused(f"no run {run_id} in this home")
+        events, root, workflow = self.load(run_id)
         created = events[0].data
-        root = Path(str(created.get("folder")))
-        found = checked(root)
-        if isinstance(found, list):
-            codes = " ".join(sorted({p.code for p in found}))
-            raise Refused(f"the run's folder no longer runs: {codes}")
         mode: Mode = "live" if created.get("mode") == "live" else "test"
         depth = created.get("call_depth")
         priority = created.get("priority")
@@ -345,7 +341,7 @@ class Engine:
         run = Run(
             self,
             root,
-            found[1],
+            workflow,
             run_id,
             mode=mode,
             call_depth=depth if isinstance(depth, int) else 0,
@@ -358,6 +354,52 @@ class Engine:
         run.woke = woke
         run.recover(woken_by(events) if reason == "wake" else reason)
         return await run.drive()
+
+    def load(self, run_id: str) -> tuple[list[Event], Path, Workflow]:
+        with Reader.open(self.home) as reader:
+            events = reader.events(run_id)
+        if not events or events[0].kind != "run_created":
+            raise Refused(f"no run {run_id} in this home")
+        root = Path(str(events[0].data.get("folder")))
+        found = checked(root)
+        if isinstance(found, list):
+            codes = " ".join(sorted({p.code for p in found}))
+            raise Refused(f"the run's folder no longer runs: {codes}")
+        return events, root, found[1]
+
+    async def adopt(self, run_id: str) -> Outcome:
+        """A child run a parent attempt takes up again (B-27): resumed while it has not ended,
+        else read as it ended, with a passed child's outputs."""
+        events, _, workflow = self.load(run_id)
+        state = fold(workflow, events)
+        if state.ended is None:
+            return await self.resume(run_id, reason="parent")
+        if state.ended == "passed":
+            sinks = plan(state, graph(workflow)).sinks
+            return Outcome(run_id, "passed", None, sinks, fingerprint(sinks))
+        status: Status = "stopped" if state.ended == "stopped" else "failed"
+        return Outcome(run_id, status, f"the child already ended {state.ended}")
+
+    def wake_parent(self, parent_run_id: str, child_run_id: str) -> None:
+        """Resume a parent that is not driven here and whose node still waits on this child, now
+        that the child ended (B-27)."""
+        try:
+            events, _, workflow = self.load(parent_run_id)
+        except Refused:
+            return
+        state = fold(workflow, events)
+        slots = {
+            slot_of(e.data)
+            for e in events
+            if e.kind == "node_waiting" and e.data.get("child_run_id") == child_run_id
+        }
+        if state.ended is None and any(
+            (run := state.nodes.get(slot)) is not None
+            and run.phase == "waiting"
+            and run.reason == "child"
+            for slot in slots
+        ):
+            self.spawn(self.resume(parent_run_id, reason="child"))
 
     def cancel(self, run_id: str, reason: str = "operator") -> list[str]:
         """Stop a run this engine drives and every live run under it (AD-5, B-66): each records
@@ -376,6 +418,12 @@ class Engine:
             above = self.live.get(parent)
             parent = above.parent_run_id if above is not None else None
         return found
+
+    def exists(self, run_id: str) -> bool:
+        if not ledger_path(self.home).exists():
+            return False
+        with Reader.open(self.home) as reader:
+            return bool(reader.events(run_id))
 
     def spawn(self, outcome: Awaitable[Outcome]) -> None:
         task = asyncio.ensure_future(outcome)
@@ -447,6 +495,8 @@ class Run:
         def launch(
             root: Path, workflow: Workflow, inputs: JsonValue, run_id: str
         ) -> Awaitable[Outcome]:
+            if self.engine.exists(run_id):
+                return self.engine.adopt(run_id)
             return self.engine.start(
                 root,
                 workflow,
@@ -475,6 +525,7 @@ class Run:
                 max_depth=max_depth if isinstance(max_depth, int) else 0,
                 launch=launch,
                 spawn=self.engine.spawn,
+                waited=lambda job: waited_child(self.events, job),
             ),
             "llm": self.llm_executor(),
             "agent": self.agent_executor(),
@@ -483,6 +534,8 @@ class Run:
 
     def agent_executor(self) -> AnyExecutor:
         engine = self.engine
+        if self.fake:
+            return FakeProvider(self.root)
         if engine.harness is None or engine.admission is None:
             return Unavailable()
         return Agent(
@@ -605,11 +658,13 @@ class Run:
 
     async def drive(self) -> Outcome:
         self.engine.live[self.run_id] = self
+        self.engine.worker.serve(self.run_id, self.executors)
         try:
             return await self.steps()
         except LedgerWriteError as error:
             return await self.fault(error)
         finally:
+            self.engine.worker.release(self.run_id)
             self.engine.live.pop(self.run_id, None)
 
     def stop(self, reason: str) -> None:
@@ -746,7 +801,7 @@ class Run:
             case "interrupt" if isinstance(agent, Agent):
                 await agent.stop(key, "idle")
             case "stalled":
-                self.engine.worker.cancel(key, stalled=True)
+                self.engine.worker.cancel(key, "stalled")
             case "loop" | "no_convergence":
                 if key not in self.stopping:
                     self.stopping.add(key)
@@ -821,6 +876,7 @@ class Run:
                 Slot(command.node_id, command.iteration, command.partition),
                 command.attempt,
                 memo_key=command.memo_key,
+                input_hash=fingerprint(command.inputs),
                 plan=command.plan,
                 **({"ladder": command.ladder} if command.ladder is not None else {}),
             ),
@@ -861,11 +917,9 @@ class Run:
         self.inflight[task] = command
 
     async def attempt(self, job: NodeJob, gate: asyncio.Event | None = None) -> None:
-        kind = REGISTRY.kind(str(job.node_definition.get("type")))
-        executor = self.executors[kind.name if kind is not None else ""]
         if gate is not None:
             await gate.wait()
-        result = await self.engine.worker.run(job, executor, self.append)
+        result = await self.engine.worker.run(job, self.append)
         if isinstance(result, Waiting) and result.resume_at is not None:
             result = replace(result, resume_at=utc_text(datetime.fromisoformat(result.resume_at)))
         slot = Slot(job.node_id, job.iteration, job.partition)
@@ -875,6 +929,28 @@ class Run:
         keys = slot_keys(slot, job.attempt)
         for name, data in ending(result):
             self.append(cast(EventKind, name), keys | data)
+        if isinstance(result, Failed):
+            self.late(slot, job.attempt)
+
+    def late(self, slot: Slot, attempt: int) -> None:
+        """A partition that fails after a join reading it fired is late: it is never merged, and
+        a digest line says so (B-23)."""
+        if slot.partition is None:
+            return
+        name = self.node(slot.node_id).name
+        fired = self.state().joins
+        for edge in edges(self.definition):
+            target = next((n for n in self.definition.nodes if n.name == edge.target.node), None)
+            if edge.source != name or target is None:
+                continue
+            merged = fired.get(Slot(target.id, slot.iteration))
+            if merged is not None and slot.partition not in merged:
+                line = (
+                    f"{slot.node_id} partition {slot.partition} failed after join {target.id} "
+                    "fired; it is late and not merged"
+                )
+                data = slot_keys(slot, attempt, level="warn", digest=True, line=line)
+                self.append("log", data)
 
     def settle_from_memo(self, command: UseMemo) -> None:
         slot = Slot(command.node_id, command.iteration, command.partition)
@@ -884,21 +960,27 @@ class Run:
         )
 
     def hold(self, command: Hold) -> None:
+        """A hold the core asked for, before any attempt, so at attempt 0 like a memo's ending. A
+        join's hold is its timeout (B-23)."""
+        found = REGISTRY.kind(self.node(command.node_id).type)
+        reason = "join_timeout" if found is not None and found.name == "join" else "wait"
         self.append(
             "node_waiting",
-            {
-                "node_id": command.node_id,
-                "iteration": command.iteration,
-                "partition": command.partition,
-                "reason": "wait",
-                "resume_at": resume_at(command, self.now),
-                "event": command.event,
-            },
+            slot_keys(
+                Slot(command.node_id, command.iteration, command.partition),
+                0,
+                reason=reason,
+                resume_at=resume_at(command, self.now),
+                event=command.event,
+            ),
         )
 
     def end(self, command: Finish | Park | Pause | Wait | None, state: State) -> Outcome:
         outcome = self.ended(command, state)
         self.flush()
+        parent = self.parent_run_id
+        if outcome.status != "waiting" and parent is not None and parent not in self.engine.live:
+            self.engine.wake_parent(parent, self.run_id)
         return outcome
 
     def ended(self, command: Finish | Park | Pause | Wait | None, state: State) -> Outcome:
@@ -1059,6 +1141,19 @@ def pinned(settings: Mapping[str, object], pins: JsonObject) -> Mapping[str, obj
         if kept:
             found[f"roles.{role}"] = kept
     return found
+
+
+def waited_child(events: list[Event], job: NodeJob) -> str | None:
+    """The child run the slot's last attempt waited on, when that attempt ended waiting on it."""
+    slot = Slot(job.node_id, job.iteration, job.partition)
+    child: str | None = None
+    for event in events:
+        if event.kind in ("node_finished", "node_failed", "node_waiting") and (
+            "node_id" in event.data and slot_of(event.data) == slot
+        ):
+            found = event.data.get("child_run_id")
+            child = found if event.kind == "node_waiting" and isinstance(found, str) else None
+    return child
 
 
 def resumed_chat(events: list[Event], slot: Slot, attempt: int) -> str | None:

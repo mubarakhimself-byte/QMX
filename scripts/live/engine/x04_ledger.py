@@ -2,9 +2,10 @@
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/x04_ledger.py [--base REV] [--trunk REV] [lane]`
-Lanes are `regression burst kill second-writer write-error migrate spans memo stats reader perf`;
-none named runs all. Each lane writes `evidence/ep4/<ENGINE_LOG_PREFIX>ep4-<lane>.log`, and the
-script exits 1 if any lane failed. No lane needs a model, a key or the ship home.
+Lanes are `regression burst kill second-writer write-error migrate spans memo stats reader perf
+keys`; none named runs all. Each lane writes
+`evidence/ep4/<ENGINE_LOG_PREFIX>ep4-<lane>.log`, and the script exits 1 if any lane failed. No
+lane needs a model, a key or the ship home.
 """
 
 from __future__ import annotations
@@ -336,7 +337,7 @@ def spans_lane(log: Log) -> None:
         ledger.append("run-0", "run_created", {"mode": "test"}, at=AT)
         endings = ("node_finished", "node_failed", "node_finished")
         for attempt, ending in enumerate(endings, start=1):
-            key = {"node_id": "triage", "attempt": attempt}
+            key = {"node_id": "triage", "iteration": 0, "partition": None, "attempt": attempt}
             ledger.append("run-0", "node_started", key, at=f"2026-10-17T09:0{attempt}:00+00:00")
             ledger.append("run-0", ending, key, at=f"2026-10-17T09:0{attempt}:0{attempt * 2}+00:00")
     with Reader.open(home) as reader:
@@ -375,8 +376,72 @@ def memo_lane(log: Log) -> None:
         memo.record(ledger, key, {"main": ["card"]})
     with Reader.open(home) as reader:
         log.check(
-            "the memo under that key is valid", memo.valid(reader, key), key.fingerprint == keys[0]
+            "the memo under that key holds its outputs",
+            memo.has(reader, key) and memo.outputs(reader, key) == {"main": ["card"]},
+            key.fingerprint == keys[0],
         )
+
+
+TWO_NODES: Final = (
+    AGENTS / "packages" / "qmx-engine" / "tests" / "fixtures" / "workflows" / "script-chain"
+)
+KEYS: Final = ("node_id", "iteration", "partition", "attempt")
+
+
+def keys_lane(log: Log) -> None:
+    """BUG2 lane 3: every node event of a real run carries its attempt key (AD-15, B-18), and the
+    ledger refuses an ending without one (L-29)."""
+    import asyncio  # noqa: PLC0415
+
+    from qmx_engine.definition.validate import checked  # noqa: PLC0415
+    from qmx_engine.runner import Engine  # noqa: PLC0415
+    from qmx_engine.settings import DEFAULTS  # noqa: PLC0415
+
+    home = throwaway_home("ep4", "keys")
+    found = checked(TWO_NODES)
+    if isinstance(found, list):
+        raise SystemExit(f"BLOCKED: script-chain does not validate: {found}")
+
+    async def go() -> str:
+        with Ledger.open(home) as ledger:
+            engine = Engine(home, ledger, settings=DEFAULTS)
+            outcome = await engine.start(TWO_NODES, found[1], mode="test", inputs=None)
+            return outcome.run_id
+
+    run_id = asyncio.run(go())
+    with Reader.open(home) as reader:
+        events = reader.events(run_id)
+        spans = reader.spans(run_id)
+    node_events = [e for e in events if "node_id" in e.data]
+    kinds = sorted({e.kind for e in node_events})
+    missing = [(e.seq, e.kind) for e in node_events if not all(k in e.data for k in KEYS)]
+    scheduled = [e.data.get("input_hash") for e in node_events if e.kind == "node_scheduled"]
+    log(f"run {run_id}: {len(node_events)} node events of kinds {kinds}, {len(spans)} spans")
+    log.check(
+        "every node event carries node_id, iteration, partition and attempt", not missing, missing
+    )
+    log.check(
+        "every node_scheduled carries its input hash",
+        len(scheduled) == 4 and all(isinstance(h, str) and len(h) == 64 for h in scheduled),
+        scheduled,
+    )
+    log.check(
+        "one span per attempt, each ok",
+        sorted((s.node_id, s.status) for s in spans)
+        == [("double", "ok"), ("numbers", "ok"), ("start", "ok"), ("total", "ok")],
+        [(s.node_id, s.status) for s in spans],
+    )
+    with Ledger.open(home) as ledger:
+        try:
+            ledger.append(run_id, "node_finished", {"node_id": "total", "attempt": 1}, at=AT)
+            refused = "stored"
+        except ValueError as error:
+            refused = str(error)
+    log.check(
+        "an ending without its full key is refused",
+        refused.startswith("node_finished needs"),
+        refused,
+    )
 
 
 def stats(log: Log) -> None:
@@ -476,6 +541,7 @@ def main() -> int:
         "stats": stats,
         "reader": reader,
         "perf": perf,
+        "keys": keys_lane,
     }
     failed: list[str] = []
     for name in args.lanes or list(lanes):

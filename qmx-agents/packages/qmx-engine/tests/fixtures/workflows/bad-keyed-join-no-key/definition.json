@@ -60,7 +60,8 @@
   },
   "meta": {
     "expect": [
-      "keyed_join_without_key"
+      "keyed_join_without_key",
+      "join_inbound_invalid"
     ]
   }
 }

@@ -167,12 +167,12 @@ def test_refused_events_name_the_rule_and_not_the_value(tmp_path: Path) -> None:
 def test_a_span_row_per_attempt_from_its_start_and_end(tmp_path: Path) -> None:
     with Ledger.open(tmp_path) as ledger:
         ledger.append("run", "run_created", {"mode": "test"}, at=AT)
-        attempt: JsonObject = {"node_id": "n1", "attempt": 1}
+        attempt: JsonObject = {"node_id": "n1", "iteration": 0, "partition": None, "attempt": 1}
         ledger.append("run", "node_started", attempt | {"model": "haiku"}, at=AT)
         failed: JsonObject = {**attempt, "signature": "abc", "tokens": {"in": 10, "out": 2}}
         ledger.append("run", "node_failed", failed, at="2026-10-17T09:00:04+00:00")
-        ledger.append("run", "node_started", {"node_id": "n1", "attempt": 2}, at=AT)
-        ledger.append("run", "node_waiting", {"node_id": "n9", "attempt": 1}, at=AT)
+        ledger.append("run", "node_started", attempt | {"attempt": 2}, at=AT)
+        ledger.append("run", "node_waiting", attempt | {"node_id": "n9"}, at=AT)
 
     with Reader.open(tmp_path) as reader:
         rows = [
@@ -228,7 +228,7 @@ def test_redact_masks_every_bundled_provider_key_shape(
 def test_an_event_with_a_key_commits_redacted_and_its_span_counts_it(tmp_path: Path) -> None:
     planted = "sk-or-" + "v1-" + HEX
     register("qmx/tool/feed", "feed-value-" + HEX[:16])
-    attempt: JsonObject = {"node_id": "call", "attempt": 1}
+    attempt: JsonObject = {"node_id": "call", "iteration": 0, "partition": None, "attempt": 1}
     failure: JsonObject = {"message": f"401 key_{planted}", "echo": ["feed-value-" + HEX[:16]]}
     with Ledger.open(tmp_path) as ledger:
         ledger.append("run", "node_started", attempt, at=AT)

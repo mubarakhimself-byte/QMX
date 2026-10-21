@@ -2,17 +2,18 @@
 
 The planner walks the nodes upstream first and works out, for each node in its current iteration,
 its partitions (its shape) and which of its slots may start. A slot is ready when every source
-slot it reads has settled and at least one inbound edge carried output; when every source settled
-and none carried output (a `rule` routed the other way), the slot is skipped, and so is what only
-it feeds. The entry is the `trigger` node, which takes the run's inputs.
+slot it reads has settled, every inbound edge marked `required` carried output, and at least one
+inbound edge carried output; in a loop body an edge from outside the loop is context and never
+makes a slot ready on its own (AD-5). Otherwise the slot is skipped (a `rule` routed the other
+way), and so is what only it feeds. The entry is the `trigger` node, which takes the run's inputs.
 
 Shapes: a node fed by a fanning edge (`core.edges`) runs one slot per partition. A node fed by
 `one` edges from a source that fanned out runs one slot per source partition, each starting as soon
 as its own source partition finishes. A `join` collects every partition of its one source into
 one slot (`core.joins`). A `loop` runs one slot per iteration (`core.loops`), and the nodes of its
 body run at the loop's latest iteration. A `wait` slot starts only once its hold is due
-(`core.waits`). Nested fan-out, a partitioned loop and a loop inside a loop body are not run by
-this core: the run parks naming them.
+(`core.waits`). Nested fan-out, a partitioned loop and a loop inside a loop body are refused by
+validation (`nesting_unsupported`); a run of an unvalidated definition still parks naming them.
 """
 
 from __future__ import annotations
@@ -265,6 +266,7 @@ class Planner:
         self.shape[(node.name, iteration)] = count
         for partition in [None] if count is None else range(count):
             delivered: dict[str, list[JsonValue]] = defaultdict(list)
+            carried: list[Edge] = []
             for edge, source, at in sources:
                 own = partition if self.shape[(source.name, at)] is not None else None
                 slot = Slot(source.id, at, own)
@@ -275,9 +277,10 @@ class Planner:
                     break
                 if edge.port in (found := self.outputs(slot)):
                     delivered[edge.target.port].append(found[edge.port])
+                    carried.append(edge)
             else:
                 slot = Slot(node.id, iteration, partition)
-                if not delivered:
+                if not self.runs_on(node, [edge for edge, _, _ in sources], carried):
                     self.skipped.add(slot)
                     continue
                 inputs: JsonObject = {
@@ -285,6 +288,17 @@ class Planner:
                     for port, values in delivered.items()
                 }
                 self.offer(node, slot, inputs, None)
+
+    def runs_on(self, node: Node, into: list[Edge], carried: list[Edge]) -> bool:
+        """AD-5 readiness, once every source has settled: every `required` edge carried output and
+        at least one edge did. In a loop body, an edge from outside the loop is context, so at
+        least one edge from inside the body must carry (B-24, B-87)."""
+        if any(edge.target.required and edge not in carried for edge in into):
+            return False
+        loop = self.graph.loop_of.get(node.name)
+        if loop is None:
+            return bool(carried)
+        return any(e.source == loop or self.graph.loop_of.get(e.source) == loop for e in carried)
 
     def visit_fan(self, node: Node, iteration: int, sources: list[tuple[Edge, Node, int]]) -> None:
         constants: JsonObject = {}
@@ -303,6 +317,9 @@ class Planner:
                 fanning.append((edge, found[edge.port]))
             elif edge.port in found:
                 constants[edge.target.port] = found[edge.port]
+            elif edge.target.required:
+                self.skip(node, iteration)
+                return
         try:
             parts = fan([(edge.target, value) for edge, value in fanning], self.state.settings)
         except (FanError, ChunkError) as error:

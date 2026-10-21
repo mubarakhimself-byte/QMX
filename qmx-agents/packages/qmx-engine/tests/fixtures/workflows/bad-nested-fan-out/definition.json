@@ -1,0 +1,76 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "bad-nested-fan-out",
+  "name": "bad-nested-fan-out",
+  "nodes": [
+    {
+      "id": "t",
+      "name": "Start",
+      "type": "trigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "each",
+      "name": "Each",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "expr": "True"
+      }
+    },
+    {
+      "id": "again",
+      "name": "Again",
+      "type": "rule",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "expr": "True"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Each",
+            "port": "in",
+            "map": "broadcast"
+          }
+        ]
+      ]
+    },
+    "Each": {
+      "true": [
+        [
+          {
+            "node": "Again",
+            "port": "in",
+            "map": "chunk",
+            "chunk": {
+              "by": "items",
+              "size": 1
+            }
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "expect": [
+      "nesting_unsupported"
+    ]
+  }
+}

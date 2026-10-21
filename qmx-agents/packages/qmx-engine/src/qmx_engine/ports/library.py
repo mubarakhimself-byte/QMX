@@ -28,7 +28,9 @@ from qmx_engine.definition.folder import (
     DEFINITION,
     Problem,
     WorkflowFolder,
+    blocks_in,
     content_hash,
+    escapes,
     load,
     refs_in,
 )
@@ -117,6 +119,14 @@ class Bundle:
                 refs[ref] = self.files[ref]
             else:
                 problems.append(Problem("ref_missing", path, "the ref names no file in the folder"))
+        for path, block in blocks_in(self.definition):
+            inside = {ref: data for ref, data in self.files.items() if ref.startswith(f"{block}/")}
+            if escapes(block):
+                problems.append(Problem("ref_escapes_folder", path, "the block leaves the folder"))
+            elif f"{block}/{DEFINITION}" not in inside:
+                problems.append(Problem("ref_missing", path, "the block holds no definition.json"))
+            else:
+                refs |= inside
         return WorkflowFolder(Path(), self.definition, refs, problems)
 
     def content_hash(self) -> str | None:

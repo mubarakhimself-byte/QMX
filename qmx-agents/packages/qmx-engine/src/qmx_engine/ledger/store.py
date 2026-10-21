@@ -10,6 +10,10 @@ holds the owner's pid for the refusal message. The OS drops the lock when its pr
 killed writer leaves nothing to clean up. `Reader` opens its own `mode=ro` connection and never
 takes the lock.
 
+Every node event carries its attempt key `node_id, iteration, partition, attempt` (AD-15, B-18):
+an event of a node-only kind, or any event that names a `node_id`, is refused without all four,
+so no ending is stored that closes no span (L-29).
+
 No error raised here quotes event data: messages name the SQLite error code, never a value. Every
 string in an event's data is redacted before it is queued (AD-37), so the stored text is the only
 text: the event `append` returns, its span's `redactions` count and every reader see the same.
@@ -218,8 +222,8 @@ class Ledger:
         if not isinstance(clean, dict):
             raise ValueError("event data is not a JSON object")
         data = cast(JsonObject, clean)
-        if kind == "node_started" and spans.attempt_of(data) is None:
-            raise ValueError("node_started needs a string node_id and an integer attempt")
+        if (kind in spans.NODE_EVENTS or "node_id" in data) and not spans.keyed(data):
+            raise ValueError(f"{kind} needs node_id, iteration, partition and attempt")
 
         def operation(txn: Transaction) -> Event:
             seq = txn.next_seq(run_id)
