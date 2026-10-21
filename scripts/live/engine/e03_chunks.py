@@ -32,6 +32,7 @@ from qmx_engine.definition.validate import validate
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Reader
 from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok
+from qmx_engine.ports.router import Row
 from qmx_engine.settings import DEFAULTS
 
 HARNESS: Final = "qmx-agents/packages/qma-harness"
@@ -275,6 +276,52 @@ def token_cap(log: Log) -> None:
     log(f"total estimated tokens {sum(estimate(i) for i in items)}")
 
 
+def e29(log: Log) -> None:
+    """E29 (RTR5): 50 abstracts of about 20k bytes each fill to 0.30 of the resolved row's window,
+    so a 1M row plans 2 chunks and a 200k row 7. On the 200k row's window a failed chunk 2 reruns
+    alone and the finished chunks settle from their memos."""
+    spec = Chunk(by="tokens", fill=0.3)
+    big = Row("kimi/k3", "kimi", "k3", "strong", 1_000_000)
+    small = Row("deepseek/deepseek-v4", "deepseek", "deepseek-v4", "strong", 200_000)
+    items: list[JsonValue] = [{"id": i, "text": "w" * 20_000} for i in range(50)]
+    plans = {row.window: chunks(items, spec, {}, row) for row in (big, small)}
+    log(
+        f"50 abstracts, {sum(estimate(item, small) for item in items)} estimated tokens: "
+        f"1M row -> {len(plans[1_000_000])} chunks, 200k row -> {len(plans[200_000])} chunks"
+    )
+    log.check(
+        "the row's window plans 2 chunks on 1M and 7 on 200k",
+        [len(plans[1_000_000]), len(plans[200_000])] == [2, 7],
+        {window: len(spans) for window, spans in plans.items()},
+    )
+    definition = validated(log, "e29", chunked({"by": "tokens", "fill": 0.3}))
+    script = Script(summary, only="read", failing={("read", 2)})
+    run = engine_run(
+        definition, script, "run-e29", {**ONE_TRY, "context_window": small.window}
+    )
+    first = run.start(items)
+    scheduled = of(run.events, "node_scheduled", "read")
+    log(f"engine run at the 200k row's window: {len(scheduled)} partitions; first pass {first}")
+    log.check("5 partitions ran, not 50, on the un-rowed estimate the fan path still uses", len(scheduled) == 5, len(scheduled))
+    log.check(
+        "the run parks on the join after chunk 2 fails",
+        first.status == "failed" and "join_failed" in (first.reason or ""),
+        first,
+    )
+    mark, calls = len(run.events), len(script.calls)
+    ended = run.resume(LATER)
+    resumed = of(run.events[mark:], "node_started", "read")
+    pairs = [(e["partition"], e["attempt"]) for e in resumed]
+    log(f"resumed attempts (partition, attempt): {pairs}")
+    log.check("only chunk 2 reran", pairs == [(2, 2)], resumed)
+    memo = of(run.events[mark:], "node_finished", "read")
+    kept = sorted(cast(int, e["partition"]) for e in memo if e.get("memo"))
+    log.check("the other 4 chunks settled from their memos", kept == [0, 1, 3, 4], kept)
+    again = [c for c in script.calls[calls:] if c[0] == "read"]
+    log.check("the executor ran only chunk 2 again", again == [("read", 0, 2)], again)
+    log.check("the run finishes after the resume", ended.status == "passed", ended.status)
+
+
 def perf(log: Log) -> None:
     items: list[JsonValue] = [{"id": i, "text": f"abstract {i}"} for i in range(PERF_ITEMS)]
     settings: dict[str, JsonValue] = {
@@ -307,11 +354,12 @@ def main() -> int:
         "e03": e03,
         "chunk-setting": chunk_setting,
         "token-cap": token_cap,
+        "e29": e29,
         "perf": perf,
     }
     failed: list[str] = []
     for name in args.lanes or list(lanes):
-        log = Log("ep6", f"ep6-{name}")
+        log = Log("rtr5", "rtr5-e29") if name == "e29" else Log("ep6", f"ep6-{name}")
         log(f"lane {name} at head {git('rev-parse', 'HEAD')}, harness base {base}")
         lanes[name](log)
         if log.verdict():

@@ -3,13 +3,15 @@
 Each value is Claude's default, not the operator's, and every one is editable from the UI. Keys
 are dotted Settings paths. `*` in a `pool.accounts` key stands for any account. Durations are in
 seconds, fractions are of a model's context window or of an account's plan window, and a role's
-candidates are `profile/model` rows in the order they are tried. The role lists are SOLUTION-DESIGN
-section 9's examples, key rows first with the Chinese models leading every tier (ruling 107), then
-GPT, then the plan; no list names Fable. A row with no model id (`glm`, `qwen`, `gpt`) is kept for
-its place and is never resolved until the registry names its model (RTR5). `roles.live_order` is
-the class order a live run sorts by. `roles.test_order` is how a test run builds its list: test-only
-rows the role names itself (a provider-proof lane), then the plan's cheap end `claude/haiku`
-(ruling 105), then the role's other rows from the cheap end.
+candidates are `profile/model` rows in the order they are tried. `generated` builds those lists from
+the model registry's rows (RTR5, AD-13, AD-39): one list per role from its class, key rows first
+with the Chinese models leading every tier (ruling 107), then GPT, then the plan, and no list names
+Fable. The tables below are the bundled registry's example rows, so the defaults document
+SOLUTION-DESIGN section 9 until a host has a registry to generate from; a row with no model id
+(`glm`, `qwen`, `gpt`) keeps its place and is never resolved until the registry names its model.
+`roles.live_order` is the class order a live run sorts by. `roles.test_order` is how a test run
+builds its list: test-only rows the role names itself (a provider-proof lane), then the plan's
+cheap end `claude/haiku` (ruling 105), then the role's other rows from the cheap end.
 
 QMX sets no usage limit of its own (ruling 106, AD-40): there is no runaway guard, no turn,
 tool-call or run-time ceiling and no background share here. `timeout.*` and `loop.*` feed the stuck
@@ -26,22 +28,79 @@ are the spend-neutral re-runs after a failed fire, counted from its first failur
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Final
 
+from qmx_engine.ports.router import Row
+
 type Setting = int | float | str | tuple[int, ...] | tuple[str, ...] | None
 
-_CHEAP: Final = (
-    "kimi/k2.7-code",
-    "deepseek",
-    "minimax/MiniMax-M2.7-highspeed",
-    "qwen",
-    "gpt",
-    "claude/haiku",
+ROLE_TIERS: Final[Mapping[str, str]] = {
+    "triage": "cheap",
+    "clarifier": "cheap",
+    "scanner": "cheap",
+    "doctor": "cheap",
+    "judge": "cheap",
+    "reader": "mid",
+    "searcher": "mid",
+    "writer": "mid",
+    "extractor": "mid",
+    "planner": "strong",
+    "synthesiser": "strong",
+    "builder": "strong",
+    "reviewer": "strong",
+}
+"""Each role's class: what kind of work it is, never a provider or a model name."""
+CHINESE: Final = frozenset({"kimi", "moonshot", "deepseek", "glm", "zai", "qwen", "minimax"})
+"""The profiles whose models lead every tier (ruling 107)."""
+BUNDLED_ROWS: Final = (
+    Row("kimi/k2.7-code", "kimi", "k2.7-code", "cheap", 256_000),
+    Row("deepseek", "deepseek", "", "cheap", 128_000),
+    Row("minimax/MiniMax-M2.7-highspeed", "minimax", "MiniMax-M2.7-highspeed", "cheap", 200_000),
+    Row("qwen", "qwen", "", "cheap", 200_000),
+    Row("gpt", "gpt", "", "cheap"),
+    Row("claude/haiku", "claude", "haiku", "cheap"),
+    Row("glm", "glm", "", "mid"),
+    Row("qwen", "qwen", "", "mid"),
+    Row("deepseek", "deepseek", "", "mid"),
+    Row("kimi", "kimi", "", "mid"),
+    Row("gpt", "gpt", "", "mid"),
+    Row("claude/sonnet", "claude", "sonnet", "mid"),
+    Row("kimi/k3", "kimi", "k3", "strong", 1_000_000),
+    Row("deepseek/deepseek-v4-pro", "deepseek", "deepseek-v4-pro", "strong", 256_000),
+    Row("glm", "glm", "", "strong"),
+    Row("qwen", "qwen", "", "strong"),
+    Row("gpt", "gpt", "", "strong"),
+    Row("claude/opus", "claude", "opus", "strong"),
 )
-_MID: Final = ("glm", "qwen", "deepseek", "kimi", "gpt", "claude/sonnet")
-_STRONG: Final = ("kimi/k3", "deepseek/deepseek-v4-pro", "glm", "qwen", "gpt", "claude/opus")
+"""The bundled registry's example rows, by class, in SOLUTION-DESIGN section 9's order."""
+
+
+def _lane(row: Row) -> tuple[int, int]:
+    """Key rows before GPT before the plan, Chinese rows first inside a lane, registry order
+    inside a group (ruling 107)."""
+    lane = {"claude": 2, "gpt": 1}.get(row.profile, 0)
+    return lane, 0 if row.profile in CHINESE else 1
+
+
+def generated(rows: Sequence[Row]) -> Mapping[str, tuple[str, ...]]:
+    """Every role's candidate rows, from the registry's rows by class: his configured providers,
+    key rows first with the Chinese rows leading every tier, then GPT, then the plan. A
+    provider-proof row is never generated; only a role that names it may use it."""
+    found: dict[str, tuple[str, ...]] = {}
+    for role, tier in ROLE_TIERS.items():
+        chosen = sorted(
+            (row for row in rows if row.class_ == tier and not row.test_only), key=_lane
+        )
+        found[f"roles.{role}"] = tuple(dict.fromkeys(row.qmx_id for row in chosen))
+    return found
+
+
+_BUNDLED: Final = generated(BUNDLED_ROWS)
+_CHEAP: Final = _BUNDLED["roles.triage"]
+_MID: Final = _BUNDLED["roles.reader"]
+_STRONG: Final = _BUNDLED["roles.planner"]
 
 DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
     {

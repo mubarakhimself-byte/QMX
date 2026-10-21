@@ -1,10 +1,12 @@
 """The `llm` node over a fake harness port: one repair turn in the same chat, a run whose span names
-the resolved candidate and its tokens, the fake switch that calls no model, and a provider failure
-redacted before the ledger."""
+the resolved candidate and its tokens, the fake switch that calls no model, a provider failure
+redacted before the ledger, and the `complete` path a key row takes with no chat at all (RTR5)."""
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from fake_port import TOKENS, FakePort
@@ -17,6 +19,7 @@ from qmx_engine.nodes.base import Failed, NodeJob, Ok
 from qmx_engine.nodes.llm import BAD_OUTPUT, Llm
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle
+from qmx_engine.ports.router import Reply, Row, adopt
 from qmx_engine.runner import Engine, Outcome
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
@@ -24,6 +27,55 @@ from qmx_engine.settings import DEFAULTS
 
 ONE_LLM = Path(__file__).resolve().parent / "fixtures" / "workflows" / "one-llm"
 GOOD = '{"country": "France", "capital": "Paris"}'
+
+
+class Router:
+    """A `RouterPort` that answers one schema reply and records the calls a key row makes."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+        self.held: list[tuple[str, str, str]] = []
+        self.let_go_calls: list[str] = []
+
+    def rows(self) -> tuple[Row, ...]:
+        return (Row("kimi/k3", "kimi", "k3", "strong", 1_000_000),)
+
+    async def complete(
+        self,
+        role_or_model: str,
+        messages: Sequence[Mapping[str, object]],
+        *,
+        schema: Mapping[str, object] | None = None,
+        session: str | None = None,
+        system: str = "",
+        max_tokens: int = 4096,
+        roles: Mapping[str, Sequence[str]] | None = None,
+    ) -> Reply:
+        self.calls.append(
+            {
+                "model": role_or_model,
+                "messages": [dict(message) for message in messages],
+                "schema": schema,
+                "session": session,
+                "system": system,
+            }
+        )
+        return Reply(
+            GOOD,
+            "kimi/k3",
+            "k3",
+            "kimi-1",
+            {"input_tokens": 30, "output_tokens": 12},
+            {"country": "France", "capital": "Paris"},
+            21,
+        )
+
+    def hold(self, *, provider: str, model: str, affinity: str) -> str:
+        self.held.append((provider, model, affinity))
+        return "kimi-1"
+
+    def let_go(self, affinity: str) -> None:
+        self.let_go_calls.append(affinity)
 
 
 def job() -> NodeJob:
@@ -100,6 +152,51 @@ def test_a_provider_failure_is_redacted_before_it_reaches_the_ledger(tmp_path: P
     assert isinstance(result, Failed)
     assert (result.code, result.retryable) == ("auth", False)
     assert result.message == "the turn failed: upstream 401 unauthorized for key [redacted]"
+
+
+def test_a_key_row_calls_complete_with_no_chat_and_spans_the_router_row(tmp_path: Path) -> None:
+    router = Router()
+    adopt(router)
+    port = FakePort(GOOD)
+    key = replace(job(), resolved_model={"role": "triage", "profile": "kimi", "model": "k3"})
+    try:
+        result = asyncio.run(llm(port, tmp_path).run(key))
+    finally:
+        adopt(None)
+
+    assert isinstance(result, Ok)
+    assert result.outputs == {"main": {"country": "France", "capital": "Paris"}}
+    assert port.chats == [] and port.sent == []
+    assert router.held == [("kimi", "k3", "r1:capital")]
+    assert router.let_go_calls == ["r1:capital"]
+    call = router.calls[0]
+    assert call["model"] == "kimi/k3"
+    assert call["session"] == "r1:capital"
+    assert call["messages"] == [
+        {"role": "user", "content": [{"type": "text", "text": 'Input:\n{"in": "France"}'}]}
+    ]
+    assert result.span["router"] == {
+        "qmx_id": "kimi/k3",
+        "model": "k3",
+        "account": "kimi-1",
+        "session": "r1:capital",
+        "ms": 21,
+    }
+    assert result.span["tokens"] == {"in": 30, "out": 12, "cache_read": 0}
+
+
+def test_a_plan_row_keeps_the_chat_even_when_a_router_is_adopted(tmp_path: Path) -> None:
+    router = Router()
+    adopt(router)
+    port = FakePort(GOOD)
+    try:
+        result = asyncio.run(llm(port, tmp_path).run(job()))
+    finally:
+        adopt(None)
+
+    assert isinstance(result, Ok)
+    assert router.calls == [] and router.held == []
+    assert [chat for chat, _ in port.sent] == ["chat-1"]
 
 
 def run(home: Path, port: FakePort | None, *, fake: bool = False) -> tuple[Outcome, Span]:

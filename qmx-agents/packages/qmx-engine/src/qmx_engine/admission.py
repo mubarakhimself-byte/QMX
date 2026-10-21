@@ -15,6 +15,11 @@ waits only when a plan window is used up, as `waiting(limit, resume_at)` with th
 time plus `limits.slack`, and a refused send waits the same way. Nothing here asks the operator
 (ruling 27). A refusal that no reset lifts (the overage stop, a refused key row) is not a limit
 wait: the attempt fails `unavailable` and the failure ladder takes it.
+
+A key or GPT attempt also takes the router's pool lease for its row, under the attempt's affinity
+(AD-9, AD-12, AD-34): the provider's own window is the only limit there, and an account the pool
+has none of is a failure the ladder sees, not an exception. The lease is given back when the call
+ends; the router's own affinity keeps a run's chunks on one account while it serves them.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from typing import Final, Literal
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import Failed, Waiting
 from qmx_engine.ports.harness_adapter import HarnessPort, PlanUse
+from qmx_engine.ports.router import Refused, adopted
 from qmx_engine.roles import PLAN, Candidate
 
 type Held = Waiting | Failed
@@ -172,3 +178,21 @@ class Admission:
             if wait is not None:
                 return wait
         return unavailable(reason, retryable=True)
+
+    def hold(self, candidate: Candidate, affinity: str) -> Held | None:
+        """Take the pool lease for a key or GPT attempt on its row, under `affinity`, or fail
+        `unavailable` when the pool has no account that serves it. A plan row leases nothing."""
+        port = adopted()
+        if candidate.profile == PLAN or port is None:
+            return None
+        try:
+            port.hold(provider=candidate.profile, model=candidate.model, affinity=affinity)
+        except Refused as refused:
+            return unavailable(str(refused), retryable=True)
+        return None
+
+    def let_go(self, affinity: str) -> None:
+        """Give the attempt's pool lease back to the router."""
+        port = adopted()
+        if port is not None:
+            port.let_go(affinity)

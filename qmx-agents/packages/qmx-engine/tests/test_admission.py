@@ -1,10 +1,12 @@
 """Capacity per resource class (AD-58) and plan admission: each kind takes its class and nothing
 else, waiting work is served by priority then age, the engine keeps no chat-slot counter of its
-own, and a plan attempt waits only on a used-up window."""
+own, a plan attempt waits only on a used-up window, and a key or GPT attempt holds the pool lease
+for its row under the attempt's affinity (RTR5)."""
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -14,8 +16,9 @@ from qmx_control.service import ControlService
 
 import qmx_engine.admission
 from qmx_engine.admission import Admission, Capacity, Slots
-from qmx_engine.nodes.base import Waiting
+from qmx_engine.nodes.base import Failed, Waiting
 from qmx_engine.ports.harness_adapter import PlanUse
+from qmx_engine.ports.router import Refused, Reply, Row, adopt
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.roles import Candidate
 from qmx_engine.settings import DEFAULTS
@@ -24,6 +27,64 @@ HAIKU = Candidate("claude", "haiku", None, 200_000, test_only=False)
 KIMI = Candidate("kimi", "k3", None, 200_000, test_only=False)
 RESETS = "2026-10-17T12:00:00+00:00"
 ONE_EACH = {**DEFAULTS, "placement.pc.cpu_slots": 1, "placement.pc.container_slots": 1}
+
+
+class Pool:
+    """A `RouterPort` with one account, or none, recording the leases it mints."""
+
+    def __init__(self, account: str | None = "kimi-1") -> None:
+        self.account = account
+        self.held: list[tuple[str, str, str]] = []
+        self.let_go_calls: list[str] = []
+
+    def rows(self) -> tuple[Row, ...]:
+        return ()
+
+    async def complete(
+        self,
+        role_or_model: str,
+        messages: Sequence[Mapping[str, object]],
+        **_options: object,
+    ) -> Reply:
+        raise AssertionError("admission never completes")
+
+    def hold(self, *, provider: str, model: str, affinity: str) -> str:
+        if self.account is None:
+            raise Refused(f"no account serves {provider}/{model}")
+        self.held.append((provider, model, affinity))
+        return self.account
+
+    def let_go(self, affinity: str) -> None:
+        self.let_go_calls.append(affinity)
+
+
+def test_a_key_attempt_holds_the_pool_lease_under_its_affinity() -> None:
+    pool = Pool()
+    adopt(pool)
+    gate = Admission(Plan(PlanUse(0.0, None, None, None)), DEFAULTS)  # type: ignore[arg-type]
+    try:
+        held = [gate.hold(candidate, "r1:capital") for candidate in (KIMI, HAIKU)]
+        gate.let_go("r1:capital")
+    finally:
+        adopt(None)
+
+    assert held == [None, None]
+    assert pool.held == [("kimi", "k3", "r1:capital")]
+    assert pool.let_go_calls == ["r1:capital"]
+
+
+def test_a_key_attempt_with_no_account_fails_unavailable() -> None:
+    pool = Pool(None)
+    adopt(pool)
+    gate = Admission(Plan(PlanUse(0.0, None, None, None)), DEFAULTS)  # type: ignore[arg-type]
+    try:
+        held = gate.hold(KIMI, "r1:capital")
+    finally:
+        adopt(None)
+
+    assert isinstance(held, Failed)
+    assert (held.code, held.retryable) == ("unavailable", True)
+    assert "no account serves kimi/k3" in held.message
 
 
 class Plan:
