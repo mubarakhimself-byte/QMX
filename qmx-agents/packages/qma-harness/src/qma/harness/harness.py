@@ -28,13 +28,14 @@ import os
 import shutil
 import webbrowser
 from collections import Counter
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, cast
 
 from qmx_broker.service import BrokerService
+from qmx_control.context import AttachedRef
 from qmx_control.models import ControlError
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
@@ -462,6 +463,28 @@ class Harness:
         """Change which QMX toolsets the chat has (None is every core toolset). A live chat's
         tools change on its next model request, with no relaunch."""
         await self._chat(chat).set_toolsets(None if toolsets is None else tuple(toolsets))
+
+    async def set_attached(self, chat: SessionId, refs: Sequence[AttachedRef]) -> None:
+        """Store the chat's attached context references on its record (H49, AD-63), the one
+        writer of that list. Through the chat when it is loaded, so a later write of the same
+        record carries this list rather than the copy it held before; else straight to the
+        file. A chat that does not exist raises `UnknownChat`."""
+        entries = tuple(refs)
+        found = self._chats.get(chat)
+        if found is not None:
+            found._write(attached=entries)  # pyright: ignore[reportPrivateUsage] - owns every chat
+            return
+        record = read_record(self._deps.home, chat)
+        if record is None:
+            raise UnknownChat(chat)
+        write_record(self._deps.home, replace(record, attached=entries))
+
+    def context_reads(self, chat: SessionId) -> Mapping[str, HostRead]:
+        """The `context` toolset's reads for one chat, by catalog target. The process that holds
+        the Library answers them by overriding this; a harness with no Library reads none, and a
+        read with no target on the surface leaves its row off (`tools.tool_defs`)."""
+        del chat
+        return MappingProxyType({})
 
     async def _slots_read(self, _arguments: dict[str, Any]) -> Mapping[str, object]:
         return dataclasses.asdict(self.slot_table())
@@ -1061,7 +1084,8 @@ class Harness:
             hooks = self._hooks.get(chat)
             if hooks is not None:
                 record = replace(record, config=replace(record.config, hooks=hooks))
-            found = self._chats[chat] = Chat(record, self._deps)
+            reads = {**self._deps.host, **self.context_reads(chat)}
+            found = self._chats[chat] = Chat(record, replace(self._deps, host=reads))
         return found
 
 

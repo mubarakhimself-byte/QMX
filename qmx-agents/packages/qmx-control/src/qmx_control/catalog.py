@@ -283,6 +283,63 @@ its host passes those two reads),
 (Library AD-22: only the operator marks)."""
 
 
+CONTEXT_ROWS: Final = (
+    _row(
+        "context",
+        "add",
+        "agent_tool",
+        "context_add",
+        "domain_write",
+        "Attach a reference to this chat so the model reads the object through its handle "
+        "instead of pasted text. One grammar: @pod, @unit, @bot, @run, @app, @library and "
+        "@session; @file, @folder, @url and @youtube arrive with REF2 and @memory with MEM. "
+        "Not for pasting a document into the prompt.",
+        reversibility="reversible",
+    ),
+    _row(
+        "context",
+        "list",
+        "agent_tool",
+        "context_list",
+        "read",
+        "List this chat's attached references as the Library reads them now: status ready, "
+        "pending, archived or not_cached, and 'newer version exists' when a pinned item moved.",
+    ),
+    _row(
+        "context",
+        "refresh",
+        "agent_tool",
+        "context_refresh",
+        "domain_write",
+        "Re-resolve one attached reference: a following one moves to main's head, and a pinned "
+        "one keeps its version and gains the note when main moved.",
+        reversibility="reversible",
+    ),
+    _row(
+        "context",
+        "drop",
+        "agent_tool",
+        "context_drop",
+        "domain_write",
+        "Take one reference off this chat's attached list. The Library object itself is not "
+        "touched.",
+        reversibility="reversible",
+    ),
+    _row(
+        "context",
+        "read",
+        "agent_tool",
+        "context_read",
+        "read",
+        "Read more of one attached reference than its excerpt carried: the object's text, "
+        "capped at the window's hard share, optionally one a-b character range.",
+    ),
+)
+"""The `context` toolset (AD-63). Every row is served by the process that holds the Library,
+which hands the harness one read per target for each chat (`Harness.context_reads`), because
+attaching writes that chat's own record. A harness with no Library serves none of these rows."""
+
+
 def control_rows() -> tuple[OperationSpec, ...]:
     """Every `@operation` row on `ControlService`, in definition order."""
     from qmx_control.service import ControlService  # noqa: PLC0415
@@ -296,7 +353,7 @@ def control_rows() -> tuple[OperationSpec, ...]:
 
 def rows() -> tuple[OperationSpec, ...]:
     """The core catalog, checked."""
-    found = (*control_rows(), *BROKER_ROWS, *DOMAIN_ROWS, *HOST_ROWS)
+    found = (*control_rows(), *BROKER_ROWS, *DOMAIN_ROWS, *HOST_ROWS, *CONTEXT_ROWS)
     check(found)
     return found
 
