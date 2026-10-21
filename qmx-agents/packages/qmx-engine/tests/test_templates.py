@@ -231,11 +231,11 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_37_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_38_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 37
-    assert len(set(ids)) == 37
+    assert len(ids) == 38
+    assert len(set(ids)) == 38
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
@@ -259,7 +259,7 @@ def test_the_catalogue_lists_37_templates_each_with_a_source_card_and_its_own_fo
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
-    assert sum(1 for t in CATALOG if t.needs) == 22
+    assert sum(1 for t in CATALOG if t.needs) == 23
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:

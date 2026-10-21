@@ -24,6 +24,11 @@ A placement is checked against the kinds its host's newest heartbeat names (AD-2
 node whose kind that host's code does not know waits `placement` with `node needs update`, and
 the fire is held until a newer heartbeat lists the kind. A placement no heartbeat has named yet
 is not checked here.
+
+A placement also has the five preflight states of AD-30 (`available | configured | authorized |
+reachable | healthy`), and a node placed on a provider's machine is refused when its role resolves
+to a plan row: a plan login stays on the machine he signed in on (AD-28, AD-30), and a provider VM
+holds key rows by design. That refusal is a configuration fault, so it costs a digest line.
 """
 
 from __future__ import annotations
@@ -42,7 +47,7 @@ from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ports.library import LibraryPort
-from qmx_engine.roles import order, resolve
+from qmx_engine.roles import Candidate, order, resolve
 
 type Cause = Literal["config", "provider"]
 
@@ -50,6 +55,13 @@ PLUGIN_SKILLS: Final = Path(__file__).resolve().parents[5] / "plugin" / "skills"
 """`qmx-agents/plugin/skills`, the skills QMX ships."""
 MARKET_OPEN: Final = "market_open"
 WEEKEND: Final = (5, 6)
+PLACEMENT_STATES: Final = ("available", "configured", "authorized", "reachable", "healthy")
+"""DEC-0428's order, ratified in AD-20: a placement is a fact checked in this order, never a
+sticker on a node."""
+PROVIDER_KINDS: Final = frozenset({"managed_vm", "managed_agent_host", "serverless"})
+"""Placements QMX does not own. A plan account never resolves on one of these (AD-28, AD-30)."""
+PLAN_PROFILE: Final = "claude"
+"""The plan rows' profile name in the model registry."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,8 +107,10 @@ def preflight(
     profiles: Collection[str] | None,
     credentials: Collection[str] | None,
     skills: Collection[str] | None,
+    kinds: Mapping[str, str] | None = None,
 ) -> Blocked | None:
-    """The first fault, or None. A `None` inventory is not checked."""
+    """The first fault, or None. A `None` inventory is not checked. `kinds` is each placement's
+    registry kind (`owned`, `managed_vm`, ...); a provider placement refuses a plan-row role."""
     for node in workflow.nodes:
         if node.disabled:
             continue
@@ -106,6 +120,10 @@ def preflight(
                 return Blocked(
                     "config", "role_missing", f"{node.name}: role {node.role} has no candidates"
                 )
+            if kinds is not None:
+                refused = plan_on_provider(node.name, node.role, node.runs_on, candidates, kinds)
+                if refused is not None:
+                    return refused
             if profiles is not None:
                 found = resolve(candidates, profiles, None)
                 if isinstance(found, str):
@@ -131,6 +149,85 @@ def quarantined_input(object_id: str, library: LibraryPort) -> Blocked | None:
         return None
     message = f"{object_id} is built on quarantined input: {' -> '.join(path)}"
     return Blocked("config", "quarantined_input", message)
+
+
+def placements_of(node: object) -> tuple[str, ...]:
+    runs_on = getattr(node, "runs_on", "pc")
+    if isinstance(runs_on, str):
+        return (runs_on,)
+    return tuple(str(name) for name in runs_on)
+
+
+def placement_kind(settings: Mapping[str, object], placement: str) -> str:
+    """A placement's registry kind; `owned` when the row names none, because a row QMX has no
+    provider for can only be a machine he owns."""
+    found = settings.get(f"placement.{placement}.kind")
+    return str(found) if isinstance(found, str) and found else "owned"
+
+
+def placement_state(
+    settings: Mapping[str, object],
+    placement: str,
+    *,
+    seen: Collection[str] | None = None,
+    healthy: Collection[str] | None = None,
+) -> str:
+    """The last state this placement has reached, in DEC-0428's order.
+
+    `available`: a name the registry can resolve (`pc` always, else a row with any key).
+    `configured`: its row names what an attempt needs.
+    `authorized`: it is QMX's own machine, or a provider row whose relay holds no plan login.
+    `reachable`: a heartbeat has named it. `healthy`: that heartbeat's kind digest was checked and
+    lists every kind the definition uses (`placement_wait` makes that judgement with the kinds).
+    """
+    if placement == "pc":
+        return "healthy"
+    prefix = f"placement.{placement}."
+    row = {key: value for key, value in settings.items() if key.startswith(prefix)}
+    if not row:
+        return "unavailable"
+    configured = all(
+        any(key.endswith(suffix) for key in row)
+        for suffix in ("ram_budget_mb", "overhead_mb", "kind")
+    )
+    if not configured:
+        return "configured"
+    if placement_kind(settings, placement) in PROVIDER_KINDS:
+        return "authorized"
+    if seen is not None and placement not in seen:
+        return "reachable"
+    if healthy is not None and placement in healthy:
+        return "healthy"
+    return "reachable" if seen is None or placement in seen else "authorized"
+
+
+def plan_on_provider(
+    node: str,
+    role: str,
+    runs_on: str | list[str],
+    candidates: Collection[Candidate],
+    kinds: Mapping[str, str],
+) -> Blocked | None:
+    """A plan row asked to run on a machine QMX does not own is refused here, before any fire.
+
+    The check is on the first candidate the role would take, which is the row a live fire resolves
+    to when nothing is benched; a role list whose cheap rows are key rows and whose plan row sits
+    last is fine, because that candidate is only reached when every key row is unavailable.
+    """
+    first = next(iter(candidates), None)
+    if first is None or first.profile != PLAN_PROFILE:
+        return None
+    placements = [runs_on] if isinstance(runs_on, str) else runs_on
+    for placement in placements:
+        kind = kinds.get(placement) or "owned"
+        if kind in PROVIDER_KINDS:
+            message = (
+                f"{node}: role {role} resolves to the plan row "
+                f"{first.profile}/{first.model} on {placement} "
+                f"({kind}); plan logins stay on his machines"
+            )
+            return Blocked("config", "plan_on_provider", message)
+    return None
 
 
 def placement_wait(workflow: Workflow, kinds: Mapping[str, Collection[str]]) -> str | None:

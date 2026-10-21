@@ -141,6 +141,15 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "placement.pc.cpu_slots": None,  # Claude's default, UI-editable; unset is cores minus one
         "placement.pc.container_slots": 3,  # Claude's default, UI-editable
         "placement.pc.gpu_slots": None,  # Claude's default, UI-editable; unset is no GPU
+        "placement.contabo.kind": "owned",  # Claude's default, UI-editable; AD-30 row
+        "placement.contabo.relay": "local",  # Claude's default, UI-editable; the central relay
+        "placement.contabo.ram_budget_mb": 12_288,  # measured on the box (PRB-S, ruling 76)
+        "placement.contabo.overhead_mb": 6_144,  # measured; Hindsight stays on the PC (PRB-S)
+        "placement.contabo.session_mb": 1_536,  # measured: 6,144 MB leaves four sessions
+        "placement.contabo.attempt_cpus": 2,  # Claude's default, UI-editable
+        "placement.contabo.attempt_memory_mb": 2_048,  # Claude's default, UI-editable
+        "placement.contabo.attempt_timeout": 3_600,  # Claude's default, UI-editable
+        "placement.contabo.attempt_gpu": 0,  # Claude's default, UI-editable; no GPU on the box
         "context_window": 200_000,  # Claude's default, UI-editable
         "roles.triage": _CHEAP,  # Claude's default, UI-editable
         "roles.clarifier": _CHEAP,  # Claude's default, UI-editable

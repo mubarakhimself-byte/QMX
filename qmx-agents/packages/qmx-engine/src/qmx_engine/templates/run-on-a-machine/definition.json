@@ -1,0 +1,30 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "run-on-a-machine",
+  "name": "Run one job on his server",
+  "inputs": {
+    "type": "object",
+    "required": ["command"],
+    "properties": {
+      "command": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "the argv of the job, run once on the placed machine"
+      },
+      "timeout_seconds": {
+        "type": "number",
+        "description": "how long the job may run, up to the placement's attempt timeout"
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "the job's exit code, its stdout tail and its stderr tail"},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "run", "name": "Run the job on its placement", "type": "script", "typeVersion": 1, "position": [220, 0], "runs_on": "contabo", "parameters": {"script": "scripts/run.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Run the job on its placement", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "run-on-a-machine", "needs": ["sandbox"]}
+}
