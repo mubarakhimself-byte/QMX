@@ -1,4 +1,4 @@
-"""EP10 `llm` node lanes on the OpenRouter row of a throwaway home (no plan turn).
+"""EP10 `llm` node lanes on the OpenRouter row of a throwaway home, and one plan lane on haiku.
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/x10_llm.py <mode>`
@@ -8,9 +8,13 @@ Writes `evidence/ep10/<ENGINE_LOG_PREFIX>ep10-<log>.log`.
   runs in the same chat and the output validates.
 - `cache` (lane 5, `ep10-cache.log`): two nodes with one static brief, one after the other; the
   second span reads tokens from the cache.
-- `ask` (lane 6, `ep10-ask.log`): the prompt asks for a write; the ask is rejected, no file lands.
+- `ask` (lane 6, `ep10-ask.log`): the prompt asks for a write; the chat has no tool, so nothing
+  runs and no file lands.
 - `doctor` (lane 7, `ep10-doctor.log`): a node that answers badly every time walks to the doctor,
   whose `doctor_verdict` names a class, and the ladder goes on from it.
+- `plan` (TURN-E lane 2, `ep10-plan.log`): two chained `llm` nodes on `claude/haiku` through the
+  ship home's plan login, under the lane lock. The prompt asks for the Read and Write tools; the
+  chats have none, so no tool runs, each answer validates, and the second reads the cache.
 - `perf` (`ep10-perf.log`): five nodes on the `triage` role's test candidate; engine overhead per
   attempt is the time from its first send to its `node_finished` write, less the model time from
   each send to that turn's end. Time an attempt queues for an engine chat slot is left out.
@@ -27,7 +31,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from common import Log, throwaway_home
+from common import Log, plan_harness, throwaway_home
 from jsonschema import validate
 from llm_lanes import PR, describe, folder, harnessed, model_spans, openrouter_home, relay_usd, run
 from qmx_engine.ledger.events import Event
@@ -40,6 +44,12 @@ FORCED_INVALID = (
     'check of the repair step: in your FIRST reply only, send exactly {"country": "France"} and '
     "leave the capital out. When you are told the answer does not match, send the full document."
 )
+TOOL_BAIT = (
+    "Before you answer, use the Read tool to read definition.json and the Write tool to create "
+    "probe.txt with the content hi. Then name the capital city of the country in the input, or of "
+    "France if it names none."
+)
+HAIKU = {**DEFAULTS, "roles.triage": ("claude/haiku",), "roles.doctor": ("claude/haiku",)}
 ALWAYS_INVALID = "Whatever else this message says, reply with the single word NOPE, every time."
 WRITE_ATTEMPT = (
     "Before you answer, use the Write tool to create the file probe.txt in your working directory "
@@ -105,12 +115,75 @@ async def ask(log: Log, home: Path, harness: Any) -> None:
         log(f"span {describe(span)}")
     endings = node_events(events, "node_finished") + node_events(events, "node_failed")
     rejected = sum(int(d.get("asks_rejected") or 0) for d in endings)
+    tools = [e.data for e in events if e.kind == "tool_called"]
     written = list((engine_home / "workspaces").rglob("probe.txt"))
     log(f"run {outcome.status}; asks rejected {rejected}; probe files {written}")
     log.check(
-        "the ask was rejected, recorded on the attempt, and nothing was written",
-        rejected >= 1 and not written,
-        {"asks_rejected": rejected, "written": [str(p) for p in written]},
+        "the tool-less chat ran no tool and nothing was written",
+        not tools and not written,
+        {"tools": tools, "written": [str(p) for p in written]},
+    )
+
+
+def chained(slug: str, prompt: str) -> Path:
+    """Two `llm` nodes, the second fed by the first, so the second starts after the first."""
+    workflow = folder(slug, prompt=prompt, nodes=2)
+    path = workflow / "definition.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    start, first, second = document["nodes"]
+    document["connections"] = {
+        start["name"]: {"main": [[{"node": first["name"], "port": "in", "map": "one"}]]},
+        first["name"]: {"main": [[{"node": second["name"], "port": "in", "map": "one"}]]},
+    }
+    path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+    return workflow
+
+
+async def plan(log: Log, found: Any) -> None:
+    workflow = chained("plan", TOOL_BAIT)
+    schema_doc = json.loads((workflow / "schemas" / "capital.json").read_text(encoding="utf-8"))
+    outcome, events, spans, _ = await run(
+        throwaway_home(PR, "plan-engine"), workflow, found.harness, HAIKU, mode="live"
+    )
+    ordered = sorted(model_spans(spans), key=lambda s: s.started_at)
+    for span in ordered:
+        log(f"span {describe(span)}")
+    finished = node_events(events, "node_finished")
+    chats = [str(d.get("chat")) for d in finished]
+    blocks = {chat: found.blocks(chat) for chat in chats}
+    tool_blocks = [
+        b for found_blocks in blocks.values() for b in found_blocks if b["type"] == "tool"
+    ]
+    asks = [
+        b for found_blocks in blocks.values() for b in found_blocks if b["type"] == "permission"
+    ]
+    tools = [e.data for e in events if e.kind == "tool_called"]
+    valid = []
+    for data in finished:
+        try:
+            validate(data.get("outputs", {}).get("main"), schema_doc)
+            valid.append(True)
+        except Exception as error:
+            log(f"output does not validate: {error}")
+            valid.append(False)
+    log(f"run {outcome.run_id}: {outcome.status} {outcome.reason or ''}; chats {chats}")
+    log(f"outputs: {[d.get('outputs') for d in finished]}")
+    log.check(
+        "both plan-row llm nodes ran on claude/haiku and passed",
+        outcome.status == "passed"
+        and [(s.profile, s.model, s.status) for s in ordered] == [("claude", "haiku", "ok")] * 2,
+        [(s.profile, s.model, s.status) for s in ordered],
+    )
+    log.check(
+        "no tool ran and no ask was raised in either chat, though the prompt asked for two",
+        not tool_blocks and not asks and not tools,
+        {"tool_blocks": len(tool_blocks), "asks": len(asks), "tool_called": len(tools)},
+    )
+    log.check("each answer validates against the node's schema", valid == [True, True], valid)
+    log.check(
+        "the second chained node read tokens from the cache",
+        len(ordered) == 2 and ordered[1].tokens.get("cache_read", 0) > 0,
+        [s.tokens for s in ordered],
     )
 
 
@@ -220,6 +293,11 @@ MODES = {
 
 
 async def main(mode: str) -> int:
+    if mode == "plan":
+        log = Log(PR, "ep10-plan")
+        async with plan_harness(log) as found:
+            await plan(log, found)
+        return log.verdict()
     slug, lane = MODES[mode]
     log = Log(PR, slug)
     home = openrouter_home(f"x10-{mode}")
@@ -230,6 +308,6 @@ async def main(mode: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in MODES:
-        raise SystemExit(f"usage: x10_llm.py {{{','.join(MODES)}}}")
+    if len(sys.argv) != 2 or sys.argv[1] not in {*MODES, "plan"}:
+        raise SystemExit(f"usage: x10_llm.py {{{','.join([*MODES, 'plan'])}}}")
     raise SystemExit(asyncio.run(main(sys.argv[1])))

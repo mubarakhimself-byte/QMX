@@ -5,7 +5,9 @@ workflow engine and the control doors on one port behind one bearer.
 reader), the `Harness` (which starts the model relay on its own thread), the engine with its
 scheduler, and the control app with the chat, engine and control routes behind the principal
 door. The Library writer is `ControlService.library` and the apps supervisor is
-`ControlService.app_runtime()`, as they are today. On stop the engine drains, then the harness
+`ControlService.app_runtime()`, as they are today. The engine's permission policy and hook sink
+are registered on the harness, both named `engine`, before the engine resumes any run, so a chat
+reloaded after a restart finds them. On stop the engine drains, then the harness
 closes, which stops the relay.
 
 The lock is an OS lock on `<home>/engine.lock` (AD-3, L-64, L-70): the OS releases it when the

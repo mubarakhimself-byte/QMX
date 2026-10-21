@@ -12,14 +12,14 @@ from typing import Any
 
 from flows import node
 from pydantic import JsonValue
-from qma.harness import ChatHooks
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Ledger, Reader
-from qmx_engine.ports.harness_adapter import Activity, CompactRefused, PlanUse, Turn
+from qmx_engine.ports.harness_adapter import Activity, PlanUse, Turn
 from qmx_engine.runner import Engine, Mode, Outcome
 from qmx_engine.settings import DEFAULTS
+from qmx_engine.sink import Listener
 
 TOKENS = {"in": 10, "out": 5, "cache_read": 100, "cache_write": 0}
 OPEN = PlanUse(0.1, "2026-10-17T12:00:00+00:00", None, None)
@@ -72,20 +72,20 @@ type Answer = Turn | str | Callable[[FakePort, str], Awaitable[Turn]]
 
 class FakePort:
     def __init__(
-        self, *answers: Answer, uses: list[PlanUse] | None = None, refuse_compact: bool = False
+        self, *answers: Answer, uses: list[PlanUse] | None = None, holds_task: bool = True
     ) -> None:
         self.answers = list(answers)
         self.uses = uses or [OPEN]
         """Each `plan_use` reading in turn; the last one repeats."""
-        self.refuse_compact = refuse_compact
         self.chats: list[dict[str, object]] = []
-        self.hooks: dict[str, ChatHooks] = {}
+        self.listeners: dict[str, Listener] = {}
         self.sent: list[tuple[str, str]] = []
         self.interrupted: list[str] = []
         self.activities: dict[str, Activity] = {}
         """What each chat shows the stuck detector; a running turn with nothing to show else."""
         self.halts: dict[str, asyncio.Event] = {}
         """Set when the chat is interrupted, so an answer can wait for it."""
+        self.task_held = holds_task
 
     def profiles(self) -> frozenset[str]:
         return frozenset({"claude", "openrouter"})
@@ -101,19 +101,32 @@ class FakePort:
         model: str,
         effort: str | None,
         workspace: Path,
+        tools: tuple[str, ...] = (),
         compact_at: float | None = None,
-        hooks: ChatHooks | None = None,
     ) -> str:
-        if self.refuse_compact and (compact_at is not None or hooks is not None):
-            raise CompactRefused("compact_at and hooks are for Background and Child chats only")
         chat = f"chat-{len(self.chats) + 1}"
-        found: dict[str, object] = {"title": title, "profile": profile, "model": model}
-        if compact_at is not None or hooks is not None:
-            found |= {"compact_at": compact_at, "hooks": hooks is not None}
-        self.chats.append(found)
-        if hooks is not None:
-            self.hooks[chat] = hooks
+        self.chats.append(
+            {
+                "title": title,
+                "profile": profile,
+                "model": model,
+                "tools": tools,
+                "compact_at": compact_at,
+            }
+        )
         return chat
+
+    def listen(self, chat: str, listener: Listener | None) -> None:
+        if listener is None:
+            self.listeners.pop(chat, None)
+        else:
+            self.listeners[chat] = listener
+
+    async def hook(self, chat: str, event: str, **data: object) -> None:
+        await self.listeners[chat]({"hook_event_name": event, **data})
+
+    def holds_task(self, chat: str) -> bool:
+        return self.task_held
 
     async def send(self, chat: str, text: str, *, priority: int = 0) -> None:
         self.sent.append((chat, text))
@@ -121,9 +134,7 @@ class FakePort:
     def queued(self, chat: str) -> bool:
         return False
 
-    async def wait_turn(
-        self, chat: str, *, timeout: float | None = None, idle: float | None = None
-    ) -> Turn:
+    async def wait_turn(self, chat: str, *, timeout: float | None = None) -> Turn:
         found = self.answers.pop(0)
         if isinstance(found, Turn):
             return found
