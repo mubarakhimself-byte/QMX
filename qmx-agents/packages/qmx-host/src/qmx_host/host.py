@@ -11,7 +11,9 @@ until the cut-over, and every `library_save` and `library_link` also writes the 
 dual write (MIGRATION step 5) attached as soon as the store opens. The apps supervisor is
 `ControlService.app_runtime()`. The
 engine's permission policy and hook sink are registered on the harness, both named `engine`, before
-the engine resumes any run, so a chat reloaded after a restart finds them. On stop the engine
+the engine resumes any run, so a chat reloaded after a restart finds them. The harness is
+`RecordedHarness`: the session recorder writes every chat's `session` item into the store
+(Library AD-21) and exports idle chats once a day. On stop the engine
 drains, the Library store closes, then the harness closes, which stops the relay.
 
 While it serves, the host writes one heartbeat row for itself and one per running app every
@@ -71,6 +73,7 @@ from qmx_library.migrate.from_library_b import DualWrite
 from qmx_library.store import Store
 
 from qmx_host.door import PrincipalDoor
+from qmx_host.sessions import RecordedHarness, SessionRecorder
 
 type Role = Literal["pc", "node"]
 
@@ -169,12 +172,13 @@ async def serve(
     """Assumes the caller scrubbed the environment and holds the home's lock."""
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
-    harness = await Harness.open(
+    harness = await RecordedHarness.open(
         qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
     )
     try:
         with Store.open(home / LIBRARY, redactor=redact) as store:
             control.attach_library_mirror(DualWrite(store))
+            harness.record_into(SessionRecorder(store))
             async with EngineDoor.open(
                 control, harness=HarnessAdapter(harness), library=EngineLibraryAdapter(store)
             ) as engine:
@@ -184,12 +188,14 @@ async def serve(
                 app = compose(control, engine, harness_api, bearer, origin)
                 server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
                 beating = asyncio.create_task(heartbeats(home, role, control, harness, engine))
+                exporting = asyncio.create_task(harness.idle_exports())
                 try:
                     await server.serve()
                 finally:
-                    beating.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await beating
+                    for task in (beating, exporting):
+                        task.cancel()
+                        with suppress(asyncio.CancelledError):
+                            await task
     finally:
         await harness.close()
 
