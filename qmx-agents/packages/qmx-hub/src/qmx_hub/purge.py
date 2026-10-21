@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 
 from qmx_library.principal import Principal
 from qmx_library.store import Store, canonical
@@ -26,8 +27,13 @@ class Purged:
     blob_id: str
     reason: str
     at: str
+    ref: str
+    tombstone: str
     targets: tuple[str, ...]
     """Every copy the tombstone reached, `hub`, `bucket:<path>`."""
+
+
+OPERATOR: Final = Principal("operator")
 
 
 def purge_everywhere(
@@ -35,20 +41,24 @@ def purge_everywhere(
     blob_id: str,
     reason: str,
     *,
+    who: Principal = OPERATOR,
     buckets: Sequence[Path] = (),
 ) -> Purged:
     """Purge `blob_id` on the Hub store and on each bucket copy, and record the reason.
 
+    `who` is the principal the Hub's door derived. The store refuses anyone but the operator, so
+    an agent or a run that reaches this function is refused rather than obeyed.
+
     The replicas apply the same tombstone on their next sync from the `refs/purges/<hex>` ref the
     store's purge moved, so no other call is needed for them.
     """
-    store.purge(Principal("operator"), blob_id, reason)
+    done = store.purge(who, blob_id, reason)
     reached = ["hub"]
     at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     for root in buckets:
         if bucket_tombstone(root, blob_id, reason, at):
             reached.append(f"bucket:{root}")
-    return Purged(blob_id, reason, at, tuple(reached))
+    return Purged(blob_id, reason, at, done.ref, str(done.tombstone), tuple(reached))
 
 
 def bucket_tombstone(root: Path, blob_id: str, reason: str, at: str) -> bool:

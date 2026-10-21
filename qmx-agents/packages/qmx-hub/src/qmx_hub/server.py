@@ -130,7 +130,11 @@ class Hub:
                 )
             case "purge":
                 done = purge_everywhere(
-                    self.store, str(args["blob_id"]), str(args["reason"]), buckets=self.buckets
+                    self.store,
+                    str(args["blob_id"]),
+                    str(args["reason"]),
+                    who=who,
+                    buckets=self.buckets,
                 )
                 return cast(JsonValue, _purge_payload(done))
             case "claim":
@@ -263,8 +267,8 @@ def _purge_payload(done: Purged | PurgeResult) -> dict[str, JsonValue]:
             "reason": done.reason,
             "at": done.at,
             "targets": list(done.targets),
-            "ref": "",
-            "tombstone": "",
+            "ref": done.ref,
+            "tombstone": done.tombstone,
         }
     return {
         "blob_id": done.blob_id,

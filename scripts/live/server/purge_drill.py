@@ -10,12 +10,13 @@ values at put, so a purge is still the operator's answer for the rest). The blob
 Hub, mirrored to a PC replica and copied to the bucket; the operator purges it through the Hub;
 then:
 
-- the Hub's bytes are gone, its tombstone names the reason, and `refs/purges/<hex>` moved;
+- the Hub's bytes are gone and `refs/purges/<hex>` moved;
 - the bucket's bytes are gone and its tombstone is beside them;
 - the PC replica applies the same tombstone on its next sync, and the object reads `blob_purged`;
 - an agent's purge is refused.
 
 Writes `<LIB4_EVIDENCE>/<LIB4_LOG_PREFIX>lib4-purge.log` and exits 1 when a check failed.
+`LIB4_LOCAL=1` runs the whole drill on this PC with a local Hub.
 """
 
 from __future__ import annotations
@@ -23,10 +24,12 @@ from __future__ import annotations
 import shutil
 import time
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Final, cast
 
 from e67_claims import (
     HOMES,
+    LOCAL,
     SERVER_DIR,
     Log,
     health,
@@ -38,8 +41,41 @@ from e67_claims import (
 )
 
 LANE: Final = "purge"
-BUCKET: Final = f"{SERVER_DIR}/{LANE}/bucket"
+REMOTE_BUCKET: Final = f"{SERVER_DIR}/{LANE}/bucket"
+LOCAL_BUCKET: Final = HOMES / f"lib4-{LANE}" / "bucket"
 SECRET: Final = b"the vault code is 4411"
+
+
+def hub_blob(blob_id: str) -> str:
+    """Where the Hub's store keeps a durable blob, sharded by its hash."""
+    hexdigest = blob_id.removeprefix("sha256:")
+    home = LOCAL_BUCKET.parent / "hub" if LOCAL else Path(f"{SERVER_DIR}/{LANE}/hub")
+    return str(home / "library" / "blobs" / hexdigest[:2] / hexdigest[2:4] / hexdigest)
+
+
+def bucket_blob(blob_id: str) -> str:
+    root = LOCAL_BUCKET if LOCAL else Path(REMOTE_BUCKET)
+    return str(root / "blobs" / blob_id.removeprefix("sha256:"))
+
+
+def bucket_tombstone(blob_id: str) -> str:
+    root = LOCAL_BUCKET if LOCAL else Path(REMOTE_BUCKET)
+    return str(root / "tombstones" / f"{blob_id.removeprefix('sha256:')}.json")
+
+
+def exists(path: str) -> str:
+    if LOCAL:
+        return "there" if Path(path).exists() else "gone"
+    return ssh(f"test -e {path} && echo there || echo gone")
+
+
+def plant_bucket(blob_id: str) -> None:
+    """Put the Hub's copy of the blob where the nightly bucket push would leave it (AD-16)."""
+    if LOCAL:
+        (LOCAL_BUCKET / "blobs").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(hub_blob(blob_id), bucket_blob(blob_id))
+        return
+    ssh(f"cp {hub_blob(blob_id)} {REMOTE_BUCKET}/blobs/ && chown -R prbs:prbs {REMOTE_BUCKET}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -55,8 +91,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         log.say(f"lane purge at {time.strftime('%Y-%m-%dT%H:%M:%S')}")
         prepare_server(LANE)
-        ssh(f"install -d -m 0755 {BUCKET}/blobs && chown -R prbs:prbs {SERVER_DIR}/{LANE}")
-        hub_url, key = start_hub(LANE, extra=f"--bucket {BUCKET}")
+        if not LOCAL:
+            ssh(
+                f"install -d -m 0755 {REMOTE_BUCKET}/blobs && "
+                f"chown -R prbs:prbs {SERVER_DIR}/{LANE}"
+            )
+        bucket = REMOTE_BUCKET if not LOCAL else str(LOCAL_BUCKET)
+        hub_url, key = start_hub(LANE, extra=f"--bucket {bucket}")
         write_home(HOMES / f"lib4-{LANE}", hub_url, key)
         log.check(health(hub_url, key).get("ok") is True, f"hub answers at {hub_url}")
         client = HubClient(hub_url, key, "operator")
@@ -70,12 +111,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         blobs = cast(dict[str, dict[str, str]], view["blobs"])
         blob_id = blobs["body.md"]["blob_id"]
         log.say(f"planted {blob_id} on the hub")
-        ssh(f"cp {bucket_source(blob_id)} {BUCKET}/blobs/ && chown -R prbs:prbs {BUCKET}")
-        bucket_blob = f"{BUCKET}/blobs/{blob_id.removeprefix('sha256:')}"
-        log.check(
-            ssh(f"test -e {bucket_blob} && echo there || echo gone") == "there",
-            "the bucket holds a copy of the secret",
-        )
+        plant_bucket(blob_id)
+        log.check(exists(bucket_blob(blob_id)) == "there", "the bucket holds the secret")
 
         local = HOMES / f"lib4-{LANE}" / "pc"
         shutil.rmtree(local, ignore_errors=True)
@@ -86,20 +123,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             purged = client.purge(blob_id, "a vault code")
             log.say(f"purged as {purged.ref}")
+            log.check(exists(hub_blob(blob_id)) == "gone", "the hub's bytes are gone")
+            log.check(exists(bucket_blob(blob_id)) == "gone", "the bucket's bytes are gone")
             log.check(
-                ssh(f"test -e {bucket_source(blob_id)} && echo there || echo gone") == "gone",
-                "the hub's bytes are gone",
-            )
-            log.check(
-                ssh(f"test -e {bucket_blob} && echo there || echo gone") == "gone",
-                "the bucket's bytes are gone",
-            )
-            log.check(
-                ssh(
-                    f"test -e {BUCKET}/tombstones/"
-                    f"{blob_id.removeprefix('sha256:')}.json && echo there || echo gone"
-                )
-                == "there",
+                exists(bucket_tombstone(blob_id)) == "there",
                 "the bucket's tombstone is beside where the bytes were",
             )
             refs = {row.ref for row in client.refs()}
@@ -131,12 +158,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if hub_url:
             stop_hub(LANE)
     return log.close()
-
-
-def bucket_source(blob_id: str) -> str:
-    """Where the Hub store keeps a durable blob, sharded by its hash."""
-    hexdigest = blob_id.removeprefix("sha256:")
-    return f"{SERVER_DIR}/{LANE}/hub/library/blobs/{hexdigest[:2]}/{hexdigest[2:4]}/{hexdigest}"
 
 
 if __name__ == "__main__":

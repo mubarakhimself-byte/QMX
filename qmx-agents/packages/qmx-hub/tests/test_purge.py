@@ -69,3 +69,12 @@ def test_only_the_operator_purges_and_only_a_blob_that_exists(hub: Store) -> Non
         hub.purge(OPERATOR, blob_id, " ")
     with pytest.raises(LibraryRefused, match=r"^not_found:"):
         hub.purge(OPERATOR, "sha256:" + "0" * 64, "a vault code")
+
+
+def test_the_hubs_purge_refuses_a_principal_that_is_not_the_operator(hub: Store) -> None:
+    _, blob_id = planted(hub)
+
+    with pytest.raises(LibraryRefused, match=r"^purge_refused:"):
+        purge_everywhere(hub, blob_id, "a vault code", who=Principal("agent", "alice"))
+
+    assert hub.purged(blob_id) is False

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shlex
 import shutil
 import subprocess
@@ -130,47 +131,91 @@ INSTALLS: Final = (
 
 def prepare_server(lane: str = LANE) -> None:
     """Install uv and Python 3.14 once, then put the PR head under `SERVER_DIR/src`."""
+    if LOCAL:
+        return
     for install in INSTALLS:
         ssh(install)
     rsync_up(ROOT, f"{SERVER_DIR}/src")
     ssh(
         as_prbs(
-            f"cd {SERVER_DIR}/src/qmx-agents && {SERVER_DIR}/uv/uv sync --frozen "
+            f"cd {SERVER_DIR}/src/qmx-agents && {SERVER_DIR}/uv/uv sync --frozen --python 3.14 "
             f"--no-dev --package qmx-hub --package qmx-library"
         )
     )
     ssh(f"install -d -m 0755 {SERVER_DIR}/{lane} && chown -R prbs:prbs {SERVER_DIR}/{lane}")
 
 
+LOCAL: Final = os.environ.get("LIB4_LOCAL") == "1"
+"""`LIB4_LOCAL=1` rehearses the same lanes on this PC: the Hub runs here on 127.0.0.1 and both
+engines are local processes. The server runs the same script without it."""
+LOCAL_PROCESSES: list[subprocess.Popen[bytes]] = []
+
+
 def start_hub(lane: str, *, primary: str = "server", extra: str = "") -> tuple[str, str]:
-    """Start one Hub for `lane` on the tailnet on an ephemeral port; return its URL and key."""
-    home = f"{SERVER_DIR}/{lane}/hub"
+    """Start one Hub for `lane` on an ephemeral port; return its URL and its pairing key."""
+    home = Path(HOMES) / f"lib4-{lane}" / "hub"
+    if LOCAL:
+        return _local_hub(home, primary=primary, extra=extra)
+    remote = f"{SERVER_DIR}/{lane}/hub"
     address = ssh("tailscale ip -4 | head -1")
     ssh(
         as_prbs(
-            f"mkdir -p {home}/vault && chmod 700 {home}/vault && "
-            f"[ -s {home}/vault/pairing-key ] || openssl rand -hex 32 > {home}/vault/pairing-key"
+            f"mkdir -p {remote}/vault && chmod 700 {remote}/vault && "
+            f"[ -s {remote}/vault/pairing-key ] || openssl rand -hex 32 "
+            f"> {remote}/vault/pairing-key"
         )
     )
     ssh(
         f"cd {SERVER_DIR} && setsid nohup runuser -u prbs -- env HOME={SERVER_HOME} "
         f"UV_CACHE_DIR={SERVER_DIR}/uv-cache {VENV}/bin/python -m qmx_hub.server "
-        f"--home {home} --host {address} --port 0 --primary {primary} {extra} "
+        f"--home {remote} --host {address} --port 0 --primary {primary} {extra} "
         f">{SERVER_DIR}/{lane}/hub.log 2>&1 < /dev/null & echo started"
     )
     port = ""
     for _ in range(60):
-        port = ssh(f"cat {home}/hub.port 2>/dev/null || true")
+        port = ssh(f"cat {remote}/hub.port 2>/dev/null || true")
         if port:
             break
         time.sleep(0.5)
     if not port:
         raise RuntimeError(f"the Hub for {lane} never wrote hub.port; see {lane}/hub.log")
-    key = ssh(f"cat {home}/vault/pairing-key")
+    key = ssh(f"cat {remote}/vault/pairing-key")
     return f"http://{address}:{port}", key
 
 
+def _local_hub(home: Path, *, primary: str, extra: str = "") -> tuple[str, str]:
+    """The same Hub as the server runs, on this PC, for a rehearsal or a lane without a box."""
+    shutil.rmtree(home, ignore_errors=True)
+    (home / "vault").mkdir(parents=True)
+    key = secrets.token_hex(32)
+    (home / "vault" / "pairing-key").write_text(key, encoding="utf-8")
+    arguments = ["--home", str(home), "--host", "127.0.0.1", "--port", "0", "--primary", primary]
+    arguments.extend(extra.split()) if extra else None
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            f"from qmx_hub.server import main; raise SystemExit(main({arguments!r}))",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    LOCAL_PROCESSES.append(process)
+    port_file = home / "hub.port"
+    for _ in range(60):
+        if port_file.exists():
+            return f"http://127.0.0.1:{port_file.read_text(encoding='utf-8').strip()}", key
+        time.sleep(0.25)
+    raise RuntimeError(f"the local Hub never wrote {port_file}")
+
+
 def stop_hub(lane: str) -> None:
+    if LOCAL:
+        for process in LOCAL_PROCESSES:
+            process.terminate()
+            process.wait(timeout=10)
+        LOCAL_PROCESSES.clear()
+        return
     ssh(f"pkill -f 'qmx_hub.server --home {SERVER_DIR}/{lane}/hub' || true")
 
 
@@ -234,7 +279,7 @@ def engine(hub_url: str, key: str, run_id: str, *, hold: float) -> int:
         return 0
     holder = claim.run_id
     linked = None
-    until = time.time() + 8
+    until = time.time() + 4
     while time.time() < until and linked is None:
         linked = _linked(client, holder)
         time.sleep(0.25)
@@ -287,6 +332,8 @@ def _linked(client: Any, holder: str | None) -> str | None:
 
 def engine_on_server(lane: str, hub_url: str, key: str, run_id: str, *, hold: float) -> Any:
     """The same engine on the server, in the lane's venv; its one JSON line returns on stdout."""
+    if LOCAL:
+        return engine_locally(hub_url, key, run_id, hold=hold)
     payload = shlex.quote(json.dumps([hub_url, key, run_id, hold]))
     command = (
         f"cd {SERVER_DIR}/src && LIB4_ENGINE={payload} "
