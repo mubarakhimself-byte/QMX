@@ -8,8 +8,8 @@ The Hub runs on the server under `/srv/qmx/bld/lib4`, from the PR head's own che
 ephemeral port. One engine runs on the PC and one on the server, started within a second of each
 other, and both ask the Hub for the same claim:
 
-- phase `live`: the first engine builds and writes its output, the second waits on the holder and
-  links the first output without building;
+- phase `live`: whichever engine reaches the claim first builds and writes its output, the other
+  waits on the holder and links that output without building;
 - phase `dead`: the first engine is killed while it holds the claim; the second waits one `ttl`,
   takes the claim and builds.
 
@@ -385,31 +385,50 @@ def main(argv: Sequence[str] | None = None) -> int:
             abs(started_b - started) < 1.0,
             f"both engines started within one second ({started_b - started:.3f}s)",
         )
-        log.check(live_a["first_claim_granted"] is True, "the first engine took the claim")
+        claimed = [answer for answer in (live_a, live_b) if answer["first_claim_granted"]]
         log.check(
-            live_b["first_claim_granted"] is False,
-            f"the second waited on {live_b['held_by']}",
+            len(claimed) == 1,
+            f"exactly one engine took the claim ({claimed[0]['run'] if claimed else 'none'})",
         )
-        log.check(live_a.get("action") == "built", "the first engine built the paper")
-        log.check(
-            live_b.get("action") == "waited and linked"
-            and live_b.get("linked") == live_a.get("output"),
-            "the second linked the first engine's output and built nothing",
-        )
+        if len(claimed) == 1:
+            winner = claimed[0]
+            loser = live_b if winner["run"] == live_a["run"] else live_a
+            log.check(
+                loser["held_by"] == winner["run"],
+                f"{loser['run']} was refused and told the holder is {loser['held_by']}",
+            )
+            log.check(winner.get("action") == "built", f"{winner['run']} built the paper")
+            log.check(
+                loser.get("action") == "waited and linked"
+                and loser.get("linked") == winner.get("output"),
+                f"{loser['run']} linked {winner['run']}'s output and built nothing",
+            )
 
         killed, taker = "e67-a-dead", "e67-b-dead"
         held = engine_locally(hub_url, key, killed, hold=60)
+        if held.stdout is None:
+            raise RuntimeError("the killed engine has no stdout to read")
+        # The holder says it holds before it sleeps; wait for that line, so the kill below lands on
+        # a claim that already exists rather than on a process still importing.
+        held_line = held.stdout.readline()
+        if not held_line:
+            raise RuntimeError("the killed engine never said it held the claim")
+        dead_a = dict(json.loads(held_line))
         started_taker = time.time()
         waiting = engine_on_server(LANE, hub_url, key, taker, hold=0)
-        time.sleep(2.0)
+        # Long enough for the taker to reach the Hub and be refused while the holder still lives.
+        time.sleep(3.0)
         held.kill()
-        dead_a = answer_of(held)
+        held.communicate(timeout=10)
         dead_b = answer_of(waiting)
         waited = time.time() - started_taker
         log.check(dead_a.get("action") == "holding", "the killed engine held the claim")
         log.check(
-            dead_b["first_claim_granted"] is False
-            and str(dead_b.get("action", "")).startswith("built"),
+            dead_b["first_claim_granted"] is False and dead_b.get("held_by") == killed,
+            f"{taker} was refused and told the holder is {dead_b.get('held_by')}",
+        )
+        log.check(
+            str(dead_b.get("action", "")).startswith("built"),
             "after one ttl the second engine took the claim and built the paper",
         )
         log.check(waited >= TTL, f"the second waited at least one ttl ({waited:.1f}s >= {TTL}s)")
