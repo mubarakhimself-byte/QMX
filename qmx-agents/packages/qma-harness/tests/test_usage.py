@@ -507,6 +507,7 @@ def test_the_page_holds_every_field_and_the_last_reading_note() -> None:
             ]
         },
         "tokens": {"claude": {"calls": 1}},
+        "accounts": [],
         "hard_stop": None,
         "extra_usage_on": None,
         "extra_usage_note": None,

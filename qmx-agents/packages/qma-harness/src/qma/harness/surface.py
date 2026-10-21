@@ -19,10 +19,14 @@ its full text becomes a skill in the chat's own `qmx-slots` plugin, so nothing i
 Per-turn state never enters the system text: `render_state` builds the `<qmx_state>` block a
 user message carries.
 
+The native sub-agent definitions are the caller's own, then the registry-generated set for this
+chat's lanes (AD-38, H38). They are regenerated at every launch, so a model the chat can no longer
+reach is gone at this relaunch and one it can reach joins by resuming the same session.
+
 The digest is sha256 over the tool names with a hash of each description and schema, the
-built-ins, the skills, the plugins, the system-prompt options and the exact `append` text. It is
-recorded per launch on the chat record and on every agent span, so "what did the model see"
-has one answer.
+built-ins, the sub-agent definitions, the skills, the plugins, the system-prompt options and the
+exact `append` text. It is recorded per launch on the chat record and on every agent span, so
+"what did the model see" has one answer.
 """
 
 from __future__ import annotations
@@ -39,6 +43,10 @@ from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
 from qmx_control.catalog import CORE_TOOLSETS
 from qmx_control.context import Budget
+from qmx_router.agents import Main as AgentMain
+from qmx_router.agents import definitions as agent_definitions
+from qmx_router.profiles import PLAN, ProfileName
+from qmx_router.registry import Registry, bundled
 
 from qma.harness.launch import (
     CHAT_HOOK_EVENTS,
@@ -233,6 +241,10 @@ class Declaration:
     observed: bool = False
     """Whether hooks or a named sink observe the chat after the guard."""
     compact_at: float | None = None
+    profile: str = PLAN
+    """The chat's main profile and model, which decide the lanes its generated sub-agents may
+    reach (AD-38)."""
+    model: str = ""
 
 
 def declaration(config: ChatConfig) -> Declaration:
@@ -244,6 +256,8 @@ def declaration(config: ChatConfig) -> Declaration:
         brief=config.append_system_prompt,
         observed=config.hooks is not None or config.hook_sink is not None,
         compact_at=config.compact_at,
+        profile=config.profile,
+        model=config.model,
     )
 
 
@@ -334,14 +348,21 @@ class HomeSlots:
 @dataclass(frozen=True)
 class Supply:
     """What the host offers a launch: the QMX tools it serves now, the slot texts, the
-    `[agents]` settings, the plugin folders every chat loads, and the folder a spilled slot is
-    written to."""
+    `[agents]` settings, the plugin folders every chat loads, the folder a spilled slot is
+    written to, and what the generated sub-agents read (AD-38): the model registry, the Claude
+    account's plan-lane switch, the Settings role lists and his pinned rows. A host that passes
+    no registry gets the bundled profiles, and no role lists means the registry generates them."""
 
     tools: tuple[ToolDef, ...]
     slots: SlotSource
     settings: Mapping[str, object]
     plugins: tuple[Path, ...]
     spill_dir: Path
+    registry: Registry | None = None
+    plan_lane: bool = False
+    roles: Mapping[str, Sequence[str]] | None = None
+    pins: Mapping[str, Sequence[str]] | None = None
+    """None reads `[agents] subagent_pins` from `settings`."""
 
 
 @dataclass(frozen=True)
@@ -384,7 +405,7 @@ class Surface:
             "toolsets": list(self.toolsets),
             "tools": list(self.tools),
             "builtins": list(self.builtins),
-            "agents": sorted(self.agents),
+            "agents": {name: agent.model for name, agent in self.agents.items()},
             "skills": list(self.skills),
             "plugins": [path.as_posix() for path in self.plugins],
             "views": [view.name for view in self.views],
@@ -452,6 +473,18 @@ def budgets(settings: Mapping[str, object]) -> dict[SlotName, int | None]:
     return found
 
 
+def pinned(settings: Mapping[str, object]) -> Mapping[str, tuple[str, ...]]:
+    """`[agents] subagent_pins`: the models he pinned for a role, by role, which add one
+    definition each beside the role's own (AD-38, H38). A list of anything but model ids is
+    skipped rather than read as a name."""
+    found: dict[str, tuple[str, ...]] = {}
+    for role, rows in _table(settings.get("subagent_pins")).items():
+        names = _names(rows)
+        if names is not None:
+            found[str(role)] = names
+    return found
+
+
 def _ordered(names: Sequence[str], keep: frozenset[str] | set[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(name for name in names if name in keep))
 
@@ -498,10 +531,15 @@ def surface_digest(
     skills: Sequence[str],
     plugins: Sequence[Path],
     append: str,
+    agents: Mapping[str, SubAgent],
 ) -> str:
     payload = {
         "tools": sorted([tool.full, _tool_hash(tool)] for tool in tools),
         "builtins": sorted(builtins),
+        "agents": {
+            name: [agent.description, agent.prompt, agent.tools, agent.model]
+            for name, agent in sorted(agents.items())
+        },
         "skills": sorted(skills),
         "plugins": [path.as_posix() for path in plugins],
         "prompt": dict(PROMPT_OPTIONS),
@@ -637,15 +675,7 @@ def build(
             builtins = (*builtins, "Skill")
     on = [tool for tool in supply.tools if tool.toolset in toolsets]
     allowed = {*builtins, *(tool.full for tool in on)}
-    agents = {
-        name: SubAgent(
-            agent.description,
-            agent.prompt,
-            None if agent.tools is None else _ordered(agent.tools, allowed),
-            agent.model,
-        )
-        for name, agent in wanted.agents.items()
-    }
+    agents = _agents(wanted, supply, allowed)
     append = "\n\n".join(slot.text for slot in slots if slot.text)
     return Surface(
         toolsets=toolsets,
@@ -665,8 +695,37 @@ def build(
             if wanted.compact_at is None
             else {COMPACT_PCT_ENV: str(round(wanted.compact_at * 100))}
         ),
-        digest=surface_digest(on, builtins, skills, plugins, append),
+        digest=surface_digest(on, builtins, skills, plugins, append, agents),
     )
+
+
+def _agents(wanted: Declaration, supply: Supply, allowed: set[str]) -> dict[str, SubAgent]:
+    """The native sub-agent definitions this launch offers the Agent tool: the caller's own, then
+    the registry-generated set for this chat's lanes (AD-38, H38). A declared name wins because it
+    is the caller's explicit choice. A declared definition's tools are cut to what this chat
+    serves; a generated one inherits them all and is never widened."""
+    generated = agent_definitions(
+        supply.registry or bundled(),
+        AgentMain(ProfileName(wanted.profile), wanted.model),
+        plan_lane=supply.plan_lane,
+        roles=supply.roles,
+        pins=supply.pins if supply.pins is not None else pinned(supply.settings),
+    )
+    found = {
+        name: SubAgent(item.description, item.prompt, None, item.model)
+        for name, item in generated.items()
+        if name not in wanted.agents
+    }
+    found |= {
+        name: SubAgent(
+            agent.description,
+            agent.prompt,
+            None if agent.tools is None else _ordered(agent.tools, allowed),
+            agent.model,
+        )
+        for name, agent in wanted.agents.items()
+    }
+    return dict(sorted(found.items()))
 
 
 def child_scope(parent: Surface) -> Declaration:

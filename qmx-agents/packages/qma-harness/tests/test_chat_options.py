@@ -9,8 +9,9 @@ from typing import Any
 
 import pytest
 import test_chat
-from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
+from claude_agent_sdk import AgentDefinition, PermissionResultAllow, PermissionResultDeny
 from claude_agent_sdk.types import ToolPermissionContext
+from qmx_router.agents import ROLE_TIERS
 from test_chat import FakeClient, run
 from test_table import read_plan
 
@@ -271,7 +272,11 @@ def test_a_background_chat_keeps_every_option_after_the_host_restarts(home: QmxH
         ["PreToolUse", "PostToolUse", "PreCompact", "Stop", "SubagentStop"]
     )
     assert options.agents is not None
-    assert list(options.agents) == ["reviewer"]
+    assert options.agents["reviewer"] == AgentDefinition(
+        description="reviews a diff", prompt="Review it.", tools=[], model="haiku"
+    )
+    assert tuple(sorted(options.agents)) == tuple(sorted(ROLE_TIERS))
+    assert len(options.agents) == len(ROLE_TIERS)
     hooks = options.hooks or {}
     call(hooks["PostToolUse"][0].hooks[0], {"hook_event_name": "PostToolUse"})
     assert seen == [(chat, "PostToolUse")]

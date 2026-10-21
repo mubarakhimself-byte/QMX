@@ -590,6 +590,22 @@ def plugin_options(paths: Sequence[Path]) -> list[SdkPluginConfig]:
     return [{"type": "local", "path": str(path)} for path in seen]
 
 
+def agent_options(surface: Surface) -> dict[str, AgentDefinition] | None:
+    """The chat's native sub-agent definitions, as the SDK's `agents` option (AD-38, H38). They
+    ride the initialize request and not the command line, so `assert_argv_fits` never counts
+    them, and every relaunch sends the set the Surface built for that launch, which is how a
+    definition the chat can no longer reach leaves and one it can reach joins."""
+    return {
+        name: AgentDefinition(
+            description=agent.description,
+            prompt=agent.prompt,
+            tools=None if agent.tools is None else list(agent.tools),
+            model=agent.model,
+        )
+        for name, agent in surface.agents.items()
+    } or None
+
+
 def build_options(
     config: ChatConfig,
     surface: Surface,
@@ -638,16 +654,7 @@ def build_options(
         cli_path=launcher,
         tools=list(surface.builtins),
         system_prompt=cast("SystemPromptPreset", dict(PROMPT_OPTIONS)),
-        agents={
-            name: AgentDefinition(
-                description=agent.description,
-                prompt=agent.prompt,
-                tools=None if agent.tools is None else list(agent.tools),
-                model=agent.model,
-            )
-            for name, agent in surface.agents.items()
-        }
-        or None,
+        agents=agent_options(surface),
         skills=list(surface.skills),
         permission_mode=config.mode,
         model=config.model,

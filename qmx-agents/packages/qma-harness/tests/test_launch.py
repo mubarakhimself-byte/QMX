@@ -23,6 +23,7 @@ from qma.harness.launch import (
     PlanLaunch,
     RelayedLaunch,
     TestMode,
+    agent_options,
     assert_argv_fits,
     assert_scrubbed,
     build_options,
@@ -157,6 +158,7 @@ def test_build_options_for_a_new_plan_chat(home: QmxHome, workspace: Path) -> No
     assert options == ClaudeAgentOptions(
         cli_path=launcher,
         tools=list(surface.builtins),
+        agents=agent_options(surface),
         skills=list(surface.skills),
         system_prompt={
             "type": "preset",
