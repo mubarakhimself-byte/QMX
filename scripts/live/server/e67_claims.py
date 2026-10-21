@@ -147,6 +147,8 @@ def prepare_server(lane: str = LANE) -> None:
             f"--no-dev --package qmx-hub --package qmx-library"
         )
     )
+    # A lane folder is throwaway: a rerun that inherited the last run's refs fails on stale_head.
+    ssh(f"rm -rf {SERVER_DIR}/{lane}")
     ssh(f"install -d -m 0755 {SERVER_DIR}/{lane} && chown -R prbs:prbs {SERVER_DIR}/{lane}")
 
 
