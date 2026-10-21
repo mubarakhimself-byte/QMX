@@ -397,8 +397,6 @@ def test_usage_lines_name_the_window_the_tokens_and_the_cap() -> None:
                 "calls": 1,
             }
         },
-        "background_cap": 0.5,
-        "background_cap_note": "Background chats stop at 50%.",
         "hard_stop": None,
         "money": {"posture": "SPEED_BUMP", "note": "no proof"},
     }
@@ -417,7 +415,6 @@ def test_usage_lines_name_the_window_the_tokens_and_the_cap() -> None:
         "  Claude plan 7-day window: no reading yet (try /usage refresh)",
         "  tokens, this chat, openrouter: in 5  out 1  cache read 0  cache write 0  (2 calls)",
         "  tokens, all chats, claude: in 9  out 2  cache read 300  cache write 4  (1 calls)",
-        "  background cap 50%: Background chats stop at 50%.",
         "  money posture SPEED_BUMP: no proof",
     ]
 

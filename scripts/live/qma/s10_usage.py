@@ -21,6 +21,7 @@ first case of each lane also checks that the chat reopens once a clean fact lift
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from datetime import timedelta
@@ -267,8 +268,6 @@ async def meter(log: Log) -> None:
             "windows",
             "readings",
             "tokens",
-            "background_cap",
-            "background_cap_note",
             "hard_stop",
             "extra_usage_on",
         }
@@ -281,9 +280,10 @@ async def meter(log: Log) -> None:
             windows,
         )
         log.check(
-            "the page says the cap acts on the last reading",
-            page.get("background_cap") == 0.5 and "last reading" in page["background_cap_note"],
-            page.get("background_cap_note"),
+            "the page shows readings and no cap row",
+            bool(page.get("readings", {}).get("claude"))
+            and not {key for key in page if "cap" in key},
+            (page.get("readings"), sorted(page)),
         )
         log.check(
             "the plan turns are counted on the page",
@@ -404,7 +404,7 @@ def main() -> int:
     if lane not in LANES:
         raise SystemExit(f"usage: s10_usage.py {{{','.join(LANES)}}}")
     slug, run = LANES[lane]
-    log = Log(slug)
+    log = Log(os.environ.get("QMA_LOG_SLUG", slug))
     boot()
     use_fake_home()
     asyncio.run(run(log))

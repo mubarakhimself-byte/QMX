@@ -125,22 +125,23 @@ def test_a_profile_outside_the_allow_list_is_refused_before_any_child(
     run(body, home)
 
 
-def test_a_full_table_refuses_at_once_with_a_tool_error(
-    home: QmxHome, defs: list[list[ToolDef]]
+@pytest.mark.parametrize("kind", [None, Background()], ids=["interactive", "background"])
+def test_a_child_borrows_its_blocked_parents_slot_under_one_live_chat(
+    home: QmxHome, defs: list[list[ToolDef]], kind: ChatKind | None
 ) -> None:
     settings(home, targets=["claude"], max_live_chats=1)
+    helper_says("the folder holds 3 files")
 
     async def body(harness: Harness) -> None:
-        parent = await open_parent(harness)
-        FakeClient.script = lambda _: []
-        reply = await asyncio.wait_for(call(defs[0], "claude"), 2)
-        [text] = reply["content"]
-        assert reply["is_error"] is True
-        assert text["text"] == (
-            f"the helper did not start: all 1 live chats are busy ({parent}); interrupt or "
-            "close one, or raise [budgets] max_live_chats"
-        )
-        assert len(FakeClient.made) == 1
+        parent = await open_parent(harness, kind)
+        reply = await asyncio.wait_for(call(defs[0], "claude"), 5)
+        assert reply == {"content": [{"type": "text", "text": "the folder holds 3 files"}]}
+        assert len(FakeClient.made) == 2
+        FakeClient.made[0].inbox.put_nowait(result())
+        await settle(lambda: turn_of(home, parent) == "idle")
+        other = await harness.start_chat(NewChat(title="next", model="haiku", kind=Background()))
+        await asyncio.wait_for(harness.send(other, InjectedText("next")), 5)
+        assert len(FakeClient.made) == 3
 
     run(body, home)
 

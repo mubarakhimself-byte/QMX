@@ -1,5 +1,5 @@
-"""The live-chat table: budgets, prompt kinds, eviction, `ChatTableFull`, reaping, the
-background cap and the overage stop on a Background chat."""
+"""The live-chat table: budgets, capacity from RAM, prompt kinds, eviction, waiting for a slot,
+`ChatTableFull`, reaping, a written background cap and the overage stop on a Background chat."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pydantic import JsonValue
 from qmx_control.server import create_app
 from test_chat import STOP_RULE_2, FakeClient, blocks, rate_limit, result, run, settle, turn_of
 
+import qma.harness.harness
 from qma.harness import (
     ChatTableFull,
     Harness,
@@ -26,17 +27,27 @@ from qma.harness import (
     UntrustedPrompt,
 )
 from qma.harness.chat import Prompt, admits
-from qma.harness.launch import Background, Budgets, ChatKind, Child, Interactive, parse_budgets
+from qma.harness.launch import (
+    Background,
+    Budgets,
+    ChatKind,
+    Child,
+    Interactive,
+    live_chat_slots,
+    parse_budgets,
+)
 from qma.harness.project import PlanMeter, Reading
 from qma.harness.routes import chat_router, control_service
 
 home = test_chat.home
 
 CHILD = SessionId("0" * 32)
-NO_READING = (
-    "the background cap holds this chat: there is no reading of the plan's five-hour window "
-    "yet; POST /api/usage/meter reads it with one haiku plan turn"
-)
+
+
+@pytest.fixture(autouse=True)
+def big_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """64 GB, so each test's written `max_live_chats` is the capacity on any machine."""
+    monkeypatch.setattr(qma.harness.harness, "machine_ram_mb", lambda: 65536)
 
 
 def budgets(home: QmxHome, **values: JsonValue) -> None:
@@ -65,28 +76,31 @@ def live(harness: Harness) -> list[SessionId]:
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ({}, Budgets(4, 900.0, 300.0, 0.5, 50, 5.0)),
+        ({}, Budgets(None, 1536, 4096, 900.0, 300.0, None, None, None)),
         (
             {
                 "max_live_chats": 2,
+                "session_mb": 1024,
+                "overhead_mb": 2048,
                 "idle_reap_seconds": 30,
                 "unattended_ask_seconds": 0.5,
                 "background_cap": 0.3,
                 "max_turns": 7,
                 "max_budget_usd": 0.25,
             },
-            Budgets(2, 30.0, 0.5, 0.3, 7, 0.25),
+            Budgets(2, 1024, 2048, 30.0, 0.5, 0.3, 7, 0.25),
         ),
         (
             {
                 "max_live_chats": 2.5,
+                "session_mb": 0,
                 "idle_reap_seconds": "soon",
                 "unattended_ask_seconds": True,
                 "background_cap": 1.5,
                 "max_turns": 0,
                 "max_budget_usd": float("inf"),
             },
-            Budgets(4, 900.0, 300.0, 0.5, 50, 5.0),
+            Budgets(),
         ),
         ({"unattended_ask_seconds": -5, "background_cap": float("nan")}, Budgets()),
         ({"background_cap": 1}, Budgets(background_cap=1.0)),
@@ -94,6 +108,23 @@ def live(harness: Harness) -> list[SessionId]:
 )
 def test_budgets_parse_and_fall_back_per_value(raw: dict[str, object], expected: Budgets) -> None:
     assert parse_budgets(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "ram_mb", "slots"),
+    [
+        ({}, 16129, 7),
+        ({"max_live_chats": 2}, 16129, 2),
+        ({"max_live_chats": 12}, 16129, 7),
+        ({}, 32768, 18),
+        ({}, 4096, 1),
+        ({"session_mb": 1024, "overhead_mb": 2048}, 16384, 14),
+    ],
+)
+def test_live_chat_slots_come_from_ram_and_a_written_value_only_lowers_them(
+    raw: dict[str, object], ram_mb: int, slots: int
+) -> None:
+    assert live_chat_slots(parse_budgets(raw), ram_mb) == slots
 
 
 @pytest.mark.parametrize(
@@ -125,23 +156,31 @@ def test_injected_text_into_an_interactive_chat_is_refused_before_any_launch(
     run(body, home)
 
 
-def test_only_background_and_child_chats_launch_verbatim_and_bounded(home: QmxHome) -> None:
-    budgets(home, max_turns=7, max_budget_usd=0.25)
+@pytest.mark.parametrize(
+    ("written", "bound"),
+    [({}, (None, None)), ({"max_turns": 7, "max_budget_usd": 0.25}, (7, 0.25))],
+    ids=["unset", "written"],
+)
+def test_background_and_child_chats_carry_only_the_limits_he_wrote(
+    home: QmxHome, written: dict[str, JsonValue], bound: tuple[int | None, float | None]
+) -> None:
+    budgets(home, **written)
 
     async def body(harness: Harness) -> None:
-        read_plan(harness, 0.1)
         operator = await chat(harness, "operator")
         await finished(harness, home, operator)
-        await harness.send(await chat(harness, "news", Background()), InjectedText("news"))
+        news = await chat(harness, "news", Background())
+        await harness.send(news, InjectedText("news"))
         child = await chat(harness, "helper", Child(operator, unattended=True))
         await harness.send(child, InjectedText("review"))
+        assert blocks(home, news) == [("user", {"text": "news"})]
 
     run(body, home)
     seen = [
         (made.options.verbatim_prompts, made.options.max_turns, made.options.max_budget_usd)
         for made in FakeClient.made
     ]
-    assert seen == [(False, None, None), (True, 7, 0.25), (True, 7, 0.25)]
+    assert seen == [(False, None, None), (True, *bound), (True, *bound)]
 
 
 def test_the_least_recently_used_idle_chat_is_evicted_first(home: QmxHome) -> None:
@@ -164,7 +203,9 @@ def test_the_least_recently_used_idle_chat_is_evicted_first(home: QmxHome) -> No
     run(body, home)
 
 
-def test_a_full_table_of_busy_chats_refuses_and_names_them(home: QmxHome) -> None:
+def test_an_interactive_send_to_a_full_table_of_busy_chats_refuses_and_names_them(
+    home: QmxHome,
+) -> None:
     budgets(home, max_live_chats=2)
 
     async def body(harness: Harness) -> None:
@@ -174,15 +215,33 @@ def test_a_full_table_of_busy_chats_refuses_and_names_them(home: QmxHome) -> Non
         with pytest.raises(ChatTableFull) as refused:
             await harness.send(third, OperatorText("one more"))
         busy = sorted([first, second])
-        reason = (
-            f"all 2 live chats are busy ({', '.join(busy)}); interrupt or close one, "
-            "or raise [budgets] max_live_chats"
-        )
+        reason = f"all 2 live chats are busy ({', '.join(busy)}); interrupt or close one"
         assert (refused.value.busy, str(refused.value)) == (tuple(busy), reason)
         assert blocks(home, third) == [("needs_you", {"reason": reason, "busy": busy})]
         assert len(FakeClient.made) == 2
         await harness.send(first, OperatorText("queued into the running turn"))
         assert len(FakeClient.made) == 2
+
+    run(body, home)
+
+
+def test_a_background_send_past_capacity_waits_and_runs_when_a_slot_frees(
+    home: QmxHome,
+) -> None:
+    budgets(home, max_live_chats=2)
+
+    async def body(harness: Harness) -> None:
+        first, second, third = [await chat(harness, name, Background()) for name in "abc"]
+        await harness.send(first, InjectedText("long"))
+        await harness.send(second, InjectedText("long"))
+        waiting = asyncio.ensure_future(harness.send(third, InjectedText("one more")))
+        await asyncio.sleep(0.5)
+        assert (waiting.done(), len(FakeClient.made), blocks(home, third)) == (False, 2, [])
+        FakeClient.made[0].go.set()
+        await asyncio.wait_for(waiting, 2)
+        assert len(FakeClient.made) == 3
+        assert FakeClient.made[2].queries == ["one more"]
+        assert live(harness) == sorted([second, third])
 
     run(body, home)
 
@@ -278,20 +337,7 @@ def test_reaping_closes_idle_chats_and_spares_one_with_a_background_task(
     run(body, home)
 
 
-def test_a_background_plan_send_fails_closed_without_a_reading(home: QmxHome) -> None:
-    async def body(harness: Harness) -> None:
-        news = await chat(harness, "news", Background())
-        with pytest.raises(LaunchRefused) as refused:
-            await harness.send(news, InjectedText("headlines"))
-        assert str(refused.value) == NO_READING
-        assert blocks(home, news) == [("needs_you", {"reason": NO_READING})]
-        assert FakeClient.made == []
-        await finished(harness, home, await chat(harness, "operator"))
-
-    run(body, home)
-
-
-def test_a_background_plan_send_is_refused_at_the_cap(home: QmxHome) -> None:
+def test_a_background_cap_he_wrote_refuses_without_asking_him(home: QmxHome) -> None:
     budgets(home, background_cap=0.3)
 
     async def body(harness: Harness) -> None:
@@ -300,9 +346,9 @@ def test_a_background_plan_send_is_refused_at_the_cap(home: QmxHome) -> None:
         with pytest.raises(LaunchRefused) as refused:
             await harness.send(news, InjectedText("headlines"))
         assert str(refused.value) == (
-            "the background cap holds this chat: the five-hour window is 40% used, at or over "
-            "the 30% cap"
+            "the five-hour window is 40% used, at or over your [budgets] background_cap of 30%"
         )
+        assert blocks(home, news) == []
         read_plan(harness, 0.1)
         await harness.send(news, InjectedText("headlines"))
         assert len(FakeClient.made) == 1
@@ -394,8 +440,6 @@ def test_the_meter_refuses_without_a_turn_while_a_plan_window_is_used_up(
         with pytest.raises(LaunchRefused) as refused:
             await harness.meter()
         assert str(refused.value) == "the plan meter will not run: a plan window is used up"
-        with pytest.raises(LaunchRefused):
-            await harness.send(await chat(harness, "news", Background()), InjectedText("x"))
         assert len(FakeClient.made) == 1
 
     run(body, home)

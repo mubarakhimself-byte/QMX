@@ -1,4 +1,4 @@
-"""Plan windows, the overage stop, the background cap and the usage page.
+"""Plan windows, the overage stop and the usage page.
 
 Per-turn tokens and cost live in each chat's run journal as `model_call` rows. A plan chat
 writes one per turn from its `ResultMessage` through `plan_row`; a relayed chat's rows come from
@@ -247,41 +247,6 @@ def _live(ends: datetime | None, now: datetime) -> bool:
 
 
 @dataclass(frozen=True)
-class BackgroundCap:
-    """Background chats stop at this share of the plan's five-hour window (R6)."""
-
-    fraction: float
-    """`[budgets] background_cap` (R6)."""
-
-    def refusal(self, ledger: UsageLedger) -> str | None:
-        """Why an unattended plan send must not run now, or None. It refuses at or above
-        `fraction` of the last five-hour reading, while a plan window is `rejected`, and with
-        no five-hour reading at all, since an unknown use could already be past the cap. The
-        CLI reports use only when a turn runs or `/usage` is read, so the cap acts on the last
-        reading, which can lag."""
-        if ledger.rejected():
-            return "a plan window is used up"
-        five_hour = ledger.reading("five_hour")
-        if five_hour is None:
-            return (
-                "there is no reading of the plan's five-hour window yet; POST /api/usage/meter "
-                "reads it with one haiku plan turn"
-            )
-        used, cap = five_hour.reading.utilization, self.fraction
-        if used >= cap:
-            return f"the five-hour window is {used:.0%} used, at or over the {cap:.0%} cap"
-        return None
-
-
-def cap_note(cap: BackgroundCap) -> str:
-    return (
-        f"Background chats stop at {cap.fraction:.0%} of the plan's five-hour window, and "
-        "until the window has been read once. The cap acts on the last reading of the plan's "
-        "use, not a live value: the CLI reports it only when a turn runs or /usage is read."
-    )
-
-
-@dataclass(frozen=True)
 class Totals:
     """A CLI process's running usage totals, summed over models."""
 
@@ -455,8 +420,6 @@ class UsagePage:
     readings: tuple[ReadingView, ...]
     tokens: Mapping[str, Mapping[str, int]]
     """Per profile: input, output, cache read and cache write tokens, and `calls`."""
-    background_cap: float
-    background_cap_note: str
     hard_stop: str | None
     extra_usage_on: bool | None
     money: PostureView
@@ -480,8 +443,6 @@ class UsagePage:
                 ]
             },
             "tokens": {profile: dict(sums) for profile, sums in self.tokens.items()},
-            "background_cap": self.background_cap,
-            "background_cap_note": self.background_cap_note,
             "hard_stop": self.hard_stop,
             "extra_usage_on": self.extra_usage_on,
             "extra_usage_note": EXTRA_USAGE_ON if self.extra_usage_on else None,
@@ -541,7 +502,6 @@ def _saved_limits(saved: dict[str, Any]) -> Limits:
 
 def usage_page(
     ledger: UsageLedger,
-    cap: BackgroundCap,
     tokens: Mapping[str, Mapping[str, int]],
     money: PostureView,
 ) -> UsagePage:
@@ -550,8 +510,6 @@ def usage_page(
         windows=ledger.windows(),
         readings=ledger.readings(),
         tokens=tokens,
-        background_cap=cap.fraction,
-        background_cap_note=cap_note(cap),
         hard_stop=ledger.hard_stop(),
         extra_usage_on=ledger.extra_usage_on(),
     )
