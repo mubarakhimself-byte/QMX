@@ -6,21 +6,24 @@ derives it, callers never choose it. A refusal is a `LibraryRefused` with one co
 set `CODES`, never a raw exception.
 
 There is no delete verb (AD-6, ruling 9): an item is archived, a version is superseded by a new
-object, and nothing stored is ever removed. `marks`, `mark`, `claim`, `release`, `purge` and
-`adopt` are not here yet: marks and claims come with their own stores, and `adopt` and `purge`
-need the server.
+object, and nothing stored is ever removed. `get`, `search`, `walk` and `resolve` take an
+optional `as_of`, a time or a ref-log position, answered from the ref log (46 K-26). `claim`,
+`release`, `purge` and `adopt` are not here yet: claims come with their own store, and `adopt`
+and `purge` need the server.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Literal, Protocol
 
 from pydantic import JsonValue
 
 if TYPE_CHECKING:
+    from qmx_library.marks import Marks
     from qmx_library.principal import Principal
 
 type JsonObject = dict[str, JsonValue]
@@ -30,6 +33,10 @@ type BlobId = str
 """`sha256:<hex>` of the blob's bytes."""
 type Class = Literal["record", "definition", "governed"]
 type Strategy = Literal["auto", "ff-only"]
+type AsOf = datetime | int
+"""A time, or a ref-log position (the `seq` of a move): the store as it stood then."""
+type Relation = tuple[str, ObjectId] | tuple[str, ObjectId, JsonObject]
+"""`(type, to)`, or `(type, to, locator)` naming where in `to` the object came from (AD-4)."""
 
 CODES: Final = frozenset(
     {
@@ -131,7 +138,7 @@ class Draft:
     summary: str = ""
     fields: JsonObject = field(default_factory=dict[str, JsonValue])
     blobs: Mapping[str, bytes | BlobRef] = field(default_factory=dict[str, bytes | BlobRef])
-    relations: Sequence[tuple[str, ObjectId]] = ()
+    relations: Sequence[Relation] = ()
     parents: Sequence[ObjectId] | None = None
     tags: Sequence[str] = ()
 
@@ -165,6 +172,8 @@ class ObjectView:
     parents: tuple[ObjectId, ...]
     relations: tuple[tuple[str, ObjectId], ...]
     annotations: JsonObject
+    locators: Mapping[ObjectId, JsonObject] = field(default_factory=dict[ObjectId, JsonObject])
+    """The locator of each at-birth relation that carries one, by its target."""
     data: Mapping[str, bytes] = field(default_factory=dict[str, bytes])
     """The blob bytes by slot, filled only by `get(..., blobs="fetch")`."""
 
@@ -202,10 +211,17 @@ class MergeResult:
 
 
 class LibraryPort(Protocol):
-    def resolve(self, who: Principal, item: str, ref: str = "main") -> ObjectId: ...
+    def resolve(
+        self, who: Principal, item: str, ref: str = "main", *, as_of: AsOf | None = None
+    ) -> ObjectId: ...
 
     def get(
-        self, who: Principal, object_id: ObjectId, *, blobs: Literal["meta", "fetch"] = "meta"
+        self,
+        who: Principal,
+        object_id: ObjectId,
+        *,
+        blobs: Literal["meta", "fetch"] = "meta",
+        as_of: AsOf | None = None,
     ) -> ObjectView: ...
 
     def search(
@@ -216,6 +232,7 @@ class LibraryPort(Protocol):
         kind: str | None = None,
         include_archived: bool = False,
         limit: int = 20,
+        as_of: AsOf | None = None,
     ) -> list[Hit]: ...
 
     def walk(
@@ -225,7 +242,13 @@ class LibraryPort(Protocol):
         types: Sequence[str] = (),
         direction: Literal["out", "in", "both"] = "out",
         depth: int = 2,
+        *,
+        as_of: AsOf | None = None,
     ) -> list[Step]: ...
+
+    def marks(self, who: Principal, object_id: ObjectId) -> Marks: ...
+
+    def mark(self, who: Principal, item: str, quarantined: bool, reason: str) -> None: ...
 
     def ground(self, who: Principal, text: str) -> Grounding: ...
 

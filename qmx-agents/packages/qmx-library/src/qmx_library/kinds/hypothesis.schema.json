@@ -7,10 +7,30 @@
   "fields": {
     "type": "object",
     "properties": {
-      "claim": {
+      "statement": {
+        "type": "string"
+      },
+      "source": {
+        "type": "object",
+        "properties": {
+          "object_id": {
+            "type": "string"
+          },
+          "locator": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "object_id"
+        ]
+      },
+      "subject": {
         "type": "string"
       }
-    }
+    },
+    "required": [
+      "statement"
+    ]
   },
   "blobs": {},
   "annotations": [

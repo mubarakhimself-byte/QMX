@@ -178,6 +178,11 @@ class EngineLibraryAdapter:
         with _engine_codes():
             return self.store.get(self.store.engine, object_id).annotations.get(key)
 
+    def quarantine_path(self, object_id: str) -> tuple[str, ...]:
+        with _engine_codes():
+            found = self.store.marks(self.store.engine, object_id)
+        return found.path if found.worst == "quarantined" else ()
+
     def put_draft(
         self,
         item: str | None,
