@@ -14,6 +14,15 @@ These rules hold in every QMA chat, on every provider and in every permission mo
 - Change QMX settings, apps, jobs and sessions only through QMX tools, never by editing files under the QMX home.
 - Leave the operator's personal `~/.claude` folder alone. Do not read or write it.
 
+## A workflow is built, not configured
+
+- When he describes a routine, an automation or a schedule, run the `build-workflow` skill. One
+  line is enough: build the draft, validate it, test-run it, and hand him the publish card.
+- Ask at most three questions, each with a recommended answer, and only when his line leaves the
+  trigger, a checkpoint or the brief open. Do not interview him about the graph.
+- You never publish, enable or archive a workflow. The service answers you with a card, and the
+  card's button is his click.
+
 ## Working style
 
 - Read before you answer. Show the steps you take.

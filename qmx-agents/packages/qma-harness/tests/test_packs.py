@@ -77,6 +77,27 @@ def test_the_shipped_plugin_manifest_is_what_the_code_generates() -> None:
     assert plugin_refusal(QmxHome(PLUGIN_DIR.parent)) is None
 
 
+def test_the_builder_skill_names_only_catalog_tools_that_exist() -> None:
+    from qmx_control.catalog import rows
+
+    from qma.harness.home import PLUGIN_DIR
+    from qma.harness.tools import tool_name
+
+    text = (PLUGIN_DIR / "skills" / "build-workflow" / "SKILL.md").read_text(encoding="utf-8")
+    header = {
+        key.strip(): value.strip()
+        for key, value in (
+            line.split(":", 1) for line in text.split("---")[1].strip().splitlines() if ":" in line
+        )
+    }
+    named = header["allowed-tools"].split()
+    known = {tool_name(row.toolset, row.op) for row in rows() if row.agent}
+
+    assert header["name"] == "build-workflow"
+    assert "mcp__qmx_workflows__drafts_put" in named
+    assert [tool for tool in named if tool not in known] == []
+
+
 def test_a_pack_materialises_into_a_view_the_chat_loads(home: QmxHome) -> None:
     [view] = packs.materialise(home.packs_dir, [source()])
 
