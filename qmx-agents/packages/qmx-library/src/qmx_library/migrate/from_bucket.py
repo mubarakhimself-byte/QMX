@@ -108,6 +108,7 @@ def import_bucket(store: Store, bucket: Path) -> Imported:
                 continue
             artifact = Draft(
                 "artifact",
+                run_id,
                 title=str(entry.get("name") or hexdigest[:12]),
                 fields={
                     "type": str(entry.get("type", "run-output")),
