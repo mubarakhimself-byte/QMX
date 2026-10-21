@@ -46,7 +46,9 @@ any slot waits on a limit, and other nodes go on. Once nothing runs, the run lea
 earliest `resume_at`, which already holds `limits.slack`, writes `run_paused` and returns
 `waiting`. The scheduler's ticker resumes it at that instant with `run_resumed` (`triggers`). A
 run held on a time `wait` or a retry backoff leaves a wake at its earliest `resume_at` the same
-way (AD-10), so only the ticker resumes it on time.
+way (AD-10), so only the ticker resumes it on time. While `autonomy.paused` is set a live run
+starts no node: its running attempts finish, then it pauses `paused` with a wake the ticker claims
+only once the flag is cleared (AD-65). A test run is the copilot's own build loop and goes on.
 
 A run's settings are read from the port as it opens and kept for the pass (B-42), with a trigger's
 role and effort pins over them. `Engine.cancel` stops a run and every live run under it: each
@@ -272,6 +274,11 @@ class Engine:
     def settings(self) -> Mapping[str, object]:
         found = self._settings
         return found if isinstance(found, Mapping) else found.values()
+
+    @property
+    def paused(self) -> bool:
+        """`autonomy.paused`, read at use: while it is set no live run starts a node (AD-65)."""
+        return bool(self.settings.get("autonomy.paused"))
 
     @property
     def inbox(self) -> InboxPort:
@@ -714,6 +721,8 @@ class Run:
                 match command:
                     case StartNode() if limits and model_bearing(command.node_definition):
                         ended = Pause("limit", earliest(limits))
+                    case StartNode() if self.mode == "live" and self.engine.paused:
+                        ended = Pause("paused", utc_text(self.engine.wall()))
                     case StartNode():
                         self.launch(command)
                         moved = True
@@ -760,7 +769,10 @@ class Run:
     def wakes(self, held: Pause | Wait) -> bool:
         """Whether a hold with a `resume_at` leaves a wake (AD-10): a usage limit, a time `wait` or
         a retry backoff always does, unless it names the instant the run was just woken at and that
-        instant is past, so a stale reset cannot spin the run. A `limits` pause waits for him."""
+        instant is past, so a stale reset cannot spin the run. A `limits` pause waits for him. A
+        `paused` hold always leaves its wake, which the ticker claims once the flag clears."""
+        if isinstance(held, Pause) and held.reason == "paused":
+            return True
         if held.resume_at is None or (isinstance(held, Pause) and held.reason != "limit"):
             return False
         reset = datetime.fromisoformat(held.resume_at)

@@ -1,23 +1,33 @@
-"""Preflight before a fire starts a run (SOLUTION-DESIGN 4.2 step 4, AD-10, AD-17).
+"""Preflight before a fire starts a run (SOLUTION-DESIGN 4.2 step 4, AD-10, AD-17), and the
+`market_open` precheck.
 
 Roles must resolve to a live candidate the harness has a profile for, every credential a node
 names must be a configured `qmx/*` reference (by name; nothing is read), and every skill an
-`agent` node names must ship in the QMX plugin. The delivery target is one of the typed
-`inbox | digest | silent` channels, which always exist.
+`agent` node names must ship in the QMX plugin. A `qmx/tool/<name>` key is the script's own: the
+script node resolves it from the keyring as it starts and fails `credential_missing` there, so
+preflight, which reads no secret, does not hold it against the Settings references. The delivery
+target is one of the typed `inbox | digest | silent` channels, which always exist.
 
 A failure blocks the fire with no run. A role or skill fault is the workflow's own configuration,
 which costs a digest line; only a missing key is a provider failure, which raises an inbox item.
+
+`market_open` is a precheck a trigger names by that word: the market is shut on Saturdays,
+Sundays and every `market.holidays` date, each read in the trigger's IANA zone, and a fire while
+it is shut is held until the next open day begins (Claude's default calendar).
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Final, Literal, cast
+from zoneinfo import ZoneInfo
 
 from qmx_control.service import ControlService
 
+from qmx_engine.definition.lint import TOOL_KEY
 from qmx_engine.definition.model import Workflow
 from qmx_engine.ledger.signature import signature
 from qmx_engine.roles import order, resolve
@@ -26,6 +36,8 @@ type Cause = Literal["config", "provider"]
 
 PLUGIN_SKILLS: Final = Path(__file__).resolve().parents[5] / "plugin" / "skills"
 """`qmx-agents/plugin/skills`, the skills QMX ships."""
+MARKET_OPEN: Final = "market_open"
+WEEKEND: Final = (5, 6)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,9 +100,10 @@ def preflight(
                     return Blocked("config", "role_unresolved", f"{node.name}: {found}")
         if credentials is not None:
             for name, ref in sorted(node.credentials.items()):
-                if ref.casefold() not in credentials:
-                    message = f"{node.name}: credential {name} names {ref}, which is not configured"
-                    return Blocked("provider", "credential_missing", message)
+                if TOOL_KEY.fullmatch(ref) or ref.casefold() in credentials:
+                    continue
+                message = f"{node.name}: credential {name} names {ref}, which is not configured"
+                return Blocked("provider", "credential_missing", message)
         named = node.parameters.get("skills")
         if skills is not None and isinstance(named, list):
             for skill in named:  # pyright: ignore[reportUnknownVariableType]
@@ -98,3 +111,18 @@ def preflight(
                     message = f"{node.name}: skill {skill} is not installed"
                     return Blocked("config", "skill_missing", message)
     return None
+
+
+def market_shut_until(now: datetime, zone: str, holidays: Collection[str]) -> datetime | None:
+    """None while the market is open at `now`; else the UTC instant its next open day begins."""
+    where = ZoneInfo(zone)
+
+    def shut(day: date) -> bool:
+        return day.weekday() in WEEKEND or day.isoformat() in holidays
+
+    day = now.astimezone(where).date()
+    if not shut(day):
+        return None
+    while shut(day):
+        day += timedelta(days=1)
+    return datetime.combine(day, time(0), where).astimezone(UTC)

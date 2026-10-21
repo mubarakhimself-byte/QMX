@@ -7,12 +7,18 @@ so no other kind of item can be stored. An item's title, cause and what was trie
 redaction (AD-37) before they are stored, so a provider message that echoes a key never lands here.
 An engine that raises on the table also takes its answers: `resolve` records the answer, then hands
 it to `answers`, which writes it through the ledger writer and wakes the run (B-32).
+
+The same file holds a trigger's incidents (AD-10, Hermes): every failed fire of one trigger with
+one masked signature (`ledger.signature`) is one incident that counts its repeats and keeps its
+first and last time. A newer signature closes the open incident and opens its own. An incident he
+acknowledged stays quiet while the signature holds, and a passing fire resolves it.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 from types import TracebackType
@@ -47,6 +53,30 @@ COLUMNS: Final = (
     " blocks_run, actions, first_raised_at, last_raised_at, count, resolved_by, resolution,"
     " resolved_at"
 )
+INCIDENTS: Final = (
+    "CREATE TABLE IF NOT EXISTS incidents ("
+    " id TEXT PRIMARY KEY, trigger_id TEXT NOT NULL, signature TEXT NOT NULL,"
+    " title TEXT NOT NULL, cause TEXT NOT NULL, count INTEGER NOT NULL,"
+    " first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, acknowledged_at TEXT, resolved_at TEXT)"
+)
+INCIDENT_COLUMNS: Final = (
+    "id, trigger_id, signature, title, cause, count, first_seen, last_seen, acknowledged_at,"
+    " resolved_at"
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Incident:
+    id: str
+    trigger_id: str
+    signature: str
+    title: str
+    cause: str
+    count: int
+    first_seen: str
+    last_seen: str
+    acknowledged_at: str | None
+    resolved_at: str | None
 
 
 def inbox_path(home: Path) -> Path:
@@ -69,6 +99,7 @@ class InboxTable:
         self.connection = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_S)
         self.connection.execute("PRAGMA journal_mode = WAL")
         self.connection.execute(SCHEMA)
+        self.connection.execute(INCIDENTS)
 
     @classmethod
     def open(cls, home: Path) -> InboxTable:
@@ -145,6 +176,55 @@ class InboxTable:
             f"SELECT {COLUMNS} FROM items{where} ORDER BY first_raised_at, id"  # noqa: S608
         ).fetchall()
         return [_item(row) for row in rows]
+
+    def incident(self, trigger_id: str, signature: str, title: str, cause: str, *, at: str) -> str:
+        """Count one failed fire on the trigger's open incident, or open one; returns its id."""
+        db = self.connection
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            found = self.open_incident(trigger_id)
+            if found is not None and found.signature == signature:
+                db.execute(
+                    "UPDATE incidents SET count = count + 1, last_seen = ?, cause = ? WHERE id = ?",
+                    (at, redact(cause), found.id),
+                )
+                db.execute("COMMIT")
+                return found.id
+            if found is not None:
+                db.execute("UPDATE incidents SET resolved_at = ? WHERE id = ?", (at, found.id))
+            digest = sha256(f"{trigger_id}\n{signature}\n{at}".encode()).hexdigest()
+            opened = f"incident-{digest[:16]}"
+            db.execute(
+                f"INSERT INTO incidents ({INCIDENT_COLUMNS})"  # noqa: S608
+                " VALUES (?, ?, ?, ?, ?, 1, ?, ?, NULL, NULL)",
+                (opened, trigger_id, signature, redact(title), redact(cause), at, at),
+            )
+            db.execute("COMMIT")
+        except BaseException:
+            db.execute("ROLLBACK")
+            raise
+        return opened
+
+    def open_incident(self, trigger_id: str) -> Incident | None:
+        row = self.connection.execute(
+            f"SELECT {INCIDENT_COLUMNS} FROM incidents"  # noqa: S608
+            " WHERE trigger_id = ? AND resolved_at IS NULL",
+            (trigger_id,),
+        ).fetchone()
+        return None if row is None else Incident(*row)
+
+    def acknowledge(self, incident_id: str, *, at: str) -> None:
+        self.connection.execute(
+            "UPDATE incidents SET acknowledged_at = coalesce(acknowledged_at, ?) WHERE id = ?",
+            (at, incident_id),
+        )
+
+    def resolve_incident(self, trigger_id: str, *, at: str) -> None:
+        """A passing fire ends the trigger's open incident."""
+        self.connection.execute(
+            "UPDATE incidents SET resolved_at = ? WHERE trigger_id = ? AND resolved_at IS NULL",
+            (at, trigger_id),
+        )
 
 
 def _item(row: tuple[object, ...]) -> Item:

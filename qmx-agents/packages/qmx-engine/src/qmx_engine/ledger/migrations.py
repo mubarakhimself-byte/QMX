@@ -1,9 +1,11 @@
 """The ledger schema: a `schema_version` row in `meta` and forward-only steps.
 
-Step N moves the schema from version N-1 to N. A file whose version is newer than this code knows
-is refused, never downgraded. The SQLite library version is recorded in `meta` at every writer
-open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can corrupt a WAL database,
-which is why only the writer thread ever checkpoints, whatever the version.
+Step N moves the schema from version N-1 to N. Step 3 rebuilds `triggers` for the wider kind
+check (SQLite cannot alter a CHECK) and adds a trigger's `priority` and `ready_by`, and a fire's
+webhook `delivery_id`, its `delivery` outcome and its re-run count. A file whose version is newer
+than this code knows is refused, never downgraded. The SQLite library version is recorded in
+`meta` at every writer open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can
+corrupt a WAL database, which is why only the writer thread ever checkpoints, whatever the version.
 """
 
 from __future__ import annotations
@@ -49,6 +51,31 @@ STEPS: Final[tuple[tuple[str, ...], ...]] = (
         "CREATE TABLE wakes ("
         " run_id TEXT PRIMARY KEY, resume_at TEXT NOT NULL, claimed_by TEXT, lease_until TEXT)",
         "CREATE INDEX wakes_due ON wakes (resume_at)",
+    ),
+    (
+        "CREATE TABLE triggers_next ("
+        " id TEXT PRIMARY KEY, workflow_item TEXT NOT NULL, pinned_object TEXT NOT NULL,"
+        " follow_champion INTEGER NOT NULL,"
+        " home_engine TEXT NOT NULL CHECK (home_engine IN ('pc', 'contabo')),"
+        " kind TEXT NOT NULL CHECK (kind IN"
+        " ('cron', 'interval', 'event', 'webhook', 'session', 'manual', 'after')),"
+        " spec TEXT NOT NULL, enabled INTEGER NOT NULL, precheck_ref TEXT,"
+        " role_pins TEXT NOT NULL, effort_pin TEXT, delivery TEXT NOT NULL,"
+        " continuity INTEGER NOT NULL, catch_up TEXT NOT NULL, max_concurrent INTEGER NOT NULL,"
+        " source TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL,"
+        " next_fire_at TEXT, last_status TEXT, failure_streak INTEGER NOT NULL,"
+        " quota_hold_until TEXT, incident_id TEXT, last_outputs TEXT,"
+        " priority INTEGER NOT NULL DEFAULT 0, ready_by TEXT)",
+        "INSERT INTO triggers_next SELECT *, 0, NULL FROM triggers",
+        "DROP TABLE triggers",
+        "ALTER TABLE triggers_next RENAME TO triggers",
+        "CREATE INDEX triggers_due ON triggers (home_engine, enabled, next_fire_at)",
+        "ALTER TABLE fires ADD COLUMN delivery_id TEXT",
+        "ALTER TABLE fires ADD COLUMN delivery TEXT",
+        "ALTER TABLE fires ADD COLUMN rerun INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE fires ADD COLUMN rerun_of TEXT",
+        "CREATE UNIQUE INDEX fires_by_delivery ON fires (trigger_id, delivery_id)"
+        " WHERE delivery_id IS NOT NULL",
     ),
 )
 

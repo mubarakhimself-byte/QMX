@@ -16,6 +16,12 @@ tool-call or run-time ceiling and no background share here. `timeout.*` and `loo
 detector, which asks whether an attempt still moves, never how much it used. `placement.pc.*_slots`
 are machine capacity per resource class (AD-58); chat slots and the Interactive reserve live in the
 harness slot table, the only chat-slot counter, under `[budgets]`.
+
+`autonomy.paused` is the local "pause everything" flag (AD-65): while it is set no fire is claimed
+and no live run starts a node; OPS2 makes the Hub's copy authoritative. `triggers.rerun_delays`
+are the spend-neutral re-runs after a failed fire, counted from its first failure.
+`triggers.precheck_timeout` bounds a trigger's own check script, which is not a node. The
+`market_open` precheck holds a fire on weekends and `market.holidays` in the trigger's zone.
 """
 
 from __future__ import annotations
@@ -43,6 +49,12 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "scheduler.lease_seconds": 300,  # Claude's default, UI-editable
         "scheduler.heartbeat": 60,  # Claude's default, UI-editable
         "scheduler.grace": 900,  # Claude's default, UI-editable
+        "autonomy.paused": 0,  # Claude's default, UI-editable; 1 or true pauses every fire
+        "triggers.rerun_delays": (300, 900, 1_800),  # Claude's default, UI-editable
+        "triggers.ready_by_window": 3_600,  # Claude's default, UI-editable
+        "triggers.precheck_timeout": 600,  # Claude's default, UI-editable; a check, not a node
+        "triggers.webhook_home": "pc",  # Claude's default, UI-editable; contabo once it exists
+        "market.holidays": (),  # Claude's default, UI-editable; local dates, YYYY-MM-DD
         "limits.slack": 60,  # Claude's default, UI-editable
         "limits.alert_after": 21_600,  # Claude's default, UI-editable
         "chunk.size": 10,  # Claude's default, UI-editable
