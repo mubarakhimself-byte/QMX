@@ -286,8 +286,10 @@ async def _bound(
 
 
 type HostRead = Callable[[dict[str, Any]], Awaitable[Mapping[str, object]]]
-"""A host read the harness serves itself: the chat-slot table or a chat's journal."""
+"""A host read served to an `agent_tool` row: the harness's chat-slot table or a chat's journal,
+or one the hosting process passes to `Harness.open`, such as its heartbeats."""
 
+NO_ARGUMENTS: Final[Mapping[str, object]] = MappingProxyType({"type": "object", "properties": {}})
 HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
     {
         "slot_table": {"type": "object", "properties": {}},
@@ -316,7 +318,7 @@ def _host_def(row: OperationSpec, read: HostRead) -> ToolDef:
             return failure("unavailable", str(error))
         return {"content": [{"type": "text", "text": json.dumps(found, default=str)}]}
 
-    return _plain(row, HOST_SCHEMAS[row.target], call)
+    return _plain(row, HOST_SCHEMAS.get(row.target, NO_ARGUMENTS), call)
 
 
 async def tool_defs(

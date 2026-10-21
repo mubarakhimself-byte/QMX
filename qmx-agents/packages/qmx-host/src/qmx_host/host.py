@@ -12,6 +12,10 @@ engine's permission policy and hook sink are registered on the harness, both nam
 the engine resumes any run, so a chat reloaded after a restart finds them. On stop the engine
 drains, the Library store closes, then the harness closes, which stops the relay.
 
+While it serves, the host writes one heartbeat row for itself and one per running app every
+`heartbeat.interval` (AD-65) into the home's heartbeat log, prunes the log to its window once an
+hour, and serves the log to the copilot's `ops_heartbeats` row through the harness.
+
 The lock is an OS lock on `<home>/engine.lock` (AD-3, L-64, L-70): the OS releases it when the
 process dies, so a crashed host never blocks the next one, and two hosts cannot both take it.
 """
@@ -21,14 +25,16 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
 import time
-from collections.abc import Generator, Sequence
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Final, Literal
+from typing import IO, Any, Final, Literal
 
 import httpx
 import psutil
@@ -37,12 +43,26 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, chat_routes, control_service
+from qma.harness.tools import HostRead
 from qmx_control.models import Document
 from qmx_control.service import ControlService
+from qmx_engine.admission import setting
 from qmx_engine.control_door import EngineDoor
+from qmx_engine.heartbeat import (
+    INTERVAL_S,
+    WINDOW_DAYS,
+    ClassUse,
+    Heartbeat,
+    HeartbeatLog,
+    kinds_digest,
+    latest,
+    node_kinds,
+    qmx_version,
+)
 from qmx_engine.ledger import redact
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.library import JsonObject
+from qmx_engine.runner import Engine
 from qmx_engine.service.rest import engine_router
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.store import Store
@@ -56,6 +76,9 @@ LIBRARY: Final = "library"
 STATE: Final = "control-process.json"
 """The running host's pid, port and start time, for `status`, `stop` and the refusal line."""
 START_S: Final = 30.0
+HOST_HISTORY: Final = 10
+"""The host rows `ops_heartbeats` returns beside the newest row per subject: five minutes at the
+default interval."""
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 
 
@@ -143,7 +166,9 @@ async def serve(
     """Assumes the caller scrubbed the environment and holds the home's lock."""
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
-    harness = await Harness.open(qmx_home, control=control)
+    harness = await Harness.open(
+        qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
+    )
     try:
         with Store.open(home / LIBRARY, redactor=redact) as store:
             async with EngineDoor.open(
@@ -154,9 +179,105 @@ async def serve(
                 bearer = qmx_control.server.local_token()
                 app = compose(control, engine, harness_api, bearer, origin)
                 server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
-                await server.serve()
+                beating = asyncio.create_task(heartbeats(home, role, control, harness, engine))
+                try:
+                    await server.serve()
+                finally:
+                    beating.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await beating
     finally:
         await harness.close()
+
+
+def capacity(engine: Engine, harness: Harness) -> dict[str, ClassUse]:
+    """Slots in use, slots there are, and work waiting, per engine class and for chats."""
+    found: dict[str, ClassUse] = {}
+    for name, slots in engine.worker.capacity.slots.items():
+        found[name] = ClassUse(used=slots.used, size=slots.size, waiting=len(slots.queue))
+    table = harness.slot_table()
+    found["chat"] = ClassUse(used=len(table.held), size=table.capacity, waiting=len(table.waiting))
+    return found
+
+
+def beat(
+    home: Path, host_id: str, me: psutil.Process, engine: Engine, harness: Harness
+) -> Heartbeat:
+    """This host's row: its own process and every child, the CLI trees included."""
+    tree = [me, *me.children(recursive=True)]
+    cpu, rss = 0.0, 0
+    for member in tree:
+        with suppress(psutil.Error):
+            times = member.cpu_times()
+            cpu += times.user + times.system
+            rss += member.memory_info().rss
+    kinds = node_kinds()
+    return Heartbeat(
+        subject="host",
+        id=host_id,
+        at=datetime.now(UTC).isoformat(),
+        cpu_seconds=cpu,
+        rss_bytes=rss,
+        machine_minutes=(time.time() - me.create_time()) / 60,
+        capacity=capacity(engine, harness),
+        qmx_version=qmx_version(),
+        node_kinds=kinds,
+        kinds_digest=kinds_digest(kinds),
+        paused=engine.paused,
+        free_disk_bytes=shutil.disk_usage(home).free,
+    )
+
+
+def app_rows(control: ControlService, paused: bool) -> list[Heartbeat]:
+    """The supervisor's app rows, completed with the facts only the host knows."""
+    version, digest = qmx_version(), kinds_digest(())
+    return [
+        Heartbeat.model_validate(
+            {**row, "qmx_version": version, "kinds_digest": digest, "paused": paused}
+        )
+        for row in control.app_runtime().heartbeats()
+    ]
+
+
+async def heartbeats(
+    home: Path, host_id: str, control: ControlService, harness: Harness, engine: EngineDoor
+) -> None:
+    """Write this host's rows every `heartbeat.interval` until cancelled. A failed beat is
+    skipped, never fatal: the next one carries the same facts."""
+    core = engine.svc.ctx.engine
+    me = psutil.Process()
+    log = HeartbeatLog(home, setting(core.settings, "heartbeat.window_days", WINDOW_DAYS))
+    pruned: int | None = None
+    while True:
+        try:
+            rows = [beat(home, host_id, me, core, harness), *app_rows(control, core.paused)]
+            await asyncio.to_thread(log.write, rows)
+            hour = int(time.time() // 3600)
+            if hour != pruned:
+                await asyncio.to_thread(log.prune, datetime.now(UTC))
+                pruned = hour
+        except (OSError, ValueError, psutil.Error) as error:
+            print(f"heartbeat skipped: {type(error).__name__}: {error}", file=sys.stderr)
+        await asyncio.sleep(setting(core.settings, "heartbeat.interval", INTERVAL_S))
+
+
+def heartbeats_read(home: Path) -> HostRead:
+    """The `ops_heartbeats` read: the newest row per subject and the host's last rows."""
+
+    async def read(_arguments: dict[str, Any]) -> Mapping[str, object]:
+        def load() -> Mapping[str, object]:
+            newest = latest(home)
+            since = datetime.now(UTC) - timedelta(hours=1)
+            found = HeartbeatLog(home, 1).rows(since)
+            hosts = [row for row in found if row.subject == "host"][-HOST_HISTORY:]
+            return {
+                "latest": {key: row.model_dump(mode="json") for key, row in newest.items()},
+                "host_history": [row.model_dump(mode="json") for row in hosts],
+            }
+
+        return await asyncio.to_thread(load)
+
+    return read
 
 
 def compose(

@@ -44,6 +44,7 @@ from pydantic import ValidationError
 
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.registry import REGISTRY
+from qmx_engine.heartbeat import INTERVAL_S, host_kinds
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Operation, Reader, Transaction
@@ -70,7 +71,13 @@ from qmx_engine.triggers.claims import (
     start,
 )
 from qmx_engine.triggers.cron import instant, stamp
-from qmx_engine.triggers.preflight import MARKET_OPEN, Blocked, market_shut_until, preflight
+from qmx_engine.triggers.preflight import (
+    MARKET_OPEN,
+    Blocked,
+    market_shut_until,
+    placement_wait,
+    preflight,
+)
 from qmx_engine.triggers.quota import closed_until
 from qmx_engine.triggers.rows import (
     FIRE_COLUMNS,
@@ -310,6 +317,11 @@ class Scheduler:
             )
             if blocked is not None:
                 self._blocked(fire, trigger, blocked)
+                return
+            waits = placement_wait(workflow, host_kinds(self.ctx.home))
+            if waits is not None:
+                beat = timedelta(seconds=self.setting("heartbeat.interval", INTERVAL_S))
+                ledger.write(hold(fire, stamp(self.ctx.clock.now() + beat), waits))
                 return
             until = await closed_until(
                 workflow, self.engine.settings, self.engine.harness, self.engine.admission

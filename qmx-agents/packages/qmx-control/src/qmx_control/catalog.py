@@ -227,6 +227,16 @@ HOST_ROWS: Final = (
         "Read a chat's request journal: one row per model request with its usage and status.",
     ),
     _row(
+        "ops",
+        "heartbeats",
+        "agent_tool",
+        "heartbeats",
+        "read",
+        "Read what is running here and how loaded it is: the newest heartbeat per host and app "
+        "(CPU, memory, capacity in use and waiting per class, the pause flag, the version) and "
+        "the host's last ten rows.",
+    ),
+    _row(
         "delegate",
         "run",
         "delegate",
@@ -236,7 +246,8 @@ HOST_ROWS: Final = (
         "helper starts fresh: put the whole task in the prompt. It cannot start helpers.",
     ),
 )
-"""Rows the harness serves itself: the chat-slot table, the relay journal and `delegate`."""
+"""Rows the harness serves itself (the chat-slot table, the relay journal and `delegate`) and
+`heartbeats`, which the host serves through the harness from its heartbeat log (AD-65)."""
 
 
 def control_rows() -> tuple[OperationSpec, ...]:
