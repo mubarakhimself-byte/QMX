@@ -49,18 +49,19 @@ SECRET: Final = b"the vault code is 4411"
 def hub_blob(blob_id: str) -> str:
     """Where the Hub's store keeps a durable blob, sharded by its hash."""
     hexdigest = blob_id.removeprefix("sha256:")
-    home = LOCAL_BUCKET.parent / "hub" if LOCAL else Path(f"{SERVER_DIR}/{LANE}/hub")
-    return str(home / "library" / "blobs" / hexdigest[:2] / hexdigest[2:4] / hexdigest)
+    tail = f"library/blobs/{hexdigest[:2]}/{hexdigest[2:4]}/{hexdigest}"
+    # Remote paths stay POSIX strings: `Path` on this Windows host would put `\\` in them.
+    return str(LOCAL_BUCKET.parent / "hub" / tail) if LOCAL else f"{SERVER_DIR}/{LANE}/hub/{tail}"
 
 
 def bucket_blob(blob_id: str) -> str:
-    root = LOCAL_BUCKET if LOCAL else Path(REMOTE_BUCKET)
-    return str(root / "blobs" / blob_id.removeprefix("sha256:"))
+    tail = f"blobs/{blob_id.removeprefix('sha256:')}"
+    return str(LOCAL_BUCKET / tail) if LOCAL else f"{REMOTE_BUCKET}/{tail}"
 
 
 def bucket_tombstone(blob_id: str) -> str:
-    root = LOCAL_BUCKET if LOCAL else Path(REMOTE_BUCKET)
-    return str(root / "tombstones" / f"{blob_id.removeprefix('sha256:')}.json")
+    tail = f"tombstones/{blob_id.removeprefix('sha256:')}.json"
+    return str(LOCAL_BUCKET / tail) if LOCAL else f"{REMOTE_BUCKET}/{tail}"
 
 
 def exists(path: str) -> str:
