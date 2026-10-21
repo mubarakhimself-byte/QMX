@@ -5,6 +5,11 @@ plugin, lists every `!` shell line the pack would run, refuses a `hooks/` folder
 `.mcp.json`, and refuses a pack whose server serves tools other than the rows `app.toml`
 declares.
 
+Two name rules come from the catalog (AD-61): a declared row's wire name
+`mcp__qmx__<toolset>_<op>` must fit `MAX_TOOL_NAME`, and no row may spell an order act, because
+agents have no path to money (ruling 116, review 48 M10). Both read the same vendored word list
+as the definition lint.
+
 A `!` line is listed, not refused: it runs under the guard like any other shell call, so the
 operator sees it before he publishes. A hook and an MCP server are refused outright, because
 neither passes through the guard and a pack's tools are catalog rows on the chat's one `qmx`
@@ -20,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
 
+from qma.core.barriers.money_path import match_money_path_act
+
 from qmx_apps.errors import Document
 
 PLUGIN_JSON: Final = ".claude-plugin/plugin.json"
@@ -29,6 +36,9 @@ REFUSED: Final = frozenset({"hooks", ".mcp.json"})
 NAME: Final = re.compile(r"\A[a-zA-Z0-9][a-zA-Z0-9_-]*\Z")
 """A plugin name is the `plugin:skill` prefix the CLI reports and the folder the pack set names."""
 SHELL: Final = re.compile(r"!`([^`\n]*)`")
+MAX_TOOL_NAME: Final = 64
+"""The bound on `mcp__qmx__<toolset>_<op>`; the catalog's `MAX_TOOL_NAME` and the same number."""
+CORE_SERVER: Final = "qmx"
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +72,17 @@ class PackCheck:
             "agents": list(self.agents),
             "commands": list(self.commands),
         }
+
+
+def wire_toolset(toolset: str) -> str:
+    """The toolset part of a wire name. The catalog names a pack's toolset `app:<id>`; a wire name
+    holds letters, digits, underscores and hyphens only, so `:` becomes `_`."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", toolset)
+
+
+def wire_name(toolset: str, op: str) -> str:
+    """`mcp__qmx__<toolset>_<op>`, the name the CLI gives the tool."""
+    return f"mcp__{CORE_SERVER}__{wire_toolset(toolset)}_{op}"
 
 
 def _manifest(folder: Path, refusals: list[str]) -> str:
@@ -118,12 +139,35 @@ def _stems(folder: Path, part: str) -> tuple[str, ...]:
     return tuple(sorted(path.stem for path in (folder / part).glob("*.md")))
 
 
+def _names(rows: Sequence[str], toolset: str) -> list[str]:
+    """Why a declared row's wire name is refused: an order act, or a name the CLI cannot carry."""
+    problems: list[str] = []
+    for op in rows:
+        act = match_money_path_act(op)
+        if act is not None:
+            problems.append(
+                f"order_act: {op} names the order act {act}; agents have no path to money "
+                "(ruling 116)"
+            )
+        name = wire_name(toolset, op)
+        if len(name) > MAX_TOOL_NAME:
+            problems.append(
+                f"wire_name: {name} is longer than {MAX_TOOL_NAME} characters ({len(name)})"
+            )
+    return problems
+
+
 def check(
-    folder: Path, *, declared: Sequence[str] = (), served: Sequence[str] | None = None
+    folder: Path,
+    *,
+    declared: Sequence[str] = (),
+    served: Sequence[str] | None = None,
+    toolset: str = CORE_SERVER,
 ) -> PackCheck:
     """Check one materialised pack view. `declared` is the rows `app.toml [operations]` names
     and `served` what the pack's server answers; the two must be the same set, which is what
-    stops a pack serving a tool it never declared (AD-61)."""
+    stops a pack serving a tool it never declared (AD-61). `toolset` names the server's toolset,
+    `qmx` for the core one and `app:<id>` for an app's pack."""
     refusals: list[str] = []
     name = _manifest(folder, refusals)
     refused = _refused_paths(folder)
@@ -138,6 +182,7 @@ def check(
             f"found {', '.join(stray)}"
         )
     rows = list(declared)
+    refusals.extend(_names(rows, toolset))
     answered = None if served is None else list(served)
     if answered is None and rows:
         refusals.append(

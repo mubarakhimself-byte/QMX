@@ -16,7 +16,9 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
+
+from qma.core.barriers.money_path import match_money_path_act
 
 from qmx_control.models import LibraryInput
 
@@ -49,9 +51,16 @@ CORE_TOOLSETS: Final = (
     "ops",
 )
 CORE_PACK: Final = "qmx"
+APP_PREFIX: Final = "app:"
+"""A pack's toolset is `app:<id>` (AD-61). The wire form of a toolset may not carry `:`, so it
+becomes `_` where the CLI's tool name is built."""
+CALL_DEPTH_SETTING: Final = "apps.call_depth"
+"""The host setting that bounds a ring of asks (AD-64). There is no default number: a host that
+sets none lets a ring run until the stuck detector sees it."""
 WIRE_NAME: Final = re.compile(r"[a-zA-Z0-9_-]+")
 MAX_TOOL_NAME: Final = 64
 """The bound on `mcp__qmx__<name>`. A probe bound: the plan lane took 80 (P-NM)."""
+TOOLSET_WIRE: Final = re.compile(r"[^a-zA-Z0-9_-]")
 INLINE_LIMIT: Final = 20_000
 """Characters an answer may carry before it spills to the Library (Claude's default)."""
 SPILL_EDGE: Final = 2_000
@@ -95,18 +104,28 @@ class OperationSpec:
     """Arguments a tool call always runs with, left out of the schema the model sees."""
     version: str = "1.0.0"
     owner: str = "core"
+    pack: str = CORE_PACK
     defer: Literal["auto", "always_load"] = "auto"
     state: Literal["none", "instance"] = "none"
 
     @property
     def name(self) -> str:
-        """The wire name, `<toolset>_<op>`."""
+        """The catalog's name for the row, `<toolset>_<op>`."""
         return f"{self.toolset}_{self.op}"
 
     @property
+    def wire(self) -> str:
+        """The name the CLI's tool carries, `<toolset>_<op>` with the toolset's wire form. A pack's
+        toolset is `app:<id>`, so its colon is an underscore here and only here."""
+        return f"{TOOLSET_WIRE.sub('_', self.toolset)}_{self.op}"
+
+    @property
     def id(self) -> str:
-        """The catalog id and engine node type, `<pack>.<toolset>_<op>`."""
-        return f"{CORE_PACK}.{self.name}"
+        """The catalog id and engine node type. A core row is `<pack>.<wire>`; a pack's row is
+        `<pack>.<op>`, because the pack is already in the name."""
+        if self.pack == CORE_PACK:
+            return f"{self.pack}.{self.name}"
+        return f"{self.pack}.{self.op}"
 
     @property
     def callers(self) -> tuple[Caller, ...]:
@@ -351,9 +370,74 @@ def control_rows() -> tuple[OperationSpec, ...]:
     )
 
 
-def rows() -> tuple[OperationSpec, ...]:
-    """The core catalog, checked."""
-    found = (*control_rows(), *BROKER_ROWS, *DOMAIN_ROWS, *HOST_ROWS, *CONTEXT_ROWS)
+def app_toolset(app_id: str) -> str:
+    """The toolset a pack's operations are served as: `app:<id>` (AD-61)."""
+    return f"{APP_PREFIX}{app_id}"
+
+
+def app_rows(
+    app_id: str, version: str, operations: Mapping[str, Mapping[str, object]]
+) -> tuple[OperationSpec, ...]:
+    """One row per `[operations.<op>]` of one app, pinned to that app's `version`. Nothing else
+    the app serves is a row: an app reaches another app only through these, which is the rule
+    that there is no union of permissions across apps (AD-64, DC-7)."""
+    found: list[OperationSpec] = []
+    for op, declared in operations.items():
+        act = match_money_path_act(op)
+        if act is not None:
+            raise CatalogError(
+                f"{app_id}.{op} names the order act {act} and cannot reach a model (ruling 116)"
+            )
+        approval = str(declared.get("approval", "read"))
+        if approval not in DEFAULT_REVERSIBILITY:
+            raise CatalogError(f"{app_id} {op} declares no approval this catalog serves")
+        served = cast(Approval, approval)
+        found.append(
+            OperationSpec(
+                toolset=app_toolset(app_id),
+                op=op,
+                binds="app_server",
+                target=op,
+                approval=served,
+                description=str(declared.get("description") or ""),
+                reversibility=cast(
+                    Reversibility, declared.get("reversibility") or DEFAULT_REVERSIBILITY[served]
+                ),
+                version=version,
+                owner=app_id,
+                pack=app_id,
+                state=cast(
+                    Literal["none", "instance"],
+                    declared.get("state") or "none",
+                ),
+            )
+        )
+    check(found)
+    return tuple(found)
+
+
+def dispatch_refusal(row: OperationSpec, *, depth: int, ceiling: int | None) -> str | None:
+    """Why an ask at `depth` may not be dispatched, or None.
+
+    Only a pack's operation carries the chain onward: a ring of apps asking each other (A asks B,
+    B asks C, C asks A) is what the host's `call_depth` bounds, and the ceiling has no default
+    number. A core row ends the chain, so it is never refused for depth."""
+    if depth < 0:
+        return "an ask's depth is never negative"
+    if row.owner == "core" or ceiling is None:
+        return None
+    if depth > ceiling:
+        return (
+            f"{row.id} is asked at depth {depth}, past the host's call_depth {ceiling}; "
+            f"the ring ends here"
+        )
+    return None
+
+
+def rows(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
+    """The catalog: the core rows, then every enabled app's `[operations]` rows the caller hands
+    in, all checked together."""
+    found = (*control_rows(), *BROKER_ROWS, *DOMAIN_ROWS, *HOST_ROWS, *CONTEXT_ROWS, *apps)
     check(found)
     return found
 
@@ -380,7 +464,7 @@ def check(found: Iterable[OperationSpec]) -> None:
         if row.name in seen:
             problems.append(f"{row.name} is declared twice")
         seen.add(row.name)
-        if (problem := name_problem(row.name)) is not None:
+        if (problem := name_problem(row.wire)) is not None:
             problems.append(problem)
         if row.owner == "core" and row.toolset not in CORE_TOOLSETS:
             problems.append(f"{row.name} names no core toolset ({row.toolset})")

@@ -6,6 +6,7 @@ import asyncio
 import concurrent.futures
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -28,7 +29,7 @@ from fastmcp.client.transports import StdioTransport
 from pydantic import JsonValue
 from qma.core.barriers.descriptors import check_descriptor
 
-from qmx_apps.artifacts import Artifacts
+from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust, image_files, image_hash
 from qmx_apps.road import Road
@@ -41,6 +42,32 @@ type EventSink = Callable[[str, Document], None]
 JOB_QUEUE: Final = "data/jobs"
 """Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
 JOB_POLL_SECONDS: Final = 0.25
+PROFILES: Final = "profiles"
+"""One folder per profile under the app's own `data/` (AD-64). The host's files, the heartbeat
+and the job queue, stay at `data/` because the app's bootstrap writes them there."""
+
+
+@dataclass(frozen=True, slots=True)
+class Pin:
+    """The `(pack, version)` an ask is pinned to: which pack ships the operation and which of its
+    versions answered. A call revalidates it before the app sees the tool call, so an app that
+    moved on under a queued ask is refused instead of answering from a version nobody pinned."""
+
+    pack: str
+    version: str
+
+    @classmethod
+    def parse(cls, value: object) -> Pin | None:
+        if value is None:
+            return None
+        if isinstance(value, Pin):
+            return value
+        if isinstance(value, dict):
+            table = cast(dict[str, object], value)
+            pack, version = table.get("pack"), table.get("version")
+            if isinstance(pack, str) and isinstance(version, str):
+                return cls(pack, version)
+        raise AppError("invalid_pin", "A pin is {pack, version}, two strings.")
 
 
 @dataclass
@@ -71,12 +98,23 @@ class Instance:
     limits: Document = field(default_factory=dict[str, JsonValue])
     node: str = "laptop"
     tier: str = "T1"
+    profile: str | None = None
+
+    @property
+    def data(self) -> Path:
+        """This instance's partition of the app's `data/`: `data/profiles/<profile>` under a
+        named profile, `data/` itself when the app runs without one."""
+        root = self.volume.root / "data"
+        return root if self.profile is None else root / PROFILES / self.profile
 
     def document(self) -> Document:
         return {
             "app_id": self.definition.manifest.id,
             "instance_id": self.id,
             "definition_hash": self.definition.hash,
+            "version": self.definition.manifest.version,
+            "profile": self.profile,
+            "data": self.data.relative_to(self.volume.root).as_posix(),
             "status": self.state,
             "pid": self.process.pid
             if self.process and self.state in {"starting", "running", "stopping"}
@@ -107,14 +145,21 @@ class Supervisor:
         event_sink: EventSink | None = None,
         secret_getter: Callable[[str, str], str | None] = keyring.get_password,
         proof_mode: str = "",
+        call_depth: int | None = None,
+        library: LibrarySink | None = None,
     ) -> None:
+        """`call_depth` is the host's bound on a ring of asks (AD-64): the longest chain of app
+        operations that may sit behind one ask. There is no default number, and a host that sets
+        none is unbounded. `library` is where an app's landings go; without one they stay in the
+        volume and the index here."""
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.catalog = self.home / "apps.db"
-        self.artifacts = Artifacts(self.home)
+        self.artifacts = Artifacts(self.home, library)
         self.event_sink = event_sink
         self.secret_getter = secret_getter
         self.proof_mode = proof_mode
+        self.call_depth = call_depth
         self._proof_images: dict[str, Definition] = {}
         self.environments = self.home / "environments"
         self.road = Road(self)
@@ -131,6 +176,10 @@ class Supervisor:
                 "(id TEXT PRIMARY KEY, data TEXT); CREATE TABLE IF NOT EXISTS active "
                 "(id TEXT PRIMARY KEY, hash TEXT, revision TEXT);"
             )
+
+    def attach_library(self, library: LibrarySink | None) -> None:
+        """Give the supervisor the Library its landings go to, or take it away."""
+        self.artifacts.attach(library)
 
     def install(
         self,
@@ -341,12 +390,22 @@ class Supervisor:
     def _submit(self, operation: Coroutine[Any, Any, T]) -> concurrent.futures.Future[T]:
         return asyncio.run_coroutine_threadsafe(operation, self._ensure_loop())
 
-    def start(self, app_id: str, *, definition_hash: str | None = None) -> Document:
+    def start(
+        self,
+        app_id: str,
+        *,
+        definition_hash: str | None = None,
+        profile: str | None = None,
+    ) -> Document:
+        """Start the selected definition, or the one `definition_hash` pins, writing that
+        `profile`'s partition of `data/`. An app that declares `[profiles]` keeps one partition
+        per profile, so two of his setups never read each other's files."""
         with self._lock:
             existing = self._instances.get(app_id)
             if existing:
                 return existing.document()
             definition = self._definition(app_id)
+            self.check_profile(definition, profile)
             if definition_hash is None and not self.proof_mode:
                 from qmx_apps.road.history import history, project  # noqa: PLC0415
 
@@ -367,8 +426,10 @@ class Supervisor:
                 definition = checked_definition(self.home, app_id, definition_hash)
             volume = Volume(self.home, app_id)
             lease = VolumeLease(self.home, app_id)
+            instance = Instance(definition, volume, lease, tier=self.tier, profile=profile)
             try:
                 volume.create(agents=bool(definition.manifest.entrypoints.agents))
+                instance.data.mkdir(parents=True, exist_ok=True)
                 # A request an earlier instance never answered has no caller left waiting.
                 shutil.rmtree(volume.root / JOB_QUEUE, ignore_errors=True)
                 migrations = definition.root / "migrations"
@@ -379,7 +440,6 @@ class Supervisor:
             except BaseException:
                 lease.close()
                 raise
-            instance = Instance(definition, volume, lease, tier=self.tier)
             self._instances[app_id] = instance
             instance.task = self._submit(self._serve(instance))
         try:
@@ -393,6 +453,21 @@ class Supervisor:
             ) from error
         return self.status(app_id)
 
+    def check_profile(self, definition: Definition, profile: str | None) -> None:
+        """A profile exists only where the app declares a `[profiles]` schema, and its id is a
+        folder name: a word of letters, digits and hyphens."""
+        declared = definition.manifest.profiles is not None
+        if profile is None:
+            return
+        if not declared:
+            raise AppError(
+                "undeclared_profile",
+                f"{definition.manifest.id} declares no [profiles], so it has one partition.",
+                409,
+            )
+        if not re.fullmatch(r"[a-z][a-z0-9-]*", profile):
+            raise AppError("invalid_profile", "A profile id is lowercase letters and hyphens.")
+
     def environment(self, instance: Instance) -> dict[str, str]:
         environment = {
             name: value
@@ -400,17 +475,22 @@ class Supervisor:
             if name.upper() in {"SYSTEMROOT", "WINDIR", "COMSPEC"}
         }
         root = str(instance.volume.root)
+        data = instance.data
+        tmp = str(data / "tmp")
         for name in ("HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA"):
             environment[name] = root
         environment.update(
             {
-                "TEMP": str(instance.volume.root / "data/tmp"),
-                "TMP": str(instance.volume.root / "data/tmp"),
+                "TEMP": tmp,
+                "TMP": tmp,
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "QMX_VOLUME": root,
+                "QMX_DATA_DIR": str(data),
                 "FASTMCP_SHOW_BANNER": "false",
             }
         )
+        if instance.profile is not None:
+            environment["QMX_PROFILE"] = instance.profile
         environment["QMX_STAGE"] = self.proof_mode or "live"
         env = self.environments / instance.definition.hash
         environment["PATH"] = str(env / ("Scripts" if sys.platform == "win32" else "bin"))
@@ -431,13 +511,15 @@ class Supervisor:
         return {
             "image": str(instance.definition.root),
             "volume": str(instance.volume.root),
+            "data": str(instance.data),
+            "profile": instance.profile,
             "mcp": manifest.entrypoints.mcp,
             "jobs": [] if self.proof_mode else list(manifest.entrypoints.jobs),
             "instance_id": instance.id,
             "job_name": job_name,
             "env_names": list(environment),
             "secret_names": list(manifest.capabilities.secrets),
-            "memory_mb": manifest.budget.memory_mb,
+            "memory_mb": manifest.isolation.memory_mb,
             "recorded": self.proof_mode in {"tests", "sandbox"},
         }
 
@@ -449,11 +531,11 @@ class Supervisor:
             environment = self.environment(instance)
             job_name = f"Local\\qmx-{instance.id}"
             if sys.platform == "win32" and self.tier == "T1":
-                instance.job = WindowsJob(job_name, manifest.budget)
+                instance.job = WindowsJob(job_name, manifest.isolation)
                 instance.limits = instance.job.limits()
             else:
                 instance.limits = {
-                    "memory_mb": manifest.budget.memory_mb,
+                    "memory_mb": manifest.isolation.memory_mb,
                     "cpu_percent": None,
                     "fallback": "RLIMIT_AS and psutil",
                 }
@@ -724,11 +806,26 @@ class Supervisor:
                 self._trip(instance, breach)
             self._persist(instance)
 
-    def call(self, app_id: str, tool: str, arguments: Document) -> Document:
+    def call(
+        self,
+        app_id: str,
+        tool: str,
+        arguments: Document,
+        *,
+        pin: Pin | Document | None = None,
+        depth: int = 0,
+    ) -> Document:
+        """Call one of the app's tools: an *ask* (AD-64). A `pin` names the `(pack, version)` the
+        caller meant, and is revalidated here before the app sees the call. `depth` is how many
+        app operations already sit behind this one: past the host's `call_depth` the ask is
+        refused, so a ring of apps cannot run forever."""
+        pinned = Pin.parse(pin)
         with self._lock:
             instance = self._instances.get(app_id)
         if instance is None:
             raise AppError("not_running", "Start the app before calling it.", 409)
+        self.revalidate(instance, pinned)
+        self.bounded(depth)
         try:
             return self._submit(self._call(instance, tool, arguments)).result(timeout=30)
         except concurrent.futures.TimeoutError as error:
@@ -737,16 +834,57 @@ class Supervisor:
                 "tool_timeout", "The tool did not complete within its timeout.", 504
             ) from error
 
-    def run_job(self, app_id: str, job: str) -> Document:
+    def revalidate(self, instance: Instance, pin: Pin | None) -> None:
+        if pin is None:
+            return
+        active = instance.definition.manifest
+        if (pin.pack, pin.version) == (active.id, active.version):
+            return
+        raise AppError(
+            "pin_stale",
+            f"pinned {pin.pack} {pin.version}; {active.id} {active.version} is what runs",
+            409,
+        )
+
+    def bounded(self, depth: int) -> None:
+        if depth < 0:
+            raise AppError("invalid_depth", "An ask's depth is never negative.")
+        if self.call_depth is not None and depth > self.call_depth:
+            raise AppError(
+                "call_depth_exceeded",
+                f"an ask at depth {depth} passes the host's call_depth {self.call_depth}",
+                409,
+            )
+
+    def run_job(
+        self,
+        app_id: str,
+        job: str,
+        *,
+        pin: Pin | Document | None = None,
+        profile: str | None = None,
+    ) -> Document:
         """Run one job entrypoint in the app's supervised process, after the jobs queued before
         it: the app's own queue is the only capacity a job takes (engine AD-58). The engine's
         `app_op` node calls this when a trigger fires; the supervisor schedules nothing itself.
         It waits as long as the job runs and fails with the supervisor's reason when the app
-        stops first."""
+        stops first. `pin` revalidates the run's `(pack, version)` and `profile` names the
+        partition it must write; a job aimed at another profile is refused."""
+        pinned = Pin.parse(pin)
         with self._lock:
             instance = self._instances.get(app_id)
         if instance is None or instance.state != "running":
             raise self._not_running(app_id)
+        self.revalidate(instance, pinned)
+        if profile is not None:
+            self.check_profile(instance.definition, profile)
+            if profile != instance.profile:
+                raise AppError(
+                    "profile_mismatch",
+                    f"{app_id} runs profile {instance.profile}; restart it on {profile} to run "
+                    "there",
+                    409,
+                )
         if job not in instance.definition.manifest.entrypoints.jobs:
             raise AppError("job_not_found", f"The app declares no job {job}.", 404)
         queue = instance.volume.root / JOB_QUEUE
@@ -766,7 +904,34 @@ class Supervisor:
         self._log(app_id, "job_completed", {"job": job, "ok": result.get("ok") is True})
         if result.get("ok") is not True:
             raise AppError("job_failed", f"Job {job} raised {result.get('error')}.", 422)
-        return {"app_id": app_id, "instance_id": instance.id, "job": job}
+        return {
+            "app_id": app_id,
+            "instance_id": instance.id,
+            "job": job,
+            "version": instance.definition.manifest.version,
+            "profile": instance.profile,
+        }
+
+    def read_output(self, app_id: str, output: str) -> Document:
+        """Read the newest artifact `app_id` landed under `output`, with its freshness: its
+        `landed_at`, its age, the `stale_after` the app declared and `stale`."""
+        found = self.artifacts.latest(app_id, output)
+        if found is None:
+            raise AppError("unknown_output", f"{app_id} has not landed {output}.", 404)
+        return found
+
+    def contract_problems(
+        self, definition: Definition, previous: Definition | None = None
+    ) -> dict[str, list[str]]:
+        """Every installed consumer that this image's changed `provides` would break, by output
+        name, against the image `previous` it replaces. The publish gate calls this before it
+        activates the version."""
+        with closing(sqlite3.connect(self.catalog)) as db:
+            installed = [str(row[0]) for row in db.execute("SELECT id FROM selected ORDER BY id")]
+        consumers = [
+            self._definition(app_id) for app_id in installed if app_id != definition.manifest.id
+        ]
+        return contract_problems(definition, consumers, previous)
 
     def _not_running(self, app_id: str) -> AppError:
         status = self.status(app_id)

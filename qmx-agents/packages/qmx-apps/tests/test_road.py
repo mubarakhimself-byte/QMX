@@ -29,7 +29,13 @@ class RuntimeFixture(Supervisor):
     running: str | None = None
     refuse: str | None = None
 
-    def start(self, app_id: str, *, definition_hash: str | None = None) -> Document:
+    def start(
+        self,
+        app_id: str,
+        *,
+        definition_hash: str | None = None,
+        profile: str | None = None,
+    ) -> Document:
         if self.refuse == definition_hash:
             raise AppError("start_failed", "Fixture activation failure", 503)
         self.running = definition_hash
