@@ -4,7 +4,7 @@ Run from `qmx-agents/` with the agents venv:
 
     uv run --no-sync python ../scripts/live/server/e67_claims.py
 
-The Hub runs on the server under `/srv/qmx/bld/lib4`, from the PR head's own checkout, on an
+The Hub runs on the server under `/srv/qmx/bld/lib4`, from the PR head's committed tree, on an
 ephemeral port. One engine runs on the PC and one on the server, started within a second of each
 other, and both ask the Hub for the same claim:
 
@@ -79,41 +79,36 @@ def as_prbs(command: str) -> str:
     )
 
 
-def rsync_up(source: Path, target: str) -> None:
-    """Copy the PR head's tree to the server without its virtualenvs or git objects."""
-    rsync = shutil.which("rsync")
-    if rsync is None:
-        raise RuntimeError("rsync is required to place the PR head on the server")
-    transport = shlex.join(server_ssh()[:-1])
-    result = subprocess.run(
-        [
-            rsync,
-            "-az",
-            "--delete",
-            "--exclude",
-            ".git",
-            "--exclude",
-            ".venv",
-            "--exclude",
-            "**/.venv",
-            "--exclude",
-            "**/__pycache__",
-            "--exclude",
-            "node_modules",
-            "--exclude",
-            "apps/qmx-ui",
-            "-e",
-            transport,
-            f"{source}/",
-            f"{server_ssh()[-1]}:{target}/",
-        ],
+def archive_head(target: str) -> None:
+    """Send the PR head's committed tree to `target`, with no `.git` and no virtualenv in it.
+
+    `git archive` rather than rsync because a Windows builder has no rsync, and the head SHA is
+    what the lane is proving; the tree is handed to `tar` over the same ssh channel.
+    """
+    git = shutil.which("git")
+    if git is None:
+        raise RuntimeError("git is required to place the PR head on the server")
+    head = subprocess.run(
+        [git, "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    archive = subprocess.run(
+        [git, "-C", str(ROOT), "archive", "--format=tar", head],
         capture_output=True,
-        text=True,
+        check=True,
+        timeout=600,
+    ).stdout
+    result = subprocess.run(
+        [*server_ssh(), f"install -d -m 0755 {target} && tar -xf - -C {target}"],
+        input=archive,
+        capture_output=True,
         timeout=3600,
         check=False,
     )
     if result.returncode:
-        raise RuntimeError(f"rsync failed: {result.stderr.strip()[-2000:]}")
+        raise RuntimeError(
+            "the source archive did not land on the server: "
+            f"{result.stderr.decode('utf-8', 'replace')[-2000:]}"
+        )
 
 
 INSTALLS: Final = (
@@ -135,7 +130,9 @@ def prepare_server(lane: str = LANE) -> None:
         return
     for install in INSTALLS:
         ssh(install)
-    rsync_up(ROOT, f"{SERVER_DIR}/src")
+    archive_head(f"{SERVER_DIR}/src")
+    # The tree arrives as root; `prbs` builds the venv inside it and runs the Hub from it.
+    ssh(f"chown -R prbs:prbs {SERVER_DIR}/src")
     ssh(
         as_prbs(
             f"cd {SERVER_DIR}/src/qmx-agents && {SERVER_DIR}/uv/uv sync --frozen --python 3.14 "
