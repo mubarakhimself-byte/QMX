@@ -404,7 +404,6 @@ def serve(
         context.load_cert_chain(tls[0], tls[1])
         server.socket = context.wrap_socket(server.socket, server_side=True)
     bound = int(server.server_address[1])
-    (hub.store.root / "hub.port").write_text(str(bound), encoding="utf-8")
     hub.record_health()
     print(
         json.dumps(
@@ -458,6 +457,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         server = serve(
             hub, host=host, port=args.port or int(str(found.get("port", 0))), key=key, tls=tls
         )
+        (args.home / "hub.port").write_text(str(server.server_address[1]), encoding="utf-8")
 
         def stop(*_: object) -> None:
             threading.Thread(target=server.shutdown, daemon=True).start()
