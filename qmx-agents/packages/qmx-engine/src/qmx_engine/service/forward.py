@@ -21,10 +21,9 @@ import hashlib
 import hmac
 import json
 import time
-import urllib.error
 import urllib.request
 from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Final, Literal, Protocol, cast
@@ -34,11 +33,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import JsonValue
 
 from qmx_engine.ports.inbox import Action
+from qmx_engine.ports.settings import SettingsPort
 
 HOME_ENGINE: Final = "home_engine"
 """The field every merged row carries: the host whose ledger owns it."""
 UNREACHABLE: Final = "server unreachable since"
-PASS_HEADER: Final = "X-QMX-Host-Pass"
+PASS_HEADER: Final = "X-QMX-Host-Pass"  # noqa: S105 (a header name, not a secret)
 PASS_TTL_S: Final = 30.0
 """One pass per call, minted at the call: nothing on the wire outlives the question."""
 CALL_TIMEOUT_S: Final = 10.0
@@ -157,6 +157,25 @@ def owned_instances(rows: Iterable[Mapping[str, JsonValue]], *, home: str) -> li
     return found
 
 
+def placement_rows(settings: Mapping[str, object] | SettingsPort) -> list[Mapping[str, JsonValue]]:
+    """The `[placement]` registry as rows: one per name, with the fields AD-30 gives it."""
+    values: Mapping[str, object] = settings if isinstance(settings, Mapping) else settings.values()
+    names = {
+        key.split(".")[1] for key in values if key.startswith("placement.") and key.count(".") >= 2
+    }
+    return [
+        cast(
+            "Mapping[str, JsonValue]",
+            {
+                "name": name,
+                "kind": values.get(f"placement.{name}.kind"),
+                "engine_url": values.get(f"placement.{name}.engine_url"),
+            },
+        )
+        for name in sorted(names)
+    ]
+
+
 @dataclass(frozen=True, slots=True)
 class Homerow:
     """One row of a merged read and the host that owns it. `stale` means it is the last value
@@ -181,9 +200,9 @@ def plain(value: object) -> JsonValue:
     if isinstance(value, StrEnum):
         return value.value
     if isinstance(value, Mapping):
-        return {str(key): plain(item) for key, item in value.items()}
+        return {str(key): plain(item) for key, item in cast("Mapping[str, object]", value).items()}
     if isinstance(value, Sequence) and not isinstance(value, str | bytes):
-        return [plain(item) for item in value]
+        return [plain(item) for item in cast("Sequence[object]", value)]
     if is_dataclass(value) and not isinstance(value, type):
         return {key: plain(item) for key, item in asdict(value).items()}
     return cast("JsonValue", value)
@@ -289,7 +308,7 @@ class Forwarder:
         except ForwardRefused:
             return marked(self.instance.name, self.down.cache(verb), self.down.since or self._now())
         return [
-            homerowed(self.instance.name, cast("Mapping[str, JsonValue]", row))
+            homerowed(self.instance.name, row)
             for row in cast("list[Mapping[str, JsonValue]]", value)
         ]
 
@@ -298,31 +317,12 @@ class Forwarder:
         return self.read("inbox.resolve", {"item_id": item_id, "action": action})
 
 
-@dataclass
-class Streamed:
-    """One node's stream, as the PC holds it: its latest open items, or since when none came."""
-
-    instance: Instance
-    items: list[Mapping[str, JsonValue]] = field(default_factory=list)
-    since: str | None = None
-    at: str | None = None
-
-    def took(self, items: Sequence[Mapping[str, JsonValue]], at: str) -> None:
-        self.items = [dict(item) for item in items]
-        self.at, self.since = at, None
-
-    def dropped(self, at: str) -> None:
-        self.since = self.since or at
-
-
 class Answered(Protocol):
     """What the answering side must offer. `EngineService` is one; nothing else is imported."""
 
     name: str
 
-    def answer(
-        self, verb: str, args: Mapping[str, JsonValue], *, principal: str
-    ) -> JsonValue: ...
+    def answer(self, verb: str, args: Mapping[str, JsonValue], *, principal: str) -> JsonValue: ...
 
     def open_items(self) -> list[Mapping[str, JsonValue]]: ...
 
@@ -339,12 +339,12 @@ class Remote:
         return self.answered.answer(verb, args, principal=principal)
 
     async def frames(self) -> AsyncIterator[dict[str, JsonValue]]:
-        """`open` once, then `inbox` whenever the open set changes; a `keepalive` in between."""
-        last: JsonValue = None
+        """`inbox` whenever the open set changes; a `keepalive` in between."""
+        last: list[Mapping[str, JsonValue]] | None = None
         while True:
-            items = cast("JsonValue", self.answered.open_items())
+            items = self.answered.open_items()
             if items != last:
-                yield {"kind": "inbox", "items": items}
+                yield {"kind": "inbox", "items": cast("JsonValue", [dict(row) for row in items])}
                 last = items
             else:
                 yield {"kind": "keepalive"}
@@ -376,10 +376,12 @@ def forward_router(remote: Remote, key: str) -> APIRouter:
             verify_host_pass(key, token, target=remote.answered.name)
         except ForwardRefused as refused:
             raise HTTPException(status_code=401, detail={"code": refused.code}) from refused
+
         async def frames() -> AsyncIterator[bytes]:
             async for frame in remote.frames():
                 yield f"data: {json.dumps(frame, sort_keys=True)}\n\n".encode()
 
         return StreamingResponse(frames(), media_type="text/event-stream")
 
+    _ = forward, stream
     return router

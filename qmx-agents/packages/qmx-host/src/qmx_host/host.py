@@ -59,6 +59,8 @@ from qmx_engine.heartbeat import (
     ClassUse,
     Heartbeat,
     HeartbeatLog,
+    HubLink,
+    Pause,
     kinds_digest,
     latest,
     node_kinds,
@@ -72,6 +74,13 @@ from qmx_engine.ports.router import Refused, Reply
 from qmx_engine.ports.router import Row as EngineRow
 from qmx_engine.ports.router import adopt as adopt_router
 from qmx_engine.runner import Engine
+from qmx_engine.service.forward import (
+    Forwarder,
+    forward_router,
+    owned_instances,
+    placement_rows,
+    wall,
+)
 from qmx_engine.service.rest import engine_router
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_library.adapter import EngineLibraryAdapter
@@ -98,6 +107,7 @@ from qmx_router.server import (
 
 from qmx_host.door import PrincipalDoor
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
+from qmx_host.streams import Streams
 
 type Role = Literal["pc", "node"]
 
@@ -491,22 +501,29 @@ async def serve(
                         placed = remote_worker(home, core) if role == "node" else None
                         if placed is not None:
                             core.worker = placed
+                        name = placement_name(control, role)
+                        link = hub_link(home, control)
+                        asking = Streams.of(forwarders_for(home, core, name, role))
+                        engine.svc.watching(name=name, forwarders=asking.forwarders)
                         harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
                         origin = ui_origin if role == "pc" else ""
                         bearer = qmx_control.server.local_token()
-                        app = compose(control, engine, harness_api, bearer, origin)
+                        answering = [*answering_router(home, engine), drain_router(core)]
+                        app = compose(control, engine, harness_api, bearer, origin, answering)
                         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
                         beating = asyncio.create_task(
-                            heartbeats(home, role, control, harness, engine)
+                            heartbeats(home, name, control, harness, engine, link)
                         )
                         exporting = asyncio.create_task(harness.idle_exports())
+                        holding = asyncio.create_task(asking.hold_all())
                         try:
                             await server.serve()
                         finally:
-                            for task in (beating, exporting):
+                            for task in (beating, exporting, holding):
                                 task.cancel()
                                 with suppress(asyncio.CancelledError):
                                     await task
+                            await asking.close()
                 finally:
                     adopt_router(None)
                     install(None)
@@ -535,9 +552,15 @@ def capacity(engine: Engine, harness: Harness) -> dict[str, ClassUse]:
 
 
 def beat(
-    home: Path, host_id: str, me: psutil.Process, engine: Engine, harness: Harness
+    home: Path,
+    host_id: str,
+    me: psutil.Process,
+    engine: Engine,
+    harness: Harness,
+    pause: Pause | None = None,
 ) -> Heartbeat:
-    """This host's row: its own process and every child, the CLI trees included."""
+    """This host's row: its own process and every child, the CLI trees included. `pause` is what
+    this host heard from the Hub, so the row says whether its flag is still current (AD-65)."""
     tree = [me, *me.children(recursive=True)]
     cpu, rss = 0.0, 0
     for member in tree:
@@ -558,6 +581,7 @@ def beat(
         node_kinds=kinds,
         kinds_digest=kinds_digest(kinds),
         paused=engine.paused,
+        pause_state="known" if pause is None else pause.state(time.time()),
         free_disk_bytes=shutil.disk_usage(home).free,
     )
 
@@ -574,18 +598,34 @@ def app_rows(control: ControlService, paused: bool) -> list[Heartbeat]:
 
 
 async def heartbeats(
-    home: Path, host_id: str, control: ControlService, harness: Harness, engine: EngineDoor
+    home: Path,
+    host_id: str,
+    control: ControlService,
+    harness: Harness,
+    engine: EngineDoor,
+    link: HubLink | None = None,
 ) -> None:
     """Write this host's rows every `heartbeat.interval` until cancelled. A failed beat is
-    skipped, never fatal: the next one carries the same facts."""
+    skipped, never fatal: the next one carries the same facts.
+
+    When a Hub answers, the row goes there too and the reply's flag becomes this host's own, so
+    one switch pauses every machine (AD-65). A Hub that stops answering leaves the last flag in
+    force and the row reads `pause_state: unknown` once five minutes have passed.
+    """
     core = engine.svc.ctx.engine
     me = psutil.Process()
     log = HeartbeatLog(home, setting(core.settings, "heartbeat.window_days", WINDOW_DAYS))
     pruned: int | None = None
     while True:
         try:
-            rows = [beat(home, host_id, me, core, harness), *app_rows(control, core.paused)]
+            pause = None if link is None else link.pause
+            rows = [
+                beat(home, host_id, me, core, harness, pause),
+                *app_rows(control, core.paused),
+            ]
             await asyncio.to_thread(log.write, rows)
+            if link is not None:
+                await asyncio.to_thread(hear, link, rows[0], control)
             hour = int(time.time() // 3600)
             if hour != pruned:
                 await asyncio.to_thread(log.prune, datetime.now(UTC))
@@ -593,6 +633,74 @@ async def heartbeats(
         except (OSError, ValueError, psutil.Error) as error:
             print(f"heartbeat skipped: {type(error).__name__}: {error}", file=sys.stderr)
         await asyncio.sleep(setting(core.settings, "heartbeat.interval", INTERVAL_S))
+
+
+def section(control: ControlService, name: str) -> Document:
+    """One settings section by name. The schema's Literal predates `engine` and `library`."""
+    return control.settings_get(cast("Any", name))
+
+
+def hear(link: HubLink, row: Heartbeat, control: ControlService) -> None:
+    """One push, and the Hub's flag written into this host's settings when it changed."""
+    reply = link.push(row)
+    if reply.autonomy_paused != bool(section(control, "engine").get("autonomy.paused")):
+        control.settings_put("engine", {"autonomy": {"paused": reply.autonomy_paused}})
+
+
+def placement_name(control: ControlService, role: Role) -> str:
+    """This host's placement name (AD-30): the PC is `pc`, a node names itself, else `contabo`."""
+    found = section(control, "engine").get("host_name")
+    if isinstance(found, str) and found:
+        return found
+    return "pc" if role == "pc" else "contabo"
+
+
+def hub_link(home: Path, control: ControlService) -> HubLink | None:
+    """The Hub this home answers to, or None when no `[library] hub_url` names one."""
+    url = section(control, "library").get("hub_url")
+    key_file = home / "vault" / "pairing-key"
+    if not isinstance(url, str) or not url or not key_file.exists():
+        return None
+    return HubLink(url, key_file.read_text(encoding="utf-8").strip())
+
+
+def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forwarder]:
+    """The owned instances this home asks: every node on the PC, none on a node (AD-65)."""
+    key_file = home / "vault" / "pairing-key"
+    if role != "pc" or not key_file.exists():
+        return []
+    key = key_file.read_text(encoding="utf-8").strip()
+    return [
+        Forwarder(instance, key=key, source=name, principal="operator", now=wall)
+        for instance in owned_instances(placement_rows(core.settings), home=name)
+    ]
+
+
+def answering_router(home: Path, engine: EngineDoor) -> list[APIRouter]:
+    """The node's forwarding route, served only where a pairing key lets another host ask."""
+    key_file = home / "vault" / "pairing-key"
+    if not key_file.exists():
+        return []
+    key = key_file.read_text(encoding="utf-8").strip()
+    return [forward_router(engine.svc.remote(), key)]
+
+
+def drain_router(core: Engine) -> APIRouter:
+    """`POST /api/node/drain`: stop claiming fires, then say whether attempts are still running.
+
+    `qmx node update` polls this and restarts nothing until `drained` is true, so a restart never
+    cuts a node's attempt (AD-65). Nothing starts claiming again until the host restarts.
+    """
+    router = APIRouter()
+
+    @router.post("/api/node/drain")
+    def drain() -> dict[str, JsonValue]:
+        core.claiming = False
+        running = sorted(core.worker.running)
+        return {"draining": True, "in_flight": len(running), "drained": not running}
+
+    _ = drain
+    return router
 
 
 def heartbeats_read(home: Path) -> HostRead:
@@ -620,14 +728,16 @@ def compose(
     harness_api: Sequence[APIRouter],
     bearer: str,
     ui_origin: str,
+    extra: Sequence[APIRouter] = (),
 ) -> FastAPI:
     """The one REST app: control, chat and engine routes behind one bearer and the principal
-    door. `ui_origin` is the one origin CORS allows, none when empty."""
+    door. `ui_origin` is the one origin CORS allows, none when empty. `extra` carries the node's
+    forwarding route, which has its own host pass and no bearer (AD-65)."""
     app = qmx_control.server.create_app(
         control,
         bearer,
         ui_origin,
-        extra_routers=[*harness_api, engine_router(engine), webhook_door(engine)],
+        extra_routers=[*harness_api, engine_router(engine), webhook_door(engine), *extra],
     )
     routes = [route for api in harness_api for route in api.routes]
     app.add_middleware(PrincipalDoor, chat_routes=routes)

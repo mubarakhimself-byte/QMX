@@ -31,7 +31,7 @@ from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.ports.settings import SettingsPort, StaticSettings
 from qmx_engine.runner import Doctor, Engine
-from qmx_engine.service.context import OPERATOR, Caller, Context, Refused
+from qmx_engine.service.context import OPERATOR, Context, Refused
 from qmx_engine.service.drafts import Drafts
 from qmx_engine.service.explain import explain
 from qmx_engine.service.forward import Forwarder, Homerow, Remote, plain
@@ -117,9 +117,19 @@ class EngineService:
         """The answering side of the forwarding route, for the host to mount (AD-65)."""
         return Remote(self)
 
+    def watching(self, *, name: str, forwarders: Sequence[Forwarder]) -> None:
+        """Name this home and the instances it answers for, once the host has read them.
+
+        The door builds this service before the placements are read, so the host wires the
+        merged reads here. One assignment, so no read can see half a wiring.
+        """
+        self.name = name
+        self.forwarders = tuple(forwarders)
+        self.runs.name, self.runs.forwarders = name, self.forwarders
+        self.inbox.name, self.inbox.forwarders = name, self.forwarders
+
     def answer(self, verb: str, args: Mapping[str, JsonValue], *, principal: str) -> JsonValue:
         """One forwarded verb, answered from this home's own stores only."""
-        caller = Caller("user")
         match verb:
             case "runs.list":
                 object_id = args.get("object_id")
@@ -174,8 +184,7 @@ class EngineService:
     def open_items(self) -> list[Mapping[str, JsonValue]]:
         """This home's open items, the stream's one payload (AD-65)."""
         return [
-            cast("Mapping[str, JsonValue]", plain(item))
-            for item in self.inbox.list(open_only=True)
+            cast("Mapping[str, JsonValue]", plain(item)) for item in self.inbox.list(open_only=True)
         ]
 
     def merged_runs(self, workflow_item: str, object_id: str | None = None) -> list[Homerow]:
@@ -208,7 +217,6 @@ class EngineService:
 
     def registry(self) -> list[JsonObject]:
         return palette()
-
 
 
 def explain_run(home: Path, run_id: str) -> JsonObject:

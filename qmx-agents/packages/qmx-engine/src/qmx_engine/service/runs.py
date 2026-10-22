@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Container, Mapping, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from typing import cast
 
 from pydantic import JsonValue
@@ -42,9 +42,7 @@ from qmx_engine.runner import Engine, Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context, Refused, State, require
 from qmx_engine.service.forward import (
-    HOME_ENGINE,
     Forwarder,
-    ForwardRefused,
     Homerow,
     homerowed,
     plain,

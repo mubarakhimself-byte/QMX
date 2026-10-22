@@ -64,7 +64,7 @@ AUTONOMY: Final = "autonomy.json"
 SOURCE_HOST: Final = "pc"
 """The host whose `paused` writes the Hub's flag: the operator's own machine."""
 CLAIM_TTL_S: Final = 900
-"""How far one heartbeat's batch pushes a claim's expiry (AD-24): three missed beats at 30 s × 10."""
+"""How far a heartbeat's batch pushes a claim's expiry (AD-24): ten beats at 30 s, with slack."""
 
 
 class Hub:
@@ -140,9 +140,7 @@ class Hub:
         """Every claim the row names, extended in one call per run holding one (AD-24, AD-65)."""
         named = set(claims)
         holders = {
-            found[0]
-            for key in sorted(named)
-            if (found := self.store.claim_holder(key)) is not None
+            found[0] for key in sorted(named) if (found := self.store.claim_holder(key)) is not None
         }
         count = 0
         for run_id in sorted(holders):
@@ -279,7 +277,8 @@ class Hub:
                 )
             case "autonomy":
                 return self.set_paused(
-                    bool(args.get("paused")), at=str(args.get("at") or datetime.now(UTC).isoformat())
+                    bool(args.get("paused")),
+                    at=str(args.get("at") or datetime.now(UTC).isoformat()),
                 )
             case _:
                 raise LibraryRefused("not_found", f"no verb {verb!r}")
@@ -437,16 +436,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == HEARTBEAT_ROUTE:
             try:
                 call = cast(dict[str, JsonValue], json.loads(body))
-                paused, renewed = self.hub.hear(
-                    cast(Mapping[str, JsonValue], call["heartbeat"])
-                )
+                paused, renewed = self.hub.hear(cast(Mapping[str, JsonValue], call["heartbeat"]))
             except (LibraryRefused, ValueError, KeyError) as refused:
                 code = refused.code if isinstance(refused, LibraryRefused) else "bad_heartbeat"
                 self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "code": code})
                 return
-            self._json(
-                HTTPStatus.OK, {"autonomy_paused": paused, "claims_renewed": renewed}
-            )
+            self._json(HTTPStatus.OK, {"autonomy_paused": paused, "claims_renewed": renewed})
             return
         if not self.path.startswith("/v1/op/"):
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "code": "not_found"})

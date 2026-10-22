@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 import os
 import time
-import urllib.error
 import urllib.request
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
@@ -79,6 +78,8 @@ class Heartbeat(BaseModel):
     """The node kinds this subject's code can run; empty for an app."""
     kinds_digest: str
     paused: bool
+    pause_state: PauseState = "known"
+    """Whether the flag is still the Hub's current word, or the last one it knew (AD-65)."""
     blob_cache_bytes: int | None = None
     free_disk_bytes: int | None = None
 
@@ -203,7 +204,7 @@ class Pause(BaseModel):
     source: str = "local"
     """`local` before the Hub ever answered; `hub` once it has."""
 
-    def heard(self, reply: HubReply, *, at: float) -> "Pause":
+    def heard(self, reply: HubReply, *, at: float) -> Pause:
         return Pause(paused=reply.autonomy_paused, heard_at=at, source="hub")
 
     def state(self, now: float) -> PauseState:
@@ -254,9 +255,7 @@ class HubLink:
         return reply
 
 
-def _post(
-    url: str, body: Mapping[str, object], headers: Mapping[str, str]
-) -> Mapping[str, object]:
+def _post(url: str, body: Mapping[str, object], headers: Mapping[str, str]) -> Mapping[str, object]:
     request = urllib.request.Request(  # noqa: S310 (the home's own setting)
         url,
         data=json.dumps(body).encode("utf-8"),

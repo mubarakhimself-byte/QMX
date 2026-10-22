@@ -16,7 +16,7 @@ from pydantic import JsonValue
 from qmx_engine.ports.clock import Clock
 from qmx_engine.ports.inbox import Action, InboxPort, Item
 from qmx_engine.service.context import Caller, Refused
-from qmx_engine.service.forward import ForwardRefused, Forwarder, Homerow, homerowed, plain
+from qmx_engine.service.forward import Forwarder, ForwardRefused, Homerow, homerowed, plain
 
 
 class Inbox:
@@ -52,7 +52,7 @@ class Inbox:
         return self.port.resolve(item_id, action, caller.principal, at=self.clock.now().isoformat())
 
     def answer_forwarded(self, item_id: str, action: Action, *, caller: Caller) -> JsonValue:
-        """His answer to an item an owned node raised: that node's ledger folds it (AD-17, AD-65)."""
+        """His answer to an item an owned node raised: that node's ledger folds it (AD-65)."""
         if caller.kind != "user":
             raise Refused("ui_only", "only the operator resolves an inbox item")
         for forwarder in self.forwarders:
@@ -74,4 +74,3 @@ class Inbox:
             if rows and not rows[0].stale and rows[0].row.get("id") is not None:
                 return rows[0]
         return None
-
