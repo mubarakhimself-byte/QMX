@@ -31,3 +31,13 @@ Written by the planning lead from his dictation. These are SEEDS: grow them, don
 ## 7. Method
 - Use the planning workflow that worked (operator memory): inventory what exists first, then an unbounded party-mode + CIS + brainstorming funnel converged on relevance, then the BMad architecture fold, review, fix, plan.
 - Design for complexity, not a complex system. No invented limits; defaults come from the real machines (the "Hindsight must fit 2 GB" line was invented; the server has ~11 GB free).
+
+## 8. Additions and answers, 2026-10-22 afternoon (after the funnel, 54)
+- **He has no more data seeds.** The lead and the architect handle the technical design; "what you make is the worst it will ever be, it only gets better" — improve on the seeds, design for complexity, not a complex system.
+- **Agent tools:** for now the backend tool that matters is QMB (backtests). The rest comes through the Lab and mini apps; do what is sensible, no long tool list.
+- **Funnel answers:** the Library is the one catalog, with big price files beside it listed by cards (Q1, yes); the server holds the main copy from this week (Q2, yes); free sources first, paid futures data only when a strategy needs it (Q3, yes); OpenObserve's free tier is fine as the EXTERNAL monitoring (Q5).
+- **Two DevOps layers:** internal (QMX's own light health and incident view in the UI, already designed) and external (OpenTelemetry into OpenObserve on the server, deep logs and traces, and a door for an outside agent such as Claude Code). Design both from one source of events, not two systems.
+- **Preview and detail view for every Library item** (his "FIFA card" idea from the UI transcript): each kind has a small card preview and a full detail view; when each appears is a UI and Library contract. The Library must give each kind what both views need.
+- **Market data:** use dukascopy-node (https://www.dukascopy-node.app/config/cli) as the Dukascopy downloader; check its data quality and alternatives. Some strategies may need order-flow data (true volume and order books exist for futures and crypto exchanges, not for spot FX).
+- **Brokers:** broker and platform accounts (cTrader first, MT5, more later, crypto via CCXT) must be managed and controlled inside QMX, not in an outside browser. Agents still never reach money; he controls brokers through QMX. The trading-node session owns live trading; the platform owns the accounts, connections and their health.
+- **The old 10 GB of ticks** is on his PC (`C:\Users\Mubarak\Documents\QMX\data\raw\external-deep-history`), not on the server (the server was reset and holds no data).
