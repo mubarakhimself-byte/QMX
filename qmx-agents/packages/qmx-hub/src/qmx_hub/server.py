@@ -10,6 +10,9 @@ Routes. `GET /healthz` answers the doctor. `POST /v1/op/<verb>` is one `LibraryP
 replication step) as JSON. `GET|POST /v1/blob` moves blob bytes by hash. `GET /v1/blob/<hex>` too.
 `events` is the ref-log read an `event` trigger needs: the rows after a `seq`, each with the
 object's kind, fields and the principal that placed it (AD-64).
+`POST /v1/heartbeat` takes one host's heartbeat row and answers with the authoritative
+`autonomy_paused` flag and how many claims the batch renewed (AD-65): the Hub is the one place the
+pause switch's current word is written, and the PC's row is what writes it.
 
 The Hub monitors itself (AD-11): `hub/health` writes one `test-report` object on `refs/hub/health`
 with its ref count, claim count and store size, and the PC's doctor reads it.
@@ -26,12 +29,14 @@ import sys
 import threading
 import traceback
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final, cast
 
 from pydantic import JsonValue
+from qmx_engine.heartbeat import WINDOW_DAYS, Heartbeat, HeartbeatLog
 from qmx_engine.ledger import redact
 from qmx_library.client import draft_from_payload
 from qmx_library.port import (
@@ -53,14 +58,24 @@ CONFIG: Final = "hub.toml"
 BODY_LIMIT: Final = 64 * 1024 * 1024
 ALLOWED: Final = frozenset({"operator", "hub", "migrator", "agent", "run", "engine"})
 """The principals the door accepts. A pairing key names a machine, not a right (AD-11)."""
+HEARTBEAT_ROUTE: Final = "/v1/heartbeat"
+AUTONOMY: Final = "autonomy.json"
+"""The one pause flag, written by the PC's heartbeat and read by every host (AD-65)."""
+SOURCE_HOST: Final = "pc"
+"""The host whose `paused` writes the Hub's flag: the operator's own machine."""
+CLAIM_TTL_S: Final = 900
+"""How far one heartbeat's batch pushes a claim's expiry (AD-24): three missed beats at 30 s × 10."""
 
 
 class Hub:
     """The verbs, as functions over the one store. Every refusal is a `LibraryRefused`."""
 
-    def __init__(self, store: Store, *, buckets: Sequence[Path] = ()) -> None:
+    def __init__(
+        self, store: Store, *, buckets: Sequence[Path] = (), home: Path | None = None
+    ) -> None:
         self.store = store
         self.buckets = tuple(buckets)
+        self.home = home
 
     def health(self) -> dict[str, Any]:
         refs = self.store.refs()
@@ -90,6 +105,53 @@ class Hub:
         if principal.who == "engine" and principal.id != self.store.name:
             return Principal("engine", self.store.name)
         return principal
+
+    def paused(self) -> bool:
+        """The one pause flag every host adopts (AD-65). Absent means running."""
+        path = self._autonomy_path()
+        if path is None or not path.exists():
+            return False
+        found = json.loads(path.read_text(encoding="utf-8"))
+        return bool(found.get("paused"))
+
+    def set_paused(self, paused: bool, *, at: str) -> bool:
+        """Write the flag the PC's row carries; the Hub never invents one."""
+        path = self._autonomy_path()
+        if path is None:
+            raise LibraryRefused("no_home", "this Hub keeps no home for the pause flag")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"paused": paused, "at": at}, sort_keys=True), encoding="utf-8")
+        return paused
+
+    def hear(self, row: Mapping[str, JsonValue]) -> tuple[bool, int]:
+        """Take one heartbeat row: adopt the PC's flag, renew its claims, keep the row.
+
+        Returns the authoritative flag and how many of the row's claims the batch renewed.
+        """
+        beat = Heartbeat.model_validate(row)
+        if beat.subject == "host" and beat.id == SOURCE_HOST:
+            self.set_paused(beat.paused, at=beat.at)
+        renewed = self.renew(beat.claims)
+        if self.home is not None:
+            HeartbeatLog(self.home, WINDOW_DAYS).write([beat])
+        return self.paused(), renewed
+
+    def renew(self, claims: Sequence[str]) -> int:
+        """Every claim the row names, extended in one call per run holding one (AD-24, AD-65)."""
+        named = set(claims)
+        holders = {
+            found[0]
+            for key in sorted(named)
+            if (found := self.store.claim_holder(key)) is not None
+        }
+        count = 0
+        for run_id in sorted(holders):
+            renewed = self.store.renew_claims(self.store.engine, run_id, CLAIM_TTL_S)
+            count += len(set(renewed) & named)
+        return count
+
+    def _autonomy_path(self) -> Path | None:
+        return None if self.home is None else self.home / AUTONOMY
 
     def op(self, verb: str, who: Principal, args: Mapping[str, JsonValue]) -> JsonValue:
         match verb:
@@ -214,6 +276,10 @@ class Hub:
                         int(str(args.get("after") or 0)),
                         limit=int(str(args.get("limit") or 500)),
                     ),
+                )
+            case "autonomy":
+                return self.set_paused(
+                    bool(args.get("paused")), at=str(args.get("at") or datetime.now(UTC).isoformat())
                 )
             case _:
                 raise LibraryRefused("not_found", f"no verb {verb!r}")
@@ -368,6 +434,20 @@ class Handler(BaseHTTPRequestHandler):
             blob_id = self.hub.store.store_blob(body)
             self._json(HTTPStatus.OK, {"blob_id": blob_id})
             return
+        if self.path == HEARTBEAT_ROUTE:
+            try:
+                call = cast(dict[str, JsonValue], json.loads(body))
+                paused, renewed = self.hub.hear(
+                    cast(Mapping[str, JsonValue], call["heartbeat"])
+                )
+            except (LibraryRefused, ValueError, KeyError) as refused:
+                code = refused.code if isinstance(refused, LibraryRefused) else "bad_heartbeat"
+                self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "code": code})
+                return
+            self._json(
+                HTTPStatus.OK, {"autonomy_paused": paused, "claims_renewed": renewed}
+            )
+            return
         if not self.path.startswith("/v1/op/"):
             self._json(HTTPStatus.NOT_FOUND, {"ok": False, "code": "not_found"})
             return
@@ -501,7 +581,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     key = key_file.read_text(encoding="utf-8").strip()
     with Store.open(root, redactor=redact, name="server", role=role) as store:
-        hub = Hub(store, buckets=buckets)
+        hub = Hub(store, buckets=buckets, home=args.home)
         host = args.host or str(found.get("host", "127.0.0.1"))
         tls = (args.cert, args.tls_key) if args.cert and args.tls_key else None
         server = serve(

@@ -1,9 +1,14 @@
 """One heartbeat row per subject per interval (AD-65), and the home's local log of them.
 
 A host, a remote run sidecar and every supervised app write the same `Heartbeat` row. The live
-facts travel only here: CPU, memory, capacity in use per class, intent claims (empty until LIB4),
-the version and node kinds a host runs, and the pause flag it sees. Preflight reads a host's
-kinds before it places a node there (AD-20), and the `ops` toolset reads the rows.
+facts travel only here: CPU, memory, capacity in use per class, intent claims, the version and
+node kinds a host runs, and the pause flag it sees. Preflight reads a host's kinds before it places
+a node there (AD-20), and the `ops` toolset reads the rows.
+
+The row is also what the Hub hears: `HubLink.push` sends it and the reply carries the authoritative
+`autonomy_paused` flag and how many claims the batch renewed (AD-65, review 48 M5). A host that
+stops hearing from the Hub for `UNKNOWN_AFTER_S` keeps the last flag it knew and says so: "pause
+state unknown", because honouring a flag nobody can confirm would quietly stop autonomy for good.
 
 The home keeps rows as JSONL day files `logs/heartbeat-<YYYY-MM-DD>.jsonl` for
 `heartbeat.window_days` days (`WINDOW_DAYS`), plus `logs/heartbeat-latest.json`, the newest row
@@ -15,7 +20,10 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Iterable, Mapping
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from importlib import metadata
 from pathlib import Path
@@ -27,6 +35,7 @@ from qmx_ledger.journal import fingerprint
 from qmx_engine.definition.registry import BASE_KINDS
 
 type Subject = Literal["host", "run", "app"]
+type PauseState = Literal["known", "unknown"]
 
 INTERVAL_S: Final = 30.0
 """`heartbeat.interval`, seconds between rows (Claude's default; a `[engine]` setting overrides)."""
@@ -34,6 +43,12 @@ WINDOW_DAYS: Final = 7.0
 """`heartbeat.window_days`, the PC's rolling log window (Claude's default; a setting overrides)."""
 LOGS: Final = "logs"
 LATEST: Final = "heartbeat-latest.json"
+UNKNOWN_AFTER_S: Final = 300.0
+"""Pause state unknown after five minutes without the Hub (Appendix B)."""
+UNKNOWN: Final = "pause state unknown"
+HEARTBEAT_ROUTE: Final = "/v1/heartbeat"
+"""The Hub's one route for a row, and its reply."""
+CALL_TIMEOUT_S: Final = 10.0
 
 
 class ClassUse(BaseModel):
@@ -162,6 +177,94 @@ def host_kinds(home: Path) -> Mapping[str, frozenset[str]]:
     return {
         row.id: frozenset(row.node_kinds) for row in latest(home).values() if row.subject == "host"
     }
+
+
+class HubReply(BaseModel):
+    """What the Hub answers a pushed row with: the authoritative pause flag and the claim batch."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    autonomy_paused: bool
+    claims_renewed: int = 0
+
+
+class Pause(BaseModel):
+    """The pause flag this host acts on, and how sure it is.
+
+    `paused` is the last flag the Hub gave (or this host's own switch before the first reply).
+    `heard_at` is the last time the Hub answered; past `UNKNOWN_AFTER_S` the flag is still
+    honoured, and `state` says the host no longer knows it is current (AD-65).
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    paused: bool = False
+    heard_at: float | None = None
+    source: str = "local"
+    """`local` before the Hub ever answered; `hub` once it has."""
+
+    def heard(self, reply: HubReply, *, at: float) -> "Pause":
+        return Pause(paused=reply.autonomy_paused, heard_at=at, source="hub")
+
+    def state(self, now: float) -> PauseState:
+        if self.heard_at is None or now - self.heard_at < UNKNOWN_AFTER_S:
+            return "known"
+        return "unknown"
+
+    def shows(self, now: float) -> str:
+        """The one line a screen shows: the flag, or that the flag is nobody's current word."""
+        if self.state(now) == "unknown":
+            return UNKNOWN
+        return "paused" if self.paused else "running"
+
+    def flag(self, now: float) -> bool:
+        """What the host honours: the last flag it knew, whatever the state (AD-65)."""
+        return self.paused
+
+
+class HubLink:
+    """This host's side of the Hub's heartbeat route: push one row, adopt the reply."""
+
+    def __init__(
+        self,
+        url: str,
+        key: str,
+        *,
+        clock: Callable[[], float] = time.time,
+        post: Callable[[str, Mapping[str, object], Mapping[str, str]], Mapping[str, object]]
+        | None = None,
+        pause: Pause | None = None,
+    ) -> None:
+        self.url = url.rstrip("/")
+        self.key = key
+        self._clock = clock
+        self._post = post or _post
+        self.pause = pause or Pause()
+
+    def push(self, row: Heartbeat) -> HubReply:
+        """Send one row and read the reply; an unreachable Hub raises `OSError`."""
+        now = self._clock()
+        body = self._post(
+            f"{self.url}{HEARTBEAT_ROUTE}",
+            {"heartbeat": row.model_dump(mode="json")},
+            {"Authorization": f"Bearer {self.key}"},
+        )
+        reply = HubReply.model_validate(body)
+        self.pause = self.pause.heard(reply, at=now)
+        return reply
+
+
+def _post(
+    url: str, body: Mapping[str, object], headers: Mapping[str, str]
+) -> Mapping[str, object]:
+    request = urllib.request.Request(  # noqa: S310 (the home's own setting)
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", **headers},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=CALL_TIMEOUT_S) as answer:  # noqa: S310
+        return json.loads(answer.read())
 
 
 def _when(text: str) -> datetime:

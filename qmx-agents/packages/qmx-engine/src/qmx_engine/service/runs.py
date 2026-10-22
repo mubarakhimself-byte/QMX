@@ -9,13 +9,17 @@ engine's live attempts, with SOLUTION-DESIGN 3.1's words; nothing stores it besi
 its version `tested-by` it, since a passed run in either mode tests its content hash (AD-11, L-56).
 A test run a wake resumed gets a fresh test report beside its fresh summary (B-61). Cancelling a run
 cancels every child run under it (AD-5, B-66).
+
+The merged read (`merged`, `card`, `spans_of`) answers for every owned instance: this home's rows
+come from its ledger, a reachable node's come back through `forward`, and each row names its
+`home_engine` (AD-21, AD-65). Nothing is copied.
 """
 
 from __future__ import annotations
 
 import copy
-from collections.abc import Container, Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Container, Mapping, Sequence
+from dataclasses import asdict, dataclass, replace
 from typing import cast
 
 from pydantic import JsonValue
@@ -37,6 +41,14 @@ from qmx_engine.ports.library import (
 from qmx_engine.runner import Engine, Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context, Refused, State, require
+from qmx_engine.service.forward import (
+    HOME_ENGINE,
+    Forwarder,
+    ForwardRefused,
+    Homerow,
+    homerowed,
+    plain,
+)
 from qmx_engine.trace_export import export
 from qmx_engine.triggers.rows import After, fire_now, triggers
 
@@ -350,8 +362,51 @@ class RunView:
 
 
 class Runs:
-    def __init__(self, ctx: Context) -> None:
+    def __init__(
+        self, ctx: Context, *, name: str = "pc", forwarders: Sequence[Forwarder] = ()
+    ) -> None:
         self.ctx = ctx
+        self.name = name
+        self.forwarders = tuple(forwarders)
+
+    def merged(self, workflow_item: str, object_id: str | None = None) -> list[Homerow]:
+        """This home's runs and every owned instance's, each row naming its `home_engine`."""
+        rows = [
+            homerowed(self.name, cast("Mapping[str, JsonValue]", plain(found)))
+            for found in self.list(workflow_item, object_id)
+        ]
+        asked: JsonObject = {"workflow_item": workflow_item, "object_id": object_id}
+        for forwarder in self.forwarders:
+            rows += forwarder.rows("runs.list", asked)
+        return rows
+
+    def card(self, run_id: str) -> Homerow:
+        """One run card, here or on the node whose ledger owns the run."""
+        try:
+            return homerowed(self.name, cast("Mapping[str, JsonValue]", plain(self.get(run_id))))
+        except Refused as missed:
+            if missed.code != "unknown_run":
+                raise
+        for forwarder in self.forwarders:
+            found = forwarder.rows("cards", {"run_id": run_id})
+            if found and not found[0].stale:
+                return found[0]
+        raise Refused("unknown_run", f"no run {run_id} here or on an owned node")
+
+    def spans_of(self, run_id: str) -> list[Homerow]:
+        """Every span of one run, from the ledger that owns it (AD-15, AD-65)."""
+        if ledger_path(self.ctx.home).exists():
+            with Reader.open(self.ctx.home) as reader:
+                if reader.events(run_id):
+                    return [
+                        homerowed(self.name, cast("Mapping[str, JsonValue]", plain(span)))
+                        for span in reader.spans(run_id)
+                    ]
+        for forwarder in self.forwarders:
+            found = forwarder.rows("spans", {"run_id": run_id})
+            if found and not found[0].stale:
+                return found
+        raise Refused("unknown_run", f"no run {run_id} here or on an owned node")
 
     def version_state(self, version: Stored) -> State:
         """Published means on `main` (AD-11, L-51); any other ref, a run's own included, is a
