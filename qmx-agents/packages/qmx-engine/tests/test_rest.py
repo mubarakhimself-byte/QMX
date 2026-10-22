@@ -97,7 +97,7 @@ def test_a_draft_is_saved_tested_published_and_run_live_over_rest(tmp_path: Path
         ("live", "passed"),
         ("test", "passed"),
     ]
-    assert remote.json() == []
+    assert remote.status_code == 404
 
 
 def test_publish_takes_only_a_semver(tmp_path: Path) -> None:
