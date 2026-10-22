@@ -408,6 +408,26 @@ GATE_TIMEOUT_S: Final = 10.0
 """Explicit `HookMatcher.timeout` for the guard. A PreToolUse SDK callback that exceeds
 its timeout blocks the tool call."""
 
+SANDBOX_SERVER: Final = "qmx_sandbox"
+"""The runner's sandbox tool server (`sandbox_bash`, `sandbox_write`, `sandbox_python`, the
+`runner_outside` agent mode). A chat that declares it executes tool calls inside the sandbox."""
+SANDBOX_BUILTINS: Final = frozenset({"Bash", "Write", "Edit", "NotebookEdit"})
+"""The host tools a sandboxed chat loses (AD-25, HARNESS-REQUESTS H2/H8): with the sandbox server
+declared, the agent loop stays outside and every file or shell act goes through the sandbox."""
+
+
+def sandbox_builtins(tools: Sequence[str], servers: Mapping[str, object]) -> tuple[str, ...]:
+    """The built-ins a chat keeps once its declared MCP servers are known.
+
+    A chat with no sandbox server keeps its built-ins, which is the local `runner_outside`-free
+    mode (AD-24). One that declares the sandbox server keeps its read tools and loses the four
+    that would act on the host, so there is one door for writes (H8).
+    """
+    if SANDBOX_SERVER not in servers:
+        return tuple(tools)
+    return tuple(tool for tool in tools if tool not in SANDBOX_BUILTINS)
+
+
 PROMPT_OPTIONS: Final[Mapping[str, object]] = MappingProxyType(
     {
         "type": "preset",
@@ -652,7 +672,7 @@ def build_options(
                 hooks.setdefault(event, []).append(matcher)
     return ClaudeAgentOptions(
         cli_path=launcher,
-        tools=list(surface.builtins),
+        tools=list(sandbox_builtins(surface.builtins, mcp_servers)),
         system_prompt=cast("SystemPromptPreset", dict(PROMPT_OPTIONS)),
         agents=agent_options(surface),
         skills=list(surface.skills),

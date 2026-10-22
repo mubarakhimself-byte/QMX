@@ -38,7 +38,7 @@ from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import IO, Any, Final, Literal
+from typing import IO, Any, Final, Literal, cast
 
 import httpx
 import psutil
@@ -73,12 +73,15 @@ from qmx_engine.ports.router import Row as EngineRow
 from qmx_engine.ports.router import adopt as adopt_router
 from qmx_engine.runner import Engine
 from qmx_engine.service.rest import engine_router
+from qmx_engine.workers.remote import PlacementWorker
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.migrate.from_library_b import DualWrite
 from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
+from qmx_remote.models import Target
+from qmx_remote.providers import registry as provider_registry
 from qmx_router import complete as router_complete
 from qmx_router.passes import PassAuthority, RevocationList
 from qmx_router.pool import NoAccount
@@ -265,6 +268,107 @@ def harness_relay(harness: Harness) -> Relay:
     return deps.relay
 
 
+TARGET_FIELDS: Final = frozenset(
+    {
+        "provider",
+        "host",
+        "root",
+        "bucket_local",
+        "image",
+        "gpu",
+        "gpu_type",
+        "executor",
+        "runner_id",
+        "runner_dir",
+        "project",
+    }
+)
+"""The `Target` fields a `[placement]` row may carry; the rest of the row is QMX's own."""
+
+
+class HubGateway:
+    """The Hub's run endpoints: the event tail and the result for one run (AD-13, AD-20)."""
+
+    def __init__(self, base_url: str, *, timeout: float = 10.0) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def _get(self, run_id: str, name: str) -> httpx.Response:
+        return httpx.get(f"{self.base_url}/runs/{run_id}/{name}", timeout=self.timeout)
+
+    def events(self, run_id: str) -> list[dict[str, Any]]:
+        try:
+            found = self._get(run_id, "events")
+        except httpx.HTTPError:
+            return []
+        if found.status_code != 200:
+            return []
+        rows = found.json()
+        if not isinstance(rows, list):
+            return []
+        listed = cast(list[object], rows)
+        return [cast(dict[str, Any], row) for row in listed if isinstance(row, dict)]
+
+    def result(self, run_id: str) -> Document | None:
+        try:
+            found = self._get(run_id, "result")
+        except httpx.HTTPError:
+            return None
+        if found.status_code != 200:
+            return None
+        body = found.json()
+        return cast(Document, body) if isinstance(body, dict) else None
+
+
+def remote_worker(home: Path, core: Engine) -> PlacementWorker | None:
+    """The `node` role's worker: an attempt placed on another owned machine runs there (AD-20).
+
+    A `[placement]` row with a provider is a machine this host dispatches to; the row's
+    `gateway_url` is the Hub that serves its `runs/<run_id>/` tail and result. With no such row
+    this host keeps its local worker, which is the one-machine case. The pass is minted here and
+    travels in `QMX_RUN_PASS`; no key does.
+    """
+    settings = core.settings
+    names = sorted(
+        {
+            key.split(".")[1]
+            for key in settings
+            if key.startswith("placement.") and key.count(".") >= 2 and key.split(".")[1]
+        }
+    )
+    providers: dict[str, Any] = {}
+    gateway_url = ""
+    for name in names:
+        if settings.get(f"placement.{name}.provider") is None:
+            continue
+        target = Target.model_validate(
+            {
+                field: settings[f"placement.{name}.{field}"]
+                for field in TARGET_FIELDS
+                if f"placement.{name}.{field}" in settings
+            }
+        )
+        bucket = settings.get(f"placement.{name}.bucket")
+        providers[name] = provider_registry(target, str(bucket) if bucket is not None else "")
+        found = settings.get(f"placement.{name}.gateway_url")
+        if found is not None:
+            gateway_url = str(found)
+    if not providers or not gateway_url:
+        return None
+    authority = PassAuthority(revocations=RevocationList(home / "passes" / "revoked.json"))
+
+    def mint(job: Any) -> str:
+        return authority.mint(run=job.run_id, placement=job.placement, attempt=job.attempt)[1]
+
+    return PlacementWorker(
+        gateway=HubGateway(gateway_url),
+        providers=providers,
+        settings=settings,
+        mint=mint,
+        remote=providers,
+    )
+
+
 def compose_memory(
     harness: RecordedHarness, store: Store, home: Path, control: ControlService
 ) -> RecallEngine:
@@ -383,6 +487,10 @@ async def serve(
                         harness=HarnessAdapter(harness),
                         library=EngineLibraryAdapter(store),
                     ) as engine:
+                        core = engine.svc.ctx.engine
+                        placed = remote_worker(home, core) if role == "node" else None
+                        if placed is not None:
+                            core.worker = placed
                         harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
                         origin = ui_origin if role == "pc" else ""
                         bearer = qmx_control.server.local_token()

@@ -61,6 +61,9 @@ def card(file: CardFile, *ids: str) -> tuple[Card, ...]:
 
 NODE: Final[tuple[Need, ...]] = ("trading-node",)
 QMB: Final[tuple[Need, ...]] = ("qmb-door",)
+SANDBOX: Final[tuple[Need, ...]] = ("sandbox",)
+"""A placed attempt runs under the sandbox tool server (AD-25, H8); the template is a draft until
+that placement exists, which is what `meta.needs` records."""
 
 CATALOG: Final[tuple[Template, ...]] = (
     Template(
@@ -380,6 +383,15 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="crystallise-a-workflow",
         test_inputs={"fixture": True},
         test_cost="TPL3 lane 2: 1 haiku turn, tokens in 2, out 5, cache read 5122; 13 s",
+    ),
+    Template(
+        "run-one-job-on-his-server",
+        "Run one job on his server",
+        card("46", "5.0"),
+        "REM",
+        needs=SANDBOX,
+        folder="run-on-a-machine",
+        test_inputs={"command": ["python", "-c", "print(42)"]},
     ),
 )
 
