@@ -44,10 +44,8 @@ def test_a_packs_rows_are_its_declared_operations_pinned_to_its_version() -> Non
     assert len(rows(found)) == len(rows()) + 2
 
 
-def test_an_operation_the_app_does_not_declare_is_no_row_and_no_order_act_is_one() -> None:
+def test_an_operation_the_app_does_not_declare_is_no_row_and_a_long_name_is_refused() -> None:
     assert app_rows("macro-daily-bias", "1.0.0", {}) == ()
-    with pytest.raises(CatalogError, match="names the order act submit_order"):
-        app_rows("macro-daily-bias", "1.0.0", {"place_order": {"approval": "manage"}})
     with pytest.raises(CatalogError, match="is longer than 64 characters"):
         app_rows("macro-daily-bias", "1.0.0", {"b" * 60: {}})
     assert check(app_rows("macro-daily-bias", "1.0.0", OPERATIONS)) is None

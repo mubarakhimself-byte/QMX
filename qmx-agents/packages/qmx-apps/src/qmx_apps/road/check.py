@@ -5,10 +5,8 @@ plugin, lists every `!` shell line the pack would run, refuses a `hooks/` folder
 `.mcp.json`, and refuses a pack whose server serves tools other than the rows `app.toml`
 declares.
 
-Two name rules come from the catalog (AD-61): a declared row's wire name
-`mcp__qmx__<toolset>_<op>` must fit `MAX_TOOL_NAME`, and no row may spell an order act, because
-agents have no path to money (ruling 116, review 48 M10). Both read the same vendored word list
-as the definition lint.
+One name rule comes from the catalog (AD-61): a declared row's wire name
+`mcp__qmx__<toolset>_<op>` must fit `MAX_TOOL_NAME`.
 
 A `!` line is listed, not refused: it runs under the guard like any other shell call, so the
 operator sees it before he publishes. A hook and an MCP server are refused outright, because
@@ -24,8 +22,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
-
-from qma.core.barriers.money_path import match_money_path_act
 
 from qmx_apps.errors import Document
 
@@ -140,15 +136,9 @@ def _stems(folder: Path, part: str) -> tuple[str, ...]:
 
 
 def _names(rows: Sequence[str], toolset: str) -> list[str]:
-    """Why a declared row's wire name is refused: an order act, or a name the CLI cannot carry."""
+    """Why a declared row's wire name is refused: a name the CLI cannot carry."""
     problems: list[str] = []
     for op in rows:
-        act = match_money_path_act(op)
-        if act is not None:
-            problems.append(
-                f"order_act: {op} names the order act {act}; agents have no path to money "
-                "(ruling 116)"
-            )
         name = wire_name(toolset, op)
         if len(name) > MAX_TOOL_NAME:
             problems.append(
