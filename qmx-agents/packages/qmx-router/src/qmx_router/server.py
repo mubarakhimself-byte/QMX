@@ -18,15 +18,27 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import socket
 import threading
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final, cast
+
+from qmx_router import facts as facts_module
+from qmx_router import vault as vault_module
+from qmx_router.passes import Ask, PassAuthority, Refusal, bearer_of
 
 if TYPE_CHECKING:
+    from starlette.types import Receive, Scope, Send
+
     from qmx_router.relay import Relay
 
+LOOPBACK: Final = "127.0.0.1"
+TAILNET: Final = "0.0.0.0"  # noqa: S104  (a node is reached over Tailscale or not at all)
+"""The `node` role's bind. The server's only reachable network is the tailnet, so every
+interface there is the tailnet one; the PC's roles keep the loopback bind."""
 PORT_FILE: Final = "router.port"
 """The pinned port, one line of text, read by every launch."""
 CHECK_S: Final = 5.0
@@ -58,10 +70,13 @@ class RouterService:
         self,
         home: Path,
         *,
+        bind: str = LOOPBACK,
         check_s: float = CHECK_S,
         stall_s: float = STALL_S,
     ) -> None:
         self.home = home
+        self.bind = bind
+        """`127.0.0.1` on the PC's roles, `0.0.0.0` on a node (AD-12, AD-38)."""
         self.check_s = check_s
         self.stall_s = stall_s
         self.port = 0
@@ -134,18 +149,18 @@ class RouterService:
         await relay.serve_on(listener)
 
     def _listen(self) -> socket.socket:
-        """Bind the pinned port, or the next free one and pin that instead. One writer, so a
-        launch never reads a port that a second bind took."""
+        """Bind the pinned port on this service's address, or the next free one and pin that
+        instead. One writer, so a launch never reads a port that a second bind took."""
         wanted = _pinned(self.home)
         for port in (wanted, 0):
             listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                listener.bind(("127.0.0.1", port))
+                listener.bind((self.bind, port))
             except OSError:
                 listener.close()
                 continue
             return listener
-        raise OSError("the router could not bind a loopback port")
+        raise OSError(f"the router could not bind a port on {self.bind}")
 
     async def canary(self) -> bool:
         """True when the pinned port accepts a connection. A TCP connect, nothing more."""
@@ -233,6 +248,190 @@ class RouterService:
     def _wake_stop(self) -> None:
         if self._stop is not None:
             self._stop.set()
+
+
+NODE_PORT_FILE: Final = "node.port"
+"""Where the `node` role pins the port of the app the PC reaches. A node still writes
+`router.port` for its own relay; this is the other listener, and it is the one with the pass
+bearers."""
+VAULT_STORE: Final = "vault-store.json"
+"""The sealed entries the PC published, on the node's disk. `qmx node vault install` writes it and
+the `node` role reads it at start. The name is repeated in `qmx_control.node` because the two
+packages do not depend on each other."""
+OPEN_PATHS: Final = frozenset({"/v1/health"})
+"""The one route a node answers without a pass. It says a node is there and no more."""
+
+
+class NodeState:
+    """What a node shares over the tailnet: the facts it holds, the vault ciphertext it was
+    given, and the pass list it reads. One instance per process, one writer, no lock."""
+
+    def __init__(
+        self,
+        *,
+        site: str,
+        passes: PassAuthority,
+        facts: facts_module.FactStore | None = None,
+        vault: vault_module.VaultStore | None = None,
+    ) -> None:
+        self.site = site
+        self.passes = passes
+        self.facts = facts or facts_module.FactStore(site)
+        self.vault = vault or vault_module.VaultStore()
+        self.accepted_vault = 0
+        """Entries this node took from the PC's vault sync. A rotation and a deletion each move
+        it, which is what the E26 lane reads."""
+
+    def require(self, scope: dict[str, Any], *, read: str = "", write: str = "") -> None:
+        """Check the authenticated pass against this route's scope. Raises `Refusal` so a
+        handler never returns 403 on its own: one place decides what a pass may do."""
+        minted = scope.get("qmx.pass")
+        if not minted:
+            raise _Refused(Refusal("absent", "no pass on this connection"))
+        for refusal in self.passes.refusals(minted, Ask(read=read, write=write)):
+            raise _Refused(refusal)
+
+    async def health(self, request: Any) -> Any:
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        return JSONResponse({"node": self.site, "facts": len(self.facts.snapshot().facts)})
+
+    async def facts_route(self, request: Any) -> Any:
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        if request.method == "POST":
+            self.require(request.scope, write="facts")
+            document = await request.json()
+            taken = self.facts.merge(facts_module.State.from_document(document))
+            return JSONResponse({"taken": taken, "facts": len(self.facts.snapshot().facts)})
+        self.require(request.scope, read="facts")
+        return JSONResponse(self.facts.snapshot().document())
+
+    async def vault_route(self, request: Any) -> Any:
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        if request.method == "POST":
+            self.require(request.scope, write="vault")
+            taken = self.vault.sync(await request.json())
+            self.accepted_vault += taken
+            return JSONResponse(
+                {
+                    "taken": taken,
+                    "names": list(self.vault.names()),
+                    "gone": list(self.vault.tombstones()),
+                }
+            )
+        self.require(request.scope, read="vault")
+        return JSONResponse(
+            {
+                "key": vault_module.as_text(self.vault.public_key),
+                "names": list(self.vault.names()),
+                "gone": list(self.vault.tombstones()),
+            }
+        )
+
+    async def passes_route(self, request: Any) -> Any:
+        """`{"revoke": "<pass id>"}` or `{"end_run": "<run id>"}`. The list is a file both ends
+        read, so a refusal survives a restart on either side."""
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        self.require(request.scope, write="passes")
+        document = await request.json()
+        if not isinstance(document, dict):
+            return JSONResponse({"refused": "malformed"}, status_code=400)
+        body = cast("dict[str, Any]", document)
+        revoked = str(body.get("revoke", ""))
+        ended = str(body.get("end_run", ""))
+        if revoked:
+            self.passes.revocations.revoke(revoked)
+        if ended:
+            self.passes.end_run(ended)
+        return JSONResponse(
+            {
+                "passes": list(self.passes.revocations.passes()),
+                "runs": list(self.passes.revocations.runs()),
+            }
+        )
+
+
+class _Refused(Exception):
+    """A route's scope refusal, carried to `_refuse` so one place writes the reply."""
+
+    def __init__(self, refusal: Refusal) -> None:
+        super().__init__(str(refusal))
+        self.refusal = refusal
+
+
+class PassBearer:
+    """The ASGI gate on a node's tailnet listener. It authenticates the bearer once, puts the
+    pass in the request scope, and lets a route check scopes; a request with no pass never
+    reaches a handler. The health line stays open so a lane can tell "not answering" from
+    "refused"."""
+
+    def __init__(self, app: Callable[..., Awaitable[None]], state: NodeState) -> None:
+        self.app = app
+        self.state = state
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        if scope.get("path", "") in OPEN_PATHS:
+            await self.app(scope, receive, send)
+            return
+        headers = {
+            key.decode("latin-1").lower(): value.decode("latin-1")
+            for key, value in scope.get("headers", [])
+        }
+        token = bearer_of(headers.get("authorization", ""))
+        minted, refusal = self.state.passes.check(token, Ask())
+        if refusal is not None:
+            await _refuse(send, refusal)
+            return
+        scope = dict(scope)
+        scope["qmx.pass"] = minted
+        await self.app(scope, receive, send)
+
+
+def node_app(state: NodeState) -> Callable[..., Awaitable[None]]:
+    """The node's tailnet application: four routes, every one but the health line behind a pass.
+    `qmx node install-vault` and the pools' sync are the only callers (AD-12, AD-38)."""
+    from starlette.applications import Starlette  # noqa: PLC0415
+    from starlette.routing import Route  # noqa: PLC0415
+
+    async def refusal_reply(request: Any, error: Exception) -> Any:
+        from starlette.responses import JSONResponse  # noqa: PLC0415
+
+        refusal = error.refusal if isinstance(error, _Refused) else Refusal("absent", str(error))
+        return JSONResponse({"refused": refusal.code, "detail": refusal.detail}, status_code=403)
+
+    return PassBearer(
+        Starlette(
+            routes=[
+                Route("/v1/health", state.health),
+                Route("/v1/facts", state.facts_route, methods=["GET", "POST"]),
+                Route("/v1/vault", state.vault_route, methods=["GET", "POST"]),
+                Route("/v1/passes", state.passes_route, methods=["POST"]),
+            ],
+            exception_handlers={_Refused: refusal_reply},
+        ),
+        state,
+    )
+
+
+async def _refuse(send: Send, refusal: Refusal) -> None:
+    body = json.dumps({"refused": refusal.code, "detail": refusal.detail}).encode("utf-8")
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 403,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body})
 
 
 def _pinned(home: Path) -> int:

@@ -47,6 +47,7 @@ from qmx_control.service import ControlService, SessionBlock
 from qmx_router.agents import ROLE_TIERS
 from qmx_router.complete import Refused as SchemaRefused
 from qmx_router.complete import check as check_schema
+from qmx_router.passes import PassAuthority
 from qmx_router.profiles import GptPlan, Profile, Profiles, resolve_model
 from qmx_router.registry import ModelRow, Registry, UnknownModel, bundled
 
@@ -354,6 +355,13 @@ class Helper:
     spawn: CliSpawn | None = None
     process: asyncio.subprocess.Process | None = None
     running: asyncio.Task[None] | None = None
+    pass_id: str = ""
+    """The run pass this helper's process carries instead of a key (AD-41). It names the
+    helper's handle, so every call the helper makes journals under the helper and not the
+    parent."""
+    pass_bearer: str = ""
+    """The token for that pass. Handed to the child's environment at spawn and never written to
+    a document, a log or a journal."""
 
     @property
     def chat(self) -> SessionId:
@@ -371,6 +379,7 @@ class Helper:
             "model": self.resolved.model,
             "group": self.group,
             "target": self.target,
+            "pass": self.pass_id,
         }
 
 
@@ -387,12 +396,22 @@ class Helpers:
         *,
         batch: int = BATCH,
         timeouts: StuckTimeouts = DEFAULT_TIMEOUTS,
+        passes: PassAuthority | None = None,
+        machine: str = "",
     ) -> None:
         self._host = host
         self._batch = asyncio.Semaphore(batch)
         self._timeouts = timeouts
+        self._passes = passes or PassAuthority()
+        self._machine = machine
         self._by_handle: dict[str, Helper] = {}
         self._tasks: set[asyncio.Task[None]] = set()
+
+    def pass_bearer(self, handle: str) -> str:
+        """The bearer a `cli` helper's process starts with, or `""` for a handle this harness did
+        not start. The host puts it in the child's environment in place of a key."""
+        helper = self._by_handle.get(handle)
+        return "" if helper is None else helper.pass_bearer
 
     async def start(self, parent: SessionId, start: Start) -> dict[str, object]:
         """Resolve, start and return the handle. The helper's turns are a task, so the caller
@@ -421,6 +440,20 @@ class Helpers:
         spawn = None
         now = time.monotonic()
         helper = Helper(handle, parent, resolved, start.group, start.target, start.task, now, now)
+        # A `cli` helper's grant is a run pass naming its own handle, minted here so the child
+        # starts with a token scoped to this helper's model and write prefix (AD-41). A chat
+        # helper needs none: its turns go through the harness, not a child process.
+        if start.target == "cli":
+            minted, helper.pass_bearer = self._passes.mint(
+                run=str(parent),
+                placement=self._machine,
+                read_scope=("runs", "vault"),
+                write_prefix=f"runs/{parent}",
+                key_scope=("*",),
+                model_scope=(resolved.model,),
+                handle=handle,
+            )
+            helper.pass_id = minted.id
         helper.child = child = await host.start_helper(spec)
         if start.target == "cli":
             try:

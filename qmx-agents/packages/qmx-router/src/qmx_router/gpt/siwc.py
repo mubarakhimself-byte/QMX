@@ -478,6 +478,7 @@ async def sign_in(
     open_page: Callable[[str], object],
     slot: int = 0,
     machine: str = "",
+    owners: Mapping[str, str] | None = None,
     timeout_s: float = SIGN_IN_TIMEOUT_S,
     keys: Keys = jwks_keys,
     vaults: Mapping[int, Vault] | None = None,
@@ -488,7 +489,9 @@ async def sign_in(
 
     `slot` picks the entry (0 is `qmx/chatgpt`), so a second sign-in lands beside the first.
     `machine` records the one machine that owns it. A sign-in of an account another slot on this
-    machine already holds is refused, because the two token families revoke each other."""
+    machine already holds is refused, because the two token families revoke each other.
+    `owners` is the pool's account-to-machine table, which is how a *second machine's* sign-in of
+    an account the PC already owns is refused (AD-12)."""
     vault = vault or KeyringVault(entry_for(slot))
     raw = await asyncio.to_thread(vault.get)
     saved = Record.loads(raw) if raw else None
@@ -538,6 +541,12 @@ async def sign_in(
         raise SignInError(
             f"this ChatGPT account is already signed in in slot {elsewhere}; two sign-ins of "
             "one account revoke each other, so sign out of one first"
+        )
+    owner = (owners or {}).get(account, "")
+    if owner and machine and owner != machine:
+        raise SignInError(
+            f"this ChatGPT account belongs to {owner}, not {machine}; a second sign-in would "
+            "revoke the one there, so it was refused"
         )
     record = Record(
         client_id=callback.client_id,
