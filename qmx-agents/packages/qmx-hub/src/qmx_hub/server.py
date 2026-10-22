@@ -170,19 +170,22 @@ class Hub:
         found.mkdir(parents=True, exist_ok=True)
         return found
 
+    def _kept(self, name: str, run_id: str) -> Path | None:
+        """One record under the Hub's home, or None when the Hub has no home or no record."""
+        if self.home is None:
+            return None
+        found = self.home / name / f"{run_id}.json"
+        return found if found.is_file() else None
+
     def journal(self, run_id: str) -> dict[str, Any] | None:
         """The run's mirrored journal as its home last pushed it."""
-        path = self._home_dir(JOURNALS) / f"{run_id}.json"
-        if not path.is_file():
-            return None
-        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+        path = self._kept(JOURNALS, run_id)
+        return None if path is None else cast(dict[str, Any], json.loads(path.read_text("utf-8")))
 
     def adoption_of(self, run_id: str) -> dict[str, Any] | None:
         """The record of the home that adopted the run, if one did."""
-        path = self._home_dir(ADOPTIONS) / f"{run_id}.json"
-        if not path.is_file():
-            return None
-        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+        path = self._kept(ADOPTIONS, run_id)
+        return None if path is None else cast(dict[str, Any], json.loads(path.read_text("utf-8")))
 
     def put_journal(self, payload: Mapping[str, JsonValue], *, at: str) -> int:
         """Keep one run's mirrored journal. The home that adopted a run is its only writer."""
