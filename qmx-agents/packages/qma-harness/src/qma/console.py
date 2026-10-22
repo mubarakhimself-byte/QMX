@@ -3,7 +3,7 @@
 It uses only the HTTP routes in `qma.harness.routes` and the existing SSE streams, the same
 doors the UI will use, so talking to it tests the real path. It never imports `qma.harness` or
 `claude_agent_sdk`. It scrubs its own environment first, because `/login` starts the bundled
-CLI from this process. With no host answering on `--port`, it starts `qma.serve` for `--home`
+CLI from this process. With no host answering on `--port`, it starts `qmx_host` for `--home`
 and stops it again on exit.
 
 Commands, mirroring Claude Code where a twin exists:
@@ -795,7 +795,7 @@ def host_up(port: int, token: str | None) -> bool:
 
 
 def serve(command: str, home: Path, port: int) -> int:
-    argv = [sys.executable, "-m", "qma.serve", command, "--home", str(home), "--port", str(port)]
+    argv = [sys.executable, "-m", "qmx_host", command, "--home", str(home), "--port", str(port)]
     return subprocess.run(argv, check=False).returncode
 
 

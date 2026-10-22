@@ -32,6 +32,8 @@ from fastapi.testclient import TestClient
 from qmx_control.models import Document
 from qmx_control.server import create_app
 from qmx_control.service import ControlService, SessionBlock
+from qmx_router.profiles import ProfileName
+from qmx_router.relay import Relay, RelayGrant, RelayUsage
 
 import qma.harness.chat
 import qma.harness.harness
@@ -48,9 +50,7 @@ from qma.harness import (
 )
 from qma.harness.harness import UsageRows, journal_path
 from qma.harness.home import PlanAuth, read_record, write_record
-from qma.harness.profiles import ProfileName
 from qma.harness.project import REDACTED, Limits, project
-from qma.harness.relay import Relay, RelayGrant, RelayUsage
 from qma.harness.routes import chat_router, control_service
 
 SIGNED_IN = PlanAuth(logged_in=True, method="claude.ai", provider="firstParty", subscription="max")

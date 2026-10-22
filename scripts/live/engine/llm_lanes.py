@@ -77,7 +77,7 @@ def openrouter_home(slug: str) -> Path:
 
 @asynccontextmanager
 async def harnessed(root: Path) -> AsyncIterator[Any]:
-    """The harness opened in this process on `root`, scrubbed as `qma.serve` boots."""
+    """The harness opened in this process on `root`, scrubbed as `qmx_host` boots."""
     boot()
     async with opened(root) as found:
         yield found

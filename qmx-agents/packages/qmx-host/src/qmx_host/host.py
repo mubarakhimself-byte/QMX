@@ -47,7 +47,6 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_service
-from qma.harness.profiles import ProfileName
 from qma.harness.tools import HostRead
 from qmx_control.models import Document
 from qmx_control.service import ControlService
@@ -94,6 +93,7 @@ from qmx_remote.providers import registry as provider_registry
 from qmx_router import complete as router_complete
 from qmx_router.passes import PassAuthority, RevocationList
 from qmx_router.pool import NoAccount
+from qmx_router.profiles import ProfileName
 from qmx_router.relay import Relay
 from qmx_router.server import (
     LOOPBACK,

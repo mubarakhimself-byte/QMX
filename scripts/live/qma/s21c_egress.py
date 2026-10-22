@@ -38,7 +38,9 @@ from common import (
 from fake_model import FakeModel, Turn, text, tool_use
 
 FAKE = "sk-ant-oat01-QMXCANARY" + "Zq7Xw2Lp9V" * 4
-HARNESS = Path(__file__).resolve().parents[3] / "qmx-agents/packages/qma-harness/src/qma/harness"
+PACKAGES = Path(__file__).resolve().parents[3] / "qmx-agents/packages"
+HARNESS = PACKAGES / "qma-harness/src/qma/harness"
+ROUTER = PACKAGES / "qmx-router/src/qmx_router"
 TOKEN_PROMPT = "Print the test string now."  # noqa: S105
 TOOLS = ["Read"]
 
@@ -63,7 +65,7 @@ def fork_point(transcript: str) -> str | None:
 async def rewound_turn(session: Session, workspace: Path, at: str) -> Any:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, ResultMessage  # noqa: PLC0415
     from qma.harness.launch import RelayedLaunch, launch_env  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName  # noqa: PLC0415
 
     grant = await session.relay.grant(session.chat, ProfileName("fake"))
     env = launch_env(RelayedLaunch(grant), home=session.home, session_id=session.chat, cap="none")
@@ -96,8 +98,8 @@ async def run(log: Log) -> None:
     workspace = args.workspace / "s21c"
     shutil.rmtree(workspace, ignore_errors=True)
     workspace.mkdir(parents=True)
-    for name in ("relay.py", "project.py"):
-        shutil.copyfile(HARNESS / name, workspace / name)
+    for source, name in ((ROUTER, "relay.py"), (HARNESS, "project.py")):
+        shutil.copyfile(source / name, workspace / name)
     (workspace / ".env.example").write_text("ANTHROPIC_API_KEY=sk-ant-...\n", encoding="utf-8")
     fake = FakeModel(
         [

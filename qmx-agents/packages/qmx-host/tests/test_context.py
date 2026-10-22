@@ -12,13 +12,13 @@ from typing import TYPE_CHECKING, Final, cast
 import pytest
 from qma.harness import Home, NewChat, SessionId
 from qma.harness.home import ChatRecord
-from qma.harness.profiles import ProfileName
 from qma.harness.tools import HostRead
 from qmx_control.context import AttachedRef
 from qmx_engine.ledger import redact
 from qmx_library.port import Draft
 from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
+from qmx_router.profiles import ProfileName
 
 from qmx_host.sessions import SessionRecorder, chat_reads
 

@@ -160,12 +160,12 @@ def test_a_planted_probe_pass_outside_probe_py_is_caught(tmp_path: Path) -> None
         tmp_path,
         {
             "gpt/probe.py": "ProbePassed(at, version, model, _mint=_MINT)\n",
-            "harness/relay.py": "from qma.gpt.probe import ProbePassed\nProbePassed(a, b, c)\n",
+            "harness/usage.py": "from qma.gpt.probe import ProbePassed\nProbePassed(a, b, c)\n",
             "harness/harness.py": "from qma.gpt.probe import _MINT\n",
             "console.py": "from qma.gpt import probe\nprobe.ProbePassed(a, b, c)\n",
         },
     )
-    assert probe_pass_builders(found) == ["qma.console", "qma.harness.harness", "qma.harness.relay"]
+    assert probe_pass_builders(found) == ["qma.console", "qma.harness.harness", "qma.harness.usage"]
 
 
 def test_keep_names_hold_no_banned_fragment() -> None:

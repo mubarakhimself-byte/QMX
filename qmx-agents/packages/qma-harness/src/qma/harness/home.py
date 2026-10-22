@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, cast
 from claude_agent_sdk import PermissionResultDeny
 from qmx_control.context import AttachedRef
 from qmx_router.ids import SessionId
+from qmx_router.profiles import PLAN, ProfileName, parse_profiles
 
 from qma.boot import banned_fragment
 from qma.harness import packs
@@ -63,7 +64,6 @@ from qma.harness.launch import (
     build_options,
     launch_env,
 )
-from qma.harness.profiles import PLAN, ProfileName, parse_profiles
 from qma.harness.surface import SLOTS_PLUGIN, HomeSlots, Supply, build, declaration
 from qma.harness.tools import DEFAULT_DOMAIN_WRITE, SERVER, SERVER_NAME, guard_rules
 from qma.launcher import BLOCK_CONFIG_CHANGE, bundled_cli, is_chat_id

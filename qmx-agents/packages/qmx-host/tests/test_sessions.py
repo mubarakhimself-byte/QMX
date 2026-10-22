@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 from qma.harness import Home, NewChat, SessionId, TurnResult, TurnTokens
 from qma.harness.home import ChatRecord
-from qma.harness.profiles import ProfileName
 from qmx_engine.ledger import redact
 from qmx_library.principal import MAIN
 from qmx_library.store import Store
+from qmx_router.profiles import ProfileName
 
 from qmx_host.sessions import SessionRecorder
 

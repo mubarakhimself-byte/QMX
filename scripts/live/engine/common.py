@@ -106,7 +106,7 @@ live: Any = _LiveQma()
 
 
 def boot() -> None:
-    """Scrub this process as `qma.serve` does, and point HOME and TMP at throwaway folders so a
+    """Scrub this process as `qmx_host` does, and point HOME and TMP at throwaway folders so a
     CLI started here never reads the operator's own profile."""
     live.boot()
     live.use_fake_home()

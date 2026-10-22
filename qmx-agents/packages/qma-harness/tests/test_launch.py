@@ -8,6 +8,17 @@ from typing import Any
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions, PermissionResultDeny
 from claude_agent_sdk.types import ToolPermissionContext
+from qmx_router.profiles import (
+    PLAN,
+    BaseUrl,
+    KeyProvider,
+    ModelId,
+    ProfileName,
+    Quirks,
+    SecretRef,
+    TierMap,
+)
+from qmx_router.relay import GrantSecret, RelayGrant
 
 from qma.harness import guard
 from qma.harness.home import QmxHome, SessionId
@@ -31,17 +42,6 @@ from qma.harness.launch import (
     unattended,
     verbatim,
 )
-from qma.harness.profiles import (
-    PLAN,
-    BaseUrl,
-    KeyProvider,
-    ModelId,
-    ProfileName,
-    Quirks,
-    SecretRef,
-    TierMap,
-)
-from qma.harness.relay import GrantSecret, RelayGrant
 from qma.harness.surface import HomeSlots, Supply, Surface, build, declaration
 
 GATE = guard.GuardRules(
@@ -275,3 +275,23 @@ def test_a_relayed_launch_carries_the_relay_and_its_grant_never_a_key(home: QmxH
         "QMA_PROC_DIR": str(home.root / "procs"),
         "QMA_CAP": "c",
     }
+
+
+def test_the_console_starts_qmx_host_with_its_home_and_port(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    import qma.console
+
+    ran: list[list[str]] = []
+
+    def start(argv: list[str], **_: Any) -> subprocess.CompletedProcess[bytes]:
+        ran.append(argv)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(qma.console.subprocess, "run", start)
+    assert qma.console.serve("start", tmp_path, 8766) == 0
+    assert ran == [
+        [sys.executable, "-m", "qmx_host", "start", "--home", str(tmp_path), "--port", "8766"]
+    ]
