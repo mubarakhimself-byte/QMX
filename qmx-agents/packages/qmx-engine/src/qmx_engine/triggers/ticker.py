@@ -1,6 +1,10 @@
 """The in-process ticker (AD-10, SOLUTION-DESIGN 4.2): every `scheduler.tick` seconds it renews its
 leases, resumes the paused runs whose wake has come (AD-9), and claims what is due.
 
+A tick first reads the Library ref log once and queues the fires the enabled `event` triggers owe
+(`triggers.event`, AD-64), then claims, so a landing fires within the same tick and a burst inside
+one tick collapses without a queue at all.
+
 Each claimed fire runs as its own task, so a tick never waits on a run. A tick starts its fires in
 priority order, then oldest first, and each run carries its fire's priority into the capacity
 queue (AD-58); `ready_by` raises it as the deadline nears (`rows.priority_at`). A fire's path is:
@@ -71,6 +75,7 @@ from qmx_engine.triggers.claims import (
     start,
 )
 from qmx_engine.triggers.cron import instant, stamp
+from qmx_engine.triggers.event import drain
 from qmx_engine.triggers.preflight import (
     MARKET_OPEN,
     Blocked,
@@ -228,6 +233,14 @@ class Scheduler:
         ledger = self.engine.ledger
         lease = self.lease()
         ledger.write(beat(lease, list(self.fires), list(self.waking)))
+        drain(
+            ledger,
+            self.ctx.library,
+            home=self.ctx.home,
+            engine=self.home,
+            now=self.ctx.clock.now(),
+            paused=self.engine.paused,
+        )
         if self.engine.paused:
             return Tick((), ())
         woken = ledger.write(claim_wakes(lease, set(self.waking)))
