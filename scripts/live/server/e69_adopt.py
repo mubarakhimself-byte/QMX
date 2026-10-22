@@ -28,7 +28,8 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Final
+from collections.abc import Mapping
+from typing import Final, cast
 
 from pydantic import JsonValue
 
@@ -36,7 +37,7 @@ from qmx_engine.definition.validate import checked
 from qmx_engine.heartbeat import Heartbeat
 from qmx_engine.ledger import mirror, redact
 from qmx_engine.ledger.events import Event
-from qmx_engine.ledger.mirror import HubJournals, MirrorRefused
+from qmx_engine.ledger.mirror import HubJournals, MirrorRefused, post_json
 from qmx_engine.ledger.store import Reader, ledger_path
 from qmx_engine.runner import Outcome, Refused as EngineRefused
 from qmx_engine.service.api import EngineService
@@ -46,7 +47,7 @@ from qmx_engine.service.runs import RunView, status_of
 from qmx_hub.server import Hub, serve
 from qmx_library.store import Store
 
-KEY: Final = "pairing-key-of-this-lane"  # noqa: S105 (a lane-made key, never the ship's)
+KEY = "pairing-key-of-this-lane"  # noqa: S105 (a lane-made key, never the ship's)
 HOLD_S: Final = 1
 PLAIN = "import json\nprint(json.dumps('done'))\n"
 SAVE = (
@@ -96,6 +97,24 @@ def beat(host: str, at: datetime) -> dict[str, JsonValue]:
         paused=False,
     )
     return row.model_dump(mode="json")
+
+
+def hear(url: str, host: str, at: datetime) -> None:
+    """One host heartbeat row on the Hub's own route, as the host's own loop sends it."""
+    post_json(
+        f"{url}/v1/heartbeat",
+        {"heartbeat": cast("Mapping[str, JsonValue]", beat(host, at))},
+        {"Authorization": f"Bearer {KEY}"},
+    )
+
+
+def held_at(url: str, run_id: str) -> JsonValue:
+    """The journal the Hub holds for `run_id`, read over the wire."""
+    return post_json(
+        f"{url}/v1/op/journal_get",
+        {"who": "hub", "args": {"run_id": run_id}},
+        {"Authorization": f"Bearer {KEY}"},
+    )
 
 
 def node(name: str, kind: str, **parameters: JsonValue) -> dict[str, JsonValue]:
@@ -209,7 +228,7 @@ def revive(home: Path, kept: Path) -> None:
     kept.unlink(missing_ok=True)
 
 
-def lane_e69(lane: Lane, root: Path, url: str, hub: Hub) -> None:
+def lane_e69(lane: Lane, root: Path, url: str) -> None:
     pc, contabo = root / "pc", root / "contabo"
     workflow(root / "wf", node("work", "script", script="scripts/work.py"), "work", PLAIN)
     lane.say("the PC's engine home and the Hub are processes on this machine")
@@ -228,7 +247,7 @@ def lane_e69(lane: Lane, root: Path, url: str, hub: Hub) -> None:
     ends = len([e for e in events_of(pc, run_id) if e.kind == "node_finished"])
     lane.check(ends == 2, f"two node ends are in the PC's ledger ({ends})")
     lane.check(
-        len(pc_client.times) == 2 and hub.journal(run_id) is not None,
+        len(pc_client.times) == 2 and held_at(url, run_id) is not None,
         f"the Hub holds the journal the mirror pushed ({len(pc_client.times)} pushes)",
     )
 
@@ -236,7 +255,7 @@ def lane_e69(lane: Lane, root: Path, url: str, hub: Hub) -> None:
     lane.check(
         not ledger_path(pc).exists(), "the PC's ledger file is gone, as a dead home's would be"
     )
-    hub.hear(beat("pc", datetime.now(UTC)))
+    hear(url, "pc", datetime.now(UTC))
     mirror.attach(HubJournals(url, KEY, home="contabo"))
     try:
         with EngineService.open(contabo, name="contabo") as probe:
@@ -249,7 +268,7 @@ def lane_e69(lane: Lane, root: Path, url: str, hub: Hub) -> None:
     finally:
         mirror.attach(None)
 
-    hub.hear(beat("pc", datetime.now(UTC) - timedelta(minutes=10)))
+    hear(url, "pc", datetime.now(UTC) - timedelta(minutes=10))
 
     view = adopt_on(contabo, "contabo", url, run_id, lane)
     events = events_of(contabo, run_id)
@@ -291,12 +310,12 @@ def lane_e69(lane: Lane, root: Path, url: str, hub: Hub) -> None:
     perf(lane)
 
 
-def lane_race(lane: Lane, root: Path, url: str, hub: Hub) -> None:
+def lane_race(lane: Lane, root: Path, url: str) -> None:
     pc, contabo, qmb = root / "pc", root / "contabo", root / "qmb"
     workflow(root / "wf", node("work", "script", script="scripts/work.py"), "work", PLAIN)
     outcome = start_on(pc, root / "wf", "pc", HubJournals(url, KEY, home="pc"))
     run_id = outcome.run_id
-    hub.hear(beat("pc", datetime.now(UTC) - timedelta(minutes=10)))
+    hear(url, "pc", datetime.now(UTC) - timedelta(minutes=10))
 
     lane.say("two machines ask the Hub for the same run at once")
 
@@ -333,7 +352,7 @@ def lane_race(lane: Lane, root: Path, url: str, hub: Hub) -> None:
         mirror.attach(None)
 
 
-def lane_work(lane: Lane, root: Path, url: str, hub: Hub) -> None:
+def lane_work(lane: Lane, root: Path, url: str) -> None:
     pc, contabo = root / "pc", root / "contabo"
     saving = node("save", "script", script="scripts/save.py")
     saving["outputs"] = {"files": [{"path": "out/saved.txt"}]}
@@ -345,7 +364,7 @@ def lane_work(lane: Lane, root: Path, url: str, hub: Hub) -> None:
         [line.get("paths") for line in committed] == [["out/saved.txt"]],
         f"the PC's node committed a file into its own zone ({committed})",
     )
-    hub.hear(beat("pc", datetime.now(UTC) - timedelta(minutes=10)))
+    hear(url, "pc", datetime.now(UTC) - timedelta(minutes=10))
 
 
     view = adopt_on(contabo, "contabo", url, run_id, lane)
@@ -362,6 +381,9 @@ def lane_work(lane: Lane, root: Path, url: str, hub: Hub) -> None:
     )
     saved = contabo.with_name(contabo.name + ".zones") / run_id / "work" / "out" / "saved.txt"
     lane.check(saved.read_text() == "kept", f"the committed file is here, made here ({saved})")
+
+
+LANES = {"e69": lane_e69, "race": lane_race, "work": lane_work}
 
 
 def perf(lane: Lane) -> None:
@@ -387,6 +409,8 @@ def main() -> int:
     parser.add_argument("--lane", choices=("e69", "race", "work"), default="e69")
     parser.add_argument("--root", type=Path, default=Path("D:/Temp/adopt-e69"))
     parser.add_argument("--evidence", type=Path, default=None)
+    parser.add_argument("--hub-url", default=None, help="a Hub already running, instead of one here")
+    parser.add_argument("--key-file", type=Path, default=None, help="that Hub's pairing key")
     args = parser.parse_args()
     evidence = args.evidence or Path(
         os.environ.get("QMA_EVIDENCE_DIR", "D:/QMX-worktrees/qma-ship/build/evidence/adopt")
@@ -397,20 +421,26 @@ def main() -> int:
     root.mkdir(parents=True, exist_ok=True)
     lane = Lane(evidence, args.lane)
     try:
-        store_root = root / "hub-store"
-        store_root.mkdir(parents=True, exist_ok=True)
-        home = root / "hub-home"
-        home.mkdir(parents=True, exist_ok=True)
-        with Store.open(store_root, redactor=redact, name="server") as store:
-            hub = Hub(store, home=home)
-            server = serve(hub, host="127.0.0.1", port=0, key=KEY)
-            threading.Thread(target=server.serve_forever, daemon=True).start()
-            url = f"http://127.0.0.1:{server.server_address[1]}"
-            lane.say(f"the Hub serves {url}")
-            {"e69": lane_e69, "race": lane_race, "work": lane_work}[args.lane](
-                lane, root, url, hub
-            )
-            server.shutdown()
+        if args.hub_url is not None:
+            global KEY  # noqa: PLW0603 (the lane's own key, from the file it is told to read)
+            KEY = (args.key_file or root / "pairing-key").read_text(encoding="utf-8").strip()
+            lane.say(f"the Hub is a separate machine's process at {args.hub_url}")
+            LANES[args.lane](lane, root, args.hub_url.rstrip("/"))
+        else:
+            store_root = root / "hub-store"
+            store_root.mkdir(parents=True, exist_ok=True)
+            home = root / "hub-home"
+            home.mkdir(parents=True, exist_ok=True)
+            with Store.open(store_root, redactor=redact, name="server") as store:
+                hub = Hub(store, home=home)
+                server = serve(hub, host="127.0.0.1", port=0, key=KEY)
+                threading.Thread(target=server.serve_forever, daemon=True).start()
+                url = f"http://127.0.0.1:{server.server_address[1]}"
+                lane.say(f"the Hub serves {url} on this machine")
+                try:
+                    LANES[args.lane](lane, root, url)
+                finally:
+                    server.shutdown()
     finally:
         code = lane.done()
     return code
@@ -418,3 +448,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
