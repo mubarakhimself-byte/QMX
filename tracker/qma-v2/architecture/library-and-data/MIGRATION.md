@@ -8,6 +8,10 @@ Ground truth at `qma/hp17` (584a7f41) **[retrieved]**:
 
 Principle: backup first, dry-run, migrate into a distinct destination, verify, then cut over. Never mutate the only copy (DEC-0118 law, kept).
 
+## Data round order (2026-10-22, AD-26; `research/methodology/55-data-round-architecture.md` §10)
+
+Steps 0-4 and 6-8 below stand as written. Changes: the dual-run period of step 5 is cut to **one** comparison on his real home (the mirror has written every save since LIB1, so seven nightly diffs would only re-check the same rows; the comparison template `migrate/lib-dual-run-diff/` runs once by hand); step 6 also retires `artifacts.db` (imported in step 4), the engine's stand-alone fake (tests only) and QMB's registry projection, and replaces (does not mirror) the QMF registry room (OPEN-2 closed); step 8 (server primary) runs this week (ruling 121), with the Library service inside the server's one `qmx_host` process and a write outbox on the PC. Before step 0, the old 10 GB of ticks and the risk-lab CSVs are copied to the server with checksums (55 packet DR0).
+
 ## Step 0 — Freeze and snapshot
 
 1. Run `backup_weekly(dry_run=False)` once more so the last `library.db` snapshot exists.

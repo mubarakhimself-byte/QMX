@@ -1,5 +1,11 @@
 # Open decisions (what is still his; the design proceeds on the recommendation)
 
+## After the data round (2026-10-22, `research/methodology/55-data-round-architecture.md`)
+
+- **W4. Settled by his answers (rulings 120-134).** The data hold of rulings 91 and 111 is lifted: he answered the funnel's questions (Library as the one catalog, the server as the main copy this week, free sources first, OpenObserve's free tier) and gave no further data seeds. The architecture pass decided the rest without him (AD-67 to AD-70; Library AD-25 to AD-33; Lab AD-19, AD-20).
+- **W5. Still his, two small calls** (55 §12): open a cloud bucket for the off-server copy (recommend a Cloudflare R2 bucket, about $2-3 a month at today's sizes; money), and allow removing the old 10 GB from his C: drive once two checked copies exist (recommend yes; irreversible on his machine). Nothing else in the data round waits on him; packet DR0 copies to the server first, and the bucket joins when it exists.
+- **W3 applied.** The order-word matcher's call sites go (AD-59 amended: three call sites, not two), then the harness's own copy (HARNESS-REQUESTS H62).
+
 ## After review 48 (2026-10-18, `research/methodology/48-review-unlocked-and-folded.md`)
 
 - **W3. Settled 2026-10-18 by the planning lead from rulings 115-118 (not his call).** He ruled agents have no path to money and that money-safety machinery is over-engineering, then unlocked the whole app (118). So the old order-word money gate goes and the guard (AD-54) stays as ordinary hygiene: sign-ins, keys, QMX's own databases and destructive commands.

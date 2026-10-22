@@ -130,6 +130,15 @@ Code truth for every "today" below: `origin/engine/base` = `132169c7`, read with
 | H57 | The recursive-delete floor row covers what lies outside the run's zones or the chat's working folder or worktree; an Interactive chat asks him instead of refusing (engine AD-54) | `rm -rf dist` in his own project (M14) | the zone-only floor row | E56 |
 | H58 | The vendored order-word list runs over operation names at `qmx app check` and over a vetted external server's tool list (engine AD-54) | an order tool under a pack or an external server (M10) | the retired gate's name check | E61 |
 
+## M. Data round (2026-10-22, `research/methodology/55-data-round-architecture.md`)
+
+| Id | Change | Why | Replaces | Check |
+| --- | --- | --- | --- | --- |
+| H59 | The harness builds the domain context with the host's market-data door and the QMB backtest binding, and with the new Library store instead of `control.library` (`qma/harness/harness.py:403-404`) | the data and backtest tools return nothing today (file 50 §5); QMB is the tool that matters now (ruling 125) | `DomainContext(root=home.root)` with the old Library | a chat asks for EURUSD bars and gets them, refused for sealed months |
+| H60 | Every chat the harness launches gets `CLAUDE_CODE_ENABLE_TELEMETRY=1` and OTLP to the local collector in its environment; prompt text stays redacted (engine AD-69) | one source of events, two layers (ruling 126) | no telemetry | the collector receives a chat's `api_request` events |
+| H61 | The control door's bearer gate accepts an observer token that lists only `read` rows plus the diagnosis-note row (engine AD-69) | an outside agent looks and cannot change anything (file 54 default 1) | one full-control token | a manage row called with the observer token is refused |
+| H62 | H58 is withdrawn after DEL3: the order-word list in `qma/harness/money_words.py`, its use in MCP-server vetting (`tools.py:958`) and in the engine lint go (engine AD-59) | money-word matching is retired (rulings 116, 118; W3) | H58 | the harness and engine suites pass without the module |
+
 ## Probes named above
 
 | Probe | Gates | Pass |

@@ -1775,3 +1775,32 @@ runs.adopt(run_id)   # refused while the home heartbeat is fresh
 | E55 | AD-60, AD-51 | rewritten in §27.8 (declared Bash outside the overlay; crash retries in a new attempt) |
 | E60, E61, E63 | AD-62, AD-61, AD-64 | extended in §28.8 (CLI scheduling tools absent; order-shaped names refused; the chain runs with the PC asleep) |
 | P-PK, P-TG, P-SET, P-PERM, P-PL | AD-61, AD-35, AD-62, AD-60, AD-55 | exact lines in `HARNESS-REQUESTS.md` "Probes named above" |
+
+## 30. The data round (2026-10-22) [spine AD-67 to AD-70; AD-5, AD-18, AD-28, AD-30, AD-31, AD-59, AD-63, AD-65 amended; Library AD-25 to AD-33; Lab AD-19, AD-20]
+
+The full design, blast radius, scenario coverage, switch-on order and probes are in `research/methodology/55-data-round-architecture.md`. What the engine builders need from it:
+
+### 30.1 New templates
+
+| Template | Kind of run | Home | Notes |
+| --- | --- | --- | --- |
+| `feed` | script-first workflow; `monitor` node first | `contabo` by default | slots are the source definition (AD-68); one feed workflow per source |
+| `download-dukascopy`, `download-binance`, `download-ccxt`, `download-broker` | script-only, `lands_as: partitions` | `contabo`; `download-broker` with MT5 is `pc` | one claim per partition key; free-disk check before each write; card update at the end |
+| `extract-source` | script plus an optional agent step | `contabo` | Docling; per-page and per-second locators; feeds Hindsight through the index watcher |
+| `connections-health` | script-only, cron | each connection's home | walks the five states, renews OAuth tokens, writes heartbeat readings (AD-67) |
+| `backup-weekly` | script-only, cron | `pc` | replaces the control plane's maintenance loop (RUN1c, AD-57) |
+| `seal-roll` | script-only, monthly | `contabo` | moves the holdout boundary by the setting `historical_holdout_months`, journaled; earlier final looks stay recorded |
+
+### 30.2 Changes to built code (each an ordinary PR, one build and one check)
+
+- `qmx_engine/definition/registry.py:94`: `library` gains `available=True` (AD-5).
+- Run start resolves `@run` and `@library` references in `inputs` with `qmx_control/context.py` and records the pinned object ids on `run_created` (AD-63).
+- Node start claims the node's intent key when it declares one; release on landing or attempt end (Library AD-24, AD-30).
+- The runner sets each node's placement from `runs_on` and the heartbeat's partition summary (AD-70); the adapter workaround that reads `runs_on` goes.
+- Admission reads live free RAM and the measured session size from the heartbeat; the constants at `qmx_engine/settings.py:146-150` go (AD-30).
+- Each write point of spans, heartbeat rows, incidents and logs also hands the record to an in-process OpenTelemetry exporter (AD-69); the harness sets the CLI telemetry environment per chat (HARNESS-REQUESTS H60).
+
+### 30.3 Acceptance
+
+Each packet's journeys run on his real home and the real server (file 54 default 16); the live checks are named per packet in 55 §10.
+
