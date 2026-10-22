@@ -27,11 +27,13 @@ prunes them when released or expired, which the log can never do.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
 import sys
 import threading
+import time
 import unicodedata
 import uuid
 from collections import deque
@@ -72,6 +74,7 @@ from qmx_library.port import (
     normalised,
 )
 from qmx_library.principal import MAIN, Act, Principal, may_advance, own_ref, state_ref
+from qmx_library.status import QUARANTINE, BadLine, Damage, StoreState, TornTail, inspect_logs
 
 MANIFEST: Final = "qmx.library.object/1"
 CHECKOUT_FILE: Final = ".checkout.json"
@@ -80,6 +83,13 @@ TEXT_LIMIT: Final = 1_000_000
 CLAIMS: Final = "claims.json"
 CLAIM_KEY: Final = re.compile(r"[A-Za-z0-9_.:+-]{1,200}")
 """An intent key is a fingerprint; a path segment it must also be, so `/` is out."""
+RENAME_TRIES: Final = 8
+"""A rename Windows refuses because the target is open is retried this many times."""
+RENAME_WAIT_S: Final = 0.01
+"""The first wait between those tries; each doubles, so a held handle has about 1.3 s to close."""
+HELD_OPEN: Final = frozenset({5, 32})
+"""The two WinError codes for "held open": access denied and sharing violation."""
+log = logging.getLogger(__name__)
 
 
 class Redactor(Protocol):
@@ -159,6 +169,47 @@ def _lock(handle: IO[bytes]) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
+def _replace(temp: Path, path: Path) -> None:
+    """`os.replace`, retried while Windows reports the target held open (WinError 5 or 32).
+
+    The wait doubles from `RENAME_WAIT_S`, so a virus scanner or an indexer that holds the target
+    for a moment no longer loses the write. When the tries run out the refusal names the holder,
+    the file's own path, because nothing else can say who has it open.
+    """
+    for attempt in range(RENAME_TRIES):
+        try:
+            os.replace(temp, path)
+        except PermissionError as held:
+            winerror = getattr(held, "winerror", None)
+            if winerror not in HELD_OPEN or attempt == RENAME_TRIES - 1:
+                raise LibraryRefused(
+                    "storage_failure",
+                    f"{path.name} could not be replaced after {attempt + 1} tries; "
+                    f"a program holds it open ({held})",
+                ) from held
+            wait = RENAME_WAIT_S * 2**attempt
+            log.warning("retrying rename onto %s in %.2f s: %s", path.name, wait, held)
+            time.sleep(wait)
+        else:
+            _fsync_folder(path.parent)
+            return
+
+
+def _fsync_folder(folder: Path) -> None:
+    """Make a rename durable: the file was fsynced before it, and the folder entry after it.
+
+    Windows cannot open a folder as a handle from Python, and NTFS commits the directory entry
+    itself; on the other systems this is the fsync AD-16 asks for.
+    """
+    if sys.platform == "win32":
+        return
+    descriptor = os.open(folder, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _write_once(path: Path, data: bytes) -> None:
     if path.exists():
         if path.read_bytes() != data:
@@ -170,7 +221,7 @@ def _write_once(path: Path, data: bytes) -> None:
         handle.write(data)
         handle.flush()
         os.fsync(handle.fileno())
-    os.replace(temp, path)
+    _replace(temp, path)
 
 
 def _append(path: Path, record: Mapping[str, object]) -> None:
@@ -181,12 +232,53 @@ def _append(path: Path, record: Mapping[str, object]) -> None:
         os.fsync(handle.fileno())
 
 
+def _quarantine(root: Path, torn: TornTail) -> None:
+    """Keep a torn last line under `quarantine/`, then cut it out of its log (AD-16).
+
+    The quarantine copy is fsynced before the log is cut, so a power cut during the repair leaves
+    the line in both places, never in neither.
+    """
+    target = root / QUARANTINE / torn.log
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("ab") as handle:
+        handle.write(torn.tail + b"\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    with (root / torn.log).open("r+b") as handle:
+        handle.truncate(torn.start)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _state(root: Path, damage: Sequence[Damage]) -> StoreState:
+    """Quarantine every torn tail and say how the store opened."""
+    alarms: list[str] = []
+    incident: str | None = None
+    for found in damage:
+        if isinstance(found, TornTail):
+            _quarantine(root, found)
+            alarms.append(found.alarm)
+        elif incident is None:
+            incident = f"{found.log} line {found.line} does not parse"
+    return StoreState(
+        "read_only" if incident else ("torn" if alarms else "open"), tuple(alarms), incident
+    )
+
+
 def _lines(path: Path) -> Generator[dict[str, Any]]:
+    """Every record in an append-only log. A damaged line is skipped and never read as a record;
+    `Store.open` has already classified it in the store's `state`."""
     if path.exists():
         with path.open("rb") as handle:
             for line in handle:
-                if line.strip():
-                    yield cast(dict[str, Any], json.loads(line))
+                if not line.strip() or b"\x00" in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(record, dict):
+                    yield cast(dict[str, Any], record)
 
 
 class Store:
@@ -203,6 +295,7 @@ class Store:
         wall: Callable[[], datetime],
         role: StoreRole = "writer",
         upstream: BlobSource | None = None,
+        state: StoreState = StoreState(),
     ) -> None:
         self.root = root
         self.name = name
@@ -211,6 +304,7 @@ class Store:
         self.wall = wall
         self.role: StoreRole = role
         self.upstream = upstream
+        self.state = state
         self._handle = handle
         self._mutex = threading.RLock()
         self.catalog = Catalog(root / "catalog.db")
@@ -249,6 +343,13 @@ class Store:
             if not target.exists() or target.read_bytes() != schema.read_bytes():
                 shutil.copyfile(schema, target)
         try:
+            found = _state(root, inspect_logs(root))
+        except OSError as refused:
+            handle.close()
+            raise LibraryRefused(
+                "storage_failure", f"cannot repair the logs at {root}: {refused}"
+            ) from refused
+        try:
             return cls(
                 root,
                 handle,
@@ -257,6 +358,7 @@ class Store:
                 wall=wall or (lambda: datetime.now(UTC)),
                 role=role,
                 upstream=upstream,
+                state=found,
             )
         except BaseException:
             handle.close()
@@ -350,6 +452,7 @@ class Store:
         replaced_by: str | None = None,
         at: str | None = None,
     ) -> Commit:
+        self._refuse_read_only("a ref move")
         found = self.catalog.head(item, ref)
         prev = None if found is None else found[0]
         self._seq += 1
@@ -412,7 +515,16 @@ class Store:
         if not may_advance(who, ref, act, store=self.name):
             raise LibraryRefused("ref_not_owned", f"{who} may not {act} onto {ref}")
 
+    def _refuse_read_only(self, act: str) -> None:
+        """A store whose logs hold a line that cannot be repaired takes no write (AD-16)."""
+        if self.state.health == "read_only":
+            raise LibraryRefused(
+                "storage_failure",
+                f"this store opened read-only: {self.state.incident}; {act} waits for a restore",
+            )
+
     def _check_writer(self, act: str) -> None:
+        self._refuse_read_only(act)
         if self.role != "writer":
             raise LibraryRefused(
                 "read_only_replica", f"this store is a {self.role}; {act} goes to the primary"
@@ -1250,8 +1362,11 @@ class Store:
         path = self.claims_path
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}")
-        temp.write_text(json.dumps(claims, sort_keys=True), encoding="utf-8")
-        os.replace(temp, path)
+        with temp.open("w", encoding="utf-8") as handle:
+            handle.write(json.dumps(claims, sort_keys=True))
+            handle.flush()
+            os.fsync(handle.fileno())
+        _replace(temp, path)
 
     def purge(self, who: Principal, blob_id: str, reason: str) -> PurgeResult:
         """AD-6's one exception to archive-never-delete: the operator, for a blob holding a
