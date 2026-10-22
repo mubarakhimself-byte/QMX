@@ -59,7 +59,7 @@ _REPO = Path(__file__).resolve().parents[2]
 _QML_SRC = _REPO / "qml" / "src" / "qml"
 _QML_EXAMPLES = _REPO / "qml" / "examples"
 _QMB_SRC = _REPO / "qmb" / "src" / "qmb"
-_QMA_DAEMON_SRC = _REPO / "qmx-agents" / "packages" / "qma-daemon" / "src"
+_AGENT_PACKAGES = _REPO / "qmx-agents" / "packages"
 _CONTRACTS = _REPO / "docs" / "contracts"
 _SKIP_DIR_NAMES = {".git", "__pycache__", ".venv"}
 _MAX_READ_BYTES = 1 << 20  # 1 MiB
@@ -428,12 +428,12 @@ def test_library_whatif_and_door_do_not_import_qml_generation() -> None:
         (_QMB_SRC / "registryread" / "library.py", _QMB_SRC),
         (_QMB_SRC / "analysis", _QMB_SRC),
         (_QMB_SRC / "doors", _QMB_SRC),
-        (_QMA_DAEMON_SRC / "qma" / "daemon" / "backtest", _QMA_DAEMON_SRC),
-        (_QMA_DAEMON_SRC / "qma" / "daemon" / "experiments", _QMA_DAEMON_SRC),
+        (_AGENT_PACKAGES, _AGENT_PACKAGES),
     )
     hits: list[str] = []
     for surface, contain_within in surfaces:
         paths = [surface] if surface.is_file() else _iter_py(surface)
+        assert paths, f"{surface} has no Python to read"
         for path in paths:
             text = _read_contained(path, contain_within=contain_within)
             if "qml.generation" in text or "from qml.generation" in text:

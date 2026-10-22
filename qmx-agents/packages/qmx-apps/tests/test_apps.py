@@ -15,7 +15,7 @@ import pytest
 
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition
-from qmx_apps.supervisor import Supervisor
+from qmx_apps.supervisor import Supervisor, refuse_tool
 from qmx_apps.volume import Volume
 
 EXAMPLES = Path(__file__).resolve().parents[4] / "examples/apps"
@@ -424,3 +424,20 @@ def test_producer_to_consumer_artifact_and_screen_state(supervisor: Supervisor) 
             Definition.load(EXAMPLES / "exchange-status"), "snapshot", {"observations": "bad"}
         )
     assert caught.value.code == "invalid_output"
+
+
+def test_a_listed_tool_is_refused_for_a_parent_surface_or_record_family_and_not_for_money_words() -> (
+    None
+):
+    refuse_tool("place_order", {"name": "place_order", "money_path": True})
+    refuse_tool("score", {"_meta": {"parent_library": "qmf-risk", "parent_surface": "value_type"}})
+    with pytest.raises(AppError) as surface:
+        refuse_tool("write_risk", {"_meta": {"parent_library": "qmf-risk", "parent_surface": "write"}})
+    with pytest.raises(AppError) as record:
+        refuse_tool("bind", {"annotations": {"tool": {"record_family": "binding"}}})
+    assert (surface.value.code, str(surface.value), surface.value.status) == (
+        "tool_refused",
+        "Parent surface refused: write_risk",
+        403,
+    )
+    assert str(record.value) == "Parent record mutation refused: bind"

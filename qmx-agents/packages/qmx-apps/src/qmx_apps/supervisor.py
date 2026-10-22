@@ -27,7 +27,6 @@ import psutil
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from pydantic import JsonValue
-from qma.core.barriers.descriptors import check_descriptor
 
 from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
 from qmx_apps.backup import checksum, snapshot
@@ -40,6 +39,38 @@ from qmx_apps.windows_job import WindowsJob
 
 T = TypeVar("T")
 type EventSink = Callable[[str, Document], None]
+
+PARENT_SURFACES: Final = frozenset(
+    {
+        ("qmf-registry", "value_type"),
+        ("qmf-registry", "typed_refusal"),
+        ("qmf-registry", "pure_calculation"),
+        ("qmf-registry", "dev_zone_candidate_write"),
+        ("qmf-risk", "value_type"),
+        ("qmf-risk", "typed_refusal"),
+        ("qmf-risk", "pure_calculation"),
+    }
+)
+"""The parent-library surfaces a pack's tool may name (AD-2); every other pair is refused."""
+
+
+def refuse_tool(name: str, tool: Document) -> None:
+    """Refuse a listed tool whose metadata names a parent surface off `PARENT_SURFACES` or any
+    parent `record_family`. The app manifest cannot declare either, so the tool's own metadata
+    is where a pack would claim one."""
+    sources: list[Document] = [tool]
+    while sources:
+        source = sources.pop()
+        for key in ("mcp", "tool", "annotations", "_meta"):
+            nested = source.get(key)
+            if isinstance(nested, dict):
+                sources.append(nested)
+        if "parent_library" in source:
+            surface = (str(source["parent_library"]), str(source.get("parent_surface", "")))
+            if surface not in PARENT_SURFACES:
+                raise AppError("tool_refused", f"Parent surface refused: {name}", 403)
+        if source.get("record_family") is not None:
+            raise AppError("tool_refused", f"Parent record mutation refused: {name}", 403)
 
 
 def _snapshot_files(root: Path) -> list[Path]:
@@ -633,7 +664,7 @@ class Supervisor:
                     for tool in await client.list_tools()
                 ]
                 for tool in instance.tools:
-                    check_descriptor(str(tool["name"]), tool)
+                    refuse_tool(str(tool["name"]), tool)
                 instance.resources = [
                     cast(Document, resource.model_dump(mode="json", by_alias=True))
                     for resource in await client.list_resources()
@@ -842,7 +873,7 @@ class Supervisor:
             resolved = next((item for item in instance.tools if item["name"] == tool), None)
             if resolved is None:
                 raise AppError("tool_not_found", "Tool is not in the connected MCP catalog.", 404)
-            check_descriptor(tool, resolved)
+            refuse_tool(tool, resolved)
             inputs = dict(arguments)
             for feed in instance.definition.manifest.feeds:
                 if feed in inputs:

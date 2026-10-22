@@ -679,9 +679,6 @@ def test_qmb_qml_and_qma_do_not_import_qmf_venue() -> None:
     roots = (
         _WORKSPACE / "qmb" / "src",
         _WORKSPACE / "qml" / "src",
-        _WORKSPACE / "qmx-agents" / "packages" / "qma-core" / "src",
-        _WORKSPACE / "qmx-agents" / "packages" / "qma-daemon" / "src",
-        _WORKSPACE / "qmx-agents" / "packages" / "qma-wire" / "src",
         _WORKSPACE / "qmn" / "src" / "qmn",
     )
     violations: list[str] = []

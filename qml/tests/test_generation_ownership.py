@@ -271,7 +271,7 @@ def test_qmb_has_no_generator_module() -> None:
 
 
 def test_qma_does_not_assemble_ct33() -> None:
-    qma_src = _REPO / "qmx-agents" / "packages" / "qma-core" / "src"
+    agent_packages = _REPO / "qmx-agents" / "packages"
     forbidden = (
         "mint_bot_definition",
         "mint_confluence",
@@ -279,7 +279,9 @@ def test_qma_does_not_assemble_ct33() -> None:
         "author_new_structure",
     )
     hits: list[str] = []
-    for path in qma_src.rglob("*.py"):
+    paths = sorted(agent_packages.rglob("*.py"))
+    assert paths
+    for path in paths:
         text = path.read_text(encoding="utf-8")
         for token in forbidden:
             if token in text:
