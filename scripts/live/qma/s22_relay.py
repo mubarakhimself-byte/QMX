@@ -51,8 +51,8 @@ def message(model: str) -> dict[str, Any]:
 
 async def run(log: Log) -> None:
     from qma.harness.launch import TestMode  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName, parse_profiles  # noqa: PLC0415
-    from qma.harness.relay import Relay  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName, parse_profiles  # noqa: PLC0415
+    from qmx_router.relay import Relay  # noqa: PLC0415
 
     script = [
         Turn([text("hi")]),

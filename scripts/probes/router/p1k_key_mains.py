@@ -58,7 +58,7 @@ def openrouter_row_model() -> str:
 
 
 def openrouter_key() -> str:
-    from qma.harness.relay import keyring_secret  # noqa: PLC0415
+    from qmx_router.relay import keyring_secret  # noqa: PLC0415
 
     return keyring_secret(OPENROUTER_REF)
 

@@ -53,7 +53,7 @@ def main() -> int:
     args = parser.parse_args()
     token = keyring.get_password("qmx/control-token", "control-token")
     if token is None:
-        print("BLOCKED no qmx/control-token in the keyring; start qma.serve once")
+        print("BLOCKED no qmx/control-token in the keyring; start qmx_host once")
         return 3
     if args.method == "turn":
         return turn(args, {"Authorization": f"Bearer {token}"})

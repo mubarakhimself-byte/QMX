@@ -1,4 +1,4 @@
-"""S19, host half. Start `qma.serve` with a polluted parent environment and read
+"""S19, host half. Start `qmx_host` with a polluted parent environment and read
 `/api/doctor`. PASS when every planted name is listed as removed with no value anywhere in the
 reply, and the Git Bash path the parent chose is kept.
 
@@ -53,7 +53,7 @@ def main() -> int:
     env = dict(os.environ) | PLANTED | {"CLAUDE_CODE_GIT_BASH_PATH": GIT_BASH}
     env |= {"HOME": str(FAKE_HOME), "USERPROFILE": str(FAKE_HOME)}
     log(f"planted names: {sorted(PLANTED)} and CLAUDE_CODE_GIT_BASH_PATH={GIT_BASH}")
-    command = [sys.executable, "-m", "qma.serve", "serve", "--home", str(args.home)]
+    command = [sys.executable, "-m", "qmx_host", "serve", "--home", str(args.home)]
     host = subprocess.Popen([*command, "--port", str(args.port)], env=env)
     try:
         token = keyring.get_password("qmx/control-token", "control-token")

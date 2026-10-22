@@ -76,7 +76,7 @@ def refuse_page(url: str) -> None:
 
 
 def capture_probe_grants() -> list[Any]:
-    from qma.harness.relay import Relay  # noqa: PLC0415
+    from qmx_router.relay import Relay  # noqa: PLC0415
 
     minted: list[Any] = []
     original = Relay.probe_grant
@@ -126,9 +126,9 @@ async def run(args: argparse.Namespace) -> int:
     )
     from qma.harness.harness import open_gpt_lane  # noqa: PLC0415
     from qma.harness.launch import Background  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName  # noqa: PLC0415
-    from qma.harness.relay import GrantRefused  # noqa: PLC0415
     from qma.harness.routes import control_service  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName  # noqa: PLC0415
+    from qmx_router.relay import GrantRefused  # noqa: PLC0415
 
     p = args.prefix
     home = QmxHome(args.home)
@@ -354,7 +354,7 @@ async def run(args: argparse.Namespace) -> int:
 
 
 async def console_lane(harness: Any, home: Any, control: Any, args: argparse.Namespace) -> int:
-    """Serve this process's harness on `PORT`, as `qma.serve` would, and run console lane 10
+    """Serve this process's harness on `PORT`, as `qmx_host` would, and run console lane 10
     against it. One host, one ChatGPT sign-in: a second process would have to refresh the
     token, which OpenAI allows only near the end of the token's hour."""
     import contextlib  # noqa: PLC0415

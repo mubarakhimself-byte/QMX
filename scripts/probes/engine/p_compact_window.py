@@ -34,7 +34,7 @@ async def main() -> int:
     from fake_model import FakeModel, Turn, text, tool_use  # noqa: PLC0415
     from qma.harness import TestMode  # noqa: PLC0415
     from qma.harness.launch import Background, verbatim  # noqa: PLC0415
-    from qma.harness.profiles import parse_profiles  # noqa: PLC0415
+    from qmx_router.profiles import parse_profiles  # noqa: PLC0415
 
     say = log("ep0-compact")
     boot()

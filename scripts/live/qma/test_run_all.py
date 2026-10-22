@@ -75,7 +75,7 @@ def test_without_a_login_only_fake_model_checks_run() -> None:
     reasons = run_all.skip_reasons(run_all.CHECKS, gpt_parked=False, no_login=True, skip=[])
     run = [found.label for found in run_all.CHECKS if found.label not in reasons]
     assert reasons["S8 rows"] == "needs the OpenRouter key"
-    assert reasons["S20 settings"] == "needs a running qma.serve host, this PC's keyring"
+    assert reasons["S20 settings"] == "needs a running qmx_host host, this PC's keyring"
     assert run == [
         "S5", "E56 fake", "E56 delete", "S6a", "S6a agent", "S6b", "S9", "S11 nested", "S11 background", "S11 model", "S11 tools",
         "S11 subagent", "S11 full", "S11 allowlist", "S11 unattended", "S12 bash", "S15 wire",

@@ -2,7 +2,7 @@
 
 `Host` serves the qmx-control app with the harness routes on a free loopback port, in this
 process and on the harness's event loop, behind a throwaway bearer that is never stored. Checks
-that need `TestMode` or the fake model cannot use `qma.serve`, so they answer asks through this
+that need `TestMode` or the fake model cannot use `qmx_host`, so they answer asks through this
 host's `POST /api/approvals/{ask_id}` and read blocks from its `GET /api/events/sessions` stream.
 
 `Answerer` watches one chat's blocks and answers each new ask through the route with whatever

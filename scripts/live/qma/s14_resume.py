@@ -1,4 +1,4 @@
-"""S14, restart and resume, against `qma.serve` in its own process, killed hard between runs.
+"""S14, restart and resume, against `qmx_host` in its own process, killed hard between runs.
 
     s14_resume.py clean       a turn, kill the host, restart, ask a recall question
     s14_resume.py midturn     kill the host mid-turn; restart; the chat shows the unknown
@@ -35,7 +35,7 @@ RECALL = "What was the codeword? Reply with the codeword only."
 
 
 class Host:
-    """`python -m qma.serve serve` on its own port, killed hard on `kill`."""
+    """`python -m qmx_host serve` on its own port, killed hard on `kill`."""
 
     def __init__(self, home: Path, port: int, log: Log) -> None:
         self.home, self.port, self.log = home, port, log
@@ -48,7 +48,7 @@ class Host:
         )
 
     def start(self) -> None:
-        command = [sys.executable, "-m", "qma.serve", "serve", "--home", str(self.home)]
+        command = [sys.executable, "-m", "qmx_host", "serve", "--home", str(self.home)]
         self.process = subprocess.Popen(
             [*command, "--port", str(self.port)],
             stdout=subprocess.DEVNULL,

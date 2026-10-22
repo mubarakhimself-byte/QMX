@@ -309,8 +309,8 @@ async def first_event(options: Any) -> float:
 async def perf(log: Log, args: argparse.Namespace) -> None:
     from claude_agent_sdk import ClaudeAgentOptions  # noqa: PLC0415
     from qma.harness.home import SessionId  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName, parse_profiles  # noqa: PLC0415
-    from qma.harness.relay import Relay, keyring_secret  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName, parse_profiles  # noqa: PLC0415
+    from qmx_router.relay import Relay, keyring_secret  # noqa: PLC0415
 
     secret = openrouter_key()
     if secret is None:
