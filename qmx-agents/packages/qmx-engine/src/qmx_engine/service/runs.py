@@ -13,6 +13,10 @@ cancels every child run under it (AD-5, B-66).
 The merged read (`merged`, `card`, `spans_of`) answers for every owned instance: this home's rows
 come from its ledger, a reachable node's come back through `forward`, and each row names its
 `home_engine` (AD-21, AD-65). Nothing is copied.
+
+`adopt` is the one way a run changes home (AD-7, ruling 117): the Hub grants the claim
+`adopt:<run_id>` and hands back the mirrored journal, the run's bundle is written here, the
+journal is seeded into this home's ledger, and the run resumes.
 """
 
 from __future__ import annotations
@@ -27,6 +31,7 @@ from pydantic import JsonValue
 from qmx_engine.core.replay import idempotency_key
 from qmx_engine.core.state import Slot
 from qmx_engine.definition.validate import checked
+from qmx_engine.ledger import mirror
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
 from qmx_engine.ports.library import (
@@ -467,6 +472,46 @@ class Runs:
     def get(self, run_id: str) -> RunView:
         [view] = self.views([run_id])
         return view
+
+    async def adopt(self, run_id: str, *, caller: Caller) -> RunView:
+        """Take over a run whose home died (AD-7, ruling 117).
+
+        Four steps, each of which can refuse: the Hub grants the claim `adopt:<run_id>` and hands
+        back the mirrored journal, this home writes the run's bundle where its own run would keep
+        it, the journal is seeded into a new ledger, and the run resumes. Nothing of the old
+        home's zone travels, so a node that committed files there keeps no ending and runs again.
+        """
+        if caller.kind == "workflow":
+            raise Refused("adopt_refused", "a run does not adopt another run")
+        if self.ctx.engine.exists(run_id):
+            raise Refused("already_here", f"run {run_id} is already this home's")
+        journals = mirror.attached()
+        if journals is None:
+            raise Refused("no_hub", f"no Hub is configured, so {run_id} has no journal to adopt")
+        try:
+            journal = journals.adopt(run_id)
+        except mirror.MirrorRefused as refused:
+            raise Refused(refused.code, str(refused)) from refused
+        root = self.ctx.home / "engine" / "runs" / run_id / "workflow"
+        journal.bundle.write(root)
+        found = checked(root)
+        if isinstance(found, list):
+            codes = " ".join(sorted({p.code for p in found}))
+            raise Refused("not_runnable", f"the adopted run's definition does not run: {codes}")
+        seed = mirror.seedable(journal, root)
+        if not seed or seed[0].kind != "run_created":
+            raise Refused("bad_journal", f"the mirrored journal of {run_id} has no run_created")
+        for event in seed:
+            self.ctx.engine.ledger.append(run_id, event.kind, event.data, at=event.at)
+        self.ctx.engine.ledger.append(
+            run_id,
+            "run_resumed",
+            {"reason": "adopted", "from": journal.home, "to": journals.home, "events": len(seed)},
+            at=self.ctx.at(),
+        )
+        outcome = await self.ctx.engine.resume(run_id, reason="adopted")
+        summarize_again(self.ctx, outcome)
+        return self.get(run_id)
 
     def views(self, run_ids: list[str]) -> list[RunView]:
         """Each run's view, its status folded from its events now, all read through one reader."""

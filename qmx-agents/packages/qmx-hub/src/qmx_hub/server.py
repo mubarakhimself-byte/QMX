@@ -14,6 +14,13 @@ object's kind, fields and the principal that placed it (AD-64).
 `autonomy_paused` flag and how many claims the batch renewed (AD-65): the Hub is the one place the
 pause switch's current word is written, and the PC's row is what writes it.
 
+The Hub also keeps the mirrored journals (AD-7, ruling 117): one run's events and its definition
+bundle, beside the link they came from, and one adoption record per run. That is what lets another
+machine adopt a run whose home died: `journal_put` is the mirror, `journal_adopt` is the one
+compare-and-swap on `adopt:<run_id>`, and it is refused while the run's home still beats. The
+journals live under the Hub's own home, not in the Library store: they are per-run replication
+traffic, never content, and no bucket or ref holds them.
+
 The Hub monitors itself (AD-11): `hub/health` writes one `test-report` object on `refs/hub/health`
 with its ref count, claim count and store size, and the PC's doctor reads it.
 """
@@ -36,8 +43,9 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from pydantic import JsonValue
-from qmx_engine.heartbeat import WINDOW_DAYS, Heartbeat, HeartbeatLog
+from qmx_engine.heartbeat import WINDOW_DAYS, Heartbeat, HeartbeatLog, latest
 from qmx_engine.ledger import redact
+from qmx_engine.ledger.mirror import FRESH_S
 from qmx_library.client import draft_from_payload
 from qmx_library.port import (
     Claim,
@@ -61,6 +69,10 @@ ALLOWED: Final = frozenset({"operator", "hub", "migrator", "agent", "run", "engi
 HEARTBEAT_ROUTE: Final = "/v1/heartbeat"
 AUTONOMY: Final = "autonomy.json"
 """The one pause flag, written by the PC's heartbeat and read by every host (AD-65)."""
+JOURNALS: Final = "journals"
+"""One mirrored journal per run, named by its run id (AD-7, ruling 117)."""
+ADOPTIONS: Final = "adoptions"
+"""One adoption record per run: `{from, to, at}`. The claim beside it is the arbitration."""
 SOURCE_HOST: Final = "pc"
 """The host whose `paused` writes the Hub's flag: the operator's own machine."""
 CLAIM_TTL_S: Final = 900
@@ -150,6 +162,96 @@ class Hub:
 
     def _autonomy_path(self) -> Path | None:
         return None if self.home is None else self.home / AUTONOMY
+
+    def _home_dir(self, name: str) -> Path:
+        if self.home is None:
+            raise LibraryRefused("no_home", f"this Hub keeps no home for {name}")
+        found = self.home / name
+        found.mkdir(parents=True, exist_ok=True)
+        return found
+
+    def _kept(self, name: str, run_id: str) -> Path | None:
+        """One record under the Hub's home, or None when the Hub has no home or no record."""
+        if self.home is None:
+            return None
+        found = self.home / name / f"{run_id}.json"
+        return found if found.is_file() else None
+
+    def journal(self, run_id: str) -> dict[str, Any] | None:
+        """The run's mirrored journal as its home last pushed it."""
+        path = self._kept(JOURNALS, run_id)
+        return None if path is None else cast(dict[str, Any], json.loads(path.read_text("utf-8")))
+
+    def adoption_of(self, run_id: str) -> dict[str, Any] | None:
+        """The record of the home that adopted the run, if one did."""
+        path = self._kept(ADOPTIONS, run_id)
+        return None if path is None else cast(dict[str, Any], json.loads(path.read_text("utf-8")))
+
+    def put_journal(self, payload: Mapping[str, JsonValue], *, at: str) -> int:
+        """Keep one run's mirrored journal. The home that adopted a run is its only writer."""
+        journal = dict(payload)
+        run_id, home = str(journal.get("run_id") or ""), str(journal.get("home") or "")
+        if not run_id or not home:
+            raise LibraryRefused("bad_journal", "a journal needs a run id and its home")
+        adopted = self.adoption_of(run_id)
+        if adopted is not None and str(adopted.get("to")) != home:
+            raise LibraryRefused(
+                "journal_moved", f"{run_id} was adopted by {adopted.get('to')}, not {home}"
+            )
+        journal["at"] = at
+        events = journal.get("events")
+        found = len(events) if isinstance(events, list) else 0
+        self._home_dir(JOURNALS).joinpath(f"{run_id}.json").write_text(
+            json.dumps(journal, sort_keys=True), encoding="utf-8"
+        )
+        return found
+
+    def beat_age(self, host: str, *, at: datetime) -> float | None:
+        """How many seconds since `host` last beat, or None when it never did."""
+        if self.home is None:
+            return None
+        row = latest(self.home).get(f"host:{host}")
+        if row is None:
+            return None
+        seen = datetime.fromisoformat(row.at)
+        if seen.tzinfo is None:
+            seen = seen.replace(tzinfo=UTC)
+        return (at - seen).total_seconds()
+
+    def adopt(self, run_id: str, home: str, ttl: int, *, at: datetime) -> dict[str, Any]:
+        """Grant one home the run's journal, or refuse with the reason (Library AD-24, AD-7).
+
+        Three refusals, in the order that keeps them honest: no journal to adopt, a home whose
+        heartbeat is still fresh, and a claim another home already holds. The claim is the
+        compare-and-swap, so two machines asking at once produce exactly one winner.
+        """
+        journal = self.journal(run_id)
+        if journal is None:
+            raise LibraryRefused("no_journal", f"the Hub holds no journal for {run_id}")
+        source = str(journal.get("home") or "")
+        age = self.beat_age(source, at=at)
+        if age is not None and age < FRESH_S:
+            raise LibraryRefused(
+                "home_fresh", f"{source}'s heartbeat is {age:.0f} s old, inside {FRESH_S:.0f} s"
+            )
+        claim = self.store.claim(self.store.engine, f"adopt:{run_id}", home, max(ttl, 1))
+        if not claim.granted:
+            raise LibraryRefused("claim_held", f"{claim.run_id} already holds adopt:{run_id}")
+        adopted = self.adoption_of(run_id)
+        if adopted is not None and str(adopted.get("to")) != home:
+            raise LibraryRefused(
+                "claimed_elsewhere", f"{run_id} was already adopted by {adopted.get('to')}"
+            )
+        record: dict[str, Any] = {
+            "run_id": run_id,
+            "from": source,
+            "to": home,
+            "at": at.isoformat(),
+        }
+        (self._home_dir(ADOPTIONS) / f"{run_id}.json").write_text(
+            json.dumps(record, sort_keys=True), encoding="utf-8"
+        )
+        return journal | record
 
     def op(self, verb: str, who: Principal, args: Mapping[str, JsonValue]) -> JsonValue:
         match verb:
@@ -275,6 +377,23 @@ class Hub:
                         limit=int(str(args.get("limit") or 500)),
                     ),
                 )
+            case "journal_put":
+                at = str(args.get("at") or datetime.now(UTC).isoformat())
+                return self.put_journal(
+                    cast(Mapping[str, JsonValue], args.get("journal") or {}), at=at
+                )
+            case "journal_get":
+                return cast(JsonValue, self.journal(str(args["run_id"])))
+            case "adoption_of":
+                return cast(JsonValue, self.adoption_of(str(args["run_id"])))
+            case "journal_adopt":
+                granted = self.adopt(
+                    str(args["run_id"]),
+                    str(args["home"]),
+                    int(str(args.get("ttl") or 900)),
+                    at=datetime.now(UTC),
+                )
+                return cast(JsonValue, granted)
             case "autonomy":
                 return self.set_paused(
                     bool(args.get("paused")),

@@ -93,8 +93,10 @@ from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.model import Node, Workflow, dropped, edges
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked
+from qmx_engine.ledger import mirror
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
 from qmx_engine.ledger.inbox_table import InboxTable
+from qmx_engine.ledger.mirror import MirrorRefused, journal_of
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.agent import Agent
@@ -115,6 +117,7 @@ from qmx_engine.nodes.wait import resume_at, utc, utc_text
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action as Answer
 from qmx_engine.ports.inbox import InboxPort, Item, Raise, answered, raised_by
+from qmx_engine.ports.library import Bundle
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import EFFORTS, order, resolve
@@ -361,7 +364,15 @@ class Engine:
     ) -> Outcome:
         """`reason` is what `run_resumed` records when nothing was left in flight. The ticker
         passes `wake` with the instant `woke` it woke the run at; a run a usage limit paused then
-        records `limit`."""
+        records `limit`.
+
+        A run another home adopted is marked `moved` here and refused, at start and before any
+        resume, so this copy never runs again (AD-7, ruling 117).
+        """
+        adopter = self.moved(run_id)
+        if adopter is not None:
+            self.abandon(run_id, adopter)
+            raise Refused(f"run {run_id} moved to {adopter}")
         events, root, workflow = self.load(run_id)
         created = events[0].data
         mode: Mode = "live" if created.get("mode") == "live" else "test"
@@ -410,6 +421,51 @@ class Engine:
             return Outcome(run_id, "passed", None, sinks, fingerprint(sinks))
         status: Status = "stopped" if state.ended == "stopped" else "failed"
         return Outcome(run_id, status, f"the child already ended {state.ended}")
+
+    def moved(self, run_id: str) -> str | None:
+        """The home that adopted this run, when it is not this one (AD-7).
+
+        The Hub is the one place an adoption is recorded, so this is the same answer every home
+        gets. An unreachable Hub answers nothing: a run is never marked moved on a guess.
+        """
+        journals = mirror.attached()
+        if journals is None:
+            return None
+        try:
+            found = journals.adoption(run_id)
+        except OSError, MirrorRefused, ValueError:
+            return None
+        return None if found is None or found == journals.home else found
+
+    def abandon(self, run_id: str, adopter: str) -> None:
+        """Mark this home's copy `moved`, once: it ends `stopped` and never resumes (AD-7)."""
+        if not self.exists(run_id):
+            return
+        with Reader.open(self.home) as reader:
+            events = reader.events(run_id)
+        if any(e.kind == "run_cancelled" and e.data.get("reason") == "moved" for e in events):
+            return
+        self.ledger.append(
+            run_id,
+            "run_cancelled",
+            {"reason": "moved", "to": adopter},
+            at=utc_text(self.wall()),
+        )
+
+    def mirror(self, run: Run) -> None:
+        """Push the run's journal to the Hub at a node's end (AD-7, ruling 117).
+
+        Best effort by design: a Hub that is absent or unreachable is counted on the journals
+        object and never raised into the run, because a run does not stop because its mirror did.
+        """
+        journals = mirror.attached()
+        bundle = run.journal_bundle
+        if journals is None or bundle is None:
+            return
+        try:
+            journals.push(journal_of(run.events, bundle=bundle, home=journals.home, at=run.now))
+        except OSError, MirrorRefused, ValueError:
+            return
 
     def wake_parent(self, parent_run_id: str, child_run_id: str) -> None:
         """Resume a parent that is not driven here and whose node still waits on this child, now
@@ -514,7 +570,18 @@ class Run:
         self.woke: str | None = None
         """The reset the ticker last woke this run at."""
         self.zone = RunZone.of(engine.home, run_id)
+        self._bundle: Bundle | None = None
         self.executors = self.build_executors()
+
+    @property
+    def journal_bundle(self) -> Bundle | None:
+        """The run's definition bundle as the mirror sends it: read once, immutable per run."""
+        if self._bundle is None:
+            try:
+                self._bundle = Bundle.read(self.root)
+            except OSError, ValueError:
+                return None
+        return self._bundle
 
     def build_executors(self) -> dict[str, AnyExecutor]:
         max_depth = self.settings.get("subworkflow.max_depth")
@@ -656,6 +723,8 @@ class Run:
             if kind == "node_started":
                 self.started.add(key)
         self.write(kind, data)
+        if kind == "node_finished":
+            self.engine.mirror(self)
 
     def create(self, inputs: JsonValue) -> None:
         self.ticked = self.engine.wall()
