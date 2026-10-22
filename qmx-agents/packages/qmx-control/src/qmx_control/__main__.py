@@ -1,12 +1,9 @@
-"""`python -m qmx_control weekly-backup` runs the backup. Every other command forwards to
-`qmx_host` for one release (AD-52), then goes (DEL2)."""
+"""`python -m qmx_control weekly-backup` runs the backup. The host is `python -m qmx_host`."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import runpy
-import sys
 from pathlib import Path
 
 from qmx_control.server import default_home
@@ -14,9 +11,6 @@ from qmx_control.service import ControlService
 
 
 def main() -> int:
-    if sys.argv[1:2] != ["weekly-backup"]:
-        runpy.run_module("qmx_host", run_name="__main__", alter_sys=True)
-        return 0
     parser = argparse.ArgumentParser(prog="qmx-control")
     parser.add_argument("command", choices=["weekly-backup"])
     parser.add_argument(
