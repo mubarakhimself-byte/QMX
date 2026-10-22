@@ -180,7 +180,7 @@ def _runtime_closure(destination: Path, wheelhouse: Path, root_lock: str, nested
 
 
 def build(destination: Path, *, runtime_wheelhouse: Path | None = None) -> None:
-    """Build both workspaces, locked runtime dependencies and mandatory packs."""
+    """Build both workspaces and their locked runtime dependencies."""
     uv = shutil.which("uv")
     git = shutil.which("git")
     if uv is None or git is None:
@@ -263,17 +263,6 @@ def build(destination: Path, *, runtime_wheelhouse: Path | None = None) -> None:
             )
             archive(source / "qmn/deploy", destination / "qmn-deploy.tar.gz")
             build_ui(destination, candidate, source)
-            packs = source / "qmx-agents/packages/qma-daemon/src/qma/daemon/bundled_packs"
-            if not packs.is_dir():
-                raise RuntimeError("Installed mandatory pack resources have not been repaired")
-            pack_inventory = {
-                path.relative_to(packs).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in sorted(packs.rglob("*"))
-                if path.is_file() and "__pycache__" not in path.parts
-            }
-            (destination / "pack-resources.json").write_text(
-                json.dumps(pack_inventory, indent=2) + "\n"
-            )
         finally:
             run([git, "worktree", "remove", "--force", str(source)])
     artifacts = {

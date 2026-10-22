@@ -7,14 +7,8 @@ description = "Shared QMX agent workspace"
 requires-python = ">=3.14,<3.15"
 dependencies = []
 
-[tool.uv]
-# `qma-runtime` installs the daemon member (and transitively qmf-data engines
-# duckdb/pyarrow + tzdata) so a plain `uv sync` can import `qmf.data` under
-# `poe test` without an explicit `--all-packages`.
-default-groups = ["dev", "qma-runtime"]
-
 [tool.uv.workspace]
-members = ["packages/qma-core", "packages/qma-wire", "packages/qma-daemon", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub"]
+members = ["packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub"]
 
 [tool.uv.sources]
 qmx-tools = { workspace = true }
@@ -23,9 +17,6 @@ qmx-remote = { workspace = true }
 qmx-apps = { workspace = true }
 qmx-control = { workspace = true }
 qmx-ledger = { workspace = true }
-qma-core = { workspace = true }
-qma-wire = { workspace = true }
-qma-daemon = { workspace = true }
 qma-harness = { workspace = true }
 qmx-engine = { workspace = true }
 qmx-host = { workspace = true }
@@ -34,8 +25,6 @@ qmx-router = { workspace = true }
 qmx-memory = { workspace = true }
 qmx-hub = { workspace = true }
 # Parent QMF roster packages — path edges into the enclosing QMX workspace.
-# Daemon may declare qmf-registry / qmf-data / qmf-risk (read-and-calculate);
-# qmf-venue stays undeclared and import-banned (DEC-0347).
 qmf-core = { workspace = ".." }
 qmf-registry = { workspace = ".." }
 qmf-data = { workspace = ".." }
@@ -65,18 +54,12 @@ dev = [
     "beautifulsoup4==4.15.0",
     "markdownify==1.2.3",
 ]
-# Pulls qma-daemon (and its qmf-data/registry/risk path edges) into the gate
-# environment so store engines are present at import/test time.
-qma-runtime = ["qma-daemon", "qmx-control"]
 
 [tool.pytest.ini_options]
 addopts = "-n auto --dist worksteal --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control --ignore=packages/qmx-ledger --ignore=packages/qma-harness --ignore=packages/qmx-engine --ignore=packages/qmx-host --ignore=packages/qmx-library --ignore=packages/qmx-router --ignore=packages/qmx-memory --ignore=packages/qmx-hub"
 markers = ["serial: requires exclusive access to shared resources"]
-testpaths = ["packages", "tests"]
+testpaths = ["packages"]
 pythonpath = [
-    "packages/qma-core/src",
-    "packages/qma-wire/src",
-    "packages/qma-daemon/src",
     "../packages/qmf-core/src",
     "../packages/qmf-data/src",
     "../packages/qmf-registry/src",
@@ -107,18 +90,13 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "packages/*/tests/*" = ["S101", "S105", "S106", "S107", "PLC0415"]
-"tests/*" = ["S101", "S105", "S106", "S107", "PLC0415"]
 "packages/*/examples/*" = ["S101"]
 "examples/*" = ["S101"]
-"plugins/**" = ["S101"]
 
 [tool.pyright]
-include = ["packages", "tests", "examples", "plugins"]
+include = ["packages", "examples"]
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub"]
 extraPaths = [
-    "packages/qma-core/src",
-    "packages/qma-wire/src",
-    "packages/qma-daemon/src",
     "../packages/qmf-core/src",
     "../packages/qmf-data/src",
     "../packages/qmf-registry/src",
@@ -133,21 +111,14 @@ pythonVersion = "3.14"
 pythonPlatform = "Windows"
 
 [tool.poe.tasks]
-fmt = "ruff format packages tests examples plugins"
-fmt-check = "ruff format --check packages tests examples plugins"
-lint = "ruff check packages tests examples plugins"
+fmt = "ruff format packages examples"
+fmt-check = "ruff format --check packages examples"
+lint = "ruff check packages examples"
 # python -m: direct `pyright` console script can be blocked by host App Control.
 # `poe.exe` itself is also blocked under this nested .venv (os error 4551); after
 # `uv sync` run `python scripts/ensure_poe_shim.py` so `uv run poe` uses poe.cmd.
 types = "python -m pyright"
-test = "python -m pytest packages tests --cov=packages/qma-core/src --cov=packages/qma-wire/src --cov=packages/qma-daemon/src --cov-branch --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=80"
-cov-report = "python ../tools/nested_coverage_report.py"
 
 [tool.poe.tasks.check]
-sequence = ["fmt-check", "lint", "types", "test", "cov-report"]
+sequence = ["fmt-check", "lint", "types"]
 default_item_type = "ref"
-
-[tool.coverage.run]
-# Match the parent workspace: measure real daemon/worker subprocess entrypoints.
-patch = ["subprocess"]
-

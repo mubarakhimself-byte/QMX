@@ -39,9 +39,6 @@ PRODUCT_DISTRIBUTIONS = frozenset(
         "qml",
         "qmb",
         "qmn",
-        "qma_core",
-        "qma_wire",
-        "qma_daemon",
     }
 )
 REQUIRED_ARTIFACTS = frozenset(
@@ -53,7 +50,6 @@ REQUIRED_ARTIFACTS = frozenset(
         "qmn-deploy.tar.gz",
         "README.md",
         "source-manifest.json",
-        "pack-resources.json",
         "runtime_wheels.py",
     }
 )
@@ -110,7 +106,6 @@ def _manifest(bundle: Path) -> tuple[dict[str, object], dict[str, str]]:
         artifacts[name] = digest
     _require_product_inventory(bundle, artifacts)
     _validate_wheels(bundle, artifacts)
-    _validate_pack_inventory(bundle / "pack-resources.json")
     _validate_lock(bundle / "requirements.lock")
     _validate_ui_archive(bundle / "ui.tar.gz")
     _validate_qmn_archive(bundle / "qmn-deploy.tar.gz")
@@ -330,28 +325,6 @@ def _email_fields(content: str) -> dict[str, str]:
 
 def _normalize_distribution(value: str) -> str:
     return re.sub(r"[-_.]+", "_", value).lower()
-
-
-def _validate_pack_inventory(path: Path) -> None:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise RuntimeError("The mandatory pack inventory is malformed") from error
-    if not isinstance(raw, dict) or not raw:
-        raise RuntimeError("The mandatory pack inventory is empty or malformed")
-    for name, digest in cast("dict[object, object]", raw).items():
-        if (
-            not isinstance(name, str)
-            or not name
-            or Path(name).is_absolute()
-            or "\\" in name
-            or PurePosixPath(name).as_posix() != name
-            or ":" in name.split("/", 1)[0]
-            or any(part in {"", ".", ".."} for part in name.split("/"))
-        ):
-            raise RuntimeError("Pack inventory paths must be safe relative paths")
-        if not isinstance(digest, str) or _SHA256.fullmatch(digest) is None:
-            raise RuntimeError(f"Pack inventory checksum is malformed: {name}")
 
 
 def _validate_ui_archive(path: Path) -> None:

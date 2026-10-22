@@ -56,13 +56,10 @@ SKIP_DIRS: frozenset[str] = frozenset(
     }
 )
 
-# Planted must_flag corpus, plus the pack-lifecycle export-scan fixture that
-# plants a fake PEM for the export oracle. Other project fixtures stay in scope
-# (QMX-F064).
+# The planted must_flag corpus. Other project fixtures stay in scope (QMX-F064).
 SKIP_PATH_PREFIXES: frozenset[str] = frozenset(
     {
         "tools/tests/fixtures",
-        "qmx-agents/packages/qma-daemon/tests/test_pack_lifecycle_fixture.py",
     }
 )
 

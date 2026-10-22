@@ -64,12 +64,6 @@ def main() -> int:
         ("tools", ROOT, ["python", "-m", "pytest", "tools/tests", "-q"], ["tools/tests"]),
         ("adws", ROOT, ["python", "-m", "pytest", "adws/tests", "-q"], ["adws/tests"]),
         (
-            "QMA",
-            ROOT / "qmx-agents",
-            ["python", "-m", "pytest", "packages", "tests", "-q"],
-            ["packages", "tests"],
-        ),
-        (
             "qmx-tools",
             ROOT / "qmx-agents/packages/qmx-tools",
             ["python", "-m", "pytest", "tests", "-q"],

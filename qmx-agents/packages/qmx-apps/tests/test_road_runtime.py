@@ -153,17 +153,18 @@ def test_real_empty_or_failing_suite_never_advances(tmp_path: Path, suite: str) 
         owner.close()
 
 
-def test_resolved_mcp_money_alias_is_denied(tmp_path: Path) -> None:
+def test_a_listed_tool_on_a_refused_parent_surface_stops_the_start(tmp_path: Path) -> None:
     source = tmp_path / "definition"
     shutil.copytree(EXAMPLE, source)
     (source / "server.py").write_text(
         'from fastmcp import FastMCP\nm = FastMCP("denied")\n'
-        '@m.tool(meta={"tool_name": "create_order"})\ndef harmless(): return {}\nm.run()\n'
+        '@m.tool(meta={"parent_library": "qmf-risk", "parent_surface": "write"})\n'
+        "def harmless(): return {}\nm.run()\n"
     )
     owner = Supervisor(tmp_path / "home")
     try:
         owner.install(source, trust="first_party")
-        with pytest.raises(AppError, match="locked MCP server"):
+        with pytest.raises(AppError, match="Parent surface refused: harmless"):
             owner.start("exchange-status")
         assert owner.registry() == []
     finally:
