@@ -13,7 +13,7 @@ Three tick sources for the month this probe pins (`2021-01`):
 
 For each pair it compares row count, first and last tick, the bid and ask prices row for
 row, and the gaps (which UTC hours carry ticks and how many). It writes only under
-`D:/Temp/prb-dp/duka/` and removes that root before it exits.
+`D:/Temp/prb-dp/` and removes that root before it exits.
 
     uv run --no-sync python -m scripts.probes.data.p_duka
 
@@ -73,6 +73,7 @@ class TickSet:
     ask: list[int] = field(default_factory=list)
     seconds: float = 0.0
     error: str = ""
+    failed: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,32 +163,48 @@ def _compare_prices(left: TickSet, right: TickSet) -> str:
 
 
 class HttpsBi5Transport:
-    """Dukascopy's hourly bi5 files over HTTPS, fetched ahead on a bounded thread pool.
+    """Dukascopy's hourly bi5 files over HTTPS, cached on disk and fetched ahead.
 
     The adapter above asks hour by hour and owns retry policy; this owns only the bytes.
-    One month of hours is prefetched, because a serial month of round trips against this
-    host runs past the probe's time budget (its connection attempts also time out now and
-    then, which a retry on a fresh connection clears).
+    Two things make a month practical: each hour is cached under the probe's scratch folder,
+    so a rerun resumes instead of re-fetching, and an hour that still fails after its retries
+    is recorded in `failed` and handed over as empty rather than aborting the month. The
+    probe reports that count, so an hour the provider refused is never silently counted as
+    an hour with no ticks.
     """
 
     HOST = "datafeed.dukascopy.com"
     USER_AGENT = "qmx-data-probe/1.0"
 
-    def __init__(self, *, workers: int = 8, retries: int = 4, timeout: float = 40.0) -> None:
+    def __init__(
+        self,
+        *,
+        cache_folder: Path,
+        workers: int = 10,
+        retries: int = 4,
+        timeout: float = 30.0,
+    ) -> None:
+        self._cache = cache_folder
         self._workers = workers
         self._retries = retries
         self._timeout = timeout
         self._local = threading.local()
         self._pool: ThreadPoolExecutor | None = None
         self._pending: dict[int, Future[bytes]] = {}
+        self._strikes = 0
+        self._strike_limit = 30
+        self._lock = threading.Lock()
+        self.failed: list[str] = []
+        self.fatal = ""
 
     def prefetch(self, keys: list[DukascopyHourKey]) -> None:
         """Start every hour's download; `fetch_hour` collects one."""
+        self._cache.mkdir(parents=True, exist_ok=True)
         self._pool = ThreadPoolExecutor(max_workers=self._workers)
         for key in keys:
-            marker = key.year * 100_000_000 + key.month_0 * 1_000_000 + key.day * 10_000 + key.hour
+            marker = _marker(key)
             if marker not in self._pending:
-                self._pending[marker] = self._pool.submit(self._download, key)
+                self._pending[marker] = self._pool.submit(self._hour, key)
 
     def close(self) -> None:
         if self._pool is not None:
@@ -206,6 +223,26 @@ class HttpsBi5Transport:
         if connection is not None:
             connection.close()
             self._local.connection = None
+
+    def _hour(self, key: DukascopyHourKey) -> bytes:
+        cached = self._cache / f"{_marker(key)}.bi5"
+        if cached.exists():
+            return cached.read_bytes()
+        if self.fatal:
+            return b""
+        try:
+            body = self._download(key)
+        except RuntimeError as error:
+            with self._lock:
+                self.failed.append(str(error))
+                self._strikes += 1
+                if self._strikes >= self._strike_limit:
+                    self.fatal = str(error)
+            return b""
+        with self._lock:
+            self._strikes = 0
+        cached.write_bytes(body)
+        return body
 
     def _download(self, key: DukascopyHourKey) -> bytes:
         path = (
@@ -230,15 +267,18 @@ class HttpsBi5Transport:
             except (OSError, http.client.HTTPException) as error:
                 problem = f"{type(error).__name__}: {error}"
                 self._forget()
-            time.sleep(1.0 + attempt)
+            time.sleep(2.0 + attempt)
         raise RuntimeError(f"dukascopy {path} failed after {self._retries} tries ({problem})")
 
     def fetch_hour(self, key: DukascopyHourKey) -> Result[bytes]:
-        marker = key.year * 100_000_000 + key.month_0 * 1_000_000 + key.day * 10_000 + key.hour
-        pending = self._pending.get(marker)
+        pending = self._pending.get(_marker(key))
         if pending is None:
-            return Ok(self._download(key))
+            return Ok(self._hour(key))
         return Ok(pending.result())
+
+
+def _marker(key: DukascopyHourKey) -> int:
+    return key.year * 100_000_000 + key.month_0 * 1_000_000 + key.day * 10_000 + key.hour
 
 
 def read_old_raw(month: str) -> TickSet:
@@ -309,7 +349,7 @@ def read_qmx_fetch(month: str) -> TickSet:
     instrument = Instrument.try_create(venue.value, SYMBOL)
     if is_refusal(instrument):
         raise RuntimeError(f"EURUSD did not build an Instrument: {instrument.context}")
-    transport = HttpsBi5Transport()
+    transport = HttpsBi5Transport(cache_folder=common.SCRATCH / "hours")
     transport.prefetch(month_hour_keys(month))
     adapter = DukascopyAdapter(
         transport,
@@ -340,10 +380,47 @@ def read_qmx_fetch(month: str) -> TickSet:
                 times.append(record.event_time // NS_PER_MS)
                 bid.append(_scaled(record.bid, "bid"))
                 ask.append(_scaled(record.ask, "ask"))
+            print(
+                f"  qmx-fetch {day.isoformat()}: {len(times)} ticks, "
+                f"{len(transport.failed)} hours refused so far",
+                file=sys.stderr,
+                flush=True,
+            )
             day += timedelta(days=1)
     finally:
         transport.close()
-    return TickSet(label="qmx-fetch", t=times, bid=bid, ask=ask, seconds=time.monotonic() - started)
+    error = ""
+    if transport.fatal:
+        error = (
+            f"the provider refused {len(transport.failed)} hourly files and the month was "
+            f"not fetched in full: {transport.fatal}"
+        )
+    return TickSet(
+        label="qmx-fetch",
+        t=times,
+        bid=bid,
+        ask=ask,
+        seconds=time.monotonic() - started,
+        error=error,
+        failed=list(transport.failed),
+    )
+
+
+def on_hours(ticks: TickSet, hours: set[int]) -> TickSet:
+    """The same ticks restricted to the given hour starts (epoch ms)."""
+    kept = [index for index, value in enumerate(ticks.t) if value // MS_PER_HOUR in hours]
+    return TickSet(
+        label=ticks.label,
+        t=[ticks.t[index] for index in kept],
+        bid=[ticks.bid[index] for index in kept],
+        ask=[ticks.ask[index] for index in kept],
+    )
+
+
+def _hour_of(message: str) -> str:
+    """The provider path inside a transport failure message."""
+    start = message.find("/datafeed/")
+    return message[start:] if start >= 0 else message
 
 
 def _scaled(block: object, side: str) -> int:
@@ -474,19 +551,46 @@ def main() -> int:
     report.numbers["node_pin"] = _node_version()
     try:
         old = read_old_raw(MONTH)
-        qmx = read_qmx_fetch(MONTH)
         node = read_node(MONTH)
-        for ticks in (old, qmx, node):
-            report.numbers[f"{ticks.label}_rows"] = len(ticks.t)
-            report.numbers[f"{ticks.label}_seconds"] = f"{ticks.seconds:.1f}"
-            if ticks.error:
-                report.note(f"{ticks.label}: {ticks.error}")
-        report.numbers["old_raw_manifest_rows"] = manifest_rows(MONTH)
-        pairs = [
-            compare_ticks("old-raw vs qmx-fetch", old, qmx),
-            compare_ticks("old-raw vs duka-node", old, node),
-            compare_ticks("qmx-fetch vs duka-node", qmx, node),
-        ]
+        report.numbers["old-raw_rows"] = len(old.t)
+        report.numbers["old-raw_manifest_rows"] = manifest_rows(MONTH)
+        report.numbers["duka-node_rows"] = len(node.t)
+        report.numbers["duka-node_seconds"] = f"{node.seconds:.1f}"
+        if node.error:
+            report.note(f"duka-node: {node.error}")
+        qmx = read_qmx_fetch(MONTH)
+        served = set(hourly_counts(qmx))
+        report.numbers["month_hours"] = len(month_hour_keys(MONTH))
+        report.numbers["qmx-fetch_hours_served"] = len(served)
+        report.numbers["qmx-fetch_hours_refused"] = len(qmx.failed)
+        report.numbers["qmx-fetch_rows"] = len(qmx.t)
+        report.numbers["qmx-fetch_seconds"] = f"{qmx.seconds:.1f}"
+        if qmx.error:
+            report.fail(qmx.error)
+        if qmx.failed:
+            report.note(
+                "hours the provider refused: "
+                + "; ".join(_hour_of(message) for message in qmx.failed[:20])
+            )
+        pairs = []
+        if qmx.t:
+            pairs.append(
+                compare_ticks(
+                    "old-raw vs qmx-fetch on the hours the provider served",
+                    on_hours(old, served),
+                    qmx,
+                )
+            )
+        else:
+            report.fail(
+                "qmx-fetch returned no ticks, so nothing was compared with the old raw files"
+            )
+        pairs.extend(
+            [
+                compare_ticks("old-raw vs duka-node", old, node),
+                compare_ticks("qmx-fetch vs duka-node", qmx, node),
+            ]
+        )
         for pair in pairs:
             report.note(
                 f"{pair.label}: rows {pair.rows}; first {pair.first}; last {pair.last}; "
