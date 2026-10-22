@@ -26,12 +26,14 @@ import shutil
 import statistics
 import threading
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from collections.abc import Mapping
 from typing import Final, cast
 
 from pydantic import JsonValue
+from qmx_hub.server import Hub, serve
+from qmx_library.store import Store
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.heartbeat import Heartbeat
@@ -39,15 +41,14 @@ from qmx_engine.ledger import mirror, redact
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.mirror import HubJournals, MirrorRefused, post_json
 from qmx_engine.ledger.store import Reader, ledger_path
-from qmx_engine.runner import Outcome, Refused as EngineRefused
+from qmx_engine.runner import Outcome
+from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.runs import RunView, status_of
-from qmx_hub.server import Hub, serve
-from qmx_library.store import Store
 
-KEY = "pairing-key-of-this-lane"  # noqa: S105 (a lane-made key, never the ship's)
+KEY = "pairing-key-of-this-lane"
 HOLD_S: Final = 1
 PLAIN = "import json\nprint(json.dumps('done'))\n"
 SAVE = (
@@ -170,7 +171,8 @@ def after(events: list[Event], kind: str) -> list[dict[str, JsonValue]]:
 
 def start_on(home: Path, root: Path, name: str, client: HubJournals) -> Outcome:
     found = checked(root)
-    assert not isinstance(found, list), found
+    if isinstance(found, list):
+        raise SystemExit(f"the definition does not run: {[p.code for p in found]}")
     mirror.attach(client)
     try:
         with EngineService.open(home, name=name) as service:
@@ -235,7 +237,8 @@ def lane_e69(lane: Lane, root: Path, url: str) -> None:
     pc_client = HubJournals(url, KEY, home="pc")
     mirror.attach(pc_client)
     found = checked(root / "wf")
-    assert not isinstance(found, list), found
+    if isinstance(found, list):
+        raise SystemExit(f"the definition does not run: {[p.code for p in found]}")
     with EngineService.open(pc, name="pc") as service:
         run_id = asyncio.run(
             service.ctx.engine.start(root / "wf", found[1], mode="test", inputs=None)
@@ -243,7 +246,10 @@ def lane_e69(lane: Lane, root: Path, url: str) -> None:
     mirror.attach(None)
     lane.times += pc_client.times
     outcome = status_of(events_of(pc, run_id))
-    lane.check(outcome.status == "waiting", f"the run is cut while its last node holds it ({outcome.status})")
+    lane.check(
+        outcome.status == "waiting",
+        f"the run is cut while its last node holds it ({outcome.status})",
+    )
     ends = len([e for e in events_of(pc, run_id) if e.kind == "node_finished"])
     lane.check(ends == 2, f"two node ends are in the PC's ledger ({ends})")
     lane.check(
@@ -278,7 +284,9 @@ def lane_e69(lane: Lane, root: Path, url: str) -> None:
         "work" not in started,
         f"the node that already finished is never started again ({started})",
     )
-    adopted = [e.data for e in events if e.kind == "run_resumed" and e.data.get("reason") == "adopted"]
+    adopted = [
+        e.data for e in events if e.kind == "run_resumed" and e.data.get("reason") == "adopted"
+    ]
     lane.check(
         bool(adopted) and (adopted[0].get("from"), adopted[0].get("to")) == ("pc", "contabo"),
         f"Contabo's ledger records where the run came from and went ({adopted[:1]})",
@@ -366,7 +374,6 @@ def lane_work(lane: Lane, root: Path, url: str) -> None:
     )
     hear(url, "pc", datetime.now(UTC) - timedelta(minutes=10))
 
-
     view = adopt_on(contabo, "contabo", url, run_id, lane)
     events = events_of(contabo, run_id)
     lane.check(view.status == "passed", f"the adopted run finishes on Contabo ({view.status})")
@@ -409,7 +416,9 @@ def main() -> int:
     parser.add_argument("--lane", choices=("e69", "race", "work"), default="e69")
     parser.add_argument("--root", type=Path, default=Path("D:/Temp/adopt-e69"))
     parser.add_argument("--evidence", type=Path, default=None)
-    parser.add_argument("--hub-url", default=None, help="a Hub already running, instead of one here")
+    parser.add_argument(
+        "--hub-url", default=None, help="a Hub already running, instead of one here"
+    )
     parser.add_argument("--key-file", type=Path, default=None, help="that Hub's pairing key")
     args = parser.parse_args()
     evidence = args.evidence or Path(
@@ -448,6 +457,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-
