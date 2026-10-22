@@ -47,7 +47,6 @@ dev = [
     "poethepoet==0.48.0",
     "pytest-xdist>=3.8,<4",
     "qmn",
-    "openai-codex==0.160.0",
     "types-pywin32==312.0.0.20261006",
     "types-jsonschema",
     "types-cachetools>=7.0.0.20260713",
