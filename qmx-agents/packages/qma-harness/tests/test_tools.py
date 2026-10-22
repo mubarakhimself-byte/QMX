@@ -20,7 +20,6 @@ from qma.harness.tools import (
     Effect,
     Grant,
     Grants,
-    OrderToolRefused,
     ToolDef,
     ToolSurfaceError,
     VetCache,
@@ -249,20 +248,16 @@ server.run()
 """
 
 
-@pytest.mark.parametrize(("tool", "refused"), [("get_weather", False), ("submitOrder", True)])
-def test_vetting_starts_the_server_and_checks_its_tools(
-    tmp_path: Path, tool: str, refused: bool
-) -> None:
+@pytest.mark.parametrize("tool", ["get_weather", "place_order", "submitOrder"])
+def test_vetting_starts_the_server_and_lists_its_tools(tmp_path: Path, tool: str) -> None:
     script = tmp_path / "server.py"
     script.write_text(SERVER.format(name=tool), encoding="utf-8")
     row = {"command": sys.executable, "args": [str(script)]}
-    if refused:
-        with pytest.raises(OrderToolRefused, match="submitOrder is submit_order"):
-            asyncio.run(vet_server("ext", row, VetCache()))
-    else:
-        vetted = asyncio.run(vet_server("ext", row, VetCache()))
-        assert vetted.config["type"] == "stdio"  # pyright: ignore[reportTypedDictNotRequiredAccess]
-        assert vetted.tools == {"get_weather"}
+
+    vetted = asyncio.run(vet_server("ext", row, VetCache()))
+
+    assert vetted.config["type"] == "stdio"  # pyright: ignore[reportTypedDictNotRequiredAccess]
+    assert vetted.tools == {tool}
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="junctions are a Windows form")
@@ -438,30 +433,18 @@ server.run()
 """
 
 
-@pytest.mark.parametrize(
-    ("name", "doc", "refusal"),
-    [
-        ("submitOrder", "Reads a value.", "it offers an order tool (submitOrder is submit_order)"),
-        ("get_bars", "Places a market order for the symbol.", None),
-        ("get_bars", "Reads bars.", None),
-        ("get_bars", "Returns the font size. Upload a file and transfer it to S3.", None),
-        ("get_bars", "Get the current book mode.", None),
-        ("get_bars", "Should I buy an umbrella?", None),
-    ],
-)
-def test_vetting_reads_every_page_and_judges_tool_names_only(
-    tmp_path: Path, name: str, doc: str, refusal: str | None
-) -> None:
+def test_vetting_reads_every_page_and_refuses_no_name(tmp_path: Path) -> None:
     script = tmp_path / "server.py"
-    script.write_text(PAGED.format(name=name, doc=doc), encoding="utf-8")
+    script.write_text(
+        PAGED.format(name="get_bars", doc="Places a market order for the symbol."), encoding="utf-8"
+    )
     row = {"command": sys.executable, "args": [str(script)]}
+
     found = asyncio.run(vet_mcp_servers({"ext": row}, VetCache()))
-    if refusal is None:
-        assert found.refused == {}
-        assert found.tools == {"ext": frozenset({"get_weather", "get_bars"})}
-    else:
-        assert refusal in found.refused["ext"]
-        assert "ext" not in found.configs
+
+    assert found.refused == {}
+    assert found.tools == {"ext": frozenset({"get_weather", "get_bars"})}
+    assert "ext" in found.configs
 
 
 COORDINATED = """\

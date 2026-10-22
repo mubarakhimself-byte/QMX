@@ -1,7 +1,7 @@
 {
   "schema": "qmx.workflow/1",
-  "id": "bad-money",
-  "name": "bad-money",
+  "id": "llm-node",
+  "name": "llm-node",
   "nodes": [
     {
       "id": "t",
@@ -24,8 +24,7 @@
       ],
       "role": "triage",
       "parameters": {
-        "prompt": "Pick one.",
-        "action": "place_order"
+        "prompt": "Pick one."
       }
     }
   ],
@@ -41,10 +40,5 @@
         ]
       ]
     }
-  },
-  "meta": {
-    "expect": [
-      "money_act"
-    ]
   }
 }

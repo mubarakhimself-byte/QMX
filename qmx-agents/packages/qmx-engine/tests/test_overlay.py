@@ -75,7 +75,7 @@ def test_a_patch_that_misses_the_parent_names_itself() -> None:
 def test_an_unresolved_variant_neither_validates_nor_hashes(tmp_path: Path) -> None:
     folder = Path(shutil.copytree(PARENT, tmp_path / "fx"))
     document = parent() | variant(
-        {"op": "add", "path": "/nodes/2/parameters/action", "value": "place_order"}
+        {"op": "add", "path": "/nodes/2/parameters/action", "value": "triage"}
     )
     (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")
 
@@ -84,6 +84,4 @@ def test_an_unresolved_variant_neither_validates_nor_hashes(tmp_path: Path) -> N
         content_hash(load(folder))
     resolved = resolve(document, parent())
     (folder / "definition.json").write_text(json.dumps(resolved.snapshot), encoding="utf-8")
-    assert [(p.code, p.path) for p in validate(load(folder))] == [
-        ("money_act", "nodes[2].parameters.action")
-    ]
+    assert [(p.code, p.path) for p in validate(load(folder))] == []

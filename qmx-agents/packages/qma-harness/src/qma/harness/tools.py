@@ -33,7 +33,6 @@ from qmx_control.catalog import CORE_TOOLSETS, OperationSpec, name_problem, rows
 
 from qma.harness.delegate import DelegateRefused
 from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
-from qma.harness.money_words import named_money_act
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpSdkServerConfig, McpServerConfig
@@ -627,10 +626,6 @@ class ToolSurfaceError(RuntimeError):
     """The QMX servers cannot be built from these defs."""
 
 
-class OrderToolRefused(RuntimeError):
-    """An external MCP server offers a tool whose name spells an order act."""
-
-
 def rule_rows(table: object) -> tuple[Rule, ...]:
     """His list as `Rule`s: each row a `{pattern, ...}` table or a bare pattern string, as
     `ControlService` stores `[rules]`. A row that does not parse is skipped."""
@@ -944,9 +939,8 @@ class VettedServer:
 
 
 async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> VettedServer:
-    """Start one declared server with the Python MCP client, list every page of its tools and
-    refuse it when a tool name spells an order act (`money_words`, H58). A config already in
-    `cache` is not started again. Raises ValueError or OrderToolRefused."""
+    """Start one declared server with the Python MCP client and list every page of its tools. A
+    config already in `cache` is not started again. Raises ValueError."""
     config = server_config(name, row)
     digest = config_digest(config)
     cached = cache.get(digest)
@@ -954,18 +948,14 @@ async def vet_server(name: str, row: Mapping[str, object], cache: VetCache) -> V
         return VettedServer(config, cached)
     listed = await asyncio.wait_for(_list_tools(config), VET_TIMEOUT_S)
     tools = frozenset(str(tool.name) for tool in listed)
-    for tool in sorted(tools):
-        act = named_money_act(tool)
-        if act is not None:
-            raise OrderToolRefused(f"{tool} is {act}")
     cache.put(digest, tools)
     return VettedServer(config, tools)
 
 
 async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> VettedServers:
     """Before any launch uses them: vet every enabled server in settings.toml [mcp_servers],
-    all at once. A server that offers an order-shaped tool, or that cannot be listed, is refused
-    and never launched (H58). A tool the CLI loads that vetting never saw refuses the launch."""
+    all at once. A server that cannot be listed is refused and never launched (H58). A tool the
+    CLI loads that vetting never saw refuses the launch."""
     rows = {
         name: cast("Mapping[str, object]", row)
         for name, row in declared.items()
@@ -981,8 +971,6 @@ async def vet_mcp_servers(declared: Mapping[str, object], cache: VetCache) -> Ve
         match result:
             case VettedServer():
                 configs[name], tools[name] = result.config, result.tools
-            case OrderToolRefused():
-                refused[name] = f"it offers an order tool ({result})"
             case Exception():
                 refused[name] = f"it could not be vetted ({type(result).__name__}: {result})"
             case _:

@@ -1,11 +1,11 @@
 """SOLUTION-DESIGN 2.4 step 4: what no definition may hold, whoever wrote it.
 
-No node writes Settings or creates a trigger, no parameter names a money act (PROMPT-ENGINE
-rule 6, AD-8), no token-shaped literal appears anywhere (the shapes of `ledger.redact`, AD-37), a
-node's credentials name only `qmx/tool/<name>` keys, a list never fans into a model node by
-`broadcast`, a loop names its `max_iterations` (so every loop ends), and a `human_gate` sits only
-in front of an `irreversible_external` effect. No limit is ever required: QMX sets no usage limit
-of its own (ruling 106, AD-40), and a `limits` value he wrote is refused only below 1.
+No node writes Settings or creates a trigger, no token-shaped literal appears anywhere (the
+shapes of `ledger.redact`, AD-37), a node's credentials name only `qmx/tool/<name>` keys, a list
+never fans into a model node by `broadcast`, a loop names its `max_iterations` (so every loop
+ends), and a `human_gate` sits only in front of an `irreversible_external` effect. No limit is
+ever required: QMX sets no usage limit of its own (ruling 106, AD-40), and a `limits` value he
+wrote is refused only below 1.
 """
 
 from __future__ import annotations
@@ -15,7 +15,6 @@ from collections.abc import Iterator
 from typing import Final
 
 from pydantic import JsonValue
-from qma.harness import named_money_act
 
 from qmx_engine.definition.folder import Problem
 from qmx_engine.definition.model import Limits, Workflow, edges
@@ -32,12 +31,6 @@ TOOL_KEY: Final = re.compile(r"qmx/tool/[a-z0-9][a-z0-9_-]{0,39}")
 """The only credential a node may name: a tool key a Settings `[credentials.tools]` row declares
 (AD-24). Provider keys stay relay-only (AD-28) and broker keys never reach a node."""
 SEGMENTS: Final = re.compile(r"__|[.:]")
-BARE_NOUNS: Final = frozenset(
-    {"order", "position", "protection", "sizing", "binding", "mode", "control", "size"}
-)
-"""The deny-list matches these single words as act families, but alone in a parameter they are a
-field or a sort key (`"sort_by": "position"`, `items.size`), not an act. Every verb phrase
-(`place_order`, `close_position`, `resize`) is still refused."""
 
 
 def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
@@ -67,13 +60,10 @@ def lint(workflow: Workflow, registry: Registry) -> Iterator[Problem]:
             *strings(node.parameters, f"nodes[{i}].parameters"),
         ]:
             operation = names_operation(text)
-            act = money_act(text)
             if operation & SETTINGS_WRITE:
                 yield Problem("settings_write", path, "no node may write Settings")
             if operation & TRIGGER_CREATION:
                 yield Problem("trigger_creation", path, "no node may create a trigger")
-            if act is not None:
-                yield Problem("money_act", path, f"names the money act {act!r}; money is read-only")
         if kind is None:
             continue
         if kind.name == "loop":
@@ -126,8 +116,8 @@ def effect(registry: Registry, type_name: str, declared: str | None) -> str | No
 
 
 def strings(value: JsonValue, path: str) -> Iterator[tuple[str, str]]:
-    """Every string in the value, keys included, so `{"place_order": true}` and a tool map keyed
-    by MCP name are read like a list of names."""
+    """Every string in the value, keys included, so `{"create_trigger": true}` and a call map
+    keyed by operation are read like a list of names."""
     if isinstance(value, str):
         yield path, value
     elif isinstance(value, dict):
@@ -141,8 +131,8 @@ def strings(value: JsonValue, path: str) -> Iterator[tuple[str, str]]:
 
 
 def candidates(text: str) -> list[str]:
-    """The whole text and its last segment, so `mcp__broker__place_order` and `qmb.submit_order`
-    are read as the tool or operation they end in."""
+    """The whole text and its last segment, so `qmx.settings_write` and
+    `workflow_triggers_create` are read as the operation they end in."""
     return [text, SEGMENTS.split(text)[-1]]
 
 
@@ -156,12 +146,3 @@ def names_operation(text: str) -> set[str]:
             if token == op or token.endswith(f"_{op}")
         }
     return found
-
-
-def money_act(text: str) -> str | None:
-    for candidate in candidates(text):
-        if candidate.strip().casefold() in BARE_NOUNS:
-            continue
-        if act := named_money_act(candidate):
-            return act
-    return None

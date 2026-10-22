@@ -693,11 +693,10 @@ def test_a_draft_validates_and_its_test_and_its_enable_are_refused_with_its_need
 
 
 @pytest.mark.parametrize("folder", FOLDERS, ids=lambda path: path.name)
-def test_no_template_names_a_money_act_or_holds_a_credential(folder: Path) -> None:
+def test_no_template_holds_a_credential_or_a_broker_ref(folder: Path) -> None:
     definition = json.loads((folder / "definition.json").read_text("utf-8"))
     texts = [path.read_text("utf-8") for path in folder.rglob("*") if path.is_file()]
 
-    assert [p for p in validate(load(folder)) if p.code == "money_act"] == []
     assert [n["id"] for n in definition["nodes"] if n.get("credentials")] == []
     assert [t for t in texts if "qmn" in t or "qmx/ctrader" in t or "qmx/broker" in t] == []
 
