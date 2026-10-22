@@ -1,5 +1,5 @@
-"""The core plugin's agents, ported from the retired agent runtime (DEL1): they parse as Claude plugin
-agents, name only tools the catalog serves, and none can reach `delegate`."""
+"""The core plugin's agents, ported from the retired agent runtime (DEL1): they parse as Claude
+plugin agents, name only tools the catalog serves, and none can reach `delegate`."""
 
 from __future__ import annotations
 
