@@ -1,10 +1,10 @@
 {
   "plugin": "qmx",
   "generated": "uv run --no-sync python -c \"from qma.harness.home import PLUGIN_DIR; from qma.harness.packs import write_manifest; write_manifest(PLUGIN_DIR)\"",
-  "sha256": "a2d80b81e92c580086cfed8fe75c35019f66f788e2336448a4d475579e65ed6b",
+  "sha256": "68e365f7485cae2b401025f8692c86cc2ef8ef8cef5de5484eaa46a38c7ce9a5",
   "files": {
     ".claude-plugin/plugin.json": "sha256:30ec523f11f39f52ef395d93a798f1211fc968a5f48722089039fa7af2274223",
-    "QMX.md": "sha256:18a6919309a599fcc7c38ff4cdfb80084b114cd7536ff89d78185427c8e4c725",
+    "QMX.md": "sha256:05983587486db87737b3603b058310e16309bc0d64d3f7cf601e05cdf13fc547",
     "agents/app-builder.md": "sha256:fcaec9c9c7a4fff7a88887af6f6d3139056a940b54d7c5bc1dcdd69405d99641",
     "agents/data-analyst.md": "sha256:91adecdf50963b8395401d5bcdbf44d53b692927c312b6cff984aed0b21eed41",
     "agents/overnight-builder.md": "sha256:ec9a6037c25f3e34e4b591947e09410497da1aed129219ac86c824e4ba67cdde",
