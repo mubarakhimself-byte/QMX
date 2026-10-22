@@ -18,6 +18,7 @@ members = [
     "qmx-control",
     "qmx-engine",
     "qmx-host",
+    "qmx-hub",
     "qmx-ledger",
     "qmx-library",
     "qmx-memory",
@@ -4550,6 +4551,43 @@ dev = [
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
     { name = "ruff", specifier = "==0.16.5" },
+]
+
+[[package]]
+name = "qmx-hub"
+version = "0.1.0"
+source = { editable = "packages/qmx-hub" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "qmx-engine" },
+    { name = "qmx-library" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+    { name = "types-jsonschema" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = "==2.13.4" },
+    { name = "qmx-engine", editable = "packages/qmx-engine" },
+    { name = "qmx-library", editable = "packages/qmx-library" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "ruff", specifier = "==0.16.5" },
+    { name = "types-jsonschema" },
 ]
 
 [[package]]
