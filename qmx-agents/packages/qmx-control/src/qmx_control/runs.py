@@ -1,5 +1,8 @@
-"""Rebuildable projections of the control plane's remote runs over their immutable journals.
-They stay until the remote worker adapter replaces them (RUN1b)."""
+"""Rebuildable projections of run journals under `journals/` and `runs/<id>/`.
+
+The control plane's remote runs are gone (RUN1b); a placed job is an engine run. The index stays
+while `runs_list`, `runs_get` and the `runs` work kind keep callers outside this package
+(`qmx_agents.tasks` and the server's maintenance loop)."""
 
 from __future__ import annotations
 
@@ -69,7 +72,7 @@ class RunIndex:
         return result
 
     def refresh(self) -> list[Document]:
-        """Project the remote runs' journals, and the journals of runs an owner published under
+        """Project the journals under `journals/`, and those of runs an owner published under
         `runs/<id>/` (background runs). Chat journals there are not runs (B-67): every unit of
         work QMX starts is an engine run, listed by the engine (engine AD-57)."""
         changed: list[Document] = []

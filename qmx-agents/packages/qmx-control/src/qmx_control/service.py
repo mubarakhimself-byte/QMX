@@ -29,8 +29,7 @@ from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
 from qmx_broker.service import read_proposals
-from qmx_remote.models import RemoteSettings, RunBundle
-from qmx_remote.runs import RemoteRuns
+from qmx_remote.models import RemoteSettings
 
 from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
@@ -228,7 +227,6 @@ class ControlService:
         self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
         self._app_hooks: dict[str, Callable[[str, Document], None]] = {}
         self._apps: Supervisor | None = None
-        self._remote: RemoteRuns | None = None
         self._backup_lock = threading.Lock()
         self._backup_schedule: BackupSchedule | None = None
         self.tier = tier
@@ -886,114 +884,6 @@ class ControlService:
         """Read a journal-indexed run, including resolved models and artifacts."""
         self._refresh_runs()
         return self.run_index.get(run_id)
-
-    def remote_runtime(self) -> RemoteRuns:
-        if self._remote is None:
-            self._remote = RemoteRuns(
-                self.home,
-                RemoteSettings.model_validate(self.settings_get("remote")),
-                secret_getter=self.secret_getter,
-            )
-        else:
-            self._remote.settings = RemoteSettings.model_validate(self.settings_get("remote"))
-        return self._remote
-
-    @operation("workflows", "remote_start", "manage", rest=("POST", "/api/runs/remote"))
-    def runs_start_remote(
-        self, bundle: RunBundle, target: str | None = None, definition_path: str | None = None
-    ) -> Document:
-        """Send an immutable workflow, app, agent or job bundle to a configured target."""
-        result = self.remote_runtime().start(
-            bundle, target, Path(definition_path) if definition_path else None
-        )
-        return self._record_remote(result)
-
-    def _record_remote(self, result: Document) -> Document:
-        bundle = RunBundle.model_validate(result["bundle"])
-        result.update(kind=bundle.kind, node=result["target"], model=bundle.model_profile)
-        run_id = str(result["run_id"])
-        recorded = self.record_work("runs", run_id, result)
-        if bundle.kind == "job":
-            self.record_work("jobs", run_id, recorded)
-        return recorded
-
-    @operation("workflows", "remote_status", "read", rest=("GET", "/api/runs/{run_id}/status"))
-    def runs_status(self, run_id: str) -> Document:
-        """Read actual remote status and publish it to the shared run index."""
-        result = self.remote_runtime().status(run_id)
-        return self._record_remote(result)
-
-    @operation("workflows", "remote_logs", "read", rest=("GET", "/api/runs/{run_id}/logs"))
-    def runs_logs(self, run_id: str) -> Document:
-        """Read the remote worker's incremental, redacted logs."""
-        return self.remote_runtime().logs(run_id)
-
-    @operation(
-        "workflows", "remote_fetch", "domain_write", rest=("POST", "/api/runs/{run_id}/fetch")
-    )
-    def runs_fetch(self, run_id: str) -> Document:
-        """Verify remote output hashes, register artifacts and journal the fetch."""
-        result = self.remote_runtime().fetch(run_id)
-        artifacts = result["artifacts"]
-        if not isinstance(artifacts, list):
-            raise ControlError("invalid_remote_result", "Remote artifact list is invalid.")
-        registered: list[JsonValue] = []
-        for artifact in artifacts:
-            if not isinstance(artifact, dict):
-                raise ControlError("invalid_remote_result", "Remote artifact entry is invalid.")
-            if str(artifact["path"]).startswith("outputs/"):
-                item = self.library_save(
-                    LibraryInput(
-                        title=str(artifact["path"]),
-                        kind="remote-result",
-                        content={
-                            **artifact,
-                            "path": str(Path(str(result["path"])) / str(artifact["path"])),
-                        },
-                        source="remote:" + run_id,
-                        tags=["remote", run_id],
-                    )
-                )
-                registered.append(item["id"])
-        result["library_items"] = registered
-        self.record_work("runs", run_id, {"status": result["status"], "artifacts": registered})
-        if self.runs_get(run_id)["kind"] == "job":
-            self.record_work("jobs", run_id, self.runs_get(run_id))
-        return result
-
-    @operation("workflows", "remote_resume", "manage", rest=("POST", "/api/runs/{run_id}/resume"))
-    def runs_resume(self, run_id: str, target: str | None = None) -> Document:
-        """Restart an interrupted remote run from its verified LangGraph checkpoint."""
-        result = self.remote_runtime().resume(run_id, target)
-        return self._record_remote(result)
-
-    @operation("workflows", "remote_stop", "manage", rest=("POST", "/api/runs/{run_id}/stop"))
-    def runs_stop(self, run_id: str) -> Document:
-        """Stop remote work and remove its container or sandbox, including credentials."""
-        result = self.remote_runtime().stop(run_id)
-        return self._record_remote(result)
-
-    @operation("workflows", "jobs_run", "manage", rest=("POST", "/api/jobs/remote"))
-    def run_job(
-        self, bundle: RunBundle, target: str | None = None, definition_path: str | None = None
-    ) -> Document:
-        """Place a job on a CPU or GPU target and record it automatically."""
-        return self.runs_start_remote(bundle, target, definition_path)
-
-    @operation("workflows", "jobs_status", "read", rest=("GET", "/api/jobs/{run_id}/status"))
-    def job_status(self, run_id: str) -> Document:
-        """Read a placed job's actual status."""
-        return self.runs_status(run_id)
-
-    @operation("workflows", "jobs_logs", "read", rest=("GET", "/api/jobs/{run_id}/logs"))
-    def job_logs(self, run_id: str) -> Document:
-        """Read a placed job's durable logs."""
-        return self.runs_logs(run_id)
-
-    @operation("workflows", "jobs_fetch", "domain_write", rest=("POST", "/api/jobs/{run_id}/fetch"))
-    def job_fetch(self, run_id: str) -> Document:
-        """Fetch and register a placed job's verified results."""
-        return self.runs_fetch(run_id)
 
     def _refresh_runs(self) -> None:
         with self._lock, self._connect() as db:
