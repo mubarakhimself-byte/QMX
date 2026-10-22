@@ -1,9 +1,9 @@
 [project]
 name = "qmx-remote"
 version = "0.1.0"
-description = "Durable QMX remote runs and content-addressed results"
+description = "QMX compute providers, the remote run sidecar and isolated code checkouts"
 requires-python = ">=3.14,<3.15"
-dependencies = ["pydantic>=2,<3", "keyring==25.7.0", "qmx-agents", "qmx-apps", "qmx-ledger"]
+dependencies = ["pydantic>=2,<3", "keyring==25.7.0", "qmx-apps", "qmx-ledger"]
 
 [project.optional-dependencies]
 amp = ["amp-sdk==0.1.20260918210324"]
@@ -15,7 +15,6 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-qmx-agents = { workspace = true }
 qmx-apps = { workspace = true }
 qmx-ledger = { workspace = true }
 
@@ -37,6 +36,7 @@ extend-exclude = []
 include = ["src", "tests", "../../../scripts/live/smoke_remote.py"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
+extraPaths = ["../../../scripts/live/server"]
 
 [tool.poe.tasks]
 fmt-check = "ruff format --config pyproject.toml --check src tests ../../../scripts/live/smoke_remote.py"

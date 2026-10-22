@@ -4704,7 +4704,6 @@ source = { editable = "packages/qmx-remote" }
 dependencies = [
     { name = "keyring" },
     { name = "pydantic" },
-    { name = "qmx-agents" },
     { name = "qmx-apps" },
     { name = "qmx-ledger" },
 ]
@@ -4737,7 +4736,6 @@ requires-dist = [
     { name = "keyring", specifier = "==25.7.0" },
     { name = "modal", marker = "extra == 'modal'", specifier = "==1.6.1" },
     { name = "pydantic", specifier = ">=2,<3" },
-    { name = "qmx-agents", editable = "packages/qmx-agents" },
     { name = "qmx-apps", editable = "packages/qmx-apps" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
 ]
