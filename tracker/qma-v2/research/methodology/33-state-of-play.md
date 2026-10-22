@@ -1,4 +1,27 @@
-# 33 — State of play, 2026-10-18 evening
+# 33 — State of play (latest update 2026-10-22 morning; the 2026-10-18 evening text follows below as history)
+
+## 0. Update 2026-10-22: the build program milestone
+
+**Code (checked on GitHub).** The QMX build program built and verified 51 of its 58 PRs.
+- PRs 112-154 (42 PRs) are merged into `engine/base`. PR 122 (QMB start-up on `qmx_host`) is merged. PR 155 merged `rebuild/base`'s 25 fixes into `engine/base` (tip `788b1926` at that point). `integration` and `rebuild/base` are now fully inside `engine/base`; only `main`'s document commits sit outside it.
+- The eight server PRs 156-163 (PRB-S, LIB4, RTRP, REM, TRG2b, APP2b, OPS2, ADOPT) are built, checked and stacked on `engine/base`; his review agent merges them bottom-up (156 first).
+- Left: the five deletions, DEL2 then DEL3, and RUN1b then DEL1 then DEL4, done by one Claude Code coordinator session with Opus builders after 156-163 land. Two PRs were skipped by their probes (AGW, RTR7).
+- Builders: Claude Opus until 2026-10-20, then DeepSeek-V4.1-Flash (operator's choice) for the rest.
+
+**Server.** `qmx-server` (Contabo, reset 2026-10-21, Ubuntu 24.04) is on his Gmail tailnet (`100.105.172.63`); key-only SSH with `~/.ssh/qmx_server`; no PHP or web server; automatic security updates on. Hindsight does not fit it (about 2.7 GB), so memory runs on the PC and server recall uses the built-in search. Tailscale SSH asks for browser checks; builders use the public IP with the key.
+
+**Findings that shape the next rounds.**
+- `LAUNCH-AND-CLEANUP-MAP.md`: proposed one-trunk branching (`main` plus short branches), the must-for-usable list, clutter (191 worktrees, about 8 GB of test homes, junk Library items), stale docs. The UI rebuild branch exists only on his PC by his choice.
+- `research/methodology/49-compute-and-storage-options.md`: one Linux home server, Cloudflare R2 for storage and backups, Cloudflare containers for bursts; Windows (cTrader) stays on the PC; a T3 Code-style "connect a machine" flow.
+- `research/methodology/50-backend-packages-and-data-today.md`: what QMF, QMB, QML and QMN do today and every data path. The agent tools for data, backtests and the node return nothing in the running host (empty starting setup); five Libraries exist in code; history data is orphaned.
+
+**His order from here (2026-10-21/22).** Merges (his review agent) -> deletions (Claude Code) -> cleanup -> backend finished (data journeys with the Library taking in all data, agent doors into QMB and QMF, loose wires) -> UI last, as pure wiring. The copilot methodology is designed in this lead session (CIS over BMad). The unit, QML revision, MIS router and a simplified trading node ("a server where trusted bots live") come after, in their own sessions. ML training runs on his PC first (Quadro T1000, 4 GB).
+
+**Planning workflow for the new rounds:** see the operator memory "planning workflow that worked" (audit, research, three-ledger alignment, on-the-ground inventory, studies, party-mode and CIS funnel, BMad fold, review and fix, re-centralize, check-plan).
+
+---
+
+## History: state of play, 2026-10-18 evening
 
 Read this file first, then `26-operator-rulings-and-alignment.md` (rulings 1-114; the latest ruling wins and outranks every other file). This file replaces the 2026-10-16 night version; that version's history lives in git.
 
