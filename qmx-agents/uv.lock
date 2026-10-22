@@ -4687,7 +4687,6 @@ version = "0.1.0"
 source = { editable = "packages/qmx-tools" }
 dependencies = [
     { name = "fastmcp" },
-    { name = "langchain-core" },
     { name = "pydantic" },
     { name = "qmb" },
     { name = "qmf-data" },
@@ -4709,7 +4708,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = "==4.0.11" },
-    { name = "langchain-core", specifier = "==1.6.7" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "qmb", editable = "../qmb" },
     { name = "qmf-data", editable = "../packages/qmf-data" },
