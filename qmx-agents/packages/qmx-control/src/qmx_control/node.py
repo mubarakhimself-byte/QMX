@@ -8,6 +8,11 @@ root's job.
 
 `qmx node verify` is the doctor: one `PASS`/`FAIL` line per fact, including the primary store the
 setting names and whether the Hub answers.
+
+`qmx node update` drains the node before it installs anything (AD-65, Appendix F): it asks the
+host to stop claiming fires, waits until no attempt is in flight, and only then runs the bootstrap
+at the pinned revision and lets it restart the services. An update that cannot drain says so and
+restarts nothing, so a node is never cut mid-node.
 """
 
 from __future__ import annotations
@@ -23,9 +28,11 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 import tomllib
 import urllib.error
 import urllib.request
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -233,6 +240,88 @@ def flip_primary(home: Path, url: str) -> None:
     path.write_text("\n".join(kept).rstrip("\n") + "\n", encoding="utf-8")
 
 
+DRAIN_ROUTE: Final = "/api/node/drain"
+CONTROL_PORT: Final = 8766
+"""The control service `qmx node serve` binds on the tailnet address."""
+
+
+def post(url: str, body: Mapping[str, object], headers: Mapping[str, str]) -> Mapping[str, object]:
+    request = urllib.request.Request(  # noqa: S310 (the node's own tailnet address)
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", **headers},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as answer:  # noqa: S310
+        return cast("Mapping[str, object]", json.loads(answer.read()))
+
+
+def drain(
+    url: str,
+    token: str,
+    *,
+    timeout_s: float,
+    wait_s: float = 2.0,
+    poster: Callable[[str, Mapping[str, object], Mapping[str, str]], Mapping[str, object]] = post,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> dict[str, object]:
+    """Ask the host to stop claiming fires and wait until no attempt is in flight.
+
+    Returns the host's last answer with `drained` true only when it said so. A timeout returns
+    `drained: False`, and the caller then restarts nothing.
+    """
+    deadline = clock() + timeout_s
+    while True:
+        answer = dict(poster(f"{url}{DRAIN_ROUTE}", {}, {"Authorization": f"Bearer {token}"}))
+        if answer.get("drained"):
+            return answer
+        if clock() >= deadline:
+            return answer | {"drained": False, "timed_out": True}
+        sleep(wait_s)
+
+
+def update(
+    home: Path,
+    vault: Path,
+    *,
+    revision: str,
+    timeout_s: float = 3600.0,
+    wait_s: float = 2.0,
+    poster: Callable[[str, Mapping[str, object], Mapping[str, str]], Mapping[str, object]] = post,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+    installer: Callable[[str], None] | None = None,
+    address_of: Callable[[], str] | None = None,
+) -> dict[str, object]:
+    """`qmx node update`: drain, then install the pinned revision and let the bootstrap restart.
+
+    `installer` and `address_of` are the install step and the node's own address, so a test never
+    runs sudo or asks Tailscale; the real ones are the bootstrap script and `tailscale ip -4`.
+    """
+
+    def bootstrap_install(pinned: str) -> None:
+        run(["sudo", "bash", "-s"], input_text=bootstrap_script(pinned))
+
+    token = read_secret(vault, "qmx/control-token", "control-token")
+    if not token:
+        return {"drained": False, "restarted": False, "error": "no control token"}
+    address = (address_of or (lambda: run(["tailscale", "ip", "-4"]).splitlines()[0]))()
+    answered = drain(
+        f"http://{address}:{CONTROL_PORT}",
+        token,
+        timeout_s=timeout_s,
+        wait_s=wait_s,
+        poster=poster,
+        sleep=sleep,
+        clock=clock,
+    )
+    if not answered.get("drained"):
+        return answered | {"restarted": False}
+    (installer or bootstrap_install)(revision)
+    return answered | {"restarted": True, "revision": revision}
+
+
 def transfer(host: str, revision: str) -> str:
     """Ship the pinned source archive to the host and run the bootstrap script there."""
     ssh = shutil.which("ssh")
@@ -283,6 +372,11 @@ def main() -> int:
     login.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     login.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
     login.add_argument("--machine", default="")
+    refresh = commands.add_parser("update")
+    refresh.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    refresh.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    refresh.add_argument("--revision", default="")
+    refresh.add_argument("--timeout", type=float, default=3600.0)
     vault_command = commands.add_parser("vault")
     vault_commands = vault_command.add_subparsers(dest="vault_command", required=True)
     vault_install_command = vault_commands.add_parser("install")
@@ -388,6 +482,19 @@ def main() -> int:
         signed_in, line = plan_login(cast(Path, args.home), cast(Path, args.vault), machine)
         print(f"{'PASS' if signed_in else 'not run, '}{line}")
         return 0
+    if args.command == "update":
+        revision = cast(str, args.revision) or run(["git", "rev-parse", "HEAD"])
+        if not re.fullmatch(r"[0-9a-f]{40}", revision):
+            raise RuntimeError("Update needs an exact Git commit.")
+        done = update(
+            cast(Path, args.home),
+            cast(Path, args.vault),
+            revision=revision,
+            timeout_s=float(args.timeout),
+        )
+        print(f"{'PASS' if done.get('restarted') else 'FAIL'} drained={done.get('drained')}")
+        print(json.dumps(done, sort_keys=True))
+        return 0 if done.get("restarted") else 1
     if args.command == "vault":
         home = cast(Path, args.home)
         source = cast(Path | None, args.document)
