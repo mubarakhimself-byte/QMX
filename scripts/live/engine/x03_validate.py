@@ -134,21 +134,23 @@ def bad(log: Log) -> None:
 
 
 def money(log: Log) -> None:
-    folder = FIXTURES / "bad-money"
-    action = json.loads((folder / "definition.json").read_text(encoding="utf-8"))["nodes"][1][
-        "parameters"
-    ]["action"]
-    log(f"llm node parameter action = {action!r}")
+    folder = copy("llm-node", "order-word")
+
+    def plant(document: dict[str, Any]) -> None:
+        document["nodes"][1]["parameters"] = {"prompt": "Pick one.", "action": "place_order"}
+
+    rewrite(folder, plant)
+    log("llm node parameter action = 'place_order'")
     code, out = cli(log, folder)
     log.check(
-        "lint refuses the llm node's place_order with money_act",
-        code == 1 and codes(out) == ["money_act"],
-        codes(out),
+        "an order act in a node parameter validates clean now that the word list is retired",
+        code == 0 and out.startswith("ok sha256:"),
+        code,
     )
 
 
 def token(log: Log) -> None:
-    folder = copy("bad-money", "token")
+    folder = copy("llm-node", "token")
     literal = "sk-" + "Qx7" * 13 + "Z"
 
     def plant(document: dict[str, Any]) -> None:
