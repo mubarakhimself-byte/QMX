@@ -15,9 +15,6 @@ MODULES = (
     "qml",
     "qmb.host.research_store",
     "qmn.host.configured_runtime",
-    "qma.core.ontology",
-    "qma.wire.grant_record",
-    "qma.daemon.process",
 )
 
 

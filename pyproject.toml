@@ -225,9 +225,6 @@ markers = [
 # QMF package sources on the import path, so `qmf.*` resolves from src/ without
 # an install at Tier 1 (additive; adws/tests never import qmf and are unaffected).
 pythonpath = [
-    "qmx-agents/packages/qma-core/src",
-    "qmx-agents/packages/qma-wire/src",
-    "qmx-agents/packages/qma-daemon/src",
     "packages/qmf-core/src",
     "packages/qmf-registry/src",
     "packages/qmf-data/src",
@@ -357,9 +354,6 @@ pythonPlatform = "Windows"
 # type-check (Story 1.7); the rest preserves pyright's default exclusions.
 exclude = ["**/node_modules", "**/__pycache__", "**/.*", "tools/tests/fixtures"]
 extraPaths = [
-    "qmx-agents/packages/qma-core/src",
-    "qmx-agents/packages/qma-wire/src",
-    "qmx-agents/packages/qma-daemon/src",
     "qmx-agents/packages/qma-harness/src",
     "packages/qmf-core/src",
     "packages/qmf-registry/src",

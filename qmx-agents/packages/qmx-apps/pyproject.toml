@@ -12,7 +12,6 @@ dependencies = [
     "pywin32==312; sys_platform == 'win32'",
     "duckdb==1.5.5",
     "cachetools==7.2.1",
-    "qma-core",
     "qmx-ledger",
 ]
 
@@ -21,7 +20,6 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-qma-core = { workspace = true }
 qmx-ledger = { workspace = true }
 
 [dependency-groups]
@@ -58,14 +56,17 @@ extend-exclude = []
 
 [tool.pyright]
 include = ["src", "tests", "../../../examples/apps"]
-# The two example apps import their git-pinned qmx_agents (Appendix G), which the workspace no
-# longer installs; the defaults are restated because `exclude` replaces them.
+# The two example apps import their git-pinned qmx_agents and LangChain (Appendix G), which the
+# workspace no longer installs, so their modules and the two files that import `macro_bias` are
+# left out; the defaults are restated because `exclude` replaces them.
 exclude = [
     "**/node_modules",
     "**/__pycache__",
     "**/.*",
     "../../../examples/apps/weekend-watcher/server.py",
     "../../../examples/apps/macro-daily-bias/macro_bias.py",
+    "../../../examples/apps/macro-daily-bias/daily.py",
+    "../../../examples/apps/macro-daily-bias/tests/test_bias.py",
 ]
 extraPaths = ["src", "../../../examples/apps/mql5-articles", "../../../examples/apps/macro-daily-bias"]
 typeCheckingMode = "strict"

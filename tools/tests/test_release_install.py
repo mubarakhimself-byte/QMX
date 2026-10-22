@@ -30,9 +30,6 @@ _DISTRIBUTIONS = (
     "qml",
     "qmb",
     "qmn",
-    "qma_core",
-    "qma_wire",
-    "qma_daemon",
 )
 
 
@@ -70,8 +67,6 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
     (path / "launcher.py").write_text("pass\n")
     (path / "install.py").write_text("pass\n")
     (path / "runtime_wheels.py").write_text("# test helper\n")
-    packs = {"qma/packs/default.json": "b" * 64}
-    (path / "pack-resources.json").write_text(json.dumps(packs))
     ui = _archive(
         {"../escape.txt": b"bad", "index.html": b"<html></html>"}
         if unsafe_ui
@@ -93,7 +88,6 @@ def _bundle(path: Path, *, unsafe_ui: bool = False) -> Path:
         "requirements.lock",
         "launcher.py",
         "install.py",
-        "pack-resources.json",
         "ui.tar.gz",
         "qmn-deploy.tar.gz",
         "README.md",

@@ -8,7 +8,6 @@ dependencies = [
     "qmx-control",
     "qmx-tools",
     "qmx-broker",
-    "qma-core",
     "qmx-ledger",
     "qmx-router",
     "keyring==25.7.0",
@@ -29,9 +28,9 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-# qma.boot, qma.serve, qma.launcher, qma.console, qma.harness and qma.gpt share the PEP 420
-# namespace `qma` with qma-core. uv_build takes only packages in a module list, so the whole
-# namespace under src/qma ships, and test_import_rules.py holds the module boundaries.
+# qma.boot, qma.serve, qma.launcher, qma.console, qma.harness and qma.gpt live in the PEP 420
+# namespace `qma`. uv_build takes only packages in a module list, so the whole namespace under
+# src/qma ships, and test_import_rules.py holds the module boundaries.
 module-name = "qma"
 namespace = true
 
@@ -39,7 +38,6 @@ namespace = true
 qmx-control = { workspace = true }
 qmx-tools = { workspace = true }
 qmx-broker = { workspace = true }
-qma-core = { workspace = true }
 qmx-ledger = { workspace = true }
 qmx-router = { workspace = true }
 

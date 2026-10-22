@@ -25,7 +25,6 @@ _RUNTIME_SPEC.loader.exec_module(runtime_wheels)
 _PRODUCT_DISTRIBUTIONS = (
     "qmf_core", "qmf_data", "qmf_registry", "qmf_indicators", "qmf_structure",
     "qmf_risk", "qmf_venue", "qmf_calendar_forex", "qml", "qmb", "qmn",
-    "qma_core", "qma_wire", "qma_daemon",
 )
 
 
@@ -252,7 +251,6 @@ def test_installer_offline_preflight_and_pip_are_isolated_and_hash_required(
     (bundle / "install.py").write_text("pass\n")
     (bundle / "README.md").write_text("test\n")
     (bundle / "source-manifest.json").write_text(json.dumps({"backend": "a" * 40}))
-    (bundle / "pack-resources.json").write_text(json.dumps({"pack.json": "b" * 64}))
     (bundle / "ui.tar.gz").write_bytes(_fixture_archive({"index.html": b"ok"}))
     (bundle / "qmn-deploy.tar.gz").write_bytes(
         _fixture_archive(

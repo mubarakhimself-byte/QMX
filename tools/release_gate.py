@@ -24,9 +24,6 @@ DISTRIBUTIONS = {
     "qml",
     "qmb",
     "qmn",
-    "qma_core",
-    "qma_wire",
-    "qma_daemon",
 }
 
 REQUIRED = (
@@ -86,7 +83,6 @@ def evaluate(manifest: object, *, evidence_root: Path | None = None) -> list[str
         "launcher.py",
         "install.py",
         "requirements.lock",
-        "pack-resources.json",
         "ui-build.json",
     ):
         if suffix not in artifacts:
@@ -98,7 +94,6 @@ def evaluate(manifest: object, *, evidence_root: Path | None = None) -> list[str
                 errors.append(f"{name}: artifact is absent or checksum differs")
             else:
                 errors.extend(_artifact_errors(path))
-        errors.extend(_pack_errors(evidence_root, artifacts))
         provenance = _local_file(evidence_root, "ui-build.json")
         if provenance is None:
             errors.append("ui-build.json: exact UI build provenance is absent")
@@ -176,47 +171,10 @@ def _artifact_errors(path: Path) -> list[str]:
                 }
                 if required - names:
                     return [f"{path.name}: missing node deployment assets"]
-        elif path.name.endswith("pack-resources.json"):
-            resources: object = json.loads(path.read_text())
-            if not isinstance(resources, dict) or len(cast("dict[str, object]", resources)) < 5:
-                return [f"{path.name}: mandatory pack resource inventory is missing"]
         elif path.name.endswith("requirements.lock") and "==" not in path.read_text():
             return [f"{path.name}: runtime versions are not pinned"]
     except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError, KeyError) as exc:
         return [f"{path.name}: invalid artifact format: {exc}"]
-    return []
-
-
-def _pack_errors(root: Path, artifacts: Mapping[str, object]) -> list[str]:
-    """Bind the mandatory pack inventory to the actual installed distribution."""
-    inventory = _local_file(root, "pack-resources.json")
-    daemon = next(
-        (
-            str(name)
-            for name in artifacts
-            if str(name).startswith("qma_daemon-") and str(name).endswith(".whl")
-        ),
-        None,
-    )
-    wheel_path = _local_file(root, daemon)
-    if inventory is None or wheel_path is None:
-        return ["mandatory pack inventory or daemon wheel is absent"]
-    try:
-        recorded = json.loads(inventory.read_text())
-        prefix = "qma/daemon/bundled_packs/"
-        with zipfile.ZipFile(wheel_path) as wheel:
-            actual = {
-                name.removeprefix(prefix): hashlib.sha256(wheel.read(name)).hexdigest()
-                for name in wheel.namelist()
-                if name.startswith(prefix) and not name.endswith("/")
-            }
-        if (
-            recorded != actual
-            or len([name for name in actual if name.endswith("manifest.json")]) < 5
-        ):
-            return ["mandatory pack inventory differs from bundled daemon resources"]
-    except (OSError, ValueError, zipfile.BadZipFile):
-        return ["mandatory pack resources cannot be verified"]
     return []
 
 
