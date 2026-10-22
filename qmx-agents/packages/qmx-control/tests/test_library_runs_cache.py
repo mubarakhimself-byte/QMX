@@ -88,7 +88,7 @@ def test_web_results_are_saved_once_per_url_and_day(tmp_path: Path) -> None:
         service.library_save(item.model_copy(update={"fetched_date": "2026-02-30"}))
 
 
-def test_old_control_catalog_and_runs_are_migrated(tmp_path: Path) -> None:
+def test_old_control_catalog_is_migrated(tmp_path: Path) -> None:
     tmp_path.mkdir(exist_ok=True)
     with closing(sqlite3.connect(tmp_path / "control.db")) as db, db:
         db.execute("CREATE TABLE library(id TEXT PRIMARY KEY,data TEXT)")
@@ -106,11 +106,8 @@ def test_old_control_catalog_and_runs_are_migrated(tmp_path: Path) -> None:
                 ),
             ),
         )
-        db.execute("CREATE TABLE work(kind TEXT,id TEXT,data TEXT,PRIMARY KEY(kind,id))")
-        db.execute("INSERT INTO work VALUES('runs','r1',?)", ('{"status":"completed"}',))
     service = ControlService(tmp_path)
     assert service.library_get("saved-id")["content"] == {"value": 1}
-    assert service.runs_get("r1")["status"] == "completed"
     assert ControlService(tmp_path).library_get("saved-id")["id"] == "saved-id"
 
 
@@ -129,13 +126,13 @@ def test_legacy_domain_envelopes_enter_the_shared_catalog(tmp_path: Path) -> Non
 
 def test_aggregate_cache_detects_another_owner_event(tmp_path: Path) -> None:
     reader = ControlService(tmp_path)
-    assert reader.aggregates_get()["active_jobs"] == 0
+    assert reader.aggregates_get()["library_items"] == 0
     writer = ControlService(tmp_path)
-    writer.record_work("jobs", "job1", {"status": "running"})
-    assert reader.aggregates_get()["active_jobs"] == 1
+    writer.library_save(LibraryInput(title="later", kind="note", content={}))
+    assert reader.aggregates_get()["library_items"] == 1
     pushed = reader.events("aggregates")[-1]["data"]
     assert isinstance(pushed, dict)
-    assert pushed["active_jobs"] == 1
+    assert pushed["library_items"] == 1
 
 
 @pytest.mark.parametrize(
@@ -237,25 +234,27 @@ def test_run_projection_validates_journal_and_updates_events(tmp_path: Path) -> 
     )
     append(path, "r1", 3, "tool_end", {"result_ref": "artifacts/abc"})
     service = ControlService(tmp_path)
-    run = service.runs_get("r1")
+    service.aggregates_get()
+    run = service.run_index.get("r1")
     assert run["model"] == {"researcher": {"resolved": "fake:model"}}
     assert run["cost"] == "0.05"
     assert run["artifacts"] == ["artifacts/abc"]
     assert run["target"] == "laptop"
     assert run["status"] == "running"
     events = service.events("runs")
-    service.runs_list()
+    service.aggregates_get()
     assert service.events("runs") == events
     append(path, "r1", 4, "run_end", {"status": "completed"})
-    assert service.runs_get("r1")["ended"] == "2026-10-08T00:00:04+00:00"
-    assert service.runs_list()[0]["status"] == "completed"
+    service.aggregates_get()
+    assert service.run_index.get("r1")["ended"] == "2026-10-08T00:00:04+00:00"
+    assert service.aggregates_get()["runs"] == 1
     assert len(service.events("runs")) == 2
     with path.open("ab") as stream:
         stream.write(b'{"seq":5')
-    assert service.runs_get("r1")["status"] == "completed"
+    assert service.run_index.get("r1")["status"] == "completed"
     path.write_bytes(path.read_bytes().replace(b"completed", b"cancelled"))
     with pytest.raises(ControlError, match="journal"):
-        service.runs_get("r1")
+        service.aggregates_get()
 
 
 def test_library_run_and_aggregate_doors_match(tmp_path: Path) -> None:
@@ -300,11 +299,6 @@ def test_library_run_and_aggregate_doors_match(tmp_path: Path) -> None:
                 stream = rest.get("/api/events/aggregates?max_events=1", headers=HEADERS)
                 assert "event: aggregates" in stream.text
                 assert '"library_items": 1' in stream.text
-                service.record_work("runs", "r1", {"status": "completed"})
-                assert (
-                    await mcp.call_tool("workflows_remote_get", {"run_id": "r1"})
-                ).data == rest.get("/api/runs/r1", headers=HEADERS).json()
-                assert rest.get("/api/runs/missing", headers=HEADERS).status_code == 404
 
     asyncio.run(exercise())
 
@@ -321,9 +315,10 @@ def test_the_run_index_never_lists_a_chat_journal(tmp_path: Path) -> None:
             ("chat-0", json.dumps({"id": "chat-0", "journal": str(chat.with_name("old.jsonl"))})),
         )
     service = ControlService(tmp_path)
-    assert [run["id"] for run in service.runs_list()] == ["r2"]
+    service.run_index.refresh()
+    assert [run["id"] for run in service.run_index.list(0, 100)] == ["r2"]
     with pytest.raises(ControlError, match="Unknown run id"):
-        service.runs_get("chat-1")
+        service.run_index.get("chat-1")
 
 
 def test_a_background_run_keeps_its_model_and_a_mirrored_chat_stays_out(tmp_path: Path) -> None:
@@ -331,16 +326,18 @@ def test_a_background_run_keeps_its_model_and_a_mirrored_chat_stays_out(tmp_path
     chat = tmp_path / "runs" / "chat-1" / "journal.jsonl"
     append(chat, "chat-1", 1, "run_start", {"agent": "primary", "session_id": "chat-1"})
     row = {"id": "chat-1", "kind": "agent", "session_id": "chat-1", "journal": str(chat)}
-    with closing(sqlite3.connect(tmp_path / "control.db")) as db, db:
-        db.execute("INSERT INTO work VALUES('runs','chat-1',?)", (json.dumps(row),))
+    with closing(sqlite3.connect(tmp_path / "runs.db")) as db, db:
+        db.execute("INSERT INTO runs VALUES(?,?)", ("chat-1", json.dumps(row)))
     service = ControlService(tmp_path)
-    service.record_work("runs", "bg-1", {"session_id": "child-1", "status": "running"})
+    service.run_index.record("bg-1", {"session_id": "child-1", "status": "running"})
     background = tmp_path / "runs" / "bg-1" / "journal.jsonl"
     append(background, "bg-1", 1, "run_start", {"agent": "builder", "session_id": "child-1"})
     append(background, "bg-1", 2, "model_call", {"agent": "builder", "model": "fake:model"})
     append(background, "bg-1", 3, "run_end", {"status": "completed"})
-    assert service.runs_get("bg-1")["model"] == {"builder": "fake:model"}
+    assert [run["id"] for run in service.run_index.refresh()] == ["bg-1"]
+    assert service.run_index.get("bg-1")["model"] == {"builder": "fake:model"}
     service.close()
     service = ControlService(tmp_path)
-    assert [run["id"] for run in service.runs_list()] == ["bg-1"]
-    assert service.runs_get("bg-1")["status"] == "completed"
+    service.run_index.refresh()
+    assert [run["id"] for run in service.run_index.list(0, 100)] == ["bg-1"]
+    assert service.run_index.get("bg-1")["status"] == "completed"

@@ -62,7 +62,6 @@ HOST_SECTIONS: frozenset[SettingsSection] = frozenset({"claude", "environment"})
 """Sections only a host that registers a parser for them can write."""
 ENGINE = "an attached workflow engine"
 type EventTopic = Literal["runs", "jobs", "sessions", "apps", "library", "settings", "aggregates"]
-type WorkKind = Literal["runs", "jobs"]
 EVAL_TASK: Final = "eval-task"
 """The tag of a copilot eval battery task (engine AD-66). A new failure becomes a task with one
 `library_save` carrying it: content `{id, prompt, grade, source}`, `grade` either
@@ -224,7 +223,6 @@ class ControlService:
         self.settings_parsers = dict(settings_parsers or {})
         self.home.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._cancellers: dict[tuple[WorkKind, str], Callable[[], None]] = {}
         self._app_hooks: dict[str, Callable[[str, Document], None]] = {}
         self._apps: Supervisor | None = None
         self._backup_lock = threading.Lock()
@@ -242,8 +240,6 @@ class ControlService:
                 CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS blocks (session_id TEXT NOT NULL, seq INTEGER NOT NULL,
                     data TEXT NOT NULL, PRIMARY KEY(session_id, seq));
-                CREATE TABLE IF NOT EXISTS work (kind TEXT NOT NULL, id TEXT NOT NULL,
-                    data TEXT NOT NULL, PRIMARY KEY(kind, id));
                 CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT,
                     topic TEXT NOT NULL, subject TEXT NOT NULL, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS delegate_completions (handle TEXT PRIMARY KEY,
@@ -272,11 +268,6 @@ class ControlService:
                     self.library.save(LibraryInput.model_validate(item), item_id=item_id)
             if legacy_catalog:
                 db.execute("DROP TABLE library")
-            for work_id, raw in db.execute("SELECT id,data FROM work WHERE kind='runs'").fetchall():
-                if self.run_index.is_chat(work_id, _document(raw)):
-                    db.execute("DELETE FROM work WHERE kind='runs' AND id=?", (work_id,))
-                else:
-                    self.run_index.record(work_id, _document(raw))
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:
@@ -292,7 +283,7 @@ class ControlService:
             (topic, subject, json.dumps(data)),
         )
         if topic in {"runs", "jobs", "apps", "library"}:
-            summary = self._aggregate_counts(db, cursor.lastrowid or 0)
+            summary = self._aggregate_counts(cursor.lastrowid or 0)
             db.execute(
                 "INSERT INTO events(topic,subject,data) VALUES('aggregates','',?)",
                 (json.dumps(summary),),
@@ -797,27 +788,26 @@ class ControlService:
             raise ControlError(
                 "backup_failed", "Snapshot creation failed; backup was not published.", 409
             ) from error
-        if result["status"] in {"completed", "dry_run"}:
-            self.record_work("jobs", "weekly-backup", {**result, "status": "completed"})
         return result
 
     def _aggregate_read(self, revision: int) -> Document:
-        with self._connect() as db:
-            return self._aggregate_counts(db, revision)
+        return self._aggregate_counts(revision)
 
-    def _aggregate_counts(self, db: sqlite3.Connection, revision: int) -> Document:
-        statuses = [
-            _document(row[0]).get("status")
-            for row in db.execute("SELECT data FROM work WHERE kind='jobs'").fetchall()
-        ]
+    def _aggregate_counts(self, revision: int) -> Document:
         count = self.library.count()
         with closing(sqlite3.connect(self.home / "runs.db")) as index:
             runs = index.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
+        engine = self._workflow_engine
+        active = 0
+        if engine is not None:
+            active = sum(
+                1 for run in engine.workflow_runs_list(None) if run.get("status") == "running"
+            )
         return {
             "revision": revision,
             "library_items": count,
             "runs": runs,
-            "active_jobs": sum(status == "running" for status in statuses),
+            "active_jobs": active,
         }
 
     @operation("ops", "aggregates", "read", rest=("GET", "/api/aggregates"))
@@ -833,114 +823,10 @@ class ControlService:
         if offset < 0 or not 1 <= limit <= 1000:
             raise ControlError("invalid_page", "Use offset >= 0 and limit between 1 and 1000.")
 
-    def record_work(
-        self,
-        kind: WorkKind,
-        work_id: str,
-        data: Document,
-        cancel: Callable[[], None] | None = None,
-    ) -> Document:
-        """Called by the owner of a real run or job to publish its state."""
-        with self._lock, self._connect() as db:
-            if kind == "runs":
-                data = self.run_index.record(work_id, data)
-            if cancel is not None:
-                self._cancellers[kind, work_id] = cancel
-            if data.get("status") in {
-                "complete",
-                "completed",
-                "failed",
-                "cancelled",
-                "canceled",
-                "stopped",
-            }:
-                self._cancellers.pop((kind, work_id), None)
-            db.execute(
-                "INSERT INTO work VALUES(?,?,?) ON CONFLICT(kind,id) "
-                "DO UPDATE SET data=excluded.data",
-                (kind, work_id, json.dumps(data)),
-            )
-            self._event(db, kind, work_id, data)
-        return data
-
-    def _work_list(self, kind: WorkKind, offset: int, limit: int) -> list[Document]:
-        self._page(offset, limit)
-        with self._connect() as db:
-            rows = db.execute(
-                "SELECT id,data FROM work WHERE kind=? ORDER BY rowid LIMIT ? OFFSET ?",
-                (kind, limit, offset),
-            ).fetchall()
-        return [{**_document(row[1]), "id": row[0]} for row in rows]
-
-    @operation("workflows", "remote_list", "read", rest=("GET", "/api/runs"), cursor=True)
-    def runs_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
-        """List recorded runs; an empty installation has no runs."""
-        self._page(offset, limit)
-        self._refresh_runs()
-        return self.run_index.list(offset, limit)
-
-    @operation("workflows", "remote_get", "read", rest=("GET", "/api/runs/{run_id}"))
-    def runs_get(self, run_id: str) -> Document:
-        """Read a journal-indexed run, including resolved models and artifacts."""
-        self._refresh_runs()
-        return self.run_index.get(run_id)
-
     def _refresh_runs(self) -> None:
         with self._lock, self._connect() as db:
             for data in self.run_index.refresh():
-                run_id = str(data["id"])
-                db.execute(
-                    "INSERT INTO work VALUES('runs',?,?) ON CONFLICT(kind,id) "
-                    "DO UPDATE SET data=excluded.data",
-                    (run_id, json.dumps(data)),
-                )
-                self._event(db, "runs", run_id, data)
-
-    @operation("workflows", "jobs_list", "read", rest=("GET", "/api/jobs"), cursor=True)
-    def jobs_list(self, offset: int = 0, limit: int = 100) -> list[Document]:
-        """List recorded background jobs."""
-        return self._work_list("jobs", offset, limit)
-
-    def _cancel(self, kind: WorkKind, work_id: str) -> Document:
-        with self._lock, self._connect() as db:
-            row = db.execute(
-                "SELECT data FROM work WHERE kind=? AND id=?", (kind, work_id)
-            ).fetchone()
-            if row is None:
-                raise ControlError("not_found", f"Unknown {kind} id.", 404)
-            data = _document(row[0])
-            if data.get("status") in {
-                "complete",
-                "completed",
-                "failed",
-                "cancelled",
-                "canceled",
-                "stopped",
-            }:
-                return {**data, "id": work_id}
-            cancel = self._cancellers.get((kind, work_id))
-        if cancel is None:
-            return self._unavailable(f"{kind}.cancel", "a connected run/job owner (P12/P22)")
-        try:
-            cancel()
-        except Exception as error:
-            raise ControlError(
-                "cancel_failed", "The work owner could not accept cancellation.", 409
-            ) from error
-        result: Document = {"id": work_id, "status": "cancel_requested"}
-        with self._lock, self._connect() as db:
-            self._event(db, kind, work_id, result)
-        return result
-
-    @operation("workflows", "remote_cancel", "manage", rest=("POST", "/api/runs/{run_id}/cancel"))
-    def runs_cancel(self, run_id: str) -> Document:
-        """Cancel a run through its owner; unavailable until the runner is connected."""
-        return self._cancel("runs", run_id)
-
-    @operation("workflows", "jobs_cancel", "manage", rest=("POST", "/api/jobs/{job_id}/cancel"))
-    def jobs_cancel(self, job_id: str) -> Document:
-        """Cancel a job through its owner; unavailable until the runner is connected."""
-        return self._cancel("jobs", job_id)
+                self._event(db, "runs", str(data["id"]), data)
 
     @staticmethod
     def _unavailable(operation: str, packet: str = "P12-P14") -> NoReturn:
@@ -1219,17 +1105,6 @@ class ControlService:
     def _app_event(self, app_id: str, data: Document) -> None:
         with self._lock, self._connect() as db:
             self._event(db, "apps", app_id, data)
-        instance_id = data.get("instance_id")
-        if isinstance(instance_id, str):
-            status = data.get("status")
-            work = {**data, "status": "failed" if status == "tripped" else status}
-
-            def cancel() -> None:
-                self.apps_stop(app_id)
-
-            self.record_work(
-                "jobs", instance_id, work, cancel=cancel if status == "running" else None
-            )
         with self._lock:
             for hook in list(self._app_hooks.values()):
                 hook(app_id, data)

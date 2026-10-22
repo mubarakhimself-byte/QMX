@@ -67,12 +67,10 @@ def test_real_app_registry_parity_artifact_and_owner_cancellation(tmp_path: Path
                 )
                 assert resource.status_code == 200
                 assert "api-fixture" in resource.json()[0]["text"]
-                job_id = started.json()["instance_id"]
-                canceled = rest.post(f"/api/jobs/{job_id}/cancel", headers=headers)
-                assert canceled.status_code == 200, canceled.text
-                assert canceled.json()["status"] == "cancel_requested"
-                jobs = rest.get("/api/jobs", headers=headers).json()
-                assert next(job for job in jobs if job["id"] == job_id)["status"] == "stopped"
+                stopped = rest.post("/api/apps/exchange-status/stop", headers=headers)
+                assert stopped.status_code == 200, stopped.text
+                assert stopped.json()["status"] == "stopped"
+                assert rest.get("/api/jobs", headers=headers).status_code == 404
                 assert not psutil.pid_exists(pid)
                 assert rest.get("/api/apps/registry", headers=headers).json() == []
                 assert (

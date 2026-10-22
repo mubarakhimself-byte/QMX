@@ -66,15 +66,19 @@ BLOCK_COPIES = {
         "rs3-source-to-lab-test/scripts/citation_check.py",
     ),
     "render-and-grade/scripts/render_and_grade.py": tuple(
-        f"{template.folder}/scripts/render_and_grade.py" for template in CATALOG
+        f"{template.folder}/scripts/render_and_grade.py"
+        for template in CATALOG
+        if template.folder != "backup-weekly"
     ),
     "render-and-grade/scripts/stop.py": tuple(
-        f"{template.folder}/scripts/stop.py" for template in CATALOG
+        f"{template.folder}/scripts/stop.py"
+        for template in CATALOG
+        if template.folder != "backup-weekly"
     ),
     "render-and-grade/scripts/deliver.py": tuple(
         f"{template.folder}/scripts/deliver.py"
         for template in CATALOG
-        if template.folder != "a-fill-the-library"
+        if template.folder not in {"a-fill-the-library", "backup-weekly"}
     ),
     "overfit-gates/scripts/deflated_sharpe.py": tuple(
         f"{folder}/scripts/deflated_sharpe.py"
@@ -231,11 +235,11 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_38_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_39_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 38
-    assert len(set(ids)) == 38
+    assert len(ids) == 39
+    assert len(set(ids)) == 39
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
@@ -254,12 +258,22 @@ def test_the_catalogue_lists_38_templates_each_with_a_source_card_and_its_own_fo
         "clippings-into-research",
         "morning-digest",
         "crystallise-a-workflow",
+        "backup-weekly",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
         f.name for f in FOLDERS if f.parent == PACK
     )
     assert sum(1 for t in CATALOG if t.needs) == 23
+
+
+def test_backup_weekly_is_a_script_workflow_on_a_cron_trigger() -> None:
+    found = find("backup-weekly")
+    definition = json.loads((PACK / found.folder / "definition.json").read_text("utf-8"))
+
+    assert [node["type"] for node in definition["nodes"]] == ["trigger", "script"]
+    assert definition["nodes"][0]["parameters"]["kinds"] == ["cron", "manual"]
+    assert [(cron.expr, cron.zone) for cron in found.triggers] == [("0 6 * * 1", "UTC")]
 
 
 def test_every_id_is_a_plain_phrase_and_every_title_says_what_the_template_does() -> None:
@@ -289,6 +303,7 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "morning-digest",
         "crystallise-a-workflow",
         "run-one-job-on-his-server",
+        "backup-weekly",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -537,7 +552,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_15_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_16_disabled_saves_22_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -553,9 +568,9 @@ def test_install_publishes_15_disabled_saves_22_drafts_and_a_second_install_chan
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 38
+    assert [i.action for i in second] == ["unchanged"] * 39
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 15
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 16
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -568,6 +583,7 @@ def test_install_publishes_15_disabled_saves_22_drafts_and_a_second_install_chan
     )
     assert status["question-over-a-large-table"] == ("validated draft, needs: rlm", None)
     assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
+        ("backup-weekly", "cron", False),
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
