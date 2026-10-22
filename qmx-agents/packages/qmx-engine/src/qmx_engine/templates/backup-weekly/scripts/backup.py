@@ -28,7 +28,8 @@ if not repository:
     print(json.dumps({"status": "not_configured"}))
     raise SystemExit(0)
 try:
-    dry_run = bool(given.get("dry_run")) or Path(str(repository)).is_dir()
+    local = Path(str(repository))
+    dry_run = bool(given.get("dry_run")) or (local.is_absolute() and local.is_dir())
     result = weekly_backup(home, str(repository), dry_run=dry_run)
 except (ControlError, OSError, sqlite3.Error) as error:
     cause = error.document()["error"]["message"] if isinstance(error, ControlError) else str(error)
