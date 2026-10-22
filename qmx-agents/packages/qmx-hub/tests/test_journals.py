@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 from qmx_engine.heartbeat import Heartbeat
 from qmx_engine.ledger import redact
 from qmx_library.port import LibraryRefused
@@ -33,8 +34,13 @@ def row(host: str, at: datetime) -> Heartbeat:
     )
 
 
-def journal() -> dict[str, str | list[dict[str, object]]]:
-    line = {"seq": 1, "at": NOW.isoformat(), "kind": "run_created", "data": {}}
+def journal() -> dict[str, JsonValue]:
+    line: dict[str, JsonValue] = {
+        "seq": 1,
+        "at": NOW.isoformat(),
+        "kind": "run_created",
+        "data": {},
+    }
     return {"run_id": "run-1", "home": "pc", "events": [line]}
 
 
@@ -84,4 +90,4 @@ def test_the_home_that_adopted_the_run_is_the_journals_only_writer(hub: Hub) -> 
     adopted = journal() | {"home": "contabo"}
     assert moved.value.code == "journal_moved"
     assert hub.put_journal(adopted, at=NOW.isoformat()) == 1
-    assert hub.journal("run-1")["home"] == "contabo"
+    assert (hub.journal("run-1") or {}).get("home") == "contabo"

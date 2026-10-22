@@ -168,12 +168,15 @@ class Journals(Protocol):
 
     def push(self, journal: Journal) -> float:
         """Send the run's journal; returns the call's milliseconds."""
+        ...
 
     def adoption(self, run_id: str) -> str | None:
         """The home that adopted the run, if one did."""
+        ...
 
     def adopt(self, run_id: str) -> Journal:
         """Take the claim and the journal, or raise `MirrorRefused`."""
+        ...
 
 
 def post_json(url: str, body: Mapping[str, JsonValue], headers: Mapping[str, str]) -> JsonValue:

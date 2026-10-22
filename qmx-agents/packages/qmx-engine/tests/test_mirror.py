@@ -4,12 +4,13 @@ Hub's answer becomes."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
 from pydantic import JsonValue
 
-from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.events import Event, EventKind
 from qmx_engine.ledger.mirror import (
     HubJournals,
     Journal,
@@ -23,7 +24,7 @@ AT = "2026-10-22T09:00:00+00:00"
 NEW = Path("D:/tmp/adopted")
 
 
-def event(seq: int, kind: str, **data: JsonValue) -> Event:
+def event(seq: int, kind: EventKind, **data: JsonValue) -> Event:
     return Event(seq, "run-1", AT, kind, dict(data))
 
 
@@ -61,9 +62,9 @@ def test_a_node_that_committed_files_keeps_one_line_and_reruns() -> None:
 
 
 def test_a_push_records_its_milliseconds_and_the_hubs_refusal_is_the_hubs_word() -> None:
-    calls: list[tuple[str, dict[str, JsonValue]]] = []
+    calls: list[tuple[str, Mapping[str, JsonValue]]] = []
 
-    def post(url: str, body: dict[str, JsonValue], _: object) -> JsonValue:
+    def post(url: str, body: Mapping[str, JsonValue], _: Mapping[str, str]) -> JsonValue:
         calls.append((url, body))
         return {"ok": True, "value": 2}
 
@@ -79,7 +80,7 @@ def test_a_push_records_its_milliseconds_and_the_hubs_refusal_is_the_hubs_word()
 
 
 def test_a_refused_push_is_counted_and_raises_its_code() -> None:
-    def post(url: str, body: dict[str, JsonValue], _: object) -> JsonValue:
+    def post(url: str, body: Mapping[str, JsonValue], _: Mapping[str, str]) -> JsonValue:
         return {"ok": False, "code": "journal_moved", "message": "another home owns it"}
 
     hub = HubJournals("http://hub:1", "not-a-key-value", home="pc", post=post)

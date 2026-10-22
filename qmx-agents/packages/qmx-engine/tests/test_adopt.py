@@ -8,7 +8,7 @@ route `journal_put`/`journal_adopt`, so what the tests exercise is the engine's 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -72,7 +72,7 @@ class JournalBox:
 
 
 @contextmanager
-def running(home: Path) -> Iterator[Engine]:
+def running(home: Path) -> Generator[Engine]:
     home.mkdir(parents=True, exist_ok=True)
     with Ledger.open(home) as ledger, InboxTable.open(home) as inbox:
         yield Engine(
