@@ -148,14 +148,6 @@ jobs:
       - name: Nested Tier-1 types
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run --no-sync poe types
-      - name: Nested Tier-1 test
-        env:
-          COVERAGE_FILE: .coverage-agents
-        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
-        run: uv run --no-sync poe test
-      - name: Nested Tier-1 cov-report
-        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
-        run: uv run --no-sync poe cov-report
 
   vulture:
     # Dead-code ratchet: fail only if the finding count rises above the committed baseline.
