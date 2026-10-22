@@ -173,8 +173,8 @@ def _replace(temp: Path, path: Path) -> None:
     """`os.replace`, retried while Windows reports the target held open (WinError 5 or 32).
 
     The wait doubles from `RENAME_WAIT_S`, so a virus scanner or an indexer that holds the target
-    for a moment no longer loses the write. When the tries run out the refusal names the holder,
-    the file's own path, because nothing else can say who has it open.
+    for a moment no longer loses the write. Past the last try the refusal names the path, because
+    no other part of the system can say which process holds it.
     """
     for attempt in range(RENAME_TRIES):
         try:
@@ -250,7 +250,7 @@ def _quarantine(root: Path, torn: TornTail) -> None:
         os.fsync(handle.fileno())
 
 
-def _state(root: Path, damage: Sequence[Damage]) -> StoreState:
+def _repair_logs(root: Path, damage: Sequence[Damage]) -> StoreState:
     """Quarantine every torn tail and say how the store opened."""
     alarms: list[str] = []
     incident: str | None = None
@@ -343,7 +343,7 @@ class Store:
             if not target.exists() or target.read_bytes() != schema.read_bytes():
                 shutil.copyfile(schema, target)
         try:
-            found = _state(root, inspect_logs(root))
+            found = _repair_logs(root, inspect_logs(root))
         except OSError as refused:
             handle.close()
             raise LibraryRefused(

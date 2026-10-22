@@ -152,7 +152,7 @@ def held_handle(root: Path) -> list[str]:
         store.release(ENGINE, "backtest:eurusd", "run-1")
         target = root / "refs" / "claims.json"
         marker = root / "held.marker"
-        holder = subprocess.Popen(  # noqa: S603
+        holder = subprocess.Popen(
             [sys.executable, "-c", HOLDER, str(target), str(marker), "0.6"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
