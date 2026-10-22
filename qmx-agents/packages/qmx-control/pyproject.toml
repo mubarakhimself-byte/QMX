@@ -32,7 +32,6 @@ build-backend = "uv_build"
 [tool.uv.sources]
 qmx-apps = { workspace = true }
 qmx-broker = { workspace = true }
-qmx-agents = { workspace = true }
 qmx-remote = { workspace = true }
 
 [dependency-groups]

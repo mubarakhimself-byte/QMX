@@ -3,11 +3,10 @@ from __future__ import annotations
 import asyncio
 import runpy
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from fastmcp import Client
-from pydantic import BaseModel
 from qmf.core import World
 from qmf.data import EvidenceStore
 from qml.protocol import construct_bot
@@ -16,7 +15,6 @@ from qmx_control.models import MemoKey
 
 from qmx_tools import DomainContext
 from qmx_tools.functions import domain_functions
-from qmx_tools.registry import default_tool_registry
 from qmx_tools.servers import create_server
 from qmx_tools.service import Artifact, Dataset, OrderProposal, unwrap
 
@@ -169,22 +167,6 @@ def test_domain_refs_preserve_type_when_payloads_match(context: DomainContext) -
     assert context.artifact(note["ref"]).kind == "note"
     assert context.artifact(report["ref"]).kind == "report"
     assert context.artifact(note["ref"]).content == context.artifact(report["ref"]).content
-
-
-def test_langchain_tools_have_typed_schemas_and_filter_arguments(context: DomainContext) -> None:
-    tools = default_tool_registry(context)
-    assert len(tools) == 13
-    for item in tools.values():
-        schema = cast("type[BaseModel]", item.get_input_schema()).model_json_schema()
-        assert "response_format" in schema["properties"]
-        assert item.description
-    bars = tools["qmx-data.read_bars"]
-    with pytest.raises(ValueError, match="less than or equal"):
-        bars.invoke({"symbol": "EURUSD", "timeframe": "1m", "limit": 1000})
-    with pytest.raises(ValueError, match="start must"):
-        bars.invoke({"symbol": "EURUSD", "timeframe": "1m", "start": 2, "end": 1})
-    with pytest.raises(ValueError, match="list_instruments"):
-        bars.invoke({"symbol": "missing", "timeframe": "1m"})
 
 
 def test_artifact_spill_restart_and_ref_confinement(context: DomainContext) -> None:

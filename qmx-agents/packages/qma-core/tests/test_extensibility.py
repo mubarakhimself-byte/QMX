@@ -137,7 +137,6 @@ def test_qma_ui_contract_placeholder_is_not_shipped() -> None:
         "packages/qma-core",
         "packages/qma-wire",
         "packages/qma-daemon",
-        "packages/qmx-agents",
         "packages/qmx-tools",
         "packages/qmx-broker",
         "packages/qmx-remote",
