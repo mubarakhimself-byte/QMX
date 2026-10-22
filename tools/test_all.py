@@ -70,12 +70,6 @@ def main() -> int:
             ["packages", "tests"],
         ),
         (
-            "qmx-agents",
-            ROOT / "qmx-agents/packages/qmx-agents",
-            ["python", "-m", "pytest", "tests", "-q"],
-            ["tests"],
-        ),
-        (
             "qmx-tools",
             ROOT / "qmx-agents/packages/qmx-tools",
             ["python", "-m", "pytest", "tests", "-q"],

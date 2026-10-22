@@ -31,7 +31,7 @@ addopts = "-n 2 --dist worksteal"
 markers = ["serial: requires exclusive access to shared resources"]
 
 [tool.ruff]
-extend = "../qmx-agents/pyproject.toml"
+extend = "../../pyproject.toml"
 extend-exclude = []
 
 [tool.ruff.lint.per-file-ignores]

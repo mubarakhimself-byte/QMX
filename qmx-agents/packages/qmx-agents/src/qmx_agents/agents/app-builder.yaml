@@ -1,8 +1,0 @@
-name: app-builder
-model: tier:workhorse
-system_prompt: app-builder.md
-mcp_servers: [qmx-control]
-memory: {scope: task}
-interrupt_on: {apps_admin_publish: true, apps_admin_start: true}
-permissions: {write: [/artifacts/**], deny_write: [/data/**]}
-budget: {model_calls: 100, tool_calls: 200}

@@ -14,7 +14,6 @@ def main() -> int:
     if uv is None:
         raise RuntimeError("uv is required to run CI")
     agents = ROOT / "qmx-agents"
-    core = agents / "packages/qmx-agents"
     control = agents / "packages/qmx-control"
     domain = agents / "packages/qmx-tools"
     apps = agents / "packages/qmx-apps"
@@ -35,7 +34,6 @@ def main() -> int:
     for workspace in (
         ROOT,
         agents,
-        core,
         control,
         domain,
         apps,
