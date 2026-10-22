@@ -39,13 +39,13 @@ class Streams:
 
     def took(self, forwarder: Forwarder, items: Sequence[Mapping[str, JsonValue]]) -> None:
         """One frame's items are the node's open set; the merged read serves them from here."""
-        forwarder.down.answered("inbox.list", [dict(item) for item in items], wall())
+        forwarder.down.answered("inbox.list", [dict(item) for item in items], wall(), streamed=True)
 
     async def hold(self, forwarder: Forwarder) -> None:
         """Hold one node's stream until cancelled. A failure marks its rows and retries."""
-        url = f"{forwarder.instance.url}/api/engine/forward/stream"
         while True:
             try:
+                url = f"{forwarder.instance.url}/api/engine/forward/stream"
                 headers = {PASS_HEADER: forwarder.pass_for()}
                 async with self.client.stream("GET", url, headers=headers) as answer:
                     if answer.status_code != 200:

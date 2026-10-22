@@ -221,11 +221,17 @@ class Down:
 
     def __init__(self) -> None:
         self.seen: dict[str, list[Mapping[str, JsonValue]]] = {}
+        self.streamed: set[str] = set()
+        """The verbs a held stream keeps fresh, so a read serves them without a call."""
         self.at: str | None = None
         self.since: str | None = None
 
-    def answered(self, verb: str, rows: list[Mapping[str, JsonValue]], at: str) -> None:
+    def answered(
+        self, verb: str, rows: list[Mapping[str, JsonValue]], at: str, *, streamed: bool = False
+    ) -> None:
         self.seen[verb] = rows
+        if streamed:
+            self.streamed.add(verb)
         self.at = at
         self.since = None
 
@@ -302,7 +308,17 @@ class Forwarder:
         return value
 
     def rows(self, verb: Verb, args: Mapping[str, JsonValue] | None = None) -> list[Homerow]:
-        """The instance's rows, or its last rows marked unreachable since a failure began."""
+        """The instance's rows, or its last rows marked unreachable since a failure began.
+
+        A verb a held stream keeps fresh is served from that cache, never by a call: the stream is
+        the one channel for those rows (AD-65), and a blocking call from the loop that holds the
+        stream would stall both.
+        """
+        if verb in self.down.streamed:
+            last = self.down.cache(verb)
+            if self.down.since is not None:
+                return marked(self.instance.name, last, self.down.since)
+            return [homerowed(self.instance.name, row) for row in last]
         try:
             value = self.read(verb, args)
         except ForwardRefused:
@@ -356,7 +372,9 @@ def forward_router(remote: Remote, key: str) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/engine/forward")
-    def forward(body: dict[str, JsonValue], request: Request) -> dict[str, JsonValue]:
+    async def forward(body: dict[str, JsonValue], request: Request) -> dict[str, JsonValue]:
+        """Answered on the server's own loop: the inbox table a home opens is bound to its thread
+        (one writer, AD-23), and FastAPI would run a plain `def` handler in a worker thread."""
         token = request.headers.get(PASS_HEADER, "")
         try:
             pass_ = verify_host_pass(key, token, target=remote.answered.name)
