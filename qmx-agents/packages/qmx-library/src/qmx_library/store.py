@@ -74,7 +74,7 @@ from qmx_library.port import (
     normalised,
 )
 from qmx_library.principal import MAIN, Act, Principal, may_advance, own_ref, state_ref
-from qmx_library.status import QUARANTINE, BadLine, Damage, StoreState, TornTail, inspect_logs
+from qmx_library.status import QUARANTINE, Damage, StoreState, TornTail, inspect_logs
 
 MANIFEST: Final = "qmx.library.object/1"
 CHECKOUT_FILE: Final = ".checkout.json"
@@ -295,7 +295,7 @@ class Store:
         wall: Callable[[], datetime],
         role: StoreRole = "writer",
         upstream: BlobSource | None = None,
-        state: StoreState = StoreState(),
+        state: StoreState,
     ) -> None:
         self.root = root
         self.name = name
