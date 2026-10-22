@@ -50,11 +50,11 @@ extend-exclude = []
 "**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
 
 [tool.pyright]
-include = ["src", "tests", "../../../scripts/live/smoke_agent.py", "../../../scripts/live/smoke_firecrawl.py", "../../../scripts/live/copilot_build_app.py"]
+include = ["src", "tests"]
 typeCheckingMode = "strict"
 pythonVersion = "3.14"
 
 [tool.poe.tasks]
-fmt-check = "ruff format --config pyproject.toml --check src tests ../../../scripts/live/smoke_agent.py ../../../scripts/live/smoke_firecrawl.py ../../../scripts/live/copilot_build_app.py"
-lint = "ruff check --config pyproject.toml src tests ../../../scripts/live/smoke_agent.py ../../../scripts/live/smoke_firecrawl.py ../../../scripts/live/copilot_build_app.py"
+fmt-check = "ruff format --config pyproject.toml --check src tests"
+lint = "ruff check --config pyproject.toml src tests"
 types = "python -m pyright"
