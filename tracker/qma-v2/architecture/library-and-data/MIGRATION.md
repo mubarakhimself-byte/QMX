@@ -12,6 +12,8 @@ Principle: backup first, dry-run, migrate into a distinct destination, verify, t
 
 Steps 0-4 and 6-8 below stand as written. Changes: the dual-run period of step 5 is cut to **one** comparison on his real home (the mirror has written every save since LIB1, so seven nightly diffs would only re-check the same rows; the comparison template `migrate/lib-dual-run-diff/` runs once by hand); step 6 also retires `artifacts.db` (imported in step 4), the engine's stand-alone fake (tests only) and QMB's registry projection, and replaces (does not mirror) the QMF registry room (OPEN-2 closed); step 8 (server primary) runs this week (ruling 121), with the Library service inside the server's one `qmx_host` process and a write outbox on the PC. Before step 0, the old 10 GB of ticks and the risk-lab CSVs are copied to the server with checksums (55 packet DR0).
 
+**Edge-case review (57), 2026-10-22 evening.** (1) The one comparison of step 5 is preceded by a **rehearsal**: the whole switch-over runs first on a copy of his real `~/.qmx` in a scratch root, and counts and hashes must match step 0's numbers, because his real home has no new-store folder (the mirror never ran there) and the importer has not yet met his real data (probe P-REHEARSE). (2) Step 8's flip raises the epoch of `refs/primary` (AD-14, AD-19); the two config keys follow that record. (3) Step 7 and step 8 do not wait for the bucket: without it, nothing durable leaves the PC and the storage view says "one copy off this PC" (AD-10). (4) The procedure for losing the server is below and is drilled on scratch roots before step 8 (probe P-SERVERLOST).
+
 ## Step 0 — Freeze and snapshot
 
 1. Run `backup_weekly(dry_run=False)` once more so the last `library.db` snapshot exists.
@@ -40,7 +42,7 @@ Dry run writes to `<home>/migration/dry/`; verify counts equal Step 0; verify ev
 
 ## Step 3 — Import the registry room (`migrate/from_registry.py`), read-only
 
-For each of the ten kinds, read records through the QMB B-15 as-of port **[retrieved]** (never the SQLite directly), write one object per record with `governed_fp1 = record fp1` and the manifest bytes arranged so `object_id == governed_fp1` (the canonical identity content is the record's own); map CT-07 edges 1:1 into `edges/registry/`. Collision on any fp1 = stop and alarm (FM-14). This importer stays as a running sync under OPEN-2 (mirror).
+For each of the ten kinds, read records through the QMB B-15 as-of port **[retrieved]** (never the SQLite directly), write one object per record with `governed_fp1 = record fp1` and the manifest bytes arranged so `object_id == governed_fp1` (the canonical identity content is the record's own); map CT-07 edges 1:1 into `edges/registry/`. Collision on any fp1 = stop and alarm (FM-14). OPEN-2 was closed as replace (AD-26): this importer runs once and does not stay as a sync.
 
 ## Step 4 — Import app artifacts and remote run folders
 
@@ -81,6 +83,17 @@ A config change with a procedure, not a build. Preconditions: step 7 done, repli
 6. Verify: a chat edit, a UI save and a local run all land on the Hub and mirror back to the PC; the doctor page shows `primary: server`.
 
 Reverse: the same six steps with the stores swapped. The UI, the harness tools, the engine and the migrator never learn which store is primary (AD-19).
+
+## When the server is lost (AD-16; edge-case review 57)
+
+For a server that is reset, broken or unreachable for good while it holds the main copy. Drill it on two scratch roots before step 8 and after each change to sync.
+
+1. **Promote the PC (his click).** The PC raises the epoch of `refs/primary` to `primary = pc`; from then on a store showing the old epoch cannot act as primary (AD-14).
+2. **Say what is stale.** The PC lists every ref the server owned (its runs, champions, memory rows of server workflows) where the PC holds only a mirror, with the time of the last sync; the inbox shows them as "may be behind".
+3. **Rebuild a server.** Install `qmx_host --role node`; restore Library evidence (objects, refs, edges, durable blobs) from the bucket, which the old server pushed after each commit batch; `rebuild_indexes()`; price partitions are fetched back from the bucket on demand, and a redownloadable month with no bucket copy is downloaded again. Without a bucket, the Library is rebuilt from the PC's replica, which has every manifest, edge and ref but not the blobs the PC never opened: those are named in the incident as lost.
+4. **Keys.** The new server makes its own vault key pair; the PC seals the replicable entries to it again (engine AD-28). A connection whose home was the server needs one new sign-in (its refresh token lived only there).
+5. **Re-pair** the server with a fresh pairing code; sync until the ref logs agree.
+6. **Flip back** when he chooses: the same steps as step 8, which raise the epoch again.
 
 ## Rollback
 

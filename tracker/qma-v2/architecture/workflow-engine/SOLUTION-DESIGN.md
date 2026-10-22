@@ -1785,11 +1785,12 @@ The full design, blast radius, scenario coverage, switch-on order and probes are
 | Template | Kind of run | Home | Notes |
 | --- | --- | --- | --- |
 | `feed` | script-first workflow; `monitor` node first | `contabo` by default | slots are the source definition (AD-68); one feed workflow per source |
-| `download-dukascopy`, `download-binance`, `download-ccxt`, `download-broker` | script-only, `lands_as: partitions` | `contabo`; `download-broker` with MT5 is `pc` | one claim per partition key; free-disk check before each write; card update at the end |
+| `download-dukascopy`, `download-binance`, `download-ccxt`, `download-broker` | script-only, `lands_as: partitions` | the connection's home (`contabo` by default; MT5 is `pc`) | one node per partition (fan-out), heartbeat on its own thread; one claim per partition key; free-disk check before each write; the open month replaced, a month frozen only when its gap check passes; dukascopy-node with `--retries` and `--retry-on-empty`; cTrader history through the home host's `qmf-venue` session; card update at the end (edge-case review 57) |
 | `extract-source` | script plus an optional agent step | `contabo` | Docling; per-page and per-second locators; feeds Hindsight through the index watcher |
-| `connections-health` | script-only, cron | each connection's home | walks the five states, renews OAuth tokens, writes heartbeat readings (AD-67) |
+| `connections-health` | script-only, cron | each connection's home | walks the five states, renews OAuth tokens on the home only (the one refresh owner), writes the `ok | slowed | maintenance | needs_you | down` reading (AD-67) |
 | `backup-weekly` | script-only, cron | `pc` | replaces the control plane's maintenance loop (RUN1c, AD-57) |
-| `seal-roll` | script-only, monthly | `contabo` | moves the holdout boundary by the setting `historical_holdout_months`, journaled; earlier final looks stay recorded |
+
+The `seal-roll` template proposed here first is **withdrawn** (edge-case review 57, F7): the holdout boundary is frozen and never silently recycled (DEC-0119, `seal.py`), so it moves only by his click, journaled on the seal's Library item (Library AD-28).
 
 ### 30.2 Changes to built code (each an ordinary PR, one build and one check)
 
@@ -1798,7 +1799,8 @@ The full design, blast radius, scenario coverage, switch-on order and probes are
 - Node start claims the node's intent key when it declares one; release on landing or attempt end (Library AD-24, AD-30).
 - The runner sets each node's placement from `runs_on` and the heartbeat's partition summary (AD-70); the adapter workaround that reads `runs_on` goes.
 - Admission reads live free RAM and the measured session size from the heartbeat; the constants at `qmx_engine/settings.py:146-150` go (AD-30).
-- Each write point of spans, heartbeat rows, incidents and logs also hands the record to an in-process OpenTelemetry exporter (AD-69); the harness sets the CLI telemetry environment per chat (HARNESS-REQUESTS H60).
+- Each write point of spans, heartbeat rows, incidents and logs also hands the record, after redaction, to an in-process OpenTelemetry exporter that sends to the server's collector (AD-69; no collector on the PC); the harness sets the CLI telemetry environment per chat (HARNESS-REQUESTS H60).
+- *Edge-case review (57):* admission reserves an admitted node's declared memory until its measured size replaces it; extraction, downloads and big market-data reads run as child processes; the host's systemd unit lowers its out-of-memory score (AD-30). The vault replicates by allow-list and the server opens its own keys (AD-28). Each connection has one home, and `host` adapters keep one session there (AD-67).
 
 ### 30.3 Acceptance
 

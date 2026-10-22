@@ -242,3 +242,15 @@ Recorded by the architect of the data round from his words in 51 §8-9, which th
 134. **Ship the rest of the backend (everything except the unit work) as soon as possible, carefully:** "nothing is fixed or locked".
    - *Not answered in this round:* funnel Q4 (removing the old 10 GB from his C: drive once two checked copies exist). It stays his call, with a cloud bucket for the second copy (55 §12).
    - *Applied 2026-10-22 (`55-data-round-architecture.md`):* Library AD-25 to AD-33, engine AD-67 to AD-70, Lab AD-19 and AD-20 added; Library OPEN-2 closed (the registry room is replaced); the money-word matcher's call sites are removed under rulings 116 and 118 (engine AD-59, three call sites).
+
+### 2026-10-22, after the edge-case review of the data round (`57-data-round-edge-case-review.md`)
+
+Not his words. **The planning lead's decision, derived from his rulings 115-118, 129 and 133, recorded here so he sees it and can overrule it.** Applied in `55-data-round-architecture.md` ("Edge-case review applied (57)").
+
+135. **Keys that can trade live money never sit where agents work.** (Lead's decision, derived from rulings 116-118.)
+   - **His PC, his server and any machine an agent can reach hold read-only broker keys only.** A read-only key can see accounts, balances, positions and history, and cannot place an order. Agents on those machines have a shell, so anything stored there is treated as readable by an agent; a read-only key is safe to be read. A key that can trade only demo accounts holds no money and may sit there too.
+   - **A key that can trade a live account lives only on a trading server.** He enters it there himself when he sets that server up (the broker's sign-in page sends it straight to that server). QMX on his PC never stores it. His PC's Connections list still shows that account and its health, read from the trading server's reports.
+   - **One machine owns each broker sign-in.** For cTrader, refreshing a sign-in logs out every other copy of it, and cTrader advises at most one demo and one live connection per registered app. So each sign-in has one home machine that holds it, refreshes it and opens its connection; other machines ask that home. The trading servers use their own cTrader app registration, separate from the one his PC and server use for reading, so a routine refresh on the server can never log out a live bot.
+   - **Why this is simpler, not more machinery.** Nothing new guards money: there is no money gate and no sandbox (rulings 116-118 retired them). The rule is only about where a key is typed and kept.
+   - **One thing to know.** A broker app he signs into himself with a trading password on his PC (for example an MT5 terminal) can be reached by an agent's shell. Keep such logins on demo accounts, or off the PC, the same way.
+   - *Applied 2026-10-22 (`55` "Edge-case review applied (57)"):* engine AD-28, AD-67 and AD-70 amended; Library AD-12 amended.
