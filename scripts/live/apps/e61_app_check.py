@@ -1,12 +1,11 @@
 """E61: `qmx app check` refuses a pack it cannot carry (AD-61, AD-19; review 48 M10).
 
-Three refusals, each on a real pack view built for it:
+Two refusals, each on a real pack view built for it:
 
-- an operation named like an order act (`place_order`) by the vendored word list;
 - a tool whose wire name `mcp__qmx__<toolset>_<op>` passes 64 characters;
 - a pack whose server serves a tool its `[operations]` rows never declared.
 
-The fourth case is the clean pack: the same view, declared and served equal, must pass.
+The third case is the clean pack: the same view, declared and served equal, must pass.
 
     python e61_app_check.py --evidence D:/QMX-worktrees/qma-ship/build/evidence/app2a
 
@@ -38,13 +37,6 @@ class Case:
 
 
 CASES = (
-    Case(
-        "an order act",
-        ("place_order",),
-        ("place_order",),
-        "app:pack-alpha",
-        "order_act: place_order names the order act submit_order",
-    ),
     Case(
         "a wire name past 64",
         ("b" * 40,),

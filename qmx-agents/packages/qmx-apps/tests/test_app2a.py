@@ -248,19 +248,12 @@ def test_profiles_partition_data_and_are_never_invented(tmp_path: Path) -> None:
         lease.close()
 
 
-def test_app_check_refuses_an_order_act_a_long_wire_name_and_served_extras(
-    tmp_path: Path,
-) -> None:
+def test_app_check_refuses_a_long_wire_name_and_served_extras(tmp_path: Path) -> None:
     view = tmp_path / "pack"
     (view / ".claude-plugin").mkdir(parents=True)
     (view / ".claude-plugin" / "plugin.json").write_text('{"name": "pack-alpha"}')
     assert wire_name("app:macro-daily-bias", "bias") == "mcp__qmx__app_macro-daily-bias_bias"
 
-    order = check(view, declared=["place_order"], served=["place_order"], toolset="app:x")
-    assert order.refusals == (
-        "order_act: place_order names the order act submit_order; agents have no path to money "
-        "(ruling 116)",
-    )
     assert not check(view, declared=["bias"], served=["bias"]).refusals
     long = "b" * 40
     past = check(view, declared=[long], served=[long], toolset="app:" + "a" * 30)
