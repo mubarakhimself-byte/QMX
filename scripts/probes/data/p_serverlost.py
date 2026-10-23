@@ -25,7 +25,9 @@ else reads back. **Fail:** a step needs an action the procedure does not name, a
 not come back, or the lost list is wrong.
 
     uv run --no-sync python ../scripts/probes/data/p_serverlost.py
-    uv run --no-sync python ../scripts/probes/data/p_serverlost.py --keep
+    uv run --no-sync python ../scripts/probes/data/p_serverlost.py --branch bucket
+    uv run --no-sync python ../scripts/probes/data/p_serverlost.py --branch no-bucket
+    uv run --no-sync python ../scripts/probes/data/p_serverlost.py --branch flip
 """
 
 from __future__ import annotations
@@ -93,16 +95,9 @@ def _copy(source: Path, target: Path) -> None:
     shutil.copy2(source, target)
 
 
-def run_branch(name: str, *, bucket: bool, report: Report) -> None:
-    """One of the two runs: the flip, the loss, and what comes back."""
-    root = SCRATCH / "p-serverlost" / name
-    shutil.rmtree(root, ignore_errors=True)
-    for folder in ("pc", "server", "bucket", "pc-home", "server-home"):
-        (root / folder).mkdir(parents=True)
-    runner = local_runner(root / "bucket")
+def flip_phase(root: Path, report: Report, name: str) -> list[str]:
+    """MIGRATION step 8 on the two roots: the card, the hold, the equal push, his press."""
     problems: list[str] = []
-
-    # The flip on the two roots: the card, the hold, the press (MIGRATION step 8).
     with (
         Store.open(root / "pc", redactor=redact, name="pc") as pc,
         Store.open(root / "server", redactor=redact, name="server") as server,
@@ -111,7 +106,7 @@ def run_branch(name: str, *, bucket: bool, report: Report) -> None:
         card = flip.announce()
         if (card.title, card.button, card.stage) != (MOVE, MOVE, "waiting"):
             problems.append(f"the inbox card reads {card.title!r} with button {card.button!r}")
-        kept = pc.put(
+        pc.put(
             OPERATOR,
             Draft("note", "before-the-move", title="a save made before the flip"),
             on="main",
@@ -135,9 +130,37 @@ def run_branch(name: str, *, bucket: bool, report: Report) -> None:
             problems.append(f"the press raised {raised}")
         if pressed.epoch != 1:
             problems.append(f"the closed card names epoch {pressed.epoch}")
-        pause = flip.paused_s
-        report.note(f"{name}: flip paused saves {pause} s, epoch now {raised}")
+        report.note(f"{name}: flip paused saves {flip.paused_s} s, epoch now {raised}")
         server.learn_epoch(raised)
+    return problems
+
+
+def after_the_flip(root: Path, report: Report, name: str) -> list[str]:
+    """A save the server takes after the flip mirrors back to the PC (step 8.6)."""
+    problems: list[str] = []
+    with Store.open(root / "server", redactor=redact, name="server") as server:
+        done = server.put(
+            OPERATOR,
+            Draft("note", "after-the-flip", title="a save made after the flip"),
+            on="main",
+            expected_head=None,
+        )
+        with Store.open(root / "pc", redactor=redact, name="pc", role="replica") as pc:
+            sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=0)
+            if pc.head("after-the-flip", "main") != (done.object_id, 1):
+                problems.append("a save after the flip did not mirror back to the PC")
+            report.note(f"{name}: the save after the flip landed on the server and mirrored back")
+    return problems
+
+
+def run_branch(name: str, *, bucket: bool, report: Report) -> None:
+    """One of the two runs: the flip, the loss, and what comes back."""
+    root = SCRATCH / "p-serverlost" / name
+    shutil.rmtree(root, ignore_errors=True)
+    for folder in ("pc", "server", "bucket", "pc-home", "server-home"):
+        (root / folder).mkdir(parents=True)
+    runner = local_runner(root / "bucket")
+    problems: list[str] = flip_phase(root, report, name)
 
     # The server is primary from here. It writes, and the PC mirrors and opens one item.
     with Store.open(root / "server", redactor=redact, name="server") as server:
@@ -188,7 +211,6 @@ def run_branch(name: str, *, bucket: bool, report: Report) -> None:
             report.note(f"{name}: the bucket came to hold {len(held)} files after one push")
             if bucket and not held:
                 problems.append("the bucket push left nothing in the scratch folder")
-    kept_head = kept.object_id
     shutil.rmtree(root / "server")
 
     # MIGRATION "When the server is lost", steps 1 to 6, on the PC that is now primary.
@@ -310,7 +332,8 @@ def run_branch(name: str, *, bucket: bool, report: Report) -> None:
                 problems.append(f"only {agreed} refs were compared")
             report.note(f"{name}: {agreed} refs agree, {len(recovery.stale)} may be behind")
         report.note(
-            f"{name}: steps done {recovery.done}, epoch {recovery.epoch}, kept {kept_head[:20]}"
+            f"{name}: steps done {recovery.done}, epoch {recovery.epoch}, "
+            f"promoted {promoted.primary}"
         )
 
     for problem in problems:
@@ -324,11 +347,30 @@ def run_branch(name: str, *, bucket: bool, report: Report) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument(
+        "--branch",
+        choices=("all", "flip", "bucket", "no-bucket"),
+        default="all",
+        help="`flip` is lane 4, `bucket` lane 2 and `no-bucket` lane 3",
+    )
     arguments = parser.parse_args(argv)
     report = Report(probe="P-SERVERLOST")
     try:
-        for name, bucket in (("bucket", True), ("no-bucket", False)):
-            run_branch(name, bucket=bucket, report=report)
+        if arguments.branch == "flip":
+            root = SCRATCH / "p-serverlost" / "flip"
+            shutil.rmtree(root, ignore_errors=True)
+            for folder in ("pc", "server", "pc-home"):
+                (root / folder).mkdir(parents=True)
+            problems = flip_phase(root, report, "flip")
+            problems += after_the_flip(root, report, "flip")
+            for problem in problems:
+                report.fail(f"flip: {problem}")
+            if not problems:
+                report.note("flip: PASS")
+        else:
+            for name, bucket in (("bucket", True), ("no-bucket", False)):
+                if arguments.branch in ("all", name):
+                    run_branch(name, bucket=bucket, report=report)
     finally:
         if not arguments.keep:
             shutil.rmtree(SCRATCH / "p-serverlost", ignore_errors=True)
