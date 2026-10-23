@@ -25,12 +25,23 @@ from qmx_engine.service.context import OPERATOR, Caller, Refused
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.cron import Cron
-from qmx_engine.triggers.preflight import preflight
+from qmx_engine.triggers.preflight import placement_state, preflight
 from qmx_engine.triggers.ticker import Scheduler
 
 T0 = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 """A Saturday."""
 MONDAY = datetime(2026, 10, 19, 9, 0, tzinfo=UTC)
+
+
+def test_a_placement_is_configured_by_the_rows_an_attempt_needs_not_by_a_memory_budget() -> None:
+    contabo = {
+        key: value for key, value in DEFAULTS.items() if key.startswith("placement.contabo.")
+    }
+    bare = {"placement.contabo.kind": "owned"}
+
+    assert placement_state(contabo, "contabo") == "authorized"
+    assert placement_state(bare, "contabo") == "configured"
+    assert placement_state({}, "contabo") == "unavailable"
 
 
 def test_a_workflow_caller_cannot_create_a_trigger(tmp_path: Path) -> None:

@@ -33,6 +33,9 @@ from typing import Any, Final, Protocol, cast
 from qmx_ledger.journal import fingerprint
 from qmx_remote.models import Document, RemoteError, Resources, RunBundle
 
+from qmx_engine.admission import declared_bytes
+from qmx_engine.admission import sessions_of as sessions_for_ram
+from qmx_engine.heartbeat import Heartbeat
 from qmx_engine.ledger.events import KINDS, EventKind
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import Failed, Gate, NodeJob, NodeResult, Ok, Waiting
@@ -40,8 +43,7 @@ from qmx_engine.settings import DEFAULTS
 from qmx_engine.workers.local import Emit, LocalWorker
 
 SCHEMA: Final = "qmx.remote.attempt/1"
-SESSION_MB: Final = 1_536
-"""One agent session's RAM at the measured footprint (PRB-S: 6,144 MB of overhead leaves four)."""
+MIB: Final = 1024 * 1024
 HEARTBEAT_TIMEOUT: Final = 30.0
 """Three missed sidecar beats: slow is not lost, and lost is not a retry until the effect folds."""
 POLL_SECONDS: Final = 0.25
@@ -62,26 +64,49 @@ class GatewayPort(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class AttemptResources:
-    """The placement's resources for one attempt, from the row`s `ram_budget_mb`."""
+    """The placement's resources for one attempt.
+
+    `memory_mb` is None when neither the node declared one nor this machine has measured a
+    session, so the provider's own default stands and no figure of ours is invented (D-11).
+    """
 
     cpus: int
-    memory_mb: int
+    memory_mb: int | None
     timeout: int
     gpu: int = 0
 
+    def as_document(self) -> dict[str, object]:
+        """The provider's resource row: the memory figure only when this attempt has one."""
+        found: dict[str, object] = {
+            "cpus": self.cpus,
+            "timeout": self.timeout,
+            "gpu": self.gpu,
+        }
+        if self.memory_mb is not None:
+            found["memory_mb"] = self.memory_mb
+        return found
 
-def sessions_of(settings: Mapping[str, object], placement: str) -> int:
-    """AD-30's derived session count: `floor((ram_budget_mb - overhead_mb) / session_mb)`.
 
-    RAM is machine capacity, never a QMX usage cap: the number is how many chats the box holds at
-    once, and work past it queues or spills to the next `runs_on` placement.
+def live_pair(live: Heartbeat | None) -> tuple[int, int] | None:
+    """A host row's live figures: the RAM it can give and what one of its sessions holds."""
+    if live is None or live.free_ram_bytes is None or not live.session_bytes:
+        return None
+    return live.free_ram_bytes, live.session_bytes
+
+
+def sessions_of(
+    settings: Mapping[str, object], placement: str, *, live: Heartbeat | None = None
+) -> int:
+    """AD-30's derived session count, from the machine's live reading (D-11).
+
+    Free RAM over the measured session size, both from the host row that machine wrote. Zero for a
+    placement that names no row of its own, and zero while no host has measured one: these figures
+    are measured now, never written down.
     """
-    ram = setting(settings, f"placement.{placement}.ram_budget_mb", 0)
-    overhead = setting(settings, f"placement.{placement}.overhead_mb", 0)
-    session = setting(settings, f"placement.{placement}.session_mb", SESSION_MB)
-    if not isinstance(ram, int) or not isinstance(overhead, int) or not isinstance(session, int):
+    if not any(key.startswith(f"placement.{placement}.") for key in settings):
         return 0
-    return max(0, (ram - overhead) // session) if session > 0 else 0
+    pair = live_pair(live)
+    return 0 if pair is None else sessions_for_ram(*pair)
 
 
 def setting(settings: Mapping[str, object], key: str, fallback: object) -> object:
@@ -90,14 +115,28 @@ def setting(settings: Mapping[str, object], key: str, fallback: object) -> objec
     return DEFAULTS.get(key, fallback)
 
 
-def resources_of(settings: Mapping[str, object], placement: str) -> AttemptResources:
+def memory_mb(node_definition: Mapping[str, object] | None, live: Heartbeat | None) -> int | None:
+    """An attempt's memory: what its node declares, else what one measured session holds."""
+    declared = declared_bytes(node_definition or {})
+    if declared is not None:
+        return declared // MIB
+    pair = live_pair(live)
+    return None if pair is None else pair[1] // MIB
+
+
+def resources_of(
+    settings: Mapping[str, object],
+    placement: str,
+    node_definition: Mapping[str, object] | None = None,
+    *,
+    live: Heartbeat | None = None,
+) -> AttemptResources:
     cpus = setting(settings, f"placement.{placement}.attempt_cpus", 1)
-    memory = setting(settings, f"placement.{placement}.attempt_memory_mb", 2_048)
     timeout = setting(settings, f"placement.{placement}.attempt_timeout", 3_600)
     gpu = setting(settings, f"placement.{placement}.attempt_gpu", 0)
     return AttemptResources(
         cpus=int(cpus) if isinstance(cpus, int | str) else 1,
-        memory_mb=int(memory) if isinstance(memory, int | str) else 2_048,
+        memory_mb=memory_mb(node_definition, live),
         timeout=int(timeout) if isinstance(timeout, int | str) else 3_600,
         gpu=int(gpu) if isinstance(gpu, int | str) else 0,
     )
@@ -108,13 +147,15 @@ def attempt_bundle(
     *,
     settings: Mapping[str, object] | None = None,
     files: Mapping[str, str] | None = None,
+    live: Heartbeat | None = None,
 ) -> Document:
     """The job as the sidecar receives it: definition, inputs by hash, refs, resources.
 
     `job.credentials` is the node's own name-to-`qmx/*` reference map; the bundle carries the
     **names** so the sidecar redacts their values from this attempt's output, and carries no value
     itself. The run pass is not in the bundle: it travels in the provider's one secret name
-    (`provider_secrets`), so a bundle written to a disk or a bucket never holds it.
+    (`provider_secrets`), so a bundle written to a disk or a bucket never holds it. `live` is the
+    host row whose measured session size stands in for a memory the node did not declare.
     """
     settings = settings or DEFAULTS
     refs = dict(job.credentials)
@@ -122,7 +163,7 @@ def attempt_bundle(
         if not ref.startswith("qmx/") or not name:
             raise RemoteError(f"{name}: remote attempts take qmx/* references, never a value")
     code = dict(files or {})
-    resources = resources_of(settings, job.placement)
+    resources = resources_of(settings, job.placement, job.node_definition, live=live)
     return cast(
         Document,
         {
@@ -142,12 +183,7 @@ def attempt_bundle(
             "files": code,
             "file_hashes": {name: text_hash(text) for name, text in code.items()},
             "secrets": sorted(refs),
-            "resources": {
-                "cpus": resources.cpus,
-                "memory_mb": resources.memory_mb,
-                "timeout": resources.timeout,
-                "gpu": resources.gpu,
-            },
+            "resources": resources.as_document(),
         },
     )
 
@@ -274,6 +310,7 @@ class PlacementWorker(LocalWorker):
         poll_seconds: float = POLL_SECONDS,
         clock: Callable[[], float] = time.time,
         code: Callable[[NodeJob], Mapping[str, str]] | None = None,
+        live: Callable[[], Heartbeat | None] | None = None,
     ) -> None:
         super().__init__()
         self.gateway = gateway
@@ -285,8 +322,14 @@ class PlacementWorker(LocalWorker):
         self.poll_seconds = poll_seconds
         self.clock = clock
         self.code: Callable[[NodeJob], Mapping[str, str]] = code or run_files
+        self.live = live
+        """The newest heartbeat row of the machines this host dispatches to, read per attempt: it
+        carries the live RAM and measured session size a bundle's resources come from (D-11)."""
         self.handles: dict[str, tuple[Any, Any]] = {}
         """Run id to `(provider, handle)` of the attempt in flight, so `cancel` reaches it."""
+
+    def reading(self) -> Heartbeat | None:
+        return None if self.live is None else self.live()
 
     def routes(self, placement: str) -> bool:
         return placement in self.remote
@@ -300,7 +343,9 @@ class PlacementWorker(LocalWorker):
             message = f"no provider serves placement {placement}"
             return Failed("placement", message, signature("placement", message), False, "before")
         placed = replace(job, placement=placement)
-        bundle = attempt_bundle(placed, settings=self.settings, files=self.code(placed))
+        bundle = attempt_bundle(
+            placed, settings=self.settings, files=self.code(placed), live=self.reading()
+        )
         return await self.dispatch(placed, provider, bundle, emit)
 
     async def dispatch(

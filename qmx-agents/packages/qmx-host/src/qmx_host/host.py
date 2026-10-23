@@ -374,7 +374,14 @@ def remote_worker(home: Path, core: Engine) -> PlacementWorker | None:
         settings=settings,
         mint=mint,
         remote=providers,
+        live=lambda: host_row(home),
     )
+
+
+def host_row(home: Path) -> Heartbeat | None:
+    """The newest heartbeat row this home wrote for its own machine, or None before the first
+    beat. A dispatched attempt's resources and session count read it (D-11)."""
+    return next((row for row in latest(home).values() if row.subject == "host"), None)
 
 
 def compose_memory(
