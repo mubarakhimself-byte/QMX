@@ -37,10 +37,11 @@
      "position": [1320, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
     {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
      "position": [1320, 120], "effect": "none", "retry": {"max_tries": 1},
-     "parameters": {"script": "scripts/stop.py"}}
+     "parameters": {"script": "scripts/stop.py"}},
+    {"id": "lineage", "name": "Write the lineage edges", "type": "script", "typeVersion": 1, "position": [1540, 120], "parameters": {"script": "scripts/lineage.py"}, "effect": "none"}
   ],
   "connections": {
-    "On request": {"main": [[{"node": "Load the return streams", "port": "in", "map": "one"}]]},
+    "On request": {"main": [[{"node": "Load the return streams", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]]},
     "Load the return streams": {"main": [[{"node": "Correlate, combine and stress", "port": "in",
                                            "map": "one"}]]},
     "Correlate, combine and stress": {"main": [[{"node": "Write the study", "port": "in",
@@ -51,7 +52,7 @@
                                                  "map": "one"}]]},
     "Write the study": {"main": [[{"node": "Book picture", "port": "in", "map": "one"}]]},
     "Book picture": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]],
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },

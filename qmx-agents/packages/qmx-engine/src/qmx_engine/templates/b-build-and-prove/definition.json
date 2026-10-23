@@ -42,10 +42,11 @@
     {"id": "assemble", "name": "Assemble the scorecard", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
     {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1, "position": [1980, 0], "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py", "schema_ref": "schemas/output.json"}, "effect": "none"},
     {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1, "position": [2200, 0], "parameters": {"script": "scripts/deliver.py"}, "effect": "none"},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2420, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2420, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"},
+    {"id": "lineage", "name": "Write the lineage edges", "type": "script", "typeVersion": 1, "position": [2640, 120], "parameters": {"script": "scripts/lineage.py"}, "effect": "none"}
   ],
   "connections": {
-    "On request": {"main": [[{"node": "Seal the experiment spec", "port": "in", "map": "one"}]]},
+    "On request": {"main": [[{"node": "Seal the experiment spec", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]]},
     "Seal the experiment spec": {"main": [[{"node": "Spec checks pass?", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Spec checks pass?": {"true": [[{"node": "Register and backtest on QMB", "port": "in", "map": "one"}]]},
     "Register and backtest on QMB": {"main": [[{"node": "Deflated Sharpe over the family", "port": "in", "map": "one"}, {"node": "Overfit gates", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
@@ -54,7 +55,7 @@
     "Paper card or dead end": {"main": [[{"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Write the scorecard": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Assemble the scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
   "meta": {"template": "strategy-idea-to-paper-tested", "needs": ["qmb-door"]}
 }
