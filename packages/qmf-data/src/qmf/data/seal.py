@@ -55,13 +55,18 @@ from qmf.data.store.refusals import invalid_input, policy_rejection
 __all__ = [
     "FINAL_LOOK_SUBTYPE",
     "SEAL_CONTROL_STREAM",
+    "SEAL_MOVE_SUBTYPE",
     "HoldoutSeal",
+    "OperatorClick",
     "ReadBoundary",
 ]
 
 # The CT-13 control-action subtype name for the sealed-period final look (DEC-0119). A
 # named subtype, so a projection selects on a declared field, never on key presence.
 FINAL_LOOK_SUBTYPE: Final[str] = "sealed-period-final-look"
+
+# The CT-13 control-action subtype name for a seal moved by his click (55 D-5; F8).
+SEAL_MOVE_SUBTYPE: Final[str] = "sealed-period-move"
 
 # The default CT-13 stream name qmf-data writes its control-action events to. qmf-data is a
 # wired producer of the control-action event type (DEC-0116); one writer owns the stream.
@@ -100,6 +105,35 @@ def _coerce_split_id(value: object) -> str | None:
     if isinstance(value, str) and value.strip() != "":
         return value
     return None
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorClick:
+    """The operator's own click on the seal, and the only thing that moves it (55 D-5; F8).
+
+    The host mints one on its operator route, where the principal is ``user``; a chat, a run
+    or a workflow is another principal there and never reaches this constructor. It carries
+    who clicked and when, so the journal entry says both.
+    """
+
+    at: Instant
+    principal: str = "user"
+
+    @classmethod
+    def try_create(cls, at: object, principal: object = "user") -> Result[OperatorClick]:
+        """Build the click for an operator route, refusing any other principal."""
+        at_instant = _as_instant(at)
+        if at_instant is None:
+            return invalid_input(
+                "at", "his click carries the Instant it happened at", given=repr(at)
+            )
+        if principal != "user":
+            return policy_rejection(
+                "principal",
+                "the seal moves only by his click; this caller is not the operator",
+                given=repr(principal),
+            )
+        return Ok(cls(at=at_instant, principal="user"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,6 +395,126 @@ class HoldoutSeal:
     def fingerprint_label(self) -> str:
         """The seal's stable label — the frozen boundary's label (for logging/journaling)."""
         return self.seal_boundary.label()
+
+    def move(
+        self,
+        journal: object,
+        writer: object,
+        *,
+        at: object,
+        click: object,
+        boundary: object,
+        correlation_id: object | None = None,
+        stream_name: str = SEAL_CONTROL_STREAM,
+    ) -> Result[StoreReceipt]:
+        """Move the seal to a new boundary on his click, journaled (55 D-5; F8).
+
+        The seal never moves by itself, by a run or by an agent: ``click`` is an
+        :class:`OperatorClick`, minted by the host's own operator route. The move is a named
+        CT-13 ``control action`` subtype, so the journal, not a settings file, records where
+        the seal stood, when it moved and by whose click.
+        """
+        if not isinstance(click, OperatorClick):
+            return policy_rejection(
+                "click",
+                "the seal moves only by his click; a run or an agent may not move it",
+                given=repr(click),
+            )
+        if not isinstance(journal, JournalStore):
+            return invalid_input(
+                "journal",
+                "the seal's move is journaled through a CT-13 JournalStore",
+                given=repr(journal),
+            )
+        if not isinstance(writer, WriterId):
+            return invalid_input(
+                "writer", "the seal's move is written under an AD-8 WriterId", given=repr(writer)
+            )
+        at_instant = _as_instant(at)
+        if at_instant is None:
+            return invalid_input(
+                "at", "the seal's move carries an event Instant (or int64 UTC ns)", given=repr(at)
+            )
+        built = SplitBoundary.try_create(boundary)
+        if is_refusal(built):
+            return built
+        moved_to = built.value
+        denied = self._require_calendar(moved_to.calendar_identity)
+        if denied is not None:
+            return denied
+        event: dict[str, object] = {
+            "event_type": _CONTROL_ACTION_EVENT,
+            "control_action_subtype": SEAL_MOVE_SUBTYPE,
+            "instant_ns": at_instant.value_ns,
+            "world": self.world.value,
+            "seal_boundary": self.seal_boundary.label(),
+            "sealed_boundary": moved_to.label(),
+            "holdout_months": self.holdout_months,
+            "writer": {
+                "machine": writer.machine,
+                "role": writer.role,
+                "stream": writer.stream,
+                "boot_epoch_id": writer.boot_epoch_id,
+            },
+            "format_version": CONTRACT_FORMAT_VERSION,
+        }
+        if isinstance(correlation_id, str) and correlation_id.strip() != "":
+            event["correlation_id"] = correlation_id
+        return journal.append(stream_name, writer, event)
+
+    def outgrown(self, sealed_months: object) -> Result[bool]:
+        """Whether the sealed span has outgrown ``historical_holdout_months`` (F8, N15).
+
+        ``sealed_months`` is the count of sealed months the store holds, read from the
+        partitions themselves. The span is a property of where the seal stands, so the door
+        asks this and files one inbox task when it is true; nothing widens the window here.
+        """
+        if isinstance(sealed_months, bool) or not isinstance(sealed_months, int):
+            return invalid_input(
+                "sealed_months",
+                "the sealed span is a count of months read from the store",
+                given=repr(sealed_months),
+            )
+        if sealed_months < 0:
+            return invalid_input(
+                "sealed_months", "a sealed span is never negative", given=repr(sealed_months)
+            )
+        return Ok(sealed_months > self.holdout_months)
+
+    def overdue_task(
+        self, sealed_months: object, *, at: object
+    ) -> Result[dict[str, object] | None]:
+        """The inbox task when the sealed span outgrew its setting, else ``None`` (F8, N15).
+
+        One task, with the numbers that raised it, so the decision to widen the window or move
+        the seal stays his. ``at`` is when the reading was taken.
+        """
+        outgrown = self.outgrown(sealed_months)
+        if is_refusal(outgrown):
+            return outgrown
+        if not outgrown.value:
+            return Ok(None)
+        if not isinstance(sealed_months, int):
+            return invalid_input(
+                "sealed_months",
+                "the sealed span is a count of months read from the store",
+                given=repr(sealed_months),
+            )
+        at_instant = _as_instant(at)
+        if at_instant is None:
+            return invalid_input(
+                "at", "the reading carries an Instant (or int64 UTC ns)", given=repr(at)
+            )
+        return Ok(
+            {
+                "reason": "seal:span-outgrown",
+                "needs_you": "the sealed span has outgrown historical_holdout_months",
+                "seal_boundary": self.seal_boundary.label(),
+                "sealed_months": sealed_months,
+                "holdout_months": self.holdout_months,
+                "read_at": at_instant.value_ns,
+            }
+        )
 
     def _existing_final_look(self, events: list[dict[str, object]]) -> Result[StoreReceipt] | None:
         """A ``policy rejection`` if a final look for this seal is already journaled,
