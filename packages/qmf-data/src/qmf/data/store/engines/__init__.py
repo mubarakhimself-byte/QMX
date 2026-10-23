@@ -44,6 +44,7 @@ __all__ = [
     "ColumnarEngine",
     "MetadataEngine",
     "OccurrenceSink",
+    "SeriesFile",
     "StoreEngineError",
 ]
 
@@ -91,6 +92,24 @@ class AppendLocation:
     byte_offset: int
     length: int
     sequence: int
+
+
+@dataclass(frozen=True, slots=True)
+class SeriesFile:
+    """One written typed price partition: its key, fingerprint, size and columns (W9).
+
+    ``fingerprint`` is the streamed sha256 over the pinned logical encoding of the key and
+    the time-ordered rows, so it names the content and not the file: the same rows written
+    twice give this same value, in this process or another. ``path`` is where the writer
+    put the file; a caller may still rename it under a fixed open-month key.
+    """
+
+    key: str
+    fingerprint: str
+    rows: int
+    bytes: int
+    path: Path
+    columns: tuple[str, ...]
 
 
 class ColumnarEngine(Protocol):

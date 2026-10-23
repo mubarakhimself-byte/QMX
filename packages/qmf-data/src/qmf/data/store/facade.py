@@ -16,10 +16,12 @@ policies build on. Stdlib + qmf-core.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from qmf.core import Ok, Result, World, is_ok
+from qmf.data.series import CommitReceipt, SeriesKey, SeriesStore
 from qmf.data.store.append_store import AppendStore
 from qmf.data.store.backup_input import BackupInput
 from qmf.data.store.engines.duckdb_views import DuckDbAnalyticsEngine
@@ -62,11 +64,38 @@ class EvidenceStore:
         self._rotation_bytes = rotation_bytes
         self._seal = seal
         self._worlds: dict[World, WorldStore] = {}
+        self._series: SeriesStore | None = None
 
     @property
     def root(self) -> Path:
         """The store's root directory."""
         return self._root
+
+    @property
+    def series(self) -> SeriesStore:
+        """The price partitions beside the rooms, under ``<root>/series`` (DR3A)."""
+        if self._series is None:
+            self._series = SeriesStore(self._root / "series")
+        return self._series
+
+    def commit(
+        self,
+        key: SeriesKey,
+        rows: Iterable[Sequence[object]],
+        *,
+        correction: str | None = None,
+        provider_checksum: str | None = None,
+    ) -> Result[CommitReceipt]:
+        """Commit one fetch of a price month; a frozen key refuses a different file.
+
+        A month that has frozen takes a different file only when ``correction`` names
+        why — that is the one place a late row lands, and it is recorded with the old and
+        new fingerprint and the range it covers. The same rows again are accepted as an
+        idempotent write, so a replayed import adds nothing and leaves one file.
+        """
+        return self.series.commit(
+            key, rows, correction=correction, provider_checksum=provider_checksum
+        )
 
     def for_world(self, world: object) -> Result[WorldStore]:
         """The :class:`WorldStore` for ``world``, or a refusal.

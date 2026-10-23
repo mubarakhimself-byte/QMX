@@ -37,21 +37,42 @@ class SeriesPartition:
     ``window`` is the half-open ``[start, end)`` span the series covers. The three
     together locate the evidence inside its world's raw archive; two partitions are
     equal only when all three match.
+
+    ``subject``, ``kind`` and ``variant`` name the series the partition belongs to
+    (DATA-PLAN DR3A): the subject a series is about (the symbol unless a caller says
+    otherwise), what it measures (``ticks``, ``bar-m1``, ``fill`` or a derived
+    component such as ``rsi-v1``), and the variant that separates two series of one
+    kind that are not one thing — a bid bar and an ask bar. Ticks keep both sides in one
+    row, so they are one series; bid and ask m1 bars are two. The fields default so a
+    partition built before they existed still reads, and every partition written now
+    carries them into its identity.
     """
 
     source: str
     instrument: Instrument
     window: Interval
+    subject: str = ""
+    kind: str = "ticks"
+    variant: str = ""
 
     @classmethod
     def try_create(
-        cls, source: object, instrument: object, window: object
+        cls,
+        source: object,
+        instrument: object,
+        window: object,
+        *,
+        subject: object = None,
+        kind: object = "ticks",
+        variant: object = "",
     ) -> Result[SeriesPartition]:
         """Validate and build a :class:`SeriesPartition`, returning value-or-refusal.
 
         ``source`` must be a non-empty token, ``instrument`` an :class:`Instrument`, and
         ``window`` an :class:`Interval`; any missing or ill-typed part is an
-        ``invalid input`` refusal naming the offending field (CT-04; DEC-0109).
+        ``invalid input`` refusal naming the offending field (CT-04; DEC-0109). The
+        series fields are optional: ``subject`` defaults to the instrument's symbol,
+        ``kind`` to ``ticks`` and ``variant`` to empty.
         """
         if not isinstance(source, str) or source.strip() == "":
             return invalid_input(
@@ -72,13 +93,34 @@ class SeriesPartition:
                 "a series partition spans a half-open qmf-core Interval time window",
                 given=repr(window),
             )
-        return cls._build(source.strip(), instrument, window)
+        for name, value in (("subject", subject), ("kind", kind), ("variant", variant)):
+            if value is not None and not isinstance(value, str):
+                return invalid_input(
+                    name, "a series partition names its subject, kind and variant in words",
+                    given=repr(value),
+                )
+        return cls._build(source.strip(), instrument, window, subject, kind, variant)
 
     @classmethod
     def _build(
-        cls, source: str, instrument: Instrument, window: Interval
+        cls,
+        source: str,
+        instrument: Instrument,
+        window: Interval,
+        subject: object = None,
+        kind: object = "ticks",
+        variant: object = "",
     ) -> Result[SeriesPartition]:
-        return Ok(cls(source=source, instrument=instrument, window=window))
+        return Ok(
+            cls(
+                source=source,
+                instrument=instrument,
+                window=window,
+                subject=instrument.symbol if subject is None else str(subject),
+                kind="ticks" if kind is None else str(kind),
+                variant="" if variant is None else str(variant),
+            )
+        )
 
     @property
     def partition_key(self) -> str:
@@ -107,6 +149,9 @@ class SeriesPartition:
             "symbol": self.instrument.symbol,
             "window_start_ns": self.window.start.value_ns,
             "window_end_ns": self.window.end.value_ns,
+            "subject": self.subject,
+            "kind": self.kind,
+            "variant": self.variant,
         }
 
     @classmethod
@@ -132,7 +177,14 @@ class SeriesPartition:
         window = Interval.try_create(start.value, end.value)
         if not is_ok(window):
             return window
-        return cls.try_create(identity.get("source"), instrument.value, window.value)
+        return cls.try_create(
+            identity.get("source"),
+            instrument.value,
+            window.value,
+            subject=identity.get("subject"),
+            kind=identity.get("kind", "ticks"),
+            variant=identity.get("variant", ""),
+        )
 
     def contains_event(self, event: object) -> Result[bool]:
         """Whether an event :class:`Instant` falls in this partition's half-open window.
