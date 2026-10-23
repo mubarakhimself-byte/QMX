@@ -118,8 +118,7 @@ class Memory:
 
     def observe_session(self, session_bytes: int) -> None:
         """Replace every reservation that declared less than a session of this host really holds."""
-        for key, reserved in self.held.items():
-            self.held[key] = max(reserved, session_bytes)
+        self.held = {key: max(reserved, session_bytes) for key, reserved in self.held.items()}
 
     def room(self) -> int | None:
         """Bytes an attempt may still reserve, or None while no reading has arrived."""
