@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from types import MappingProxyType
 
 import pytest
+from pydantic import JsonValue
 
 from qmx_control.catalog import rows
 from qmx_control.context import (
@@ -18,7 +19,7 @@ from qmx_control.context import (
     LibraryHit,
     LibraryObject,
     MemoryRowHit,
-    Pin,
+    Pinned,
     Resolvers,
     listing,
     parse,
@@ -333,7 +334,7 @@ class PinnedReads:
 
 
 def test_a_runs_inputs_name_each_reference_once_and_in_order() -> None:
-    inputs = {
+    inputs: dict[str, JsonValue] = {
         "today": "@run:run1/nightly-bias",
         "also": ["@library:fp1:sha256::pod7", "@run:run1/nightly-bias"],
         "note": "no reference here",
@@ -351,8 +352,8 @@ def test_a_reference_pins_the_object_the_library_holds(library: Fixture) -> None
     pinned = pins_of(["@run:" + RUN + "/bias", "@library:" + POD_V7], PinnedReads(library))
 
     assert pinned == (
-        Pin("@run:" + RUN + "/bias", "fp1:sha256::bias"),
-        Pin("@library:" + POD_V7, POD_V7),
+        Pinned("@run:" + RUN + "/bias", "fp1:sha256::bias"),
+        Pinned("@library:" + POD_V7, POD_V7),
     )
     assert [pin.document() for pin in pinned] == [
         {"ref": "@run:" + RUN + "/bias", "object_id": "fp1:sha256::bias"},

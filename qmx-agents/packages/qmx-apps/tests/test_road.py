@@ -371,9 +371,7 @@ def test_publishing_lands_the_pack_a_chat_loads(owner: RuntimeFixture) -> None:
         "name": "exchange-status",
         "version": "1.0.0",
         "description": "Exchange status",
-        "operations": {
-            "status": {"approval": "read", "description": "Read one exchange status."}
-        },
+        "operations": {"status": {"approval": "read", "description": "Read one exchange status."}},
     }
 
 

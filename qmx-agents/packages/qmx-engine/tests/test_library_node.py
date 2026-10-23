@@ -12,7 +12,7 @@ import pytest
 
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.store import Reader
-from qmx_engine.ports.library import Bundle, runs_ref
+from qmx_engine.ports.library import Bundle, JsonObject, runs_ref
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
@@ -23,7 +23,7 @@ EARLIER = "0192a000-0000-7000-8000-00000000e001"
 def flow() -> Bundle:
     """A trigger handing the run's inputs to one `library` node, so the node reads what the run
     named."""
-    definition = {
+    definition: JsonObject = {
         "schema": "qmx.workflow/1",
         "id": "today",
         "name": "today",
@@ -89,7 +89,8 @@ def test_a_run_start_pins_its_references_on_run_created(tmp_path: Path) -> None:
 
     created = events[0]
     assert (created.kind, ran.status) == ("run_created", "passed")
-    assert created.data["pins"]["references"] == [
+    recorded = cast("dict[str, list[dict[str, str]]]", created.data["pins"])
+    assert recorded["references"] == [
         {"ref": f"@run:{EARLIER}", "object_id": earlier.object_id},
         {"ref": f"@library:{version}", "object_id": version},
     ]
@@ -98,8 +99,9 @@ def test_a_run_start_pins_its_references_on_run_created(tmp_path: Path) -> None:
         for event in events
         if event.kind == "node_finished" and event.data.get("node_id") == "read"
     ]
-    handed = finished[0].data["outputs"]["main"]
-    assert sorted((one["ref"], one["object_id"], one["kind"]) for one in handed) == [
+    outputs = cast("dict[str, list[dict[str, object]]]", finished[0].data["outputs"])
+    handed = outputs["main"]
+    assert sorted((str(one["ref"]), str(one["object_id"]), str(one["kind"])) for one in handed) == [
         (f"@library:{version}", version, "workflow"),
         (f"@run:{EARLIER}", earlier.object_id, "workflow-run"),
     ]
@@ -113,9 +115,7 @@ def test_a_reference_that_names_nothing_refuses_the_start(tmp_path: Path) -> Non
         version = published(svc)
         with pytest.raises(Refused) as refused:
             asyncio.run(
-                svc.runs.start(
-                    version, caller=OPERATOR, inputs={"today": "@run:no-such-run"}
-                )
+                svc.runs.start(version, caller=OPERATOR, inputs={"today": "@run:no-such-run"})
             )
 
     assert refused.value.code == "not_found"

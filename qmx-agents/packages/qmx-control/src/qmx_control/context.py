@@ -33,6 +33,8 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, Literal, Protocol, cast
 
+from pydantic import JsonValue
+
 type Pin = Literal["version", "follow"]
 type Status = Literal["ready", "pending", "archived", "not_cached"]
 
@@ -523,14 +525,14 @@ def _span(text: str, span: str) -> str:
 
 
 @dataclass(frozen=True)
-class Pin:
+class Pinned:
     """One reference a run start resolved, as `run_created` records it: the reference and the
     Library object it pinned."""
 
     ref: str
     object_id: str
 
-    def document(self) -> dict[str, object]:
+    def document(self) -> dict[str, JsonValue]:
         return {"ref": self.ref, "object_id": self.object_id}
 
 
@@ -565,13 +567,13 @@ def references(inputs: JsonValue) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
-def pins_of(refs: Sequence[str], reads: InputReads) -> tuple[Pin, ...]:
+def pins_of(refs: Sequence[str], reads: InputReads) -> tuple[Pinned, ...]:
     """Each reference pinned to the object it names. The first that does not resolve refuses the
     start with one `ContextRefused` naming it."""
     return tuple(_pin(ref, reads) for ref in refs)
 
 
-def _pin(ref: str, reads: InputReads) -> Pin:
+def _pin(ref: str, reads: InputReads) -> Pinned:
     kind, target = parse(ref)
     if kind not in RUN_INPUT_KINDS:
         raise ContextRefused(
@@ -581,17 +583,17 @@ def _pin(ref: str, reads: InputReads) -> Pin:
     if kind == "library":
         if reads.object(target) is None:
             raise ContextRefused("not_found", f"{ref} names no Library object")
-        return Pin(ref, target)
+        return Pinned(ref, target)
     run_id, _, output = target.partition("/")
     summaries = reads.summaries(run_id)
     if not summaries:
         raise ContextRefused("not_found", f"{ref} names no run {run_id!r}")
     if not output:
-        return Pin(ref, summaries[-1])
+        return Pinned(ref, summaries[-1])
     for artifact in reads.produced(summaries[-1]):
         found = reads.object(artifact)
         if found is not None and _names_output(found, output):
-            return Pin(ref, artifact)
+            return Pinned(ref, artifact)
     raise ContextRefused("not_found", f"{ref} names an output the run has not landed")
 
 

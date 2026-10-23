@@ -33,8 +33,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol, cast, override
 
 from pydantic import JsonValue
-from qma.harness import Harness, NewChat, QmxHome, SessionId, TurnHandle, TurnResult
-from qma.harness import packs
+from qma.harness import Harness, NewChat, QmxHome, SessionId, TurnHandle, TurnResult, packs
 from qma.harness.chat import ChatDeps, Prompt
 from qma.harness.harness import PlanWatch
 from qma.harness.home import ChatRecord, list_records, read_record
@@ -284,11 +283,20 @@ class Landed(Protocol):
     """What a publish hands the Library: `qmx_apps.road.Pack`, typed here by its shape so the
     host keeps no dependency on the apps package."""
 
-    app_id: str
-    version: str
-    definition_hash: str
-    operations: Sequence[str]
-    bundle: bytes
+    @property
+    def app_id(self) -> str: ...
+
+    @property
+    def version(self) -> str: ...
+
+    @property
+    def definition_hash(self) -> str: ...
+
+    @property
+    def operations(self) -> Sequence[str]: ...
+
+    @property
+    def bundle(self) -> bytes: ...
 
 
 class PackLanding:
@@ -317,7 +325,9 @@ class PackLanding:
             on=ref,
             expected_head=None,
         )
-        self.store.merge(self.store.engine, pack.app_id, from_ref=ref, into=MAIN, strategy="ff-only")
+        self.store.merge(
+            self.store.engine, pack.app_id, from_ref=ref, into=MAIN, strategy="ff-only"
+        )
         return commit.object_id
 
 

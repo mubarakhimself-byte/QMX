@@ -457,7 +457,8 @@ def app_rows(views: Sequence[View]) -> Mapping[str, tuple[str, ...]]:
     for view in views:
         operations = _manifest(view.folder).get("operations")
         if isinstance(operations, Mapping):
-            found[view.name] = tuple(str(name) for name in operations)
+            table = cast("Mapping[str, object]", operations)
+            found[view.name] = tuple(str(name) for name in table)
     return found
 
 
@@ -465,7 +466,7 @@ def _manifest(folder: Path) -> Mapping[str, object]:
     """A materialised view's `plugin.json`, or an empty table when it cannot be read."""
     try:
         found = json.loads((folder / PLUGIN_JSON).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return {}
     return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else {}
 

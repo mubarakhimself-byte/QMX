@@ -27,6 +27,14 @@ from dataclasses import dataclass, replace
 from typing import cast
 
 from pydantic import JsonValue
+from qmx_control.context import (
+    ContextRefused,
+    InputReads,
+    LibraryObject,
+    Pinned,
+    pins_of,
+    references,
+)
 
 from qmx_engine.core.replay import idempotency_key
 from qmx_engine.core.state import Slot
@@ -58,15 +66,7 @@ from qmx_engine.service.forward import (
 )
 from qmx_engine.trace_export import export
 from qmx_engine.triggers.rows import After, fire_now, triggers
-from qmx_control.context import (
-    RUN_INPUT_KINDS,
-    ContextRefused,
-    InputReads,
-    LibraryObject,
-    Pin,
-    pins_of,
-    references,
-)
+from qmx_engine.workers.local import AnyExecutor
 
 SUBGRAPH_ENTRY = "subgraph-input"
 
@@ -195,20 +195,15 @@ class RunInputReads:
         return [edge.to_id for edge in self.library.edges(producer, "produced-by")]
 
 
-def pinned_references(ctx: Context, inputs: JsonValue) -> list[Pin]:
-    """The references this start resolves, one pin each, in the order the inputs carry them.
-    The first that does not resolve refuses the start, so a run never begins on a reference it
-    cannot read."""
-    return list(pins_of(references(inputs), RunInputReads(ctx.library)))
-
-
 def reference_pins(ctx: Context, inputs: JsonValue) -> JsonObject:
     """The pins a start puts on `run_created` beside the trigger's own: `runner` reads `roles`
-    and `effort` from that block and keeps the rest, so the references travel with it."""
-    return {"references": [pin.document() for pin in pinned_references(ctx, inputs)]}
+    and `effort` from that block and keeps the rest, so the references travel with it. The
+    first reference that does not resolve refuses the start."""
+    pins: list[Pinned] = list(pins_of(references(inputs), RunInputReads(ctx.library)))
+    return {"references": [pin.document() for pin in pins]}
 
 
-def handed(pin: Pin, reads: InputReads) -> JsonObject:
+def handed(pin: Pinned, reads: InputReads) -> JsonObject:
     """One resolved reference as the `library` node passes it on: what it names, and the fields
     a downstream node reads. The bytes stay in the Library."""
     found = reads.object(pin.object_id)
@@ -220,7 +215,7 @@ def handed(pin: Pin, reads: InputReads) -> JsonObject:
         "item": found.item,
         "kind": found.kind,
         "title": found.title,
-        "fields": dict(found.fields),
+        "fields": cast("JsonValue", dict(found.fields)),
     }
 
 
@@ -244,8 +239,10 @@ class LibraryNode:
 
 def install(engine: Engine, library: LibraryPort) -> None:
     """Give the engine the `library` node's executor. The engine ships the pure and process
-    kinds; this one reads the Library, which reaches the engine as a port here."""
-    engine.executors.setdefault("library", LibraryNode(library))
+    kinds; this one reads the Library, which reaches the engine as a port here. A table the
+    composition root already filled for this kind wins."""
+    table = cast("dict[str, AnyExecutor]", engine.executors)
+    table.setdefault("library", LibraryNode(library))
 
 
 def induced(bundle: Bundle, node_ids: list[str]) -> Bundle:
