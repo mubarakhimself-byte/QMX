@@ -33,29 +33,44 @@
     ]
   },
   "blobs": {},
+  "card": {
+    "facts": [
+      "statement",
+      "status",
+      "tests",
+      "used_in"
+    ],
+    "thumbnail": "computed:status-ring",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Evidence",
+        "renderer": "graph",
+        "source": "walk:tests:in"
+      },
+      {
+        "tab": "Source",
+        "renderer": "json",
+        "source": "fields.source"
+      },
+      {
+        "tab": "Family",
+        "renderer": "graph",
+        "source": "walk:variant-of:both"
+      },
+      {
+        "tab": "History",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

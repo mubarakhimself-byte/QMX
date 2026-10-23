@@ -61,54 +61,44 @@
       "class": "transient"
     }
   },
+  "card": {
+    "facts": [
+      "workflow_item",
+      "status",
+      "mode",
+      "placement"
+    ],
+    "thumbnail": "computed:timeline",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Timeline",
+        "renderer": "json",
+        "source": "blobs.trace"
+      },
+      {
+        "tab": "Outputs",
+        "renderer": "graph",
+        "source": "walk:produced-by:in"
+      },
+      {
+        "tab": "Logs",
+        "renderer": "text",
+        "source": "blobs.logs/*"
+      },
+      {
+        "tab": "Trace",
+        "renderer": "json",
+        "source": "blobs.trace"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "summary",
-      "renderer": "json",
-      "source": "blobs.summary"
-    },
-    {
-      "tab": "trace",
-      "renderer": "text",
-      "source": "blobs.trace"
-    },
-    {
-      "tab": "logs/*",
-      "renderer": "text",
-      "source": "blobs.logs/*"
-    },
-    {
-      "tab": "transcripts/*",
-      "renderer": "json",
-      "source": "blobs.transcripts/*"
-    },
-    {
-      "tab": "checkpoints/*",
-      "renderer": "text",
-      "source": "blobs.checkpoints/*"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

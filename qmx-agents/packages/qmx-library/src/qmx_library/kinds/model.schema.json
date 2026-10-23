@@ -16,39 +16,49 @@
       "media_type": "application/json"
     }
   },
+  "card": {
+    "facts": [
+      "task",
+      "metric",
+      "seed",
+      "used_in"
+    ],
+    "thumbnail": "computed:training-curve",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Card",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Metrics",
+        "renderer": "json",
+        "source": "fields.metrics"
+      },
+      {
+        "tab": "Used by",
+        "renderer": "graph",
+        "source": "walk:uses:in"
+      },
+      {
+        "tab": "Versions",
+        "renderer": "table",
+        "source": "computed:versions"
+      },
+      {
+        "tab": "History",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "weights",
-      "renderer": "text",
-      "source": "blobs.weights"
-    },
-    {
-      "tab": "card",
-      "renderer": "json",
-      "source": "blobs.card"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

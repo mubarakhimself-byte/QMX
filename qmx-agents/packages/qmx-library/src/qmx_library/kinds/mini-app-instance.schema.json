@@ -13,34 +13,37 @@
       "media_type": "application/json"
     }
   },
+  "card": {
+    "facts": [
+      "title",
+      "summary"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "snapshot",
+        "renderer": "json",
+        "source": "blobs.snapshot"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "snapshot",
-      "renderer": "json",
-      "source": "blobs.snapshot"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

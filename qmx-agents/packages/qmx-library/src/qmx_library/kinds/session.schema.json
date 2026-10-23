@@ -51,6 +51,39 @@
       "media_type": "application/x-ndjson"
     }
   },
+  "card": {
+    "facts": [
+      "home",
+      "created",
+      "used_in"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Transcript export",
+        "renderer": "json",
+        "source": "blobs.transcript"
+      },
+      {
+        "tab": "Attached items",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      },
+      {
+        "tab": "What it saw",
+        "renderer": "graph",
+        "source": "walk:consumed:out"
+      },
+      {
+        "tab": "Produced",
+        "renderer": "graph",
+        "source": "walk:produced-by:in"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
@@ -64,30 +97,6 @@
     "tokens",
     "surface_digest",
     "exported_at"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "transcript",
-      "renderer": "json",
-      "source": "blobs.transcript"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

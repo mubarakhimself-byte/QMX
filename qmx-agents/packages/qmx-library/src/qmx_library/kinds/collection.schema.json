@@ -13,29 +13,33 @@
     }
   },
   "blobs": {},
+  "card": {
+    "facts": [
+      "members",
+      "used_in",
+      "title"
+    ],
+    "thumbnail": "computed:mosaic",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Members",
+        "renderer": "table",
+        "source": "fields.items"
+      },
+      {
+        "tab": "Activity",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

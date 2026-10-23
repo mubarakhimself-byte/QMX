@@ -20,35 +20,38 @@
       "media_type": "text/x-python"
     }
   },
+  "card": {
+    "facts": [
+      "title",
+      "summary"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "code",
+        "renderer": "code",
+        "source": "blobs.code"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key",
     "semver"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "code",
-      "renderer": "code",
-      "source": "blobs.code"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

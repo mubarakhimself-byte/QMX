@@ -13,34 +13,37 @@
       "media_type": "text/markdown"
     }
   },
+  "card": {
+    "facts": [
+      "title",
+      "summary"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Text",
+        "renderer": "markdown",
+        "source": "blobs.text"
+      },
+      {
+        "tab": "Links",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      },
+      {
+        "tab": "History",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "body.md",
-      "renderer": "markdown",
-      "source": "blobs.body.md"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

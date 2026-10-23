@@ -6,42 +6,80 @@
   "identity": "manifest",
   "fields": {
     "type": "object",
-    "properties": {}
+    "properties": {
+      "component_type": {
+        "type": "string",
+        "enum": [
+          "indicator",
+          "combination",
+          "feature",
+          "filter",
+          "labeler"
+        ]
+      },
+      "inputs": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "parameters": {
+        "type": "object"
+      },
+      "logic_fingerprint": {
+        "type": "string"
+      }
+    }
   },
   "blobs": {
     "code": {
       "media_type": "text/x-python"
     }
   },
+  "card": {
+    "facts": [
+      "component_type",
+      "inputs",
+      "version",
+      "used_in"
+    ],
+    "thumbnail": "computed:sample-plot",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Code",
+        "renderer": "code",
+        "source": "blobs.code"
+      },
+      {
+        "tab": "Parameters",
+        "renderer": "json",
+        "source": "fields.parameters"
+      },
+      {
+        "tab": "Uses",
+        "renderer": "graph",
+        "source": "walk:uses:out"
+      },
+      {
+        "tab": "Used by",
+        "renderer": "graph",
+        "source": "walk:uses:in"
+      },
+      {
+        "tab": "Versions",
+        "renderer": "table",
+        "source": "computed:versions"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key",
     "semver"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "code",
-      "renderer": "code",
-      "source": "blobs.code"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

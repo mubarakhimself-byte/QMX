@@ -30,41 +30,50 @@
       "media_type": "application/octet-stream"
     }
   },
+  "card": {
+    "facts": [
+      "publish",
+      "used_in",
+      "title"
+    ],
+    "thumbnail": "computed:graph",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Graph",
+        "renderer": "json",
+        "source": "blobs.definition"
+      },
+      {
+        "tab": "Code",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Runs",
+        "renderer": "graph",
+        "source": "walk:instance-of:in"
+      },
+      {
+        "tab": "Tests",
+        "renderer": "graph",
+        "source": "walk:tested-by:out"
+      },
+      {
+        "tab": "Versions",
+        "renderer": "table",
+        "source": "computed:versions"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key",
     "semver",
     "state"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "definition",
-      "renderer": "json",
-      "source": "blobs.definition"
-    },
-    {
-      "tab": "files/*",
-      "renderer": "text",
-      "source": "blobs.files/*"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

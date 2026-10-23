@@ -28,6 +28,7 @@ from pydantic import JsonValue
 if TYPE_CHECKING:
     from qmx_library.marks import Marks
     from qmx_library.principal import Principal
+    from qmx_library.view import CardView, Family, PageView
 
 type JsonObject = dict[str, JsonValue]
 type ObjectId = str
@@ -325,6 +326,12 @@ class LibraryPort(Protocol):
         *,
         as_of: AsOf | None = None,
     ) -> list[Step]: ...
+
+    def view(
+        self, who: Principal, object_id: ObjectId, level: Literal["card", "page"] = "card"
+    ) -> CardView | PageView: ...
+
+    def family(self, who: Principal, object_id: ObjectId) -> Family: ...
 
     def marks(self, who: Principal, object_id: ObjectId) -> Marks: ...
 
