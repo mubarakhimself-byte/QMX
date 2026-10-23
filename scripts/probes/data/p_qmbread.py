@@ -17,7 +17,7 @@ not hash to the fingerprint claimed for it must be refused before a quote is bui
 `--step-minutes` sets the spacing of the month's frontiers, and defaults to 60: the whole month,
 one quote an hour, 744 frontiers. Both readers hold the whole series so far in every frontier's
 read surface, so a read costs memory quadratic in the frontier count: the default run of 744
-frontiers replayed in 23 s from the tick series, 22 s from the bid/ask pair and 47 s from 1,488
+frontiers replayed in 12 s from the tick series, 14 s from the bid/ask pair and 38 s from 1,488
 CT-10 receipts, with a peak working set around 1 GB, and the month's whole 44,640 frontiers would
 hold about 1.0e9 sample entries, roughly 16 GB. The probe therefore refuses more than 1,000
 frontiers and prints the bound it applied. The bound belongs to this probe and to the reader's
