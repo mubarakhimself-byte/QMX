@@ -152,9 +152,9 @@ if is_refusal(key):
 columns = COLUMNS[kind.value]
 if tuple(key.value.rule.columns) != columns:
     fail(
-        f"the store has no freeze rule for kind {kind.value!r}: it would land a partition of "
-        f"{list(key.value.rule.columns)} where this dataset is {list(columns)}. Register the "
-        "kind's rule in qmf.data.series (FD/series.py) before this month can land."
+        f"the store's rule for kind {kind.value!r} holds {list(key.value.rule.columns)} where "
+        f"this decoder writes {list(columns)}; the door re-streams a commit through the rule's "
+        "columns, so the two have to be one definition (qmf.data.series)"
     )
 claim_path = claim(root, key.value.text)
 if claim_path is None:
@@ -222,7 +222,8 @@ try:
             "days": len(fetched.value),
         },
     )
-    card_path = Path("library") / "cards" / f"{card.series.replace('/', '_')}.json"
+    cards = Path(os.environ.get("QMX_WORK") or ".") / "library" / "cards"
+    card_path = cards / f"{card.series.replace('/', '_')}.json"
     card_path.parent.mkdir(parents=True, exist_ok=True)
     card_path.write_text(json.dumps(card_fields(card, partitions), indent=2), encoding="utf-8")
     print(

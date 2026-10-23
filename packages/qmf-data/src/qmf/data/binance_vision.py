@@ -40,6 +40,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Final, TypeAlias
 
 from qmf.core import Ok, Result, is_refusal
+from qmf.data.series import BOOK_COLUMNS, BOOK_KIND, TRADES_COLUMNS, TRADES_KIND
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
@@ -67,8 +68,9 @@ BUCKET: Final[str] = "https://data.binance.vision/data"
 BINANCE_VISION_SOURCE: Final[str] = "binance"
 """The provenance noun of every series a Binance bulk download writes."""
 
-KIND_TRADES: Final[str] = "trades"
-KIND_BOOK: Final[str] = "book"
+KIND_TRADES: Final[str] = TRADES_KIND
+KIND_BOOK: Final[str] = BOOK_KIND
+"""The two series kinds a bulk file lands as, named once by the store's kind registry (DR6)."""
 
 CRYPTO_PRICE_SCALE: Final[int] = 100_000_000
 """Eight decimals: the finest a Binance symbol trades, as a scaled integer."""
@@ -90,10 +92,14 @@ VARIANTS: Final[dict[str, str]] = {
 """The variant that keeps two datasets of one kind apart in the partition key."""
 
 COLUMNS: Final[dict[str, tuple[str, ...]]] = {
-    KIND_TRADES: ("t", "price", "volume"),
-    KIND_BOOK: ("t", "value", "volume"),
+    KIND_TRADES: TRADES_COLUMNS,
+    KIND_BOOK: BOOK_COLUMNS,
 }
-"""The typed columns of a kind's partition; a price is int64 scaled, a size a float64."""
+"""The typed columns of a kind's partition, read from the store's own kind rule (DR6).
+
+One definition, in `qmf.data.series`: the decoder and the door's re-streaming writer therefore
+agree by construction, which is what a commit requires.
+"""
 
 Reader: TypeAlias = Callable[[str], Result[bytes]]
 """Fetches one URL's bytes. The download script wires HTTPS; a test wires a mapping."""

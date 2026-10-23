@@ -201,7 +201,8 @@ try:
             "topup": "recent days only; a bulk file replaces this month when it is published",
         },
     )
-    card_path = Path("library") / "cards" / f"{card.series.replace('/', '_')}.json"
+    cards = Path(os.environ.get("QMX_WORK") or ".") / "library" / "cards"
+    card_path = cards / f"{card.series.replace('/', '_')}.json"
     card_path.parent.mkdir(parents=True, exist_ok=True)
     card_path.write_text(json.dumps(card_fields(card, partitions), indent=2), encoding="utf-8")
     print(

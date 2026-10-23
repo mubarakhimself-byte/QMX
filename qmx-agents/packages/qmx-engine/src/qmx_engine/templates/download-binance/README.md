@@ -26,11 +26,12 @@ One run, one partition: a dataset, a symbol and a month, landed through the mark
 
 ## The kind registry
 
-The store's freeze rules live in `qmf.data.series` (`FD/series.py`), which this PR's files do not
-name. It declares `ticks`, `bar-m1` and `fill`; it declares no `trades` and no `book` row. Until
-those rows exist, this template refuses to land with a message naming that file, because the
-alternative is a two-column partition that silently drops the price and the size. The refusal is
-the honest state, and it is in `findings-backlog.md`.
+The store's freeze rules live in `qmf.data.series`. `trades` and `book` are rows there: a trade
+row is `t`, `price`, `volume`, a book row `t`, `value`, `volume`, and both freeze on a checksum,
+which is how a bulk month closes, since the bucket published a digest for every file it served.
+The decoder's columns come from those same constants, so the door's re-streamed commit and the
+decoder agree by construction. The script still refuses if the two ever drift, naming both column
+lists.
 
 ## Binance's own limits
 

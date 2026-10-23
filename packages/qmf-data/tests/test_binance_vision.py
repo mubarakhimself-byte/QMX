@@ -14,6 +14,7 @@ from datetime import date
 
 from qmf.core import Ok, RefusalCategory, Result, is_ok, is_refusal
 from qmf.data.binance_vision import (
+    COLUMNS,
     bucket_path,
     decode_rows,
     kind_for,
@@ -22,6 +23,7 @@ from qmf.data.binance_vision import (
     variant_for,
     verify_checksum,
 )
+from qmf.data.series import FreezeKind, SeriesKey
 from qmf.data.store.refusals import storage_failure
 
 TRADES_CSV = (
@@ -85,6 +87,20 @@ def test_a_month_whose_second_day_the_bucket_does_not_serve_is_refused() -> None
 
     assert is_refusal(refused)
     assert refused.category is RefusalCategory.STORAGE_FAILURE
+
+
+def test_a_trades_and_a_book_month_freeze_on_a_checksum_with_the_decoder_columns() -> None:
+    for dataset, kind, variant in (
+        ("trades", "trades", ""),
+        ("aggTrades", "trades", "aggTrades"),
+        ("bookDepth", "book", "depth"),
+    ):
+        built = SeriesKey.try_create("binance", "BTCUSDT", kind, 2026, 8, variant)
+        assert is_ok(built)
+        rule = built.value.rule
+
+        assert rule.columns == COLUMNS[value(kind_for(dataset))]
+        assert rule.freeze is FreezeKind.CHECKSUM
 
 
 def test_a_checksum_file_is_read_in_the_shapes_the_bucket_publishes() -> None:
