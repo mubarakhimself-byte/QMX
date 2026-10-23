@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
-from qmf.core import CalendarIdentity, Ok, Result, World, is_ok, is_refusal
-from qmf.data.splits import SegmentRole, SplitBoundary, SplitManifest
-from qmf.data.store.engines.typed import TypedWriter
+from qmf.core import CalendarIdentity, World, is_ok, is_refusal
 from qmf.data.series import SeriesKey
-from qmf.data.store.refusals import invalid_input
+from qmf.data.splits import SplitBoundary, SplitManifest
+from qmf.data.store.engines.typed import TypedWriter
 
 from qmx_host.market_data import HANDLE_ROWS, SEAL_READ_REASON, MarketDoor, Placement, Purpose
 
@@ -25,6 +25,15 @@ FEB = _at(2026, 2, 1)
 MAR = _at(2026, 3, 1)
 
 
+def _value(result: Any) -> Any:
+    assert is_ok(result)
+    return result.value
+
+
+def _boundary(ns: int) -> SplitBoundary:
+    return cast("SplitBoundary", _value(SplitBoundary.try_create(ns)))
+
+
 def _split(gap_ns: int = DAY) -> SplitManifest:
     calendar = CalendarIdentity.try_create("forex-17NY", "v1", "2025a")
     assert is_ok(calendar)
@@ -33,7 +42,7 @@ def _split(gap_ns: int = DAY) -> SplitManifest:
     built = SplitManifest.try_create(
         calendar_identity=calendar.value,
         segments=segments.value,
-        seal_boundary=SplitBoundary.try_create(FEB).value,
+        seal_boundary=_boundary(FEB),
         purge_width=0,
         embargo_width=0,
         gap=gap_ns,

@@ -19,6 +19,7 @@ import json
 import multiprocessing
 import re
 import shutil
+import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -32,7 +33,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from qmf.core import (
     CalendarIdentity,
-    Instant,
     Ok,
     Result,
     TypedRefusal,
@@ -374,7 +374,7 @@ class MarketDoor:
                 given=[window_start, window_end],
             )
         if purpose is Purpose.FINAL_LOOK:
-            return self._final_look(asked, window_start, window_end, into)
+            return self._final_look(asked, window_start, window_end, into, data_scope)
         if purpose in _PURPOSE_ROLE:
             clipped = self._split_window(_PURPOSE_ROLE[purpose], window_start, window_end)
             if is_refusal(clipped):
@@ -553,7 +553,6 @@ class MarketDoor:
                 match = MONTH_NAME.match(month.name)
                 if match is None or not (month / "state.json").is_file():
                     continue
-                start = _month_start(int(match.group(1)), int(match.group(2)))
                 built = _key_of(*folder.relative_to(self.store_root).parts, month=month.name)
                 if is_ok(built) and self._month_is_sealed(built.value):
                     count += 1
@@ -707,7 +706,12 @@ class MarketDoor:
         return split.apply_gap(role, start_ns, end_ns)
 
     def _final_look(
-        self, keys: Sequence[SeriesKey], start_ns: int, end_ns: int, into: Path | None
+        self,
+        keys: Sequence[SeriesKey],
+        start_ns: int,
+        end_ns: int,
+        into: Path | None,
+        data_scope: Sequence[str] | None,
     ) -> Result[ReadAnswer]:
         if not self.primary:
             if self.primary_forward is None:
@@ -723,6 +727,7 @@ class MarketDoor:
                     "start_ns": start_ns,
                     "end_ns": end_ns,
                     "into": str(into),
+                    "data_scope": list(data_scope or ()),
                 }
             )
         if self.split is None:
@@ -743,7 +748,7 @@ class MarketDoor:
         if is_refusal(writer):
             return writer
         allowed = self.seal.authorize_final_look(
-            journal.value, writer.value, at=datetime.now(UTC), split_id=self.split.split_id
+            journal.value, writer.value, at=time.time_ns(), split_id=self.split.split_id
         )
         if is_refusal(allowed):
             return allowed
@@ -888,10 +893,6 @@ class MarketDoor:
         with path.open("a", encoding="utf-8") as sink:
             sink.write(json.dumps(task, sort_keys=True) + "\n")
         return dict(task)
-
-
-def _month_start(year: int, month: int) -> int:
-    return int(datetime(year, month, 1, tzinfo=UTC).timestamp()) * 1_000_000_000
 
 
 def _refused(refusal: TypedRefusal) -> HTTPException:

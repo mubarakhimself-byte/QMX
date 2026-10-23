@@ -48,6 +48,7 @@ type Code = Literal[
     "write_scope",
     "key_scope",
     "model_scope",
+    "data_scope",
     "handle_mismatch",
 ]
 """Every way a pass is refused. E25 drives one request per code."""

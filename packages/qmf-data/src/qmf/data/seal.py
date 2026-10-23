@@ -43,6 +43,7 @@ from qmf.core import (
     Ok,
     Result,
     TemporalOrder,
+    TypedRefusal,
     World,
     WriterId,
     is_ok,
@@ -505,16 +506,15 @@ class HoldoutSeal:
             return invalid_input(
                 "at", "the reading carries an Instant (or int64 UTC ns)", given=repr(at)
             )
-        return Ok(
-            {
-                "reason": "seal:span-outgrown",
-                "needs_you": "the sealed span has outgrown historical_holdout_months",
-                "seal_boundary": self.seal_boundary.label(),
-                "sealed_months": sealed_months,
-                "holdout_months": self.holdout_months,
-                "read_at": at_instant.value_ns,
-            }
-        )
+        task: dict[str, object] = {
+            "reason": "seal:span-outgrown",
+            "needs_you": "the sealed span has outgrown historical_holdout_months",
+            "seal_boundary": self.seal_boundary.label(),
+            "sealed_months": sealed_months,
+            "holdout_months": self.holdout_months,
+            "read_at": at_instant.value_ns,
+        }
+        return Ok(task)
 
     def _existing_final_look(self, events: list[dict[str, object]]) -> Result[StoreReceipt] | None:
         """A ``policy rejection`` if a final look for this seal is already journaled,
@@ -566,7 +566,7 @@ class HoldoutSeal:
             event["correlation_id"] = correlation_id
         return event
 
-    def _require_calendar(self, identity: CalendarIdentity | None) -> Result[bool] | None:
+    def _require_calendar(self, identity: CalendarIdentity | None) -> TypedRefusal | None:
         """A ``policy rejection`` if ``identity`` differs from the pinned one, else ``None``."""
         if identity is not None and identity != self.calendar_identity:
             return policy_rejection(
