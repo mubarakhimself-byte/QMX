@@ -15,6 +15,9 @@ uncached_resend surface_digest` (AD-62: what an agent's chat was offered); on `c
 at_fraction`. A `tool_called` event writes one `tool` span (AD-34), a child of its attempt's span,
 from its `tool` object: `id name duration_ms error`. An attempt's span counts the secrets the ledger
 redacted from any of its events (`redactions`, AD-37); it never records a value.
+
+A span that closes also hands its row, already redacted, to the external layer's exporter
+(AD-69), so a trace reaches the server without a second reader of the ledger.
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from pydantic import JsonValue
 from qmx_ledger.journal import encoded, fingerprint
 
 from qmx_engine.ledger.events import Event, JsonObject
+from qmx_engine.ledger.redact import exported
 
 type SpanStatus = Literal["ok", "failed", "waiting", "gate", "cancelled"]
 type SpanKind = Literal["node", "tool", "chunk"]
@@ -240,6 +244,12 @@ def _save(connection: sqlite3.Connection, span: Span) -> None:
     )
 
 
+def _hand(span: Span) -> None:
+    """A closed span's record for the external layer (AD-69), as the row the ledger stored."""
+    if span.ended_at is not None:
+        exported("span", encoded(asdict(span)).decode())
+
+
 def _run_mode(connection: sqlite3.Connection, run_id: str) -> str | None:
     row = connection.execute(
         "SELECT data FROM events WHERE run_id = ? AND kind = 'run_created' LIMIT 1", (run_id,)
@@ -264,13 +274,16 @@ def apply(connection: sqlite3.Connection, event: Event, redactions: int = 0) -> 
         _save(connection, replace(made, redactions=redactions))
         return
     if event.kind == "tool_called" and (child := tool(event, key)) is not None:
-        _save(connection, replace(child, redactions=redactions))
+        made = replace(child, redactions=redactions)
+        _save(connection, made)
+        _hand(made)
     changes = event.kind in ENDINGS or event.kind in ("compacted", "gate_opened", "gate_resolved")
     if not changes and redactions == 0:
         return
     span = _load(connection, span_id(event.run_id, key))
     if span is None:
         return
+    was_open = span.ended_at is None
     if event.kind in ENDINGS:
         span = ended(span, event)
     elif event.kind == "compacted":
@@ -280,6 +293,8 @@ def apply(connection: sqlite3.Connection, event: Event, redactions: int = 0) -> 
     elif event.kind == "gate_resolved" and span.status == "gate":
         span = replace(span, status="waiting" if span.ended_at is not None else None)
     _save(connection, replace(span, redactions=span.redactions + redactions))
+    if was_open:
+        _hand(span)
 
 
 def cancel_open(connection: sqlite3.Connection, event: Event) -> None:
@@ -290,4 +305,6 @@ def cancel_open(connection: sqlite3.Connection, event: Event) -> None:
     for (record,) in rows:
         span = from_record(record)
         if span.ended_at is None:
-            _save(connection, replace(span, ended_at=event.at, status="cancelled"))
+            closed = replace(span, ended_at=event.at, status="cancelled")
+            _save(connection, closed)
+            _hand(closed)

@@ -9,16 +9,25 @@ table, the `LibraryPort` adapter, the trace export and the REST serializer. Two 
 - Values. A secret the engine handled (a tool key it resolved into a child, a pass it minted) is
   registered once and replaced by `[redacted:<ref>]` wherever it appears.
 
+The one call site for exporters (AD-69): `exported` hands an already-redacted record to every
+exporter the process registered, so a write point names the record once and the external layer
+never sees text this module did not clean first. A sink that raises is logged and skipped: the
+record on disk is the one that matters.
+
 Keys in encoded forms (base64, reversed, split across fields) pass; that is an accepted miss.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
+from collections.abc import Callable
 from typing import Final, cast
 
 from pydantic import JsonValue
+
+LOG = logging.getLogger(__name__)
 
 MASK: Final = "[redacted]"
 MIN_VALUE: Final = 12
@@ -50,6 +59,11 @@ SHAPES: Final = re.compile("|".join((*GLUED, GENERIC, ZHIPU)))
 
 _values: dict[str, str] = {}
 _values_lock = threading.Lock()
+
+type Sink = Callable[[str, str], None]
+"""An exporter: the record's kind and the JSON text the write point already stored."""
+_sinks: list[Sink] = []
+_sinks_lock = threading.Lock()
 
 
 def register(ref: str, value: str) -> None:
@@ -108,3 +122,31 @@ def redact_json(value: object) -> tuple[JsonValue, int]:
             total += n
         return items, total
     return cast(JsonValue, value), 0
+
+
+def exporter(sink: Sink) -> None:
+    """Register one exporter of already-redacted records: the external layer (AD-69)."""
+    with _sinks_lock:
+        if sink not in _sinks:
+            _sinks.append(sink)
+
+
+def unexporter(sink: Sink) -> None:
+    with _sinks_lock:
+        if sink in _sinks:
+            _sinks.remove(sink)
+
+
+def exported(kind: str, record: str) -> None:
+    """The one call site for exporters. `record` is the JSON text the write point stored, which is
+    redacted by construction: it is the same value, not a copy made later. No sink is a no-op, and
+    a sink that raises never fails the write."""
+    if not _sinks:
+        return
+    with _sinks_lock:
+        sinks = list(_sinks)
+    for sink in sinks:
+        try:
+            sink(kind, record)
+        except Exception:
+            LOG.debug("an exporter refused a %s record", kind, exc_info=True)

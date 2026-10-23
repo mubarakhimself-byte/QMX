@@ -15,6 +15,10 @@ The home keeps rows as JSONL day files `logs/heartbeat-<YYYY-MM-DD>.jsonl` for
 `heartbeat.window_days` days (`WINDOW_DAYS`), plus `logs/heartbeat-latest.json`, the newest row
 per subject, so a reader never scans a day file. The host is the one writer: it holds the
 home's lock. Spend per subject is a reading over these rows, never a cap.
+
+A host row also carries this home's Library facts (the outbox length and how long its oldest
+entry has waited) and its Lab facts when a Lab backend writes them, and every row is handed,
+already redacted, to the external layer as gauges (AD-69).
 """
 
 from __future__ import annotations
@@ -32,7 +36,9 @@ from typing import Final, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field
 from qmx_ledger.journal import fingerprint
 
+from qmx_engine import telemetry
 from qmx_engine.definition.registry import BASE_KINDS
+from qmx_engine.ledger.redact import exported
 
 type Subject = Literal["host", "run", "app"]
 type PauseState = Literal["known", "unknown"]
@@ -79,6 +85,34 @@ class ClassUse(BaseModel):
     waiting: int = 0
 
 
+class LibraryFacts(BaseModel):
+    """What this home's Library is doing, beside the machine's own numbers (AD-65, AD-69).
+
+    The outbox length and the age of its oldest entry are the sync lag a reader watches; both
+    come from `<home>/library/outbox.jsonl`, the same file the sync loop replays, so there is one
+    count and no second bookkeeping. `writer_alive` is read where the store's lock is: the data
+    health read.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    outbox: int = 0
+    sync_lag_s: float | None = None
+    oldest_at: str | None = None
+    writer_alive: bool | None = None
+
+
+class LabFacts(BaseModel):
+    """Open projects, kernels and runs on this home's Lab, from `logs/lab.json` when the Lab
+    writes it. Absent before the Lab backend exists, and an absent figure is not a guess."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    open_projects: int | None = None
+    kernels: int | None = None
+    runs: int | None = None
+
+
 class Heartbeat(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -110,6 +144,10 @@ class Heartbeat(BaseModel):
     the figure that replaces a reserved constant once it is known (D-11)."""
     connections: tuple[ConnectionReading, ...] = ()
     """The newest reading per external connection on this home (AD-67)."""
+    library: LibraryFacts | None = None
+    """This home's Library facts, on a host row (AD-69)."""
+    lab: LabFacts | None = None
+    """This home's Lab facts, on a host row (AD-69)."""
     clock_offset_ms: int | None = None
     """The largest absolute provider clock offset this home measured, signed as measured."""
 
@@ -142,6 +180,7 @@ class HeartbeatLog:
     def __init__(self, home: Path, window_days: float) -> None:
         self.home = home
         self.window = timedelta(days=window_days)
+        telemetry.opened(home)
         logs_dir(home).mkdir(parents=True, exist_ok=True)
 
     def write(self, rows: Iterable[Heartbeat]) -> None:
@@ -161,6 +200,8 @@ class HeartbeatLog:
         scratch = target.with_suffix(".tmp")
         scratch.write_text(json.dumps(document), encoding="utf-8")
         os.replace(scratch, target)
+        for row in found:
+            exported("heartbeat", row.model_dump_json())
 
     def prune(self, now: datetime) -> int:
         """Drop every row older than the window; returns how many went. Whole day files before
@@ -237,6 +278,54 @@ def connection_words(home: Path) -> Mapping[str, str]:
     return {reading.connection: reading.word for reading in connection_readings(home)}
 
 
+OUTBOX: Final = "outbox.jsonl"
+"""The Library's write outbox under `<home>/library/`, the file the sync loop replays (AD-14)."""
+LAB: Final = "lab.json"
+"""What the Lab backend writes under `logs/`: its open projects, kernels and runs (AD-69)."""
+
+
+def library_facts(home: Path, *, now: datetime | None = None) -> LibraryFacts:
+    """The Library's outbox length and how long its oldest entry has waited (AD-14, AD-65)."""
+    path = home / "library" / OUTBOX
+    try:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except OSError:
+        return LibraryFacts()
+    oldest: str | None = None
+    for line in lines[:1]:
+        try:
+            entry: object = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(entry, dict):
+            continue
+        written = cast("dict[str, object]", entry).get("at")
+        oldest = written if isinstance(written, str) else None
+    lag: float | None = None
+    if oldest is not None:
+        when = _when(oldest)
+        lag = round(((now or datetime.now(UTC)) - when).total_seconds(), 1)
+    return LibraryFacts(outbox=len(lines), sync_lag_s=lag, oldest_at=oldest)
+
+
+def lab_facts(home: Path) -> LabFacts | None:
+    """The Lab's own numbers, or None before a Lab backend writes them (AD-69)."""
+    try:
+        raw: object = json.loads((logs_dir(home) / LAB).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    fields = cast("dict[str, object]", raw)
+    found: dict[str, int | None] = {}
+    for name in ("open_projects", "kernels", "runs"):
+        value = fields.get(name)
+        found[name] = value if isinstance(value, int) and not isinstance(value, bool) else None
+    return LabFacts(
+        open_projects=found["open_projects"], kernels=found["kernels"], runs=found["runs"]
+    )
+
+
 def measured_clock_offset(home: Path) -> int | None:
     """The largest absolute provider clock offset the connections measured, signed as measured."""
     stored = _health(home).get("clock_offset_ms")
@@ -251,14 +340,18 @@ def measured_clock_offset(home: Path) -> int | None:
 
 
 def _attached(home: Path, row: Heartbeat) -> Heartbeat:
-    """A host row carries the newest connection readings, so one row answers both questions."""
-    if row.subject != "host" or row.connections:
+    """A host row carries the newest connection readings and the home's Library and Lab facts, so
+    one row answers all three questions."""
+    if row.subject != "host":
         return row
-    readings = connection_readings(home)
-    if not readings:
-        return row
+    readings = connection_readings(home) if not row.connections else row.connections
     return row.model_copy(
-        update={"connections": readings, "clock_offset_ms": measured_clock_offset(home)}
+        update={
+            "connections": readings,
+            "clock_offset_ms": row.clock_offset_ms or measured_clock_offset(home),
+            "library": row.library or library_facts(home),
+            "lab": row.lab or lab_facts(home),
+        }
     )
 
 
