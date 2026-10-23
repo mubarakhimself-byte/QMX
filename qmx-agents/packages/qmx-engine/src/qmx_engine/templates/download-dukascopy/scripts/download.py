@@ -54,7 +54,7 @@ HEARTBEAT_SECONDS = 10.0
 
 def fail(why: str) -> None:
     print(f"{FAILURE} {why}")
-    raise SystemExit(1)
+    raise SystemExit(0)
 
 
 def month_of(text: str) -> tuple[int, int]:
@@ -206,6 +206,10 @@ def free_disk(folder: Path, floor_gb: float) -> str:
 
 
 given = json.load(sys.stdin).get("in") or {}
+if isinstance(given, dict) and given.get("dry_run"):
+    (Path(os.environ["QMX_WORK"]) / "library" / "cards").mkdir(parents=True, exist_ok=True)
+    print(json.dumps({"status": "dry_run", "note": "nothing fetched; the source slot is read when a download runs"}))
+    raise SystemExit(0)
 source = given.get("source") if isinstance(given, dict) else None
 if not isinstance(source, dict):
     fail("the run names no source definition under `source`")

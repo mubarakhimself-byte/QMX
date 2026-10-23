@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from qmf.core import is_ok
 from qmf.data.calendar_feed import CalendarEvent, calendar_key, land_calendar
 from qmf.data.series import SeriesStore
 
@@ -45,7 +46,7 @@ def event(
 def test_a_revision_in_an_open_month_is_an_append(tmp_path: Path) -> None:
     store = SeriesStore(tmp_path / "series", wall=lambda: NOW)
     built = calendar_key(*MONTH)
-    assert not isinstance(built, list)
+    assert is_ok(built)
     key = built.value
     first = land_calendar(store, key, [event("us-nfp", "r1", at=OCT_02, known_at=OCT_02)])
     second = land_calendar(
@@ -56,11 +57,13 @@ def test_a_revision_in_an_open_month_is_an_append(tmp_path: Path) -> None:
             event("us-nfp", "r2", at=OCT_30, known_at=OCT_09),
         ],
     )
-    assert first is not None and second is not None
+
+    assert is_ok(first) and first.value is not None
+    assert is_ok(second) and second.value is not None
     assert (first.value.rows, first.value.frozen) == (1, False)
     assert (second.value.rows, second.value.frozen) == (2, False)
     read = store.read(key)
-    assert not isinstance(read, list)
+    assert is_ok(read)
     assert [(row["source_native_id"], row["revision"]) for row in read.value.rows] == [
         ("us-nfp", "r1"),
         ("us-nfp", "r2"),
@@ -70,11 +73,14 @@ def test_a_revision_in_an_open_month_is_an_append(tmp_path: Path) -> None:
 
 def test_the_same_rows_again_write_one_file(tmp_path: Path) -> None:
     store = SeriesStore(tmp_path / "series", wall=lambda: NOW)
-    key = calendar_key(*MONTH).value
+    built = calendar_key(*MONTH)
+    assert is_ok(built)
+    key = built.value
     one = event("us-nfp", "r1", at=OCT_02, known_at=OCT_02)
     first = land_calendar(store, key, [one])
     again = land_calendar(store, key, [one])
 
-    assert first is not None and again is not None
+    assert is_ok(first) and first.value is not None
+    assert is_ok(again) and again.value is not None
     assert again.value.fingerprint == first.value.fingerprint
     assert sorted(path.name for path in store.folder(key).glob("*.parquet")) == ["open.parquet"]

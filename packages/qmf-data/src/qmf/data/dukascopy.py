@@ -422,7 +422,9 @@ def decode_node_csv(
             "payload", "a dukascopy-node CSV is text or bytes", given=repr(type(payload))
         )
     text = (
-        bytes(payload).decode("utf-8", "replace") if isinstance(payload, (bytes, bytearray)) else payload
+        bytes(payload).decode("utf-8", "replace")
+        if isinstance(payload, (bytes, bytearray))
+        else payload
     )
     lines = [line for line in text.splitlines() if line.strip()]
     if not lines:

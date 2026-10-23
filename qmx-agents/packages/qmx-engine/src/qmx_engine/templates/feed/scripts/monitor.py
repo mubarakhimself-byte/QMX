@@ -12,6 +12,7 @@ the node's hash is what decides whether a fire happens at all. Nothing run-scope
 
 import hashlib
 import json
+import os
 import sys
 import xml.etree.ElementTree as ElementTree
 from datetime import UTC, datetime
@@ -25,17 +26,24 @@ FAILURE = "[QMX_FAILURE]"
 
 def fail(why: str) -> None:
     print(f"{FAILURE} {why}")
-    raise SystemExit(1)
+    raise SystemExit(0)
 
 
 def read(location: str) -> bytes:
-    """The bytes at a url, or at a plain path (which is what a test and a local file use)."""
+    """The bytes at a url, or at a path (which is what a test and a local file use).
+
+    A relative path resolves under the workflow's own folder (`QMX_CODE`), so a feed can watch a
+    file it ships with and its template test run needs no network.
+    """
     target = location.strip()
     if target.startswith(("http://", "https://", "file://")):
         request = Request(target, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
         with urlopen(request, timeout=TIMEOUT_SECONDS) as reply:  # noqa: S310
             return reply.read()
-    return Path(target).read_bytes()
+    path = Path(target)
+    if not path.is_absolute():
+        path = Path(os.environ.get("QMX_CODE", ".")) / path
+    return path.read_bytes()
 
 
 def stamp(text: str) -> str:
@@ -118,8 +126,10 @@ def api(body: bytes) -> list[dict[str, str]]:
     return items
 
 
-def page(body: bytes) -> list[dict[str, str]]:
-    return [{"id": hashlib.sha256(body).hexdigest(), "url": "", "title": "", "published": ""}]
+def page(body: bytes, location: str) -> list[dict[str, str]]:
+    return [
+        {"id": hashlib.sha256(body).hexdigest(), "url": location, "title": "", "published": ""}
+    ]
 
 
 given = json.load(sys.stdin).get("in") or {}
@@ -149,7 +159,7 @@ elif method == "bulk-files":
         if line.strip()
     ]
 else:
-    items = page(body)
+    items = page(body, location)
 snapshot = {
     "source": {
         "name": str(source.get("name") or ""),

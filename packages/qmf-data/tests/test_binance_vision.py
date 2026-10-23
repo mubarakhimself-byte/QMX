@@ -12,7 +12,7 @@ import io
 import zipfile
 from datetime import date
 
-from qmf.core import Ok, RefusalCategory, is_refusal
+from qmf.core import Ok, RefusalCategory, Result, is_ok, is_refusal
 from qmf.data.binance_vision import (
     bucket_path,
     decode_rows,
@@ -29,6 +29,12 @@ TRADES_CSV = (
     b"1,19000.50,0.25,4750.125,1756684800000,false,true\n"
     b"2,19001.00,0.75,14250.75,1756684801000,true,true\n"
 )
+
+
+def value[T](result: Result[T]) -> T:
+    """The successful value, with the refusal assertion spelled once."""
+    assert is_ok(result)
+    return result.value
 
 
 def zipped(csv_bytes: bytes) -> bytes:
@@ -51,13 +57,13 @@ def test_a_file_that_does_not_hash_to_its_published_checksum_is_refused() -> Non
 
 
 def test_the_two_trade_datasets_land_as_one_kind_under_two_variants() -> None:
-    assert (kind_for("trades").value, variant_for("trades").value) == ("trades", "")
-    assert (kind_for("aggTrades").value, variant_for("aggTrades").value) == (
+    assert (value(kind_for("trades")), value(variant_for("trades"))) == ("trades", "")
+    assert (value(kind_for("aggTrades")), value(variant_for("aggTrades"))) == (
         "trades",
         "aggTrades",
     )
-    assert (kind_for("bookDepth").value, variant_for("bookDepth").value) == ("book", "depth")
-    assert decode_rows("trades", TRADES_CSV).value[0] == (
+    assert (value(kind_for("bookDepth")), value(variant_for("bookDepth"))) == ("book", "depth")
+    assert value(decode_rows("trades", TRADES_CSV))[0] == (
         1_756_684_800_000,
         1_900_050_000_000,
         0.25,
@@ -65,13 +71,10 @@ def test_the_two_trade_datasets_land_as_one_kind_under_two_variants() -> None:
 
 
 def test_a_month_whose_second_day_the_bucket_does_not_serve_is_refused() -> None:
-    csv_bytes = TRADES_CSV
-    payload = zipped(csv_bytes)
+    payload = zipped(TRADES_CSV)
     checksum = "sha256:" + hashlib.sha256(payload).hexdigest()
-    served = {
-        bucket_path("trades", "BTCUSDT", date(2026, 8, 1)).path: payload,
-        bucket_path("trades", "BTCUSDT", date(2026, 8, 1)).checksum_path: checksum.encode(),
-    }
+    first = bucket_path("trades", "BTCUSDT", date(2026, 8, 1))
+    served = {first.path: payload, first.checksum_path: checksum.encode()}
 
     def reader(url: str):
         if url in served:
@@ -87,6 +90,6 @@ def test_a_month_whose_second_day_the_bucket_does_not_serve_is_refused() -> None
 def test_a_checksum_file_is_read_in_the_shapes_the_bucket_publishes() -> None:
     digest = "ab" * 32
 
-    assert parse_checksum(f"sha256:{digest}  BTCUSDT-trades-2026-08-01.zip\n").value == digest
-    assert parse_checksum(f"SHA256 (BTCUSDT-trades-2026-08-01.zip) = {digest}").value == digest
-    assert parse_checksum(digest.encode()).value == digest
+    assert value(parse_checksum(f"sha256:{digest}  BTCUSDT-trades-2026-08-01.zip\n")) == digest
+    assert value(parse_checksum(f"SHA256 (BTCUSDT-trades-2026-08-01.zip) = {digest}")) == digest
+    assert value(parse_checksum(digest.encode())) == digest

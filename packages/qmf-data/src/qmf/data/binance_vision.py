@@ -37,14 +37,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Final
+from typing import Final, TypeAlias
 
-from qmf.core import Ok, Result, Retryability, TypedRefusal, is_refusal
+from qmf.core import Ok, Result, is_refusal
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
-    "BUCKET",
     "BINANCE_VISION_SOURCE",
+    "BUCKET",
     "COLUMNS",
     "CRYPTO_PRICE_SCALE",
     "DATASETS",
@@ -95,7 +95,7 @@ COLUMNS: Final[dict[str, tuple[str, ...]]] = {
 }
 """The typed columns of a kind's partition; a price is int64 scaled, a size a float64."""
 
-type Reader = Callable[[str], Result[bytes]]
+Reader: TypeAlias = Callable[[str], Result[bytes]]
 """Fetches one URL's bytes. The download script wires HTTPS; a test wires a mapping."""
 
 NS_PER_MS: Final[int] = 1_000_000
@@ -260,7 +260,9 @@ def _timestamp_ms(text: str, *, name: str) -> Result[int]:
         return Ok(int(datetime.fromisoformat(token.replace("Z", "+00:00")).timestamp() * 1000))
     except ValueError:
         return invalid_input(
-            "t", "a trade print's time is epoch milliseconds or an ISO instant", file=name,
+            "t",
+            "a trade print's time is epoch milliseconds or an ISO instant",
+            file=name,
             given=token[:40],
         )
 
@@ -276,9 +278,7 @@ def _header_index(lines: list[list[str]], wanted: Mapping[str, tuple[str, ...]])
     return found
 
 
-def _row_by_position(
-    dataset: str, cells: list[str], *, name: str
-) -> Result[tuple[object, ...]]:
+def _row_by_position(dataset: str, cells: list[str], *, name: str) -> Result[tuple[object, ...]]:
     """One CSV line decoded by the position the bucket's dataset documents."""
     try:
         if dataset in ("trades", "aggTrades"):
@@ -303,7 +303,9 @@ def _row_by_position(
         )
 
 
-def decode_rows(dataset: object, payload: object, *, name: str = "") -> Result[tuple[tuple[object, ...], ...]]:
+def decode_rows(
+    dataset: object, payload: object, *, name: str = ""
+) -> Result[tuple[tuple[object, ...], ...]]:
     """One day's CSV as typed rows for its kind's partition.
 
     A trade print is `(time_ms, scaled price, size)`; a book level is
@@ -314,7 +316,9 @@ def decode_rows(dataset: object, payload: object, *, name: str = "") -> Result[t
     token = _clean(dataset)
     if token is None or token not in DATASETS:
         return invalid_input(
-            "dataset", "a bulk CSV names one of: " + ", ".join(sorted(DATASETS)), given=repr(dataset)
+            "dataset",
+            "a bulk CSV names one of: " + ", ".join(sorted(DATASETS)),
+            given=repr(dataset),
         )
     if not isinstance(payload, (bytes, bytearray)):
         return invalid_input("payload", "a bulk CSV is bytes", given=repr(type(payload)))
@@ -326,12 +330,16 @@ def decode_rows(dataset: object, payload: object, *, name: str = "") -> Result[t
         return Ok(())
     header = [cell.strip().lower() for cell in rows[0]]
     named = token in ("bookDepth", "bookTicker")
+    index: dict[str, int] = {}
     if named:
-        index = _header_index(rows, {
-            "t": ("timestamp", "time", "transact_time"),
-            "value": ("percentage", "depth", "value"),
-            "volume": ("notional", "volume", "qty"),
-        })
+        index = _header_index(
+            rows,
+            {
+                "t": ("timestamp", "time", "transact_time"),
+                "value": ("percentage", "depth", "value"),
+                "volume": ("notional", "volume", "qty"),
+            },
+        )
         if set(index) != {"t", "value", "volume"}:
             return invalid_input(
                 "header",
@@ -344,7 +352,7 @@ def decode_rows(dataset: object, payload: object, *, name: str = "") -> Result[t
         body = rows[1:] if header and not header[0].isdigit() else rows
     decoded: list[tuple[object, ...]] = []
     for cells in body:
-        if named:
+        if named and index:
             try:
                 moment = _timestamp_ms(cells[index["t"]], name=name)
                 if is_refusal(moment):
@@ -354,8 +362,10 @@ def decode_rows(dataset: object, payload: object, *, name: str = "") -> Result[t
                 )
             except (IndexError, ValueError):
                 return invalid_input(
-                    "row", "a book bulk line carries its time, level and notional",
-                    file=name, row=cells,
+                    "row",
+                    "a book bulk line carries its time, level and notional",
+                    file=name,
+                    row=cells,
                 )
             continue
         row = _row_by_position(token, cells, name=name)
@@ -382,7 +392,9 @@ def month_files(
     prints) answers storage failure and stops it too: the caller reports the day.
     """
     if year < 1970 or not 1 <= month <= 12:
-        return invalid_input("month", "a bulk month is a real month from 1970", given=f"{year}-{month}")
+        return invalid_input(
+            "month", "a bulk month is a real month from 1970", given=f"{year}-{month}"
+        )
     if symbol.strip() == "":
         return invalid_input("symbol", "a bulk download names its symbol", given=repr(symbol))
     start = date(year, month, 1)

@@ -23,7 +23,6 @@ in this package.
 from __future__ import annotations
 
 import json
-import xml.etree.ElementTree as ElementTree
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -31,6 +30,7 @@ from enum import StrEnum
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Protocol, cast
+from xml.etree import ElementTree
 
 from qmf.core import (
     Instrument,
@@ -45,8 +45,6 @@ from qmf.core import (
     fingerprint,
     is_refusal,
 )
-from qmf.data.series import CommitReceipt, SeriesKey, SeriesStore
-from qmf.data.store.engines import SeriesFile
 from qmf.data.ingest import (
     ExternalSourceIngest,
     IntakeOutcome,
@@ -55,7 +53,9 @@ from qmf.data.ingest import (
     SourceRequest,
 )
 from qmf.data.journal_producer import JournalAppendReceipt, JournalWriter
+from qmf.data.series import CommitReceipt, SeriesKey, SeriesStore
 from qmf.data.source_boundary import ObservationReceipt, SourceObservationBoundary
+from qmf.data.store.engines import SeriesFile
 from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
@@ -921,16 +921,18 @@ def calendar_rows(
             )
         found[identity] = row
     return Ok(
-        tuple(sorted(found.values(), key=lambda row: (row.observed_at_ns, row.source_native_id,
-                                                      row.revision)))
+        tuple(
+            sorted(
+                found.values(),
+                key=lambda row: (row.observed_at_ns, row.source_native_id, row.revision),
+            )
+        )
     )
 
 
 def calendar_key(year: int, month: int) -> Result[SeriesKey]:
     """The partition key of one month of the economic calendar."""
-    return SeriesKey.try_create(
-        CALENDAR_FEED_SOURCE, CALENDAR_SUBJECT, CALENDAR_KIND, year, month
-    )
+    return SeriesKey.try_create(CALENDAR_FEED_SOURCE, CALENDAR_SUBJECT, CALENDAR_KIND, year, month)
 
 
 def _calendar_file(rows: Sequence[CalendarRow], key: SeriesKey, folder: Path) -> Result[SeriesFile]:
@@ -959,8 +961,10 @@ def _calendar_file(rows: Sequence[CalendarRow], key: SeriesKey, folder: Path) ->
     columns = [list(column) for column in zip(*(row.values() for row in rows), strict=True)]
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        pq.write_table(pa.Table.from_pydict(dict(zip(CALENDAR_COLUMNS, columns, strict=True)),
-                                            schema=schema), target)
+        pq.write_table(
+            pa.Table.from_pydict(dict(zip(CALENDAR_COLUMNS, columns, strict=True)), schema=schema),
+            target,
+        )
     except OSError as exc:
         target.unlink(missing_ok=True)
         return storage_failure(
@@ -1022,7 +1026,10 @@ def land_calendar(
     written = _calendar_file(inside, key, store.folder(key))
     if is_refusal(written):
         return written
-    return store.commit_file(key, written.value, correction=correction)
+    landed = store.commit_file(key, written.value, correction=correction)
+    if is_refusal(landed):
+        return landed
+    return Ok(landed.value)
 
 
 def decode_calendar_xml(
@@ -1043,12 +1050,14 @@ def decode_calendar_xml(
         return invalid_input(
             "payload", "a calendar XML snapshot is XML text or bytes", given=repr(type(payload))
         )
-    text = payload.decode("utf-8", "replace") if isinstance(payload, (bytes, bytearray)) else payload
+    text = (
+        payload.decode("utf-8", "replace") if isinstance(payload, (bytes, bytearray)) else payload
+    )
     try:
         root = ElementTree.fromstring(text)  # noqa: S314 (the recorder's own archived bytes)
     except ElementTree.ParseError as exc:
         return invalid_input(
-            "payload", "a calendar XML snapshot parses as XML", reason=str(exc)[:160]
+            "payload", "a calendar XML snapshot parses as XML", error=str(exc)[:160]
         )
     blocks: list[dict[str, object]] = []
     for element in root.iter():

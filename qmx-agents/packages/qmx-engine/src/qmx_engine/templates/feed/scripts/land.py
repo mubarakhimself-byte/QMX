@@ -84,7 +84,10 @@ for item in items:
             with urlopen(request, timeout=TIMEOUT_SECONDS) as reply:  # noqa: S310
                 body = reply.read(BODY_LIMIT + 1)
         else:
-            body = Path(intent).read_bytes()[: BODY_LIMIT + 1]
+            path = Path(intent)
+            if not path.is_absolute():
+                path = Path(os.environ.get("QMX_CODE", ".")) / path
+            body = path.read_bytes()[: BODY_LIMIT + 1]
         document = {
             "kind": "source",
             "origin": "feed",
