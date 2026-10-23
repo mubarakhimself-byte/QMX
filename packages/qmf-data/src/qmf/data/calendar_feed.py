@@ -982,7 +982,7 @@ def _calendar_file(rows: Sequence[CalendarRow], key: SeriesKey, folder: Path) ->
     return Ok(
         SeriesFile(
             key=key.text,
-            fingerprint=stamped.value.value,
+            fingerprint=stamped.value.value.rsplit(":", 1)[-1],
             rows=len(rows),
             bytes=target.stat().st_size,
             path=target,

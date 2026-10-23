@@ -6,7 +6,7 @@ template read, and the XML the recorder also kept. Every snapshot's own `fetched
 observation time, which is what orders the rows; a snapshot's sha256 is its revision, so the same
 bytes imported twice are one row set and a new snapshot is an append.
 
-    uv run --no-sync python -m scripts.data.import_calendar_files \
+    uv run --no-sync python scripts/data/import_calendar_files.py \
         --recorder C:/Users/Mubarak/Desktop/QMX/recorder/data/calendar --root D:/Temp/calendar-import
 
 A rerun adds nothing: the second run recomputes the same rows, gets the same fingerprints and the
@@ -36,6 +36,7 @@ FORMATS: Final[tuple[str, ...]] = (".json", ".xml")
 
 
 def instant_ns(text: str) -> int:
+    """The UTC nanosecond instant of the recorder's `fetched_at_utc` stamp."""
     moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=UTC)
@@ -43,36 +44,46 @@ def instant_ns(text: str) -> int:
 
 
 def manifest(recorder: Path) -> list[dict[str, object]]:
+    """The recorder's one-record-per-fetch log, oldest first; a torn line is skipped."""
     path = recorder / "manifest.jsonl"
     if not path.is_file():
         return []
     rows: list[dict[str, object]] = []
     for line in path.read_text("utf-8").splitlines():
-        if line.strip():
-            try:
-                rows.append(json.loads(line))
-            except ValueError:
-                continue  # a torn line is the recorder's, not the import's
+        if not line.strip():
+            continue
+        try:
+            rows.append(json.loads(line))
+        except ValueError:
+            continue
     return rows
 
 
-def snapshot(recorder: Path, record: dict[str, object]) -> tuple[bytes, str, str] | None:
-    """The bytes, their sha256 and the fetch time of one manifest record, or None."""
+def snapshot(recorder: Path, record: dict[str, object]) -> tuple[bytes, str, str, str] | None:
+    """One record's bytes, revision, fetch time and suffix, or None when it is not a snapshot."""
     relative = str(record.get("path") or "")
     fetched = str(record.get("fetched_at_utc") or "")
     if relative == "" or fetched == "":
         return None
     path = Path(relative)
     if not path.is_absolute():
-        path = recorder.parents[1] / relative
+        # The recorder wrote its paths relative to its own folder, so try the folder that
+        # holds the recorder, the folder above that, and the recorder folder itself.
+        for base in (recorder.parents[1], recorder.parents[2], recorder):
+            candidate = base / relative
+            if candidate.is_file():
+                path = candidate
+                break
     if not path.is_file() or path.suffix not in FORMATS:
         return None
-    return path.read_bytes(), str(record.get("sha256") or path.stem), fetched
+    revision = str(record.get("sha256") or path.stem)[:12]
+    return path.read_bytes(), revision, fetched, path.suffix
 
 
 def decoded(
     body: bytes, *, known_at_ns: int, revision: str, suffix: str
 ) -> tuple[CalendarEvent, ...] | None:
+    """One snapshot's events through the parser its own format needs, or None when refused."""
     if suffix == ".xml":
         built = decode_calendar_xml(body, known_at_ns=known_at_ns, revision=revision)
     else:
@@ -93,10 +104,9 @@ def main() -> int:
         if found is None:
             continue
         seen += 1
-        body, revision, fetched = found
-        suffix = Path(str(record.get("path"))).suffix
+        body, revision, fetched, suffix = found
         events = decoded(
-            body, known_at_ns=instant_ns(fetched), revision=revision[:12], suffix=suffix
+            body, known_at_ns=instant_ns(fetched), revision=revision, suffix=suffix
         )
         if events is None:
             print(f"refused: {record.get('path')}", file=sys.stderr)
@@ -105,8 +115,7 @@ def main() -> int:
         for event in events:
             moment = datetime.fromtimestamp(event.known_at_ns // 1_000_000_000, tz=UTC)
             months.setdefault((moment.year, moment.month), []).append(event)
-    landed = 0
-    rows = 0
+    landed = rows = 0
     for (year, month), events in sorted(months.items()):
         key = calendar_key(year, month)
         if is_refusal(key):

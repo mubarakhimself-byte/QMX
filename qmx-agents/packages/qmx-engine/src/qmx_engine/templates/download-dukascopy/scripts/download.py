@@ -230,7 +230,8 @@ key = SeriesKey.try_create("dukascopy", symbol, "ticks", year, month)
 if is_refusal(key):
     fail(f"the partition key was refused: {key.context}")
 store_root = root
-claim_path = claim(store_root, key.value.text)if claim_path is None:
+claim_path = claim(store_root, key.value.text)
+if claim_path is None:
     print(json.dumps({"status": "claimed", "key": key.value.text}))
     raise SystemExit(0)
 stop = heartbeat(shared, "dukascopy", {"key": key.value.text, "hours": 0, "of": 24 * 31})
