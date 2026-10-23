@@ -32,10 +32,14 @@ from pathlib import Path
 SERVER: str = "root@qmx-server"
 SSH_KEY: str = str(Path.home() / ".ssh" / "qmx_server")
 ADDRESS: str = "100.105.172.63"
-SRC: str = "/srv/qmx/bld/rtrp/src"
-NODE_LOG: str = "/srv/qmx/bld/rtrp/logs/e26-node.log"
-NODE_HOME: str = "/srv/qmx/bld/rtrp/home"
-KEY_PUB: str = "/srv/qmx/bld/rtrp/logs/e26-key.pub"
+LANE: str = os.environ.get("QMX_LANE", "/srv/qmx/bld/rtrp")
+"""The checkout, home and log folder on the server. A lane run from a check folder sets
+`QMX_LANE=/srv/qmx/check/dr2c` instead of editing this file."""
+SRC: str = f"{LANE}/src"
+NODE_LOG: str = f"{LANE}/logs/e26-node.log"
+NODE_HOME: str = f"{LANE}/home"
+KEY_PUB: str = f"{LANE}/logs/e26-key.pub"
+PYTHON: str = f"{SRC}/qmx-agents/.venv/bin/python"
 PORT: int = 18202
 UNIT: str = "rtrp-e26"
 WAIT_S: float = 60.0
@@ -211,7 +215,7 @@ def main() -> int:
         f"--setenv=HOME={NODE_HOME} --setenv=QMX_VAULT_HOME={NODE_HOME} "
         f"--setenv=QMX_KEY_PUB={KEY_PUB} --setenv=QMX_ENTRY_VALUE={VALUE} "
         f"--setenv=QMX_PASS_SECRET={secret.hex()} "
-        f"--unit={UNIT} /srv/qmx/bld/rtrp/src/qmx-agents/.venv/bin/python "
+        f"--unit={UNIT} {PYTHON} "
         f"scripts/live/server/e26_vault.py --serve --port {args.port} --log {NODE_LOG}"
     )
     if "Running as unit" not in started.stdout + started.stderr:
