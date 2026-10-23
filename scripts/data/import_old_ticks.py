@@ -88,7 +88,6 @@ MANIFEST_NAME: Final[str] = "MANIFEST.sha256"
 RISK_LAB_MANIFEST: Final[str] = "MANIFEST.risk-lab.sha256"
 TICKS_FOLDER: Final[str] = "external-deep-history"
 CSV_FOLDER: Final[str] = "risk-lab-2026-10-05-data"
-MS_PER_MINUTE: Final[int] = 60_000
 LISTED: Final[int] = 50
 """A report names this many differing paths; its counts carry the rest."""
 MANIFEST_LINE: Final[re.Pattern[str]] = re.compile(
@@ -473,7 +472,7 @@ def import_ticks(plan: Plan, door: MarketDoor, report: Report) -> None:
                 )
             )
     report.manifest["ticks"] |= {
-        "months_in_scope": len(named),
+        "files_in_scope": len(named),
         "missing_from_copy": sorted(named - read)[:LISTED],
         "not_in_manifest": sorted(read - named)[:LISTED],
     }
@@ -560,7 +559,7 @@ def import_csv(plan: Plan, door: MarketDoor, report: Report) -> None:
         "files": len(files),
         "unrecorded": sorted(path.name for path, *_ in files if path.name not in recorded),
         "unread": sorted(name for name in recorded if name not in {f[0].name for f in files}),
-        "incomplete": [],
+        "coverage": {},
     }
     for path, subject, variant, year, partial_file in files:
         if plan.subjects and subject not in plan.subjects:
@@ -596,6 +595,7 @@ def _import_csv_file(
 ) -> None:
     """One risk-lab file: every month it holds becomes one partition, or a recorded gap."""
     last: SeriesKey | None = None
+    empty: list[str] = []
     for month in range(1, 13):
         if not plan.in_scope(year, month):
             continue
@@ -634,9 +634,11 @@ def _import_csv_file(
                     )
                 record |= landed
                 last = key
+        if record["action"] == "empty":
+            empty.append(str(record["month"]))
         record["seconds"] = round(time.perf_counter() - started, 3)
         report.add(record)
-    _note_incomplete(store, report, path, last, partial_file)
+    _note_coverage(store, report, path, last, empty, partial_file)
 
 
 def month_rows(bars: CsvBars, start_ms: int, end_ms: int) -> Iterator[Sequence[object]]:
@@ -650,27 +652,32 @@ def month_rows(bars: CsvBars, start_ms: int, end_ms: int) -> Iterator[Sequence[o
             yield row
 
 
-def _note_incomplete(
+def _note_coverage(
     store: SeriesStore,
     report: Report,
     path: Path,
     last: SeriesKey | None,
+    empty: Sequence[str],
     partial_file: bool,
 ) -> None:
-    """Name a file that stops before its year does, in the note its series card carries."""
-    if last is None:
-        return
-    read = store.read(last)
-    if is_refusal(read) or not read.value.rows:
-        return
-    last_t = int(read.value.rows[-1]["t"])  # type: ignore[arg-type]
-    tail = (last.end_ns // 1_000_000 - last_t) // MS_PER_MINUTE - 1
-    if tail <= 0 and not partial_file:
-        return
-    moment = datetime.fromtimestamp(last_t // 1000, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    report.manifest["csv"]["incomplete"].append(  # type: ignore[union-attr]
-        f"{path.name} stops at {moment}, {max(tail, 0)} minutes before its year does"
-    )
+    """What a file covers: its last row, the months it holds no row for, and any partial mark.
+
+    The note states what the file gave, not a verdict: a file whose last bar is a couple of hours
+    before the UTC month end is complete in its own zone, so only a whole empty month is called
+    out as a gap.
+    """
+    note: dict[str, object] = {"partial": partial_file}
+    if empty:
+        note["empty_months"] = list(empty)
+    if last is not None:
+        read = store.read(last)
+        if not is_refusal(read) and read.value.rows:
+            last_t = int(read.value.rows[-1]["t"])  # type: ignore[arg-type]
+            note["last"] = datetime.fromtimestamp(last_t // 1000, tz=UTC).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+    if partial_file or empty or "last" in note:
+        report.manifest["csv"]["coverage"][path.name] = note  # type: ignore[index]
 
 
 def write_cards(plan: Plan, store: SeriesStore, report: Report) -> None:
@@ -722,7 +729,7 @@ def _write_card(
         licence=PERSONAL_USE_LICENSE if source == DUKASCOPY_SOURCE else "",
         world=plan.world,
         redownloadable=source == DUKASCOPY_SOURCE,
-        quality={"months": len(partitions), "files": series["files"]},
+        quality={"months": len(partitions)},
     )
     landed = write_card(library, Principal("operator"), card, tuple(partitions), tuple(corrections))
     report.cards.append({"series": name, "item": landed.item, "object_id": landed.object_id})
