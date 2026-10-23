@@ -127,8 +127,6 @@ SYNC_INTERVAL_S: Final = 30.0
 """How often the PC asks the Library server what moved since its last sequence (AD-10). The
 `[library] sync_interval` setting raises or lowers it."""
 PAIRING_KEY: Final = "vault/pairing-key"
-SERVER_LIBRARY: Final = "/srv/qmx/library"
-"""The server store's root (Appendix D). The server's host opens it as its one writer."""
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 
 
@@ -953,7 +951,7 @@ class HubBlobs:
         if self.client is None:
             return None
         try:
-            return cast(bytes | None, self.client.blob(blob_id))
+            return self.client.blob(blob_id)
         except OSError, ValueError, LibraryRefused:
             return None
 

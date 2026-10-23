@@ -193,7 +193,6 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
         "tailscale": ["tailscale", "ip", "-4"],
         "supervisor": ["systemctl", "is-active", "qmx-node"],
         "hub": ["systemctl", "is-active", "qmx-hub"],
-        "host": ["systemctl", "is-active", "qmx-host"],
         "shipping": ["systemctl", "is-active", "qmx-ship.timer"],
         "rclone": ["rclone", "version"],
     }
@@ -206,7 +205,6 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
     checks["pairing_key"] = (vault / "pairing-key").exists()
     checks["bucket"] = (home / "bucket").is_dir()
     checks["library_db"] = (home / "library").is_dir()
-    checks["library_root"] = Path(SERVER_LIBRARY).is_dir()
     checks["shipping_config"] = (home / "rclone.conf").is_file()
     checks["library_primary"] = library_primary(home) == "server"
     checks["hub_answers"] = hub_answers(home)

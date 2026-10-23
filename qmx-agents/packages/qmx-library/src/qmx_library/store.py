@@ -326,10 +326,6 @@ class Epoch:
     parked: tuple[str, ...] = ()
     """The `refs/conflicts/*` refs its primary moves were parked on, one per move (N13, N19)."""
 
-    @property
-    def alarm(self) -> str:
-        return f"library:epoch:{self.primary}"
-
 
 class Store:
     """The writer of one store. Every verb of `LibraryPort` is here; the reads the engine adapter
@@ -1019,17 +1015,12 @@ class Store:
         ).fetchone()
         return int(seq), at
 
-    def _placed_by(self, object_id: ObjectId, seq: int, ref: str | None = None) -> bool:
-        """Whether a move at or before `seq` put `object_id` on a ref, and on `ref` when named."""
-        if ref is None:
-            row = self.catalog.db.execute(
-                "SELECT 1 FROM moves WHERE new_head = ? AND seq <= ? LIMIT 1", (object_id, seq)
-            ).fetchone()
-        else:
-            row = self.catalog.db.execute(
-                "SELECT 1 FROM moves WHERE new_head = ? AND seq <= ? AND ref = ? LIMIT 1",
-                (object_id, seq, ref),
-            ).fetchone()
+    def _placed_by(self, object_id: ObjectId, seq: int) -> bool:
+        """Whether a move at or before `seq` put `object_id` on a ref. The outbox asks the same
+        question of one ref by name, in `ever_placed`."""
+        row = self.catalog.db.execute(
+            "SELECT 1 FROM moves WHERE new_head = ? AND seq <= ? LIMIT 1", (object_id, seq)
+        ).fetchone()
         return row is not None
 
     def ever_placed(self, object_id: ObjectId, item: str, ref: str) -> bool:
@@ -1638,6 +1629,7 @@ class Store:
             with self._writing():
                 tombstone = self._tombstone(blob_id, reason, who)
                 path.unlink(missing_ok=True)
+                self._blob_path(blob_id, transient=False, fetched=True).unlink(missing_ok=True)
                 ref = f"refs/purges/{hexdigest}"
                 found = self.catalog.head(f"purge:{hexdigest}", ref)
                 if found is None or found[0] != "purged":
@@ -1656,6 +1648,7 @@ class Store:
         with self._mutex:
             self._tombstone(blob_id, reason, Principal("operator"), at=at)
             self._blob_path(blob_id, transient=False).unlink(missing_ok=True)
+            self._blob_path(blob_id, transient=False, fetched=True).unlink(missing_ok=True)
         return True
 
     def _tombstone(

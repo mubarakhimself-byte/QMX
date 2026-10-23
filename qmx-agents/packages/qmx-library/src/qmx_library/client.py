@@ -236,10 +236,6 @@ class HubClient:
             for row in rows
         ]
 
-    def cursor(self) -> int:
-        """The Hub's last ref-log sequence, from its health reading."""
-        return int(str(self.health().get("seq") or 0))
-
     def versions(self) -> Mapping[str, int]:
         """The kinds and schema versions the Hub can read, for the version handshake (N17)."""
         found = cast(Mapping[str, JsonValue], self.call("kinds"))

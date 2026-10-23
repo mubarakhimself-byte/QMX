@@ -43,8 +43,6 @@ class Peer(Protocol):
 
     def moves(self, after: int) -> list[Move]: ...
 
-    def cursor(self) -> int: ...
-
     def versions(self) -> Mapping[str, int]: ...
 
     def alarms(self) -> tuple[str, ...]: ...
@@ -105,9 +103,6 @@ class StorePeer:
             )
             for row in self.store.placements(after)
         ]
-
-    def cursor(self) -> int:
-        return self.store.catalog.last_seq()
 
     def versions(self) -> Mapping[str, int]:
         return self.store.versions()
@@ -480,7 +475,7 @@ def _copy(local: Peer, remote: Peer, synced: Synced, *, pull: bool) -> None:
     for object_id in order(parents):
         manifest = present[object_id]
         for blob_id in _blob_ids(manifest):
-            if target.blob(blob_id) is not None:
+            if target.has_blob(blob_id):
                 continue
             data = source.blob(blob_id)
             if data is None:
