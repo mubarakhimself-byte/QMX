@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
+import json
 import secrets
 import shutil
 import sqlite3
+import tarfile
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
@@ -15,12 +18,24 @@ from qmx_ledger.journal import RunJournal, encoded, fingerprint
 
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition
+from qmx_apps.road import Pack
 from qmx_apps.road.history import history
 from qmx_apps.road.models import Evidence, Proof, Stage, json_document
 from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import VolumeLease
 
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
+
+
+def pack_files(bundle: bytes) -> dict[str, bytes]:
+    """One pack's `bundle.tar` as its files by posix path."""
+    found: dict[str, bytes] = {}
+    with tarfile.open(fileobj=io.BytesIO(bundle), mode="r:*") as archive:
+        for member in archive.getmembers():
+            handle = archive.extractfile(member)
+            if handle is not None:
+                found[member.name] = handle.read()
+    return found
 
 
 class RuntimeFixture(Supervisor):
@@ -323,6 +338,43 @@ def test_precommit_failure_then_retry_preserves_runtime(
     assert owner.running is None
     monkeypatch.setattr(RunJournal, "append", original)
     assert owner.road.publish("exchange-status", image.hash)["stage"] == "live"
+
+
+def test_publishing_lands_the_pack_a_chat_loads(owner: RuntimeFixture) -> None:
+    source = owner.home / "with-operation"
+    shutil.copytree(EXAMPLE, source)
+    manifest = source / "app.toml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8")
+        + '\n[operations.status]\napproval = "read"\ndescription = "Read one exchange status."\n',
+        encoding="utf-8",
+    )
+    image = Definition.load(source)
+    target = owner.home / "definitions" / image.hash
+    shutil.copytree(source, target)
+    image = Definition.load(target)
+    owner.road.register(image, "first_party", None)
+    shadow(owner, image)
+    landed: list[Pack] = []
+
+    def sink(pack: Pack) -> str:
+        landed.append(pack)
+        return "fp1:sha256::mini-app"
+
+    owner.attach_packs(sink)
+    owner.road.publish("exchange-status", image.hash)
+
+    assert [
+        (pack.app_id, pack.version, pack.definition_hash, pack.operations) for pack in landed
+    ] == [("exchange-status", "1.0.0", image.hash, ("status",))]
+    assert json.loads(pack_files(landed[0].bundle)[".claude-plugin/plugin.json"]) == {
+        "name": "exchange-status",
+        "version": "1.0.0",
+        "description": "Exchange status",
+        "operations": {
+            "status": {"approval": "read", "description": "Read one exchange status."}
+        },
+    }
 
 
 def test_postcommit_projection_failure_reports_committed_and_repairs(

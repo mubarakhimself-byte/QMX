@@ -32,7 +32,7 @@ from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
 from qmx_apps.backup import checksum, snapshot
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust, image_files, image_hash
-from qmx_apps.road import Road
+from qmx_apps.road import PackSink, Road
 from qmx_apps.store import open_store
 from qmx_apps.volume import Lease, Volume, VolumeLease
 from qmx_apps.windows_job import WindowsJob
@@ -281,6 +281,10 @@ class Supervisor:
     def attach_library(self, library: LibrarySink | None) -> None:
         """Give the supervisor the Library its landings go to, or take it away."""
         self.artifacts.attach(library)
+
+    def attach_packs(self, sink: PackSink | None) -> None:
+        """Give the supervisor the Library a published pack lands in, or take it away."""
+        self.road.attach_packs(sink)
 
     def install(
         self,

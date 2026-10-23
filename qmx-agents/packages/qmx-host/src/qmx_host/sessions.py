@@ -30,13 +30,15 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final, cast, override
+from typing import TYPE_CHECKING, Final, Protocol, cast, override
 
 from pydantic import JsonValue
 from qma.harness import Harness, NewChat, QmxHome, SessionId, TurnHandle, TurnResult
+from qma.harness import packs
 from qma.harness.chat import ChatDeps, Prompt
 from qma.harness.harness import PlanWatch
 from qma.harness.home import ChatRecord, list_records, read_record
+from qma.harness.packs import PackSource
 from qma.harness.surface import MEMORY, excerpt_budget
 from qma.harness.tools import HostRead
 from qmx_control.context import (
@@ -61,6 +63,10 @@ if TYPE_CHECKING:
     from qmx_tools.service import MarketPort
 
 KIND: Final = "session"
+MINI_APP: Final = "mini-app"
+APPS_REF: Final = "refs/apps/{app_id}"
+"""Where a publish writes its `mini-app` item before landing it on `main`."""
+BUNDLE: Final = "bundle.tar"
 IDLE: Final = timedelta(hours=24)
 """Claude's default: a chat idle this long gets its daily export."""
 IDLE_TICK_S: Final = 3600.0
@@ -254,6 +260,65 @@ def _whole(value: object, default: int) -> int:
 def _strings(value: object) -> list[str]:
     found = cast("Sequence[object]", value) if isinstance(value, list | tuple) else ()
     return [str(one) for one in found]
+
+
+def published_packs(store: Store) -> tuple[PackSource, ...]:
+    """Every `mini-app` on `main`, as the pack tree its `bundle.tar` blob holds."""
+    found: list[PackSource] = []
+    for item, object_id in store.heads_on(MAIN):
+        view = store.get(store.engine, object_id)
+        blob = view.blobs.get(BUNDLE)
+        if view.kind != MINI_APP or blob is None:
+            continue
+        found.append(packs.source(object_id, item, {BUNDLE: store.read_blob(blob.blob_id)}))
+    return tuple(found)
+
+
+def materialise_packs(home: QmxHome, store: Store) -> tuple[str, ...]:
+    """Write every published pack's view under this home's plugin folder, so a chat's surface
+    loads it (AD-55). A second start rewrites the same views, so it converges."""
+    return tuple(view.name for view in packs.materialise(home.packs_dir, published_packs(store)))
+
+
+class Landed(Protocol):
+    """What a publish hands the Library: `qmx_apps.road.Pack`, typed here by its shape so the
+    host keeps no dependency on the apps package."""
+
+    app_id: str
+    version: str
+    definition_hash: str
+    operations: Sequence[str]
+    bundle: bytes
+
+
+class PackLanding:
+    """`qmx_apps.road.PackSink` over the host's store: a publish writes its `mini-app` item on
+    `refs/apps/<id>` and lands it on `main`, where the next start materialises it."""
+
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    def __call__(self, pack: Landed) -> str:
+        ref = APPS_REF.format(app_id=pack.app_id)
+        commit = self.store.put(
+            self.store.engine,
+            Draft(
+                MINI_APP,
+                item=pack.app_id,
+                title=pack.app_id,
+                summary=f"{pack.version} serves {len(pack.operations)} operations",
+                fields={
+                    "version": pack.version,
+                    "definition_hash": pack.definition_hash,
+                    "operations": list(pack.operations),
+                },
+                blobs={BUNDLE: pack.bundle},
+            ),
+            on=ref,
+            expected_head=None,
+        )
+        self.store.merge(self.store.engine, pack.app_id, from_ref=ref, into=MAIN, strategy="ff-only")
+        return commit.object_id
 
 
 class StoreReads:
@@ -577,7 +642,18 @@ class RecordedHarness(Harness):
         return cast("RecordedHarness", opened)
 
     def record_into(self, recorder: SessionRecorder) -> None:
+        """Take the recorder, then the two things a start owes the mini apps: their published
+        packs materialised as views, and the road's sink that lands a publish in the Library."""
         self.recorder = recorder
+        store = recorder.store
+        try:
+            materialise_packs(self.home, store)
+        except (OSError, ValueError, LibraryRefused) as error:
+            _skipped("pack views", error)
+        try:
+            self._deps.control.app_runtime().attach_packs(PackLanding(store))
+        except (OSError, ValueError, LibraryRefused) as error:
+            _skipped("pack sink", error)
 
     def remember_into(self, engine: RecallEngine) -> None:
         """The host's memory engine, and the retain worker that feeds it (AD-18, §28.6)."""
