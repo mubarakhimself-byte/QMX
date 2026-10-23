@@ -1,0 +1,31 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "connections-health",
+  "name": "Connections health",
+  "inputs": {
+    "type": "object",
+    "properties": {"dry_run": {"type": "boolean", "description": "probe nothing; report the rows as configured"}}
+  },
+  "outputs": {
+    "type": "object",
+    "description": "one reading word per connection, its setup state and its latency"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Every five minutes", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "health", "name": "Read every connection", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/health.py"}}
+  ],
+  "connections": {
+    "Every five minutes": {"main": [[{"node": "Read every connection", "port": "in",
+                                      "map": "one"}]]}
+  },
+  "meta": {"template": "connections-health"}
+}

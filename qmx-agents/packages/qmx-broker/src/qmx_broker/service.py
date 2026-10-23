@@ -114,13 +114,45 @@ class BrokerService:
             )
 
     def configured_settings(self) -> BrokerSettings:
-        """`settings` when given, else `[brokers]` from the reader the composition injects,
-        which is `ControlService.settings_get` (AD-52); with neither, no accounts."""
+        """`settings` when given, else the `connections` section from the reader the composition
+        injects, which is `ControlService.settings_get` (AD-52); the reader also serves the old
+        `brokers` section, which it has already read into `connections`. With neither, no
+        accounts."""
         if self.settings is not None:
             return self.settings
         if self.brokers is None:
             return BrokerSettings()
         return BrokerSettings.model_validate(self.brokers())
+
+    def list_connections(self, offset: int = 0, limit: int = 100) -> Document:
+        """Read-only rows over enabled accounts: one row per connection, with its scope and home.
+
+        The row carries no secret and no read operation: only the identity fields, the enabled
+        accounts and the connection's declared home. Every tool over these rows is read-only.
+        """
+        _page(offset, limit)
+        rows = [
+            {
+                "provider_id": broker.id,
+                "provider": broker.name,
+                "kind": broker.kind,
+                "adapter": broker.adapter,
+                "exchange": broker.exchange,
+                "connection_id": connection.id,
+                "environment": connection.environment,
+                "scope": connection.scope,
+                "home": connection.home,
+                "accounts": [
+                    account.model_dump(exclude={"credential_ref"})
+                    for account in connection.accounts
+                    if account.enabled
+                ],
+                "enabled_accounts": sum(1 for account in connection.accounts if account.enabled),
+            }
+            for broker in self.configured_settings().providers
+            for connection in broker.connections
+        ]
+        return {"connections": rows[offset : offset + limit], "total": len(rows)}
 
     def list_accounts(self, offset: int = 0, limit: int = 100) -> Document:
         """List configured account identities; use all three ids in subsequent calls."""
@@ -129,14 +161,18 @@ class BrokerService:
             {
                 "broker_id": broker.id,
                 "broker": broker.name,
+                "kind": broker.kind,
                 "adapter": broker.adapter,
                 "connection_id": connection.id,
                 "environment": connection.environment,
+                "scope": connection.scope,
+                "home": connection.home,
                 **account.model_dump(exclude={"credential_ref"}),
             }
-            for broker in self.configured_settings().brokers
+            for broker in self.configured_settings().providers
             for connection in broker.connections
             for account in connection.accounts
+            if account.enabled
         ]
         return {"accounts": accounts[offset : offset + limit], "total": len(accounts)}
 

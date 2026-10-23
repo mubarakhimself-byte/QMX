@@ -422,6 +422,15 @@ CATALOG: Final[tuple[Template, ...]] = (
             ],
         },
     ),
+    Template(
+        "connections-health",
+        "Check that every connection is reachable",
+        card("46", "G9"),
+        "DR5A",
+        folder="connections-health",
+        triggers=(Cron("*/5 * * * *", "UTC"),),
+        test_inputs={"dry_run": True},
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {

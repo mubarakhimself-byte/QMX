@@ -49,6 +49,7 @@ type SettingsSection = Literal[
     "memory_provider",
     "backup",
     "brokers",
+    "connections",
     "remote",
     "claude",
     "environment",
@@ -200,6 +201,64 @@ def _no_secrets(value: JsonValue) -> None:
             _no_secrets(item)
 
 
+LEGACY_PROVIDER_KEYS: Final = frozenset(
+    {"id", "name", "adapter", "exchange", "connections"}
+)
+LEGACY_CONNECTION_KEYS: Final = frozenset(
+    {"id", "credential_ref", "environment", "accounts", "protocol_path", "protocol_tag"}
+)
+LEGACY_ACCOUNT_KEYS: Final = frozenset(
+    {"id", "currency", "leverage", "permissions", "credential_ref"}
+)
+
+
+def legacy_brokers(stored: Document) -> Document:
+    """The old `[brokers]` shape, read from the one `[connections]` list."""
+    if "brokers" in stored:
+        return cast(Document, stored.get("brokers", {}))
+    rows = stored.get("connections")
+    if not isinstance(rows, list):
+        return {}
+    try:
+        settings = BrokerSettings.model_validate({"connections": rows})
+    except ValueError:
+        return {}
+    return {
+        "brokers": [
+            {
+                **{
+                    key: value
+                    for key, value in provider.model_dump(mode="json", exclude_none=True).items()
+                    if key in LEGACY_PROVIDER_KEYS
+                },
+                "connections": [
+                    {
+                        **{
+                            key: value
+                            for key, value in connection.model_dump(
+                                mode="json", exclude_none=True
+                            ).items()
+                            if key in LEGACY_CONNECTION_KEYS
+                        },
+                        "accounts": [
+                            {
+                                key: value
+                                for key, value in account.model_dump(
+                                    mode="json", exclude_none=True
+                                ).items()
+                                if key in LEGACY_ACCOUNT_KEYS
+                            }
+                            for account in connection.accounts
+                        ],
+                    }
+                    for connection in provider.connections
+                ],
+            }
+            for provider in settings.providers
+        ]
+    }
+
+
 class ControlService:
     def __init__(
         self,
@@ -332,9 +391,13 @@ class ControlService:
         with self._lock:
             path = self.home / "settings.toml"
             values: Document = {}
+            stored: Document = {}
             if path.exists():
                 with path.open("rb") as file:
-                    values = cast(Document, tomllib.load(file).get(section, {}))
+                    stored = cast(Document, tomllib.load(file))
+                    values = stored.get(section, {})
+            if section == "brokers":
+                values = legacy_brokers(stored)
             if section == "mcp_servers":
                 firecrawl = values.get("firecrawl", {})
                 if not isinstance(firecrawl, dict):
@@ -372,6 +435,7 @@ class ControlService:
 
     def _settings_put(self, section: SettingsSection, values: Document) -> Document:
         _no_secrets(values)
+        stored_rows: list[Document] | None = None
         if section in HOST_SECTIONS:
             parser = self.settings_parsers.get(section)
             if parser is None:
@@ -423,16 +487,26 @@ class ControlService:
             app_settings = {key: value for key, value in values.items() if key != "repository"}
             if app_settings:
                 BackupSettings.model_validate(app_settings).destination("validation", "validation")
-        elif section == "brokers":
+        elif section in ("brokers", "connections"):
             try:
-                values = BrokerSettings.model_validate(values).model_dump(
-                    mode="json", exclude_none=True
-                )
+                parsed = BrokerSettings.model_validate(values)
             except ValueError as error:
                 raise ControlError(
                     "invalid_brokers",
-                    "Use valid brokers, connections and accounts with qmx/* vault references.",
+                    "Use valid connections, providers and accounts with qmx/* vault references.",
                 ) from error
+            rows = [
+                provider.model_dump(mode="json", exclude_none=True)
+                for provider in parsed.providers
+            ]
+            if section == "brokers":
+                # The old section is read once into `connections`; its shape is served from there.
+                values = legacy_brokers({"connections": rows})
+            else:
+                values = {"connections": rows}
+            stored_rows = rows
+        else:
+            stored_rows = None
 
         with self._lock:
             path = self.home / "settings.toml"
@@ -440,7 +514,11 @@ class ControlService:
             if path.exists():
                 with path.open("rb") as file:
                     settings = cast(Document, tomllib.load(file))
-            settings[section] = values
+            if stored_rows is not None:
+                settings["connections"] = stored_rows
+                settings.pop("brokers", None)
+            else:
+                settings[section] = values
             try:
                 encoded = tomli_w.dumps(settings)
             except (TypeError, ValueError) as error:

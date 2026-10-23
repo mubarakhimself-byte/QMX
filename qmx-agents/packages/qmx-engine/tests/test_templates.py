@@ -68,17 +68,17 @@ BLOCK_COPIES = {
     "render-and-grade/scripts/render_and_grade.py": tuple(
         f"{template.folder}/scripts/render_and_grade.py"
         for template in CATALOG
-        if template.folder != "backup-weekly"
+        if template.folder not in {"backup-weekly", "connections-health"}
     ),
     "render-and-grade/scripts/stop.py": tuple(
         f"{template.folder}/scripts/stop.py"
         for template in CATALOG
-        if template.folder != "backup-weekly"
+        if template.folder not in {"backup-weekly", "connections-health"}
     ),
     "render-and-grade/scripts/deliver.py": tuple(
         f"{template.folder}/scripts/deliver.py"
         for template in CATALOG
-        if template.folder not in {"a-fill-the-library", "backup-weekly"}
+        if template.folder not in {"a-fill-the-library", "backup-weekly", "connections-health"}
     ),
     "overfit-gates/scripts/deflated_sharpe.py": tuple(
         f"{folder}/scripts/deflated_sharpe.py"
@@ -235,7 +235,7 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_39_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_40_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
     assert len(ids) == 40
@@ -260,6 +260,7 @@ def test_the_catalogue_lists_39_templates_each_with_a_source_card_and_its_own_fo
         "crystallise-a-workflow",
         "backup-weekly",
         "synthetic-data",
+        "connections-health",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
@@ -306,6 +307,7 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "run-one-job-on-his-server",
         "backup-weekly",
         "synthetic-data",
+        "connections-health",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -554,7 +556,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_the_built_templates_and_a_second_install_changes_nothing(
+def test_install_publishes_18_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -570,9 +572,9 @@ def test_install_publishes_the_built_templates_and_a_second_install_changes_noth
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 40
+    assert [i.action for i in second] == ["unchanged"] * 41
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 17
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 18
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (
@@ -586,6 +588,7 @@ def test_install_publishes_the_built_templates_and_a_second_install_changes_noth
     assert status["question-over-a-large-table"] == ("validated draft, needs: rlm", None)
     assert sorted((t.workflow_item, t.kind, t.enabled) for t in triggers) == [
         ("backup-weekly", "cron", False),
+        ("connections-health", "cron", False),
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
         ("db-desk-brief", "cron", False),
