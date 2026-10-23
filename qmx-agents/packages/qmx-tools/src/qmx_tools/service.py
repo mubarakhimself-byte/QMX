@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Final, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from qmb.results.ct32 import as_ct32_artifact
 from qmb.runloop import run
-from qmf.core import Result, World, is_refusal
-from qmf.data.store.append_store import AppendStore
+from qmf.core import Result, is_refusal
 from qml.protocol import HostedBot
 from qmn.doors.api import DoorRuntime
 from qmx_control.library import Library
@@ -22,6 +21,57 @@ from qmx_control.models import ControlError, LibraryInput, MemoKey
 from qmx_control.service import ControlService
 
 ResponseFormat = Literal["concise", "detailed"]
+
+
+class SeriesRow(Protocol):
+    """One series as the market-data door names it."""
+
+    @property
+    def series(self) -> str: ...
+
+    @property
+    def subject(self) -> str: ...
+
+    @property
+    def kind(self) -> str: ...
+
+
+class ReadRow(Protocol):
+    """One answer from the market-data door."""
+
+    @property
+    def series(self) -> str: ...
+
+    @property
+    def fingerprints(self) -> tuple[str, ...]: ...
+
+    @property
+    def rows(self) -> tuple[dict[str, object], ...]: ...
+
+
+class MarketPort(Protocol):
+    """The host's market-data door, as the tools see it (Lib AD-28).
+
+    The door is a module of the host, not of this package, so the tools depend on this shape
+    and the host passes its own object in. Every read goes through it: the door is where the
+    seal and the split are applied.
+    """
+
+    def instruments(self) -> Result[Any]: ...
+
+    def card(self, series: str) -> Result[Any]: ...
+
+    def read(
+        self,
+        series: str = "",
+        *,
+        fingerprints: Sequence[str] = (),
+        start_ns: int | None = None,
+        end_ns: int | None = None,
+        purpose: Any = "exploration",
+        data_scope: Sequence[str] | None = None,
+        into: Path | None = None,
+    ) -> Result[Any]: ...
 
 
 class Request(BaseModel):
@@ -47,12 +97,12 @@ class SeriesRequest(Page):
         return self
 
 
-class Dataset(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    kind: Literal["bars", "features", "calendar"]
-    symbol: str
-    timeframe: str
-    fingerprint: str
+FAMILIES: Final[dict[str, str]] = {
+    "bars": "bar",
+    "features": "feature",
+    "calendar": "calendar",
+}
+"""The agent's word for a series family, and the door kind it names."""
 
 
 class BacktestSpec(BaseModel):
@@ -113,8 +163,7 @@ def unwrap(result: Result[Any]) -> Any:
 @dataclass
 class DomainContext:
     root: Path
-    store: AppendStore | None = None
-    datasets: list[Dataset] = field(default_factory=list[Dataset])
+    market: MarketPort | None = None
     backtests: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
     backtest_identities: dict[str, MemoKey] = field(default_factory=dict[str, MemoKey])
     bots: dict[str, HostedBot] = field(default_factory=dict[str, HostedBot])
@@ -167,36 +216,42 @@ class DomainContext:
         }
 
     def read(self, kind: str, request: SeriesRequest) -> dict[str, Any]:
-        if self.store is None:
-            raise ValueError("No data store configured; inject a host-owned QMF AppendStore")
-        matches = [
-            item
-            for item in self.datasets
-            if item.kind == kind
-            and item.symbol == request.symbol
-            and item.timeframe == request.timeframe
-        ]
-        if not matches:
+        """Read one series through the host's market-data door, and cite the card it came from.
+
+        The door is the only reader: it applies the seal and the split, so a sealed month is
+        refused with its reason here, never served as an empty page.
+        """
+        door = self.market
+        if door is None:
             raise ValueError(
-                "No matching recorded dataset; select symbol/timeframe from list_instruments"
+                "No market-data door on this host; the data tools need the host's door (Lib AD-28)"
             )
-        rows: list[dict[str, Any]] = []
-        for item in matches:
-            rows.extend(
-                unwrap(
-                    self.store.read_raw(
-                        item.fingerprint, for_world=self.store.world, at=request.end
-                    )
-                )
-            )
-        rows = [
-            row
-            for row in rows
-            if (request.start is None or row["t"] >= request.start)
-            and (request.end is None or row["t"] <= request.end)
-        ]
-        rows.sort(key=lambda row: row["t"])
-        return self.page(rows, request, kind)
+        series = self._series_for(door, kind, request.symbol, request.timeframe)
+        answer = unwrap(
+            door.read(series, start_ns=request.start, end_ns=request.end, purpose="exploration")
+        )
+        return {
+            **self.page([dict(row) for row in answer.rows], request, kind),
+            "card": answer.series,
+            "fingerprints": list(answer.fingerprints),
+        }
+
+    def _series_for(self, door: MarketPort, kind: str, symbol: str, timeframe: str) -> str:
+        """The door's series for the agent's (kind, symbol, timeframe), or why there is none."""
+        family = FAMILIES.get(kind)
+        if family is None:
+            raise ValueError(f"Unknown data kind {kind!r}; ask for bars, features or calendar")
+        expected = "calendar" if family == "calendar" else f"{family}-{timeframe}"
+        known = unwrap(door.instruments())
+        for row in known:
+            if row.subject == symbol and row.kind == expected:
+                return row.series
+        held = sorted(row.series for row in known if row.subject == symbol)
+        absent = (
+            f"No {kind} series for {symbol} {timeframe} on this host; "
+            f"it holds {held or 'none'} for that instrument; pick one with list_instruments"
+        )
+        raise ValueError(absent)
 
     def run_backtest(self, spec: BacktestSpec, response_format: ResponseFormat) -> dict[str, Any]:
         arguments = self.backtests.get(spec.config_ref)
@@ -237,30 +292,3 @@ class DomainContext:
             "backtest",
             response_format,
         )
-
-    @classmethod
-    def from_environment(cls) -> DomainContext:
-        import os  # noqa: PLC0415
-        from importlib import import_module  # noqa: PLC0415
-
-        from qmf.data import EvidenceStore  # noqa: PLC0415
-
-        factory_ref = os.environ.get("QMX_TOOLS_FACTORY")
-        if factory_ref:
-            module, separator, name = factory_ref.partition(":")
-            if not separator:
-                raise ValueError("QMX_TOOLS_FACTORY must be a host-owned module:function")
-            context = getattr(import_module(module), name)()
-            if not isinstance(context, cls):
-                raise ValueError("QMX_TOOLS_FACTORY must return a DomainContext")
-            return context
-        root = Path(os.environ.get("QMX_TOOLS_ROOT", str(Path.home() / ".qmx"))).resolve()
-        ctx = cls(root=root)
-        manifest = root / "datasets.json"
-        if manifest.exists():
-            ctx.datasets = [
-                Dataset.model_validate(item)
-                for item in json.loads(manifest.read_text(encoding="utf-8"))
-            ]
-            ctx.store = unwrap(EvidenceStore(root / "market").for_world(World.REPLAY)).append_store
-        return ctx

@@ -72,7 +72,7 @@ from qmx_router.relay import (
     RelayUsage,
     keyring_secret,
 )
-from qmx_tools.service import DomainContext
+from qmx_tools.service import DomainContext, MarketPort
 
 from qma.harness.chat import (
     Answer,
@@ -366,6 +366,7 @@ class Harness:
         control: ControlService,
         test: TestMode | None = None,
         host_reads: Mapping[str, HostRead] | None = None,
+        market: MarketPort | None = None,
     ) -> Harness:
         """Convergent startup, safe to run after any crash. Assumes `qma.boot` already
         scrubbed this process. `test` is None except in check scripts.
@@ -379,7 +380,8 @@ class Harness:
         6. Open the relay's GPT lane only if a `ProbePassed` is stored for this translator
            version and a ChatGPT sign-in is stored.
         `host_reads` are reads the hosting process serves to `agent_tool` catalog rows by
-        target, beside the harness's own."""
+        target, beside the harness's own. `market` is the host's market-data door, which the
+        data tools read through (Lib AD-28, H59)."""
         assert_scrubbed(os.environ)
         limit = control.settings_get("budgets").get("agent_memory_mb")
         with contextlib.suppress(LaunchRefused):
@@ -402,6 +404,7 @@ class Harness:
         )
         domain = DomainContext(root=home.root)
         domain.control, domain.library = control, control.library
+        domain.market = market
 
         def profiles() -> Profiles:
             return parse_profiles(control.settings_get("providers"), allow_loopback_http=loopback)

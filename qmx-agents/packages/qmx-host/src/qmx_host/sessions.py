@@ -58,6 +58,7 @@ from qmx_memory.rows import SCOPES
 if TYPE_CHECKING:
     from qma.harness.launch import TestMode
     from qmx_control.service import ControlService
+    from qmx_tools.service import MarketPort
 
 KIND: Final = "session"
 IDLE: Final = timedelta(hours=24)
@@ -568,8 +569,11 @@ class RecordedHarness(Harness):
         control: ControlService,
         test: TestMode | None = None,
         host_reads: Mapping[str, HostRead] | None = None,
+        market: MarketPort | None = None,
     ) -> RecordedHarness:
-        opened = await super().open(home, control=control, test=test, host_reads=host_reads)
+        opened = await super().open(
+            home, control=control, test=test, host_reads=host_reads, market=market
+        )
         return cast("RecordedHarness", opened)
 
     def record_into(self, recorder: SessionRecorder) -> None:

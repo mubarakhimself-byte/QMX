@@ -26,12 +26,17 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
     def list_instruments(
         limit: int = 50, cursor: int = 0, response_format: ResponseFormat = "concise"
     ) -> dict[str, Any]:
-        """List recorded instrument/timeframe pairs. Continue with next_cursor."""
-        rows = sorted({(item.symbol, item.timeframe) for item in ctx.datasets})
+        """List the series this host holds. Continue with next_cursor."""
+        if ctx.market is None:
+            raise ValueError(
+                "No market-data door on this host; the data tools need the host's door (Lib AD-28)"
+            )
+        rows = [
+            {"symbol": row.subject, "timeframe": row.kind, "series": row.series}
+            for row in unwrap(ctx.market.instruments())
+        ]
         return ctx.page(
-            [{"symbol": symbol, "timeframe": frame} for symbol, frame in rows],
-            Page(limit=limit, cursor=cursor, response_format=response_format),
-            "instruments",
+            rows, Page(limit=limit, cursor=cursor, response_format=response_format), "instruments"
         )
 
     def read_bars(
