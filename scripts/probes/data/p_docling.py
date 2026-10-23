@@ -188,9 +188,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _summary(log: common.Log, kind: str) -> dict[str, object]:
-    if not common.SUMMARY.exists():
+    if not SUMMARY.exists():
+        log.say(f"{kind}: the child wrote no summary at {SUMMARY}")
         return {}
-    summary = json.loads(common.SUMMARY.read_text(encoding="utf-8"))
+    summary = json.loads(SUMMARY.read_text(encoding="utf-8"))
     log.say(f"{kind}: {json.dumps(summary)}")
     return summary
 

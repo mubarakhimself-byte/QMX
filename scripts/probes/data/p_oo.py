@@ -24,6 +24,7 @@ import argparse
 import base64
 import json
 import secrets
+import shutil
 import signal
 import subprocess
 import tarfile
@@ -209,11 +210,16 @@ def main(argv: list[str] | None = None) -> int:
     report.numbers.update({"openobserve_version": OO_VERSION, "url": OO_URL})
     process: subprocess.Popen[bytes] | None = None
     sampler: common.PeakSampler | None = None
-    email, password = "qmx-probe@localhost", secrets.token_urlsafe(24)
+    # The service checks the root email against an RFC-shaped pattern whose domain needs a dot and
+    # a 2-6 letter suffix; `@localhost` is refused at startup, which the first run proved.
+    email = "qmx-probe@example.com"
+    password = secrets.token_urlsafe(24)
     port = common.free_port()
     base = f"http://127.0.0.1:{port}"
     data_dir = common.PROBE_ROOT / "oo-data"
     try:
+        # A run's disk figure is its own day, not the last run's leftovers.
+        shutil.rmtree(data_dir, ignore_errors=True)
         binary = fetch(log)
         report.numbers["free_before_mb"] = common.free_mb()
         began = time.perf_counter()
