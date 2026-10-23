@@ -27,7 +27,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 USER: Final = Caller("user")
 MCP_CLIENT: Final = Caller("agent", "mcp")
 MCP: Final = "/mcp"
-SECRET_INTAKE: Final = "/v1/secret"  # noqa: S105 — a route path, not a credential
+SECRET_INTAKE: Final = "/v1/secret"  # noqa: S105  a route path, not a credential
 """Where a home receives a secret once, for itself: an OAuth code exchanged on its own machine, or
 a static key whose connection lives here. `user` only, and the route table never names an agent
 for it."""
