@@ -102,6 +102,10 @@ class SeriesFile:
     the time-ordered rows, so it names the content and not the file: the same rows written
     twice give this same value, in this process or another. ``path`` is where the writer
     put the file; a caller may still rename it under a fixed open-month key.
+    ``first_t``, ``last_t`` and ``holes`` are what the writer saw as the rows passed: the
+    span they cover in the file's own time unit, and every gap between consecutive rows
+    that fell inside the writer's declared hole bounds. A month's freeze rule reads them
+    without a second pass over the data.
     """
 
     key: str
@@ -110,6 +114,9 @@ class SeriesFile:
     bytes: int
     path: Path
     columns: tuple[str, ...]
+    first_t: int | None = None
+    last_t: int | None = None
+    holes: tuple[tuple[int, int], ...] = ()
 
 
 class ColumnarEngine(Protocol):

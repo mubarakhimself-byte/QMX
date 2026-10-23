@@ -20,6 +20,7 @@ pyarrow ships no type stubs; the unknown-type rules are disabled at file scope h
 """
 
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownParameterType=false
 # pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
 
 from __future__ import annotations
@@ -105,6 +106,7 @@ class TypedWriter:
         columns: Sequence[str],
         *,
         row_group_rows: int = ROW_GROUP_ROWS,
+        hole_bounds: tuple[int, int] | None = None,
     ) -> None:
         if row_group_rows < 1:
             raise ValueError("a row group holds at least one row")
@@ -115,6 +117,9 @@ class TypedWriter:
         self._row_group_rows = row_group_rows
         self._rows = 0
         self._last_t: int | None = None
+        self._first_t: int | None = None
+        self._hole_bounds = hole_bounds
+        self._holes: list[tuple[int, int]] = []
         self._pending: list[tuple[object, ...]] = []
         self._hasher = hashlib.sha256()
         self._hasher.update(_HEADER)
@@ -151,7 +156,8 @@ class TypedWriter:
         self._closed = True
         try:
             self._writer.close()
-            descriptor = os.open(self._target, os.O_RDONLY)
+            # Windows flushes a file through a writable handle only: O_RDONLY fails EBADF.
+            descriptor = os.open(self._target, os.O_RDWR)
             try:
                 os.fsync(descriptor)
             finally:
@@ -169,6 +175,9 @@ class TypedWriter:
             bytes=self._target.stat().st_size,
             path=self._target,
             columns=self._columns,
+            first_t=self._first_t,
+            last_t=self._last_t,
+            holes=tuple(self._holes),
         )
 
     def _checked(self, row: Sequence[object]) -> tuple[object, ...]:
@@ -188,7 +197,7 @@ class TypedWriter:
                         engine="typed",
                         retryable=False,
                     )
-                values.append(None if value is None else float(cast("int | float", value)))
+                values.append(None if value is None else float(value))
                 continue
             if isinstance(value, bool) or not isinstance(value, int):
                 raise StoreEngineError(
@@ -202,6 +211,12 @@ class TypedWriter:
                     f"{name} is outside int64: {number}", engine="typed", retryable=False
                 )
             if name == "t":
+                if self._first_t is None:
+                    self._first_t = number
+                elif self._hole_bounds is not None and self._last_t is not None:
+                    low, high = self._hole_bounds
+                    if low < number - self._last_t < high:
+                        self._holes.append((self._last_t, number))
                 if self._last_t is not None and number < self._last_t:
                     raise StoreEngineError(
                         "rows must be time-ordered; t went backwards",
@@ -238,6 +253,7 @@ def write_in_child(
     columns: Sequence[str],
     rows: Callable[[], Iterable[Sequence[object]]],
     *,
+    hole_bounds: tuple[int, int] | None = None,
     timeout_s: float = 3600.0,
 ) -> SeriesFile:
     """Run :class:`TypedWriter` in a spawned child, so this process holds no rows.
@@ -248,7 +264,9 @@ def write_in_child(
     """
     context = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=1, mp_context=context) as pool:
-        return pool.submit(_write_job, target, key, tuple(columns), rows).result(timeout=timeout_s)
+        return pool.submit(_write_job, target, key, tuple(columns), rows, hole_bounds).result(
+            timeout=timeout_s
+        )
 
 
 def _write_job(
@@ -256,6 +274,7 @@ def _write_job(
     key: str,
     columns: tuple[str, ...],
     rows: Callable[[], Iterable[Sequence[object]]],
+    hole_bounds: tuple[int, int] | None,
 ) -> SeriesFile:
     """The child's entry point: the same writer, on rows this process streams itself."""
-    return TypedWriter(target, key, columns).add(rows()).finish()
+    return TypedWriter(target, key, columns, hole_bounds=hole_bounds).add(rows()).finish()

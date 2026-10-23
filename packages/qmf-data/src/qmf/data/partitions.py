@@ -96,7 +96,8 @@ class SeriesPartition:
         for name, value in (("subject", subject), ("kind", kind), ("variant", variant)):
             if value is not None and not isinstance(value, str):
                 return invalid_input(
-                    name, "a series partition names its subject, kind and variant in words",
+                    name,
+                    "a series partition names its subject, kind and variant in words",
                     given=repr(value),
                 )
         return cls._build(source.strip(), instrument, window, subject, kind, variant)

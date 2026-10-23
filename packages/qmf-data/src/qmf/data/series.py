@@ -23,13 +23,16 @@ Everything here is a plain value or a typed refusal; nothing raises across the b
 Stdlib + qmf-core + the typed writer.
 """
 
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+
 from __future__ import annotations
 
 import json
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
-from dataclasses import dataclass, field, replace
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -53,8 +56,8 @@ from qmf.data.store.refusals import (
 
 __all__ = [
     "BAR_KIND",
-    "GAP_MAX_NS",
-    "GAP_MIN_NS",
+    "GAP_MAX_MS",
+    "GAP_MIN_MS",
     "OPEN_NAME",
     "RULES",
     "STATE_NAME",
@@ -76,13 +79,14 @@ FILL_KIND: Final[str] = "fill"
 DERIVED_SOURCE: Final[str] = "derived"
 OPEN_NAME: Final[str] = "open.parquet"
 STATE_NAME: Final[str] = "state.json"
+INCOMING_NAME: Final[str] = ".incoming.parquet"
 SETTLEMENT_DAYS: Final[int] = 2
 NS_PER_MS: Final[int] = 1_000_000
 NS_PER_DAY: Final[int] = 86_400 * 1_000_000_000
 # A feed outage inside trading time, not a market closure: longer than an hour, shorter
 # than six, so a weekend (48 hours) and a holiday (a day or more) are never gaps.
-GAP_MIN_NS: Final[int] = 3_600 * 1_000_000_000
-GAP_MAX_NS: Final[int] = 6 * 3_600 * 1_000_000_000
+GAP_MIN_MS: Final[int] = 3_600 * 1_000
+GAP_MAX_MS: Final[int] = 6 * 3_600 * 1_000
 _TOKEN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_.+-]{1,64}")
 
 
@@ -96,15 +100,21 @@ class FreezeKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class KindRule:
-    """One kind's freeze rule, its typed columns, and the delay its month end carries."""
+    """One kind's freeze rule, its typed columns, and the delay its month end carries.
+
+    ``hole_bounds`` is the writer's window for recording a hole between consecutive rows,
+    in the file's own time unit. Only a gap-checked kind sets it: the writer records the
+    holes it sees and the freeze rule decides what they mean.
+    """
 
     freeze: FreezeKind
     columns: tuple[str, ...]
     settlement_days: int = 0
+    hole_bounds: tuple[int, int] | None = None
 
 
 RULES: Final[dict[str, KindRule]] = {
-    TICKS_KIND: KindRule(FreezeKind.GAP, TICK_COLUMNS),
+    TICKS_KIND: KindRule(FreezeKind.GAP, TICK_COLUMNS, hole_bounds=(GAP_MIN_MS, GAP_MAX_MS)),
     BAR_KIND: KindRule(FreezeKind.CHECKSUM, BAR_COLUMNS),
     FILL_KIND: KindRule(FreezeKind.MONTH_END, BAR_COLUMNS, SETTLEMENT_DAYS),
 }
@@ -174,7 +184,9 @@ class SeriesKey:
         ):
             text = "" if value is None else value
             if not isinstance(text, str) or (name != "variant" and text.strip() == ""):
-                return invalid_input(name, "a series key names a non-empty token", given=repr(value))
+                return invalid_input(
+                    name, "a series key names a non-empty token", given=repr(value)
+                )
             if text != "" and _TOKEN.fullmatch(text.strip()) is None:
                 return invalid_input(
                     name,
@@ -184,14 +196,18 @@ class SeriesKey:
         if isinstance(year, bool) or not isinstance(year, int) or not 1970 <= year <= 9999:
             return invalid_input("year", "a series key names a year from 1970", given=repr(year))
         if isinstance(month, bool) or not isinstance(month, int) or not 1 <= month <= 12:
-            return invalid_input("month", "a series key names a month from 1 to 12", given=repr(month))
-        return cls(
-            source=str(source).strip(),
-            subject=str(subject).strip(),
-            kind=str(kind).strip(),
-            year=year,
-            month=month,
-            variant="" if variant is None else str(variant).strip(),
+            return invalid_input(
+                "month", "a series key names a month from 1 to 12", given=repr(month)
+            )
+        return Ok(
+            cls(
+                source=str(source).strip(),
+                subject=str(subject).strip(),
+                kind=str(kind).strip(),
+                year=year,
+                month=month,
+                variant="" if variant is None else str(variant).strip(),
+            )
         )
 
     @property
@@ -331,35 +347,17 @@ class SeriesRead:
         return f"{self.key.text} [{_iso(self.start_ns)}, {_iso(self.end_ns)})"
 
 
-@dataclass(slots=True)
-class _Trail:
-    """What a commit learns while the rows pass: its time span and its holes."""
-
-    first_t: int | None = None
-    last_t: int | None = None
-    holes: list[tuple[int, int]] = field(default_factory=list)
-
-
-def _observed(rows: Iterable[Sequence[object]], trail: _Trail) -> Iterator[Sequence[object]]:
-    """Pass rows through, noting their span and any hole between consecutive ones."""
-    previous: int | None = None
-    for row in rows:
-        moment = int(row[0])  # type: ignore[arg-type]
-        if trail.first_t is None:
-            trail.first_t = moment
-        if previous is not None and GAP_MIN_NS < moment - previous < GAP_MAX_NS:
-            trail.holes.append((previous, moment))
-        previous = moment
-        trail.last_t = moment
-        yield row
+def _range_of(written: SeriesFile, key: SeriesKey) -> tuple[int, int]:
+    """The half-open ns range a written file covers, for a correction record."""
+    start = written.first_t * NS_PER_MS if written.first_t is not None else key.start_ns
+    end = (written.last_t * NS_PER_MS if written.last_t is not None else key.end_ns - 1) + 1
+    return start, end
 
 
 class SeriesStore:
     """The price partitions under one root, with their keys, freezes and corrections."""
 
-    def __init__(
-        self, root: Path, *, wall: Callable[[], datetime] | None = None
-    ) -> None:
+    def __init__(self, root: Path, *, wall: Callable[[], datetime] | None = None) -> None:
         self._root = root
         self._wall = wall if wall is not None else (lambda: datetime.now(UTC))
 
@@ -392,28 +390,49 @@ class SeriesStore:
         the new fingerprint and the range it covers are recorded. The same rows again are
         an idempotent write and leave one file, whether the month is open or frozen.
         """
-        if not isinstance(key, SeriesKey):
-            return invalid_input("key", "a commit names a SeriesKey", given=repr(key))
         rule = key.rule
         folder = self.folder(key)
-        temp = folder / ".incoming.parquet"
-        trail = _Trail()
-        previous = self.state(key)
+        temp = folder / INCOMING_NAME
         try:
             folder.mkdir(parents=True, exist_ok=True)
             written = (
-                TypedWriter(temp, key.text, rule.columns).add(_observed(rows, trail)).finish()
+                TypedWriter(temp, key.text, rule.columns, hole_bounds=rule.hole_bounds)
+                .add(rows)
+                .finish()
             )
         except StoreEngineError as exc:
             temp.unlink(missing_ok=True)
             return translate_engine_failure(exc)
         except OSError as exc:
             temp.unlink(missing_ok=True)
-            return storage_failure("could not write the partition", context={"key": key.text, "error": str(exc)})
-        gaps = tuple(f"{_iso(a)}/{_iso(b)}" for a, b in trail.holes)
+            return storage_failure(
+                "could not write the partition", context={"key": key.text, "error": str(exc)}
+            )
+        return self.commit_file(
+            key, written, correction=correction, provider_checksum=provider_checksum
+        )
+
+    def commit_file(
+        self,
+        key: SeriesKey,
+        written: SeriesFile,
+        *,
+        correction: str | None = None,
+        provider_checksum: str | None = None,
+    ) -> Result[CommitReceipt]:
+        """Finish a file another process wrote — the importer's child writer — as a commit.
+
+        The file must sit inside the key's folder (the importer writes
+        ``<folder>/.incoming.parquet``); the store decides its final name, so a month that
+        froze while the child was writing still refuses a different file.
+        """
+        folder = self.folder(key)
+        folder.mkdir(parents=True, exist_ok=True)
+        previous = self.state(key)
+        gaps = tuple(f"{_iso(a * NS_PER_MS)}/{_iso(b * NS_PER_MS)}" for a, b in written.holes)
         if previous is not None and previous.frozen:
-            return self._commit_frozen(key, folder, previous, written, trail, correction)
-        return self._commit_open(key, folder, rule, previous, written, trail, gaps, provider_checksum)
+            return self._commit_frozen(key, folder, previous, written, correction)
+        return self._commit_open(key, folder, key.rule, previous, written, gaps, provider_checksum)
 
     def _commit_frozen(
         self,
@@ -421,7 +440,6 @@ class SeriesStore:
         folder: Path,
         previous: SeriesState,
         written: SeriesFile,
-        trail: _Trail,
         correction: str | None,
     ) -> Result[CommitReceipt]:
         final = folder / f"{written.fingerprint}.parquet"
@@ -449,9 +467,10 @@ class SeriesStore:
                 frozen=previous.fingerprint,
             )
         os.replace(written.path, final)
-        start = trail.first_t if trail.first_t is not None else key.start_ns
-        end = (trail.last_t if trail.last_t is not None else key.end_ns - 1) + 1
-        record = Correction(previous.fingerprint, written.fingerprint, correction.strip(), self._at(), start, end)
+        start, end = _range_of(written, key)
+        record = Correction(
+            previous.fingerprint, written.fingerprint, correction.strip(), self._at(), start, end
+        )
         state = replace(
             previous,
             fingerprint=written.fingerprint,
@@ -482,7 +501,6 @@ class SeriesStore:
         rule: KindRule,
         previous: SeriesState | None,
         written: SeriesFile,
-        trail: _Trail,
         gaps: tuple[str, ...],
         provider_checksum: str | None,
     ) -> Result[CommitReceipt]:
@@ -509,18 +527,37 @@ class SeriesStore:
             )
             self._write_state(folder, state)
             return Ok(
-                CommitReceipt(key, written.fingerprint, written.rows, written.bytes, open_path, False, gaps, attempts)
+                CommitReceipt(
+                    key,
+                    written.fingerprint,
+                    written.rows,
+                    written.bytes,
+                    open_path,
+                    False,
+                    gaps,
+                    attempts,
+                )
             )
         final = folder / f"{written.fingerprint}.parquet"
         os.replace(written.path, final)
         (folder / OPEN_NAME).unlink(missing_ok=True)
         corrections = previous.corrections if previous is not None else ()
-        if previous is not None and previous.frozen_once and previous.fingerprint != written.fingerprint:
-            start = trail.first_t if trail.first_t is not None else key.start_ns
-            end = (trail.last_t if trail.last_t is not None else key.end_ns - 1) + 1
+        if (
+            previous is not None
+            and previous.frozen_once
+            and previous.fingerprint != written.fingerprint
+        ):
+            start, end = _range_of(written, key)
             corrections = (
                 *corrections,
-                Correction(previous.fingerprint, written.fingerprint, "re-opened month re-fetched", self._at(), start, end),
+                Correction(
+                    previous.fingerprint,
+                    written.fingerprint,
+                    "re-opened month re-fetched",
+                    self._at(),
+                    start,
+                    end,
+                ),
             )
         state = SeriesState(
             key=key.text,
@@ -536,7 +573,9 @@ class SeriesStore:
         )
         self._write_state(folder, state)
         return Ok(
-            CommitReceipt(key, written.fingerprint, written.rows, written.bytes, final, True, gaps, attempts)
+            CommitReceipt(
+                key, written.fingerprint, written.rows, written.bytes, final, True, gaps, attempts
+            )
         )
 
     def _should_freeze(
@@ -589,20 +628,16 @@ class SeriesStore:
             )
         start = key.start_ns if start_ns is None else start_ns
         end = key.end_ns if end_ns is None else end_ns
-        if isinstance(start, bool) or not isinstance(start, int):
-            return invalid_input("start_ns", "a read range starts at int64 ns", given=repr(start_ns))
-        if isinstance(end, bool) or not isinstance(end, int):
-            return invalid_input("end_ns", "a read range ends at int64 ns", given=repr(end_ns))
         if end <= start:
-            return invalid_input("end_ns", "a read range is half-open and non-empty", given=repr(end_ns))
+            return invalid_input(
+                "end_ns", "a read range is half-open and non-empty", given=repr(end_ns)
+            )
         try:
             import pyarrow.parquet as pq  # noqa: PLC0415 (only a read needs the library)
 
             table = pq.read_table(path)
             rows = tuple(
-                row
-                for row in table.to_pylist()
-                if start <= int(row["t"]) < end
+                row for row in table.to_pylist() if start <= int(row["t"]) * NS_PER_MS < end
             )
         except (OSError, ValueError) as exc:
             return storage_failure(
@@ -619,7 +654,7 @@ class SeriesStore:
         target = folder / STATE_NAME
         temp = folder / ".state.tmp"
         temp.write_text(json.dumps(state.as_json(), sort_keys=True), encoding="utf-8")
-        descriptor = os.open(temp, os.O_RDONLY)
+        descriptor = os.open(temp, os.O_RDWR)
         try:
             os.fsync(descriptor)
         finally:
@@ -628,5 +663,3 @@ class SeriesStore:
 
     def _at(self) -> str:
         return self._wall().isoformat()
-
-

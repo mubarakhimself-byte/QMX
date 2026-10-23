@@ -10,8 +10,23 @@
       "source": {
         "type": "string"
       },
+      "subject": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "variant": {
+        "type": "string"
+      },
+      "series_key": {
+        "type": "string"
+      },
       "instruments": {
-        "type": "array"
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       },
       "window": {
         "type": "object"
@@ -24,6 +39,30 @@
       },
       "licence": {
         "type": "string"
+      },
+      "redownloadable": {
+        "type": "boolean"
+      },
+      "replaced": {
+        "type": "string"
+      },
+      "quality": {
+        "type": "object"
+      },
+      "coverage": {
+        "type": "object"
+      },
+      "partitions": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "corrections": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
       },
       "partition_digests": {
         "type": "array"
@@ -48,6 +87,11 @@
       "tab": "Fields",
       "renderer": "json",
       "source": "fields"
+    },
+    {
+      "tab": "Coverage",
+      "renderer": "json",
+      "source": "fields.coverage"
     },
     {
       "tab": "Used in",
