@@ -107,7 +107,9 @@ from qmx_host.door import PrincipalDoor
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 
-type Role = Literal["pc", "node"]
+type Role = Literal["pc", "node", "server"]
+"""`server` is the node role plus the Library service: on the server the one `qmx_host` process
+opens the store as its one writer and answers the Library routes in process (AD-19, AD-26)."""
 
 LOCK: Final = "engine.lock"
 LIBRARY: Final = "library"
@@ -121,6 +123,12 @@ MEMORY_FOLDER: Final = "memory"
 """The home's memory folder: the FTS5 file, Hindsight's own folders and the snapshot slot."""
 MEMORY_ROLE: Final = "memory_extractor"
 """The grant Hindsight's extractor calls run on (SOLUTION-DESIGN 28.6, AD-18)."""
+SYNC_INTERVAL_S: Final = 30.0
+"""How often the PC asks the Library server what moved since its last sequence (AD-10). The
+`[library] sync_interval` setting raises or lowers it."""
+PAIRING_KEY: Final = "vault/pairing-key"
+SERVER_LIBRARY: Final = "/srv/qmx/library"
+"""The server store's root (Appendix D). The server's host opens it as its one writer."""
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 
 
@@ -191,11 +199,12 @@ def serve_forever(
     ui_origin: str,
     scrubbed: Sequence[str],
     keep: Sequence[str],
+    library_root: Path | None = None,
 ) -> int:
     try:
         with single_instance(home):
             record(home, port)
-            asyncio.run(serve(home, port, role, ui_origin, scrubbed, keep))
+            asyncio.run(serve(home, port, role, ui_origin, scrubbed, keep, library_root))
     except HostRunning as refused:
         print(refused, file=sys.stderr)
         return 1
@@ -475,24 +484,42 @@ async def node_sidecar(home: Path) -> None:
 
 
 async def serve(
-    home: Path, port: int, role: Role, ui_origin: str, scrubbed: Sequence[str], keep: Sequence[str]
+    home: Path,
+    port: int,
+    role: Role,
+    ui_origin: str,
+    scrubbed: Sequence[str],
+    keep: Sequence[str],
+    library_root: Path | None = None,
 ) -> None:
     """Assumes the caller scrubbed the environment and holds the home's lock."""
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
-    router = await RouterService(home, bind=TAILNET if role == "node" else LOOPBACK).start()
+    serving = role == "server"
+    root = (library_root or home / LIBRARY) if serving else home / LIBRARY
+    router = await RouterService(
+        home, bind=TAILNET if role in ("node", "server") else LOOPBACK
+    ).start()
     # Its own thread and loop, pinned in `<home>/router.port`; the harness's relay adopts it.
-    # The `node` role binds the tailnet instead of the loopback: that machine is reached over
-    # Tailscale or not at all, and its relay is still the only caller on that port (AD-12).
+    # The `node` and `server` roles bind the tailnet instead of the loopback: those machines are
+    # reached over Tailscale or not at all, and the relay is still the only caller on that port
+    # (AD-12).
     supervising = asyncio.create_task(router.supervise())
-    sidecar = asyncio.create_task(node_sidecar(home)) if role == "node" else None
+    sidecar = asyncio.create_task(node_sidecar(home)) if role in ("node", "server") else None
     try:
         harness = await RecordedHarness.open(
             qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
         )
         try:
             floor = floor_bytes(section(control, "engine"), free_bytes(home))
-            with Store.open(home / LIBRARY, redactor=redact, floor_bytes=floor) as store:
+            with Store.open(
+                root,
+                redactor=redact,
+                floor_bytes=floor,
+                name="server" if serving else "pc",
+                role="writer" if serving else "replica",
+                upstream=None if serving else HubBlobs(library_client(home)),
+            ) as store:
                 control.attach_library(store)
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(compose_memory, harness, store, home, control)
@@ -504,7 +531,7 @@ async def serve(
                         library=EngineLibraryAdapter(store),
                     ) as engine:
                         core = engine.svc.ctx.engine
-                        placed = remote_worker(home, core) if role == "node" else None
+                        placed = remote_worker(home, core) if role in ("node", "server") else None
                         if placed is not None:
                             core.worker = placed
                         name = placement_name(control, role)
@@ -515,17 +542,27 @@ async def serve(
                         origin = ui_origin if role == "pc" else ""
                         bearer = qmx_control.server.local_token()
                         answering = [*answering_router(home, engine), drain_router(core)]
+                        answering.extend(library_service(home, store, serving))
                         app = compose(control, engine, harness_api, bearer, origin, answering)
-                        server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port))
+                        app_host = TAILNET if serving else "127.0.0.1"
+                        server = uvicorn.Server(uvicorn.Config(app, host=app_host, port=port))
                         beating = asyncio.create_task(
                             heartbeats(home, name, control, harness, engine, link)
                         )
                         exporting = asyncio.create_task(harness.idle_exports())
                         holding = asyncio.create_task(asking.hold_all())
+                        replicator = Replicator.for_home(home, store, control)
+                        syncing = (
+                            asyncio.create_task(replicator.run())
+                            if replicator is not None
+                            else None
+                        )
                         try:
                             await server.serve()
                         finally:
-                            for task in (beating, exporting, holding):
+                            for task in (beating, exporting, holding, syncing):
+                                if task is None:
+                                    continue
                                 task.cancel()
                                 with suppress(asyncio.CancelledError):
                                     await task
@@ -823,7 +860,9 @@ def health(port: int) -> int | None:
     return pid if isinstance(pid, int) else None
 
 
-def start(home: Path, port: int, role: Role, ui_origin: str) -> int:
+def start(
+    home: Path, port: int, role: Role, ui_origin: str, library_root: Path | None = None
+) -> int:
     """`serve` in a background process, once it answers `/api/health`."""
     running = recorded_host(home)
     if running is not None:
@@ -837,6 +876,8 @@ def start(home: Path, port: int, role: Role, ui_origin: str) -> int:
             return 1
     command = [sys.executable, "-m", "qmx_host", "serve", "--home", str(home), "--port", str(port)]
     command += ["--role", role, "--ui-origin", ui_origin]
+    if library_root is not None:
+        command += ["--library-root", str(library_root)]
     with (home / "control.log").open("ab") as log:
         process = subprocess.Popen(
             command,
@@ -898,3 +939,140 @@ def terminate(pid: int) -> None:
     for member in alive:
         with suppress(psutil.NoSuchProcess):
             member.kill()
+
+
+class HubBlobs:
+    """The PC replica's `upstream`: a blob it does not hold comes from the Library server and is
+    kept as a cache copy it may give up at any time (AD-10). A Hub that cannot answer returns
+    None, so the read refuses `blob_unavailable` instead of pretending."""
+
+    def __init__(self, client: Any) -> None:
+        self.client = client
+
+    def fetch(self, blob_id: str) -> bytes | None:
+        if self.client is None:
+            return None
+        try:
+            return cast(bytes | None, self.client.blob(blob_id))
+        except OSError, ValueError, LibraryRefused:
+            return None
+
+
+def library_client(home: Path) -> Any:
+    """The Hub client this home writes and syncs through, or None while the PC is primary.
+
+    `[library] primary = server` is the flip's cached word (AD-19); the record on `refs/primary`
+    is the truth, and a store that learns a higher epoch stops acting as primary (AD-14).
+    """
+    try:
+        from qmx_library.client import HubClient, primary  # noqa: PLC0415 (only a PC uses it)
+    except ImportError:  # pragma: no cover (the package ships with the host)
+        return None
+    if primary(home) != "server":
+        return None
+    try:
+        return HubClient.connect(home)
+    except LibraryRefused as refused:
+        print(f"library: no Library server to sync with: {refused}", file=sys.stderr)
+        return None
+
+
+def library_service(home: Path, store: Store, serving: bool) -> list[Any]:
+    """The Library service inside the server's one host (AD-19, AD-26): one store, one writer."""
+    if not serving:
+        return []
+    key_file = home / PAIRING_KEY
+    if not key_file.exists():
+        print("library: no pairing key, so the Library routes are not mounted", file=sys.stderr)
+        return []
+    from qmx_hub.server import Hub, in_process  # noqa: PLC0415 (the server role's Library)
+
+    hub = Hub(store, home=home)
+    return [in_process(hub, key_file.read_text(encoding="utf-8").strip())]
+
+
+class HubTarget:
+    """The primary as the outbox sees it: its ref log, its head, its put, its kinds (AD-14)."""
+
+    def __init__(self, hub: Any) -> None:
+        self.hub = hub
+
+    def ever_placed(self, object_id: str, item: str, ref: str) -> bool:
+        return bool(self.hub.call("ever_placed", object_id=object_id, item=item, ref=ref))
+
+    def head(self, item: str, ref: str) -> str | None:
+        found = self.hub.call("head", item=item, ref=ref)
+        return None if found is None else str(found)
+
+    def put(self, draft: Any, *, on: str, expected_head: str | None) -> Any:
+        return self.hub.put(draft, on=on, expected_head=expected_head)
+
+    def can_read(self, kind: str, version: int) -> bool:
+        found = self.hub.versions().get(kind)
+        return found is not None and int(found) >= version
+
+    def park(self, entry: Any) -> str:
+        return str(
+            self.hub.call(
+                "park",
+                item=entry.item,
+                ref=entry.ref,
+                expected_head=entry.expected_head,
+                intended=entry.object_id,
+            )
+        )
+
+
+class Replicator:
+    """The PC's sync loop and outbox (AD-10, AD-14, AD-26).
+
+    One sync runs at a time and a burst of commits coalesces into the next one. Each tick asks the
+    Library server for the ref moves after the sequence it last read, copies their text slots and
+    no other blob, then replays the saves the primary has not taken yet.
+    """
+
+    def __init__(self, store: Store, hub: Any, outbox: Any, table: Any, interval: float) -> None:
+        self.store = store
+        self.hub = hub
+        self.outbox = outbox
+        self.table = table
+        self.interval = interval
+        self.cursor = 0
+        self.target = HubTarget(hub)
+        from qmx_hub.replicate import Synchroniser  # noqa: PLC0415 (the PC's sync)
+
+        self.synchroniser: Any = Synchroniser(self.sync_once)
+
+    @classmethod
+    def for_home(cls, home: Path, store: Store, control: ControlService) -> Replicator | None:
+        hub = library_client(home)
+        if hub is None:
+            return None
+        from qmx_library.client import owners  # noqa: PLC0415
+        from qmx_library.outbox import OUTBOX, Outbox  # noqa: PLC0415
+
+        interval = float(setting(section(control, "library"), "sync_interval", SYNC_INTERVAL_S))
+        return cls(store, hub, Outbox(home / LIBRARY / OUTBOX), owners(home), interval)
+
+    def sync_once(self) -> Any:
+        from qmx_hub.replicate import StorePeer, sync_since  # noqa: PLC0415
+
+        done = sync_since(StorePeer(self.store), self.hub, self.table, cursor=self.cursor)
+        self.cursor = done.cursor
+        return done
+
+    def tick(self) -> tuple[Any, Any]:
+        from qmx_library.outbox import replay  # noqa: PLC0415
+
+        synced = self.synchroniser.request()
+        if synced is None:
+            return None, None
+        return synced, replay(self.outbox, self.target)
+
+    async def run(self) -> None:
+        while True:
+            try:
+                await asyncio.to_thread(self.tick)
+            except (OSError, ValueError, LibraryRefused) as error:
+                print(f"library sync skipped: {type(error).__name__}: {error}", file=sys.stderr)
+            await asyncio.sleep(self.interval)

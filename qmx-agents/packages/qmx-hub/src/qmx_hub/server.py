@@ -46,7 +46,7 @@ from pydantic import JsonValue
 from qmx_engine.heartbeat import WINDOW_DAYS, Heartbeat, HeartbeatLog, latest
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.mirror import FRESH_S
-from qmx_library.client import draft_from_payload
+from qmx_library.client import OwnerTable, draft_from_payload
 from qmx_library.port import (
     Claim,
     Commit,
@@ -117,6 +117,16 @@ class Hub:
         if principal.who == "engine" and principal.id != self.store.name:
             return Principal("engine", self.store.name)
         return principal
+
+    def refuse_owned(self, ref: str) -> None:
+        """Refuse a mirror of a ref this server owns (AD-14): an owner is moved by its owner.
+
+        The table follows this store's own role, so a Hub replicating from a PC primary still
+        takes the PC's `main`, while a Hub that is the primary does not take a mirror of it.
+        """
+        primary = "server" if self.store.role == "writer" else "pc"
+        if OwnerTable(primary).owner(ref) == "server":
+            raise LibraryRefused("ref_not_owned", f"the server owns {ref}; a mirror never moves it")
 
     def paused(self) -> bool:
         """The one pause flag every host adopts (AD-65). Absent means running."""
@@ -265,8 +275,12 @@ class Hub:
                 )
             case "object_ids":
                 return cast(JsonValue, self.store.object_ids())
+            case "has_object":
+                return self.store.has_object(str(args["object_id"]))
             case "blob_ids":
                 return cast(JsonValue, self.store.blob_ids())
+            case "has_blob":
+                return self.store.has_blob(str(args["blob_id"]))
             case "manifest":
                 return cast(JsonValue, self.store.manifest(str(args["object_id"])))
             case "put_manifest":
@@ -274,6 +288,7 @@ class Hub:
             case "ancestry":
                 return cast(JsonValue, sorted(self.store.ancestry_of(str(args["object_id"]))))
             case "mirror":
+                self.refuse_owned(str(args["ref"]))
                 at = args.get("at")
                 self.store.mirror(
                     str(args["item"]),
@@ -286,6 +301,26 @@ class Hub:
                     at=None if at is None else str(at),
                 )
                 return None
+            case "ever_placed":
+                return self.store.ever_placed(
+                    str(args["object_id"]), str(args["item"]), str(args["ref"])
+                )
+            case "park":
+                return self.store.park_entry(
+                    str(args["item"]),
+                    str(args["ref"]),
+                    expected_head=None
+                    if args.get("expected_head") is None
+                    else str(args["expected_head"]),
+                    intended=str(args["intended"]),
+                    who=who,
+                )
+            case "kinds":
+                return cast(JsonValue, self.store.versions())
+            case "edges":
+                return cast(JsonValue, self.store.edges_since(int(str(args.get("after") or 0))))
+            case "put_edge":
+                return self.store.ingest_edge(cast(Mapping[str, Any], args["edge"]))
             case "tombstone":
                 return cast(JsonValue, self._tombstone(str(args["blob_id"])))
             case "apply_purge":
@@ -657,6 +692,69 @@ def serve(
         flush=True,
     )
     return server
+
+
+def in_process(hub: Hub, key: str) -> Any:
+    """The same routes as an `APIRouter` for the server's one `qmx_host` process (AD-19, AD-26).
+
+    The host already binds one port and holds the one store the Library and the engine share, so
+    the Library service is mounted there rather than listening on a second port beside it: one
+    process, one store, one writer. Blob bytes still move whole; the streaming door is DR7's.
+    """
+    from fastapi import APIRouter, HTTPException, Request  # noqa: PLC0415 (only the host needs it)
+
+    router = APIRouter()
+
+    def authorised(request: Request) -> None:
+        given = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        if not hmac.compare_digest(given, key):
+            raise HTTPException(HTTPStatus.UNAUTHORIZED, detail="ref_not_owned")
+
+    @router.get("/healthz")
+    def healthz(request: Request) -> Mapping[str, object]:
+        authorised(request)
+        return hub.health()
+
+    @router.get("/v1/blob/{hexdigest}")
+    def blob(hexdigest: str, request: Request) -> bytes:
+        authorised(request)
+        try:
+            return hub.store.read_blob(f"sha256:{hexdigest}")
+        except LibraryRefused as refused:
+            raise HTTPException(HTTPStatus.NOT_FOUND, detail=refused.code) from None
+
+    @router.post("/v1/blob")
+    async def put_blob(request: Request) -> Mapping[str, object]:
+        authorised(request)
+        body = await request.body()
+        return {"blob_id": hub.store.store_blob(body)}
+
+    @router.post(HEARTBEAT_ROUTE)
+    async def heartbeat(request: Request) -> Mapping[str, object]:
+        authorised(request)
+        try:
+            call = cast(dict[str, JsonValue], await request.json())
+            paused, renewed = hub.hear(cast(Mapping[str, JsonValue], call["heartbeat"]))
+        except (LibraryRefused, ValueError, KeyError) as refused:
+            code = refused.code if isinstance(refused, LibraryRefused) else "bad_heartbeat"
+            raise HTTPException(HTTPStatus.BAD_REQUEST, detail=code) from None
+        return {"autonomy_paused": paused, "claims_renewed": renewed}
+
+    @router.post("/v1/op/{verb}")
+    async def op(verb: str, request: Request) -> Mapping[str, object]:
+        authorised(request)
+        call = cast(dict[str, JsonValue], await request.json())
+        try:
+            who = hub.door(str(call["who"]))
+            value = hub.op(verb, who, cast(Mapping[str, JsonValue], call.get("args") or {}))
+        except LibraryRefused as refused:
+            raise HTTPException(
+                HTTPStatus.BAD_REQUEST, detail={"code": refused.code, "message": str(refused)}
+            ) from None
+        return {"ok": True, "value": value}
+
+    _ = (healthz, blob, put_blob, heartbeat, op)
+    return router
 
 
 def config(home: Path) -> dict[str, Any]:

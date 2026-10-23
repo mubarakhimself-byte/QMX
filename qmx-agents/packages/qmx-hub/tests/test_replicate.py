@@ -1,5 +1,6 @@
-"""Replication: parent-hash order, ref ownership from the setting, and the alarm instead of a
-merge (Library AD-10, AD-11, AD-14, AD-19)."""
+"""Replication: parent-hash order, ref ownership from the setting, the alarm instead of a
+merge, the selective sync that copies text slots only, and a mirror refused for a ref the server
+owns (Library AD-10, AD-11, AD-14, AD-19, AD-26)."""
 
 from __future__ import annotations
 
@@ -13,7 +14,8 @@ from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import Principal
 from qmx_library.store import Store
 
-from qmx_hub.replicate import Plan, StorePeer, order, plan, sync
+from qmx_hub.replicate import Plan, StorePeer, order, plan, sync, sync_since
+from qmx_hub.server import Hub
 
 OPERATOR = Principal("operator")
 RUN = Principal("run", "r1")
@@ -26,6 +28,16 @@ def pair(tmp_path: Path) -> Iterator[tuple[Store, Store]]:
         Store.open(tmp_path / "server", redactor=redact, name="server", role="replica") as hub,
     ):
         yield pc, hub
+
+
+@pytest.fixture
+def primary_server(tmp_path: Path) -> Iterator[tuple[Store, Store]]:
+    """The PC as a replica and the server as the one writer: the state DR2D's flip creates."""
+    with (
+        Store.open(tmp_path / "pc", redactor=redact, name="pc", role="replica") as pc,
+        Store.open(tmp_path / "server", redactor=redact, name="server") as server,
+    ):
+        yield pc, server
 
 
 def note(title: str, item: str, *, parents: list[str] | None = None) -> Draft:
@@ -79,16 +91,39 @@ def test_the_owner_table_is_read_from_the_setting(tmp_path: Path) -> None:
 
 
 def test_the_owner_wins_either_way() -> None:
-    local = [Ref("n1", "main", "aaa", "", "operator")]
-    remote = [Ref("n1", "main", "bbb", "", "operator")]
+    local = [Ref("n1", "main", "bbb", "", "operator")]
+    remote = [Ref("n1", "main", "aaa", "", "operator")]
 
-    pushed = plan(local, remote, OwnerTable("pc"), name="pc", ancestor=lambda _a, _b: False)
-    mirrored = plan(local, remote, OwnerTable("server"), name="pc", ancestor=lambda _a, _b: False)
+    def behind(older: str, newer: str) -> bool:
+        return older == "aaa"
 
-    assert [row.head for row in pushed.push] == ["aaa"]
+    pushed = plan(local, remote, OwnerTable("pc"), name="pc", ancestor=behind)
+    mirrored = plan(local, remote, OwnerTable("server"), name="pc", ancestor=behind)
+
+    assert [row.head for row in pushed.push] == ["bbb"]
     assert pushed.mirror == ()
     assert mirrored.push == ()
-    assert [row.head for row in mirrored.mirror] == ["bbb"]
+    assert [row.head for row in mirrored.mirror] == ["aaa"]
+
+
+def test_a_push_of_a_ref_this_store_owns_is_fast_forward_only() -> None:
+    here = Ref("n1", "main", "new", "", "operator")
+    there = Ref("n1", "main", "old", "", "operator")
+
+    def one_step(older: str, newer: str) -> bool:
+        return older == "old" and newer == "new"
+
+    def never(older: str, newer: str) -> bool:
+        return False
+
+    forwards = plan([here], [there], OwnerTable("pc"), name="pc", ancestor=one_step)
+    stranded = plan([here], [there], OwnerTable("pc"), name="pc", ancestor=never)
+
+    assert [row.head for row in forwards.push] == ["new"]
+    assert stranded.push == ()
+    assert stranded.alarms == (
+        "n1 main: old is not an ancestor of new; a push of an owned ref is fast-forward only",
+    )
 
 
 def test_a_run_ref_that_diverged_is_an_alarm_not_a_merge() -> None:
@@ -110,3 +145,56 @@ def test_a_mirror_refuses_a_head_the_caller_did_not_read(pair: tuple[Store, Stor
 
     with pytest.raises(LibraryRefused, match=r"^stale_head:"):
         hub.mirror("n1", "main", second.object_id, expected_head=None)
+
+
+def test_a_selective_sync_copies_text_slots_and_no_other_blob(
+    primary_server: tuple[Store, Store],
+) -> None:
+    pc, server = primary_server
+    done = server.put(
+        OPERATOR,
+        Draft(
+            "source",
+            "paper",
+            title="A paper",
+            blobs={"transcript": b"the phrase only the server extracted", "content": b"\x00pdf"},
+        ),
+        on="main",
+        expected_head=None,
+    )
+
+    synced = sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=0)
+
+    view = pc.get(OPERATOR, done.object_id)
+    assert synced.ok
+    assert (synced.text_blobs, len(synced.pulled)) == (1, 1)
+    assert pc.has_blob(view.blobs["transcript"].blob_id)
+    assert not pc.has_blob(view.blobs["content"].blob_id)
+    assert [hit.object_id for hit in pc.search(OPERATOR, "extracted")] == [done.object_id]
+
+
+def test_a_selective_sync_asks_only_for_the_moves_after_its_cursor(
+    primary_server: tuple[Store, Store],
+) -> None:
+    pc, server = primary_server
+    server.put(OPERATOR, note("one", "n1"), on="main", expected_head=None)
+    first = sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=0)
+    second = server.put(OPERATOR, note("two", "n2"), on="main", expected_head=None)
+
+    synced = sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=first.cursor)
+
+    assert (len(first.pulled), len(synced.pulled)) == (1, 1)
+    assert synced.pulled == [second.object_id]
+    assert synced.cursor == 2
+
+
+def test_the_server_refuses_a_mirror_of_a_ref_it_owns(tmp_path: Path) -> None:
+    head = "fp1:sha256:" + "a" * 64
+    with Store.open(tmp_path / "server", redactor=redact, name="server") as store:
+        writer = Hub(store, home=tmp_path / "home")
+        with pytest.raises(LibraryRefused, match=r"^ref_not_owned:"):
+            writer.op("mirror", OPERATOR, {"item": "n1", "ref": "main", "head": head})
+    with Store.open(tmp_path / "replica", redactor=redact, name="server", role="replica") as store:
+        replica = Hub(store, home=tmp_path / "home")
+        replica.op("mirror", OPERATOR, {"item": "n1", "ref": "main", "head": head})
+        assert store.head("n1", "main") == (head, 1)

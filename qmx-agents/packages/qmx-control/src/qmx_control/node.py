@@ -2,9 +2,10 @@
 
 `qmx node setup` is the server step of the plan (LIB4, MIGRATION steps 7 and 8): it installs the
 Library Hub, the node service and, only when the setting asks for it, Hindsight; imports the
-bucket's run folders into the server store; and flips `[library] primary = server` on the PC's
-home. The Hub and the node run unprivileged as `qmx`, because a long-lived server process is not
-root's job.
+bucket's run folders into the server store; installs the host's unit with the `server` role and
+the store root `/srv/qmx/library` owned by `qmx`, so the one host process is the server store's
+one writer (DATA-PLAN DR2B); and flips `[library] primary = server` on the PC's home. The Hub and
+the node run unprivileged as `qmx`, because a long-lived server process is not root's job.
 
 `qmx node verify` is the doctor: one `PASS`/`FAIL` line per fact, including the primary store the
 setting names and whether the Hub answers.
@@ -192,6 +193,7 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
         "tailscale": ["tailscale", "ip", "-4"],
         "supervisor": ["systemctl", "is-active", "qmx-node"],
         "hub": ["systemctl", "is-active", "qmx-hub"],
+        "host": ["systemctl", "is-active", "qmx-host"],
         "shipping": ["systemctl", "is-active", "qmx-ship.timer"],
         "rclone": ["rclone", "version"],
     }
@@ -204,6 +206,7 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
     checks["pairing_key"] = (vault / "pairing-key").exists()
     checks["bucket"] = (home / "bucket").is_dir()
     checks["library_db"] = (home / "library").is_dir()
+    checks["library_root"] = Path(SERVER_LIBRARY).is_dir()
     checks["shipping_config"] = (home / "rclone.conf").is_file()
     checks["library_primary"] = library_primary(home) == "server"
     checks["hub_answers"] = hub_answers(home)
@@ -243,6 +246,35 @@ def flip_primary(home: Path, url: str) -> None:
 DRAIN_ROUTE: Final = "/api/node/drain"
 CONTROL_PORT: Final = 8766
 """The control service `qmx node serve` binds on the tailnet address."""
+HOST_UNIT: Final = "qmx-host.service"
+SERVER_LIBRARY: Final = "/srv/qmx/library"
+"""The server store's root (Appendix D), owned by `qmx` because the host is its one writer."""
+
+
+def host_unit(role: str = "server") -> str:
+    """The unit DR2A ships, with the role the server runs (AD-19, AD-26; DATA-PLAN DR2B).
+
+    On the server the one host process opens the store as its writer and answers the Library
+    routes, so its role is `server`. The file DR2A wrote names `--role node`, so this rewrites that
+    one flag and leaves everything else as it stands, `OOMScoreAdjust` included (P-OOM reads it).
+    """
+    path = Path(__file__).parents[3] / "qmx-host" / "deploy" / HOST_UNIT
+    if not path.is_file():
+        raise RuntimeError(f"the host's unit is missing at {path}; install the source tree first")
+    return path.read_text(encoding="utf-8").replace("--role node", f"--role {role}")
+
+
+def host_unit_script(role: str = "server") -> str:
+    """The shell the setup step runs on the server: the store root, then DR2A's unit enabled."""
+    return (
+        "set -eu\n"
+        f"install -d -o qmx -g qmx -m 750 {SERVER_LIBRARY}\n"
+        f"cat > /etc/systemd/system/{HOST_UNIT} <<'QMXUNIT'\n"
+        f"{host_unit(role)}"
+        "QMXUNIT\n"
+        "systemctl daemon-reload\n"
+        "systemctl enable qmx-host\n"
+    )
 
 
 def post(url: str, body: Mapping[str, object], headers: Mapping[str, str]) -> Mapping[str, object]:
@@ -427,6 +459,9 @@ def main() -> int:
             ]
         )
         run([ssh, host, "sudo systemctl restart qmx-hub qmx-node"])
+        # DR2B: the server's Library service is the host's, so the setup installs DR2A's unit with
+        # the `server` role and makes the store root `/srv/qmx/library` belong to `qmx`.
+        run([ssh, host, "sudo bash -s"], input_text=host_unit_script())
         address = run([ssh, host, "tailscale ip -4"]).splitlines()[0]
         port = run([ssh, host, f"sudo cat {remote}/hub.port"]).strip()
         url = f"http://{address}:{port}"

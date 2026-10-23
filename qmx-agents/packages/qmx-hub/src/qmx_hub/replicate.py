@@ -1,4 +1,4 @@
-"""Replication between the PC's store and the Hub's (Library AD-10, AD-11, AD-14, AD-16).
+"""Replication between the PC's store and the Hub's (Library AD-10, AD-11, AD-14, AD-16, AD-26).
 
 Two mechanisms, one rule each. Objects and blobs are immutable and content-addressed, so they
 copy in either direction without a conflict. Refs are owned: the store named by the owner table
@@ -7,18 +7,26 @@ store mirrors it. Order is decided by parent hashes, never by a wall clock (AD-1
 the manifests' `parents`, and a child never travels before its parent.
 
 `plan` is pure over the two ref lists and the local ancestry, so a test proves routing and alarms
-without a socket or a store. `sync` is the loop: pull, mirror, push, apply purge tombstones.
+without a socket or a store. A push of a ref this store owns is fast-forward only: a peer head
+that is not an ancestor of ours is an alarm, never an overwrite.
+
+`sync` is the whole store, which is what the first copy of a store needs. `sync_since` is the
+selective sync of AD-10 (F10, F18, N1): it asks for the ref moves after a sequence, pulls the
+manifests and edges those moves name, copies their text-slot blobs and no other blob, and moves
+its cursor. `Synchroniser` makes one sync run at a time and coalesces a burst of commits into the
+next one.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
-from qmx_library.client import OwnerTable, Ref
-from qmx_library.store import Store
+from qmx_library.client import Move, OwnerTable, Ref
+from qmx_library.store import Store, text_blob_ids
 
 
 class Peer(Protocol):
@@ -33,11 +41,27 @@ class Peer(Protocol):
 
     def refs(self) -> list[Ref]: ...
 
+    def moves(self, after: int) -> list[Move]: ...
+
+    def cursor(self) -> int: ...
+
+    def versions(self) -> Mapping[str, int]: ...
+
+    def alarms(self) -> tuple[str, ...]: ...
+
+    def edges_since(self, after: int) -> list[dict[str, Any]]: ...
+
+    def ingest_edge(self, edge: Mapping[str, Any]) -> bool: ...
+
     def object_ids(self) -> set[str]: ...
+
+    def has_object(self, object_id: str) -> bool: ...
 
     def manifest(self, object_id: str) -> Mapping[str, Any] | None: ...
 
     def blob_ids(self) -> set[str]: ...
+
+    def has_blob(self, blob_id: str) -> bool: ...
 
     def blob(self, blob_id: str) -> bytes | None: ...
 
@@ -70,8 +94,38 @@ class StorePeer:
             for item, ref, head, at, principal in self.store.refs()
         ]
 
+    def moves(self, after: int) -> list[Move]:
+        return [
+            Move(
+                int(row["seq"]),
+                str(row["item"]),
+                str(row["ref"]),
+                str(row["new_head"]),
+                str(row["kind"]),
+            )
+            for row in self.store.placements(after)
+        ]
+
+    def cursor(self) -> int:
+        return self.store.catalog.last_seq()
+
+    def versions(self) -> Mapping[str, int]:
+        return self.store.versions()
+
+    def alarms(self) -> tuple[str, ...]:
+        return self.store.alarms
+
+    def edges_since(self, after: int) -> list[dict[str, Any]]:
+        return self.store.edges_since(after)
+
+    def ingest_edge(self, edge: Mapping[str, Any]) -> bool:
+        return self.store.ingest_edge(edge)
+
     def object_ids(self) -> set[str]:
         return set(self.store.object_ids())
+
+    def has_object(self, object_id: str) -> bool:
+        return self.store.has_object(object_id)
 
     def manifest(self, object_id: str) -> Mapping[str, Any] | None:
         try:
@@ -81,6 +135,9 @@ class StorePeer:
 
     def blob_ids(self) -> set[str]:
         return set(self.store.blob_ids())
+
+    def has_blob(self, blob_id: str) -> bool:
+        return self.store.has_blob(blob_id)
 
     def blob(self, blob_id: str) -> bytes | None:
         try:
@@ -169,7 +226,9 @@ def plan(
 
     `ancestor(older, newer)` answers from the ref-log ancestry whether one head is behind the
     other, and is the only evidence used when the owner is `either` (a run ref belongs to the
-    store that minted it). Anything else is an alarm for `adopt`, never a merge (AD-14).
+    store that minted it) and for a push of a ref this store owns: that push is fast-forward
+    only, so a peer head that is not an ancestor of ours is an alarm, never an overwrite
+    (AD-14, F11, F15). Anything else is an alarm for `adopt`, never a merge.
     """
     mine = {(row.item, row.ref): row for row in local}
     theirs = {(row.item, row.ref): row for row in remote}
@@ -182,7 +241,13 @@ def plan(
         owner = table.owner(ref)
         if owner == name:
             if here is not None and (there is None or there.head != here.head):
-                push.append(here)
+                if there is None or ancestor(there.head, here.head):
+                    push.append(here)
+                else:
+                    alarms.append(
+                        f"{key[0]} {ref}: {there.head} is not an ancestor of {here.head}; "
+                        "a push of an owned ref is fast-forward only"
+                    )
             elif here is None and there is not None:
                 alarms.append(f"{key[0]} {ref}: this store owns it and has no head")
             continue
@@ -215,6 +280,14 @@ class Synced:
     """Refs this store owns, now at this head there."""
     purged: list[str] = field(default_factory=list[str])
     alarms: list[str] = field(default_factory=list[str])
+    cursor: int = 0
+    """The ref-log sequence this sync read to; the next selective sync asks from here."""
+    edges: int = 0
+    """After-birth edges recorded here from the other store."""
+    text_blobs: int = 0
+    """Text-slot blobs copied. A selective sync copies no other blob (AD-10, N1)."""
+    needs_update: list[str] = field(default_factory=list[str])
+    """Objects or entries left alone because this store lacks their kind or schema version."""
 
     @property
     def ok(self) -> bool:
@@ -222,8 +295,8 @@ class Synced:
 
 
 def sync(local: Peer, remote: Peer, table: OwnerTable) -> Synced:
-    """One sync: pull and mirror what the other store owns, push what this one owns, then apply
-    the purge tombstones the owner recorded (AD-6, AD-14, AD-16)."""
+    """One sync of everything: pull and mirror what the other store owns, push what this one
+    owns, then apply the purge tombstones the owner recorded (AD-6, AD-14, AD-16)."""
     synced = Synced()
     routes = plan(
         local.refs(),
@@ -245,6 +318,144 @@ def sync(local: Peer, remote: Peer, table: OwnerTable) -> Synced:
         synced.pushed_refs.append(row.ref)
     _apply_purges(local, remote, synced)
     return synced
+
+
+def sync_since(local: Peer, remote: Peer, table: OwnerTable, *, cursor: int) -> Synced:
+    """One selective sync of what moved after `cursor` (AD-10, F10, F18, N1).
+
+    It reads the other store's ref-log tail instead of its object ids, ingests the manifests and
+    after-birth edges those rows name, copies each manifest's text slots and no other blob, and
+    stops at the sequence it read. Every other blob of a pulled object reaches this store only
+    when something here opens it. A manifest whose kind or schema version this store lacks is
+    left for a host that can read it, and `refs` is still mirrored so the ref name is not lost.
+    """
+    synced = Synced()
+    routes = plan(
+        local.refs(),
+        remote.refs(),
+        table,
+        name=local.name,
+        ancestor=lambda older, newer: older in _ancestry(local, newer),
+    )
+    synced.alarms.extend(routes.alarms)
+    moves = remote.moves(cursor)
+    _pull_moves(local, remote, moves, synced)
+    synced.edges = _pull_edges(local, remote, cursor)
+    local_heads = {(row.item, row.ref): row.head for row in local.refs()}
+    remote_heads = {(row.item, row.ref): row.head for row in remote.refs()}
+    for row in routes.mirror:
+        local.mirror(row, expected_head=local_heads.get((row.item, row.ref)))
+        synced.mirrored.append(row.ref)
+    stale = stale_primary(local)
+    if stale is not None:
+        synced.alarms.append(f"{stale}: this store is not the primary, so no ref is pushed")
+    else:
+        for row in routes.push:
+            remote.mirror(row, expected_head=remote_heads.get((row.item, row.ref)))
+            synced.pushed_refs.append(row.ref)
+    _apply_purges(local, remote, synced)
+    synced.cursor = max([cursor, *(move.seq for move in moves)])
+    return synced
+
+
+def _pull_moves(
+    local: Peer,
+    remote: Peer,
+    moves: Sequence[Move],
+    synced: Synced,
+) -> None:
+    """Ingest the objects the moves name, parents first, and their text slots only."""
+    wanted = [move for move in moves if not local.has_object(move.head)]
+    manifests: dict[str, Mapping[str, Any]] = {}
+    for move in wanted:
+        found = remote.manifest(move.head)
+        if found is not None:
+            manifests[move.head] = found
+    parents = {
+        object_id: [str(parent) for parent in found.get("parents", [])]
+        for object_id, found in manifests.items()
+    }
+    version_of = {move.head: move.kind for move in wanted}
+    for object_id in order(parents):
+        manifest = manifests[object_id]
+        kind_name = str(manifest.get("kind") or version_of.get(object_id, ""))
+        schema_version = int(manifest.get("schema_version") or 0)
+        if kind_name and not _readable(local, kind_name, schema_version):
+            synced.needs_update.append(
+                f"{object_id} {kind_name}@{schema_version} (this PC needs updating)"
+            )
+            continue
+        for blob_id in sorted(text_blob_ids(manifest)):
+            if local.has_blob(blob_id):
+                continue
+            data = remote.blob(blob_id)
+            if data is None:
+                continue
+            local.store_blob(data)
+            synced.text_blobs += 1
+        synced.pulled.append(local.ingest(manifest))
+
+
+def _readable(peer: Peer, kind_name: str, version: int) -> bool:
+    """Whether this store has that kind at that schema version or newer (AD-14, N17)."""
+    known = peer.versions().get(kind_name)
+    return known is not None and int(known) >= version
+
+
+def _pull_edges(local: Peer, remote: Peer, cursor: int) -> int:
+    """Record the after-birth edges the other store made after `cursor`, once each."""
+    added = 0
+    for edge in remote.edges_since(cursor):
+        if local.ingest_edge(edge):
+            added += 1
+    return added
+
+
+@dataclass(slots=True)
+class Synchroniser:
+    """One sync at a time, and a burst of commits coalesces into the next one (AD-10).
+
+    A commit asks for a sync. When one is already running the request is remembered rather than
+    queued twice, so a hundred saves in a second cost one extra sync, never a hundred.
+    """
+
+    run: Callable[[], Synced]
+    _running: threading.Lock = field(default_factory=threading.Lock)
+    _again: bool = False
+    _coalesced: int = 0
+
+    def request(self) -> Synced | None:
+        """Run one sync, or None when one is already running and this request was folded in."""
+        if not self._running.acquire(blocking=False):
+            self._again = True
+            self._coalesced += 1
+            return None
+        try:
+            return self.run()
+        finally:
+            self._running.release()
+
+    @property
+    def coalesced(self) -> int:
+        """How many requests were folded into a sync already running."""
+        return self._coalesced
+
+    @property
+    def folded(self) -> bool:
+        """Whether a commit arrived while the last sync ran, so another one is due."""
+        return self._again
+
+    def done(self) -> None:
+        self._again = False
+
+
+def stale_primary(peer: Peer) -> str | None:
+    """The epoch alarm a store raised, when it learned a higher epoch than its own (AD-14).
+
+    Such a store stops acting as primary at once, so it pushes nothing: the moves it made as
+    primary are already parked as conflicts and he decides (N13, N19).
+    """
+    return next((found for found in peer.alarms() if found.startswith("library:epoch:")), None)
 
 
 def _ancestry(peer: Peer, object_id: str) -> set[str]:
