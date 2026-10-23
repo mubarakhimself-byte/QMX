@@ -1,21 +1,22 @@
-"""The keys, entered once and carried as ciphertext (H11, H13, H33; AD-12 two hosts).
+"""The keys, entered once and carried as ciphertext each machine can open for itself (H11, H13,
+H33; AD-28 two hosts, ruling 135).
 
 Keys stay where they are today: Windows Credential Manager, under `qmx/*`. This module never
 moves them. What it moves is a sealed copy:
 
-- Every replicable entry is encrypted under the vault's public key and published as ciphertext.
-  The private key never leaves the machine the key was typed on, so the ciphertext on the server
-  is useful to exactly one reader: the vault that sealed it. A node keeps the ciphertext as its
-  inventory and asks the vault for a value over the tailnet, holding the answer in `KeyCache`.
-- Broker credentials are never replicable. `install` refuses to seal one, so the rule is held by
-  the code rather than by the caller's memory.
-- Deletion publishes a tombstone. A node that reads a tombstone refuses the name from then on,
-  which is what makes "a deletion is refused within one sync" true even if a stale value is still
-  in a cache somewhere.
+- One replication is an allow-list of static keys, never a default: a model-provider row,
+  `qmx/read/*` or `qmx/data/*`. A trade key, an OAuth token, a broker credential, the backup
+  payload key and the pairing key are not vault entries at all, so they are never sealed and a
+  deletion spreads no tombstone for them.
+- Every receiving machine has its own key pair. `install` seals the value once per machine, and
+  each machine opens its own share with the private key in its own key file. No machine asks
+  another for a value: the PC can be off and the server still serves a model call.
+- Deletion of a vault entry publishes a tombstone, so a stale ciphertext is refused from the sync
+  that carries it. Deletion of anything else is local and silent.
 
-The public-key half is X25519, HKDF-SHA256 and AES-256-GCM: an ephemeral key per entry, the
-vault's public key as the recipient, the entry's name as associated data so a ciphertext cannot
-be relabelled into another key's slot.
+The seal format is unchanged: X25519, HKDF-SHA256 and AES-256-GCM, an ephemeral key per entry with
+the vault's public key as the recipient and the entry's name as associated data, so a ciphertext
+cannot be relabelled into another key's slot.
 """
 
 from __future__ import annotations
@@ -25,8 +26,9 @@ import hashlib
 import json
 import os
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
 from cryptography.hazmat.primitives import hashes, serialization
@@ -38,8 +40,29 @@ SALT: Final = b"qmx-vault-v1"
 """The KDF's salt. Fixed, because the ephemeral key is already unique per entry."""
 NONCE: Final = 12
 """AES-GCM's nonce length, the one size every implementation agrees on."""
-BROKER_MARKS: Final[tuple[str, ...]] = ("broker",)
-"""A keyring name holding a broker credential. Never replicated, in any spelling."""
+PRIVATE_BYTES: Final = 32
+"""An X25519 private key's length, which is also the whole key file."""
+PROVIDERS: Final[tuple[str, ...]] = (
+    "deepseek",
+    "glm",
+    "kimi",
+    "meta",
+    "minimax",
+    "ollama",
+    "opencode-go",
+    "openrouter",
+    "qwen",
+)
+"""The model-provider rows of `[providers]`, one `qmx/<name>` keyring entry each. A row he adds is
+passed by the caller; this is the bundled set."""
+STATIC_PREFIXES: Final[tuple[str, ...]] = ("qmx/read/", "qmx/data/")
+"""A connection's static read or data key. The connection is the segment after the prefix."""
+TOKEN_MARKS: Final[tuple[str, ...]] = ("token", "oauth", "chatgpt")
+"""A name holding a token is never a static key, whatever prefix it tries to hide behind."""
+KEY_FOLDER: Final = ".qmx"
+"""The folder each machine keeps its own private key in, inside its home."""
+KEY_FILE: Final = "vault.key"
+"""The file name the plan names: `<home>/.qmx/vault.key`, mode 0600, owner only."""
 
 
 class NotReplicable(PermissionError):
@@ -54,23 +77,40 @@ class WrongKey(PermissionError):
     """The ciphertext was sealed for another vault, or the name was relabelled."""
 
 
-def is_replicable(name: str) -> bool:
-    """False for a broker credential, named either as `qmx/broker/...`, `qmx/brokers`, or with
-    `broker` as any segment. True for everything else, which is a default about names only: a
-    caller still passes `replicable=False` for a key it wants kept local."""
-    segments = [segment for segment in name.strip().lower().split("/") if segment]
-    return not any(
-        segment in BROKER_MARKS or segment.startswith("broker-") or segment.startswith("broker_")
-        for segment in segments
+class VaultUnavailable(RuntimeError):
+    """This machine has no key file, so it cannot open anything. The code names the machine, as
+    a job reports it: `vault:unavailable:contabo`."""
+
+    def __init__(self, machine: str) -> None:
+        super().__init__(f"vault:unavailable:{machine}")
+        self.machine = machine
+
+
+def is_replicable(name: str, *, providers: Iterable[str] = PROVIDERS) -> bool:
+    """Whether `name` is a vault entry: an allow-list of a model-provider row, `qmx/read/*` or
+    `qmx/data/*`, and nothing else. A token name is refused even under a static prefix, and a
+    trade key, a broker credential or the backup payload key is refused because it is on no list.
+    """
+    folded = name.strip().lower()
+    if not folded.startswith("qmx/"):
+        return False
+    tail = folded.removeprefix("qmx/")
+    if any(mark in tail for mark in TOKEN_MARKS):
+        return False
+    if tail in providers:
+        return True
+    return any(
+        folded.startswith(prefix) and len(folded) > len(prefix) for prefix in STATIC_PREFIXES
     )
 
 
 class VaultKey:
-    """The vault's key pair. `seal` needs only the public half, which every machine may hold;
-    `open` needs the private half, which stays with the vault."""
+    """One machine's key pair. `seal` needs only the public half, which every machine holds;
+    `open` needs the private half, which stays with the machine that owns it."""
 
-    def __init__(self, private: X25519PrivateKey | None = None) -> None:
-        self._private = private
+    def __init__(self, private: X25519PrivateKey) -> None:
+        self._private: X25519PrivateKey | None = private
+        self._public: X25519PublicKey | None = None
 
     @classmethod
     def generate(cls) -> VaultKey:
@@ -80,8 +120,16 @@ class VaultKey:
     def from_private_bytes(cls, raw: bytes) -> VaultKey:
         return cls(X25519PrivateKey.from_private_bytes(raw))
 
+    @classmethod
+    def from_public_bytes(cls, raw: bytes) -> VaultKey:
+        """Another machine's public half. It can seal for that machine and cannot open."""
+        key = cls.__new__(cls)
+        key._private = None
+        key._public = X25519PublicKey.from_public_bytes(raw)
+        return key
+
     def private_bytes(self) -> bytes:
-        """The 32 bytes to keep in Credential Manager. Nothing else in this module writes it."""
+        """The 32 bytes to keep in this machine's key file. Nothing else writes them."""
         if self._private is None:
             raise WrongKey("this is a public-only vault key")
         return self._private.private_bytes(
@@ -96,7 +144,12 @@ class VaultKey:
                 encoding=serialization.Encoding.Raw,
                 format=serialization.PublicFormat.Raw,
             )
-        raise WrongKey("this vault key has no public half")
+        if self._public is None:
+            raise WrongKey("this vault key has no public half")
+        return self._public.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
 
     def seal(self, name: str, value: bytes) -> bytes:
         """Ciphertext for `name`: ephemeral public key, nonce, then the sealed bytes."""
@@ -125,9 +178,10 @@ class VaultKey:
             raise WrongKey(f"{name} was not sealed for this vault") from error
 
     def _recipient(self) -> X25519PublicKey:
-        private = self._private
-        if private is not None:
-            return private.public_key()
+        if self._private is not None:
+            return self._private.public_key()
+        if self._public is not None:
+            return self._public
         raise WrongKey("this vault key has no public half")
 
 
@@ -135,6 +189,34 @@ def _derive(shared: bytes) -> bytes:
     return HKDF(algorithm=hashes.SHA256(), length=32, salt=SALT, info=b"qmx-vault-entry").derive(
         shared
     )
+
+
+def key_file(home: Path) -> Path:
+    """`<home>/.qmx/vault.key`: the one file a machine's private key lives in."""
+    return home / KEY_FOLDER / KEY_FILE
+
+
+def write_machine_key(home: Path, key: VaultKey) -> Path:
+    """Write this machine's private key where only its user reads it: 0600 in a 0700 folder. The
+    server's file is written by its setup as `qmx`, which is the only reader it needs."""
+    folder = home / KEY_FOLDER
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    path = folder / KEY_FILE
+    path.write_bytes(key.private_bytes())
+    path.chmod(0o600)
+    return path
+
+
+def read_machine_key(home: Path, machine: str) -> VaultKey:
+    """This machine's key from its key file, or `vault:unavailable:<machine>`: a job that cannot
+    open a key says which machine is missing one rather than waiting on another host."""
+    try:
+        raw = key_file(home).read_bytes()
+    except OSError as error:
+        raise VaultUnavailable(machine) from error
+    if len(raw) != PRIVATE_BYTES:
+        raise VaultUnavailable(machine)
+    return VaultKey.from_private_bytes(raw)
 
 
 class Source(Protocol):
@@ -171,12 +253,13 @@ class MemorySource:
 
 @dataclass(frozen=True)
 class VaultEntry:
-    """One published entry. `fingerprint` is a rotation witness (a truncated SHA-256 of the
-    value), never the value, and `deleted` is the tombstone that makes a deletion spread."""
+    """One published entry. `sealed` carries one ciphertext per receiving machine, `fingerprint` is
+    a rotation witness (a truncated SHA-256 of the value), never the value, and `deleted` is the
+    tombstone that makes a deletion of a vault entry spread."""
 
     name: str
     replicable: bool
-    sealed: bytes
+    sealed: Mapping[str, bytes]
     fingerprint: str
     updated_at: float
     deleted: bool = False
@@ -185,7 +268,10 @@ class VaultEntry:
         return {
             "name": self.name,
             "replicable": self.replicable,
-            "sealed": base64.b64encode(self.sealed).decode("ascii"),
+            "sealed": {
+                machine: base64.b64encode(part).decode("ascii")
+                for machine, part in self.sealed.items()
+            },
             "fingerprint": self.fingerprint,
             "updated_at": float(self.updated_at),
             "deleted": self.deleted,
@@ -200,11 +286,14 @@ class VaultEntry:
         name = data.get("name")
         if not isinstance(name, str) or not name:
             return None
-        sealed_text = data.get("sealed")
-        try:
-            sealed = base64.b64decode(str(sealed_text or ""), validate=True)
-        except ValueError, TypeError:
-            return None
+        raw = data.get("sealed")
+        sealed: dict[str, bytes] = {}
+        if isinstance(raw, dict):
+            for machine, text in cast("dict[object, object]", raw).items():
+                try:
+                    sealed[str(machine)] = base64.b64decode(str(text), validate=True)
+                except TypeError, ValueError:
+                    continue
         updated_at = data.get("updated_at")
         if not isinstance(updated_at, int | float):
             return None
@@ -219,24 +308,27 @@ class VaultEntry:
 
 
 class Vault:
-    """The machine the keys were entered on. It reads a value only to seal it or to answer a
-    pass-bearing request; nothing here logs, formats or returns a value to a caller that is not
-    the relay."""
+    """The machine the keys were entered on. It reads a value only to seal it. It seals a copy for
+    itself and for every receiving machine it holds a public key for, so no machine ever asks it
+    for a value."""
 
     def __init__(
         self,
         key: VaultKey,
         source: Source,
         *,
+        machine: str = "pc",
+        peers: Mapping[str, VaultKey] | None = None,
         clock: Callable[[], float] = time.time,
         replicable: Callable[[str], bool] = is_replicable,
     ) -> None:
         self.key = key
         self.source = source
+        self.machine = machine
+        self.machines: dict[str, VaultKey] = {machine: key, **(peers or {})}
         self.clock = clock
         self.replicable = replicable
         self._entries: dict[str, VaultEntry] = {}
-        self._fingerprints: dict[str, str] = {}
         self._deleted: set[str] = set()
 
     @property
@@ -246,9 +338,13 @@ class Vault:
     def public_key_text(self) -> str:
         return base64.b64encode(self.public_key).decode("ascii")
 
+    def add_machine(self, machine: str, public_key: bytes) -> None:
+        """Take a receiving machine's public half. A machine that is already known keeps its key."""
+        self.machines.setdefault(machine, VaultKey.from_public_bytes(public_key))
+
     def install(self, name: str, value: str, *, replicable: bool | None = None) -> VaultEntry:
-        """Enter or rotate one value. `replicable` defaults to the name's own answer, and a
-        broker credential's is False whatever the caller says."""
+        """Enter or rotate one value. `replicable` defaults to the name's own answer, and a name on
+        no allow-list stays local whatever the caller says: no caller can seal a trade key."""
         allowed = is_replicable(name) and (
             self.replicable(name) if replicable is None else replicable
         )
@@ -257,24 +353,42 @@ class Vault:
         entry = VaultEntry(
             name=name,
             replicable=allowed,
-            sealed=self.key.seal(name, value.encode("utf-8")) if allowed else b"",
+            sealed=(
+                {
+                    machine: key.seal(name, value.encode("utf-8"))
+                    for machine, key in self.machines.items()
+                }
+                if allowed
+                else {}
+            ),
             fingerprint=fingerprint,
             updated_at=float(self.clock()),
         )
         self._entries[name] = entry
-        self._fingerprints[name] = fingerprint
         self._deleted.discard(name)
         return entry
 
     def delete(self, name: str) -> VaultEntry:
-        """Remove the value here and publish a tombstone, so a node stops serving the name even
-        when its copy of the old ciphertext is still on disk."""
+        """Remove the value here. A vault entry publishes a tombstone, so a receiving machine stops
+        serving the name from the sync that carries it. Anything else, a token or a trade key,
+        leaves locally and publishes nothing: it was never in the vault."""
         self.source.delete(name)
+        held = self._entries.get(name)
+        published = held.replicable if held is not None else is_replicable(name)
+        if not published:
+            return VaultEntry(
+                name=name,
+                replicable=False,
+                sealed={},
+                fingerprint="",
+                updated_at=float(self.clock()),
+                deleted=True,
+            )
         self._deleted.add(name)
         entry = VaultEntry(
             name=name,
-            replicable=self._entries.get(name, VaultEntry(name, False, b"", "", 0.0)).replicable,
-            sealed=b"",
+            replicable=True,
+            sealed={},
             fingerprint="",
             updated_at=float(self.clock()),
             deleted=True,
@@ -293,9 +407,9 @@ class Vault:
         return value
 
     def entries(self) -> tuple[VaultEntry, ...]:
-        """Every replicable entry and every tombstone, newest first by name. This is the whole
-        sync payload; a non-replicable entry is never in it, whether or not it was installed."""
-        published = [entry for entry in self._entries.values() if entry.replicable or entry.deleted]
+        """Every vault entry, a rotation and a tombstone alike, oldest name first. This is the
+        whole sync payload; an entry off the allow-list is never in it, installed or not."""
+        published = [entry for entry in self._entries.values() if entry.replicable]
         return tuple(sorted(published, key=lambda entry: entry.name))
 
     def rotate(self, name: str) -> str:
@@ -305,20 +419,26 @@ class Vault:
         return entry.fingerprint
 
     def sync_document(self) -> dict[str, object]:
-        """The one message a node reads: the entries, and the public key it may check them
-        against. `key` is here so a node can refuse a payload sealed for another vault."""
+        """The one message a receiving machine reads: the entries and the public key of every
+        machine they are sealed for, so a machine can check its own share exists."""
         return {
             "key": self.public_key_text(),
+            "keys": {
+                machine: as_text(key.public_bytes()) for machine, key in self.machines.items()
+            },
             "entries": [entry.document() for entry in self.entries()],
         }
 
 
 class VaultStore:
-    """The node's copy: ciphertext and tombstones, never plaintext. Newest `updated_at` wins, so
-    a rotation and a deletion each take effect on the sync that carries them and a replayed old
-    message cannot undo one."""
+    """One receiving machine's copy: ciphertext and tombstones, never plaintext. Newest
+    `updated_at` wins, so a rotation and a deletion each take effect on the sync that carries them
+    and a replayed old message cannot undo one. It opens only its own share, with its own key."""
 
-    def __init__(self, public_key: bytes = b"", *, clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self, machine: str = "", public_key: bytes = b"", *, clock: Callable[[], float] = time.time
+    ) -> None:
+        self.machine = machine
         self.public_key = public_key
         self.clock = clock
         self._entries: dict[str, VaultEntry] = {}
@@ -358,61 +478,22 @@ class VaultStore:
     def entry(self, name: str) -> VaultEntry | None:
         return self._entries.get(name)
 
-    def sealed(self, name: str) -> bytes:
+    def open(self, name: str, key: VaultKey) -> str:
+        """The value, opened with this machine's own key. A share sealed for another machine, or a
+        name that is not here, is refused rather than guessed at."""
         entry = self._entries.get(name)
         if entry is None or entry.deleted or not entry.sealed:
             raise MissingKey(f"{name} is not in the vault")
-        return entry.sealed
+        share = entry.sealed.get(self.machine)
+        if share is None:
+            raise MissingKey(f"{name} is not sealed for {self.machine or 'this machine'}")
+        return key.open(name, share).decode("utf-8")
 
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(name for name, entry in self._entries.items() if not entry.deleted))
 
     def tombstones(self) -> tuple[str, ...]:
         return tuple(sorted(name for name, entry in self._entries.items() if entry.deleted))
-
-
-@dataclass(frozen=True)
-class CachedKey:
-    """One plaintext value in a node's memory, with the deadline it was granted for."""
-
-    name: str
-    value: str
-    expires_at: float
-
-
-class KeyCache:
-    """The node's memory of values it was granted. It answers without the vault and without the
-    Hub, which is what keeps in-flight runs calling while both are stopped: a cache miss is a
-    wait, a hit is a key. The value is never written to disk and never formatted into a log."""
-
-    def __init__(self, *, clock: Callable[[], float] = time.time) -> None:
-        self.clock = clock
-        self._held: dict[str, CachedKey] = {}
-
-    def put(self, name: str, value: str, ttl_s: float) -> None:
-        self._held[name] = CachedKey(name, value, float(self.clock()) + float(ttl_s))
-
-    def get(self, name: str) -> str | None:
-        held = self._held.get(name)
-        if held is None:
-            return None
-        if float(self.clock()) >= held.expires_at:
-            del self._held[name]
-            return None
-        return held.value
-
-    def drop(self, name: str) -> None:
-        self._held.pop(name, None)
-
-    def names(self) -> tuple[str, ...]:
-        """The names held, never their values. For the usage page and for a lane's log."""
-        return tuple(sorted(name for name in self._held if self.get(name) is not None))
-
-    def clear(self) -> None:
-        self._held.clear()
-
-    def __len__(self) -> int:
-        return len([name for name in self._held if self.get(name) is not None])
 
 
 def install_from_document(
