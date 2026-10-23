@@ -2,25 +2,93 @@ from __future__ import annotations
 
 import asyncio
 import runpy
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import pytest
 from fastmcp import Client
+from qmb.host.library_landing import BacktestResult, Stored
+from qmb.results.ct32 import as_ct32_artifact
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
-from qmx_control.models import MemoKey
 
 from qmx_tools import DomainContext
 from qmx_tools.functions import domain_functions
 from qmx_tools.servers import create_server
-from qmx_tools.service import Artifact, OrderProposal, unwrap
+from qmx_tools.service import Artifact, BacktestRun, OrderProposal, unwrap
 
 ROOT = Path(__file__).resolve().parents[4]
 FIRST = 1_700_000_000_000_000_000
+
+
+class FakeQmbBacktest:
+    """The engine's `qmb_backtest` door: one finished result and the edges it lands with."""
+
+    def __init__(self) -> None:
+        self.specs: list[dict[str, Any]] = []
+
+    def run(self, *, spec: Mapping[str, Any]) -> Result[BacktestRun]:
+        self.specs.append(dict(spec))
+        return Ok(
+            BacktestRun(
+                result=BacktestResult(
+                    run_id="fp1:sha256:recorded-run",
+                    title="recorded",
+                    summary="one recorded backtest",
+                    world="backtest",
+                    claim_class="retrospective",
+                    role="confirmation",
+                    fidelity="bar-m1",
+                    provenance={"config_ref": "recorded"},
+                    report=b'{"data_points_processed": 4}',
+                    outcome="supports",
+                    memo_key="recorded-memo",
+                ),
+                consumed="dataset-card-v3",
+                uses="bot-version-7",
+                tests="hypothesis-2",
+            )
+        )
+
+
+class RecordingLanding:
+    """The new Library, recording the one put and the edges the landing step writes."""
+
+    def __init__(self) -> None:
+        self.puts: list[dict[str, Any]] = []
+        self.links: list[tuple[str, str, str]] = []
+
+    def put(
+        self,
+        kind: str,
+        fields: Any,
+        blobs: Any,
+        *,
+        item: Any,
+        title: str,
+        summary: str,
+        principal: str,
+    ) -> Stored:
+        self.puts.append(
+            {
+                "kind": kind,
+                "fields": dict(fields),
+                "blobs": dict(blobs),
+                "item": item,
+                "title": title,
+                "summary": summary,
+                "principal": principal,
+            }
+        )
+        return Stored("landed-1")
+
+    def link(self, from_id: str, relation: str, to_id: str, *, principal: str) -> str:
+        self.links.append((from_id, relation, to_id))
+        return f"{from_id}-{relation}-{to_id}"
 
 
 @dataclass(frozen=True)
@@ -91,14 +159,13 @@ class SealedDoor(FakeDoor):
 
 @pytest.fixture
 def context(tmp_path: Path) -> DomainContext:
-    ctx = DomainContext(root=tmp_path, market=FakeDoor())
-    # Reuse the engine's accepted configurations and recorded-slice fixtures.
-    qmb = runpy.run_path(str(ROOT / "qmb/tests/test_ct32_artifact.py"))
-    ctx.backtests["recorded"] = {
-        "slices": qmb["_slices"](),
-        "config": qmb["_config"](),
-        "handler": qmb["SilentSliceHandler"](),
-    }
+    ctx = DomainContext(
+        root=tmp_path,
+        market=FakeDoor(),
+        backtest_door=FakeQmbBacktest(),
+        landing=RecordingLanding(),
+    )
+    ctx.backtests["recorded"] = {"config_ref": "recorded"}
     qml = runpy.run_path(str(ROOT / "qml/tests/test_protocol.py"))
     ctx.bots["recorded"] = unwrap(
         construct_bot(
@@ -125,6 +192,26 @@ def test_a_sealed_month_is_refused_with_its_reason(tmp_path: Path) -> None:
     context = DomainContext(root=tmp_path, market=SealedDoor())
     with pytest.raises(ValueError, match="this month is sealed for the final look"):
         domain_functions(context)["data"]["read_bars"](symbol="EURUSD", timeframe="1m")
+
+
+def _legacy_backtest(context: DomainContext) -> str:
+    """An old-shape `backtest` artifact already in the Library, for the read tools to read."""
+    qmb = runpy.run_path(str(ROOT / "qmb/tests/test_ct32_artifact.py"))
+    outcome = qmb["_run"]()
+    artifact = unwrap(as_ct32_artifact(outcome.performance_result))
+    return context.save(
+        Artifact(
+            name="legacy-recorded",
+            kind="backtest",
+            content={
+                "data_points_processed": 4,
+                "filled": 1,
+                "stream_order": ["eurusd"],
+                "slices": [{"i": 1}, {"i": 2}],
+                "performance_result": artifact,
+            },
+        )
+    )["ref"]
 
 
 def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
@@ -158,11 +245,20 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
     backtest = functions["backtest"]
     started = backtest["run_backtest"](spec={"config_ref": "recorded"})["result"]
     assert started["status"] == "completed"
-    ref = started["run_id"]
-    assert backtest["backtest_status"](run_id=ref)["result"]["status"] == "completed"
-    assert backtest["backtest_results"](run_id=ref)["result"]["data_points_processed"] == 4
-    assert len(backtest["backtest_results"](run_id=ref, response_format="detailed")["result"]) == 2
-    assert backtest["compare_runs"](left=ref, right=ref)["result"] == []
+    assert started["run_id"] == "landed-1"
+    assert started["edges"] == [
+        ["consumed", "dataset-card-v3"],
+        ["uses", "bot-version-7"],
+        ["tests", "hypothesis-2"],
+    ]
+    assert started["memo_key"] == "recorded-memo"
+    legacy = _legacy_backtest(context)
+    assert backtest["backtest_status"](run_id=legacy)["result"]["status"] == "completed"
+    assert backtest["backtest_results"](run_id=legacy)["result"]["data_points_processed"] == 4
+    assert (
+        len(backtest["backtest_results"](run_id=legacy, response_format="detailed")["result"]) == 2
+    )
+    assert backtest["compare_runs"](left=legacy, right=legacy)["result"] == []
     research = functions["research"]
     assert (
         research["qml_run"](bot_ref="recorded", instants=[1_700_000_000_000_000_000])["result"][0][
@@ -191,46 +287,42 @@ def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
     assert context.artifact(proposal["proposal"]["ref"]).content["quantity"] == "0.10"
 
 
-def test_backtest_memo_reuses_the_real_engine_result(
-    context: DomainContext, monkeypatch: pytest.MonkeyPatch
+def test_a_backtest_lands_one_result_and_writes_no_old_backtest_item(
+    context: DomainContext,
 ) -> None:
-    import qmx_tools.service as service_module
+    door = cast("FakeQmbBacktest", context.backtest_door)
+    landing = cast("RecordingLanding", context.landing)
 
-    original = service_module.run
-    calls = 0
+    result = domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})[
+        "result"
+    ]
 
-    def counted(**arguments: Any) -> Any:
-        nonlocal calls
-        calls += 1
-        return original(**arguments)
+    assert door.specs == [{"config_ref": "recorded"}]
+    [put] = landing.puts
+    assert put["kind"] == "backtest-result"
+    assert put["item"] == "fp1:sha256:recorded-run"
+    assert put["fields"]["outcome"] == "supports"
+    assert put["fields"]["world"] == "backtest"
+    assert put["blobs"] == {"report": b'{"data_points_processed": 4}'}
+    assert landing.links == [
+        ("landed-1", "consumed", "dataset-card-v3"),
+        ("landed-1", "uses", "bot-version-7"),
+        ("landed-1", "tests", "hypothesis-2"),
+    ]
+    assert result["edges"] == [
+        ["consumed", "dataset-card-v3"],
+        ["uses", "bot-version-7"],
+        ["tests", "hypothesis-2"],
+    ]
+    assert context.control.library_search() == []
 
-    monkeypatch.setattr(service_module, "run", counted)
-    context.backtest_identities["recorded"] = MemoKey(
-        strategy_version="strategy-v1",
-        data_snapshot="recorded-slices-v1",
-        params={"lookback": 20},
-        engine_version="qmb-v1",
-    )
-    functions = domain_functions(context)["backtest"]
-    first = functions["run_backtest"](spec={"config_ref": "recorded"})
-    assert functions["run_backtest"](spec={"config_ref": "recorded"}) == first
-    assert calls == 1
-    assert len(context.control.library_search()) == 1
-    assert len(context.control.events("library")) == 1
-    assert first["result"]["memo_key"]
-    reopened = DomainContext(root=context.root)
-    reopened.backtests = context.backtests
-    reopened.backtest_identities = context.backtest_identities
-    assert (
-        domain_functions(reopened)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
-        == first
-    )
-    assert calls == 1
-    reopened.backtest_identities["recorded"] = context.backtest_identities["recorded"].model_copy(
-        update={"engine_version": "qmb-v2"}
-    )
-    domain_functions(reopened)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
-    assert calls == 2
+
+def test_a_host_without_the_qmb_door_refuses_a_backtest(tmp_path: Path) -> None:
+    context = DomainContext(root=tmp_path, market=FakeDoor())
+    context.backtests["recorded"] = {"config_ref": "recorded"}
+
+    with pytest.raises(ValueError, match="binds no qmb_backtest door"):
+        domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
 
 
 def test_domain_refs_preserve_type_when_payloads_match(context: DomainContext) -> None:
@@ -308,14 +400,13 @@ def test_mcp_lists_and_calls_all_tools(
             }
         },
     }
-    ref = domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})[
-        "result"
-    ]["run_id"]
+    domain_functions(context)["backtest"]["run_backtest"](spec={"config_ref": "recorded"})
+    legacy = _legacy_backtest(context)
     calls.update(
         {
-            "backtest_status": {"run_id": ref},
-            "backtest_results": {"run_id": ref},
-            "compare_runs": {"left": ref, "right": ref},
+            "backtest_status": {"run_id": legacy},
+            "backtest_results": {"run_id": legacy},
+            "compare_runs": {"left": legacy, "right": legacy},
         }
     )
 

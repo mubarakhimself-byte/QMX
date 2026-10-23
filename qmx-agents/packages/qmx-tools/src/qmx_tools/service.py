@@ -11,13 +11,12 @@ from pathlib import Path
 from typing import Any, Final, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from qmb.results.ct32 import as_ct32_artifact
-from qmb.runloop import run
+from qmb.host.library_landing import BacktestResult, LandingPort, land
 from qmf.core import Result, is_refusal
 from qml.protocol import HostedBot
 from qmn.doors.api import DoorRuntime
 from qmx_control.library import Library
-from qmx_control.models import ControlError, LibraryInput, MemoKey
+from qmx_control.models import ControlError, LibraryInput
 from qmx_control.service import ControlService
 
 ResponseFormat = Literal["concise", "detailed"]
@@ -160,12 +159,37 @@ def unwrap(result: Result[Any]) -> Any:
     return result.value
 
 
+@dataclass(frozen=True, slots=True)
+class BacktestRun:
+    """One finished backtest: the result to land and the three edges to land it with."""
+
+    result: BacktestResult
+    consumed: str
+    """The dataset card version the backtest read (Library AD-25)."""
+    uses: str
+    """The bot version it ran (Library AD-29)."""
+    tests: str | None = None
+    """The hypothesis it was built to test, when one is named (AD-23)."""
+
+
+class BacktestDoor(Protocol):
+    """The engine's `qmb_backtest` operation on the QMB placement (engine AD-31).
+
+    Backtests run on one dedicated QMB machine that agents call, so this tool holds a door and
+    not a runner: the door owns the queue, the memo key and the data read, and answers with one
+    result to land.
+    """
+
+    def run(self, *, spec: Mapping[str, Any]) -> Result[BacktestRun]: ...
+
+
 @dataclass
 class DomainContext:
     root: Path
     market: MarketPort | None = None
     backtests: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
-    backtest_identities: dict[str, MemoKey] = field(default_factory=dict[str, MemoKey])
+    backtest_door: BacktestDoor | None = None
+    landing: LandingPort | None = None
     bots: dict[str, HostedBot] = field(default_factory=dict[str, HostedBot])
     node: DoorRuntime | None = None
     inline_bytes: int = 16_000
@@ -254,40 +278,38 @@ class DomainContext:
         raise ValueError(absent)
 
     def run_backtest(self, spec: BacktestSpec, response_format: ResponseFormat) -> dict[str, Any]:
+        """Ask the QMB placement for one backtest, then land its one result shape.
+
+        The tool no longer runs QMB in this process and no longer writes the old Library's
+        `backtest` items: backtests go through the `qmb_backtest` door (engine AD-31) and land as
+        one `backtest-result` through the Library's landing step (Library AD-29).
+        """
         arguments = self.backtests.get(spec.config_ref)
         if arguments is None:
             raise ValueError(
                 "Unknown config_ref; ask the host to register a recorded QMB run configuration"
             )
-
-        def produce() -> LibraryInput:
-            outcome = unwrap(run(**arguments))
-            content = json_value(outcome)
-            if outcome.performance_result is not None:
-                content["performance_result"] = unwrap(as_ct32_artifact(outcome.performance_result))
-            return LibraryInput(
-                title=spec.config_ref,
-                kind="backtest",
-                content={
-                    "name": spec.config_ref,
-                    "kind": "backtest",
-                    "content": content,
-                },
+        door = self.backtest_door
+        landing = self.landing
+        if door is None or landing is None:
+            raise ValueError(
+                "This host binds no qmb_backtest door: backtests run on the QMB placement and "
+                "land through the Library (engine AD-31, Library AD-29)"
             )
-
-        identity = self.backtest_identities.get(spec.config_ref)
-        saved = (
-            self.control.memoized_backtest(identity, produce)
-            if identity
-            else self.control.library_save(produce())
+        run = unwrap(door.run(spec=arguments))
+        landed = land(
+            run.result,
+            landing,
+            consumed=run.consumed,
+            uses=run.uses,
+            tests=run.tests,
         )
-        content = cast("dict[str, Any]", saved["content"])["content"]
         return self.output(
             {
-                "run_id": saved["ref"],
+                "run_id": landed.object_id,
                 "status": "completed",
-                "data_points_processed": content["data_points_processed"],
-                "memo_key": saved.get("memo_key"),
+                "edges": [list(edge) for edge in landed.edges],
+                "memo_key": run.result.memo_key,
             },
             "backtest",
             response_format,

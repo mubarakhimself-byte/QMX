@@ -402,6 +402,26 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("0 6 * * 1", "UTC"),),
         test_inputs={"dry_run": True},
     ),
+    Template(
+        "synthetic-data",
+        "Synthetic data from a month of prices",
+        card("46", "G7"),
+        "DR4",
+        folder="synthetic-data",
+        test_inputs={
+            "purpose": "train",
+            "source_card": "dataset-card-v3",
+            "months": ["2025-10"],
+            "generator": "moving-block-bootstrap",
+            "settings": {"block_rows": 2},
+            "seed": 7,
+            "rows": [
+                [1_760_000_000_000, 1_084_500, 1_084_520],
+                [1_760_000_060_000, 1_084_507, 1_084_527],
+                [1_760_000_120_000, 1_084_514, 1_084_534],
+            ],
+        },
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {

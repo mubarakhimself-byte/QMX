@@ -1,0 +1,75 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "synthetic-data",
+  "name": "Synthetic data from a month of prices",
+  "inputs": {
+    "type": "object",
+    "required": ["purpose", "source_card", "rows", "seed"],
+    "properties": {
+      "purpose": {
+        "type": "string",
+        "enum": ["train", "validation", "test", "final_look"],
+        "description": "the door read's purpose; a synthetic series is drawn with train only"
+      },
+      "source_card": {
+        "type": "string",
+        "description": "the dataset card version the month was read from"
+      },
+      "rows": {
+        "type": "array",
+        "description": "the month's [t_ms, bid, ask] rows as the door served them",
+        "items": {"type": "array", "minItems": 3, "maxItems": 3}
+      },
+      "months": {
+        "type": "array",
+        "description": "the YYYY-MM months the rows span",
+        "items": {"type": "string"}
+      },
+      "generator": {
+        "type": "string",
+        "description": "how the series is drawn; this template ships moving-block-bootstrap"
+      },
+      "settings": {
+        "type": "object",
+        "description": "the generator's own settings, kept on the card verbatim"
+      },
+      "seed": {
+        "type": "integer",
+        "description": "the seed, so the same seed draws the same series again"
+      }
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the dataset card: world synthetic, the generator, its settings and the seed, the source card version, the months, the row count and the values"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "generate", "name": "Draw the synthetic month", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/generate.py"}},
+    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
+     "position": [440, 0], "effect": "none",
+     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
+                    "schema_ref": "schemas/output.json"}},
+    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
+     "position": [660, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
+    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
+     "position": [660, 120], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/stop.py"}}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Draw the synthetic month", "port": "in", "map": "one"}]]},
+    "Draw the synthetic month": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
+                         "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "synthetic-data"}
+}

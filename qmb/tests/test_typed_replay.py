@@ -7,7 +7,7 @@ partitions and from the same rows admitted as CT-10 receipts, and half a pair is
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from qmb.host.replay import (
     PinnedInstrumentPriceMetadata,
@@ -134,7 +134,7 @@ def _ticks(root: Path) -> TypedPartitionRef:
 def _bars(root: Path) -> tuple[TypedPartitionRef, TypedPartitionRef]:
     """The same minutes as bid and ask m1 bars: one tick a minute, so all four prices agree."""
     refs: list[TypedPartitionRef] = []
-    for index, side in enumerate(("bid", "ask")):
+    for side in ("bid", "ask"):
         store = SeriesStore(root / "typed")
         key = _ok(SeriesKey.try_create("dukascopy", "EURUSD", "bar-m1", 2025, 10, side))
         receipt = _ok(

@@ -5,6 +5,11 @@ source-observation boundary. It preserves foreign prices and their declared
 scales verbatim; it does not convert them into QMB execution prices.
 """
 
+# pyarrow ships no type stubs; as in the QMF store's typed writer, the unknown-type rules are
+# disabled at file scope here so the rest of this module stays strictly typed.
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+
 from __future__ import annotations
 
 import re
@@ -22,13 +27,11 @@ from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.data.observation import SourceObservation
 from qmf.data.seal import HoldoutSeal
-from qmf.data.series import rule_for
+from qmf.data.series import SeriesKey, SeriesStore, rule_for
 from qmf.data.source_boundary import SourceObservationBoundary
 from qmf.data.source_split import partition_source_observation
 from qmf.data.splits import SegmentRole, SplitManifest
 from qmf.data.store import EvidenceStore
-from qmf.data.store.engines import StoreEngineError
-from qmf.data.store.engines.typed import TypedWriter
 from qml.protocol import MappingReadSurface
 
 from qmb._refuse import invalid, policy
@@ -175,7 +178,6 @@ class TypedPartitionRef:
             "series": self.series,
             "fingerprint": self.fingerprint,
         }
-
 
 
 @dataclass(frozen=True, slots=True)
@@ -677,7 +679,7 @@ def read_typed_replay_source(
     if is_refusal(paired):
         return paired
     kind, ordered = paired.value
-    metadata = cast("PinnedInstrumentPriceMetadata | None", instrument_metadata)
+    metadata = instrument_metadata
     if metadata is not None and (
         ordered[0].subject != metadata.instrument.symbol
         or metadata.price_scale != _SOURCE_PRICE_SCALE
@@ -744,9 +746,7 @@ def _typed_pair(
         return invalid("partitions", "a typed replay read cites at least one partition")
     kinds = sorted({ref.kind for ref in refs})
     if len(kinds) != 1:
-        return invalid(
-            "partitions", "a typed replay read pairs one kind at a time", kinds=kinds
-        )
+        return invalid("partitions", "a typed replay read pairs one kind at a time", kinds=kinds)
     kind = kinds[0]
     if kind == _TICKS_KIND:
         if len(refs) != 1:
@@ -791,32 +791,28 @@ def _verified_rows(
 ) -> Result[list[tuple[object, ...]]]:
     """Read a materialised partition and re-derive the fingerprint its rows hash to.
 
-    The fingerprint is the writer's own streamed hash over the pinned logical encoding, so the
-    rows pass through the same writer again (`TypedWriter`) instead of through a second copy of
-    the encoding. A file whose rows do not hash to its claimed fingerprint is refused before a
-    single quote is built, so a substituted or truncated copy cannot pass as that partition.
+    The fingerprint is the store writer's own streamed hash over the pinned logical encoding, so
+    the rows are written once more through the store's public commit into a scratch root, and the
+    fingerprint that comes back is compared with the one claimed for the partition. A file whose
+    rows do not hash to its claim is refused before a single quote is built, so a substituted or
+    truncated copy cannot pass as that partition.
     """
     try:
         import pyarrow.parquet as pq  # noqa: PLC0415 (only a read needs the library)
     except ImportError as exc:  # pragma: no cover - qmf-data ships pyarrow
         return invalid("partitions", "reading a typed partition needs pyarrow", error=str(exc))
-    key = f"{ref.series}/{ref.month}"
+    key = SeriesKey.try_create(
+        ref.source, ref.subject, ref.kind, ref.year, ref.month_number, ref.variant
+    )
+    if is_refusal(key):
+        return key
     collected: list[tuple[object, ...]] = []
     computed = ""
-    with tempfile.TemporaryDirectory(
-        prefix="qmb-typed-", ignore_cleanup_errors=True
-    ) as scratch:
-        target = Path(scratch) / "verify.parquet"
+    with tempfile.TemporaryDirectory(prefix="qmb-typed-", ignore_cleanup_errors=True) as scratch:
         try:
-            writer = TypedWriter(target, key, columns)
             for batch in pq.ParquetFile(ref.path).iter_batches(batch_size=50_000):
-                batch_rows = [
-                    tuple(row[name] for name in columns) for row in batch.to_pylist()
-                ]
-                writer.add(batch_rows)
-                collected.extend(batch_rows)
-            computed = writer.finish().fingerprint
-        except (OSError, ValueError, KeyError, StoreEngineError) as exc:
+                collected.extend(tuple(row[name] for name in columns) for row in batch.to_pylist())
+        except (OSError, ValueError, KeyError) as exc:
             return invalid(
                 "partitions",
                 "a typed partition is a readable typed Parquet file",
@@ -824,6 +820,10 @@ def _verified_rows(
                 month=ref.month,
                 error=str(exc),
             )
+        written = SeriesStore(Path(scratch)).commit(key.value, collected)
+        if is_refusal(written):
+            return written
+        computed = written.value.fingerprint
     checked = data_policy.check_typed_fingerprint(
         series=ref.series, month=ref.month, claimed=ref.fingerprint, computed=computed
     )
@@ -889,6 +889,8 @@ def _typed_frontiers(
                 ask_t=ask_t,
             )
         event_ns = bid_t * _NS_PER_MS
+        # One m1 bar is one quote at its minute, priced at the bar's close, the last price the
+        # minute traded and so the price a taker could have met at its end.
         paired.append(
             _QuoteFrontier(
                 event_ns=event_ns,
