@@ -17,13 +17,18 @@ the live CDN. Stdlib + qmf-core + the CT-15 ingest / CT-13 journal types already
 in this package.
 """
 
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false
+
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+import xml.etree.ElementTree as ElementTree
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
+from pathlib import Path
 from types import MappingProxyType
 from typing import Final, Protocol, cast
 
@@ -37,8 +42,11 @@ from qmf.core import (
     VenueId,
     World,
     WriterId,
+    fingerprint,
     is_refusal,
 )
+from qmf.data.series import CommitReceipt, SeriesKey, SeriesStore
+from qmf.data.store.engines import SeriesFile
 from qmf.data.ingest import (
     ExternalSourceIngest,
     IntakeOutcome,
@@ -48,11 +56,14 @@ from qmf.data.ingest import (
 )
 from qmf.data.journal_producer import JournalAppendReceipt, JournalWriter
 from qmf.data.source_boundary import ObservationReceipt, SourceObservationBoundary
-from qmf.data.store.refusals import invalid_input, policy_rejection
+from qmf.data.store.refusals import invalid_input, policy_rejection, storage_failure
 
 __all__ = [
+    "CALENDAR_COLUMNS",
     "CALENDAR_FEED_SOURCE",
     "CALENDAR_FEED_VENUE",
+    "CALENDAR_KIND",
+    "CALENDAR_SUBJECT",
     "CONTRACT_FORMAT_VERSION",
     "LEGAL_ARCHIVING_POSTURE",
     "CalendarEvent",
@@ -60,12 +71,17 @@ __all__ = [
     "CalendarFeedImport",
     "CalendarFeedTransport",
     "CalendarImportReceipt",
+    "CalendarRow",
     "FailClosedReason",
     "FailClosedSignal",
+    "calendar_key",
+    "calendar_rows",
     "decode_calendar_snapshot",
+    "decode_calendar_xml",
     "fail_closed",
     "journal_fail_closed",
     "journal_import",
+    "land_calendar",
     "refuse_authorized_retention_claim",
     "refuse_live_skip",
     "refuse_minted_severity_scale",
@@ -793,3 +809,257 @@ class CalendarFeedImport:
                 journal_receipt=journaled.value,
             )
         )
+
+
+# --- bitemporal partitions --------------------------------------------------
+
+
+CALENDAR_KIND: Final[str] = "calendar"
+"""The series kind a calendar month lands as: bitemporal rows, one partition per month."""
+
+CALENDAR_SUBJECT: Final[str] = "-"
+"""A calendar is about no instrument, so its partition key says so (Library AD-25)."""
+
+CALENDAR_COLUMNS: Final[tuple[str, ...]] = (
+    "t",
+    "event_t",
+    "source_native_id",
+    "revision",
+    "impact",
+    "currency",
+    "title",
+)
+"""The calendar partition's columns.
+
+``t`` is when the row became knowable and ``event_t`` when the event happens, which is what
+makes the table bitemporal: a row is never rewritten, so a revision is a new row under the
+same provider-native id. The remaining columns keep the provider's own words verbatim, which
+is why this partition is written by the calendar's own writer rather than the typed price
+writer (that writer holds int64 numbers and float64 sizes only).
+"""
+
+CALENDAR_INCOMING: Final[str] = ".incoming.parquet"
+_NS_PER_MS: Final[int] = 1_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class CalendarRow:
+    """One bitemporal calendar row: the event, the revision, and when it was knowable."""
+
+    observed_at_ns: int
+    event_time_ns: int
+    source_native_id: str
+    revision: str
+    impact_label: str
+    currency: str
+    title: str
+
+    @property
+    def observed_ms(self) -> int:
+        return self.observed_at_ns // _NS_PER_MS
+
+    @property
+    def event_ms(self) -> int:
+        return self.event_time_ns // _NS_PER_MS
+
+    @property
+    def month(self) -> tuple[int, int]:
+        """The UTC month the row was observed in, which is the month its partition holds."""
+        moment = datetime.fromtimestamp(self.observed_at_ns // 1_000_000_000, tz=timezone.utc)
+        return moment.year, moment.month
+
+    def values(self) -> tuple[object, ...]:
+        """The row in :data:`CALENDAR_COLUMNS` order."""
+        return (
+            self.observed_ms,
+            self.event_ms,
+            self.source_native_id,
+            self.revision,
+            self.impact_label,
+            self.currency,
+            self.title,
+        )
+
+
+def calendar_rows(
+    events: Iterable[CalendarEvent],
+) -> Result[tuple[CalendarRow, ...]]:
+    """The events as bitemporal rows, ordered by observation time.
+
+    A revision is its own row: the same provider-native id under a new revision keeps both
+    rows, so an open month grows by an append and never by a rewrite. The same identity twice
+    with the same content collapses to one row (a re-fetch changes nothing), and the same
+    identity twice with *different* content is refused, because that is a provider that
+    rewrote a revision it had already published.
+    """
+    found: dict[tuple[str, str], CalendarRow] = {}
+    for event in events:
+        if event.known_at_ns < 0 or event.event_time_ns < 0:
+            return invalid_input(
+                "known_at_ns",
+                "a calendar row carries its observation time and its event time as UTC ns",
+                source_native_id=event.source_native_id,
+            )
+        row = CalendarRow(
+            observed_at_ns=event.known_at_ns,
+            event_time_ns=event.event_time_ns,
+            source_native_id=event.source_native_id,
+            revision=event.revision,
+            impact_label=event.impact_label,
+            currency=event.currency,
+            title=event.title,
+        )
+        identity = (row.source_native_id, row.revision)
+        known = found.get(identity)
+        if known is not None and known != row:
+            return invalid_input(
+                "revision",
+                "the same calendar revision arrived twice with different content; a "
+                "provider that rewrote a published revision is a refusal, never a silent pick",
+                source_native_id=row.source_native_id,
+                revision=row.revision,
+            )
+        found[identity] = row
+    return Ok(
+        tuple(sorted(found.values(), key=lambda row: (row.observed_at_ns, row.source_native_id,
+                                                      row.revision)))
+    )
+
+
+def calendar_key(year: int, month: int) -> Result[SeriesKey]:
+    """The partition key of one month of the economic calendar."""
+    return SeriesKey.try_create(
+        CALENDAR_FEED_SOURCE, CALENDAR_SUBJECT, CALENDAR_KIND, year, month
+    )
+
+
+def _calendar_file(rows: Sequence[CalendarRow], key: SeriesKey, folder: Path) -> Result[SeriesFile]:
+    """Write the month's rows to the key's staging name and fingerprint them.
+
+    The fingerprint is :func:`qmf.core.fingerprint` over the key, the columns and the rows, so
+    the same rows give the same fingerprint wherever they land, and it is the store's identity
+    for the month. It hashes the rows and not the file's bytes because the rows carry the
+    provider's own words.
+    """
+    import pyarrow as pa  # noqa: PLC0415 (only a calendar landing needs the library)
+    import pyarrow.parquet as pq  # noqa: PLC0415
+
+    target = folder / CALENDAR_INCOMING
+    schema = pa.schema(
+        [
+            pa.field("t", pa.int64()),
+            pa.field("event_t", pa.int64()),
+            pa.field("source_native_id", pa.string()),
+            pa.field("revision", pa.string()),
+            pa.field("impact", pa.string()),
+            pa.field("currency", pa.string()),
+            pa.field("title", pa.string()),
+        ]
+    )
+    columns = [list(column) for column in zip(*(row.values() for row in rows), strict=True)]
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        pq.write_table(pa.Table.from_pydict(dict(zip(CALENDAR_COLUMNS, columns, strict=True)),
+                                            schema=schema), target)
+    except OSError as exc:
+        target.unlink(missing_ok=True)
+        return storage_failure(
+            "could not write the calendar month", context={"key": key.text, "error": str(exc)}
+        )
+    content = {
+        "key": key.text,
+        "columns": list(CALENDAR_COLUMNS),
+        "rows": [list(row.values()) for row in rows],
+    }
+    stamped = fingerprint(content)
+    if is_refusal(stamped):
+        target.unlink(missing_ok=True)
+        return stamped
+    return Ok(
+        SeriesFile(
+            key=key.text,
+            fingerprint=stamped.value.value,
+            rows=len(rows),
+            bytes=target.stat().st_size,
+            path=target,
+            columns=CALENDAR_COLUMNS,
+            first_t=rows[0].observed_ms,
+            last_t=rows[-1].observed_ms,
+        )
+    )
+
+
+def land_calendar(
+    store: SeriesStore,
+    key: SeriesKey,
+    events: Iterable[CalendarEvent],
+    *,
+    correction: str | None = None,
+) -> Result[CommitReceipt | None]:
+    """Land one month of the calendar, appending every revision the store has not seen.
+
+    The rows are those observed inside ``key``'s month; a row observed in another month is
+    refused rather than filed under the wrong one. An open month is written again under the
+    open name, so a revision is an append to the month's rows; a month that has frozen takes a
+    different file only as a correction, which is the store's rule and stays its rule. No rows
+    for the month answers ``None`` and writes nothing.
+    """
+    built = calendar_rows(events)
+    if is_refusal(built):
+        return built
+    inside = [row for row in built.value if row.month == (key.year, key.month)]
+    outside = len(built.value) - len(inside)
+    if outside:
+        return invalid_input(
+            "key",
+            "a calendar month holds only the rows observed inside it; land the other months "
+            "under their own keys",
+            key=key.text,
+            outside=outside,
+        )
+    if not inside:
+        return Ok(None)
+    written = _calendar_file(inside, key, store.folder(key))
+    if is_refusal(written):
+        return written
+    return store.commit_file(key, written.value, correction=correction)
+
+
+def decode_calendar_xml(
+    payload: object,
+    *,
+    known_at_ns: object,
+    revision: object = "r1",
+    source: object = CALENDAR_FEED_SOURCE,
+) -> Result[tuple[CalendarEvent, ...]]:
+    """Decode the provider's weekly XML snapshot into :class:`CalendarEvent` values.
+
+    The recorder kept both of the provider's formats, so the import has to read both. Each
+    ``<event>`` carries ``title``, ``country``, ``date``, ``impact`` and optionally
+    ``forecast`` and ``previous``; everything but the two numeric times is kept verbatim, and
+    the same fields the JSON decode requires are required here.
+    """
+    if not isinstance(payload, (bytes, bytearray, str)):
+        return invalid_input(
+            "payload", "a calendar XML snapshot is XML text or bytes", given=repr(type(payload))
+        )
+    text = payload.decode("utf-8", "replace") if isinstance(payload, (bytes, bytearray)) else payload
+    try:
+        root = ElementTree.fromstring(text)  # noqa: S314 (the recorder's own archived bytes)
+    except ElementTree.ParseError as exc:
+        return invalid_input(
+            "payload", "a calendar XML snapshot parses as XML", reason=str(exc)[:160]
+        )
+    blocks: list[dict[str, object]] = []
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1].lower() != "event":
+            continue
+        row: dict[str, object] = {}
+        for child in element:
+            name = child.tag.rsplit("}", 1)[-1].lower()
+            if child.text is not None and child.text.strip() != "":
+                row[name] = child.text
+        blocks.append(row)
+    return decode_calendar_snapshot(
+        blocks, known_at_ns=known_at_ns, revision=revision, source=source
+    )

@@ -1,0 +1,92 @@
+"""Binance's bulk files: the checksum decides whether a month may be read (W14).
+
+The bucket publishes a digest beside every file. A file that does not hash to it is refused
+before a row is decoded, because the alternative is a month that quietly holds the days that
+worked and looks complete.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import zipfile
+from datetime import date
+
+from qmf.core import Ok, RefusalCategory, is_refusal
+from qmf.data.binance_vision import (
+    bucket_path,
+    decode_rows,
+    kind_for,
+    month_files,
+    parse_checksum,
+    variant_for,
+    verify_checksum,
+)
+from qmf.data.store.refusals import storage_failure
+
+TRADES_CSV = (
+    b"trade_id,price,qty,quote_qty,time,is_buyer_maker,is_best_match\n"
+    b"1,19000.50,0.25,4750.125,1756684800000,false,true\n"
+    b"2,19001.00,0.75,14250.75,1756684801000,true,true\n"
+)
+
+
+def zipped(csv_bytes: bytes) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("BTCUSDT-trades-2026-08-01.csv", csv_bytes)
+    return buffer.getvalue()
+
+
+def test_a_file_that_does_not_hash_to_its_published_checksum_is_refused() -> None:
+    payload = zipped(TRADES_CSV)
+    published = "sha256:" + hashlib.sha256(b"a different file").hexdigest()
+
+    refused = verify_checksum(payload, published, name="BTCUSDT-trades-2026-08-01.zip")
+
+    assert is_refusal(refused)
+    assert refused.category is RefusalCategory.POLICY_REJECTION
+    assert refused.context["field"] == "checksum"
+    assert refused.context["published"] == published.removeprefix("sha256:")
+
+
+def test_the_two_trade_datasets_land_as_one_kind_under_two_variants() -> None:
+    assert (kind_for("trades").value, variant_for("trades").value) == ("trades", "")
+    assert (kind_for("aggTrades").value, variant_for("aggTrades").value) == (
+        "trades",
+        "aggTrades",
+    )
+    assert (kind_for("bookDepth").value, variant_for("bookDepth").value) == ("book", "depth")
+    assert decode_rows("trades", TRADES_CSV).value[0] == (
+        1_756_684_800_000,
+        1_900_050_000_000,
+        0.25,
+    )
+
+
+def test_a_month_whose_second_day_the_bucket_does_not_serve_is_refused() -> None:
+    csv_bytes = TRADES_CSV
+    payload = zipped(csv_bytes)
+    checksum = "sha256:" + hashlib.sha256(payload).hexdigest()
+    served = {
+        bucket_path("trades", "BTCUSDT", date(2026, 8, 1)).path: payload,
+        bucket_path("trades", "BTCUSDT", date(2026, 8, 1)).checksum_path: checksum.encode(),
+    }
+
+    def reader(url: str):
+        if url in served:
+            return Ok(served[url])
+        return storage_failure("the bucket has no such file", context={"url": url})
+
+    refused = month_files(reader, "trades", "BTCUSDT", 2026, 8)
+
+    assert is_refusal(refused)
+    assert refused.category is RefusalCategory.STORAGE_FAILURE
+
+
+def test_a_checksum_file_is_read_in_the_shapes_the_bucket_publishes() -> None:
+    digest = "ab" * 32
+
+    assert parse_checksum(f"sha256:{digest}  BTCUSDT-trades-2026-08-01.zip\n").value == digest
+    assert parse_checksum(f"SHA256 (BTCUSDT-trades-2026-08-01.zip) = {digest}").value == digest
+    assert parse_checksum(digest.encode()).value == digest

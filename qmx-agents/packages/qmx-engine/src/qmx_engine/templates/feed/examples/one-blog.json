@@ -1,0 +1,12 @@
+{
+  "name": "One research blog",
+  "method": "rss",
+  "url": "https://www.quantstart.com/feed/",
+  "cadence": "0 6 * * 1",
+  "lands_as": "source",
+  "collection": "one-blog",
+  "tags": ["blog", "research"],
+  "licence": "the blog's own terms; the post is quoted and linked, never republished",
+  "extract": {"text": true, "notes": false},
+  "note": "The shape of the blog he names; the copilot's draft is this document with draft: true, published on his yes."
+}
