@@ -52,6 +52,11 @@ from qmx_engine.workers.zones import Overlay, RunZone, ZoneError, slot_name
 HEARTBEAT_SECONDS: Final = 10.0
 WRITERS: Final = frozenset({"script", "grader", "monitor"})
 """The kinds whose attempt runs a script and so gets an overlay."""
+CHILD_PROCESS: Final = frozenset({"script", "grader", "monitor", "rlm"})
+"""The heavy kinds: an attempt of one does its work in a child process of this host, never in the
+host's own address space, so a kernel out-of-memory kill takes the attempt and `qmx_host` keeps
+answering (F39, P-OOM). The script family's `python -I` child is that process (AD-24); an `rlm`
+kernel, extraction and a big market-data read join this set as their executors ship."""
 RESOLVED: Final = ("role", "profile", "model", "effort", "candidate", "test_only", "unresolved")
 """What `node_started` records of the candidate the runner resolved, so the span names it."""
 
@@ -235,6 +240,9 @@ class LocalWorker:
             return Failed(
                 "executor_missing", message, signature("executor_missing", message), False
             )
+        refused = self.capacity.admit(job.idempotency_key, job.node_definition)
+        if refused is not None:
+            return Failed("memory", refused, signature("memory", refused), True)
         task = asyncio.current_task()
         if task is not None:
             self.running[job.idempotency_key] = cast(asyncio.Task[object], task)
@@ -248,6 +256,7 @@ class LocalWorker:
             return replace(failure, effect_state="before")
         finally:
             self.running.pop(job.idempotency_key, None)
+            self.capacity.memory.give(job.idempotency_key)
 
     def cancel(self, idempotency_key: str, reason: CancelReason = "stop") -> bool:
         """Stop the attempt with this key; False when it is not running here. A stalled attempt
@@ -268,13 +277,19 @@ class LocalWorker:
     async def attempt(self, job: NodeJob, executor: AnyExecutor, emit: Emit) -> NodeResult:
         effect = effects.effect_of(job.node_definition)
         resolved = job.resolved_model or {}
+        kind = REGISTRY.kind(str(job.node_definition.get("type")))
+        name = kind.name if kind is not None else ""
         emit(
             "node_started",
             attempt_keys(job)
             | {key: resolved[key] for key in RESOLVED if key in resolved}
-            | {"idempotency_key": job.idempotency_key, "effect": effect, "placement": "pc"},
+            | {
+                "idempotency_key": job.idempotency_key,
+                "effect": effect,
+                "placement": "pc",
+                "process": "child" if name in CHILD_PROCESS else "host",
+            },
         )
-        kind = REGISTRY.kind(str(job.node_definition.get("type")))
         zone = None
         if job.workspace is not None and kind is not None and kind.name in WRITERS:
             zone = RunZone(Path(job.workspace))

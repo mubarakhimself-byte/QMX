@@ -82,6 +82,13 @@ class Heartbeat(BaseModel):
     """Whether the flag is still the Hub's current word, or the last one it knew (AD-65)."""
     blob_cache_bytes: int | None = None
     free_disk_bytes: int | None = None
+    disk_floor_bytes: int | None = None
+    """The room this machine keeps for itself, from its own free space (D-11)."""
+    free_ram_bytes: int | None = None
+    """RAM this machine can give right now, which admission reserves against (F39, AD-58)."""
+    session_bytes: int | None = None
+    """What one session of this host really holds: this host's process tree, measured here, and
+    the figure that replaces a reserved constant once it is known (D-11)."""
 
 
 def node_kinds() -> tuple[str, ...]:

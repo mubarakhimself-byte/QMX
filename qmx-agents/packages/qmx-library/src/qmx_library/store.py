@@ -80,6 +80,7 @@ MANIFEST: Final = "qmx.library.object/1"
 CHECKOUT_FILE: Final = ".checkout.json"
 TEXT_LIMIT: Final = 1_000_000
 """Bytes of one text blob read into the search index."""
+MIB: Final = 1024 * 1024
 CLAIMS: Final = "claims.json"
 CLAIM_KEY: Final = re.compile(r"[A-Za-z0-9_.:+-]{1,200}")
 """An intent key is a fingerprint; a path segment it must also be, so `/` is out."""
@@ -296,6 +297,7 @@ class Store:
         role: StoreRole = "writer",
         upstream: BlobSource | None = None,
         state: StoreState,
+        floor_bytes: int = 0,
     ) -> None:
         self.root = root
         self.name = name
@@ -305,6 +307,9 @@ class Store:
         self.role: StoreRole = role
         self.upstream = upstream
         self.state = state
+        self.floor_bytes = floor_bytes
+        """The room this machine keeps for itself, handed in by its host (D-11). Zero means the
+        caller measured no floor, so every write that fits is taken."""
         self._handle = handle
         self._mutex = threading.RLock()
         self.catalog = Catalog(root / "catalog.db")
@@ -326,6 +331,7 @@ class Store:
         wall: Callable[[], datetime] | None = None,
         role: StoreRole = "writer",
         upstream: BlobSource | None = None,
+        floor_bytes: int = 0,
     ) -> Store:
         root.mkdir(parents=True, exist_ok=True)
         handle = (root / "writer.lock").open("a+b")
@@ -359,6 +365,7 @@ class Store:
                 role=role,
                 upstream=upstream,
                 state=found,
+                floor_bytes=floor_bytes,
             )
         except BaseException:
             handle.close()
@@ -528,6 +535,21 @@ class Store:
         if self.role != "writer":
             raise LibraryRefused(
                 "read_only_replica", f"this store is a {self.role}; {act} goes to the primary"
+            )
+        self._refuse_full(act)
+
+    def _refuse_full(self, act: str) -> None:
+        """A machine below its floor takes no write at all, so no file is ever left half written
+        (F22, P-DISKFULL). The Library gives way last: the machine's expendable classes go first,
+        and this door opens again when room is back."""
+        if self.floor_bytes <= 0:
+            return
+        free = shutil.disk_usage(self.root).free
+        if free < self.floor_bytes:
+            raise LibraryRefused(
+                "disk_full",
+                f"{free // MIB} MB free here, below the {self.floor_bytes // MIB} MB floor this "
+                f"machine keeps; {act} was refused whole and nothing was written",
             )
 
     def _active(self, item: str) -> None:

@@ -18,7 +18,6 @@ from qmx_engine.workers.remote import (
     PlacementWorker,
     attempt_bundle,
     result_from_document,
-    sessions_of,
     text_hash,
 )
 
@@ -186,10 +185,8 @@ def test_the_job_carries_the_pass_and_no_key() -> None:
     assert "qmx/openrouter" not in shipped
 
 
-def test_the_contabo_row_derives_four_sessions() -> None:
-    assert DEFAULTS["placement.contabo.ram_budget_mb"] == 12_288
-    assert DEFAULTS["placement.contabo.overhead_mb"] == 6_144
-    assert sessions_of(DEFAULTS, "contabo") == 4
+def test_no_removed_memory_figure_is_a_setting() -> None:
+    assert [key for key in DEFAULTS if "ram_budget" in key or "overhead_mb" in key] == []
 
 
 def test_a_wire_result_round_trips_every_ending() -> None:

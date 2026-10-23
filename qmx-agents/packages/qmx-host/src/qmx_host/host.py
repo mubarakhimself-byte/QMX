@@ -28,7 +28,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -103,6 +102,7 @@ from qmx_router.server import (
     node_app,
 )
 
+from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
@@ -484,7 +484,8 @@ async def serve(
             qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
         )
         try:
-            with Store.open(home / LIBRARY, redactor=redact) as store:
+            floor = floor_bytes(section(control, "engine"), free_bytes(home))
+            with Store.open(home / LIBRARY, redactor=redact, floor_bytes=floor) as store:
                 control.attach_library(store)
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(compose_memory, harness, store, home, control)
@@ -556,9 +557,17 @@ def beat(
     engine: Engine,
     harness: Harness,
     pause: Pause | None = None,
+    *,
+    floor: int | None = None,
 ) -> Heartbeat:
     """This host's row: its own process and every child, the CLI trees included. `pause` is what
-    this host heard from the Hub, so the row says whether its flag is still current (AD-65)."""
+    this host heard from the Hub, so the row says whether its flag is still current (AD-65).
+
+    The row carries this machine's live capacity: the room left on its volume and the floor it
+    keeps, and the RAM it can give together with what one of its sessions really holds in memory.
+    Admission reads the RAM figure, so no reserved constant stands in for it (D-11, F39). `floor`
+    is the one measured when the host started; left out, it is measured here.
+    """
     tree = [me, *me.children(recursive=True)]
     cpu, rss = 0.0, 0
     for member in tree:
@@ -566,6 +575,11 @@ def beat(
             times = member.cpu_times()
             cpu += times.user + times.system
             rss += member.memory_info().rss
+    free_disk = free_bytes(home)
+    kept = floor if floor is not None else floor_bytes(engine.settings, free_disk)
+    free_ram = psutil.virtual_memory().available
+    engine.worker.capacity.observe_free_ram(free_ram)
+    engine.worker.capacity.observe_session(rss)
     kinds = node_kinds()
     return Heartbeat(
         subject="host",
@@ -580,7 +594,24 @@ def beat(
         kinds_digest=kinds_digest(kinds),
         paused=engine.paused,
         pause_state="known" if pause is None else pause.state(time.time()),
-        free_disk_bytes=shutil.disk_usage(home).free,
+        free_disk_bytes=free_disk,
+        disk_floor_bytes=kept,
+        free_ram_bytes=free_ram,
+        session_bytes=rss,
+    )
+
+
+def make_room(home: Path, engine: Engine, floor: int) -> None:
+    """Below the floor, take this machine's expendable classes in the table's order and say which
+    went. Nothing durable is in that table (F22, P-DISKFULL)."""
+    free = free_bytes(home)
+    if free >= floor:
+        return
+    taken = give_way(home, floor)
+    print(
+        f"disk below its floor: {free // MIB} MB free, {floor // MIB} MB kept; "
+        f"gave way: {', '.join(taken) or 'nothing was expendable'}",
+        file=sys.stderr,
     )
 
 
@@ -613,12 +644,14 @@ async def heartbeats(
     core = engine.svc.ctx.engine
     me = psutil.Process()
     log = HeartbeatLog(home, setting(core.settings, "heartbeat.window_days", WINDOW_DAYS))
+    floor = floor_bytes(core.settings, free_bytes(home))
     pruned: int | None = None
     while True:
         try:
             pause = None if link is None else link.pause
+            await asyncio.to_thread(make_room, home, core, floor)
             rows = [
-                beat(home, host_id, me, core, harness, pause),
+                beat(home, host_id, me, core, harness, pause, floor=floor),
                 *app_rows(control, core.paused),
             ]
             await asyncio.to_thread(log.write, rows)

@@ -15,7 +15,7 @@ from flows import edge, folder, node, run_folder
 from qmx_control.service import ControlService
 
 import qmx_engine.admission
-from qmx_engine.admission import Admission, Capacity, Slots
+from qmx_engine.admission import MIB, Admission, Capacity, Slots, sessions_of
 from qmx_engine.nodes.base import Failed, Waiting
 from qmx_engine.ports.harness_adapter import PlanUse
 from qmx_engine.ports.router import Refused, Reply, Row, adopt
@@ -254,3 +254,37 @@ def test_a_refused_plan_send_waits_for_the_used_up_window_plus_slack() -> None:
 @pytest.mark.parametrize("used", [0.5, 0.9, 0.99])
 def test_a_plan_attempt_runs_at_any_use_until_its_window_is_used_up(used: float) -> None:
     assert asyncio.run(admission(PlanUse(used, RESETS, None, None)).check(HAIKU)) is None
+
+
+def test_a_node_is_refused_when_its_declared_memory_exceeds_the_live_free_ram() -> None:
+    room = {**DEFAULTS, "placement.pc.cpu_slots": 2, "placement.pc.container_slots": 1}
+    capacity = Capacity.of(room)
+    capacity.observe_free_ram(3_000 * MIB)
+
+    first = capacity.admit("run-1.a.0.1", {"type": "script", "parameters": {"memory_mb": 2_000}})
+    refused = capacity.admit("run-1.b.0.1", {"type": "script", "parameters": {"memory_mb": 2_000}})
+    capacity.memory.give("run-1.a.0.1")
+    after = capacity.admit("run-1.b.0.1", {"type": "script", "parameters": {"memory_mb": 2_000}})
+
+    assert first is None
+    assert refused == "2000 MB declared, 1000 MB free after what other attempts hold"
+    assert after is None
+    assert capacity.memory.held == {"run-1.b.0.1": 2_000 * MIB}
+
+
+def test_a_measured_size_replaces_the_declaration_and_no_reading_refuses_nothing() -> None:
+    capacity = Capacity.of(DEFAULTS)
+    declared = {"type": "script", "parameters": {"memory_mb": 100}}
+
+    assert capacity.admit("run-1.a.0.1", declared) is None
+    capacity.observe_free_ram(1_000 * MIB)
+    capacity.observe_session(400 * MIB)
+
+    assert capacity.memory.held == {"run-1.a.0.1": 400 * MIB}
+    assert capacity.admit("run-1.b.0.1", {**declared, "parameters": {"memory_mb": 100}}) is None
+    assert capacity.memory.held == {"run-1.a.0.1": 400 * MIB, "run-1.b.0.1": 100 * MIB}
+
+
+def test_the_session_count_comes_from_live_ram_and_the_measured_session() -> None:
+    assert sessions_of(11 * 1024 * MIB, 1_536 * MIB) == 7
+    assert sessions_of(1_000 * MIB, 0) == 0
