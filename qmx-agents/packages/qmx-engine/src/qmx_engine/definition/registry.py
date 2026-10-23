@@ -91,7 +91,7 @@ BASE_KINDS: Final[Mapping[str, Kind]] = MappingProxyType(
             ),
             Kind("monitor", IN, ("changed", "silent"), "none", available=True),
             Kind("app_op", IN, MAIN, "irreversible", available=True),
-            Kind("library", IN, MAIN, "compensable"),
+            Kind("library", IN, MAIN, "compensable", available=True),
             Kind("claude_workflow", IN, MAIN, "irreversible"),
         )
     }

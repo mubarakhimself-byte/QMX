@@ -33,11 +33,15 @@ from qmx_engine.core.state import Slot
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger import mirror
 from qmx_engine.ledger.events import Event
+from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Operation, Reader, Transaction, ledger_path
+from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok
 from qmx_engine.ports.library import (
     MAIN,
     Bundle,
     JsonObject,
+    LibraryPort,
+    LibraryRefused,
     Mode,
     RunStatus,
     RunSummary,
@@ -54,6 +58,15 @@ from qmx_engine.service.forward import (
 )
 from qmx_engine.trace_export import export
 from qmx_engine.triggers.rows import After, fire_now, triggers
+from qmx_control.context import (
+    RUN_INPUT_KINDS,
+    ContextRefused,
+    InputReads,
+    LibraryObject,
+    Pin,
+    pins_of,
+    references,
+)
 
 SUBGRAPH_ENTRY = "subgraph-input"
 
@@ -161,6 +174,80 @@ def live_attempts(engine: Engine) -> frozenset[str]:
     return frozenset((*held, *engine.worker.running))
 
 
+class RunInputReads:
+    """`qmx_control.context.InputReads` over this home's Library port: the objects a run's
+    `@run` and `@library` references name, and the artifacts a run landed."""
+
+    def __init__(self, library: LibraryPort) -> None:
+        self.library = library
+
+    def object(self, object_id: str) -> LibraryObject | None:
+        try:
+            found = self.library.get(object_id)
+        except LibraryRefused:
+            return None
+        return LibraryObject(found.object_id, found.item, str(found.kind), fields=found.fields)
+
+    def summaries(self, run: str) -> list[str]:
+        return [found.object_id for found in self.library.objects(run, "workflow-run")]
+
+    def produced(self, producer: str) -> list[str]:
+        return [edge.to_id for edge in self.library.edges(producer, "produced-by")]
+
+
+def pinned_references(ctx: Context, inputs: JsonValue) -> list[Pin]:
+    """The references this start resolves, one pin each, in the order the inputs carry them.
+    The first that does not resolve refuses the start, so a run never begins on a reference it
+    cannot read."""
+    return list(pins_of(references(inputs), RunInputReads(ctx.library)))
+
+
+def reference_pins(ctx: Context, inputs: JsonValue) -> JsonObject:
+    """The pins a start puts on `run_created` beside the trigger's own: `runner` reads `roles`
+    and `effort` from that block and keeps the rest, so the references travel with it."""
+    return {"references": [pin.document() for pin in pinned_references(ctx, inputs)]}
+
+
+def handed(pin: Pin, reads: InputReads) -> JsonObject:
+    """One resolved reference as the `library` node passes it on: what it names, and the fields
+    a downstream node reads. The bytes stay in the Library."""
+    found = reads.object(pin.object_id)
+    if found is None:
+        return {"ref": pin.ref, "object_id": pin.object_id}
+    return {
+        "ref": pin.ref,
+        "object_id": pin.object_id,
+        "item": found.item,
+        "kind": found.kind,
+        "title": found.title,
+        "fields": dict(found.fields),
+    }
+
+
+class LibraryNode:
+    """The `library` node (engine AD-5, AD-19, AD-63): it resolves every `@run` and `@library`
+    reference its inputs carry and hands the Library objects on `main`, so a workflow reads
+    Tuesday's run instead of a copy of it. A reference that does not resolve fails the attempt
+    with one reason."""
+
+    def __init__(self, library: LibraryPort) -> None:
+        self.reads = RunInputReads(library)
+
+    def run(self, job: NodeJob) -> NodeResult:
+        try:
+            pins = pins_of(references(job.inputs), self.reads)
+        except ContextRefused as refused:
+            code = "context_refused"
+            return Failed(code, refused.message, signature(code, refused.message), False)
+        return Ok({"main": [handed(pin, self.reads) for pin in pins]})
+
+
+def install(engine: Engine, library: LibraryPort) -> None:
+    """Give the engine the `library` node's executor. The engine ships the pure and process
+    kinds; this one reads the Library, which reaches the engine as a port here."""
+    engine.executors.setdefault("library", LibraryNode(library))
+
+
 def induced(bundle: Bundle, node_ids: list[str]) -> Bundle:
     """The draft cut to the selected nodes and the edges between them. A selected node that read
     from an unselected one reads the run's inputs instead, through one added `trigger`."""
@@ -216,6 +303,12 @@ async def run_bundle(
 ) -> tuple[Outcome, Stored]:
     """`pins` are the firing trigger's role and effort pins (B-60); `priority` is its fire's."""
     run_id = run_id or new_run_id(ctx.clock.now())
+    try:
+        resolved = reference_pins(ctx, inputs)
+    except ContextRefused as refused:
+        raise Refused(refused.code, refused.message) from refused
+    pins = {**(pins or {}), **resolved}
+    install(ctx.engine, ctx.library)
     if subgraph is not None:
         bundle = induced(bundle, subgraph)
     root = bundle.write(ctx.home / "engine" / "runs" / run_id / "workflow")
