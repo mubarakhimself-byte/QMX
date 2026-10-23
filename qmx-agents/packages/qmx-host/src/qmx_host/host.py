@@ -5,11 +5,10 @@ workflow engine, the control doors and the webhook door on one port behind one b
 `ControlService` (the one settings reader), the `Harness` (whose relay adopts the router's loop),
 the engine with its scheduler, and the control app with the chat, engine and control routes behind
 the principal door. The host is the one writer of the home's Library store `<home>/library/`
-(Library AD-5): it opens the store with the engine's one redaction (AD-37) and the engine reads and
-writes it through `EngineLibraryAdapter`. The control's own `library.db` stays
-`ControlService.library`, the truth until the cut-over, and every `library_save` and `library_link`
-also writes the store through the dual write (MIGRATION step 5) attached as soon as the store
-opens. The apps supervisor is `ControlService.app_runtime()`. The engine's permission policy and
+(Library AD-5): it opens the store with the engine's one redaction (AD-37) and hands it to
+`ControlService`, so the engine's `EngineLibraryAdapter`, the control's `library_*` rows and the
+copilot's search read and write that one store (MIGRATION step 6). The apps supervisor is
+`ControlService.app_runtime()`. The engine's permission policy and
 hook sink are registered on the harness, both named `engine`, before the engine resumes any run, so
 a chat reloaded after a restart finds them. The harness is `RecordedHarness`: the session recorder
 writes every chat's `session` item into the store (Library AD-21) and exports idle chats once a
@@ -83,7 +82,6 @@ from qmx_engine.service.forward import (
 from qmx_engine.service.rest import engine_router
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_library.adapter import EngineLibraryAdapter
-from qmx_library.migrate.from_library_b import DualWrite
 from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
@@ -487,7 +485,7 @@ async def serve(
         )
         try:
             with Store.open(home / LIBRARY, redactor=redact) as store:
-                control.attach_library_mirror(DualWrite(store))
+                control.attach_library(store)
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(compose_memory, harness, store, home, control)
                 adopt_router(RelayRouter(harness_relay(harness)))

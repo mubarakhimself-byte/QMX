@@ -15,10 +15,13 @@ from pathlib import Path
 from qmx_control.models import ControlError, Document
 
 MAX_BYTES = 95_000_000
+LIBRARY = Path("library")
+"""The one Library store `<home>/library/` (MIGRATION step 6): its objects, refs, edges, annotation
+log and catalog. Its `blobs/` are excluded like every other blob folder, so the snapshot stays a
+small-store backup."""
 DATABASES = {
     "memory.db",
     "runs.db",
-    "library.db",
     "experiments.db",
     "experiment.db",
     "app.db",
@@ -111,6 +114,7 @@ def weekly_backup(home: Path, repository: str, *, dry_run: bool = False) -> Docu
                 allowed = (
                     path.name in DATABASES
                     or relative == Path("settings.toml")
+                    or relative.is_relative_to(LIBRARY)
                     or (definition and path.suffix.lower() in {".toml", ".json", ".yaml", ".yml"})
                 )
                 if (
