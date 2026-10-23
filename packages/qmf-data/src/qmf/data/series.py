@@ -38,7 +38,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from qmf.core import Ok, Result
+from qmf.core import Ok, Result, Retryability
 from qmf.data.store.engines import SeriesFile, StoreEngineError
 from qmf.data.store.engines.typed import (
     BAR_COLUMNS,
@@ -430,9 +430,20 @@ class SeriesStore:
         folder.mkdir(parents=True, exist_ok=True)
         previous = self.state(key)
         gaps = tuple(f"{_iso(a * NS_PER_MS)}/{_iso(b * NS_PER_MS)}" for a, b in written.holes)
-        if previous is not None and previous.frozen:
-            return self._commit_frozen(key, folder, previous, written, correction)
-        return self._commit_open(key, folder, key.rule, previous, written, gaps, provider_checksum)
+        try:
+            if previous is not None and previous.frozen:
+                return self._commit_frozen(key, folder, previous, written, correction)
+            return self._commit_open(
+                key, folder, key.rule, previous, written, gaps, provider_checksum
+            )
+        except OSError as exc:
+            # A rename or a state write that the disk refused is a storage failure, never a
+            # half-commit reported as success (AC4).
+            return storage_failure(
+                "could not finish the partition commit",
+                retryability=Retryability.YES,
+                context={"key": key.text, "error": str(exc)},
+            )
 
     def _commit_frozen(
         self,

@@ -17,7 +17,7 @@ from qmx_library.cards import (
     read_range,
     write_card,
 )
-from qmx_library.port import Draft, LibraryRefused, Relation
+from qmx_library.port import Draft, JsonObject, LibraryRefused, Relation
 from qmx_library.principal import Principal
 from qmx_library.store import Store
 
@@ -55,7 +55,7 @@ def ticks_card() -> SeriesCard:
 
 
 def put_result(store: Store, item: str, card_id: str, series: str, span: tuple[int, int]) -> str:
-    fields = {"outcome": "inconclusive", "reads": [read_range(series, *span)]}
+    fields: JsonObject = {"outcome": "inconclusive", "reads": [read_range(series, *span)]}
     relations: list[Relation] = [("consumed", card_id)]
     draft = Draft("backtest-result", item, item, fields=fields, relations=relations)
     head = store.head(item, "main")

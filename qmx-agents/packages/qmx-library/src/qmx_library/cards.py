@@ -17,7 +17,7 @@ and row count, and each correction with the range it covers. A consumer records 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, cast
 
 from qmx_library.port import Draft, JsonObject, ObjectId
 from qmx_library.principal import Principal
@@ -176,7 +176,7 @@ def card_fields(
         "licence": card.licence,
         "redownloadable": card.redownloadable,
         "replaced": card.replaced,
-        "quality": dict(card.quality),
+        "quality": cast("JsonObject", dict(card.quality)),
         "coverage": coverage,
         "partitions": [part.as_json() for part in months],
         "corrections": [correction.as_json() for correction in corrections],

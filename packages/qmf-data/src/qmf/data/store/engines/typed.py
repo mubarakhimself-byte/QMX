@@ -31,7 +31,7 @@ import os
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Final, cast
+from typing import Final
 
 import pyarrow as pa
 import pyarrow.parquet as pq

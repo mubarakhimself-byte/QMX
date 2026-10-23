@@ -113,8 +113,10 @@ def _cached(
             seen[object_id] = None
         else:
             kind_name, item, fields = row
-            loaded = json.loads(fields) if fields else {}
-            seen[object_id] = _Object(str(kind_name), str(item), cast(dict[str, object], loaded))
+            loaded: dict[str, object] = (
+                cast("dict[str, object]", json.loads(fields)) if fields else {}
+            )
+            seen[object_id] = _Object(str(kind_name), str(item), loaded)
     return seen[object_id]
 
 
