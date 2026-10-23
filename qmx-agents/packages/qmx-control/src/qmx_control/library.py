@@ -303,7 +303,7 @@ class Library:
         if row is not None:
             return str(row[0])
         fields: JsonObject = {
-            **cast(JsonObject, landing.fields),
+            **landing.fields,
             "legacy_ref": ref.model_dump_json(),
             "legacy_kind": "app-output",
             "output": landing.output,
@@ -408,7 +408,7 @@ class Library:
             "id": view.object_id,
             "kind": str(view.fields.get("legacy_kind", view.kind)),
             "title": view.title,
-            "tags": cast(JsonValue, view.annotations.get("tags") or []),
+            "tags": view.annotations.get("tags") or [],
             "source": str(view.fields.get("url", "")),
             "created": str(view.annotations.get("created", "")),
             "root_id": self._root(view),
@@ -417,7 +417,7 @@ class Library:
             "sha256": digest,
             "size": blob.size,
             "ref": f"artifacts/{digest}",
-            "fetched_date": cast(JsonValue, view.fields.get("fetched_date")),
+            "fetched_date": view.fields.get("fetched_date"),
             "content": cast(JsonValue, json.loads(view.data[slot])),
         }
         if "memo_key" in view.fields:

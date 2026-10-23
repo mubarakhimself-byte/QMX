@@ -60,24 +60,29 @@ def test_backup_restores_wal_and_excludes_bulk_secrets_and_large_files(tmp_path:
     assert isinstance(included, list)
     assert {
         "memory.db",
-        "library.db",
         "runs.db",
         "settings.toml",
         "definitions/small/app.toml",
     } <= set(included)
+    assert any(str(path).startswith("library/objects/") for path in included)
+    assert "library/catalog.db" not in included
+    assert not any(str(path).startswith("library/blobs/") for path in included)
     assert "market.parquet" not in included
     assert "definitions/big.json" not in included
     assert not any(str(path).startswith("artifacts/") for path in included)
     tree = git(remote, "ls-tree", "-r", "--name-only", "HEAD")
     assert "oauth.json" not in tree and ".env" not in tree
     assert "parquet" not in tree and "artifacts" not in tree and "big.json" not in tree
+    assert "library/catalog.db" not in tree and "library/blobs" not in tree
     checkout = tmp_path / "restore"
     git(tmp_path, "clone", str(remote), str(checkout))
     with closing(sqlite3.connect(checkout / "snapshot/memory.db")) as restored:
         assert restored.execute("SELECT value FROM memories").fetchone()[0] == "precious"
-    with closing(sqlite3.connect(checkout / "snapshot/library.db")) as catalog:
-        raw = catalog.execute("SELECT data FROM items WHERE id=?", (saved["id"],)).fetchone()[0]
-        assert json.loads(raw)["sha256"] == saved["sha256"]
+    snapshot = checkout / "snapshot" / "library"
+    assert list((snapshot / "objects").rglob("*.json")), "the snapshot holds the store's objects"
+    moves = (snapshot / "refs" / "log.jsonl").read_text("utf-8").splitlines()
+    assert json.loads(moves[0])["new_head"] == saved["id"]
+    assert not (home / "library.db").exists()
     assert not (home / "weekly-backup.lock").exists()
     assert not (home / "weekly-backup.json").exists()
 

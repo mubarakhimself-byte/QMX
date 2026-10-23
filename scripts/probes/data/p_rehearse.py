@@ -23,7 +23,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import shutil
+import stat
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 from qmx_control.library import Library
@@ -86,6 +88,14 @@ def rehearse(copy: Path) -> tuple[list[str], dict[str, object]]:
     return problems, report
 
 
+def remove(folder: Path) -> None:
+    """Delete a rehearsal copy, clearing the retired files' read-only bit first."""
+    for path in [folder, *folder.rglob("*")]:
+        with suppress(OSError):
+            path.chmod(stat.S_IWRITE | stat.S_IREAD)
+    shutil.rmtree(folder, ignore_errors=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--home", type=Path, default=HOME, help="the real home, read only")
@@ -104,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         print("refused: the probe rehearses on a copy, never on the real home")
         return 2
     if copy.exists():
-        shutil.rmtree(copy)
+        remove(copy)
     copy.parent.mkdir(parents=True, exist_ok=True)
     before = tree_hash(home)
     shutil.copytree(home, copy)
@@ -122,8 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     for problem in problems:
         print(f"  {problem}")
     if not arguments.keep:
-        shutil.rmtree(copy, ignore_errors=True)
-        if copy.parent != home and not any(copy.parent.iterdir()):
+        remove(copy)
+        if copy.parent != home and copy.parent.is_dir() and not any(copy.parent.iterdir()):
             copy.parent.rmdir()
     if problems:
         print("P-REHEARSE FAIL")

@@ -1,11 +1,11 @@
-"""MIGRATION steps 0 to 5 on fixture homes: step 0's counts, each importer's mapping and its
-collision stop, a rerun that writes nothing, and the dual write that keeps the nightly diff
-clean."""
+"""MIGRATION steps 0 to 6 on fixture homes: step 0's counts, each importer's mapping and its
+collision stop, a rerun that writes nothing, and the switch-over that retires the old files."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
 from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass, field
@@ -14,17 +14,16 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from qmx_control.library import Library
-from qmx_control.models import LibraryInput, MemoKey
-from qmx_control.service import ControlService
+from qmx_control.library import encoded
+from qmx_control.models import MemoKey
 from qmx_engine.ledger import redact
 
 from qmx_library.migrate import MigrationAlarm, open_target, pre
 from qmx_library.migrate.from_apps import import_apps
-from qmx_library.migrate.from_library_b import DualWrite, import_library_b, resolve_alias
+from qmx_library.migrate.from_library_b import JUNK, import_library_b, resolve_alias, switch_over
 from qmx_library.migrate.from_registry import import_registry
 from qmx_library.migrate.snapshot import Counts, snapshot
-from qmx_library.migrate.verify import dual_diff, verify
+from qmx_library.migrate.verify import verify
 from qmx_library.port import LibraryRefused
 from qmx_library.principal import MAIN, Principal
 
@@ -32,36 +31,89 @@ OPERATOR = Principal("operator")
 
 
 def library_b(home: Path) -> dict[str, Any]:
-    """Seven versions over five roots, two links and one memo row."""
-    lib = Library(home)
-    article = lib.save(
-        LibraryInput(
-            title="Carry paper",
-            kind="article",
-            content={"text": "carry works"},
+    """Seven versions over five roots, two links and one memo row, in the file step 0 freezes.
+
+    Written the way `library.db` was written (MIGRATION step 2's table), because the importer's
+    input is that file: a fixture that went through today's Library would build the store instead.
+    """
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "artifacts").mkdir(exist_ok=True)
+    written: list[dict[str, Any]] = []
+    with closing(sqlite3.connect(home / "library.db")) as db, db:
+        db.executescript("""
+            CREATE TABLE items(id TEXT PRIMARY KEY, data TEXT NOT NULL, root TEXT NOT NULL,
+                version INTEGER NOT NULL, source TEXT NOT NULL, fetched_date TEXT,
+                UNIQUE(root,version));
+            CREATE VIRTUAL TABLE search USING fts5(id UNINDEXED,title,tags,text);
+            CREATE TABLE links(source TEXT,target TEXT,relation TEXT,
+                PRIMARY KEY(source,target,relation));
+            CREATE TABLE memo(key TEXT PRIMARY KEY,item_id TEXT NOT NULL);
+        """)
+
+        def add(
+            title: str,
+            kind: str,
+            content: Any,
+            *,
+            previous: dict[str, Any] | None = None,
+            tags: Sequence[str] = (),
+            source: str = "",
+            fetched_date: str | None = None,
+        ) -> dict[str, Any]:
+            body = encoded(content)
+            digest = sha256(body).hexdigest()
+            (home / "artifacts" / digest).write_bytes(body)
+            item_id = str(uuid.uuid4())
+            root = str(previous["root_id"]) if previous is not None else item_id
+            version = int(previous["version"]) + 1 if previous is not None else 1
+            data: dict[str, Any] = {
+                "id": item_id,
+                "kind": kind,
+                "title": title,
+                "tags": list(tags),
+                "source": source,
+                "created": "2026-10-01T00:00:00+00:00",
+                "root_id": root,
+                "version": version,
+                "previous_id": None if previous is None else previous["id"],
+                "sha256": digest,
+                "size": len(body),
+                "ref": f"artifacts/{digest}",
+                "fetched_date": fetched_date,
+            }
+            db.execute(
+                "INSERT INTO items VALUES(?,?,?,?,?,?)",
+                (item_id, json.dumps(data), root, version, source, fetched_date),
+            )
+            db.execute(
+                "INSERT INTO search VALUES(?,?,?,?)",
+                (item_id, title, " ".join(tags), f"{source}\n{json.dumps(content)}"),
+            )
+            written.append(data)
+            return data
+
+        article = add(
+            "Carry paper",
+            "article",
+            {"text": "carry works"},
             source="https://example.org/carry",
             fetched_date="2026-10-01",
         )
-    )
-    first = lib.save(LibraryInput(title="Rates", kind="backtest", content={"sharpe": 1.0}))
-    second = lib.save(
-        LibraryInput(
-            title="Rates", kind="backtest", content={"sharpe": 1.1}, previous_id=str(first["id"])
+        first = add("Rates", "backtest", {"sharpe": 1.0})
+        second = add("Rates", "backtest", {"sharpe": 1.1}, previous=first)
+        third = add("Rates", "backtest", {"sharpe": 1.2}, previous=second)
+        tool = add("Answer", "tool-result", {"rows": 3})
+        add("Run", "workflow-result", {"ok": True}, tags=["x"])
+        identity = MemoKey(
+            strategy_version="v1", data_snapshot="s1", engine_version="e1", params={"n": 1}
         )
-    )
-    third = lib.save(
-        LibraryInput(
-            title="Rates", kind="backtest", content={"sharpe": 1.2}, previous_id=str(second["id"])
+        memo = add("Memo", "backtest", {"sharpe": 0.5})
+        db.execute(
+            "INSERT INTO memo VALUES(?,?)",
+            (sha256(encoded(identity.model_dump(mode="json"))).hexdigest(), memo["id"]),
         )
-    )
-    tool = lib.save(LibraryInput(title="Answer", kind="tool-result", content={"rows": 3}))
-    lib.save(LibraryInput(title="Run", kind="workflow-result", content={"ok": True}, tags=["x"]))
-    key = MemoKey(strategy_version="v1", data_snapshot="s1", engine_version="e1", params={"n": 1})
-    memo = lib.memoized(
-        key, lambda: LibraryInput(title="Memo", kind="backtest", content={"sharpe": 0.5})
-    )
-    lib.link(str(article["id"]), str(third["id"]))
-    lib.link(str(tool["id"]), str(article["id"]), "cites")
+        db.execute("INSERT INTO links VALUES(?,?,?)", (article["id"], third["id"], "related"))
+        db.execute("INSERT INTO links VALUES(?,?,?)", (tool["id"], article["id"], "cites"))
     return {"article": article, "first": first, "third": third, "memo": memo}
 
 
@@ -90,13 +142,15 @@ def test_a_dry_run_of_library_b_matches_step_0(tmp_path: Path) -> None:
     assert (article.kind, article.fields["url"]) == ("source", "https://example.org/carry")
 
 
-def test_a_rerun_writes_nothing_and_a_late_save_leaves_step_0_frozen(tmp_path: Path) -> None:
+def test_a_rerun_writes_nothing_and_step_0_stays_frozen(tmp_path: Path) -> None:
     library_b(tmp_path)
     snapshot(tmp_path)
     with open_target(tmp_path, dry_run=True, redactor=redact) as store:
         import_library_b(store, tmp_path)
         again = import_library_b(store, tmp_path)
-    Library(tmp_path).save(LibraryInput(title="Late", kind="note", content={}))
+    (tmp_path / "library.db").unlink()
+    (tmp_path / "artifacts").rename(tmp_path / "later")
+    snapshot(tmp_path)
 
     assert (again.objects, again.skipped, again.edges) == (0, 7, 2)
     assert sum(snapshot(tmp_path).kinds.values()) == 7
@@ -268,38 +322,36 @@ def test_app_artifacts_and_definitions_import_with_their_relations(tmp_path: Pat
     assert result.ok, result.render()
 
 
-def test_every_library_save_reaches_both_stores_and_the_diff_stays_clean(tmp_path: Path) -> None:
+def test_the_switch_over_retires_the_old_files_with_the_junk_filtered(tmp_path: Path) -> None:
     saved = library_b(tmp_path)
-    snapshot(tmp_path)
-    with open_target(tmp_path, dry_run=False, redactor=redact) as store:
-        import_library_b(store, tmp_path)
-        service = ControlService(tmp_path)
-        service.attach_library_mirror(DualWrite(store))
-        fresh = service.library_save(LibraryInput(title="New", kind="note", content={"a": 1}))
-        newer = service.library_save(
-            LibraryInput(
-                title="Rates", kind="backtest", content={"sha": 2}, previous_id=saved["third"]["id"]
-            )
+    junk = dict(saved["memo"])
+    junk["id"] = JUNK[0]
+    junk["root_id"] = JUNK[0]
+    with closing(sqlite3.connect(tmp_path / "library.db")) as db, db:
+        db.execute(
+            "INSERT INTO items VALUES(?,?,?,?,?,?)",
+            (JUNK[0], json.dumps(junk), JUNK[0], 1, "", None),
         )
-        events = [cast(dict[str, Any], e["data"]) for e in service.events("library")]
-        clean = dual_diff(tmp_path, tmp_path / "library")
-        service.library.save(LibraryInput(title="Unmirrored", kind="note", content={}))
-        gap = dual_diff(tmp_path, tmp_path / "library")
-        latest = store.get(OPERATOR, str(resolve_alias(store, str(newer["id"]))))
-        fresh_kind = store.get(OPERATOR, str(resolve_alias(store, str(fresh["id"])))).kind
 
-    assert [e.get("mirror") for e in events if e.get("type") == "saved"] == ["ok", "ok"]
-    assert clean.as_json() == {
-        "clean": True,
-        "old": 9,
-        "new": 9,
-        "missing": [],
-        "other_bytes": [],
-        "stale_heads": [],
+    switched = switch_over(tmp_path, redactor=redact)
+
+    report = switched.report()
+    step0 = cast(dict[str, Any], report["step0"])
+    assert report["junk"] == list(JUNK[:1])
+    assert step0["kinds"] == {
+        "article": 1,
+        "backtest": 5,
+        "tool-result": 1,
+        "workflow-result": 1,
     }
-    assert (gap.clean, gap.old, gap.new, len(gap.missing)) == (False, 10, 9, 1)
-    assert latest.fields["legacy_version"] == 4
-    assert fresh_kind == "artifact"
+    assert (switched.imported.objects, switched.imported.edges) == (7, 2)
+    assert switched.ok, switched.verification.render()
+    assert report["retired"] == ["library.db", "artifacts"]
+    assert (tmp_path / "library" / "objects").is_dir()
+    assert not (tmp_path / "library.db").exists()
+    retired = tmp_path / "migration" / "retired" / "library.db"
+    assert retired.is_file()
+    assert retired.stat().st_mode & 0o222 == 0, "the retired copy is read-only"
 
 
 def test_the_step_0_copy_is_read_not_the_live_library(tmp_path: Path) -> None:
