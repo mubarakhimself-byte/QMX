@@ -15,6 +15,10 @@ selective sync of AD-10 (F10, F18, N1): it asks for the ref moves after a sequen
 manifests and edges those moves name, copies their text-slot blobs and no other blob, and moves
 its cursor. `Synchroniser` makes one sync run at a time and coalesces a burst of commits into the
 next one.
+
+Both syncs read the other store's epoch record first. A higher epoch is learned before any push is
+judged, so a PC restored from an older backup stops acting as primary, parks the moves it made as
+primary and pushes nothing (AD-14, F12, F15, N13, N19).
 """
 
 from __future__ import annotations
@@ -26,7 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
 from qmx_library.client import Move, OwnerTable, Ref
-from qmx_library.store import Store, text_blob_ids
+from qmx_library.store import PRIMARY_ITEM, PRIMARY_REF, Epoch, Store, text_blob_ids
 
 
 class Peer(Protocol):
@@ -74,6 +78,17 @@ class Peer(Protocol):
     def tombstone(self, blob_id: str) -> Mapping[str, Any] | None: ...
 
     def apply_purge(self, blob_id: str, *, reason: str, at: str) -> None: ...
+
+
+class Learner(Peer, Protocol):
+    """The side of a sync that can learn an epoch: the PC's store, which is always the caller.
+
+    The Hub is only ever the other end, and it never learns an epoch from a PC (AD-11, DEC-0497).
+    """
+
+    def epoch(self) -> Epoch | None: ...
+
+    def learn_epoch(self, other: Epoch, *, shared_seq: int | None = None) -> Epoch: ...
 
 
 class StorePeer:
@@ -167,6 +182,12 @@ class StorePeer:
 
     def apply_purge(self, blob_id: str, *, reason: str, at: str) -> None:
         self.store.apply_purge(blob_id, reason=reason, at=at)
+
+    def epoch(self) -> Epoch | None:
+        return self.store.epoch
+
+    def learn_epoch(self, other: Epoch, *, shared_seq: int | None = None) -> Epoch:
+        return self.store.learn_epoch(other, shared_seq=shared_seq)
 
 
 def order(manifests: Mapping[str, Sequence[str]]) -> list[str]:
@@ -289,7 +310,7 @@ class Synced:
         return not self.alarms
 
 
-def sync(local: Peer, remote: Peer, table: OwnerTable) -> Synced:
+def sync(local: Learner, remote: Peer, table: OwnerTable) -> Synced:
     """One sync of everything: pull and mirror what the other store owns, push what this one
     owns, then apply the purge tombstones the owner recorded (AD-6, AD-14, AD-16)."""
     synced = Synced()
@@ -301,21 +322,19 @@ def sync(local: Peer, remote: Peer, table: OwnerTable) -> Synced:
         ancestor=lambda older, newer: older in _ancestry(local, newer),
     )
     synced.alarms.extend(routes.alarms)
+    _learn_higher_epoch(local, remote)
     _copy(local, remote, synced, pull=True)
     _copy(local, remote, synced, pull=False)
     local_heads = {(row.item, row.ref): row.head for row in local.refs()}
-    remote_heads = {(row.item, row.ref): row.head for row in remote.refs()}
     for row in routes.mirror:
         local.mirror(row, expected_head=local_heads.get((row.item, row.ref)))
         synced.mirrored.append(row.ref)
-    for row in routes.push:
-        remote.mirror(row, expected_head=remote_heads.get((row.item, row.ref)))
-        synced.pushed_refs.append(row.ref)
+    _push(local, remote, routes, synced)
     _apply_purges(local, remote, synced)
     return synced
 
 
-def sync_since(local: Peer, remote: Peer, table: OwnerTable, *, cursor: int) -> Synced:
+def sync_since(local: Learner, remote: Peer, table: OwnerTable, *, cursor: int) -> Synced:
     """One selective sync of what moved after `cursor` (AD-10, F10, F18, N1).
 
     It reads the other store's ref-log tail instead of its object ids, ingests the manifests and
@@ -323,6 +342,7 @@ def sync_since(local: Peer, remote: Peer, table: OwnerTable, *, cursor: int) -> 
     stops at the sequence it read. Every other blob of a pulled object reaches this store only
     when something here opens it. A manifest whose kind or schema version this store lacks is
     left for a host that can read it, and `refs` is still mirrored so the ref name is not lost.
+    It learns the other store's epoch before it judges any push (AD-14).
     """
     synced = Synced()
     routes = plan(
@@ -333,24 +353,67 @@ def sync_since(local: Peer, remote: Peer, table: OwnerTable, *, cursor: int) -> 
         ancestor=lambda older, newer: older in _ancestry(local, newer),
     )
     synced.alarms.extend(routes.alarms)
+    _learn_higher_epoch(local, remote)
     moves = remote.moves(cursor)
     _pull_moves(local, remote, moves, synced)
     synced.edges = _pull_edges(local, remote, cursor)
     local_heads = {(row.item, row.ref): row.head for row in local.refs()}
-    remote_heads = {(row.item, row.ref): row.head for row in remote.refs()}
     for row in routes.mirror:
         local.mirror(row, expected_head=local_heads.get((row.item, row.ref)))
         synced.mirrored.append(row.ref)
-    stale = stale_primary(local)
-    if stale is not None:
-        synced.alarms.append(f"{stale}: this store is not the primary, so no ref is pushed")
-    else:
-        for row in routes.push:
-            remote.mirror(row, expected_head=remote_heads.get((row.item, row.ref)))
-            synced.pushed_refs.append(row.ref)
+    _push(local, remote, routes, synced)
     _apply_purges(local, remote, synced)
     synced.cursor = max([cursor, *(move.seq for move in moves)])
     return synced
+
+
+def peer_epoch(remote: Peer) -> Epoch | None:
+    """The epoch record the other store holds on `refs/primary`, or None when it holds none.
+
+    The record is one object on that ref, so this reads it with the verbs every peer already
+    has: no extra route, and no extra trust (AD-14, DEC-0497).
+    """
+    for row in remote.refs():
+        if (row.item, row.ref) != (PRIMARY_ITEM, PRIMARY_REF):
+            continue
+        found = remote.manifest(row.head)
+        if found is None:
+            return None
+        fields = cast(Mapping[str, Any], found.get("fields") or {})
+        try:
+            return Epoch(str(fields["primary"]), int(fields["epoch"]))
+        except KeyError, TypeError, ValueError:
+            return None
+    return None
+
+
+def _learn_higher_epoch(local: Learner, remote: Peer) -> None:
+    """Take the other store's epoch when it is above this one's, once per learning (AD-14).
+
+    The record names the primary and the epoch and no shared ref-log sequence, so a store that
+    learns one parks every move it made as primary, which is the safe side of N13 and N19. Learned
+    before any push is judged, the epoch governs this sync's push and every later one.
+    """
+    theirs = peer_epoch(remote)
+    if theirs is None:
+        return
+    known = local.epoch()
+    if known is not None and known.epoch >= theirs.epoch:
+        return
+    local.learn_epoch(theirs, shared_seq=theirs.seq)
+
+
+def _push(local: Peer, remote: Peer, routes: Plan, synced: Synced) -> None:
+    """Push the refs this store owns, unless it learned that it is not the primary (AD-14)."""
+    if stale := stale_primary(local):
+        synced.alarms.append(f"{stale}: this store is not the primary, so no ref is pushed")
+        return
+    if not routes.push:
+        return
+    remote_heads = {(row.item, row.ref): row.head for row in remote.refs()}
+    for row in routes.push:
+        remote.mirror(row, expected_head=remote_heads.get((row.item, row.ref)))
+        synced.pushed_refs.append(row.ref)
 
 
 def _pull_moves(

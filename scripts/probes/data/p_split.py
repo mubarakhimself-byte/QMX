@@ -13,6 +13,10 @@ The PC works offline and moves its own `main` twice. Then its first sync learns 
 4. The sync pushes nothing, and the server's own `main` head is unchanged.
 5. The offline moves are still on the restored PC's own `main`: nothing was lost.
 
+The epoch is learned by the sync itself, not by a call the probe makes: `sync_since` reads the
+server's `refs/primary` record and takes it before it judges any push (Library AD-14; F12, F15,
+N13, N19).
+
 **Pass:** the epoch alarm, the refused write, one conflict per offline move, no push, the server's
 `main` unchanged, and the offline heads still readable. **Fail:** the server's `main` moves to an
 older head, or an offline move is lost or applied silently.
@@ -29,7 +33,7 @@ from qmx_engine.ledger import redact
 from qmx_library.client import OwnerTable
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import Principal
-from qmx_library.store import Store
+from qmx_library.store import Epoch, Store
 
 from qmx_hub.replicate import StorePeer, sync_since
 
@@ -67,8 +71,13 @@ def main(argv: list[str] | None = None) -> int:
                 expected_head=None,
             )
 
-            shared = 0
-            learned = pc.learn_epoch(server.epoch, shared_seq=shared)
+            synced = sync_since(
+                StorePeer(pc),
+                StorePeer(server),
+                OwnerTable("server"),
+                cursor=0,
+            )
+            learned = pc.epoch or Epoch("", 0)
             print(
                 f"epoch on the PC {learned.primary}@{learned.epoch}, stale {learned.stale}, "
                 f"alarms {pc.alarms}"
@@ -101,12 +110,6 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 problems.append("the stale PC still acts as primary")
 
-            synced = sync_since(
-                StorePeer(pc),
-                StorePeer(server),
-                OwnerTable("server" if learned.primary == "server" else "pc"),
-                cursor=0,
-            )
             print(f"sync pushed {synced.pushed_refs}, alarms {synced.alarms}")
             if synced.pushed_refs:
                 problems.append(f"the stale PC pushed {synced.pushed_refs}")
