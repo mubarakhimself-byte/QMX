@@ -48,7 +48,7 @@ from pydantic import ValidationError
 
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.registry import REGISTRY
-from qmx_engine.heartbeat import INTERVAL_S, host_kinds
+from qmx_engine.heartbeat import INTERVAL_S, connection_words, host_kinds
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Operation, Reader, Transaction
@@ -328,6 +328,7 @@ class Scheduler:
                 profiles=None if harness is None else harness.profiles(),
                 credentials=self.credentials,
                 skills=self.skills,
+                connections=connection_words(self.ctx.home),
             ) or quarantined_input(version.object_id, self.ctx.library)
             if blocked is not None:
                 self._blocked(fire, trigger, blocked)
