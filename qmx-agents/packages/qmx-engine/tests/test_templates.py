@@ -51,6 +51,23 @@ CRYSTALLISE = PACK / "crystallise-a-workflow"
 DRAFTS = [PACK / t.folder for t in CATALOG if t.needs]
 CALIBRATED = ("rs2-source-to-component-card", "rs4-literature-review", "a-fill-the-library")
 
+NO_RENDER = frozenset(
+    {
+        "a-fill-the-library",
+        "backup-weekly",
+        "connections-health",
+        "download-binance",
+        "download-ccxt",
+        "download-dukascopy",
+        "feed",
+    }
+)
+"""Script-first templates with no grader and no deliver step, so they carry no block copy.
+
+`backup-weekly` and `connections-health` were the first two; the feed and the three downloaders
+land their own output and have nothing to render or grade (DR6).
+"""
+
 BLOCK_COPIES = {
     "preflight/scripts/new_ids.py": ("rs1-paper-scout/scripts/new_ids.py",),
     "paper-read/prompts/read.md": ("rs1-paper-scout/prompts/read.md",),
@@ -68,17 +85,17 @@ BLOCK_COPIES = {
     "render-and-grade/scripts/render_and_grade.py": tuple(
         f"{template.folder}/scripts/render_and_grade.py"
         for template in CATALOG
-        if template.folder not in {"backup-weekly", "connections-health"}
+        if template.folder not in NO_RENDER
     ),
     "render-and-grade/scripts/stop.py": tuple(
         f"{template.folder}/scripts/stop.py"
         for template in CATALOG
-        if template.folder not in {"backup-weekly", "connections-health"}
+        if template.folder not in NO_RENDER
     ),
     "render-and-grade/scripts/deliver.py": tuple(
         f"{template.folder}/scripts/deliver.py"
         for template in CATALOG
-        if template.folder not in {"a-fill-the-library", "backup-weekly", "connections-health"}
+        if template.folder not in NO_RENDER
     ),
     "overfit-gates/scripts/deflated_sharpe.py": tuple(
         f"{folder}/scripts/deflated_sharpe.py"

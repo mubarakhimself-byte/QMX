@@ -11,13 +11,11 @@ own thread, and hands the staged month to the door's `commit`. A month is landed
 at all: the days that happened to work are never written as if they were the month.
 """
 
-import hashlib
 import json
 import os
 import shutil
 import sys
 import threading
-import time
 import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,9 +24,8 @@ from urllib.request import Request, urlopen
 
 from qmf.core import Ok, is_refusal
 from qmf.data.binance_vision import (
-    COLUMNS,
     BINANCE_VISION_SOURCE,
-    bucket_path,
+    COLUMNS,
     kind_for,
     month_files,
     variant_for,
@@ -36,9 +33,10 @@ from qmf.data.binance_vision import (
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import TypedWriter
 from qmf.data.store.refusals import storage_failure
-from qmx_engine.workers.zones import home_of
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Partition, SeriesCard, card_fields
+
+from qmx_engine.workers.zones import home_of
 
 FAILURE = "[QMX_FAILURE]"
 USER_AGENT = "qmx-feed/1.0"
@@ -53,12 +51,16 @@ def fail(why: str) -> None:
 
 def http_reader(url: str):
     """The bucket's bytes over HTTPS, with the folder taken from the file's own path."""
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+    request = Request(  # noqa: S310 (the bucket's own url, http or https)
+        url, headers={"User-Agent": USER_AGENT, "Accept": "*/*"}
+    )
     try:
         with urlopen(request, timeout=TIMEOUT_SECONDS) as reply:  # noqa: S310
             return Ok(reply.read())
     except HTTPError as error:
-        return storage_failure("the bucket answered an error", context={"url": url, "status": error.code})
+        return storage_failure(
+            "the bucket answered an error", context={"url": url, "status": error.code}
+        )
     except (URLError, OSError) as error:
         return storage_failure(
             "the bucket could not be read", context={"url": url, "error": str(error)}
@@ -121,7 +123,14 @@ def claim(root: Path, key_text: str) -> Path | None:
 given = json.load(sys.stdin).get("in") or {}
 if isinstance(given, dict) and given.get("dry_run"):
     (Path(os.environ["QMX_WORK"]) / "library" / "cards").mkdir(parents=True, exist_ok=True)
-    print(json.dumps({"status": "dry_run", "note": "nothing fetched; the source slot is read when a download runs"}))
+    print(
+        json.dumps(
+            {
+                "status": "dry_run",
+                "note": "nothing fetched; the source slot is read when a download runs",
+            }
+        )
+    )
     raise SystemExit(0)
 source = given.get("source") if isinstance(given, dict) else None
 if not isinstance(source, dict):
@@ -174,7 +183,9 @@ try:
         reader = http_reader
     else:
         reader = file_reader(Path(base))
-    fetched = month_files(reader, dataset, symbol, year, month, market=str(source.get("market") or "spot"))
+    fetched = month_files(
+        reader, dataset, symbol, year, month, market=str(source.get("market") or "spot")
+    )
     if is_refusal(fetched):
         fail(f"the month was refused: {fetched.context}")
     rows: list[tuple[object, ...]] = []
@@ -191,7 +202,9 @@ try:
     free = shutil.disk_usage(staged.parent).free / (1024**3)
     floor = float(data.get("disk_floor_gb") or DEFAULT_FLOOR_GB)
     if free < floor:
-        fail(f"the partition keeps the disk below its floor: {free:.1f} GB free, {floor:g} GB floor")
+        fail(
+            f"the partition keeps the disk below its floor: {free:.1f} GB free, {floor:g} GB floor"
+        )
     TypedWriter(staged, key.value.text, columns).add(rows).finish()
     landed = door.commit([staged], staging=staging, born_on=placement)
     if is_refusal(landed):

@@ -80,7 +80,9 @@ for item in items:
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
             handle.write(json.dumps({"intent_key": intent, "at": datetime.now(UTC).isoformat()}))
         if intent.startswith(("http://", "https://", "file://")):
-            request = Request(intent, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+            request = Request(  # noqa: S310 (the feed's own item url)
+                intent, headers={"User-Agent": USER_AGENT, "Accept": "*/*"}
+            )
             with urlopen(request, timeout=TIMEOUT_SECONDS) as reply:  # noqa: S310
                 body = reply.read(BODY_LIMIT + 1)
         else:

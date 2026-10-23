@@ -14,10 +14,10 @@ import hashlib
 import json
 import os
 import sys
-import xml.etree.ElementTree as ElementTree
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 
 USER_AGENT = "QMX feed/1.0 (+qmx)"
 TIMEOUT_SECONDS = 45
@@ -37,7 +37,9 @@ def read(location: str) -> bytes:
     """
     target = location.strip()
     if target.startswith(("http://", "https://", "file://")):
-        request = Request(target, headers={"User-Agent": USER_AGENT, "Accept": "*/*"})
+        request = Request(  # noqa: S310 (the source's own url)
+            target, headers={"User-Agent": USER_AGENT, "Accept": "*/*"}
+        )
         with urlopen(request, timeout=TIMEOUT_SECONDS) as reply:  # noqa: S310
             return reply.read()
     path = Path(target)
@@ -109,7 +111,9 @@ def sitemap(body: bytes) -> list[dict[str, str]]:
 
 def api(body: bytes) -> list[dict[str, str]]:
     parsed = json.loads(body)
-    rows = parsed if isinstance(parsed, list) else parsed.get("items") or parsed.get("results") or []
+    rows = (
+        parsed if isinstance(parsed, list) else parsed.get("items") or parsed.get("results") or []
+    )
     items: list[dict[str, str]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -127,9 +131,7 @@ def api(body: bytes) -> list[dict[str, str]]:
 
 
 def page(body: bytes, location: str) -> list[dict[str, str]]:
-    return [
-        {"id": hashlib.sha256(body).hexdigest(), "url": location, "title": "", "published": ""}
-    ]
+    return [{"id": hashlib.sha256(body).hexdigest(), "url": location, "title": "", "published": ""}]
 
 
 given = json.load(sys.stdin).get("in") or {}

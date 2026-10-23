@@ -16,7 +16,6 @@ import os
 import shutil
 import sys
 import threading
-import time
 import tomllib
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -25,9 +24,10 @@ from pathlib import Path
 from qmf.core import is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import BAR_COLUMNS, TypedWriter
-from qmx_engine.workers.zones import home_of
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Partition, SeriesCard, card_fields
+
+from qmx_engine.workers.zones import home_of
 
 FAILURE = "[QMX_FAILURE]"
 DEFAULT_FLOOR_GB = 3.0
@@ -54,7 +54,7 @@ def month_of(text: str) -> tuple[int, int]:
 def scaled(value: object, scale: int) -> int:
     try:
         return int(Decimal(str(value)) * (10**scale))
-    except (InvalidOperation, ValueError):
+    except InvalidOperation, ValueError:
         fail(f"a bar's number {value!r} is not a decimal")
 
 
@@ -91,7 +91,14 @@ def claim(root: Path, key_text: str) -> Path | None:
 given = json.load(sys.stdin).get("in") or {}
 if isinstance(given, dict) and given.get("dry_run"):
     (Path(os.environ["QMX_WORK"]) / "library" / "cards").mkdir(parents=True, exist_ok=True)
-    print(json.dumps({"status": "dry_run", "note": "nothing fetched; the source slot is read when a download runs"}))
+    print(
+        json.dumps(
+            {
+                "status": "dry_run",
+                "note": "nothing fetched; the source slot is read when a download runs",
+            }
+        )
+    )
     raise SystemExit(0)
 source = given.get("source") if isinstance(given, dict) else None
 if not isinstance(source, dict):
@@ -104,7 +111,7 @@ year, month = month_of(str(source.get("month") or ""))
 timeframe = str(source.get("timeframe") or "1m")
 scale = int(source.get("price_scale") or DEFAULT_PRICE_SCALE)
 try:
-    import ccxt  # noqa: PLC0415 (only a top-up needs the library)
+    import ccxt
 except ImportError:
     fail("ccxt is not installed on this machine, so the recent-days top-up cannot run")
 library = getattr(ccxt, exchange_name, None)
@@ -170,7 +177,9 @@ try:
     free = shutil.disk_usage(staged.parent).free / (1024**3)
     floor = float(data.get("disk_floor_gb") or DEFAULT_FLOOR_GB)
     if free < floor:
-        fail(f"the partition keeps the disk below its floor: {free:.1f} GB free, {floor:g} GB floor")
+        fail(
+            f"the partition keeps the disk below its floor: {free:.1f} GB free, {floor:g} GB floor"
+        )
     TypedWriter(staged, key.value.text, BAR_COLUMNS).add(rows).finish()
     landed = door.commit([staged], staging=staging, born_on=placement)
     if is_refusal(landed):

@@ -19,30 +19,29 @@ no ticks.
 The volume on every row is Dukascopy's own liquidity. The card says so.
 """
 
+import http.client
 import json
 import os
 import shutil
 import sys
 import threading
 import time
+import tomllib
 from datetime import UTC, datetime
 from pathlib import Path
 
-import http.client
-import tomllib
-
 from qmf.core import is_refusal
 from qmf.data.dukascopy import (
-    NS_PER_HOUR,
     VOLUME_LIQUIDITY,
     DukascopyHourKey,
     decode_bi5_ticks,
 )
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import TICK_COLUMNS, TypedWriter
-from qmx_engine.workers.zones import home_of
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Partition, SeriesCard, card_fields
+
+from qmx_engine.workers.zones import home_of
 
 FAILURE = "[QMX_FAILURE]"
 HOST = "datafeed.dukascopy.com"
@@ -208,7 +207,14 @@ def free_disk(folder: Path, floor_gb: float) -> str:
 given = json.load(sys.stdin).get("in") or {}
 if isinstance(given, dict) and given.get("dry_run"):
     (Path(os.environ["QMX_WORK"]) / "library" / "cards").mkdir(parents=True, exist_ok=True)
-    print(json.dumps({"status": "dry_run", "note": "nothing fetched; the source slot is read when a download runs"}))
+    print(
+        json.dumps(
+            {
+                "status": "dry_run",
+                "note": "nothing fetched; the source slot is read when a download runs",
+            }
+        )
+    )
     raise SystemExit(0)
 source = given.get("source") if isinstance(given, dict) else None
 if not isinstance(source, dict):
