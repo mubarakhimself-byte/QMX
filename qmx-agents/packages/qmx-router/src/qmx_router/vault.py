@@ -324,7 +324,6 @@ class Vault:
     ) -> None:
         self.key = key
         self.source = source
-        self.machine = machine
         self.machines: dict[str, VaultKey] = {machine: key, **(peers or {})}
         self.clock = clock
         self.replicable = replicable
@@ -337,10 +336,6 @@ class Vault:
 
     def public_key_text(self) -> str:
         return base64.b64encode(self.public_key).decode("ascii")
-
-    def add_machine(self, machine: str, public_key: bytes) -> None:
-        """Take a receiving machine's public half. A machine that is already known keeps its key."""
-        self.machines.setdefault(machine, VaultKey.from_public_bytes(public_key))
 
     def install(self, name: str, value: str, *, replicable: bool | None = None) -> VaultEntry:
         """Enter or rotate one value. `replicable` defaults to the name's own answer, and a name on
