@@ -553,8 +553,8 @@ def references(inputs: JsonValue) -> tuple[str, ...]:
     def walk(value: JsonValue) -> None:
         if isinstance(value, str):
             if value.startswith("@") and ":" in value:
-                parse(value)
-                if value.startswith(tuple(f"@{kind}:" for kind in RUN_INPUT_KINDS)):
+                kind, _ = parse(value)
+                if kind in RUN_INPUT_KINDS:
                     found.append(value)
         elif isinstance(value, list):
             for item in value:
