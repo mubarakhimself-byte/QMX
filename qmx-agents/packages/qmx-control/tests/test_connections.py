@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
+from typing import Any, cast
 
 from qmx_broker.service import BrokerService
 
@@ -36,11 +37,11 @@ def test_the_brokers_section_is_read_once_into_connections(tmp_path: Path) -> No
 
     assert "brokers" not in stored
     assert stored["connections"][0]["kind"] == "broker"
-    assert written == service.settings_get("brokers")
-    assert service.settings_get("brokers")["brokers"][0]["adapter"] == "ctrader"
-    assert service.settings_get("connections")["connections"][0]["connections"][0]["scope"] == (
-        "read"
-    )
+    legacy_view = cast(dict[str, Any], service.settings_get("brokers"))
+    modern_view = cast(dict[str, Any], service.settings_get("connections"))
+    assert written == legacy_view
+    assert legacy_view["brokers"][0]["adapter"] == "ctrader"
+    assert modern_view["connections"][0]["connections"][0]["scope"] == "read"
 
     rows = BrokerService(
         tmp_path, brokers=lambda: service.settings_get("connections")

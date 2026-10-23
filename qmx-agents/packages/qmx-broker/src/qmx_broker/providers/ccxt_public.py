@@ -10,9 +10,8 @@ import time
 from collections.abc import Mapping
 
 from qmx_broker.models import Broker, Connection
-from qmx_broker.registry import Declaration, ProbeResult, register, register_probe
-
 from qmx_broker.providers.http import Fetch, answered, declared_object, urllib_fetch
+from qmx_broker.registry import Declaration, ProbeResult, register, register_probe
 
 TIME_ENDPOINTS = {
     "binance": "https://api.binance.com/api/v3/time",

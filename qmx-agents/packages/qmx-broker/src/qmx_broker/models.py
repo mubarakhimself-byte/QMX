@@ -117,9 +117,7 @@ class BrokerSettings(BaseModel):
         homes: dict[str, str] = {}
         for broker in self.providers:
             for connection in broker.connections:
-                if len({account.id for account in connection.accounts}) != len(
-                    connection.accounts
-                ):
+                if len({account.id for account in connection.accounts}) != len(connection.accounts):
                     raise ValueError("Account ids must be unique within a connection")
                 earlier = homes.setdefault(connection.credential_ref, connection.home)
                 if earlier != connection.home:

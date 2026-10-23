@@ -17,7 +17,7 @@ import urllib.request
 from collections.abc import Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
-from typing import Protocol
+from typing import Protocol, cast
 
 from qmx_broker.models import Broker, Connection
 from qmx_broker.registry import (
@@ -42,9 +42,7 @@ class Response:
 
 
 class Fetch(Protocol):
-    def __call__(
-        self, url: str, headers: Mapping[str, str], method: str
-    ) -> Response: ...
+    def __call__(self, url: str, headers: Mapping[str, str], method: str) -> Response: ...
 
 
 def urllib_fetch(url: str, headers: Mapping[str, str], method: str) -> Response:
@@ -71,7 +69,7 @@ def retry_after(headers: Mapping[str, str]) -> float | None:
     except ValueError:
         try:
             when = parsedate_to_datetime(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
         return max(0.0, when.timestamp() - time.time())
 
@@ -82,7 +80,7 @@ def clock_offset_ms(headers: Mapping[str, str]) -> int | None:
         return None
     try:
         when = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if when.tzinfo is None:
         return None
@@ -113,7 +111,8 @@ def declared_object(response: Response) -> dict[str, object]:
     value = payload(response)
     if not isinstance(value, dict):
         raise Down("invalid_body")
-    return {str(key): item for key, item in value.items()}
+    found = cast("dict[object, object]", value)
+    return {str(key): item for key, item in found.items()}
 
 
 def base_url(provider: Broker, connection: Connection) -> str:
@@ -161,8 +160,8 @@ register_probe("http", probe)
 
 __all__ = [
     "DECLARATION",
-    "Fetch",
     "OK",
+    "Fetch",
     "Response",
     "answered",
     "base_url",

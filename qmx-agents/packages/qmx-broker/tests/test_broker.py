@@ -340,6 +340,7 @@ def test_mcp_tools_list_and_every_call_in_process(tmp_path: Path) -> None:
             tools = await client.list_tools()
             assert {tool.name for tool in tools} == {
                 "list_accounts",
+                "list_connections",
                 "account_state",
                 "positions",
                 "quotes",
@@ -357,6 +358,7 @@ def test_mcp_tools_list_and_every_call_in_process(tmp_path: Path) -> None:
             scope = {"broker_id": "ic", "connection_id": "demo", "account_id": "101"}
             inputs = {
                 "list_accounts": {},
+                "list_connections": {},
                 "account_state": scope,
                 "positions": scope,
                 "quotes": {**scope, "symbol": "EURUSD"},

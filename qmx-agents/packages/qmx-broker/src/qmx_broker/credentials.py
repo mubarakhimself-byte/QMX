@@ -9,6 +9,7 @@ ruling 135).
 
 import json
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Literal, Protocol, cast
 
@@ -106,11 +107,11 @@ def refile(
     secrets = _store(store)
     raw = secrets.get_password(old_reference, old_reference.removeprefix("qmx/"))
     if raw is None:
-        return Filing(connection_id, old_reference, False, "needs_you", "No stored entry to re-file.")
+        return Filing(
+            connection_id, old_reference, False, "needs_you", "No stored entry to re-file."
+        )
     reference = filed_reference(connection_id, kind)
     secrets.set_password(reference, reference.removeprefix("qmx/"), raw)
-    try:
+    with suppress(PasswordDeleteError):
         secrets.delete_password(old_reference, old_reference.removeprefix("qmx/"))
-    except PasswordDeleteError:
-        pass
     return Filing(connection_id, reference, True, "ok")

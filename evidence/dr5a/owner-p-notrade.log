@@ -1,0 +1,7 @@
+P-NOTRADE PASS
+  names checked: 12
+  allowed: ['qmx/read/x', 'qmx/data/x', 'qmx/kimi', 'qmx/openrouter']
+  refused names in the sync payload: []
+  names the server received: ['qmx/data/x', 'qmx/kimi', 'qmx/openrouter', 'qmx/read/x']
+  tombstones published: []
+  W13 stub: live-trade key: stored False, row needs_you, writes 0

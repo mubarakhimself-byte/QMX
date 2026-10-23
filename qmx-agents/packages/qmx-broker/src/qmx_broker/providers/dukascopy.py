@@ -10,9 +10,8 @@ import time
 from collections.abc import Mapping
 
 from qmx_broker.models import Broker, Connection
-from qmx_broker.registry import Declaration, ProbeResult, register, register_probe
-
 from qmx_broker.providers.http import Fetch, answered, urllib_fetch
+from qmx_broker.registry import Declaration, ProbeResult, register, register_probe
 
 BASE = "https://datafeed.dukascopy.com/datafeed"
 """Month is zero-indexed in the provider's path: 2026/08/01 is 1 September 2026."""

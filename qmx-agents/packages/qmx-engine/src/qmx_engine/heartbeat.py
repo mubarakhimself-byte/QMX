@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from importlib import metadata
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from qmx_ledger.journal import fingerprint
@@ -210,19 +210,21 @@ def host_kinds(home: Path) -> Mapping[str, frozenset[str]]:
     }
 
 
+def _health(home: Path) -> dict[str, object]:
+    try:
+        raw: object = json.loads((logs_dir(home) / CONNECTIONS).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    return cast("dict[str, object]", raw) if isinstance(raw, dict) else {}
+
+
 def connection_readings(home: Path) -> tuple[ConnectionReading, ...]:
     """The health workflow's newest reading per connection; empty before its first run."""
-    try:
-        raw = json.loads((logs_dir(home) / CONNECTIONS).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return ()
-    if not isinstance(raw, dict):
-        return ()
-    rows = raw.get("readings")
+    rows = _health(home).get("readings")
     if not isinstance(rows, list):
         return ()
     found: list[ConnectionReading] = []
-    for row in rows:
+    for row in cast("list[object]", rows):
         try:
             found.append(ConnectionReading.model_validate(row))
         except ValueError:
@@ -237,6 +239,9 @@ def connection_words(home: Path) -> Mapping[str, str]:
 
 def measured_clock_offset(home: Path) -> int | None:
     """The largest absolute provider clock offset the connections measured, signed as measured."""
+    stored = _health(home).get("clock_offset_ms")
+    if isinstance(stored, int) and not isinstance(stored, bool):
+        return stored
     offsets = [
         reading.clock_offset_ms
         for reading in connection_readings(home)

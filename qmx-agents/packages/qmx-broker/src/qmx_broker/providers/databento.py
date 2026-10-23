@@ -7,14 +7,13 @@ import time
 from collections.abc import Mapping
 
 from qmx_broker.models import Broker, Connection
-from qmx_broker.registry import Declaration, NeedsYou, ProbeResult, register, register_probe
-
 from qmx_broker.providers.http import (
     Fetch,
     answered,
     declared_object,
     urllib_fetch,
 )
+from qmx_broker.registry import Declaration, NeedsYou, ProbeResult, register, register_probe
 
 ENDPOINT = "https://hist.databento.com/v0/metadata.list_datasets"
 
@@ -46,7 +45,9 @@ def probe(
     del provider
     key = (secret or {}).get("apiKey") or (secret or {}).get("api_key")
     if not key:
-        raise NeedsYou("credential_missing", f"keyring entry {connection.credential_ref} has no apiKey")
+        raise NeedsYou(
+            "credential_missing", f"keyring entry {connection.credential_ref} has no apiKey"
+        )
     token = base64.b64encode(f"{key}:".encode()).decode()
     started = time.monotonic()
     response = fetch(ENDPOINT, {"Authorization": f"Basic {token}"}, "GET")

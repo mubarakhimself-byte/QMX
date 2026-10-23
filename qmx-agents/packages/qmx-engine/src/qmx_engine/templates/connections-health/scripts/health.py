@@ -13,6 +13,7 @@ import sys
 import time
 import tomllib
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from qmx_broker.credentials import credentials
@@ -73,15 +74,22 @@ def main() -> int:
             probe = probe_for(provider.adapter)
             if dry_run:
                 rows.append(
-                    {"connection": connection.id, "word": "needs_you", "setup": "configured",
-                     "code": "dry_run", "latency_ms": None, "clock_offset_ms": None,
-                     "slowed_until": None, "at": datetime.now(UTC).isoformat()}
+                    {
+                        "connection": connection.id,
+                        "word": "needs_you",
+                        "setup": "configured",
+                        "code": "dry_run",
+                        "latency_ms": None,
+                        "clock_offset_ms": None,
+                        "slowed_until": None,
+                        "at": datetime.now(UTC).isoformat(),
+                    }
                 )
                 continue
             reading = walk(
                 provider,
                 connection,
-                probe=None if probe is None else lambda p, c: resolve(p, c, probe),
+                probe=None if probe is None else partial(resolve, probe=probe),
                 now=now,
             )
             rows.append(report(connection, reading))

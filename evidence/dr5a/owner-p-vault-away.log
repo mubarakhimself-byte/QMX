@@ -1,0 +1,11 @@
+P-VAULT-AWAY PASS
+  key file: vault.key (mode 0600 on Ubuntu)
+  sealed for: ['contabo', 'pc']
+  data key sealed for: ['contabo', 'pc']
+  server opened its own entry: True
+  ten opens ms: 1.68
+  relay status: 200
+  model calls: 1
+  missing key code: vault:unavailable:contabo
+  relay with no key file: 0 GrantRefused: the keyring could not read qmx/kimi: VaultUnavailable
+  server-homed data connection: ok 0 ms

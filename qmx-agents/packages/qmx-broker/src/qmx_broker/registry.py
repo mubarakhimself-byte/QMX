@@ -14,8 +14,9 @@ address, and every caller on the machine waits on it.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import cache
 from importlib import metadata
 from typing import ClassVar, Final, Literal, Protocol
 
@@ -78,7 +79,7 @@ class ProbeResult:
 
 
 class Probe(Protocol):
-    def __call__(self, provider: Broker, connection: Connection) -> ProbeResult: ...
+    def __call__(self, provider: Broker, connection: Connection, /) -> ProbeResult: ...
 
 
 class ConnectionFault(Exception):
@@ -86,9 +87,7 @@ class ConnectionFault(Exception):
 
     word: ClassVar[Word] = "down"
 
-    def __init__(
-        self, code: str, message: str = "", *, retry_after: float | None = None
-    ) -> None:
+    def __init__(self, code: str, message: str = "", *, retry_after: float | None = None) -> None:
         super().__init__(message or code)
         self.code = code
         self.message = message
@@ -131,9 +130,7 @@ class Slowdowns:
     def __init__(self) -> None:
         self._until: dict[str, float] = {}
 
-    def key(
-        self, declaration: Declaration, connection: Connection, egress_ip: str = ""
-    ) -> str:
+    def key(self, declaration: Declaration, connection: Connection, egress_ip: str = "") -> str:
         if declaration.limit_scope == "egress":
             return f"{declaration.name}:{egress_ip}"
         return connection.id
@@ -161,7 +158,6 @@ class Slowdowns:
 
 _DECLARATIONS: Final[dict[str, Declaration]] = {}
 _PROBES: Final[dict[str, Probe]] = {}
-_BUILTINS_LOADED: bool = False
 BUILTIN_MODULES: Final = ("qmx_broker.adapters", "qmx_broker.providers")
 
 
@@ -179,11 +175,8 @@ def declare(*declarations: Declaration) -> None:
         register(declaration)
 
 
+@cache
 def _builtins() -> None:
-    global _BUILTINS_LOADED
-    if _BUILTINS_LOADED:
-        return
-    _BUILTINS_LOADED = True
     for module in BUILTIN_MODULES:
         __import__(module)
     for entry_point in metadata.entry_points(group=GROUP):
@@ -283,9 +276,7 @@ def walk(
         )
     except Exception as error:  # the probe crosses the network; any failure is that connection's
         word = "down" if market_open else "maintenance"
-        return Reading(
-            connection.id, "reachable", word, code=type(error).__name__, latency_ms=None
-        )
+        return Reading(connection.id, "reachable", word, code=type(error).__name__, latency_ms=None)
     return Reading(
         connection.id,
         "healthy",

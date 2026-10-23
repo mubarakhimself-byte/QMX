@@ -166,10 +166,7 @@ def test_one_egress_address_shares_its_wait_between_two_connections() -> None:
     declaration = describe("binance-vision")
     space.note(declaration, connection(), retry_after=60, now=0.0, egress_ip="203.0.113.9")
 
-    assert (
-        space.remaining(declaration, other, now=10.0, egress_ip="203.0.113.9")
-        == 50.0
-    )
+    assert space.remaining(declaration, other, now=10.0, egress_ip="203.0.113.9") == 50.0
     assert space.remaining(declaration, other, now=10.0, egress_ip="198.51.100.4") == 0.0
 
 

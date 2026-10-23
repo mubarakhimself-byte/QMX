@@ -1,4 +1,4 @@
-"""Firecrawl: the one web-fetch path, keyed by `qmx/data/<connection>`; its credit call is the probe."""
+"""Firecrawl: the one web-fetch path; the team credit call is its probe."""
 
 from __future__ import annotations
 
@@ -6,9 +6,8 @@ import time
 from collections.abc import Mapping
 
 from qmx_broker.models import Broker, Connection
-from qmx_broker.registry import Declaration, NeedsYou, ProbeResult, register, register_probe
-
 from qmx_broker.providers.http import Fetch, answered, declared_object, urllib_fetch
+from qmx_broker.registry import Declaration, NeedsYou, ProbeResult, register, register_probe
 
 ENDPOINT = "https://api.firecrawl.dev/v2/team/credit-usage"
 
@@ -40,7 +39,9 @@ def probe(
     del provider
     key = (secret or {}).get("apiKey") or (secret or {}).get("api_key")
     if not key:
-        raise NeedsYou("credential_missing", f"keyring entry {connection.credential_ref} has no apiKey")
+        raise NeedsYou(
+            "credential_missing", f"keyring entry {connection.credential_ref} has no apiKey"
+        )
     started = time.monotonic()
     response = fetch(ENDPOINT, {"Authorization": f"Bearer {key}"}, "GET")
     result = answered(started, response)

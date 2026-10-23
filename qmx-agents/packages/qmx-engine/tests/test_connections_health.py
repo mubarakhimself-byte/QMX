@@ -57,9 +57,7 @@ def test_a_host_heartbeat_carries_the_connection_readings_and_clock_offset(tmp_p
 
 
 def check(words: dict[str, str], settings: dict[str, object] | None = None) -> str:
-    body = workflow(
-        [node("Fetch", "script", connection="dukascopy") | {"runs_on": "pc"}], {}
-    )
+    body = workflow([node("Fetch", "script", connection="dukascopy") | {"runs_on": "pc"}], {})
     blocked = preflight(
         body,
         DEFAULTS if settings is None else settings,

@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator, Callable, Generator, Mapping, Sequenc
 from contextlib import closing, contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final, Literal, NoReturn, Protocol, cast
+from typing import Any, Final, Literal, NoReturn, Protocol, cast
 from urllib.parse import urlsplit
 
 import keyring
@@ -201,9 +201,7 @@ def _no_secrets(value: JsonValue) -> None:
             _no_secrets(item)
 
 
-LEGACY_PROVIDER_KEYS: Final = frozenset(
-    {"id", "name", "adapter", "exchange", "connections"}
-)
+LEGACY_PROVIDER_KEYS: Final = frozenset({"id", "name", "adapter", "exchange", "connections"})
 LEGACY_CONNECTION_KEYS: Final = frozenset(
     {"id", "credential_ref", "environment", "accounts", "protocol_path", "protocol_tag"}
 )
@@ -395,9 +393,12 @@ class ControlService:
             if path.exists():
                 with path.open("rb") as file:
                     stored = cast(Document, tomllib.load(file))
-                    values = stored.get(section, {})
+                    values = cast(Document, stored.get(section, {}))
             if section == "brokers":
                 values = legacy_brokers(stored)
+            if section == "connections":
+                rows = stored.get("connections")
+                values = {"connections": rows if isinstance(rows, list) else []}
             if section == "mcp_servers":
                 firecrawl = values.get("firecrawl", {})
                 if not isinstance(firecrawl, dict):
@@ -435,7 +436,7 @@ class ControlService:
 
     def _settings_put(self, section: SettingsSection, values: Document) -> Document:
         _no_secrets(values)
-        stored_rows: list[Document] | None = None
+        stored_rows: list[dict[str, Any]] | None = None
         if section in HOST_SECTIONS:
             parser = self.settings_parsers.get(section)
             if parser is None:
@@ -493,17 +494,17 @@ class ControlService:
             except ValueError as error:
                 raise ControlError(
                     "invalid_brokers",
-                    "Use valid connections, providers and accounts with qmx/* vault references.",
+                    "Use valid brokers, connections, providers and accounts with qmx/* vault"
+                    " references.",
                 ) from error
             rows = [
-                provider.model_dump(mode="json", exclude_none=True)
-                for provider in parsed.providers
+                provider.model_dump(mode="json", exclude_none=True) for provider in parsed.providers
             ]
             if section == "brokers":
                 # The old section is read once into `connections`; its shape is served from there.
-                values = legacy_brokers({"connections": rows})
+                values = legacy_brokers(cast(Document, {"connections": rows}))
             else:
-                values = {"connections": rows}
+                values = cast(Document, {"connections": rows})
             stored_rows = rows
         else:
             stored_rows = None
@@ -515,7 +516,7 @@ class ControlService:
                 with path.open("rb") as file:
                     settings = cast(Document, tomllib.load(file))
             if stored_rows is not None:
-                settings["connections"] = stored_rows
+                settings["connections"] = cast(JsonValue, stored_rows)
                 settings.pop("brokers", None)
             else:
                 settings[section] = values
