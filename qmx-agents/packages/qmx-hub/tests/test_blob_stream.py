@@ -138,5 +138,5 @@ def test_the_one_process_router_streams_the_same_upload(tmp_path: Path) -> None:
             )
 
     assert answer.status_code == 200
-    assert answer.json()["copies"] == 2
+    assert answer.json()["copies"] == 1
     assert fetched.content == data

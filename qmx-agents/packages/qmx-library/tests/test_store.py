@@ -333,6 +333,19 @@ def test_a_store_that_learns_a_higher_epoch_parks_its_move_as_a_conflict(
         store.put(OPERATOR, note("after", "n1"), on="main", expected_head=first.object_id)
 
 
+def test_a_second_higher_epoch_parks_nothing_twice(store: Store) -> None:
+    store.record_primary(OPERATOR, "pc")
+    store.put(OPERATOR, note("mine", "n1"), on="main", expected_head=None)
+    store.learn_epoch(Epoch("server", 2, seq=0))
+
+    again = store.learn_epoch(Epoch("server", 3, seq=0))
+
+    assert (again.epoch, again.stale, again.parked) == (3, True, ("refs/conflicts/n1/1",))
+    assert [ref for _, ref, *_ in store.refs() if ref.startswith("refs/conflicts/")] == [
+        "refs/conflicts/n1/1"
+    ]
+
+
 def test_a_peer_behind_this_store_changes_nothing(store: Store) -> None:
     store.record_primary(OPERATOR, "server", epoch=4)
 

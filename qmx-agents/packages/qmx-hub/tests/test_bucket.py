@@ -42,6 +42,7 @@ def test_without_a_bucket_remote_the_push_says_so_and_fails_nothing(tmp_path: Pa
             "said": NO_BUCKET,
             "last": NO_BUCKET,
             "pending": 0,
+            "pushed_blobs": 0,
         }
 
 
@@ -117,7 +118,7 @@ def test_a_bucket_that_refuses_is_recorded_and_does_not_stop_the_server(tmp_path
         pushed = bucket.push()
         assert (pushed.ok, pushed.failed) == (False, True)
         assert pushed.said == "the bucket push failed: connection refused"
-        assert bucket.view()["copies"] == 2
+        assert bucket.view()["copies"] == 1
 
 
 def test_commits_are_batched_and_the_remote_comes_from_the_servers_own_config(
