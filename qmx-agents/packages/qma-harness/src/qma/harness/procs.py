@@ -1,4 +1,5 @@
-"""The OS memory cap over every agent CLI tree, and the chat-to-process bookkeeping.
+"""The OS memory cap over every agent CLI tree, the chat-to-process bookkeeping, and the one
+extraction child a capture or an upload needs.
 
 `max_live_chats` and idle reaping bound how many CLIs run. This bounds what they use together,
 Bash children and MCP helpers included. The cap holder itself is never inside the cap.
@@ -11,6 +12,10 @@ child, before the CLI runs.
 - Linux: the user slice `qma-agents.slice` with `MemoryMax`. Without a usable user systemd,
   `report().os_cap` is False and the live-chat cap is the only bound.
 - macOS: no OS cap.
+
+`extract` is the one child this module starts itself: Docling, alone, under the memory P-DOCLING
+measured (7,334 MB peak for a 400-page PDF, 2,666 MB for an hour of audio). Its output is the
+text and locators a `source` lands with, through the Library port (Library AD-27).
 """
 
 from __future__ import annotations
@@ -23,8 +28,10 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+from collections.abc import Sequence
 from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -53,6 +60,18 @@ from qma.launcher import (
 SLICE: Final = "qma-agents.slice"
 MB: Final = 1024 * 1024
 STOP_WAIT_S: Final = 5.0
+SAMPLE_S: Final = 0.2
+"""How often the extraction child's peak is read while it runs."""
+
+DOCLING_PEAK_MB: Final = 7334
+"""P-DOCLING's peak resident memory for a 400-page PDF on the server."""
+DOCLING_AUDIO_PEAK_MB: Final = 2666
+"""P-DOCLING's peak resident memory for one hour of audio on the server."""
+EXTRACTOR_LIMIT_MB: Final = 9216
+"""The memory one extraction child may use: P-DOCLING's largest peak, 7,334 MB, with a quarter
+of headroom for Docling's own layout and OCR children. It is a memory cap, not a QMX usage cap."""
+EXTRACT_TIMEOUT_S: Final = 4 * 3600
+"""Docling took 1,182 s on 400 pages and 1,104 s on an hour of audio; four hours is a runaway."""
 
 _PROCESS_ID_LIST: Final = 3
 _ASSOCIATE_COMPLETION_PORT: Final = 7
@@ -448,3 +467,101 @@ class _SliceParent:
 
     def close(self) -> None:
         _systemctl("stop", f"{self._home_units}*.scope")
+
+
+@dataclass(frozen=True)
+class ExtractRun:
+    """One extraction child: its exit, its peak memory, its output, and whether it ran away."""
+
+    ok: bool
+    code: int
+    seconds: float
+    peak_mb: int | None
+    output: str
+    timed_out: bool = False
+    capped: bool = False
+    """Whether the child ran under the memory cap: false where `prlimit` is not installed."""
+
+
+def extract(
+    command: Sequence[str],
+    *,
+    limit_mb: int | None = EXTRACTOR_LIMIT_MB,
+    timeout_s: float = EXTRACT_TIMEOUT_S,
+    cwd: Path | None = None,
+) -> ExtractRun:
+    """Run Docling alone, in a child process, under the memory P-DOCLING measured (AD-27).
+
+    The cap is `prlimit --as` in front of the command, so no `preexec_fn` races the harness's own
+    threads; a host without `prlimit` still runs the extraction and says `capped: false` rather
+    than pretending. The peak is sampled while it runs, because `/proc` is gone once it exits.
+    """
+    started = time.monotonic()
+    peak: int | None = None
+    timed_out = False
+    capped = bool(
+        limit_mb is not None and sys.platform.startswith("linux") and shutil.which("prlimit")
+    )
+    argv = list(command)
+    if capped and limit_mb is not None:
+        argv = [
+            shutil.which("prlimit") or "prlimit",
+            f"--as={limit_mb * MB}",
+            "--",
+            *argv,
+        ]
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as sink:
+        child = subprocess.Popen(
+            argv,
+            cwd=None if cwd is None else str(cwd),
+            stdout=sink,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        while child.poll() is None:
+            found = _peak_mb(child.pid)
+            if found is not None:
+                peak = found if peak is None else max(peak, found)
+            if time.monotonic() - started > timeout_s:
+                timed_out = True
+                child.kill()
+                break
+            time.sleep(SAMPLE_S)
+        code = child.wait()
+        sink.seek(0)
+        output = sink.read()
+    return ExtractRun(
+        ok=code == 0 and not timed_out,
+        code=code,
+        seconds=round(time.monotonic() - started, 1),
+        peak_mb=peak,
+        output=output[-EXTRA_CHARS:],
+        timed_out=timed_out,
+        capped=capped,
+    )
+
+
+EXTRA_CHARS: Final = 4000
+"""Characters of the child's output the run keeps: enough for the error, never its whole log."""
+
+
+def _peak_mb(pid: int) -> int | None:
+    """A live process's peak resident memory: `/proc` on Linux, the process counters on Windows."""
+    if sys.platform == "win32":
+        process = open_process(pid, PROCESS_QUERY_LIMITED_INFORMATION | _PROCESS_VM_READ)
+        if process is None:
+            return None
+        k = _kernel32()
+        try:
+            counters = _MemoryCounters(cb=ctypes.sizeof(_MemoryCounters))
+            if k.K32GetProcessMemoryInfo(process, ctypes.byref(counters), counters.cb):
+                return int(counters.PeakPagefileUsage) // MB
+            return None
+        finally:
+            k.CloseHandle(process)
+    status = Path(f"/proc/{pid}/status")
+    with contextlib.suppress(OSError):
+        for line in status.read_text(encoding="utf-8").splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1]) // 1024
+    return None

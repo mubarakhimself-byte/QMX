@@ -110,19 +110,17 @@ def test_a_resumed_upload_rehashes_its_partial_and_keeps_what_it_holds(
     assert (wrong, refused["code"]) == (409, "hash_mismatch")
     assert done == 200
     assert landed["sha256"] == sha256(head + tail).hexdigest()
-    fetched = urllib.request.urlopen(  # noqa: S310
-        urllib.request.Request(
-            f"{url}/v1/blob/{landed['sha256']}", headers={"Authorization": f"Bearer {KEY}"}
-        ),
-        timeout=30,
-    ).read()
+    request = urllib.request.Request(  # noqa: S310
+        f"{url}/v1/blob/{landed['sha256']}", headers={"Authorization": f"Bearer {KEY}"}
+    )
+    fetched = urllib.request.urlopen(request, timeout=30).read()  # noqa: S310
     assert fetched == head + tail
 
 
 def test_the_one_process_router_streams_the_same_upload(tmp_path: Path) -> None:
     pytest.importorskip("fastapi")
-    from fastapi import FastAPI  # noqa: PLC0415
-    from fastapi.testclient import TestClient  # noqa: PLC0415
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
 
     data = b"streamed through the host" * 100_000
     with Store.open(tmp_path / "host", redactor=redact, name="server") as store:

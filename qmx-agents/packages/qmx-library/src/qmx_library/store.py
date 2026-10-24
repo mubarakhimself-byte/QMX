@@ -97,7 +97,12 @@ CLAIMS: Final = "claims.json"
 CLAIM_KEY: Final = re.compile(r"[A-Za-z0-9_.:+-]{1,200}")
 """An intent key is a fingerprint; a path segment it must also be, so `/` is out."""
 UPLOAD_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,128}")
-"""An upload id names one partial file under `uploads/`, so it is a path segment and nothing else."""
+"""An upload id names one partial file under `uploads/`, so it is one path segment."""
+CAPTURE_ORIGIN: Final = "capture"
+"""The origin a computer or browser capture lands with (AD-27)."""
+REDACTED_ACCOUNT: Final = "[redacted account]"
+CAPTURE_VERSION: Final = "capture-1"
+"""The extractor version a capture's text hash is compared within (AD-27)."""
 RENAME_TRIES: Final = 8
 """A rename Windows refuses because the target is open is retried this many times."""
 RENAME_WAIT_S: Final = 0.01
@@ -305,6 +310,51 @@ def _decoded(path: Path, *, chunk: int = CHUNK) -> str:
             pieces.append(decoder.decode(data))
     pieces.append(decoder.decode(b"", final=True))
     return "".join(pieces)
+
+
+PREVIEW_CHARS: Final = 200
+"""Characters of a capture's text its summary carries, the same cut search previews (AD-8)."""
+
+
+def redact_accounts(text: str, account_ids: Sequence[str]) -> str:
+    """Every account id Connections knows, replaced, longest first so no prefix wins (AD-27)."""
+    found = sorted((account for account in account_ids if account), key=len, reverse=True)
+    for account in found:
+        text = text.replace(account, REDACTED_ACCOUNT)
+    return text
+
+
+def capture_source(
+    text: str,
+    pixels: bytes,
+    *,
+    account_ids: Sequence[str] = (),
+    title: str = "",
+    surface: str = "computer",
+    media_type: str = "image/png",
+) -> Draft:
+    """A screen or browser capture as one `source`: text redacted, pixels kept (AD-27).
+
+    The capture's text is redacted against the account ids in Connections, because a broker
+    screen carries them and never should reach a search index; the pixels stay whole, because
+    they are the evidence of what he saw. The text hash names the extractor version it was
+    compared within, so a better extractor does not read as the same document.
+    """
+    clean = redact_accounts(text, account_ids)
+    digest = sha256(" ".join(clean.split()).encode("utf-8")).hexdigest()
+    return Draft(
+        "source",
+        title=title or f"{surface} capture",
+        summary=clean[:PREVIEW_CHARS],
+        fields={
+            "origin": CAPTURE_ORIGIN,
+            "captured_from": surface,
+            "media_type": media_type,
+            "text_hash": digest,
+            "extractor_version": CAPTURE_VERSION,
+        },
+        blobs={"text": clean.encode("utf-8"), "original": pixels, "frames/0": pixels},
+    )
 
 
 def text_blob_ids(manifest: Mapping[str, Any]) -> set[str]:

@@ -1,7 +1,7 @@
-"""P-DISKFULL (W4; F22, D-11; Library AD-10), acceptance: a machine gives way in one order, and a
-Library save that cannot fit is refused whole.
+"""P-DISKFULL (W4; F22, D-11; Library AD-10, AD-27), acceptance: a machine gives way in one order, a
+Library save that cannot fit is refused whole, and an upload stops whole and resumes later.
 
-`p_torn.py`'s sibling, and the same two-part shape:
+`p_torn.py`'s sibling, and the same shape:
 
 1. **The order.** A volume under the scratch root is declared at a fixed size and filled with the
    four expendable classes. Making room for a floor takes the price cache, then transient blobs,
@@ -9,6 +9,9 @@ Library save that cannot fit is refused whole.
 2. **The refusal.** A scratch Library store whose floor is above the machine's real free space
    refuses `put` with `disk_full` and a plain message, and leaves no object, no blob and no move
    behind.
+3. **The upload.** A write that stops on an I/O error leaves the bytes it took as a prefix of the
+   file, never a torn mixture; the partial is re-hashed, resumed at that offset and the finished
+   blob hashes to the whole file. DR7's upload half (AD-27).
 
 On the server, lane 2 runs this against a loop-mounted volume under `/srv/qmx/check/dr2a/` with
 `QMX_PROBE_SCRATCH` pointing into it, which is the same code on a real small disk; on the PC the
@@ -23,6 +26,8 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Iterator
+from hashlib import sha256
 from pathlib import Path
 
 from qmx_engine.ledger import redact
@@ -116,6 +121,37 @@ def refusal_case(folder: Path, problems: list[str]) -> None:
         problems.append("a refused save left files behind")
 
 
+def upload_case(folder: Path, problems: list[str]) -> None:
+    """A write that hits an I/O error leaves a prefix, and the resume finishes the right blob."""
+    root = folder / "upload-library"
+    shutil.rmtree(root, ignore_errors=True)
+    whole = b"qmx upload bytes " * 400_000
+    half = len(whole) // 2
+    first, rest = whole[:half], whole[half:]
+
+    def stopping() -> Iterator[bytes]:
+        yield first
+        raise OSError(28, "No space left on device")
+
+    with Store.open(root, redactor=redact) as store:
+        try:
+            store.append_upload(stopping(), upload_id="full-1")
+        except OSError as error:
+            print(f"the upload stopped: {error}")
+        held, partial = store.upload_held("full-1")
+        print(f"held {held} of {len(whole)} bytes, prefix hashes {partial == sha256(first).hexdigest()}")
+        resumed, _ = store.append_upload(
+            [rest], upload_id="full-1", offset=held, partial_sha256=partial
+        )
+        blob_id = store.complete_upload("full-1")
+    if held != len(first):
+        problems.append(f"the stopped upload held {held} bytes, not the {len(first)} it wrote")
+    if partial != sha256(first).hexdigest():
+        problems.append("the partial does not hash to the prefix it holds")
+    if resumed != len(whole) or blob_id != f"sha256:{sha256(whole).hexdigest()}":
+        problems.append("the resumed upload did not finish as the same blob")
+
+
 def main() -> int:
     folder = SCRATCH / "diskfull"
     shutil.rmtree(folder, ignore_errors=True)
@@ -124,6 +160,7 @@ def main() -> int:
     try:
         order_case(folder, problems)
         refusal_case(folder, problems)
+        upload_case(folder, problems)
     finally:
         shutil.rmtree(SCRATCH, ignore_errors=True)
     for problem in problems:

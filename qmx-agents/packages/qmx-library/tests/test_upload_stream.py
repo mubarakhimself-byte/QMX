@@ -18,7 +18,7 @@ from qmx_engine.ledger import redact
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import Principal
 from qmx_library.search import answer, locate
-from qmx_library.store import Store
+from qmx_library.store import Store, capture_source, redact_accounts
 
 OPERATOR = Principal("operator")
 NOW = datetime(2026, 10, 20, tzinfo=UTC)
@@ -42,7 +42,11 @@ def source(store: Store, item: str, **blobs: bytes) -> str:
             "source",
             item=item,
             title=item,
-            fields={"origin": "upload", "canonical_url": item, "extractor_version": "docling-2.134.0"},
+            fields={
+                "origin": "upload",
+                "canonical_url": item,
+                "extractor_version": "docling-2.134.0",
+            },
             blobs=blobs,
         ),
         on="main",
@@ -126,3 +130,27 @@ def test_completing_an_upload_whose_hash_disagrees_deletes_the_partial(store: St
 
     assert refused.value.code == "hash_mismatch"
     assert store.upload_held("up-2") == (0, sha256(b"").hexdigest())
+
+
+def test_a_capture_lands_as_one_source_with_its_account_ids_redacted(store: Store) -> None:
+    pixels = b"\x89PNG\r\n\x1a\n not really a png, but it must come back whole"
+    draft = capture_source(
+        "Account 51234567 holds the position; account 51234567 again.",
+        pixels,
+        account_ids=("51234567",),
+        title="Broker screen",
+        surface="browser",
+    )
+
+    done = store.put(OPERATOR, draft, on="main", expected_head=None)
+    view = store.get(OPERATOR, done.object_id, blobs="fetch")
+
+    assert redact_accounts("a 99 b 9", ("9", "99")) == "a [redacted account] b [redacted account]"
+    assert view.fields["origin"] == "capture"
+    assert view.fields["captured_from"] == "browser"
+    assert (
+        view.data["text"]
+        == b"Account [redacted account] holds the position; account [redacted account] again."
+    )
+    assert view.data["original"] == pixels
+    assert view.data["frames/0"] == pixels

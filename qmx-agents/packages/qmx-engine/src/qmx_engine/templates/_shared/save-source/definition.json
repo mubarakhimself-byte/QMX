@@ -1,0 +1,20 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "save-source",
+  "name": "Save each find as one source keyed by its canonical URL",
+  "settings": {
+    "on_error": "park",
+    "caller_policy": "workflows_only"
+  },
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "save", "name": "Save the finds as sources", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/save_source.py", "artifacts": ["library/sources/"]}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Save the finds as sources", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

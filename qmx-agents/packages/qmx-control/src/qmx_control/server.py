@@ -8,7 +8,6 @@ import secrets
 import ssl
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from functools import wraps
 from hashlib import sha256
 from pathlib import Path
@@ -154,7 +153,12 @@ class Part:
             while data := handle.read(CHUNK):
                 hasher.update(data)
                 held += len(data)
-        return {"upload_id": upload_id, "offset": held, "sha256": hasher.hexdigest(), "staging": True}
+        return {
+            "upload_id": upload_id,
+            "offset": held,
+            "sha256": hasher.hexdigest(),
+            "staging": True,
+        }
 
 
 def _hub_connection(url: str) -> http.client.HTTPConnection:

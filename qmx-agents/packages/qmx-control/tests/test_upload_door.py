@@ -11,7 +11,7 @@ from hashlib import sha256
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastapi import FastAPI
@@ -20,16 +20,15 @@ from fastapi.testclient import TestClient
 from qmx_control.server import COPIES_REQUIRED, STAGING, UPLOAD_ROUTE, upload_router
 
 KEY = "pairing-key-of-this-test"
-TOKEN = "local-bearer-of-this-test"
 
 
 class FakeHub(BaseHTTPRequestHandler):
     """The server's upload door, as far as the PC can tell: append, hash, answer the copies."""
 
     protocol_version = "HTTP/1.1"
-    held: dict[str, bytes] = {}
-    copies: int = 2
-    seen: list[dict[str, Any]] = []
+    held: ClassVar[dict[str, bytes]] = {}
+    copies: ClassVar[int] = 2
+    seen: ClassVar[list[dict[str, Any]]] = []
 
     def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length") or 0)

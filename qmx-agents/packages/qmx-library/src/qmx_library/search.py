@@ -252,7 +252,7 @@ def answer(
 def _slot_text(store: Store, blob: dict[str, Any]) -> str:
     try:
         return store.read_blob(str(blob["sha256"])).decode("utf-8", "replace")
-    except (LibraryRefused, KeyError):
+    except LibraryRefused, KeyError:
         return ""
 
 
@@ -288,7 +288,5 @@ def locate(store: Store, object_id: ObjectId, phrase: str) -> JsonObject | None:
             if stamps:
                 stamp = stamps[-1]
                 hours = int(stamp.group(1) or 0)
-                return {
-                    "seconds": hours * 3600 + int(stamp.group(2)) * 60 + int(stamp.group(3))
-                }
+                return {"seconds": hours * 3600 + int(stamp.group(2)) * 60 + int(stamp.group(3))}
     return None
