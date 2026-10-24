@@ -32,7 +32,7 @@ import os
 from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import Failed, Waiting
@@ -53,6 +53,10 @@ SETTINGS: Final[Mapping[SlotClass, str]] = {
     "container": "placement.pc.container_slots",
     "gpu": "placement.pc.gpu_slots",
 }
+MIB: Final = 1024 * 1024
+MEMORY_PARAM: Final = "memory_mb"
+"""Where a node declares the RAM its attempt needs: `parameters.memory_mb`. A node that declares
+none reserves nothing, so a kind the host has no measurement for still runs."""
 
 
 def setting(settings: Mapping[str, object], key: str, default: float) -> float:
@@ -95,11 +99,70 @@ class Slots:
 
 
 @dataclass
+class Memory:
+    """The RAM a host can give and the memory its attempts have declared (AD-58, F39, D-11).
+
+    `free_bytes` is the host's live reading from its own heartbeat; `None` until the first beat,
+    when nothing is refused. An admitted attempt holds the memory its node declared, and the size
+    one of this host's sessions really reaches replaces every declaration below it when the
+    heartbeat measures it. No budget and no cap: this is the machine's own room, so the next
+    attempt waits for room or goes to another placement.
+    """
+
+    free_bytes: int | None = None
+    held: dict[str, int] = field(default_factory=dict[str, int])
+
+    def observe(self, free_bytes: int) -> None:
+        """Take the host's newest free-RAM reading."""
+        self.free_bytes = free_bytes
+
+    def observe_session(self, session_bytes: int) -> None:
+        """Replace every reservation that declared less than a session of this host really holds."""
+        self.held = {key: max(reserved, session_bytes) for key, reserved in self.held.items()}
+
+    def room(self) -> int | None:
+        """Bytes an attempt may still reserve, or None while no reading has arrived."""
+        if self.free_bytes is None:
+            return None
+        return self.free_bytes - sum(self.held.values())
+
+    def take(self, key: str, declared: int) -> bool:
+        """Hold an attempt's declared memory; False when the host has no room for it."""
+        room = self.room()
+        if room is not None and declared > room:
+            return False
+        self.held[key] = declared
+        return True
+
+    def give(self, key: str) -> None:
+        """Give a reservation back."""
+        self.held.pop(key, None)
+
+
+def declared_bytes(node_definition: Mapping[str, object]) -> int | None:
+    """The memory a node declares for its attempt, or None when it declares none."""
+    parameters = node_definition.get("parameters")
+    if not isinstance(parameters, Mapping):
+        return None
+    declared = cast("Mapping[str, object]", parameters).get(MEMORY_PARAM)
+    if isinstance(declared, int) and not isinstance(declared, bool) and declared > 0:
+        return declared * MIB
+    return None
+
+
+def sessions_of(free_ram_bytes: int, session_bytes: int) -> int:
+    """How many sessions a host's live free RAM holds: what AD-30's derived row reads now that
+    the machine's figures are measured rather than written down (D-11)."""
+    return max(0, free_ram_bytes // session_bytes) if session_bytes > 0 else 0
+
+
+@dataclass
 class Capacity:
     """One host's capacity table. A class whose setting is unset (`gpu_slots` on the PC) is not
     in the table, since no placement here has that hardware."""
 
     slots: dict[SlotClass, Slots]
+    memory: Memory = field(default_factory=Memory)
 
     @classmethod
     def of(cls, settings: Mapping[str, object]) -> Capacity:
@@ -112,6 +175,25 @@ class Capacity:
             if isinstance(value, int) and not isinstance(value, bool):
                 found[name] = Slots(max(value, 1))
         return cls(found)
+
+    def observe_free_ram(self, free_bytes: int) -> None:
+        """Hand admission the host's newest free-RAM reading, from its heartbeat."""
+        self.memory.observe(free_bytes)
+
+    def observe_session(self, session_bytes: int) -> None:
+        """Hand admission the measured size of one of this host's sessions."""
+        self.memory.observe_session(session_bytes)
+
+    def admit(self, key: str, node_definition: Mapping[str, object]) -> str | None:
+        """Hold the memory this node declares, or say why it cannot run on this host."""
+        declared = declared_bytes(node_definition)
+        if declared is None:
+            return None
+        if self.memory.take(key, declared):
+            return None
+        room = self.memory.room()
+        free = "no free-RAM reading yet" if room is None else f"{room // MIB} MB free"
+        return f"{declared // MIB} MB declared, {free} after what other attempts hold"
 
     @contextlib.asynccontextmanager
     async def held(self, kind: str, placement: str, priority: int) -> AsyncGenerator[None]:

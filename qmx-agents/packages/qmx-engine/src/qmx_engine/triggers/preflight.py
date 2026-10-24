@@ -165,6 +165,12 @@ def placement_kind(settings: Mapping[str, object], placement: str) -> str:
     return str(found) if isinstance(found, str) and found else "owned"
 
 
+NEEDS: Final = ("kind", "attempt_cpus", "attempt_timeout")
+"""What an attempt needs a placement's row to name. Memory is not here: an attempt's figure is what
+its node declares or what the machine's own heartbeat measured, so a row that carries these three
+and no memory figure is configured (D-11)."""
+
+
 def placement_state(
     settings: Mapping[str, object],
     placement: str,
@@ -175,7 +181,8 @@ def placement_state(
     """The last state this placement has reached, in DEC-0428's order.
 
     `available`: a name the registry can resolve (`pc` always, else a row with any key).
-    `configured`: its row names what an attempt needs.
+    `configured`: its row names the kind, CPU share and timeout an attempt needs. The memory rows
+    are live readings now, so a row is not made unconfigured by leaving them out (D-11).
     `authorized`: it is QMX's own machine, or a provider row whose relay holds no plan login.
     `reachable`: a heartbeat has named it. `healthy`: that heartbeat's kind digest was checked and
     lists every kind the definition uses (`placement_wait` makes that judgement with the kinds).
@@ -186,10 +193,7 @@ def placement_state(
     row = {key: value for key, value in settings.items() if key.startswith(prefix)}
     if not row:
         return "unavailable"
-    configured = all(
-        any(key.endswith(suffix) for key in row)
-        for suffix in ("ram_budget_mb", "overhead_mb", "kind")
-    )
+    configured = all(any(key.endswith(suffix) for key in row) for suffix in NEEDS)
     if not configured:
         return "configured"
     if placement_kind(settings, placement) in PROVIDER_KINDS:

@@ -9,6 +9,7 @@ from typing import Any
 
 from qmx_ledger.journal import fingerprint
 
+from qmx_engine.heartbeat import Heartbeat
 from qmx_engine.ledger.events import EventKind
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import Failed, NodeJob, Ok
@@ -24,6 +25,7 @@ from qmx_engine.workers.remote import (
 
 PASS = "pass_" + "a" * 48
 """A stand-in run pass, long enough that the sidecar registers it for redaction."""
+MIB = 1024 * 1024
 
 
 def job(placement: str = "contabo") -> NodeJob:
@@ -151,7 +153,6 @@ def test_a_placed_job_ships_its_shape_and_returns_the_result() -> None:
     assert shipped["job"]["placement"] == "contabo"
     assert shipped["resources"] == {
         "cpus": 2,
-        "memory_mb": 2_048,
         "timeout": 3_600,
         "gpu": 0,
     }
@@ -186,10 +187,44 @@ def test_the_job_carries_the_pass_and_no_key() -> None:
     assert "qmx/openrouter" not in shipped
 
 
-def test_the_contabo_row_derives_four_sessions() -> None:
-    assert DEFAULTS["placement.contabo.ram_budget_mb"] == 12_288
-    assert DEFAULTS["placement.contabo.overhead_mb"] == 6_144
-    assert sessions_of(DEFAULTS, "contabo") == 4
+def test_no_removed_memory_figure_is_a_setting() -> None:
+    assert [key for key in DEFAULTS if "ram_budget" in key or "overhead_mb" in key] == []
+
+
+def host_row() -> Heartbeat:
+    return Heartbeat(
+        subject="host",
+        id="contabo",
+        at="2026-10-21T20:00:00+00:00",
+        cpu_seconds=1.0,
+        rss_bytes=1_536 * MIB,
+        machine_minutes=10,
+        qmx_version="0.1.0",
+        kinds_digest="digest",
+        paused=False,
+        free_ram_bytes=11 * 1024 * MIB,
+        session_bytes=1_536 * MIB,
+    )
+
+
+def test_a_bundle_takes_its_memory_from_the_node_then_the_measured_session() -> None:
+    declared = replace(
+        job(), node_definition={**job().node_definition, "parameters": {"memory_mb": 512}}
+    )
+
+    from_node = attempt_bundle(declared, live=host_row())
+    from_reading = attempt_bundle(job(), live=host_row())
+    from_nothing = attempt_bundle(job())
+
+    assert from_node["resources"] == {"cpus": 2, "memory_mb": 512, "timeout": 3_600, "gpu": 0}
+    assert from_reading["resources"] == {"cpus": 2, "memory_mb": 1_536, "timeout": 3_600, "gpu": 0}
+    assert from_nothing["resources"] == {"cpus": 2, "timeout": 3_600, "gpu": 0}
+
+
+def test_the_session_count_comes_from_the_live_row_and_is_zero_without_one() -> None:
+    assert sessions_of(DEFAULTS, "contabo", live=host_row()) == 7
+    assert sessions_of(DEFAULTS, "contabo") == 0
+    assert sessions_of(DEFAULTS, "nowhere", live=host_row()) == 0
 
 
 def test_a_wire_result_round_trips_every_ending() -> None:

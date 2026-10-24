@@ -1,0 +1,36 @@
+# The server's QMX host as a service (G-LAND; DATA-PLAN DR2A, lane 4).
+#
+# The host runs as the ordinary user `qmx`, never root, out of its own home, because it is the one
+# writer of the Library store and the only process that holds the vault key (Library AD-12).
+#
+# `OOMScoreAdjust` is the point of this file (F39, P-OOM): the kernel's out-of-memory killer ranks
+# candidates by that score, so the host sits well below every attempt's child process. A machine
+# that runs out of memory loses an attempt, never the host, and the Library and the door keep
+# answering. -600 is the value sshd ships with for the same reason.
+#
+# Install, once, as root: copy this file to /etc/systemd/system/qmx-host.service, then
+#   systemctl daemon-reload && systemctl enable --now qmx-host
+# Read the score back with: cat /proc/$(systemctl show -p MainPID --value qmx-host)/oom_score_adj
+
+[Unit]
+Description=QMX host: the copilot, the workflows and the control doors
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qmx
+Group=qmx
+WorkingDirectory=/srv/qmx/home
+Environment=HOME=/srv/qmx/home
+Environment=XDG_CACHE_HOME=/srv/qmx/home/.cache
+ExecStart=/srv/qmx/home/.venv/bin/python -m qmx_host serve --home /srv/qmx/home/.qmx --port 8766 --role node
+Restart=on-failure
+RestartSec=5
+OOMScoreAdjust=-600
+# The host reads and writes only its own home and the Library store, and imports nothing.
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
