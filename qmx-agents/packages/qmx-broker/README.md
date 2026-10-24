@@ -1,8 +1,9 @@
 # Broker reads and Portfolio proposals
 
 `qmx-broker` serves `list_accounts`, `account_state`, `positions`, `quotes`,
-`bars`, `symbol_info` and `propose_order` through FastMCP 4. `bars` accepts explicit
-UTC millisecond bounds and a maximum of 1000 rows. All account calls require
+`bars`, `symbol_info` and `propose_order` through FastMCP 4. `bars` takes explicit
+UTC millisecond bounds and returns every bar in them, paged by the provider's own
+per-request limit; an optional `limit` stops it sooner. All account calls require
 broker, connection and account ids; native account ids may repeat across brokers.
 
 Configure `brokers` through `qmx-control`'s settings REST/MCP operations:
