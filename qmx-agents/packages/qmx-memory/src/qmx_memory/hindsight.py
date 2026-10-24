@@ -14,6 +14,10 @@ re-extracting text QMX wrote. That is also what keeps a retain inside P-MEM's 30
 No provider key reaches this module. The extractor's model call, when a `reflect` needs one, is the
 host's relay grant: a base URL on the router's key lane and a grant secret minted for the
 `memory_extractor` role (SOLUTION-DESIGN 28.6). The grant is held in memory and never printed.
+
+The server's own traces go to the one collector on the server (AD-69): Hindsight's OTel switch and
+its OTLP endpoint are set in `_isolate`, before its configuration is built, so its retain and
+reflect spans join the run they serve.
 """
 
 from __future__ import annotations
@@ -27,7 +31,9 @@ from collections.abc import Callable, Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Final, Protocol, cast
+
+from qmx_engine.telemetry import DEFAULT_ENDPOINT
 
 from qmx_memory.rows import MemoryRow
 
@@ -48,6 +54,15 @@ NO_MODEL = "http://127.0.0.1:9/v1"
 """Where Hindsight points when no grant exists: a closed port on this machine, so a model call
 fails here instead of leaving the host."""
 """The extraction Hindsight does on a retain: chunk, embed and index the row QMX already wrote."""
+
+OTEL_ENABLED: Final = "HINDSIGHT_API_OTEL_TRACES_ENABLED"
+OTEL_ENDPOINT: Final = "HINDSIGHT_API_OTEL_EXPORTER_OTLP_ENDPOINT"
+OTEL_SERVICE: Final = "HINDSIGHT_API_OTEL_SERVICE_NAME"
+"""Hindsight reads its tracing switch and its OTLP target from these names, never from the
+standard `OTEL_*` ones (`hindsight_api.config`)."""
+COLLECTOR_ENDPOINT: Final = DEFAULT_ENDPOINT
+"""The server's collector, which the engine's exporter also sends to (AD-69, F46)."""
+SERVICE: Final = "qmx-memory"
 
 
 def bank_of(scope: str) -> str:
@@ -203,6 +218,9 @@ class HindsightIndex:
         os.environ["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_RERANKER_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_ENABLE_OBSERVATIONS"] = "false"
+        os.environ[OTEL_ENABLED] = "1"
+        os.environ[OTEL_ENDPOINT] = COLLECTOR_ENDPOINT
+        os.environ[OTEL_SERVICE] = SERVICE
 
     def bank(self, bank_id: str) -> str:
         """The bank, made once per process with the plan's two settings."""
