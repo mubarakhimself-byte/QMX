@@ -280,7 +280,7 @@ class Planner:
                     carried.append(edge)
             else:
                 slot = Slot(node.id, iteration, partition)
-                if not self.runs_on(node, [edge for edge, _, _ in sources], carried):
+                if not self.carries(node, [edge for edge, _, _ in sources], carried):
                     self.skipped.add(slot)
                     continue
                 inputs: JsonObject = {
@@ -289,7 +289,7 @@ class Planner:
                 }
                 self.offer(node, slot, inputs, None)
 
-    def runs_on(self, node: Node, into: list[Edge], carried: list[Edge]) -> bool:
+    def carries(self, node: Node, into: list[Edge], carried: list[Edge]) -> bool:
         """AD-5 readiness, once every source has settled: every `required` edge carried output and
         at least one edge did. In a loop body, an edge from outside the loop is context, so at
         least one edge from inside the body must carry (B-24, B-87)."""

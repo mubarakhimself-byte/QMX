@@ -339,13 +339,15 @@ class HubGateway:
         return cast(Document, body) if isinstance(body, dict) else None
 
 
-def remote_worker(home: Path, core: Engine) -> PlacementWorker | None:
+def remote_worker(home: Path, core: Engine, authority: PassAuthority) -> PlacementWorker | None:
     """The `node` role's worker: an attempt placed on another owned machine runs there (AD-20).
 
     A `[placement]` row with a provider is a machine this host dispatches to; the row's
     `gateway_url` is the Hub that serves its `runs/<run_id>/` tail and result. With no such row
     this host keeps its local worker, which is the one-machine case. The pass is minted here and
-    travels in `QMX_RUN_PASS`; no key does.
+    travels in `QMX_RUN_PASS`; no key does. It carries the node's `parameters.data_scope`, which
+    this host's door checks a remote read against, and a row's `door_url` is the door its
+    attempts read price data through (AD-70). `authority` is the one the door verifies with.
     """
     settings = core.settings
     names = sorted(
@@ -356,6 +358,7 @@ def remote_worker(home: Path, core: Engine) -> PlacementWorker | None:
         }
     )
     providers: dict[str, Any] = {}
+    doors: dict[str, str] = {}
     gateway_url = ""
     for name in names:
         if settings.get(f"placement.{name}.provider") is None:
@@ -369,15 +372,22 @@ def remote_worker(home: Path, core: Engine) -> PlacementWorker | None:
         )
         bucket = settings.get(f"placement.{name}.bucket")
         providers[name] = provider_registry(target, str(bucket) if bucket is not None else "")
+        door = settings.get(f"placement.{name}.door_url")
+        if door is not None:
+            doors[name] = str(door)
         found = settings.get(f"placement.{name}.gateway_url")
         if found is not None:
             gateway_url = str(found)
     if not providers or not gateway_url:
         return None
-    authority = PassAuthority(revocations=RevocationList(home / "passes" / "revoked.json"))
 
     def mint(job: Any) -> str:
-        return authority.mint(run=job.run_id, placement=job.placement, attempt=job.attempt)[1]
+        return authority.mint(
+            run=job.run_id,
+            placement=job.placement,
+            attempt=job.attempt,
+            data_scope=data_scope_of(job.node_definition),
+        )[1]
 
     return PlacementWorker(
         gateway=HubGateway(gateway_url),
@@ -386,6 +396,18 @@ def remote_worker(home: Path, core: Engine) -> PlacementWorker | None:
         mint=mint,
         remote=providers,
         live=lambda: host_row(home),
+        doors=doors,
+    )
+
+
+def data_scope_of(node_definition: Mapping[str, Any]) -> tuple[str, ...]:
+    """The series a node's `parameters.data_scope` names, which its run pass may read."""
+    parameters: object = node_definition.get("parameters")
+    if not isinstance(parameters, Mapping):
+        return ()
+    found: object = cast("Mapping[str, object]", parameters).get("data_scope")
+    return (
+        tuple(str(item) for item in cast("list[object]", found)) if isinstance(found, list) else ()
     )
 
 
@@ -510,6 +532,8 @@ async def serve(
     sidecar = asyncio.create_task(node_sidecar(home)) if role in ("node", "server") else None
     try:
         door = market_door(home, control, role)
+        # One authority mints the remote attempts' passes and verifies them at this host's door.
+        passes = PassAuthority(revocations=RevocationList(home / "passes" / "revoked.json"))
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
@@ -537,7 +561,11 @@ async def serve(
                         library=EngineLibraryAdapter(store),
                     ) as engine:
                         core = engine.svc.ctx.engine
-                        placed = remote_worker(home, core) if role in ("node", "server") else None
+                        placed = (
+                            remote_worker(home, core, passes)
+                            if role in ("node", "server")
+                            else None
+                        )
                         if placed is not None:
                             core.worker = placed
                         name = placement_name(control, role)
@@ -551,7 +579,9 @@ async def serve(
                         if door is not None:
                             answering.append(market_router(door))
                         answering.extend(library_service(home, store, serving))
-                        app = compose(control, engine, harness_api, bearer, origin, answering)
+                        app = compose(
+                            control, engine, harness_api, bearer, origin, answering, passes
+                        )
                         app_host = TAILNET if serving else "127.0.0.1"
                         server = uvicorn.Server(uvicorn.Config(app, host=app_host, port=port))
                         beating = asyncio.create_task(
@@ -831,10 +861,12 @@ def compose(
     bearer: str,
     ui_origin: str,
     extra: Sequence[APIRouter] = (),
+    passes: PassAuthority | None = None,
 ) -> FastAPI:
     """The one REST app: control, chat and engine routes behind one bearer and the principal
     door. `ui_origin` is the one origin CORS allows, none when empty. `extra` carries the node's
-    forwarding route, which has its own host pass and no bearer (AD-65)."""
+    forwarding route, which has its own host pass and no bearer (AD-65). `passes` is the authority
+    whose run passes the door admits on the one data read (AD-70)."""
     app = qmx_control.server.create_app(
         control,
         bearer,
@@ -842,7 +874,7 @@ def compose(
         extra_routers=[*harness_api, engine_router(engine), webhook_door(engine), *extra],
     )
     routes = [route for api in harness_api for route in api.routes]
-    app.add_middleware(PrincipalDoor, chat_routes=routes)
+    app.add_middleware(PrincipalDoor, chat_routes=routes, passes=passes)
     return app
 
 

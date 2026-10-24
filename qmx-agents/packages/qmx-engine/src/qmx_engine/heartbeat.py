@@ -27,7 +27,7 @@ import json
 import os
 import time
 import urllib.request
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
 from importlib import metadata
 from pathlib import Path
@@ -58,6 +58,10 @@ CALL_TIMEOUT_S: Final = 10.0
 CONNECTIONS: Final = "connections-health.json"
 """The health workflow's file under `logs/`; the host attaches its readings to its next row."""
 type ConnectionWord = Literal["ok", "slowed", "maintenance", "needs_you", "down"]
+FRESH_S: Final = 3 * INTERVAL_S
+"""A host row older than three intervals no longer says where data is (Claude's default)."""
+MARKET_SERIES: Final = ("market", "series")
+"""The market-data door's partitions under a home: `<series>/<YYYY-MM>/state.json` (Lib AD-25)."""
 
 
 class ConnectionReading(BaseModel):
@@ -150,6 +154,9 @@ class Heartbeat(BaseModel):
     """This home's Lab facts, on a host row (AD-69)."""
     clock_offset_ms: int | None = None
     """The largest absolute provider clock offset this home measured, signed as measured."""
+    partitions: dict[str, int] = Field(default_factory=dict[str, int])
+    """The partition summary: each series this machine's market-data store holds, with how many
+    months of it, which placement by locality reads (AD-65, AD-70)."""
 
 
 def node_kinds() -> tuple[str, ...]:
@@ -249,6 +256,44 @@ def host_kinds(home: Path) -> Mapping[str, frozenset[str]]:
     return {
         row.id: frozenset(row.node_kinds) for row in latest(home).values() if row.subject == "host"
     }
+
+
+def partition_summary(home: Path) -> dict[str, int]:
+    """Each series the home's market-data store holds, with its month count; empty without one."""
+    root = home.joinpath(*MARKET_SERIES)
+    found: dict[str, int] = {}
+    for state in root.glob("*/*/*/*/????-??/state.json"):
+        series = state.parent.parent.relative_to(root).as_posix()
+        found[series] = found.get(series, 0) + 1
+    return dict(sorted(found.items()))
+
+
+def placement(
+    runs_on: Sequence[str],
+    wants: Collection[str],
+    rows: Mapping[str, Heartbeat],
+    now: datetime,
+) -> str | None:
+    """Where a node runs by locality (AD-70), or None while no placement can read its data.
+
+    `runs_on` is the node's list in preference order and `wants` the series it reads. A node that
+    reads none runs on its first placement. Otherwise the first placement whose fresh host row
+    holds every series wins. Failing that, a live placement reads through the door of a fresh host
+    that holds them. With neither, the node waits `placement` and never fails.
+    """
+    if not wants:
+        return runs_on[0]
+    live = {
+        row.id: row
+        for row in rows.values()
+        if row.subject == "host" and (now - _when(row.at)).total_seconds() <= FRESH_S
+    }
+    holders = {name for name, row in live.items() if set(wants) <= row.partitions.keys()}
+    near = [name for name in runs_on if name in holders]
+    if near:
+        return near[0]
+    reach = [name for name in runs_on if name in live] if holders else []
+    return reach[0] if reach else None
 
 
 def _health(home: Path) -> dict[str, object]:
@@ -351,6 +396,7 @@ def _attached(home: Path, row: Heartbeat) -> Heartbeat:
             "clock_offset_ms": row.clock_offset_ms or measured_clock_offset(home),
             "library": row.library or library_facts(home),
             "lab": row.lab or lab_facts(home),
+            "partitions": row.partitions or partition_summary(home),
         }
     )
 

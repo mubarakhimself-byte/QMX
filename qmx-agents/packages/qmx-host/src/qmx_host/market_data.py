@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Final, cast
 
 import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from qmf.core import (
     CalendarIdentity,
@@ -53,6 +53,9 @@ from qmf.data.store.refusals import (
     storage_failure,
 )
 from qmx_engine.control_door import PRINCIPAL
+from qmx_router.passes import Pass
+
+from qmx_host.door import RUN_PASS
 
 __all__ = [
     "HANDLE_ROWS",
@@ -334,6 +337,7 @@ class MarketDoor:
         purpose: Purpose | str = Purpose.EXPLORATION,
         data_scope: Sequence[str] | None = None,
         into: Path | None = None,
+        open_months: bool = False,
     ) -> Result[ReadAnswer]:
         """Serve one read through the seal and the split, or refuse it by name.
 
@@ -341,6 +345,10 @@ class MarketDoor:
         answers remote callers refuses a read with no scope; the PC's own door, whose caller
         is the operator and his copilot, needs none. ``purpose`` arrives as a word from a
         route or a tool and is parsed here into the closed vocabulary it names.
+
+        ``open_months`` serves only the months before the seal instead of refusing the read
+        for holding a sealed one. It is for a remote attempt's read with no range, which cannot
+        know where this door's seal sits; a read that names its range is refused as before.
         """
         if not isinstance(purpose, Purpose):
             try:
@@ -389,7 +397,7 @@ class MarketDoor:
                 refused.append(key.text)
             else:
                 served.append(key)
-        if refused:
+        if refused and not (open_months and served):
             return policy_rejection(
                 "seal",
                 f"{SEAL_READ_REASON}; a read into the sealed no-peek window is refused at the "
@@ -955,6 +963,33 @@ class VerifyBody(BaseModel):
     fingerprints: list[str]
 
 
+def pass_scope(body: ReadBody, minted: Pass) -> list[str]:
+    """The scope a run-pass read is checked against: the pass's own, never the body's. A body that
+    asks for more than the pass is refused. A run pass reads by series only: a target folder or a
+    fingerprint list on this machine is not its to name, and the journaled final look is the
+    operator's, never a remote attempt's."""
+    scope = list(minted.data_scope)
+    wider = sorted(set(body.data_scope or ()) - set(scope))
+    if wider:
+        raise _pass_refusal("data_scope", "the body asks for more than the run pass", wider=wider)
+    if body.into is not None or body.fingerprints:
+        raise _pass_refusal("into", "a run pass reads by series, never into a path or by file")
+    if body.purpose is Purpose.FINAL_LOOK:
+        raise _pass_refusal("purpose", "a run pass never takes the final look")
+    return scope
+
+
+def _pass_refusal(field: str, reason: str, **extra: object) -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail={
+            "refused": "policy rejection",
+            "retryability": "no",
+            "context": {"field": field, "reason": reason, **extra},
+        },
+    )
+
+
 def market_router(door: MarketDoor) -> APIRouter:
     """The door's routes, mounted by the host behind its bearer and its principal door.
 
@@ -978,15 +1013,19 @@ def market_router(door: MarketDoor) -> APIRouter:
         return found.value
 
     @router.post("/api/data/read")
-    def read(body: ReadBody) -> dict[str, object]:
+    def read(body: ReadBody, request: Request) -> dict[str, object]:
+        # A local-bearer caller keeps the body's scope and the whole-read seal refusal. A run
+        # pass with no range gets the series' open months: it cannot know where the seal sits.
+        minted: object = getattr(request.state, RUN_PASS, None)
         answered = door.read(
             body.series,
             fingerprints=body.fingerprints,
             start_ns=body.start_ns,
             end_ns=body.end_ns,
             purpose=body.purpose,
-            data_scope=body.data_scope,
+            data_scope=pass_scope(body, minted) if isinstance(minted, Pass) else body.data_scope,
             into=Path(body.into) if body.into else None,
+            open_months=isinstance(minted, Pass) and body.start_ns is None and body.end_ns is None,
         )
         if is_refusal(answered):
             raise _refused(answered)

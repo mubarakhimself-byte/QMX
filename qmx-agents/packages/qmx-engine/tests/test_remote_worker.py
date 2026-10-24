@@ -251,20 +251,6 @@ def test_a_bundle_carries_files_by_hash() -> None:
     assert bundle["files"] == files
 
 
-def test_runs_on_in_the_definition_selects_the_machine() -> None:
-    provider = FakeProvider()
-    local = job("pc")
-    routed = replace(local, node_definition={**local.node_definition, "runs_on": "contabo"})
-    result, _ = run(
-        worker(FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}), provider),
-        routed,
-    )
-
-    assert isinstance(result, Ok)
-    assert provider.bundle is not None
-    assert provider.bundle["definition"]["job"]["placement"] == "contabo"
-
-
 def test_a_placed_job_with_code_passes_the_provider_envelope() -> None:
     provider = FakeProvider()
     placed = worker(
@@ -276,3 +262,23 @@ def test_a_placed_job_with_code_passes_the_provider_envelope() -> None:
     assert isinstance(result, Ok)
     assert provider.bundle is not None
     assert list(provider.bundle["files"]) == ["count.py"]
+
+
+def test_a_placed_job_carries_its_placements_door_url() -> None:
+    provider = FakeProvider()
+    placed = PlacementWorker(
+        gateway=FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}),
+        providers={"contabo": provider},
+        settings=DEFAULTS,
+        mint=lambda _job: PASS,
+        remote={"contabo"},
+        poll_seconds=0.0,
+        clock=Clock(),
+        doors={"contabo": "http://qmx-server:8765"},
+    )
+
+    result, _ = run(placed, job("contabo"))
+
+    assert isinstance(result, Ok)
+    assert provider.bundle is not None
+    assert provider.bundle["definition"]["job"]["door_url"] == "http://qmx-server:8765"
