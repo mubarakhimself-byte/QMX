@@ -5,7 +5,8 @@ import shutil
 import sys
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -31,6 +32,7 @@ from qma.harness.tools import (
     guard_rules,
     keyring_refs,
     sdk_tools,
+    served_apps,
     server_config,
     tool_defs,
     unvetted_tools,
@@ -249,6 +251,21 @@ def test_a_running_app_serves_its_operations_to_a_chat_until_it_stops(tmp_path: 
     assert running["apps_admin_move"].effect is Effect.MANAGE
     assert "app_exchange-status_ping" not in stopped
     assert "apps_admin_move" in stopped
+
+
+class ListedApps:
+    def list(self) -> list[dict[str, Any]]:
+        def app(app_id: str, status: str) -> dict[str, Any]:
+            operations = {"ping": {"approval": "read"}}
+            definition = {"id": app_id, "version": "1.0.0", "operations": operations}
+            return {"runtime": {"status": status}, "definition": definition}
+
+        return [app("a" * 60, "running"), app("idle", "stopped"), app("ok", "running")]
+
+
+def test_only_running_apps_the_catalog_accepts_serve_tools() -> None:
+    control = cast("ControlService", SimpleNamespace(app_runtime=ListedApps))
+    assert [row.name for row, _ in served_apps(control)] == ["app:ok_ping"]
 
 
 def test_keyring_refs_reads_names_from_three_sections(tmp_path: Path) -> None:

@@ -17,6 +17,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import logging
 import re
 import sys
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -33,6 +34,7 @@ from qmx_broker.service import BrokerService
 from qmx_control.catalog import (
     CORE_TOOLSETS,
     TOOLSET_WIRE,
+    CatalogError,
     OperationSpec,
     app_rows,
     name_problem,
@@ -54,6 +56,7 @@ if TYPE_CHECKING:
     from qma.harness.home import QmxHome
 
 SERVER: Final = QMX_SERVER
+log = logging.getLogger(__name__)
 
 
 class Effect(Enum):
@@ -500,7 +503,8 @@ MOVE_SCHEMA: Final[Mapping[str, object]] = MappingProxyType(
 
 def served_apps(control: ControlService) -> list[tuple[OperationSpec, dict[str, object]]]:
     """Each running app's `[operations]` rows, pinned to its selected version, each with the
-    input schema the app declares for it. A stopped app serves none."""
+    input schema the app declares for it. A stopped app serves none, and so does one whose rows
+    the catalog refuses (an id too long for a tool name), so one app never stops every chat."""
     found: list[tuple[OperationSpec, dict[str, object]]] = []
     for app in control.app_runtime().list():
         runtime, definition = app.get("runtime"), app.get("definition")
@@ -510,7 +514,12 @@ def served_apps(control: ControlService) -> list[tuple[OperationSpec, dict[str, 
             continue
         operations = cast("dict[str, dict[str, object]]", definition.get("operations") or {})
         app_id, version = str(definition["id"]), str(definition["version"])
-        for row in app_rows(app_id, version, operations):
+        try:
+            declared = app_rows(app_id, version, operations)
+        except CatalogError as refused:
+            log.warning("the app %s serves no tools to a chat: %s", app_id, refused)
+            continue
+        for row in declared:
             schema = operations[row.op].get("input_schema")
             found.append((row, cast("dict[str, object]", schema) if schema else dict(NO_ARGUMENTS)))
     return found
