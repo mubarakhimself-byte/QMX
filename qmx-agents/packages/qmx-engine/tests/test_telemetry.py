@@ -7,9 +7,12 @@ heartbeat write, with the exporter pointed at a function that records what arriv
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
+
+import pytest
 
 from qmx_engine import telemetry
 from qmx_engine.heartbeat import Heartbeat, HeartbeatLog, kinds_digest
@@ -21,6 +24,14 @@ from qmx_engine.ledger.store import Ledger
 T0 = datetime(2026, 10, 23, 9, 0, tzinfo=UTC)
 RUN = "run-1"
 ENDPOINT = "http://collector.invalid:4318"
+
+
+@pytest.fixture(autouse=True)
+def one_exporter() -> Iterator[None]:
+    """Each test's exporter is its own: the process keeps one, and a neighbour's must not answer."""
+    telemetry.reset()
+    yield
+    telemetry.reset()
 
 
 def a_span() -> Span:
@@ -78,27 +89,25 @@ def test_the_pinned_genai_names_and_the_runs_trace_id() -> None:
 
 def test_an_exported_record_carries_no_value_the_redactor_masks(tmp_path: Path) -> None:
     sent: list[tuple[str, bytes]] = []
-    telemetry.reset()
     exporter = telemetry.configure(ENDPOINT, post=lambda url, body: sent.append((url, body)))
-    secret = "sk-or-v1-" + "a" * 32
+    echoed = "sk-or-v1-" + "a" * 32
     with Ledger.open(tmp_path) as ledger:
         ledger.append(
             RUN,
             "run_created",
-            {"mode": "test", "note": f"the key {secret} was echoed"},
+            {"mode": "test", "note": f"the key {echoed} was echoed"},
             at=T0.isoformat(),
         )
     exporter.flush()
 
     bodies = b"".join(body for _, body in sent)
     assert sent and sent[0][0] == f"{ENDPOINT}/v1/logs"
-    assert secret.encode() not in bodies
+    assert echoed.encode() not in bodies
     assert b"[redacted]" in bodies
 
 
 def test_a_heartbeat_row_goes_out_as_gauges(tmp_path: Path) -> None:
     sent: list[tuple[str, bytes]] = []
-    telemetry.reset()
     exporter = telemetry.configure(ENDPOINT, post=lambda url, body: sent.append((url, body)))
     HeartbeatLog(tmp_path, 7).write([a_host_row(free_disk_bytes=73_259_859_968)])
     exporter.flush()
@@ -125,7 +134,6 @@ def test_a_collector_that_is_down_drops_and_counts_and_never_fails_the_write(
     def refuse(url: str, body: bytes) -> None:
         raise OSError(f"the collector at {url} is away")
 
-    telemetry.reset()
     exporter = telemetry.configure(ENDPOINT, post=refuse, state=tmp_path / telemetry.STATE_FILE)
     with Ledger.open(tmp_path) as ledger:
         ledger.append(RUN, "run_created", {"mode": "test"}, at=T0.isoformat())
@@ -141,22 +149,21 @@ def test_a_collector_that_is_down_drops_and_counts_and_never_fails_the_write(
 
 def test_an_exported_span_carries_no_value_the_redactor_masks(tmp_path: Path) -> None:
     sent: list[tuple[str, bytes]] = []
-    telemetry.reset()
     exporter = telemetry.configure(ENDPOINT, post=lambda url, body: sent.append((url, body)))
-    secret = "sk-or-v1-" + "a" * 32
+    echoed = "sk-or-v1-" + "a" * 32
     key: JsonObject = {"node_id": "step", "iteration": 0, "partition": None, "attempt": 1}
     with Ledger.open(tmp_path) as ledger:
         ledger.append(RUN, "node_started", key, at=T0.isoformat())
         ledger.append(
             RUN,
             "tool_called",
-            {**key, "tool": {"id": "t-1", "name": f"read {secret}", "duration_ms": 4}},
+            {**key, "tool": {"id": "t-1", "name": f"read {echoed}", "duration_ms": 4}},
             at=T0.isoformat(),
         )
     exporter.flush()
 
     body = b"".join(body for path, body in sent if path.endswith("/v1/traces"))
-    assert body and secret.encode() not in body
+    assert body and echoed.encode() not in body
     spans = json.loads(body)["resourceSpans"][0]["scopeSpans"][0]["spans"]
     assert [span["name"] for span in spans] == ["read [redacted]"]
 
@@ -167,7 +174,6 @@ def test_a_span_write_reaches_the_exporter_once_it_closes(tmp_path: Path) -> Non
     def sink(kind: str, record: str) -> None:
         seen.append((kind, record))
 
-    telemetry.reset()
     redact.exporter(sink)
     try:
         with Ledger.open(tmp_path) as ledger:
