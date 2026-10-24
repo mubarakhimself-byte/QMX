@@ -78,7 +78,7 @@ def test_every_appendix_h_default_has_its_literal_value() -> None:
         "inline_limit_bytes": 65_536,
         "placement.pc.cpu_slots": None,
         "placement.pc.container_slots": 3,
-        "placement.pc.gpu_slots": None,
+        "placement.pc.gpu_slots": 1,
         "placement.contabo.kind": "owned",
         "placement.contabo.relay": "local",
         "placement.contabo.attempt_cpus": 2,

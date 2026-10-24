@@ -30,10 +30,18 @@ type Reversibility = Literal[
     "none", "reversible", "compensable", "irreversible", "irreversible_external"
 ]
 type Binds = Literal[
-    "control_op", "domain_fn", "broker", "app_server", "agent_tool", "delegate", "primary_op"
+    "control_op",
+    "domain_fn",
+    "broker",
+    "app_server",
+    "agent_tool",
+    "delegate",
+    "primary_op",
+    "lab_op",
 ]
 """`primary_op` is `qmx_control.primary`: the primary store's own operations, served at the host's
-user door and on no model's surface (migration step 8, "When the server is lost")."""
+user door and on no model's surface (migration step 8, "When the server is lost"). `lab_op` is
+`qmx_control.lab`: the Lab's own operations, served the same way for its screens (Lab AD-19)."""
 type Caller = Literal["model", "code"]
 type Verb = Literal["GET", "POST", "PUT"]
 
@@ -52,6 +60,7 @@ CORE_TOOLSETS: Final = (
     "settings_read",
     "ops",
     "router",
+    "lab",
 )
 CORE_PACK: Final = "qmx"
 APP_PREFIX: Final = "app:"
@@ -574,6 +583,97 @@ DR2D). Both are the operator's, so neither is on any model's surface: `qmx_contr
 them at the host's user door, which is the same `user` the inbox answers as."""
 
 
+LAB_ROWS: Final = (
+    _row(
+        "lab",
+        "levels",
+        "lab_op",
+        "levels",
+        "read",
+        "List the Lab's four levels and the templates each offers: the published ones tagged for "
+        "the level first, then the pack's own. A level is a filter, not a kind.",
+        agent=False,
+        left_out="its screens ask it; the copilot's Lab pack is a later slice (Lab AD-14)",
+    ),
+    _row(
+        "lab",
+        "new",
+        "lab_op",
+        "new",
+        "domain_write",
+        "Create a project as a collection and install its template at one level: quick idea, "
+        "experiment, study or campaign. The template is published and tagged with the level, and "
+        "the new project gets an empty workspace annotation.",
+        agent=False,
+        left_out="opening a project is the operator's act on his own Lab (Lab AD-19)",
+        reversibility="compensable",
+    ),
+    _row(
+        "lab",
+        "open",
+        "lab_op",
+        "open",
+        "read",
+        "Open one project: its members as cards, its workspace state, its problems (marks and "
+        "merge conflicts) and its timeline (the item's moves in the ref log).",
+        agent=False,
+        left_out="its screens ask it; the copilot's Lab pack is a later slice (Lab AD-14)",
+    ),
+    _row(
+        "lab",
+        "workspace",
+        "lab_op",
+        "workspace",
+        "domain_write",
+        "Save the workspace state onto the project: which member is open, the pins, the layout "
+        "and the open tabs. It is an annotation, so reopening the Lab restores it and no version "
+        "is minted.",
+        agent=False,
+        left_out="the layout is his screen's state, and no model arranges his workspace",
+        reversibility="reversible",
+    ),
+    _row(
+        "lab",
+        "panel",
+        "lab_op",
+        "panel",
+        "read",
+        "Read one dataset card's data panel: its months and quality off the card and one month's "
+        "sample through the market-data door. A sealed month is refused in the door's own words.",
+        agent=False,
+        left_out="agents read price data through the data tools, not the Lab's panel (Lib AD-28)",
+    ),
+    _row(
+        "lab",
+        "training",
+        "lab_op",
+        "training",
+        "domain_write",
+        "Place a training run on the PC: check the live free disk against the partitions it must "
+        "fetch, refuse with both sizes when they do not fit, then materialise exactly those "
+        "partitions and answer the lineage the model will record.",
+        agent=False,
+        left_out="a training run is a placement the Lab holds a GPU slot for, not a tool call",
+        reversibility="reversible",
+    ),
+    _row(
+        "lab",
+        "model",
+        "lab_op",
+        "model",
+        "domain_write",
+        "Land the model a training run made: its data fingerprints, code version, seed, framework "
+        "and hardware, its weights blob, and its edges consumed to the card and derived-from its "
+        "code.",
+        agent=False,
+        left_out="the run that trained it lands it; nothing else writes a model item",
+        reversibility="compensable",
+    ),
+)
+"""The Lab backend's operations (Lab AD-19, AD-20; DATA-PLAN DR13). `qmx_control.lab` serves them at
+the host's user door for the Lab's screens, which are the UI session's; pods are not among them."""
+
+
 def control_rows() -> tuple[OperationSpec, ...]:
     """Every `@operation` row on `ControlService`, in definition order."""
     from qmx_control.service import ControlService  # noqa: PLC0415
@@ -657,6 +757,7 @@ def rows(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
         *ROUTER_ROWS,
         *INSTANCE_ROWS,
         *PRIMARY_ROWS,
+        *LAB_ROWS,
         *apps,
     )
     check(found)

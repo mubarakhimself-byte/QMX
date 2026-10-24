@@ -97,6 +97,13 @@ def test_rest_only_rows_stay_off_the_agent_surface() -> None:
     assert sorted(found.name for found in rows() if not found.agent) == [
         "apps_admin_call",
         "apps_admin_enable",
+        "lab_levels",
+        "lab_model",
+        "lab_new",
+        "lab_open",
+        "lab_panel",
+        "lab_training",
+        "lab_workspace",
         "library_move",
         "library_server_lost",
         "ops_backup_weekly",

@@ -14,7 +14,6 @@ sit in the host's memory.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import multiprocessing
 import re
@@ -42,7 +41,7 @@ from qmf.core import (
     is_refusal,
 )
 from qmf.data.seal import SEAL_CONTROL_STREAM, HoldoutSeal, OperatorClick, ReadBoundary
-from qmf.data.series import CommitReceipt, SeriesKey, SeriesStore
+from qmf.data.series import OPEN_NAME, CommitReceipt, SeriesKey, SeriesStore
 from qmf.data.splits import SegmentRole, SplitBoundary, SplitManifest
 from qmf.data.store.engines.typed import TypedWriter
 from qmf.data.store.facade import EvidenceStore
@@ -406,8 +405,11 @@ class MarketDoor:
     ) -> Result[tuple[Path, ...]]:
         """Copy the named partitions to local paths, verifying each fingerprint (QMB's read).
 
-        A sealed partition is never copied into a shared cache: it needs the run's own
-        attempt folder, so a sealed month cannot be left lying where the next run finds it.
+        The store's fingerprint is the typed writer's hash of the rows themselves, never the
+        hash of the file's bytes, so a copy is verified by streaming its rows back through that
+        same writer and comparing the two. A sealed partition is never copied into a shared
+        cache: it needs the run's own attempt folder, so a sealed month cannot be left lying
+        where the next run finds it.
         """
         keys = self._keys_of_fingerprints(fingerprints)
         if is_refusal(keys):
@@ -436,7 +438,7 @@ class MarketDoor:
                     month=key.text,
                 )
             source = store.folder(key) / (
-                f"{state.fingerprint}.parquet" if state.frozen else ".open.parquet"
+                f"{state.fingerprint}.parquet" if state.frozen else OPEN_NAME
             )
             if not source.is_file():
                 return missing_artifact(
@@ -451,7 +453,22 @@ class MarketDoor:
                     "could not copy the partition",
                     context={"key": key.text, "error": str(exc)},
                 )
-            if _sha256(copied) != state.fingerprint:
+            probe = copied.with_name(f".verify-{state.fingerprint}-{time.monotonic_ns()}.parquet")
+            try:
+                written = (
+                    TypedWriter(probe, key.text, key.rule.columns)
+                    .add(_rows_of(copied, key.rule.columns))
+                    .finish()
+                )
+            except Exception as exc:  # a copy that cannot be read back failed its verification
+                copied.unlink(missing_ok=True)
+                return storage_failure(
+                    "the copied partition could not be read back",
+                    context={"key": key.text, "error": str(exc)},
+                )
+            finally:
+                probe.unlink(missing_ok=True)
+            if written.fingerprint != state.fingerprint:
                 copied.unlink(missing_ok=True)
                 return storage_failure(
                     "the copied partition does not hash to its fingerprint",
@@ -1067,14 +1084,6 @@ def _key_of(*parts: str, month: str) -> Result[SeriesKey]:
         int(match.group(2)),
         "" if variant == "-" else variant,
     )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _rows_of(path: Path, columns: Sequence[str]) -> Iterable[tuple[object, ...]]:
