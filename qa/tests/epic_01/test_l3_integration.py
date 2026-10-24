@@ -126,6 +126,11 @@ def test_e1_i03_single_fp1_implementation_only_in_qmf_core() -> None:
         # These are explicitly non-fp1 protocol/checksum digests.
         "packages/qmf-indicators/src/qmf/indicators/series.py",
         "packages/qmf-venue/src/qmf/venue/proto.py",
+        # Data-round checksums: a partition content digest and Binance Vision's published
+        # .CHECKSUM verification. Neither is the CT-05 canonical serializer.
+        "packages/qmf-data/src/qmf/data/store/engines/typed.py",
+        "packages/qmf-data/src/qmf/data/binance_vision.py",
+        "packages/qmf-data/tests/test_binance_vision.py",
     }
     offenders: set[str] = set()
     for py in PACKAGES.rglob("*.py"):

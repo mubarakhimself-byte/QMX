@@ -359,7 +359,9 @@ class SeriesStore:
 
     def __init__(self, root: Path, *, wall: Callable[[], datetime] | None = None) -> None:
         self._root = root
-        self._wall = wall if wall is not None else (lambda: datetime.now(UTC))
+        self._wall = (
+            wall if wall is not None else (lambda: datetime.now(UTC))  # ambient-scan: allow
+        )
 
     @property
     def root(self) -> Path:
