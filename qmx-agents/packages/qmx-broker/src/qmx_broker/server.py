@@ -46,9 +46,10 @@ def create_server(service: BrokerService) -> FastMCP:
         timeframe: str,
         since: int,
         until: int,
-        limit: int = 100,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Read up to 1000 bars within explicit UTC millisecond bounds."""
+        """Read every bar within explicit UTC millisecond bounds, paged by the provider's own
+        limit. Pass `limit` to stop after that many bars."""
         return await service.read(
             "bars",
             broker_id,

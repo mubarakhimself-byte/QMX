@@ -186,13 +186,18 @@ class BrokerService:
             raise ValueError("Enable read permission for this account in node settings")
         if operation not in {"account_state", "positions", "quotes", "bars", "symbol_info"}:
             raise ValueError("Unknown read operation")
+        # 2147483646000 is a millisecond timestamp (January 2038), not a capacity number.
         if operation == "bars" and (
-            not 1 <= kwargs["limit"] <= 1000
+            (kwargs["limit"] is not None and kwargs["limit"] < 1)
             or not 0 <= kwargs["since"] < kwargs["until"] <= 2147483646000
         ):
-            raise ValueError("Use 0 <= since < until <= 2147483646000 and limit 1..1000")
+            raise ValueError(
+                "Use 0 <= since < until <= 2147483646000, and limit >= 1 or no limit for every bar"
+            )
         try:
             async with self._read_lock, self.factory(broker, connection, account) as adapter:
+                if operation == "bars":
+                    return await read_bars(adapter, **kwargs)
                 return await getattr(adapter, operation)(**kwargs)
         except Exception:
             raise ValueError(
@@ -224,6 +229,27 @@ class BrokerService:
     def proposals(self, offset: int = 0, limit: int = 100) -> list[Document]:
         """Read the unsigned Portfolio queue; signing and execution belong to QMN."""
         return read_proposals(self.home, offset, limit)
+
+
+async def read_bars(
+    adapter: ReadAdapter, symbol: str, timeframe: str, since: int, until: int, limit: int | None
+) -> list[Document]:
+    """Every bar in `[since, until]`, or the first `limit`, paged by the provider's own limit."""
+    page = adapter.bar_page_limit
+    rows: list[Document] = []
+    cursor = since
+    while cursor <= until and (limit is None or len(rows) < limit):
+        wanted = page if limit is None else min(page or limit, limit - len(rows))
+        batch = [
+            row
+            for row in await adapter.bars(symbol, timeframe, cursor, until, wanted)
+            if cursor <= int(row["timestamp_ms"]) <= until
+        ]
+        if not batch:
+            break
+        rows.extend(batch)
+        cursor = max(int(row["timestamp_ms"]) for row in batch) + 1
+    return rows[:limit]
 
 
 def _page(offset: int, limit: int) -> None:

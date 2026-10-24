@@ -77,12 +77,20 @@ declare(CTRADER_DECLARATION, CCXT_DECLARATION, MT5_DECLARATION)
 
 
 class ReadAdapter(Protocol):
+    @property
+    def bar_page_limit(self) -> int | None:
+        """The provider's own most bars per request, or None when the provider picks the page."""
+        ...
+
     async def account_state(self) -> Document: ...
     async def positions(self) -> list[Document]: ...
     async def quotes(self, symbol: str) -> Document: ...
     async def bars(
-        self, symbol: str, timeframe: str, since: int, until: int, limit: int
-    ) -> list[Document]: ...
+        self, symbol: str, timeframe: str, since: int, until: int, limit: int | None
+    ) -> list[Document]:
+        """One page of bars in `[since, until]`, earliest first."""
+        ...
+
     async def symbol_info(self, symbol: str) -> Document: ...
 
 
@@ -93,6 +101,8 @@ def scaled(value: object, digits: int) -> str:
 
 
 class CTraderAdapter:
+    bar_page_limit: int | None = None
+
     def __init__(self, account: Account, request: Request, spot: Request) -> None:
         self.account = account
         self.request = request
@@ -195,7 +205,7 @@ class CTraderAdapter:
         }
 
     async def bars(
-        self, symbol: str, timeframe: str, since: int, until: int, limit: int
+        self, symbol: str, timeframe: str, since: int, until: int, limit: int | None
     ) -> list[Document]:
         periods = {
             "1m": "M1",
@@ -210,13 +220,14 @@ class CTraderAdapter:
         if timeframe not in periods:
             raise ValueError("Use a supported cTrader period: " + ", ".join(periods))
         info = await self.symbol_info(symbol)
+        count = {} if limit is None else {"count": limit}
         result = await self._read(
             "ProtoOAGetTrendbarsReq",
             symbolId=int(info["symbolId"]),
             period=periods[timeframe],
             fromTimestamp=since,
             toTimestamp=until,
-            count=limit,
+            **count,
         )
         return [
             {
@@ -236,6 +247,16 @@ class CTraderAdapter:
 class CCXTAdapter:
     def __init__(self, exchange: Any) -> None:
         self.exchange = exchange
+
+    @property
+    def bar_page_limit(self) -> int | None:
+        try:
+            limit: object = self.exchange.features["spot"]["fetchOHLCV"]["limit"]
+        except AttributeError, KeyError, TypeError:
+            return None
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            return None
+        return limit
 
     async def _market(self, symbol: str) -> Document:
         markets = cast("dict[str, Document]", await asyncio.to_thread(self.exchange.load_markets))
@@ -301,7 +322,7 @@ class CCXTAdapter:
         return {key: ticker.get(key) for key in ("symbol", "bid", "ask", "timestamp")}
 
     async def bars(
-        self, symbol: str, timeframe: str, since: int, until: int, limit: int
+        self, symbol: str, timeframe: str, since: int, until: int, limit: int | None
     ) -> list[Document]:
         await self._market(symbol)
         rows = cast(
