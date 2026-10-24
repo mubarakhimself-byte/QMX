@@ -412,7 +412,7 @@ def from_ctrader(
     account: str,
     currency: str = "USD",
     money_digits: int = 2,
-    price_digits: int = 5,
+    price_digits: int = 5,  # mock-data-scan: allow
 ) -> tuple[Fill, ...]:
     """cTrader's deal rows: ``dealId``, ``positionId``, ``symbolName``, ``tradeSide``, ``volume``,
     ``executionPrice``, ``executionTime``, ``commission`` and ``swap``."""
@@ -452,7 +452,7 @@ def from_mt5(
     account: str,
     currency: str = "USD",
     money_digits: int = 2,
-    price_digits: int = 5,
+    price_digits: int = 5,  # mock-data-scan: allow
 ) -> tuple[Fill, ...]:
     """MT5's deal rows: ``Deal``, ``Position``, ``Symbol``, ``Type``, ``Volume``, ``Price``,
     ``Time``, ``Commission``, ``Swap`` and ``Profit``. A ``Type`` of 0 buys and 1 sells."""
@@ -490,7 +490,7 @@ def from_ccxt(
     account: str,
     currency: str = "USD",
     money_digits: int = 8,
-    price_digits: int = 8,
+    price_digits: int = 8,  # mock-data-scan: allow
 ) -> tuple[Fill, ...]:
     """CCXT's ``fetchMyTrades`` rows: ``id``, ``order``, ``symbol``, ``side``, ``amount``,
     ``price``, ``timestamp``, ``fee`` and ``info`` (where an exchange puts its position id)."""
