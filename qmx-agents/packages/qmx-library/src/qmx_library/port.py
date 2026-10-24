@@ -271,6 +271,42 @@ class MergeResult:
 
 
 @dataclass(frozen=True, slots=True)
+class HistoryEntry:
+    """One row of the item's ref log (AD-30): the move a ref took, who made it and when."""
+
+    seq: int
+    item: str
+    ref: str
+    principal: str
+    prev_head: ObjectId | None
+    new_head: ObjectId
+    at: str
+    reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BlameLine:
+    """Who last changed one line of a text slot, in the version that holds it (AD-30)."""
+
+    number: int
+    """1-based, as a diff counts."""
+    text: str
+    object_id: ObjectId
+    principal: str
+    at: str
+
+
+@dataclass(frozen=True, slots=True)
+class Blame:
+    item: str
+    slot: str
+    ref: str
+    object_id: ObjectId
+    """The version blamed, the head of `ref` when the read ran."""
+    lines: tuple[BlameLine, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Claim:
     """AD-24's answer: `granted`, or `held_by(run_id, expires)` when another live run holds it and
     a claim past its `expires` may be taken by the next caller."""
@@ -360,6 +396,23 @@ class LibraryPort(Protocol):
         into: str,
         strategy: Strategy = "auto",
     ) -> MergeResult: ...
+
+    def conflicts(self, who: Principal, item: str | None = None) -> list[ObjectView]: ...
+
+    def resolve_conflict(
+        self,
+        who: Principal,
+        conflict: ObjectId,
+        *,
+        text: str | None = None,
+        values: Mapping[str, JsonValue] | None = None,
+    ) -> MergeResult: ...
+
+    def history_of(
+        self, who: Principal, item: str, ref: str | None = None
+    ) -> list[HistoryEntry]: ...
+
+    def blame(self, who: Principal, item: str, slot: str, ref: str = "main") -> Blame: ...
 
     def checkout(self, who: Principal, item: str, ref: str = "main") -> Path: ...
 

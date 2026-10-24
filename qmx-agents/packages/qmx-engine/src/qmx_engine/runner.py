@@ -179,6 +179,31 @@ class Doctor(Protocol):
     async def classify(self, consult: Consult) -> Verdict: ...
 
 
+INTENT_TTL_S: Final = 900
+"""How long a node's intent claim holds. Nothing renews it yet (AD-65), so a longer node can lose
+it to the next caller."""
+
+
+class ClaimAnswer(Protocol):
+    @property
+    def granted(self) -> bool: ...
+
+
+class Claims(Protocol):
+    """AD-24's compare-and-swap on an intent key, as the runner reaches it. `LibraryClient` fits
+    it as it stands: `claim` takes the transient ref `refs/claims/<key>` for one run."""
+
+    def claim(self, intent_key: str, run_id: str, ttl: int) -> ClaimAnswer: ...
+
+    def release(self, intent_key: str, run_id: str) -> None: ...
+
+
+def intent_key(node: Node) -> str | None:
+    """The intent key a node declares in its parameters, or None when it declares none (AD-30)."""
+    found = node.parameters.get("intent_key")
+    return found if isinstance(found, str) and found else None
+
+
 def recorded_settings(
     settings: Mapping[str, object], workflow: Workflow, mode: Mode = "test"
 ) -> JsonObject:
@@ -245,12 +270,13 @@ class Engine:
         watch_every: float | None = None,
         harness: HarnessPort | None = None,
         memory: MemoryPort | None = None,
+        claims: Claims | None = None,
     ) -> None:
         """`settings` given as a port are read at use, so a run starts on the settings of that
         moment (B-42). `executors` replace the built-in executor of a kind. Without a `doctor`,
         the ladder's doctor step is recorded as skipped. Without a `harness`, model nodes fail
         `unavailable`. Without `memory`, agent notes go to the memory stub over the home's
-        Library."""
+        Library. Without `claims`, a node's intent key is read but nothing claims it."""
         self.home = home
         self.ledger = ledger
         self._settings = settings
@@ -260,6 +286,7 @@ class Engine:
         self.executors = executors or {}
         self.doctor = doctor
         self.harness = harness
+        self.claims = claims
         self.admission = Admission(harness, settings) if harness is not None else None
         self._inbox = inbox
         if isinstance(inbox, InboxTable):
@@ -1024,18 +1051,26 @@ class Run:
     async def attempt(self, job: NodeJob, gate: asyncio.Event | None = None) -> None:
         if gate is not None:
             await gate.wait()
-        result = await self.engine.worker.run(job, self.append)
-        if isinstance(result, Waiting) and result.resume_at is not None:
-            result = replace(result, resume_at=utc_text(datetime.fromisoformat(result.resume_at)))
-        slot = Slot(job.node_id, job.iteration, job.partition)
-        if isinstance(result, Failed) and result.effect_state == "unknown":
-            self.unknown(slot, job.attempt, result.code, result.message)
-            return
-        keys = slot_keys(slot, job.attempt)
-        for name, data in ending(result):
-            self.append(cast(EventKind, name), keys | data)
-        if isinstance(result, Failed):
-            self.late(slot, job.attempt)
+        intent, claims = intent_key(self.node(job.node_id)), self.engine.claims
+        held = bool(intent and claims and claims.claim(intent, job.run_id, INTENT_TTL_S).granted)
+        try:
+            result = await self.engine.worker.run(job, self.append)
+            if isinstance(result, Waiting) and result.resume_at is not None:
+                result = replace(
+                    result, resume_at=utc_text(datetime.fromisoformat(result.resume_at))
+                )
+            slot = Slot(job.node_id, job.iteration, job.partition)
+            if isinstance(result, Failed) and result.effect_state == "unknown":
+                self.unknown(slot, job.attempt, result.code, result.message)
+                return
+            keys = slot_keys(slot, job.attempt)
+            for name, data in ending(result):
+                self.append(cast(EventKind, name), keys | data)
+            if isinstance(result, Failed):
+                self.late(slot, job.attempt)
+        finally:
+            if held and intent and claims:
+                claims.release(intent, job.run_id)
 
     def late(self, slot: Slot, attempt: int) -> None:
         """A partition that fails after a join reading it fired is late: it is never merged, and

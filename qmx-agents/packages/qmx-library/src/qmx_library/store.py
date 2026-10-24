@@ -33,7 +33,9 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
+import tempfile
 import threading
 import time
 import unicodedata
@@ -49,12 +51,16 @@ from typing import IO, Any, Final, Literal, Protocol, Self, cast
 
 from pydantic import JsonValue
 
+from qmx_library.blame import lines, origins
 from qmx_library.fts import Catalog, norm
 from qmx_library.kinds import Kind, kind, roster, schema_files
 from qmx_library.marks import CLEAR, QUARANTINED, Marks, marks, marks_ref
 from qmx_library.port import (
     RELATIONS,
     AsOf,
+    Blame,
+    BlameLine,
+    BlobId,
     BlobRef,
     BlobView,
     Claim,
@@ -62,6 +68,7 @@ from qmx_library.port import (
     Commit,
     Draft,
     Grounding,
+    HistoryEntry,
     Hit,
     JsonObject,
     LibraryRefused,
@@ -109,7 +116,91 @@ RENAME_WAIT_S: Final = 0.01
 """The first wait between those tries; each doubles, so a held handle has about 1.3 s to close."""
 HELD_OPEN: Final = frozenset({5, 32})
 """The two WinError codes for "held open": access denied and sharing violation."""
+JSON_MEDIA: Final = "application/json"
+"""The one media type besides `text/*` that merges by structure instead of by pick-one (AD-30)."""
+CONFLICT_LIMIT: Final = 127
+"""`git merge-file`'s largest conflict count; anything above is git's own failure, not a merge."""
 log = logging.getLogger(__name__)
+
+
+ABSENT: Final = object()
+"""A JSON key one side does not hold, which is not the same as a key holding null."""
+CLASH: Final = object()
+"""The answer `_pick_key` gives for a key both sides changed away from the base."""
+
+
+def _pick_key(ours: object, theirs: object, base: object) -> object:
+    """The one side to keep for a JSON key, or `CLASH`: the rule `pick` applies to fields."""
+    if theirs in (ours, base):
+        return ours
+    if ours == base:
+        return theirs
+    return CLASH
+
+
+def _json_object(data: bytes) -> JsonObject | None:
+    try:
+        found = json.loads(data.decode("utf-8"))
+    except UnicodeDecodeError, ValueError:
+        return None
+    return cast(JsonObject, found) if isinstance(found, dict) else None
+
+
+def _canonical_json(value: JsonObject) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
+def merge_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, int]:
+    """Three-way text merge through `git merge-file -p --diff3` (AD-30).
+
+    The merged bytes and the number of conflicts. Exit 0 is a clean merge; a positive status is
+    git's conflict count and the bytes carry the diff3 markers; anything higher is git failing,
+    which is refused rather than reported as a conflict.
+    """
+    with tempfile.TemporaryDirectory(prefix="qmx-merge-") as folder:
+        paths = [Path(folder) / name for name in ("ours", "base", "theirs")]
+        for path, data in zip(paths, (ours, base, theirs), strict=True):
+            path.write_bytes(data)
+        try:
+            done = subprocess.run(
+                [  # noqa: S607 - git from PATH is the pinned 2.x the contract names
+                    "git",
+                    "merge-file",
+                    "-p",
+                    "--diff3",
+                    "-L",
+                    "ours",
+                    "-L",
+                    "base",
+                    "-L",
+                    "theirs",
+                    *(str(path) for path in paths),
+                ],
+                capture_output=True,
+                check=False,
+            )
+        except OSError as error:
+            raise LibraryRefused(
+                "storage_failure", f"git merge-file is not usable here: {error}"
+            ) from error
+    if done.returncode < 0 or done.returncode > CONFLICT_LIMIT:
+        detail = done.stderr.decode("utf-8", "replace").strip()
+        raise LibraryRefused("storage_failure", f"git merge-file failed: {detail}")
+    return done.stdout, done.returncode
+
+
+@dataclass(slots=True)
+class _Merged:
+    """A three-way merge before anything is minted: the clean result and the entries that clash."""
+
+    kind: str
+    title: str
+    summary: str
+    fields: JsonObject
+    blobs: dict[str, BlobRef]
+    keyed: dict[str, JsonObject]
+    """A JSON slot merged except for its clashing keys, waiting for `resolve` to fill them."""
+    entries: list[JsonObject]
 
 
 class Redactor(Protocol):
@@ -988,8 +1079,17 @@ class Store:
         mine, other = self._ancestry(ours), self._ancestry(theirs)
         common = [(mine[o] + other[o], o) for o in mine.keys() & other.keys()]
         base = min(common)[1] if common else None
-        views = [self._view(o) if o else None for o in (base, ours, theirs)]
-        b, o, t = views[0], cast(ObjectView, views[1]), cast(ObjectView, views[2])
+        merged = self._merged(base, ours, theirs)
+        if merged.entries:
+            return self._conflict(who, item, into, base, ours, theirs, merged.entries)
+        return self._land(who, item, into, merged, ours, theirs, reason=f"merge {from_ref}")
+
+    def _merged(self, base: ObjectId | None, ours: ObjectId, theirs: ObjectId) -> _Merged:
+        """The three-way merge of two versions, field by field and slot by slot, with nothing
+        minted. `merge` lands it when nothing clashes; `resolve` computes it again and fills in
+        the clashing entries, so a resolution keeps every clean change of both sides."""
+        b = self._view(base) if base else None
+        o, t = self._view(ours), self._view(theirs)
         entries: list[JsonObject] = []
 
         def pick(path: str, base_v: object, ours_v: object, theirs_v: object) -> object:
@@ -1013,33 +1113,130 @@ class Store:
         title = pick("title", b.title if b else None, o.title, t.title)
         summary = pick("summary", b.summary if b else None, o.summary, t.summary)
         blobs: dict[str, BlobRef] = {}
+        keyed: dict[str, JsonObject] = {}
+        spec = kind(o.kind)
         for slot in sorted(o.blobs.keys() | t.blobs.keys()):
             ours_b, theirs_b = o.blobs.get(slot), t.blobs.get(slot)
             base_b = b.blobs.get(slot) if b else None
-            chosen = pick(
-                f"blobs.{slot}",
-                base_b and base_b.blob_id,
-                ours_b and ours_b.blob_id,
-                theirs_b and theirs_b.blob_id,
-            )
+            ours_id, theirs_id = ours_b and ours_b.blob_id, theirs_b and theirs_b.blob_id
+            base_id = base_b and base_b.blob_id
+            media = cast(BlobView, ours_b or theirs_b).media_type
+            mergeable = media.startswith("text/") or media == JSON_MEDIA
+            if (
+                ours_id
+                and theirs_id
+                and mergeable
+                and ours_id != theirs_id
+                and base_id not in (ours_id, theirs_id)
+            ):
+                landed, partial, found = self._merge_slot(
+                    spec, slot, media, base_id, ours_id, theirs_id
+                )
+                entries.extend(found)
+                if landed is not None:
+                    blobs[slot] = BlobRef(landed)
+                if partial is not None:
+                    keyed[slot] = partial
+                continue
+            chosen = pick(f"blobs.{slot}", base_id, ours_id, theirs_id)
             if isinstance(chosen, str):
                 blobs[slot] = BlobRef(chosen)
+        return _Merged(o.kind, str(title), str(summary), fields, blobs, keyed, entries)
+
+    def _merge_slot(
+        self,
+        spec: Kind,
+        slot: str,
+        media: str,
+        base: BlobId | None,
+        ours: BlobId,
+        theirs: BlobId,
+    ) -> tuple[BlobId | None, JsonObject | None, list[JsonObject]]:
+        """One slot changed on both sides: keys for a JSON object, lines for any other text.
+
+        A clean merge returns its blob. A JSON clash returns the object merged except for the
+        clashing keys, and every clash returns its `merge-conflict` entries (AD-30)."""
+        mine, other = self._slot_bytes(spec, slot, ours), self._slot_bytes(spec, slot, theirs)
+        before = b"" if base is None else self._slot_bytes(spec, slot, base)
+        if media == JSON_MEDIA:
+            sides = [_json_object(data) for data in (before or b"{}", mine, other)]
+            if all(side is not None for side in sides):
+                return self._merge_keys(spec, slot, *cast(list[JsonObject], sides))
+        merged, conflicts = merge_text(mine, before, other)
+        if not conflicts:
+            return self._slot_blob(spec, slot, merged), None, []
+        entry: JsonObject = {
+            "path": f"blobs.{slot}",
+            "slot": slot,
+            "media_type": media,
+            "conflicts": conflicts,
+            "text": merged.decode("utf-8", "replace"),
+        }
+        return None, None, [entry]
+
+    def _merge_keys(
+        self, spec: Kind, slot: str, base: JsonObject, ours: JsonObject, theirs: JsonObject
+    ) -> tuple[BlobId | None, JsonObject | None, list[JsonObject]]:
+        """A JSON object slot key by key, with one entry per clashing key (AD-30)."""
+        merged: JsonObject = {}
+        entries: list[JsonObject] = []
+        for key in sorted(ours.keys() | theirs.keys()):
+            chosen = _pick_key(
+                ours.get(key, ABSENT), theirs.get(key, ABSENT), base.get(key, ABSENT)
+            )
+            if chosen is CLASH:
+                entries.append(
+                    {
+                        "path": f"blobs.{slot}.{key}",
+                        "slot": slot,
+                        "media_type": JSON_MEDIA,
+                        "key": key,
+                        "base": base.get(key),
+                        "ours": ours.get(key),
+                        "theirs": theirs.get(key),
+                    }
+                )
+            elif chosen is not ABSENT:
+                merged[key] = cast(JsonValue, chosen)
         if entries:
-            return self._conflict(who, item, into, base, ours, theirs, entries)
+            return None, merged, entries
+        return self._slot_blob(spec, slot, _canonical_json(merged)), None, []
+
+    def _slot_bytes(self, spec: Kind, slot: str, blob_id: BlobId) -> bytes:
+        return self.read_blob(blob_id, transient=spec.slot(slot).transient)
+
+    def _slot_blob(self, spec: Kind, slot: str, data: bytes) -> BlobId:
+        """Write bytes as the slot's blob and name it, redacted the way `_blob` redacts."""
+        return str(self._blob(slot, data, spec)["sha256"])
+
+    def _land(
+        self,
+        who: Principal,
+        item: str,
+        into: str,
+        merged: _Merged,
+        ours: ObjectId,
+        theirs: ObjectId,
+        *,
+        reason: str,
+        also: Sequence[Relation] = (),
+    ) -> MergeResult:
+        """Mint the merged version with both parents and move `into` to it."""
+        o, t = self._view(ours), self._view(theirs)
         relations: dict[Relation, None] = dict.fromkeys([*o.relations, *t.relations])
-        relations |= dict.fromkeys([("merged-from", ours), ("merged-from", theirs)])
+        relations |= dict.fromkeys([("merged-from", ours), ("merged-from", theirs), *also])
         draft = Draft(
-            o.kind,
+            merged.kind,
             item,
-            str(title),
-            str(summary),
-            fields,
-            blobs,
+            merged.title,
+            merged.summary,
+            merged.fields,
+            merged.blobs,
             list(relations),
             [ours, theirs],
         )
         object_id, _ = self._mint(who, draft, item, [ours, theirs])
-        self._move(who, item, into, object_id, reason=f"merge {from_ref}")
+        self._move(who, item, into, object_id, reason=reason)
         return MergeResult("merged", object_id)
 
     def _conflict(
@@ -1054,6 +1251,7 @@ class Store:
     ) -> MergeResult:
         ref = f"refs/conflicts/{item}/{self.catalog.refs_like(f'refs/conflicts/{item}/') + 1}"
         fields: JsonObject = {
+            "item": item,
             "base": base,
             "ours": ours,
             "theirs": theirs,
@@ -1090,6 +1288,182 @@ class Store:
         state = {"item": item, "ref": target, "base": head, "head": found and found[0]}
         (folder / CHECKOUT_FILE).write_text(json.dumps(state), encoding="utf-8")
         return folder
+
+    def conflicts(self, who: Principal, item: str | None = None) -> list[ObjectView]:
+        """The open `merge-conflict` objects, newest first, of one item or of the whole store.
+
+        A conflict is open until `resolve` annotates it, so the inbox shows exactly the ones that
+        still need a side (AD-30)."""
+        rows = self.catalog.db.execute(
+            "SELECT head FROM heads WHERE ref LIKE 'refs/conflicts/%' ORDER BY rowid DESC"
+        ).fetchall()
+        found: list[ObjectView] = []
+        with self._mutex:
+            for (head,) in rows:
+                view = self._view(str(head))
+                if item is not None and str(view.fields.get("item")) != item:
+                    continue
+                if "resolved_by" not in view.annotations:
+                    found.append(view)
+        return found
+
+    def resolve_conflict(
+        self,
+        who: Principal,
+        conflict: ObjectId,
+        *,
+        text: str | None = None,
+        values: Mapping[str, JsonValue] | None = None,
+    ) -> MergeResult:
+        """Close a `merge-conflict`: land the merged version on `into` and annotate the conflict.
+
+        `values` answers each entry by its path (`blobs.<slot>.<key>` for a JSON key, `fields.<f>`,
+        `title`, `blobs.<slot>` for a text slot's resolved text or a binary slot's chosen blob id).
+        `text` is shorthand for the one text slot. The merge is computed again from the conflict's
+        base and sides, so every clean change of both sides lands too. An entry left open refuses
+        `merge_conflict` naming it, so a resolution never guesses a side (AD-30)."""
+        self._check_writer("resolve")
+        view = self._view(conflict)
+        if view.kind != "merge-conflict":
+            raise LibraryRefused("not_found", f"{conflict} is a {view.kind}, not a merge conflict")
+        if "resolved_by" in view.annotations:
+            raise LibraryRefused("merge_conflict", f"{conflict} is already resolved")
+        item, into = str(view.fields["item"]), str(view.fields["into"])
+        ours, theirs = str(view.fields["ours"]), str(view.fields["theirs"])
+        base = view.fields.get("base")
+        if base is None and view.fields["entries"] == [{"path": "history"}]:
+            raise LibraryRefused(
+                "merge_conflict", f"{conflict} is an ff-only stop; merge again with strategy auto"
+            )
+        self._check_owner(who, into, "merge")
+        with self._writing():
+            self._active(item)
+            held = self.catalog.head(item, into)
+            if held is None or held[0] != ours:
+                raise LibraryRefused(
+                    "merge_conflict", f"{into} moved since {conflict}; merge again"
+                )
+            merged = self._merged(None if base is None else str(base), ours, theirs)
+            spec = kind(merged.kind)
+            given = dict(values or {})
+            texts = [str(entry["path"]) for entry in merged.entries if "text" in entry]
+            if text is not None:
+                if len(texts) != 1:
+                    raise LibraryRefused(
+                        "merge_conflict",
+                        f"{conflict} holds {len(texts)} text slots in conflict; answer each by "
+                        "path in values",
+                    )
+                given[texts[0]] = text
+            sides = (self._view(ours), self._view(theirs))
+            for entry in merged.entries:
+                path = str(entry["path"])
+                if path not in given:
+                    raise LibraryRefused("merge_conflict", f"{conflict} needs a value for {path}")
+                value = given[path]
+                slot = str(entry.get("slot", path.removeprefix("blobs.")))
+                if "text" in entry:
+                    merged.blobs[slot] = BlobRef(self._slot_blob(spec, slot, str(value).encode()))
+                elif "key" in entry:
+                    merged.keyed[slot][str(entry["key"])] = value
+                elif path.startswith("fields."):
+                    merged.fields[path.removeprefix("fields.")] = value
+                elif path == "title":
+                    merged.title = str(value)
+                elif path == "summary":
+                    merged.summary = str(value)
+                else:
+                    held_ids = {side.blobs[slot].blob_id for side in sides if slot in side.blobs}
+                    if value not in held_ids:
+                        raise LibraryRefused(
+                            "merge_conflict", f"{path} takes the blob id of one side"
+                        )
+                    merged.blobs[slot] = BlobRef(str(value))
+            for slot, partial in merged.keyed.items():
+                merged.blobs[slot] = BlobRef(self._slot_blob(spec, slot, _canonical_json(partial)))
+            result = self._land(
+                who,
+                item,
+                into,
+                merged,
+                ours,
+                theirs,
+                reason=f"resolve {conflict}",
+                also=[("resolves", conflict)],
+            )
+            self._annotate(who, conflict, {"resolved_by": result.object_id})
+        return result
+
+    def history_of(self, who: Principal, item: str, ref: str | None = None) -> list[HistoryEntry]:
+        """The item's ref log, oldest first: a READ, answered from the moves this store wrote
+        (AD-30). `ref` narrows it to one ref; without it every ref the item moved on is listed."""
+        query = "SELECT seq, item, ref, principal, prev_head, new_head, at, reason FROM moves "
+        args: tuple[str, ...] = (item,)
+        query += "WHERE item = ?"
+        if ref is not None:
+            query += " AND ref = ?"
+            args += (ref,)
+        rows = self.catalog.db.execute(query + " ORDER BY seq", args).fetchall()
+        return [
+            HistoryEntry(
+                int(seq),
+                str(moved_item),
+                str(moved_ref),
+                str(principal),
+                None if prev is None else str(prev),
+                str(new),
+                str(at),
+                None if reason is None else str(reason),
+            )
+            for seq, moved_item, moved_ref, principal, prev, new, at, reason in rows
+        ]
+
+    def blame(self, who: Principal, item: str, slot: str, ref: str = MAIN) -> Blame:
+        """Which version last changed each line of a text slot, computed at read (AD-30).
+
+        A line keeps travelling back through whichever parent the diff says already held it, so
+        a line a merge carried in is blamed on the side that wrote it. Nothing is written."""
+        head = self.resolve(who, item, ref)
+        with self._mutex:
+            text: dict[str, list[str]] = {}
+            parents: dict[str, tuple[str, ...]] = {}
+            pending = [head]
+            while pending:
+                here = pending.pop()
+                if here in text:
+                    continue
+                view = self._view(here)
+                blob = view.blobs.get(slot)
+                if blob is None or not blob.media_type.startswith("text/"):
+                    continue
+                raw = self._slot_bytes(kind(view.kind), slot, blob.blob_id)
+                text[here] = lines(raw.decode("utf-8", "replace"))
+                parents[here] = view.parents
+                pending.extend(view.parents)
+            if head not in text:
+                raise LibraryRefused("not_found", f"{head} holds no text slot {slot}")
+            origin = origins(head, text, parents)
+        blamed: list[BlameLine] = []
+        for index, line in enumerate(text[head]):
+            author, at = self._author(origin[index], item)
+            blamed.append(BlameLine(index + 1, line.rstrip("\r\n"), origin[index], author, at))
+        return Blame(item, slot, ref, head, tuple(blamed))
+
+    def _author(self, object_id: ObjectId, item: str) -> tuple[str, str]:
+        """Who first placed this version, and when: the write that changed the line.
+
+        The first move of the object is its birth, which names the chat or run that made it; a
+        later move of the same object (a fast-forward) is another ref carrying it, not an edit."""
+        row = self.catalog.db.execute(
+            "SELECT principal, at FROM moves WHERE new_head = ? AND item = ? "
+            "ORDER BY seq ASC LIMIT 1",
+            (object_id, item),
+        ).fetchone()
+        if row is not None:
+            return str(row[0]), str(row[1])
+        view = self._view(object_id)
+        author = cast(JsonObject, view.annotations.get("author") or {})
+        return str(author.get("id", "")), str(view.annotations.get("created", ""))
 
     def commit(
         self,
