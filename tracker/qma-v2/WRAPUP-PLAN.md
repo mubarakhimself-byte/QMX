@@ -45,13 +45,14 @@ The table is the build order. Two builders run at once only when their Files blo
 | 4 | WU6 | engine | 6 | `just ci` green | WU2 | `just ci` exit 0 apart from named gaps |
 | 5 | WU3 | harness | 4 | Skip providers with no key, drop disabled sub-agents | WU7 | missing-key row skipped |
 | 6 | WU7 | engine | 8 | The Hub counts real copies per blob | WU3 | unpushed blob answers 1 copy |
-| 7 | WU4 | harness | 1 | Agent backtests run and land | WU8 | a backtest lands one result |
-| 8 | WU8 | broker | added | The cTrader demo sign-in | WU4 | receiver forwards and keeps nothing |
+| 7 | WU4 | harness | 1 | Agent backtests run and land | none | a backtest lands one result |
+| 8 | WU8 | broker | added | The cTrader demo sign-in | none | receiver forwards and keeps nothing |
 | 9 | WU9 | engine | 7 | The server is ready to be home | none | setup sequence and one root |
 | 10 | WU10 | broker | added | cTrader reads through the server, broker history | none | a forwarded read after a refresh |
 
 - [ ] Spawn one Opus builder per chain in the background with `subagent_type: poteto-agent` and `model: opus`. The prompt is `PROMPT-DATA.md`'s builder template, filled from this plan, pointing at the store's `BRIEF-BUILDER.md`, saved as `dispatch/<id>.md` before it is sent. Its first words are exactly "Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents."
 - [ ] Every change traces to a handover item, a plan section and the check that proves it. Anything that needs design rather than a fix is not built here. It goes to `BACKLOG.md`, to be designed with the operator's saved planning workflow (audit, research, alignment, inventory, studies, funnel, fold, review, check-plan).
+- [ ] The seams that move (WU4, WU8 with WU10, WU9) are designed first with the operator's planning workflow, scaled to three seams. Each is checked against the code, folded into the spines with the `bmad-architecture` skill in amend mode, and recorded in `research/methodology/60-wrapup-seams.md`. Then the coordinator runs `bmad-review-edge-case-hunter` over this whole plan, applies one fix round, and reruns `check-plan.mjs` to 0 problems. No builder past WU1 and WU5 starts before that. WU1 and WU5 started earlier, and both are code fixes that move no seam.
 - [ ] Never stop to ask the operator during the build. A question goes to `QUESTIONS-FOR-OPERATOR.md` and the build goes on.
 - [ ] Record the empty Files intersection of each parallel pair in `ledger.tsv` before the second dispatch.
 - [ ] No PR touches `apps/qmx-ui/`, `~/.claude`, his real home `~/.qmx`, `C:/Users/Mubarak/Documents`, `C:/Users/Mubarak/Desktop/DATA_NARL`, or any vault value.
@@ -101,6 +102,8 @@ Closes list A item 2 and the harness tool-row half of item 6. Sources are build 
 - [ ] Bind each enabled app's toolset as one `create_sdk_mcp_server`, forwarding to `control.app_runtime().call`, and bind `apps_admin_move` to the supervisor's move.
 - [ ] Thread pin and profile through `app_job`.
 - [ ] Materialise a pack on publish.
+- [ ] Land the publish as `operator`, because a publish is his card click. The engine principal may not put on `refs/apps/<id>` (`LB/principal.py:99`) nor land a definition on `main` (`LB/store.py:1047-1049`), so today every publish is refused.
+- [ ] A call to an app that stopped after the tool list was built answers a named `app_not_running` error (edge case, `review/plan-edge-cases.json`).
 
 **You see.**
 
@@ -140,7 +143,7 @@ Closes list A item 2 and the harness tool-row half of item 6. Sources are build 
 
 ## Templates install into the real Library (WU5)
 
-Closes list A item 5 and three engine follow-ups in the same files. Sources are data BACKLOG RUN1C and DR6, build BACKLOG TPL1. Real step the weekly backup trigger enabled on his real home after the first boot. Gate none. Done when `python -m qmx_engine templates install` lands into the Store the host serves, through the running host's door when one runs, `--template <id>` installs one template, a `[QMX_FAILURE]` reason survives an exit code of 1, and a feed's new items land as Library `source` items through `save_source`.
+Closes list A item 5, the PC writer rule found by `60-wrapup-seams.md`, and three engine follow-ups in the same files. Sources are data BACKLOG RUN1C and DR6, build BACKLOG TPL1. Real step the weekly backup trigger enabled on his real home after the first boot. Gate none. Done when `python -m qmx_engine templates install` lands into the Store the host serves, through the running host's door when one runs, `--template <id>` installs one template, a `[QMX_FAILURE]` reason survives an exit code of 1, and a feed's new items land as Library `source` items through `save_source`.
 
 **Depends on.** The root `f05fc64b`.
 
@@ -148,6 +151,7 @@ Closes list A item 5 and three engine follow-ups in the same files. Sources are 
 
 - [ ] Edit `E/__main__.py` (`--template`, repeatable, and the host route call) and `E/service/api.py` (no silent `LibraryFake` fallback outside tests).
 - [ ] Add the route `POST /api/templates/install` as `templates_router(engine)` in `HO/door.py`, and serve it with one line in `HO/host.py` `serve` beside the other routers (granted 2026-10-24, because `door.py` is middleware with no engine handle).
+- [ ] Edit the `Store.open` call in `HO/host.py` `serve`. The host opens the store as `writer` when it serves or when the home's `[library] primary` is `pc`, which is the default before the flip. Today every PC host opens it as `replica` (`HO/host.py:549-550`) and `Store._check_writer` refuses every put (`LB/store.py:860`), so a PC saves nothing (found by `60-wrapup-seams.md`, confirmed by the coordinator). How the PC writes after the flip is deferred and blocks G-FLIP.
 - [ ] `LibraryFake` stays the default for test callers of `EngineService.open`. The CLI always passes the real Store, so no production path reaches the fake.
 - [ ] Edit `E/nodes/script.py` (read the marker on either exit code).
 - [ ] Edit `T/feed/land.py` (call `T/_shared/save_source.py`).
@@ -159,6 +163,8 @@ Closes list A item 5 and three engine follow-ups in the same files. Sources are 
 - [ ] Add `--template`.
 - [ ] Read `[QMX_FAILURE]` on any exit code.
 - [ ] Land feed items as `source` items.
+- [ ] The store role is read once at host start. A change of `[library] primary` while the host runs is refused by name and needs a restart (edge case).
+- [ ] When the CLI's post to the route is refused, it falls back only if `Store.open` takes the store's single-writer lock, and a host start refuses while that lock is held (edge case).
 
 **You see.**
 
@@ -166,7 +172,7 @@ Closes list A item 5 and three engine follow-ups in the same files. Sources are 
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Three tests. An installed template is visible through the real Store. A script exiting 1 with the marker fails with the marker's reason. A feed run lands one `source` item. Run the engine and host suites with `-n 2`.
+- [ ] Four tests. A PC-role host with `primary = pc` lands a put, and with `primary = server` refuses it as `read_only_replica`. An installed template is visible through the real Store. A script exiting 1 with the marker fails with the marker's reason. A feed run lands one `source` item. Run the engine and host suites with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
@@ -267,6 +273,7 @@ Closes list A item 6's remaining causes. Sources are data BACKLOG DR10, DR13 and
 - [ ] Fix the flush race.
 - [ ] Fix the path test.
 - [ ] Add the two suites.
+- [ ] Emitters never take the send lock, the post uses the collector client's own timeout, and `flush` returns a named error on timeout, so a hung collector cannot stall the host (edge case).
 
 **You see.**
 
@@ -377,6 +384,7 @@ Closes list A item 8 and two store follow-ups in the same chain of files. Source
 - [ ] Count copies from a real read.
 - [ ] Fix the re-park.
 - [ ] Wire `learn_epoch` into the real sync if it is absent.
+- [ ] A failed or slow bucket read counts as no bucket copy, never as an error (edge case).
 
 **You see.**
 
@@ -422,17 +430,22 @@ Closes list A item 1 and restores the tamper test. Sources are data BACKLOG DR4 
 
 **Files.**
 
-- [ ] Edit `LB/adapter.py` (add `StoreLanding`, about 20 lines, mapping `put` to a `Draft` on `main` and `link` to `store.relate`).
-- [ ] Add the door in `QB/host/` beside `library_landing.py`, running QMB's placement in process.
-- [ ] Edit `HO/host.py` (bind the door, the landing and the run configurations where `control.attach_library(store)` runs), `H/harness.py:405` and `TL/servers.py:44` (take them from the host instead of building an empty context).
-- [ ] Add the `qmb_backtest` operation in `E/control_door.py` beside `app_op`, and remove `needs: qmb-door` from its templates in `T/catalog.py`.
+The design is `60-wrapup-seams.md` seam A (engine AD-31, Library AD-29).
+
+- [ ] Edit `LB/adapter.py` (add `StoreLanding`, mapping `put` to one `Draft` and `link` to `store.relate`, the caller's principal picking the ref).
+- [ ] Add `QB/host/backtest_door.py` (QMB's own door, one child process per replay, local by default) and edit `QB/host/library_landing.py` (no default principal, every caller names one).
+- [ ] Edit `TL/service.py` (one `backtest_and_land(door, landing, arguments, principal)` used by the agent tool as `operator`, landing on `main`).
+- [ ] Edit `HO/host.py` (bind the door, the landing and the run configurations where `control.attach_library(store)` runs) and `H/harness.py:405`. `TL/servers.py` is not edited, because the stdio server holds no Store and keeps its named refusal.
+- [ ] Edit `E/nodes/app_op.py` and `E/control_door.py` so an `app_op` node with `{app: qmb, job: backtest}` reaches the same door as `run:<run_id>`, landing on `refs/runs/<run_id>` until the run passes. Remove `needs: qmb-door` in `T/catalog.py` only from templates that wait on nothing else (`b-build-and-prove` and `d3-iterate-against-qmb` keep it).
 - [ ] Edit `SL/qma/cat_lanes.py` and `SL/qma/s28_effects.py` to pass the same fields.
-- [ ] Edit `QA/qmx-tools/tests/test_tools.py` (a landing test and the restored tamper step). Add tests in `QBT/` and `ET/`.
+- [ ] Edit `QA/qmx-tools/tests/test_tools.py` (a landing test and the restored tamper step). Add tests in `QBT/`, `ET/` and `HT/test_tools.py`.
+- [ ] Every live lane uses a replay of at most 1,000 steps (hourly bars over one month is 744). A full month of one-minute data needs about 16 GB in QMB's reader (data BACKLOG DR4).
 
 **Build.**
 
 - [ ] Write `StoreLanding` and the door.
 - [ ] Bind them on the host.
+- [ ] Land only on a clean child exit with a complete report. A nonzero exit is a named refusal with the stderr tail. The host kills the child when it stops. A put of an object that already exists with the same id answers ok, so the tool and a workflow can land the same spec at once (edge cases).
 - [ ] Add the engine operation.
 - [ ] Restore the tamper step, and make `DomainContext.artifact` surface a corrupt blob as a named refusal.
 
@@ -442,13 +455,13 @@ Closes list A item 1 and restores the tamper test. Sources are data BACKLOG DR4 
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Three tests. A backtest lands through `StoreLanding` on a real Store with its `consumed` and `uses` edges. A tampered blob is refused by name. A workflow `qmb_backtest` node lands one result. Run the qmb, tools, Library, host, harness and engine suites with `-n 2`.
+- [ ] Four tests. A backtest lands through `StoreLanding` on a real Store with its `consumed` and `uses` edges. The same backtest through the tool and through a workflow node gives the same object id. A tampered blob is refused by name. A workflow `app_op` backtest node lands one result on its run ref. Run the qmb, tools, Library, host, harness and engine suites with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
 - [ ] Lane 1. The six suites at parent and head. Save `wu4-regression.log`. Pass when head fails nothing the parent passes.
 - [ ] Lane 2. DR4's lane 3, the copilot on haiku runs a backtest on a scratch home. Save `wu4-copilot.log`. Pass when one `backtest-result` lands with its edges and the old `library.db` is not written.
-- [ ] Lane 3. A workflow with one `qmb_backtest` node. Save `wu4-workflow.log`. Pass when it lands one result.
+- [ ] Lane 3. A workflow with one `app_op` backtest node. Save `wu4-workflow.log`. Pass when it lands one result on the run ref and on `main` after the run passes.
 - [ ] Lane 4. `library_search` for the result. Save `wu4-search.log`. Pass when it is found.
 - [ ] Lane 5. A backtest over a sealed month. Save `wu4-sealed.log`. Pass when it is refused by the seal.
 - [ ] Lane 6. Rerun `SP/data/p_qmbread.py`. Save `wu4-qmbread.log`. Pass when it passes.
@@ -483,9 +496,11 @@ Added on the operator's word (`decisions.md` 2). It is the first half of DATA-PL
 
 **Files.**
 
-- [ ] Add `BR/oauth.py` (the loopback receiver, its port a Settings value that defaults to the redirect registered on his app).
-- [ ] Add `HO/venue_session.py` (the code exchange and the home's token store) and mount its `user`-only route in `HO/door.py`.
-- [ ] Edit `BR/credentials.py` (read the client id and secret by reference) and `BR/registry.py` (the keyless check).
+The design is `60-wrapup-seams.md` seam B (engine AD-67).
+
+- [ ] Add `BR/oauth.py` (the loopback receiver on the redirect registered on his app, a Settings value, passing the code straight to the server and keeping nothing).
+- [ ] Add `HO/venue_session.py` (the begin step, one pending sign-in per app for 10 minutes and usable once, the code exchange, and the home's own key store under `<home>/vault/` holding `qmx/token/ctrader-app`). Mount its routes in `HO/door.py` and `HO/host.py`, called with the existing host pass. Before the server host runs, the begin step refuses by name and no browser opens.
+- [ ] Edit `BR/credentials.py` (a one-time copy joining `qmx/ctrader-client-id` and `qmx/ctrader-client-secret` into `qmx/read/ctrader-app`, read by reference, his two entries left as they are) and `BR/registry.py` (the keyless check).
 - [ ] Add `SP/data/p_ctscope.py`, `SP/data/p_ctrefresh.py`, `SP/data/p_ct2conn.py` and `SP/data/FINDINGS-ctrader.md` as written in DATA-PLAN's PRB-CT section.
 - [ ] Add tests in the broker's `tests/` and `HOT/`.
 
@@ -495,6 +510,7 @@ Added on the operator's word (`decisions.md` 2). It is the first half of DATA-PL
 - [ ] Write the exchange on the home. The tokens never enter the vault document or the PC's keyring.
 - [ ] Write the three probes. They do not run in this PR.
 - [ ] Fix the keyless read.
+- [ ] The receiver stops after the same 10 minutes. A busy port refuses before the browser opens. A code that arrives after a server restart is refused by name with retry advice. The home's token file has one writer lock and is written to a temp file, fsynced and renamed. The begin step recomputes `qmx/read/ctrader-app` and reinstalls the vault copy when his two entries changed (edge cases).
 
 **You see.**
 
@@ -533,7 +549,7 @@ Added on the operator's word (`decisions.md` 2). It is the first half of DATA-PL
 - [ ] The coordinator's CLEAN verdict at the exact head, or after the one fix round.
 - [ ] Lows in `lows.md`, new findings in `BACKLOG.md`, the verdict in `ledger.tsv`.
 - [ ] Stacked on the tip.
-- [ ] Real step (G-LAND, G-CT). After he lands the stack and the server host runs (WU9's real step), the coordinator walks him through the demo sign-in, then runs the three probes and writes their rows. That opens WU10.
+- [ ] Real step (G-LAND, G-CT). After he lands the stack, in this order. WU9's server setup runs. The copy into `qmx/read/ctrader-app` runs. `qmx node vault install` carries it to the server. He confirms the redirect address. Then the coordinator walks him through the demo sign-in, runs the three probes and writes their rows. That opens WU10.
 
 ## The server is ready to be home (WU9)
 
@@ -543,9 +559,11 @@ Closes list A item 7 and the server follow-ups in the same files. Sources are da
 
 **Files.**
 
-- [ ] Edit `QX/node.py` (one root `/srv/qmx/library`, the setup order, `rebuild`, `pair`) and `QX/primary.py` only if the quiesce check needs a public read.
+The pass design is `60-wrapup-seams.md` seam C (engine AD-28, Library AD-12).
+
+- [ ] Edit `QX/node.py` (one root `/srv/qmx/library`, the setup order, `rebuild`, `pair` writing `<home>/vault/pairing-key`, and `setup` writing `hub_url` only, no longer calling `flip_primary` at line 608, which today turns the PC into a refusing replica before his click) and `QX/primary.py` only if the quiesce check needs a public read.
 - [ ] Edit `HO/host.py` (the save path checks the flip's held flag, the doctor row reads `Store.state`, `door_url` defaults per placement) and `QA/qmx-host/pyproject.toml` plus `qmx-agents/uv.lock` (the `qmx-hub` dependency).
-- [ ] Edit `R/passes.py` (the secret is read from the home's vault and created once, not drawn per process).
+- [ ] Edit `R/passes.py` (the secret is `HMAC-SHA256(pairing key, "qmx run pass v1")`, or `<home>/vault/run-pass-key` created once on an unpaired PC) and `H/harness.py` (one `PassAuthority` per host process, replacing the three at `HO/host.py:476`, `:536` and `H/delegate.py:405`).
 - [ ] Edit `RM/providers.py` and `QA/qmx-remote/Dockerfile` (start `qmx_remote.sidecar`).
 - [ ] Add tests in `QXT/test_node*.py`, `HOT/` and the router's `tests/`.
 
@@ -555,6 +573,8 @@ Closes list A item 7 and the server follow-ups in the same files. Sources are da
 - [ ] Wire the quiesce check and the doctor row.
 - [ ] Make the pass secret durable and per home, and set the default door address.
 - [ ] Point the remote providers at the sidecar.
+- [ ] After a secret rotation (re-pairing, or pairing an unpaired PC) the previous secret is accepted for one pass lifetime, and the pair procedure reloads the key on both hosts. `setup` and `pair` move an existing `/etc/qmx/vault/pairing-key` to `<home>/vault/pairing-key` once (edge cases).
+- [ ] While `[library] primary` is `pc`, the server host refuses puts onto `main` and takes the PC's history only through sync. Server-run steps land on `refs/runs` and reach `main` through the PC. Check the epoch code first, since it may already hold this (edge case).
 
 **You see.**
 
@@ -601,8 +621,8 @@ The rest of DATA-PLAN's DR5B, on the facts PRB-CT's probes record after his sign
 
 **Files.**
 
-- [ ] Edit `BR/ctrader_transport.py` (reads through the home session) and `BR/credentials.py` (the re-filing).
-- [ ] Edit `HO/venue_session.py` (the long-running session per app and environment).
+- [ ] Edit `BR/ctrader_transport.py`, `BR/service.py` and `BR/adapters.py` (reads through the home session, forwarded with a host pass from other machines) and `BR/credentials.py` (re-filing only the old bundles that carry tokens).
+- [ ] Edit `HO/venue_session.py` (one long-running `qmf.venue` ConnectionManager per app and environment on the server, with the server's key store plugged in) and `HO/host.py` only where its routes mount.
 - [ ] Edit `BR/registry.py` (the cTrader declaration with PRB-CT's facts, and `bar_page_limit` from DR11's paging proof).
 - [ ] Add the template folder `T/download-broker/` and its row in `T/catalog.py`.
 - [ ] Add tests in the broker's `tests/` and `HOT/`. Extend `SP/data/p_notrade.py` with the token half.
@@ -612,6 +632,7 @@ The rest of DATA-PLAN's DR5B, on the facts PRB-CT's probes record after his sign
 - [ ] Route every cTrader read through the home session.
 - [ ] Re-file the old entries, removing local tokens with no tombstone.
 - [ ] Add the liveness read only if P-CT2CONN recorded a silent drop.
+- [ ] A forwarded read with the home unreachable answers a named `home_unreachable` refusal at once. A caller that wants to wait uses the placement wait (edge case).
 - [ ] Write `download-broker`.
 
 **You see.**
@@ -686,14 +707,15 @@ Facts read at `f05fc64b` on 2026-10-24 by a read-only Opus pass (no edits, no sp
 |---|---|---|
 | WU1, WU2 | `H/tools.py`, `HT/test_tools.py` | WU1 first |
 | WU2, WU3 | `R/registry.py` | WU2 first |
-| WU5, WU2, WU4, WU9 | `HO/host.py` (WU5 adds one line) | WU5, WU2, WU4, WU9 |
+| WU5, WU2, WU4, WU8, WU9, WU10 | `HO/host.py` (WU5 adds the router line and the writer rule) | WU5, WU2, WU4, WU8, WU9, WU10 |
+| WU4, WU9 | `H/harness.py` | WU4 first |
 | WU1, WU4 | `E/control_door.py` | WU1 first |
 | WU5, WU8 | `HO/door.py` | WU5 first |
 | WU8, WU10 | `BR/credentials.py`, `BR/registry.py`, `HO/venue_session.py` | WU8 first |
 | WU5, WU10 | `T/catalog.py` (WU4 too) | WU4, then WU10 |
 | WU7, WU9 | none (`QX/server.py` in WU7, `QX/node.py` in WU9) | free |
 
-Parallel pairs and their intersections, checked from the Files blocks above. WU1 and WU5 share none. WU2 and WU6 share none. WU3 and WU7 share none. WU4 and WU8 share none, unless WU8 needs `HO/host.py` to build the venue session, in which case WU8 waits for WU4 to be stacked.
+Parallel pairs and their intersections, checked from the Files blocks above. WU1 and WU5 share none. WU2 and WU6 share none. WU3 and WU7 share none. WU4, WU8 and WU9 all edit `HO/host.py`, so they run one after another, WU4 first.
 
 ## Appendix D. Defaults
 
@@ -706,7 +728,7 @@ Parallel pairs and their intersections, checked from the Files blocks above. WU1
 
 - G-GO. His go to merge the stack into `engine/base`, once for the whole stack or per PR.
 - G-LAND. Real steps run only on landed code.
-- G-FLIP. His click on "Move the Library to the server". The coordinator never presses it.
+- G-FLIP. His click on "Move the Library to the server". The coordinator never presses it. It also waits on a design item that is not in this program, how the PC writes after the flip (Library spine Deferred, `60-wrapup-seams.md`), so the card is not posted in this run.
 - G-CT. His demo sign-in, walked through click by click after WU8 lands and the server host runs.
 - G-SEAL. The month his holdout starts. Until he names it, the price door stays shut.
 - G-R2. Closed by his decision. Anything that needs a bucket waits and says so.
