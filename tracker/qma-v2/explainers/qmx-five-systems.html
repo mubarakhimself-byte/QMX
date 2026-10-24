@@ -1,0 +1,861 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QMX Five Systems</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Version control, the Library, the Lab, Pods and the codebase: what is merged, what waits for your merge, and what is only designed. Checked against the code on 24 October 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one sheet, five tabs; each tab = one sentence, an isometric machine on a framed plate, three status columns, then weak spots.
+   Drawing follows the "anatomy" approach: solid paper-toned parts with three-tone shading, painted back to front; colour only where status is the subject. */
+:root {
+  --page: #f2f2ef;
+  --card: #fbfbfa;
+  --strong: #1b1b1d;
+  --text: #55555a;
+  --muted: #8c8c90;
+  --rule: #dcdcd8;
+  --top: #ffffff;
+  --front: #efefeb;
+  --side: #d9d9d4;
+  --plinth-top: #e8e8e4;
+  --plinth-front: #d5d5d0;
+  --plinth-side: #c4c4bf;
+  --edge: #8e8e92;
+  --faint: #d6d6d8;
+  --lo: #a9a9ad;
+  --screen: #30343b;
+  --screen-glow: #8fa3c0;
+  --plate: #ebebe7;
+  --plate-front: #dadad5;
+  --pipe: #f7f7f4;
+  --pipe-edge: #9a9a9e;
+  --merged: #4a8a69;
+  --waiting: #a97a2b;
+  --designed: #6474ab;
+  --idea: #8c8c90;
+  --designed-wash: rgba(100, 116, 171, 0.08);
+  --merged-wash: rgba(74, 138, 105, 0.09);
+  --waiting-wash: rgba(169, 122, 43, 0.10);
+  --weak: #a8574c;
+  --sel: #000000;
+  --halo: #fbfbfa;
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --ease: cubic-bezier(.32, .72, 0, 1);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0b0b0b; --card: #131313; --strong: #e6e6e6; --text: #a3a3a3; --muted: #6e6e6e; --rule: #262626;
+    --top: #242424; --front: #1b1b1b; --side: #121212; --plinth-top: #1a1a1a; --plinth-front: #141414; --plinth-side: #0e0e0e;
+    --edge: #505053; --faint: #2c2c2c; --lo: #444447; --screen: #07090c; --screen-glow: #6f86a8; --plate: #161616; --plate-front: #101010;
+    --pipe: #1f1f1f; --pipe-edge: #4c4c4f;
+    --merged: #7cc3a0; --waiting: #d8b26a; --designed: #9eb0e8; --idea: #7d7d82;
+    --designed-wash: rgba(158, 176, 232, 0.07); --merged-wash: rgba(124, 195, 160, 0.08); --waiting-wash: rgba(216, 178, 106, 0.08);
+    --weak: #e09a8f; --sel: #ffffff; --halo: #131313;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0b0b0b; --card: #131313; --strong: #e6e6e6; --text: #a3a3a3; --muted: #6e6e6e; --rule: #262626;
+  --top: #242424; --front: #1b1b1b; --side: #121212; --plinth-top: #1a1a1a; --plinth-front: #141414; --plinth-side: #0e0e0e;
+  --edge: #505053; --faint: #2c2c2c; --lo: #444447; --screen: #07090c; --screen-glow: #6f86a8; --plate: #161616; --plate-front: #101010;
+  --pipe: #1f1f1f; --pipe-edge: #4c4c4f;
+  --merged: #7cc3a0; --waiting: #d8b26a; --designed: #9eb0e8; --idea: #7d7d82;
+  --designed-wash: rgba(158, 176, 232, 0.07); --merged-wash: rgba(124, 195, 160, 0.08); --waiting-wash: rgba(216, 178, 106, 0.08);
+  --weak: #e09a8f; --sel: #ffffff; --halo: #131313;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--page); color: var(--text); font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+.wrap { max-width: 1160px; margin: 0 auto; display: grid; gap: 26px; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--strong); text-wrap: balance; margin: 0; line-height: 1.15; font-weight: 600; }
+h1 { font-size: clamp(2rem, 4.4vw, 2.9rem); letter-spacing: -0.01em; }
+h2 { font-size: clamp(1.4rem, 3vw, 1.85rem); }
+h3 { font-size: 1.08rem; }
+p { margin: 0; }
+strong { color: var(--strong); }
+.mono { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header.top { display: grid; gap: 12px; }
+.lede { max-width: 68ch; font-size: 1.05rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; }
+.key { display: inline-flex; align-items: center; gap: 9px; font-size: 0.92rem; }
+.key svg { width: 34px; height: 24px; flex: none; }
+.note-bar { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 14px 0; display: grid; gap: 6px; max-width: 80ch; }
+.hint { color: var(--muted); font-size: 0.88rem; }
+
+nav.tabs { display: flex; flex-wrap: wrap; gap: 4px 22px; border-bottom: 1px solid var(--rule); }
+nav.tabs button {
+  font: inherit; font-size: 0.98rem; background: transparent; color: var(--muted); border: 0; border-bottom: 2px solid transparent;
+  padding: 8px 0 10px; cursor: pointer; display: inline-flex; gap: 8px; align-items: baseline; margin-bottom: -1px;
+}
+nav.tabs button .n { font-family: var(--font-mono); font-size: 0.7rem; }
+nav.tabs button[aria-selected="true"] { color: var(--strong); border-bottom-color: var(--strong); }
+nav.tabs button:hover:not([aria-selected="true"]) { color: var(--strong); }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--sel); outline-offset: 3px; }
+
+section.sys { display: grid; gap: 24px; }
+.intro { display: grid; gap: 10px; }
+.what { font-size: 1.12rem; max-width: 72ch; color: var(--strong); }
+.what b { font-weight: 700; }
+
+.plate { position: relative; background: var(--card); box-shadow: 0 0 0 1px var(--rule); padding: 46px 18px 54px; min-width: 0; }
+.corner { position: absolute; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; color: var(--muted); line-height: 1.3; }
+.corner.tl { top: 16px; left: 18px; text-transform: uppercase; }
+.corner.tr { top: 16px; right: 18px; color: var(--strong); text-align: right; text-transform: uppercase; }
+.corner.bl { bottom: 16px; left: 18px; max-width: 46%; }
+.corner.br { bottom: 16px; right: 18px; text-align: right; max-width: 50%; }
+.scroller { overflow-x: auto; }
+.scroller svg { display: block; width: 100%; min-width: 820px; height: auto; }
+@media (max-width: 560px) {
+  .plate { padding: 52px 10px 104px; }
+  .corner.bl, .corner.br { max-width: calc(100% - 36px); }
+  .corner.bl { bottom: 46px; }
+  .corner.br { bottom: 14px; left: 18px; text-align: left; }
+}
+.mapbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+.filter { display: inline-flex; flex-wrap: wrap; gap: 2px; }
+.filter button { font: inherit; font-size: 0.85rem; border: 1px solid transparent; border-radius: 999px; padding: 3px 11px; background: transparent; color: var(--muted); cursor: pointer; }
+.filter button[aria-pressed="true"] { border-color: var(--rule); color: var(--strong); background: var(--card); }
+.detail { border-left: 2px solid var(--rule); padding: 4px 0 4px 16px; display: grid; gap: 6px; min-height: 86px; max-width: 80ch; }
+.detail .head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+.chip { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.chip.merged { color: var(--merged); border-color: var(--merged); background: var(--merged-wash); }
+.chip.waiting { color: var(--waiting); border-color: var(--waiting); background: var(--waiting-wash); }
+.chip.designed { color: var(--designed); border-color: var(--designed); border-style: dashed; }
+.chip.idea { color: var(--idea); border-color: var(--idea); border-style: dotted; }
+.chip.actor { color: var(--muted); border-color: var(--rule); }
+
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.col { background: var(--card); box-shadow: 0 0 0 1px var(--rule); padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; border-top: 3px solid; }
+.col.merged { border-top-color: var(--merged); }
+.col.waiting { border-top-color: var(--waiting); }
+.col.designed { border-top: 3px dashed var(--designed); }
+.col h3 { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; font-size: 1rem; }
+.col.merged h3 .count { color: var(--merged); } .col.waiting h3 .count { color: var(--waiting); } .col.designed h3 .count { color: var(--designed); }
+.col h3 .count { font-family: var(--font-mono); font-size: 0.78rem; }
+.col ul { margin: 0; padding-left: 1.05em; display: grid; gap: 7px; }
+.col li { color: var(--strong); }
+.col li em { color: var(--muted); font-style: normal; font-size: 0.9rem; display: block; }
+
+.weak { display: grid; gap: 12px; }
+.weak ol { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 12px; counter-reset: w; max-width: 82ch; }
+.weak li { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 10px; align-items: start; }
+.weak li::before { counter-increment: w; content: counter(w); font-family: var(--font-mono); font-size: 0.74rem; color: var(--weak); border: 1px solid var(--weak); border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; margin-top: 1px; }
+.weak li.q::before { content: "?"; color: var(--designed); border-color: var(--designed); }
+.weak .sub { color: var(--text); }
+footer { color: var(--muted); font-size: 0.88rem; display: grid; gap: 6px; border-top: 1px solid var(--rule); padding-top: 16px; }
+
+/* isometric drawing */
+.iso .ln { stroke: var(--edge); stroke-width: 0.7; stroke-linejoin: round; }
+.iso .f-top { fill: var(--top); } .iso .f-front { fill: var(--front); } .iso .f-side { fill: var(--side); }
+.iso .p-top { fill: var(--plinth-top); } .iso .p-front { fill: var(--plinth-front); } .iso .p-side { fill: var(--plinth-side); }
+.iso .pl-top { fill: var(--plate); stroke: var(--rule); stroke-width: .7; } .iso .pl-front { fill: var(--plate-front); stroke: var(--rule); stroke-width: .7; }
+.iso .pl-name { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; fill: var(--muted); }
+.iso .bevel { fill: none; stroke: var(--faint); stroke-width: 0.8; }
+.iso .seam { stroke: var(--faint); stroke-width: 0.8; }
+.iso .screw { fill: var(--lo); }
+.iso .screen { fill: var(--screen); stroke: var(--edge); stroke-width: .6; }
+.iso .screen-line { stroke: var(--screen-glow); stroke-width: 1.2; stroke-linecap: round; opacity: .8; }
+.iso .lamp.merged { fill: var(--merged); } .iso .lamp.waiting { fill: var(--waiting); }
+.iso .name { font-family: var(--font-body); font-weight: 700; font-size: 12.5px; fill: var(--strong); }
+.iso .stw { font-family: var(--font-mono); font-size: 8.5px; letter-spacing: .1em; text-transform: uppercase; }
+.iso .stw.merged { fill: var(--merged); } .iso .stw.waiting { fill: var(--waiting); } .iso .stw.designed { fill: var(--designed); } .iso .stw.idea { fill: var(--idea); }
+.iso .ghost-floor { stroke: none; }
+.iso .ghost-floor.designed { fill: var(--designed-wash); } .iso .ghost-floor.idea { fill: var(--designed-wash); }
+.iso .ghost-face { fill: var(--card); fill-opacity: .55; }
+.iso .ghost-ln { fill: none; stroke-width: 1.1; stroke-linejoin: round; stroke-linecap: round; }
+.iso .ghost-ln.designed { stroke: var(--designed); stroke-dasharray: 5 4; }
+.iso .ghost-ln.idea { stroke: var(--idea); stroke-dasharray: 1.5 4; }
+.iso .pipe-case { fill: none; stroke: var(--pipe-edge); stroke-width: 8.5; stroke-linejoin: round; stroke-linecap: round; }
+.iso .pipe-body { fill: none; stroke: var(--pipe); stroke-width: 6.5; stroke-linejoin: round; stroke-linecap: round; }
+.iso .pipe-flow { fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-dasharray: 2 12; animation: flow 2.8s linear infinite; }
+.iso .pipe-flow.merged { stroke: var(--merged); } .iso .pipe-flow.waiting { stroke: var(--waiting); }
+.iso .pipe-ghost { fill: none; stroke: var(--designed); stroke-width: 1.4; stroke-dasharray: 5 5; stroke-linejoin: round; opacity: .85; }
+.iso .tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: .06em; fill: var(--text); paint-order: stroke; stroke: var(--halo); stroke-width: 4px; stroke-linejoin: round; }
+@keyframes flow { from { stroke-dashoffset: 28; } to { stroke-dashoffset: 0; } }
+.iso .part { cursor: pointer; transition: transform .45s var(--ease), opacity .3s ease; }
+.iso .part:hover, .iso .part:focus-visible { transform: translateY(-4px); }
+.iso .part.sel .ln, .iso .part.sel .ghost-ln { stroke: var(--sel); stroke-width: 1.5; }
+.iso .part.dim { opacity: .14; }
+.iso .part:focus { outline: none; }
+.iso .wires.dim { opacity: .3; }
+@media (prefers-reduced-motion: reduce) {
+  .iso .pipe-flow { animation: none; }
+  .iso .part { transition: none; }
+  .iso .part:hover, .iso .part:focus-visible { transform: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="mono">QMX · state of the build · checked 24 October 2026</span>
+    <h1>QMX Five Systems</h1>
+    <p class="lede">Five parts of QMX, one per tab. Each shows what the part is, a map you can click, what is really built, and where it is weak. Every "built" mark below was checked against the code, not against the plans.</p>
+    <div class="legend" aria-label="Colour key">
+      <span class="key"><span class="sw merged"></span>Merged: in the main code line</span>
+      <span class="key"><span class="sw waiting"></span>Built, waiting for your merge</span>
+      <span class="key"><span class="sw designed"></span>Designed only, no code</span>
+      <span class="key"><span class="sw idea"></span>Idea, not decided</span>
+    </div>
+    <div class="note-bar">
+      <p><strong>The waiting pile.</strong> 25 finished changes sit in one stack, each built on the one below it, so they merge bottom-up in order. Builders were not allowed to touch your real QMX home, so every waiting piece has only run on test copies and on the server's scratch folders.</p>
+      <p class="hint">Since 20 October the builders have been DeepSeek models, each piece checked with one build and one test pass.</p>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Systems" id="tabs"></nav>
+  <main id="panels"></main>
+
+  <footer>
+    <p>Sources: the design folders for the workflow engine, the Library and data, and the Lab and pods; the data-round studies; the launch and clean-up map; the risk-lab seeds. Code: the main code line after the deletions, plus the 25 waiting changes, read without checking anything out.</p>
+    <p>Nothing on this page was committed.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var SHORT = { merged: "Merged", waiting: "Waiting", designed: "Designed", idea: "Idea" };
+  var ST = { merged: "Merged", waiting: "Waiting for merge", designed: "Designed only", idea: "Idea, not decided", actor: "Who or where" };
+
+  var SYSTEMS = [
+  /* ---------------------------------------------------------------- 1 */
+  {
+    id: "version-control", tab: "Version control",
+    what: "<b>Version control</b> lets you and many agents edit the same things without wiping out each other's work: every save is a new version on its own line, and lines are joined back by fixed rules, never by whoever saved last.",
+    groups: [],
+    nodes: [
+      { id: "you", x: 0, y: 0, w: 140, s: "actor", t: "You", i: "You edit drafts. Publishing a workflow, mini app or skill, and promoting a bot, stay your own clicks." },
+      { id: "agent", x: 0, y: 145, w: 140, s: "actor", t: "Chat agent", i: "A copilot chat or one of its helpers." },
+      { id: "run", x: 0, y: 290, w: 140, s: "actor", t: "Workflow run", i: "One run of a scheduled or started job." },
+      { id: "draftline", x: 200, y: 0, w: 180, s: "merged", t: "Your drafts line", i: "Each item has its own drafts line, apart from the trusted copy. A change is a new version that points back at the old one; nothing is overwritten. Built and used today by workflow drafts." },
+      { id: "agentline", x: 200, y: 145, w: 180, s: "merged", t: "Agent's own line", i: "Each agent writes on its own line, and a write on someone else's line is refused. Built, but today only chat session records use it. Notes, strategies and files saved from a chat still go to the old Library file, which keeps numbered copies with no lines and no merges." },
+      { id: "runline", x: 200, y: 290, w: 180, s: "merged", t: "Run's own line", i: "Every run writes on its own line. When it passes, its results land on the trusted copy by themselves under the workflow's standing rule (default: land). Test runs never land. A new workflow, app or skill a run makes arrives as a draft for your yes." },
+      { id: "chattools", x: 200, y: 435, w: 180, s: "waiting", t: "Chat tools: branch,\nmerge, resolve", i: "Six new tools let a chat agent branch, merge, list conflicts, resolve one, read history and see who wrote each line. Waiting. They only matter once chats also switch to the one Library (another waiting change)." },
+      { id: "merge", x: 440, y: 145, w: 170, s: "merged", t: "Merge, field\nby field", i: "Three-way merge: it finds the last common version and keeps both sides' changes when they touch different fields. A straight catch-up just moves the pointer. Built and tested." },
+      { id: "textmerge", x: 440, y: 290, w: 170, s: "waiting", t: "Line-by-line\ntext merge", i: "Two agents edit different lines of one note and both edits survive. Structured settings merge key by key. Waiting. Today a note changed on both sides becomes one whole-note conflict, even when the edits touched different lines." },
+      { id: "files", x: 440, y: 435, w: 170, s: "designed", t: "Own working copy\nper agent, for files", i: "Code files agents edit in folders on disk are outside version control. A workflow step keeps only the files it declares. A separate working copy per agent is designed only." },
+      { id: "main", x: 670, y: 0, w: 170, s: "merged", t: "Trusted copy\n(main)", i: "The version you trust. It holds only published versions. Results land here automatically; definitions and trading things need your one yes or click." },
+      { id: "conflict", x: 670, y: 145, w: 170, s: "merged", t: "Conflict card,\nboth sides kept", i: "When a merge clashes, QMX writes a conflict card holding both sides and the base. It never picks a side and the trusted copy does not move. Closing a conflict with both sides recorded is in the waiting chat tools." },
+      { id: "pick", x: 670, y: 290, w: 170, s: "designed", t: "Screen to see both\nsides and pick", i: "The screen where you see both sides next to each other and choose. Designed; the screens are wired last. Until then nobody sees conflict cards." },
+      { id: "history", x: 0, y: 580, w: 180, s: "merged", t: "History: who, what, when", i: "Every pointer move is logged with who made it (you, an agent, a run, the engine) and when. You can also read the Library as it stood at any past moment." },
+      { id: "blame", x: 230, y: 580, w: 180, s: "waiting", t: "Who wrote each line", i: "For a note or other text, names the version and the person or agent that last changed each line. Worked out on reading, never stored. Waiting." },
+      { id: "claims", x: 460, y: 580, w: 170, s: "merged", t: "Claims board", i: "\"I am doing this job\" markers, so two agents do not build the same thing. Proven across the PC and the server in a test: exactly one won, the other built nothing. But nothing in the engine or the chats calls it yet." },
+      { id: "autoclaim", x: 690, y: 580, w: 170, s: "designed", t: "Engine claims at\nstep start", i: "The engine would take a claim automatically when a step starts and release it when the output lands. Planned for the version-control change but not in it: no code calls claims from the engine." }
+    ],
+    edges: [
+      ["you", "draftline"], ["agent", "agentline"], ["run", "runline"],
+      ["agent", "chattools", "", 0, [[170, 175], [170, 465]]],
+      ["draftline", "merge", "", 0, [[410, 30], [410, 175]]], ["agentline", "merge"], ["runline", "merge", "", 0, [[410, 320], [410, 175]]],
+      ["merge", "main", "clean", 0, [[640, 175], [640, 30]], [640, 112]], ["merge", "conflict", "clash"], ["merge", "textmerge", "text"],
+      ["conflict", "pick"], ["claims", "autoclaim"]
+    ],
+    merged: [
+      ["Every save is a new version; nothing is overwritten", "Same content saved twice is one version."],
+      ["Separate lines for drafts, agents, runs and variants", "A write on someone else's line is refused."],
+      ["Three-way merge, field by field, and conflict cards", "A conflict never picks a side."],
+      ["Full history and \"how it looked on Tuesday\" reads", ""],
+      ["Run results land on the trusted copy by rule", "New definitions arrive as drafts for your yes."],
+      ["Claims board, across PC and server", "Built and proven in a test; nothing calls it yet."]
+    ],
+    waiting: [
+      ["Chats save into the one Library instead of the old file", "The switch-over change."],
+      ["Line-by-line text merge; key-by-key settings merge", ""],
+      ["Who wrote each line, and per-item history for agents", ""],
+      ["Six chat tools: branch, merge, conflicts, resolve, history, line authors", ""],
+      ["Edits made offline replay later; a clash becomes a conflict card", "Part of the server sync change."],
+      ["A machine restored from an old backup cannot act as the boss copy", ""]
+    ],
+    designed: [
+      ["Engine takes a claim automatically when a step starts", ""],
+      ["A separate working copy per agent for code files on disk", ""],
+      ["The screen that shows both sides and lets you pick", "Screens come last."]
+    ],
+    weak: [
+      ["Today chat agents bypass version control.", "Until the switch-over merges, everything a chat saves goes to the old Library file: numbered copies, no lines, no merges, no owners."],
+      ["Claims exist but nothing uses them.", "Two workflows can still start the same job at the same time. Only the new feeds take their own claim."],
+      ["Conflicts have nowhere to go.", "Conflict cards are written but no screen shows them, so they can pile up unseen until the UI is wired."],
+      ["Files on disk are not versioned.", "Code an agent edits in a folder is kept only if the step declared it; two agents in one folder can still collide."],
+      ["Should every passed result land on the trusted copy by itself?", "That is the design (the default rule is \"land\", messy or clean). Worth a yes or no from you.", 1]
+    ]
+  },
+  /* ---------------------------------------------------------------- 2 */
+  {
+    id: "library", tab: "The Library",
+    what: "<b>The Library</b> is the one catalog of everything QMX makes or takes in: each thing is a small versioned card, heavy files are stored once by their fingerprint, and price history sits beside it with one card per price series.",
+    groups: [ { x: -20, y: 125, w: 640, d: 385, t: "Library on your PC" }, { x: -20, y: 610, w: 690, d: 100, t: "Price history, beside the Library" }, { x: 700, y: 125, w: 270, d: 535, t: "Server and backups" } ],
+    nodes: [
+      { id: "upl", x: 145, y: 0, w: 125, d: 56, h: 44, s: "waiting", t: "Your uploads", i: "One upload door for any file, any size, resumable after a cut. Text is pulled out of PDFs and audio on the server and made searchable. Waiting. Today there is no way to hand QMX a file." },
+      { id: "finds", x: 0, y: 0, w: 125, d: 56, h: 44, s: "waiting", t: "Agent finds, pages", i: "Web pages, papers and video transcripts agents gather are saved as one kind of card, keyed by web address so the same page is not saved twice. Waiting." },
+      { id: "feeds", x: 290, y: 0, w: 125, d: 56, h: 44, s: "waiting", t: "Feeds, downloaders", i: "Scheduled workflows that check a source and save only what is new: articles, research papers, a blog; and price downloaders for Dukascopy, Binance and broker history. Waiting." },
+      { id: "wf", x: 435, y: 0, w: 125, d: 56, h: 44, s: "merged", t: "Workflow, chat results", i: "Every workflow run writes a run card, its trace and its files, linked back to the run. Chat session records too. Built, in the new store." },
+      { id: "bt", x: 580, y: 0, w: 125, d: 56, h: 44, s: "waiting", t: "Backtest results", i: "One result shape that names the exact data version, bot version and idea it tested. Old results import into it. Waiting." },
+      { id: "apps", x: 725, y: 0, w: 125, d: 56, h: 44, s: "waiting", t: "Mini apps", i: "Publishing a mini app stores it as a Library card; the program loads published apps from there. Waiting." },
+      { id: "cards", x: 0, y: 145, w: 170, s: "merged", t: "Cards: about 40\nkinds, 3 classes", i: "Results (notes, runs, reports) land at once. Definitions (workflows, apps, skills, agents, pods) wait for your one publish. Trading things (bots, strategies, units, rulebooks) reach the trusted copy only by your click. A new kind is a new file, not new code." },
+      { id: "blobs", x: 215, y: 145, w: 170, s: "merged", t: "Each file\nstored once", i: "Every file is named by its own fingerprint, so two identical files are one file. Built." },
+      { id: "links", x: 430, y: 145, w: 170, s: "merged", t: "Links with\nfixed words", i: "\"produced by\", \"tested by\", \"part of\", \"cites\" and the rest. No agent can invent a link word. Bad-data marks travel along the links to everything built on them." },
+      { id: "search", x: 0, y: 290, w: 170, s: "merged", t: "Search that\ncites", i: "Text search plus a map built from the links. Before any model answers, the map checks there is a real path from your words to real items, and says so if not." },
+      { id: "views", x: 215, y: 290, w: 170, s: "waiting", t: "Card and full page\nfor every kind", i: "Each kind declares a small card (up to five facts, a badge) and a full page with tabs, served by one read. Also adds the trade kind and trade journals. Waiting. Today kinds carry only an older preview and detail outline." },
+      { id: "family", x: 430, y: 290, w: 170, s: "waiting", t: "Family tree\nread", i: "Parent, children, siblings and history of any item in one read, and the research workflows write their family links. Waiting. The link words exist today, but almost nothing writes family links for strategies or indicators." },
+      { id: "switch", x: 0, y: 435, w: 600, h: 44, s: "waiting", t: "Switch: chats leave the old Library file", i: "Today two Libraries live side by side: the new store gets workflow results, and the old file gets every chat save, search and read (110 KB, much of it test junk). The switch imports the old file once, checks counts, and retires it read-only. Waiting." },
+      { id: "parts", x: 0, y: 630, w: 200, s: "waiting", t: "Monthly price\nfiles + one card\nper series", i: "Ticks and bars stored as typed monthly files beside the Library, with one dataset card per series saying what months exist and how good they are. Waiting. Today there is no market data in QMX at all." },
+      { id: "door", x: 230, y: 630, w: 200, s: "waiting", t: "One door to\nprice history,\nsealed final year", i: "The only way to read or write prices. A month in the sealed final year is refused with the reason, never served empty. Waiting, and it stays shut until you enter one value: where the sealed year starts." },
+      { id: "server", x: 720, y: 145, w: 200, s: "waiting", t: "Server copy, main\ncopy after your click", i: "The server's own program holds the Library. Your PC syncs what moved; big files come down only when opened. Moving the main copy to the server is one card with one button for you. Waiting. Today sync runs only in test scripts." },
+      { id: "vault", x: 720, y: 290, w: 200, s: "waiting", t: "Key safe per machine", i: "Each machine has its own key to open its copy of model-provider keys. Trading keys are never copied off your PC. Waiting." },
+      { id: "bucket", x: 720, y: 435, w: 200, s: "designed", t: "Nightly bucket copy,\nrestore tests", i: "A full copy in a storage bucket every night, pushed by the server, with nightly and monthly restore tests. Designed only: no bucket exists yet." },
+      { id: "mem", x: 720, y: 580, w: 200, s: "designed", t: "Memory engine\non the server", i: "The memory engine runs on your PC today. The server probe passed (about 2 GB peak), but the move itself has not been built." },
+      { id: "ticks", x: 460, y: 630, w: 190, s: "waiting", t: "Old 10 GB of ticks:\non the server,\nimport waiting", i: "The old Dukascopy ticks and the risk-lab bars were copied to the server with checksums on 22 October. The import into monthly files with cards is a waiting change." }
+    ],
+    edges: [
+      ["finds", "cards", "", 0, [[62.5, 68], [85, 68]]], ["feeds", "cards", "", 0, [[352.5, 68], [85, 68]]],
+      ["wf", "cards", "", 0, [[497.5, 68], [85, 68]]], ["bt", "cards", "", 0, [[642.5, 68], [85, 68]]], ["apps", "cards", "", 0, [[787.5, 68], [85, 68]]],
+      ["upl", "blobs", "", 0, [[207.5, 82], [300, 82]]],
+      ["parts", "door"], ["ticks", "door", "import"],
+      ["blobs", "server", "sync", 0, [[300, 219], [660, 219], [660, 175]], [690, 200]],
+      ["server", "bucket", "", 0, [[950, 175], [950, 465]]]
+    ],
+    merged: [
+      ["One store of versioned cards, about 40 kinds", "Each kind belongs to one of three classes that decide how it lands."],
+      ["Each file stored once, by fingerprint", ""],
+      ["Fixed link words, a link map, search that cites its items", ""],
+      ["Bad-data marks travel downstream", ""],
+      ["Importers for the old Libraries", ""],
+      ["Workflow and chat-session results saved in the new store", ""],
+      ["Server Library service and sync code", "Proven in test scripts on the server; the running app never calls it."]
+    ],
+    waiting: [
+      ["The switch: chats move to the one Library", ""],
+      ["Upload door and text extraction on the server", ""],
+      ["Feeds and price downloaders as scheduled workflows", ""],
+      ["Monthly price files, a card per series, one door with the sealed year", ""],
+      ["Old ticks imported from the server copy", ""],
+      ["Backtest results in one shape", ""],
+      ["Card and page for every kind, family-tree read, trade journals", ""],
+      ["Mini apps stored in and run from the Library", ""],
+      ["Server holds the main copy after your click; selective sync; key safe per machine", ""]
+    ],
+    designed: [
+      ["Nightly bucket copy and restore tests", "No bucket yet."],
+      ["Memory engine moved to the server", ""],
+      ["Jobs placed on the machine where their data is", ""],
+      ["A sweep for leftover made-up capacity numbers", ""]
+    ],
+    weak: [
+      ["Two Libraries until the switch merges.", "Chats read and write the old file; workflows write the new store. Each sees half the picture."],
+      ["Only one second copy.", "No bucket exists, so the old ticks and, later, the Library have one copy off your PC: the server."],
+      ["The price door needs one value from you first.", "Where the sealed final year starts. Without it the door stays shut and agents get no prices."],
+      ["The text extractor is heavy for the server.", "A 400-page PDF took about 20 minutes and 7.3 GB of memory on a 12 GB machine. Two big uploads at once could squeeze other work."],
+      ["Search is untested at scale.", "It was tuned on about 20 items."],
+      ["Lightly checked pieces hide bugs.", "A later builder found the price door's copy function could never succeed (it compared the wrong fingerprint). It was fixed in a later waiting change, which means the stack must merge in order."]
+    ]
+  },
+  /* ---------------------------------------------------------------- 3 */
+  {
+    id: "lab", tab: "The Lab",
+    what: "<b>The Lab</b> is meant to be your research workbench, like VS Code built for trading ideas: start a project from a template, edit a strategy or workflow as boxes or as code, run just one part, pull Tuesday's results into today's run, test honestly, and train models on your PC. It has no runner and no store of its own: it sits on the workflow engine and the Library.",
+    groups: [ { x: 460, y: -20, w: 470, d: 390, t: "Lab panels" }, { x: -20, y: 590, w: 950, d: 100, t: "What does the work underneath" } ],
+    nodes: [
+      { id: "new", x: 0, y: 0, w: 170, s: "waiting", t: "New… four levels", i: "Quick idea, experiment, study, campaign. Each level is a tag on published templates, so it is a filter, not a new kind. Waiting." },
+      { id: "proj", x: 230, y: 0, w: 170, s: "waiting", t: "Project, workspace\nremembered", i: "A project is a collection in the Library. The open tabs, layout and pins are stored on it, so reopening the Lab restores them without making a new version. Waiting." },
+      { id: "explorer", x: 480, y: 0, w: 200, s: "waiting", t: "Explorer, Problems,\nTimeline", i: "Explorer lists the project's items as cards; Problems shows bad-data marks and conflicts; Timeline shows history. Waiting, as backend reads for the screens." },
+      { id: "editor", x: 710, y: 0, w: 200, s: "designed", t: "Editor: boxes\nand code views", i: "One draft, two views: boxes and arrows, or code. Edit either and the other follows; a broken match blocks publishing. Designed only. No code." },
+      { id: "runpart", x: 480, y: 145, w: 200, s: "merged", t: "Run just this part", i: "Run one step. Steps whose inputs did not change show fresh and are not rerun; downstream steps show stale. Built in the workflow engine, for workflows." },
+      { id: "data", x: 710, y: 145, w: 200, s: "waiting", t: "Data panel", i: "A dataset card's months and quality, and one month's sample through the price door. A sealed month shows the door's refusal. Waiting." },
+      { id: "nb", x: 480, y: 290, w: 200, s: "designed", t: "Notebooks", i: "A notebook as a board whose cells are workflow steps, run in a throw-away box. Designed only." },
+      { id: "sweeps", x: 710, y: 290, w: 200, s: "designed", t: "Sweep, walk-forward,\nrobustness buttons", i: "The backtester library already does sweeps, walk-forward and robustness tests, but no Lab door or button reaches them. Designed." },
+      { id: "copilot", x: 0, y: 145, w: 170, s: "designed", t: "Lab copilot,\n17 tools", i: "The Lab copilot's own tools, with the same permissions as your buttons. Designed only; the waiting Lab change deliberately leaves them for a later slice." },
+      { id: "tuesday", x: 230, y: 145, w: 170, s: "waiting", t: "Pull Tuesday's run\ninto today's", i: "A workflow's inputs can name an old run or any Library item, pinned at start, so a new run reads Tuesday's result instead of a retyped copy. Waiting. Chats can already attach old runs today." },
+      { id: "engine", x: 480, y: 465, w: 200, s: "merged", t: "Workflow engine", i: "Drafts, checks, test runs, versions, memo of finished steps, retries. Built and merged." },
+      { id: "tpl", x: 710, y: 465, w: 200, s: "merged", t: "About 38 templates", i: "Including idea-to-first-result, overnight loop, variant comparison and ML training run. Merged, but the backtest ones say they wait for a backtester door." },
+      { id: "lib", x: 480, y: 610, w: 200, s: "merged", t: "Library", i: "Stores every project, result and model. See the Library tab." },
+      { id: "door", x: 0, y: 610, w: 150, s: "waiting", t: "Price door", i: "The one door to price history. Waiting (see the Library tab)." },
+      { id: "bt", x: 180, y: 610, w: 180, s: "waiting", t: "Backtests via\nthe door", i: "The backtester reads monthly price files through the door and lands one result card. Waiting, and not finished: the program does not yet hand the backtest door to the chat tools, so a backtest from a chat still refuses with a reason." },
+      { id: "gpu", x: 710, y: 610, w: 200, s: "waiting", t: "Training on\nyour PC's GPU", i: "Checks free disk, copies only the months it needs, trains on the GPU or the CPU, and saves a model card with data fingerprints, code version and seed. Waiting. Measured on your Quadro T1000: a small test model ran slower on the GPU than on the CPU." },
+      { id: "paper", x: 0, y: 290, w: 170, s: "designed", t: "Paper runs", i: "One paper-money run per trading day. Designed only; tied to pods." }
+    ],
+    edges: [
+      ["new", "proj"], ["proj", "explorer"],
+      ["copilot", "proj", "", 1, [[200, 175], [200, 30]]],
+      ["runpart", "engine", "", 0, [[445, 175], [445, 495]]],
+      ["tuesday", "engine", "", 0, [[315, 219], [445, 219], [445, 495]]],
+      ["engine", "tpl"], ["engine", "lib"],
+      ["engine", "door", "", 0, [[580, 539], [75, 539]]], ["engine", "bt", "", 0, [[580, 539], [270, 539]]], ["engine", "gpu", "", 0, [[580, 539], [810, 539]]]
+    ],
+    merged: [
+      ["The workflow engine underneath", "Drafts, test runs, versions, finished-step memo."],
+      ["Run just this part, with fresh and stale steps", "For workflows."],
+      ["About 38 templates", "The backtest ones wait for a backtester door."],
+      ["Chats can attach an old run or Library item", ""],
+      ["The backtester's sweeps, walk-forward and robustness code", "In the backend library; the Lab cannot reach it."]
+    ],
+    waiting: [
+      ["Projects, New… by four levels, remembered workspace", ""],
+      ["Panel reads: Explorer, Problems, Timeline, Data", ""],
+      ["Workflows read Tuesday's run through references", ""],
+      ["Backtests through the price door, one result card", "Not yet wired to the chat tools."],
+      ["ML training on your PC, model card with data, code and seed", ""]
+    ],
+    designed: [
+      ["Editor with boxes and code views of one draft", ""],
+      ["Notebooks", ""],
+      ["The Lab copilot's 17 tools", ""],
+      ["Sweep, walk-forward and robustness buttons", ""],
+      ["Paper runs", ""],
+      ["The screens", "Drawn in the UI rebuild on your PC, with demo data. Wired last."]
+    ],
+    weak: [
+      ["Even after the merge you cannot use the Lab.", "What waits is a backend for screens that are not wired, with no copilot tools. The \"VS Code\" heart (the two-view editor and notebooks) has no code."],
+      ["Backtests do not run end to end.", "The door is built but the program does not hand it to the chat tools yet; that is a named leftover."],
+      ["No backtest machine exists.", "The design sends backtests to one dedicated machine; your PC stands in."],
+      ["Training was proven on practice data.", "The GPU probe used made-up rows, not real prices, and a 4 GB card is small."],
+      ["How much should the first usable Lab hold?", "Editor first, notebooks first, or backtest buttons first is still open.", 1]
+    ]
+  },
+  /* ---------------------------------------------------------------- 4 */
+  {
+    id: "pods", tab: "Pods",
+    what: "<b>A pod</b> was designed as the risk-and-sizing machine around your bots: a stack of rule blocks that decides how big each trade is and when to stop. Almost none of it exists, and the unit redesign may change it or remove it.",
+    groups: [ { x: -20, y: -20, w: 250, d: 170, t: "A pod: seven slots" } ],
+    nodes: [
+      { id: "s1", x: 0, y: 0, w: 210, d: 130, h: 34, z: 0, layer: 1, s: "designed", t: "Inputs", i: "Which bots and data feed the pod." },
+      { id: "s2", x: 0, y: 0, w: 210, d: 130, h: 34, z: 34, layer: 1, s: "designed", t: "Guards", i: "Rules that block a trade outright." },
+      { id: "s3", x: 0, y: 0, w: 210, d: 130, h: 34, z: 68, layer: 1, s: "designed", t: "Allocator", i: "Splits capital across bots." },
+      { id: "s4", x: 0, y: 0, w: 210, d: 130, h: 34, z: 102, layer: 1, s: "designed", t: "Sizer", i: "Decides the size of each trade." },
+      { id: "s5", x: 0, y: 0, w: 210, d: 130, h: 34, z: 136, layer: 1, s: "designed", t: "Throttles", i: "Slow down after losses or in bad conditions." },
+      { id: "s6", x: 0, y: 0, w: 210, d: 130, h: 34, z: 170, layer: 1, s: "designed", t: "Caps", i: "Hard limits on exposure." },
+      { id: "s7", x: 0, y: 0, w: 210, d: 130, h: 34, z: 204, layer: 1, s: "designed", t: "Ledger", i: "Keeps the pod's own record." },
+      { id: "sim", x: 330, y: 0, w: 200, s: "designed", t: "One simulator", i: "Turns the stack into numbers for every screen. Designed only." },
+      { id: "screens", x: 330, y: 145, w: 200, s: "designed", t: "Size trail, stress,\ndrawdown fan,\nhead-to-head", i: "The pods bench screens. Drawn in the UI rebuild with demo data; no backend." },
+      { id: "paper", x: 330, y: 290, w: 200, s: "designed", t: "Paper run, one\nper trading day", i: "Paper money on the server's ledger over live prices. Designed only." },
+      { id: "compile", x: 620, y: 0, w: 230, s: "designed", t: "Compile to the trading\nnode's rulebook", i: "A pod version would turn into the rulebook the trading node already understands. Blocks the node cannot run would be named and fail a \"Ready for live?\" check. Designed only." },
+      { id: "rules", x: 620, y: 145, w: 230, s: "merged", t: "Trading rulebook\ncode in the backend", i: "Sizing, exits, paper mode, kill controls and results in R already exist in the backend toolbox (QMF). This is what a pod would compile into. It is old code, not pod code." },
+      { id: "promote", x: 620, y: 290, w: 230, s: "designed", t: "Promote card to\nPortfolio, two clicks", i: "After paper passes, a promotion card goes to Portfolio; signing and switching on stay your two clicks. Designed only." },
+      { id: "kinds", x: 620, y: 435, w: 230, s: "merged", t: "Two empty card kinds", i: "\"pod\" and \"pod block\" exist as Library kind files: shapes only. Nothing writes them." },
+      { id: "unit", x: 330, y: 580, w: 520, s: "idea", t: "Unit redesign: a bot that tunes its own sizing; a market router places bots", i: "Your risk-lab seeds: a unit is one bot plus its own risk and sizing, tuned from its record. A separate market router on the trading node places each bot on the markets where it is proven. If that holds, pods may fold into Strategies or go. Not decided." }
+    ],
+    edges: [
+      ["s4", "sim", "", 0, [[270, 65], [270, 30]]], ["sim", "screens"], ["screens", "paper"], ["sim", "compile"], ["compile", "rules", "into"], ["paper", "promote"]
+    ],
+    merged: [
+      ["Two empty Library card kinds: pod and pod block", "Shapes only."],
+      ["The old trading rulebook code in the backend toolbox", "What a pod would compile into."]
+    ],
+    waiting: [
+      ["Nothing", "The waiting Lab change leaves pods out on purpose."]
+    ],
+    designed: [
+      ["Seven slots of pure rule blocks", ""],
+      ["One simulator for every pod screen", ""],
+      ["Compile a pod to the trading node's rulebook", ""],
+      ["Paper runs, one per trading day", ""],
+      ["Promote card to Portfolio", ""],
+      ["The bench screens", "Drawn with demo data in the UI rebuild."]
+    ],
+    weak: [
+      ["Building on pods now may be wasted.", "Your rule for the data round: do not build on pods until the unit work settles."],
+      ["Several blocks had no home on the trading node.", "Some throttles and caps could only run in the Lab, which would fail \"Ready for live?\"."],
+      ["The trading node itself was never deployed.", "It cannot talk back to your PC, so pods had nowhere to go live anyway."],
+      ["Do pods survive the unit?", "Fold into Strategies, stay as a portfolio layer, or go. That is the risk session's call.", 1],
+      ["Four pod questions are parked.", "How a pod reaches the node, what paper money it uses, what a mix of pods is, and pairs trading.", 1]
+    ]
+  },
+  /* ---------------------------------------------------------------- 5 */
+  {
+    id: "codebase", tab: "Codebase",
+    what: "<b>The codebase</b> is two halves in one repository: the human side where you, the copilot and agents work, and the backend libraries that do the trading maths. They are joined by one list of tools, and one host program runs the human side on each machine.",
+    groups: [ { x: -20, y: -20, w: 450, d: 390, t: "Human side" }, { x: 480, y: 20, w: 280, d: 350, t: "Host program, one per machine" }, { x: 790, y: -20, w: 340, d: 535, t: "Backend libraries" } ],
+    nodes: [
+      { id: "you", x: 0, y: 0, w: 190, s: "actor", t: "You", i: "You work through the screens and the copilot." },
+      { id: "ui", x: 220, y: 0, w: 190, s: "designed", t: "Screens\n(rebuild on your PC)", i: "The main code line has only a small shell (home, Library, copilot, settings). The real rebuild lives on your PC with demo data and is wired last." },
+      { id: "copilot", x: 0, y: 145, w: 190, s: "merged", t: "Copilot chats", i: "Chats run on the Claude Agent SDK, with helpers on other models." },
+      { id: "wfs", x: 220, y: 145, w: 190, s: "merged", t: "Workflows", i: "Jobs you set up once and leave running." },
+      { id: "apps", x: 0, y: 290, w: 190, s: "merged", t: "Mini apps", i: "Small apps that load like Claude plugins. Proven in tests; the running app does not yet load published apps (waiting)." },
+      { id: "lib", x: 220, y: 290, w: 190, s: "merged", t: "Library", i: "The one catalog. See its tab." },
+      { id: "host5", x: 500, y: 40, w: 240, d: 170, h: 32, z: 128, layer: 1, s: "merged", t: "Heartbeat, inbox, pause", i: "One heartbeat per machine and app; one pause button for all autonomous work." },
+      { id: "host3", x: 500, y: 40, w: 240, d: 170, h: 32, z: 96, layer: 1, s: "merged", t: "Control door, about 75 tools", i: "Every operation is one row. The screen's button, the agent's tool and the workflow step all come from the same row." },
+      { id: "host1", x: 500, y: 40, w: 240, d: 170, h: 32, z: 64, layer: 1, s: "merged", t: "Chat runner", i: "Runs every copilot chat and helper on the Claude Agent SDK, with your permission lists." },
+      { id: "host2", x: 500, y: 40, w: 240, d: 170, h: 32, z: 32, layer: 1, s: "merged", t: "Workflow engine", i: "Runs every job, keeps a diary of steps, resumes after a crash, never pays twice for a finished step." },
+      { id: "host4", x: 500, y: 40, w: 240, d: 170, h: 32, z: 0, layer: 1, s: "merged", t: "Library store, mini apps", i: "The host is the only writer of the machine's Library." },
+      { id: "router", x: 500, y: 290, w: 240, s: "merged", t: "Model router", i: "A relay on each machine: Claude plan requests pass through unchanged; Kimi, DeepSeek, GPT and others are reached through a pool that spreads work across your accounts. It adds keys itself, so agents and rented machines never hold one. Built." },
+      { id: "prov", x: 500, y: 480, w: 240, s: "actor", t: "AI providers", i: "Your Claude plan, plus any provider that speaks the Claude-style API." },
+      { id: "bridge", x: 810, y: 0, w: 300, s: "merged", t: "Backend bridge\n(answers nothing today)", i: "The tools for data, backtests, bots and the node exist, but the program fills them with nothing, so they return empty or refuse. Proven by running them." },
+      { id: "pdoor", x: 810, y: 145, w: 145, s: "waiting", t: "Price\ndoor", i: "Wired into the data tools in the waiting stack." },
+      { id: "bdoor", x: 965, y: 145, w: 145, s: "waiting", t: "Backtest\ndoor", i: "Built in the waiting stack, but not yet handed to the tools." },
+      { id: "qml", x: 810, y: 290, w: 96, s: "merged", t: "QML:\nbots", i: "Writing and checking bots. One example bot; no real bot registered anywhere." },
+      { id: "qmb", x: 912, y: 290, w: 96, s: "merged", t: "QMB:\nbacktests", i: "Backtesting, sweeps, optimisation, robustness. Its own agent door is a placeholder." },
+      { id: "qmf", x: 810, y: 435, w: 300, h: 44, s: "merged", t: "QMF: the toolbox", i: "Seven small packages: exact money and time, fingerprints, the price store, indicators, chart structures, risk rules, the cTrader connection." },
+      { id: "qmn", x: 1014, y: 290, w: 96, s: "merged", t: "QMN:\ntrading node", i: "About 98,000 lines, written and tested, never deployed. It listens only on its own machine." },
+      { id: "server", x: 810, y: 625, w: 300, s: "merged", t: "Server: same host\nprogram, remote runs", i: "Your Contabo server on the private network. Remote steps, run takeover, cross-machine triggers and the server-to-PC inbox are built and were proven in tests. Serving the Library and the log viewer there are waiting." },
+      { id: "nodehome", x: 500, y: 625, w: 240, s: "designed", t: "Trading node calls home", i: "No path from a trading node back to your PC. Not designed against today's passes and key safe." }
+    ],
+    edges: [
+      ["ui", "host4", "", 1, [[465, 30], [465, 125]]],
+      ["copilot", "host1", "", 0, [[95, 219], [465, 219], [465, 125]]],
+      ["wfs", "host2", "", 0, [[465, 175], [465, 125]]],
+      ["apps", "host4", "", 0, [[95, 364], [465, 364], [465, 125]]],
+      ["lib", "host4", "", 0, [[465, 320], [465, 125]]],
+      ["host3", "bridge", "", 0, [[775, 125], [775, 30]]],
+      ["bridge", "pdoor", "", 0, [[882.5, 30]]], ["bridge", "bdoor", "", 0, [[1037.5, 30]]],
+      ["pdoor", "qmf", "", 0, [[882.5, 219], [795, 219], [795, 457]]],
+      ["bdoor", "qmb", "", 0, [[1037.5, 219], [960, 219]]],
+      ["host1", "router"], ["router", "prov"]
+    ],
+    merged: [
+      ["One host program per machine", "Chats, engine, control door and Library in one process; a crash never blocks the next start."],
+      ["Over 100,000 lines of the old agent system deleted", "Plus the last LangChain parts."],
+      ["One list of about 75 tools", ""],
+      ["Model router: pass-through, pool, one-run passes, sealed key safe", ""],
+      ["Remote runs on the server, takeover, triggers, inbox", "Proven in tests."],
+      ["The four backend libraries", "Well tested; nothing in the running app uses them for real work."]
+    ],
+    waiting: [
+      ["Price door wired into the data tools", ""],
+      ["Backtest door", "Not yet handed to the tools."],
+      ["One list of broker and data connections with health readings", ""],
+      ["Server serves the Library from its host program", ""],
+      ["Logs sent to a viewer on the server; a read-only look-in for an outside agent", ""]
+    ],
+    designed: [
+      ["Doors for QML and the trading node", ""],
+      ["One dedicated backtest machine", ""],
+      ["The trading node connecting back to your PC", ""],
+      ["Clean refactor of the backend libraries", "From your seeds, after the unit work."]
+    ],
+    weak: [
+      ["Agents can go around the doors.", "Every chat still has a shell and Python, so an agent that wants a backtest can write raw Python against the libraries."],
+      ["The bridge is still thin.", "Even with the waiting stack, only the price door is wired; backtests, bots and the node are not."],
+      ["The trading node cannot talk to your PC.", "And \"node\" names two things: a workflow worker machine and the trading node."],
+      ["Leftovers outside each builder's allowed files.", "One waiting change leaves eleven test scripts pointing at a deleted program; another misses a package in the server's install list. Each lists them, so someone must sweep them."],
+      ["One long stack.", "25 changes built on each other. A bad piece low in the stack blocks everything above it."]
+    ]
+  }
+  ];
+
+  var tabsEl = document.getElementById("tabs");
+  var panelsEl = document.getElementById("panels");
+  var NS = "http://www.w3.org/2000/svg";
+  var AZ = 65 * Math.PI / 180, EL = 50 * Math.PI / 180;
+  var sA = Math.sin(AZ), cA = Math.cos(AZ), sE = Math.sin(EL), cE = Math.cos(EL);
+  var UX = [sA, cA * sE], UY = [-cA, sA * sE];
+  var NRM = Math.hypot(UX[0], UX[1]);
+  var FRONT_U = [UX[0] / NRM, UX[1] / NRM];
+
+  function P(x, y, z) { return [x * sA - y * cA, (x * cA + y * sA) * sE - z * cE]; }
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function h(tag, cls, html) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+  function Bounds() { this.x0 = Infinity; this.y0 = Infinity; this.x1 = -Infinity; this.y1 = -Infinity; }
+  Bounds.prototype.add = function (p) {
+    if (p[0] < this.x0) this.x0 = p[0]; if (p[0] > this.x1) this.x1 = p[0];
+    if (p[1] < this.y0) this.y0 = p[1]; if (p[1] > this.y1) this.y1 = p[1];
+  };
+  function poly(parent, pts3, cls, bounds, extra) {
+    var s = pts3.map(function (q) { var p = P(q[0], q[1], q[2]); if (bounds) bounds.add(p); return p[0].toFixed(2) + "," + p[1].toFixed(2); }).join(" ");
+    var a = { points: s, "class": cls };
+    if (extra) for (var k in extra) a[k] = extra[k];
+    return el("polygon", a, parent);
+  }
+  function seg(parent, a, b, cls) {
+    var p = P(a[0], a[1], a[2]), q = P(b[0], b[1], b[2]);
+    return el("line", { x1: p[0].toFixed(2), y1: p[1].toFixed(2), x2: q[0].toFixed(2), y2: q[1].toFixed(2), "class": cls }, parent);
+  }
+  function rect3(x, y, w, d, z) { return [[x, y, z], [x + w, y, z], [x + w, y + d, z], [x, y + d, z]]; }
+
+  function solid(parent, x, y, w, d, z0, z1, cls, b) {
+    poly(parent, [[x, y + d, z0], [x + w, y + d, z0], [x + w, y + d, z1], [x, y + d, z1]], cls[0] + " ln", b);
+    poly(parent, [[x + w, y, z0], [x + w, y + d, z0], [x + w, y + d, z1], [x + w, y, z1]], cls[1] + " ln", b);
+    poly(parent, rect3(x, y, w, d, z1), cls[2] + " ln", b);
+  }
+
+  function frontText(parent, n, bz) {
+    var c = P(n.x + n.w / 2, n.y + n.d, bz + n.h / 2);
+    var t = el("text", { transform: "matrix(" + FRONT_U[0].toFixed(4) + "," + FRONT_U[1].toFixed(4) + ",0,1," + c[0].toFixed(2) + "," + c[1].toFixed(2) + ")", "text-anchor": "middle" }, parent);
+    var showStatus = n.s !== "actor";
+    if (n.layer) {
+      var a = el("tspan", { "class": "name", y: 4.5, x: 0 }, t); a.textContent = n.t;
+      if (showStatus) { var s = el("tspan", { "class": "stw " + n.s, dx: 8 }, t); s.textContent = SHORT[n.s]; }
+      return;
+    }
+    var lines = n.t.split("\n");
+    var block = lines.length * 15 + (showStatus ? 11 : 0) - 4;
+    var y0 = -block / 2 + 9;
+    lines.forEach(function (ln, i) { var tp = el("tspan", { "class": "name", x: 0, y: (y0 + i * 15).toFixed(1) }, t); tp.textContent = ln; });
+    if (showStatus) { var st = el("tspan", { "class": "stw " + n.s, x: 0, y: (y0 + lines.length * 15 - 1).toFixed(1) }, t); st.textContent = SHORT[n.s]; }
+  }
+
+  function drawPart(parent, n, b) {
+    var g = el("g", { "class": "part " + n.s, tabindex: "0", role: "button", "aria-label": n.t.replace(/\n/g, " ") + ", " + ST[n.s] }, parent);
+    g.dataset.status = n.s;
+    var ghost = n.s === "designed" || n.s === "idea";
+    var z0 = n.z || 0, off = ghost ? 0 : 4, bz = z0 + off, tz = bz + n.h;
+    var x = n.x, y = n.y, w = n.w, d = n.d;
+    if (!ghost && z0 === 0) solid(g, x - 5, y - 5, w + 10, d + 10, 0, 4, ["p-front", "p-side", "p-top"], b);
+    if (ghost) {
+      if (z0 === 0) poly(g, rect3(x, y, w, d, 0), "ghost-floor " + n.s, b);
+      poly(g, [[x, y + d, bz], [x + w, y + d, bz], [x + w, y + d, tz], [x, y + d, tz]], "ghost-face", b);
+      poly(g, [[x + w, y, bz], [x + w, y + d, bz], [x + w, y + d, tz], [x + w, y, tz]], "", b, { fill: "transparent" });
+      poly(g, rect3(x, y, w, d, tz), "", b, { fill: "transparent" });
+      var pth = [P(x, y, tz), P(x + w, y, tz), P(x + w, y + d, tz), P(x, y + d, tz)];
+      var dd = "M" + pth.map(function (p) { return p[0].toFixed(2) + "," + p[1].toFixed(2); }).join(" L") + " Z";
+      var fl = P(x, y + d, bz), fr = P(x + w, y + d, bz), br = P(x + w, y, bz);
+      dd += " M" + pth[3][0].toFixed(2) + "," + pth[3][1].toFixed(2) + " L" + fl[0].toFixed(2) + "," + fl[1].toFixed(2) + " L" + fr[0].toFixed(2) + "," + fr[1].toFixed(2) + " L" + br[0].toFixed(2) + "," + br[1].toFixed(2) + " L" + pth[1][0].toFixed(2) + "," + pth[1][1].toFixed(2);
+      dd += " M" + pth[2][0].toFixed(2) + "," + pth[2][1].toFixed(2) + " L" + fr[0].toFixed(2) + "," + fr[1].toFixed(2);
+      el("path", { d: dd, "class": "ghost-ln " + n.s }, g);
+    } else {
+      solid(g, x, y, w, d, bz, tz, ["f-front", "f-side", "f-top"], b);
+      poly(g, rect3(x + 5, y + 5, w - 10, d - 10, tz), "bevel");
+      [[x + 10, y + 10], [x + w - 10, y + 10], [x + w - 10, y + d - 10], [x + 10, y + d - 10]].forEach(function (q) {
+        var p = P(q[0], q[1], tz); el("ellipse", { cx: p[0].toFixed(2), cy: p[1].toFixed(2), rx: 1.7, ry: 1.1, "class": "screw" }, g);
+      });
+      if (n.h >= 40) {
+        seg(g, [x + w, y, bz + n.h * 0.36], [x + w, y + d, bz + n.h * 0.36], "seam");
+        seg(g, [x + w, y, bz + n.h * 0.64], [x + w, y + d, bz + n.h * 0.64], "seam");
+      }
+      if (n.s === "actor") {
+        poly(g, rect3(x + 18, y + 14, w - 36, d - 28, tz), "screen");
+        seg(g, [x + 26, y + 24, tz], [x + 26 + (w - 52) * 0.62, y + 24, tz], "screen-line");
+        seg(g, [x + 26, y + 33, tz], [x + 26 + (w - 52) * 0.38, y + 33, tz], "screen-line");
+      } else {
+        var lw = Math.min(56, w * 0.34);
+        poly(g, [[x + 16, y + d - 19, tz], [x + 16 + lw, y + d - 19, tz], [x + 16 + lw, y + d - 12, tz], [x + 16, y + d - 12, tz]], "lamp " + n.s);
+      }
+    }
+    frontText(g, n, bz);
+    return g;
+  }
+
+  function drawPlate(parent, gr, b, labels) {
+    var x = gr.x, y = gr.y, w = gr.w, d = gr.d;
+    poly(parent, [[x, y + d, 0], [x + w, y + d, 0], [x + w, y + d, -3], [x, y + d, -3]], "pl-front", b);
+    poly(parent, [[x + w, y, 0], [x + w, y + d, 0], [x + w, y + d, -3], [x + w, y, -3]], "pl-front", b);
+    poly(parent, rect3(x, y, w, d, 0), "pl-top", b);
+    var p = P(x + 10, y + d, -3);
+    var t = el("text", { "class": "pl-name", transform: "matrix(" + [FRONT_U[0], FRONT_U[1], 0, 1, p[0], p[1] + 15].map(function (v) { return v.toFixed(4); }).join(",") + ")" }, labels);
+    b.add([p[0], p[1] + 20]);
+    t.textContent = gr.t;
+  }
+
+  function center(n) { return [n.x + n.w / 2, n.y + n.d / 2]; }
+  function drawPipe(parent, e, byId, b, tags) {
+    var a = byId[e[0]], c = byId[e[1]];
+    var pts = [center(a)].concat(e[4] || []).concat([center(c)]).map(function (q) { var p = P(q[0], q[1], 6); b.add(p); return p; });
+    var d = "M" + pts.map(function (p) { return p[0].toFixed(2) + "," + p[1].toFixed(2); }).join(" L");
+    var ss = [a.s, c.s];
+    var style = e[3] || ss.indexOf("designed") >= 0 || ss.indexOf("idea") >= 0 ? "ghost" : ss.indexOf("waiting") >= 0 ? "waiting" : "merged";
+    if (style === "ghost") el("path", { d: d, "class": "pipe-ghost" }, parent);
+    else {
+      el("path", { d: d, "class": "pipe-case" }, parent);
+      el("path", { d: d, "class": "pipe-body" }, parent);
+      el("path", { d: d, "class": "pipe-flow " + style }, parent);
+    }
+    if (e[2]) {
+      var best = 0, bi = 0;
+      for (var i = 0; i < pts.length - 1; i++) {
+        var L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]);
+        if (L > best) { best = L; bi = i; }
+      }
+      var mx = (pts[bi][0] + pts[bi + 1][0]) / 2, my = (pts[bi][1] + pts[bi + 1][1]) / 2;
+      if (e[5]) { var lp = P(e[5][0], e[5][1], 6); mx = lp[0]; my = lp[1]; }
+      var t = el("text", { x: mx.toFixed(1), y: (my - 10).toFixed(1), "text-anchor": "middle", "class": "tag" }, tags);
+      t.textContent = e[2];
+    }
+  }
+
+  function order(a, b) {
+    var ax2 = a.x + a.w, ay2 = a.y + a.d, bx2 = b.x + b.w, by2 = b.y + b.d;
+    var xo = a.x < bx2 && b.x < ax2, yo = a.y < by2 && b.y < ay2;
+    if (xo && yo) return (a.z || 0) - (b.z || 0);
+    if (xo) return ay2 <= b.y ? -1 : 1;
+    if (yo) return ax2 <= b.x ? -1 : 1;
+    return (a.x + a.w / 2 + a.y + a.d / 2) - (b.x + b.w / 2 + b.y + b.d / 2);
+  }
+
+  function buildMap(sys, detail) {
+    sys.nodes.forEach(function (n) {
+      if (n.d == null) n.d = 60;
+      if (n.h == null) n.h = Math.max(50, Math.ceil((n.t.split("\n").length * 15 + 13) / cE));
+    });
+    var b = new Bounds();
+    var svg = el("svg", { "class": "iso", role: "img", "aria-label": "Isometric drawing of " + sys.tab });
+    var floor = el("g", {}, svg), wires = el("g", { "class": "wires" }, svg), partsG = el("g", {}, svg), tags = el("g", { "class": "wires" }, svg);
+    sys.groups.forEach(function (gr) { drawPlate(floor, gr, b, tags); });
+    var byId = {};
+    sys.nodes.forEach(function (n) { byId[n.id] = n; });
+    sys.edges.forEach(function (e) { drawPipe(wires, e, byId, b, tags); });
+    var sorted = sys.nodes.slice().sort(order);
+    var nodeEls = [];
+    sorted.forEach(function (n) {
+      var g = drawPart(partsG, n, b);
+      function pick() {
+        nodeEls.forEach(function (o) { o.classList.remove("sel"); });
+        g.classList.add("sel");
+        showDetail(detail, n);
+      }
+      g.addEventListener("click", pick);
+      g.addEventListener("keydown", function (ev) { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); pick(); } });
+      g._pick = pick; g._node = n;
+      nodeEls.push(g);
+    });
+    var pad = 26;
+    svg.setAttribute("viewBox", [(b.x0 - pad).toFixed(1), (b.y0 - pad).toFixed(1), (b.x1 - b.x0 + 2 * pad).toFixed(1), (b.y1 - b.y0 + 2 * pad).toFixed(1)].join(" "));
+    var ordered = sys.nodes.map(function (n) { return nodeEls.filter(function (g) { return g._node === n; })[0]; });
+    return { svg: svg, nodes: ordered, wires: [wires, tags] };
+  }
+
+  function glyph(status) {
+    var svg = el("svg", { "class": "iso", "aria-hidden": "true" });
+    var b = new Bounds();
+    var n = { x: 0, y: 0, w: 46, d: 30, h: 22, s: status, t: "" };
+    var g = drawPart(svg, n, b);
+    g.removeAttribute("tabindex"); g.removeAttribute("role"); g.setAttribute("class", "glyph " + status);
+    var tx = g.querySelector("text"); if (tx) tx.remove();
+    svg.setAttribute("viewBox", [b.x0 - 3, b.y0 - 3, b.x1 - b.x0 + 6, b.y1 - b.y0 + 6].join(" "));
+    return svg;
+  }
+  document.querySelectorAll(".sw").forEach(function (sw) {
+    var st = sw.classList.contains("merged") ? "merged" : sw.classList.contains("waiting") ? "waiting" : sw.classList.contains("designed") ? "designed" : "idea";
+    sw.replaceWith(glyph(st));
+  });
+
+  function showDetail(box, n) {
+    box.innerHTML = "";
+    var head = h("div", "head");
+    head.appendChild(h("h3", "", n.t.replace(/\n/g, " ")));
+    head.appendChild(h("span", "chip " + n.s, ST[n.s]));
+    box.appendChild(head);
+    box.appendChild(h("p", "", n.i));
+  }
+
+  function list(cls, title, items) {
+    var c = h("div", "col " + cls);
+    var none = items.length === 1 && items[0][0] === "Nothing";
+    c.appendChild(h("h3", "", title + ' <span class="count">' + (none ? 0 : items.length) + "</span>"));
+    var ul = h("ul");
+    items.forEach(function (it) { ul.appendChild(h("li", "", it[0] + (it[1] ? "<em>" + it[1] + "</em>" : ""))); });
+    c.appendChild(ul);
+    return c;
+  }
+
+  function readout(sys) {
+    var c = { merged: 0, waiting: 0, designed: 0, idea: 0 };
+    sys.nodes.forEach(function (n) { if (c[n.s] != null) c[n.s]++; });
+    var total = c.merged + c.waiting + c.designed + c.idea;
+    var s = total + " parts · " + c.merged + " merged · " + c.waiting + " waiting · " + c.designed + " designed";
+    if (c.idea) s += " · " + c.idea + " idea";
+    return s;
+  }
+
+  var tabButtons = [], panels = [];
+  SYSTEMS.forEach(function (sys, idx) {
+    var b = h("button", "", '<span class="n">' + (idx + 1) + "</span>" + sys.tab);
+    b.type = "button"; b.setAttribute("role", "tab"); b.id = "tab-" + sys.id;
+    b.setAttribute("aria-controls", "panel-" + sys.id);
+    b.addEventListener("click", function () { select(sys.id, true); });
+    tabsEl.appendChild(b); tabButtons.push(b);
+
+    var sec = h("section", "sys"); sec.id = "panel-" + sys.id; sec.setAttribute("role", "tabpanel"); sec.setAttribute("aria-labelledby", b.id);
+    var intro = h("div", "intro");
+    intro.appendChild(h("span", "mono", "Part " + (idx + 1) + " of 5"));
+    intro.appendChild(h("h2", "", sys.tab));
+    intro.appendChild(h("p", "what", sys.what));
+    sec.appendChild(intro);
+
+    var detail = h("div", "detail"); detail.setAttribute("aria-live", "polite");
+    var map = buildMap(sys, detail);
+    var bar = h("div", "mapbar");
+    var filt = h("div", "filter"); filt.setAttribute("role", "group"); filt.setAttribute("aria-label", "Highlight parts");
+    var opts = [["all", "Everything"], ["merged", "Merged"], ["waiting", "Waiting"], ["designed", "Designed only"]];
+    var fbtns = [];
+    opts.forEach(function (o) {
+      var fb = h("button", "", o[1]); fb.type = "button"; fb.id = "f-" + sys.id + "-" + o[0];
+      fb.setAttribute("aria-pressed", o[0] === "all" ? "true" : "false");
+      fb.addEventListener("click", function () {
+        fbtns.forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+        fb.setAttribute("aria-pressed", "true");
+        map.nodes.forEach(function (g) {
+          var s = g.dataset.status;
+          var keep = o[0] === "all" || s === o[0] || (o[0] === "designed" && s === "idea");
+          g.classList.toggle("dim", !keep);
+        });
+        map.wires.forEach(function (w) { w.classList.toggle("dim", o[0] !== "all"); });
+      });
+      filt.appendChild(fb); fbtns.push(fb);
+    });
+    bar.appendChild(h("span", "hint", "Highlight:"));
+    bar.appendChild(filt);
+    sec.appendChild(bar);
+
+    var plate = h("div", "plate");
+    plate.appendChild(h("span", "corner tl", "Fig. " + (idx + 1)));
+    plate.appendChild(h("span", "corner tr", sys.tab));
+    var sc = h("div", "scroller"); sc.appendChild(map.svg); plate.appendChild(sc);
+    plate.appendChild(h("span", "corner bl", "Hover or tap a part to read it. Moving dots show where work flows; dashed outlines are parts only on paper."));
+    plate.appendChild(h("span", "corner br", readout(sys)));
+    sec.appendChild(plate);
+    sec.appendChild(detail);
+    var first = map.nodes.filter(function (g) { return g.dataset.status !== "actor"; })[0];
+    if (first) first._pick();
+
+    var cols = h("div", "cols");
+    cols.appendChild(list("merged", "Merged", sys.merged));
+    cols.appendChild(list("waiting", "Built, waiting for merge", sys.waiting));
+    cols.appendChild(list("designed", "Designed only", sys.designed));
+    sec.appendChild(cols);
+
+    var weak = h("div", "weak");
+    weak.appendChild(h("h3", "", "Weak spots and open questions"));
+    var ol = h("ol");
+    sys.weak.forEach(function (w) {
+      var li = h("li", w[2] ? "q" : "");
+      li.appendChild(h("div", "", "<strong>" + w[0] + "</strong> <span class=\"sub\">" + w[1] + "</span>"));
+      ol.appendChild(li);
+    });
+    weak.appendChild(ol);
+    sec.appendChild(weak);
+    panelsEl.appendChild(sec); panels.push(sec);
+  });
+
+  function select(id, remember) {
+    SYSTEMS.forEach(function (s, i) {
+      var on = s.id === id;
+      tabButtons[i].setAttribute("aria-selected", on ? "true" : "false");
+      tabButtons[i].tabIndex = on ? 0 : -1;
+      panels[i].hidden = !on;
+    });
+    if (remember) { try { localStorage.setItem("qmx5-tab", id); } catch (e) {} }
+  }
+  var start = SYSTEMS[0].id;
+  try { var saved = localStorage.getItem("qmx5-tab"); if (saved) start = saved; } catch (e) {}
+  var hash = (location.hash || "").slice(1);
+  if (hash) start = hash;
+  if (!SYSTEMS.some(function (s) { return s.id === start; })) start = SYSTEMS[0].id;
+  select(start, false);
+
+  tabsEl.addEventListener("keydown", function (ev) {
+    var i = tabButtons.indexOf(document.activeElement);
+    if (i < 0) return;
+    if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+      var j = (i + (ev.key === "ArrowRight" ? 1 : -1) + tabButtons.length) % tabButtons.length;
+      tabButtons[j].focus(); select(SYSTEMS[j].id, true);
+    }
+  });
+})();
+</script>
