@@ -1,8 +1,8 @@
 """Rebuildable projections of run journals under `journals/` and `runs/<id>/`.
 
-The control plane's remote runs are gone (RUN1b); a placed job is an engine run. The index stays
-while `runs_list`, `runs_get` and the `runs` work kind keep callers outside this package
-(`qmx_agents.tasks` and the server's maintenance loop)."""
+A placed job is an engine run (engine AD-57), served by `workflow_runs_list`, `workflow_runs_get`
+and `workflow_runs_cancel`. The index stays for the live lanes that read a chat's cost and for the
+aggregates' count of runs."""
 
 from __future__ import annotations
 

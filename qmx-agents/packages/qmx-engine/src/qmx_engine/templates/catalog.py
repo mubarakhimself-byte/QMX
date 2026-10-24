@@ -393,6 +393,15 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="run-on-a-machine",
         test_inputs={"command": ["python", "-c", "print(42)"]},
     ),
+    Template(
+        "backup-weekly",
+        "Weekly backup",
+        card("46", "G13"),
+        "RUN1C",
+        folder="backup-weekly",
+        triggers=(Cron("0 6 * * 1", "UTC"),),
+        test_inputs={"dry_run": True},
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {

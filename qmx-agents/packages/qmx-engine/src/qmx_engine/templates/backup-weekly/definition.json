@@ -1,0 +1,31 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "backup-weekly",
+  "name": "Weekly backup",
+  "inputs": {
+    "type": "object",
+    "properties": {"dry_run": {"type": "boolean", "description": "publish nothing; snapshot against a local bare repository"}}
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the snapshot's status and commit, and the files it included and left out"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Mondays at 06:00 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "backup", "name": "Snapshot the small stores", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "retry": {"max_tries": 1},
+     "parameters": {"script": "scripts/backup.py"}}
+  ],
+  "connections": {
+    "Mondays at 06:00 UTC": {"main": [[{"node": "Snapshot the small stores", "port": "in",
+                                        "map": "one"}]]}
+  },
+  "meta": {"template": "backup-weekly"}
+}

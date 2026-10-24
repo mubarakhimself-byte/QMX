@@ -1,5 +1,5 @@
 """E57 trigger clause and the RUN1a lanes: an app's schedule is an engine trigger on an `app_op`
-workflow, the supervisor schedules nothing, and the control run list never shows a chat journal.
+workflow, the supervisor schedules nothing, and the control's run index never shows a chat journal.
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python ../scripts/live/engine/e57_app_trigger.py [lane]`
@@ -13,7 +13,7 @@ example with the supervisor test server and one job) on throwaway homes under th
   it fires twice, each fire is an engine run whose `app_op` node ran the job in the app's process,
   and those runs are in the engine's run list. Perf: seconds from each fire's due time to its
   `app_op` start, with `scheduler.tick` at 10 s (his setting; the default is 60 s).
-- `runs`: a chat journal under `runs/` and a remote run journal; the control run list shows only
+- `runs`: a chat journal under `runs/` and a remote run journal; the control's run index shows only
   the remote run.
 - `stopped`: the app stops, then its trigger fires; the run fails with the supervisor's reason.
 - `breaker`: a job that raises, run three times; the crash breaker still trips.
@@ -263,10 +263,10 @@ def lane_runs(log: Log) -> None:
     journal(root / "journals/remote-r9.jsonl", "r9", {"kind": "job", "target": "contabo"})
     control = ControlService(root)
     try:
-        listed = [run["id"] for run in control.runs_list()]
+        listed = [run["id"] for run in control.run_index.refresh()]
     finally:
         control.close()
-    log(f"runs_list ids {listed}")
+    log(f"run index ids {listed}")
     log.check("the chat journal is not listed", "chat-7" not in listed, listed)
     log.check("the remote run still is", listed == ["r9"], listed)
 

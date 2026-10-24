@@ -1,11 +1,10 @@
 """Transport adapters over the same bound service methods."""
 
-import asyncio
 import json
 import os
 import secrets
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
-from contextlib import asynccontextmanager, suppress
+from contextlib import asynccontextmanager
 from functools import wraps
 from pathlib import Path
 from typing import Annotated, Any
@@ -100,29 +99,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-        async def maintain() -> None:
-            while True:
-                try:
-                    await asyncio.to_thread(service.runs_list)
-                    if service.settings_get("backup").get("repository"):
-                        await asyncio.to_thread(service.backup_weekly)
-                except ControlError as error:
-                    await asyncio.to_thread(
-                        service.record_work,
-                        "jobs",
-                        "maintenance",
-                        {"status": "failed", "error": error.document()},
-                    )
-                await asyncio.sleep(60)
-
-        maintenance = asyncio.create_task(maintain())
         try:
             async with mcp_app.lifespan(app):
                 yield
         finally:
-            maintenance.cancel()
-            with suppress(asyncio.CancelledError):
-                await maintenance
             service.close()
 
     app = FastAPI(title="QMX control", version="0.1.0", lifespan=lifespan)

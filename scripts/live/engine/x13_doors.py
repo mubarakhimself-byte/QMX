@@ -16,7 +16,7 @@ Lanes are `regression rest tools cancel menu perf`; none named runs all. Each wr
   quiet rows as "always allow" leaves one. The draft saves under `agent:<chat>` and the test passes
   with no ask; publish raises exactly one ask and then returns a card, and no version exists.
 - `cancel` (lane 4): a run held on a `wait` node is cancelled over REST and ends `stopped`
-  (reason `operator`); `GET /api/runs` lists none of the engine's runs.
+  (reason `operator`); `GET /api/runs` answers 404 while `GET /api/workflow-runs` lists the run.
 - `menu` (lanes 5 to 9): `qmx_host` serves the workflow doors; REST explain equals the CLI's; a
   second host on one home is refused in one line naming the pid; a run's events stream in `seq`
   order; no bearer, 401.
@@ -414,12 +414,13 @@ def cancel(log: Log) -> None:
             kinds = [event.kind for event in reader.events(run["run_id"])]
         log(f"ledger kinds of the run: {kinds}")
         log.check("the ledger ends run_cancelled", kinds[-1:] == ["run_cancelled"], kinds[-1:])
-        remote = reply(log, "GET /api/runs", client.get("/api/runs"))
+        gone = client.get("/api/runs")
+        listed = reply(log, "GET /api/workflow-runs", client.get("/api/workflow-runs"))
         engine = {run["run_id"]}
         log.check(
-            "GET /api/runs lists none of the engine's runs",
-            not engine & {str(r.get("id")) for r in remote},
-            [r.get("id") for r in remote],
+            "the remote-run door is gone and the engine's door lists the run",
+            gone.status_code == 404 and engine <= {str(r.get("run_id")) for r in listed},
+            (gone.status_code, [r.get("run_id") for r in listed]),
         )
 
 

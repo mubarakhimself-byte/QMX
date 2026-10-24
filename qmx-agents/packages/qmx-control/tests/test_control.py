@@ -72,14 +72,10 @@ def test_rest_mcp_parity_and_openapi(tmp_path: Path) -> None:
     service.library_save(LibraryInput(title="Research", kind="note", content={"text": "rates"}))
     session = service.sessions_create(SessionInput(title="Overnight"))
     service.sessions_append(str(session["id"]), SessionBlock(type="text", content={"text": "done"}))
-    service.record_work("runs", "run-1", {"status": "running"})
-    service.record_work("jobs", "job-1", {"status": "complete"})
     service.settings_put("budgets", {"model_calls": 10})
     cases: list[tuple[str, str, dict[str, Any]]] = [
         ("library_search", "/api/library?query=rates", {"query": "rates"}),
         ("ops_sessions", "/api/sessions", {}),
-        ("workflows_remote_list", "/api/runs", {}),
-        ("workflows_jobs_list", "/api/jobs", {}),
         ("settings_read_get", "/api/settings/budgets", {"section": "budgets"}),
         (
             "ops_sessions_stream",
@@ -273,10 +269,9 @@ def test_sse_replay_for_each_topic(tmp_path: Path) -> None:
     service.sessions_append(
         str(session["id"]), SessionBlock(type="text", content={"text": "reply"})
     )
-    service.record_work("runs", "r1", {"status": "complete"})
-    service.record_work("jobs", "j1", {"status": "failed"})
+    service.notify_app("exchange-status", {"status": "running"})
     with TestClient(create_app(service, TOKEN)) as client:
-        for topic in ("runs", "jobs", "sessions"):
+        for topic in ("apps", "sessions"):
             headers = {**HEADERS, "Last-Event-ID": str(cursor if topic == "sessions" else 0)}
             response = client.get(f"/api/events/{topic}?max_events=1", headers=headers)
             assert response.headers["content-type"].startswith("text/event-stream")
@@ -291,7 +286,7 @@ def test_sse_replay_for_each_topic(tmp_path: Path) -> None:
         )
 
 
-def test_append_is_serialized_and_cancellation_is_honest(tmp_path: Path) -> None:
+def test_append_is_serialized(tmp_path: Path) -> None:
     service = ControlService(tmp_path)
     session = service.sessions_create(SessionInput(title="Concurrency"))
 
@@ -306,12 +301,6 @@ def test_append_is_serialized_and_cancellation_is_honest(tmp_path: Path) -> None
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sorted(pool.map(append, range(20))) == list(range(1, 21))
-    service.record_work("runs", "r1", {"status": "running"})
-    with pytest.raises(ControlError, match="not available"):
-        service.runs_cancel("r1")
-    assert service.runs_list()[0]["status"] == "running"
-    with pytest.raises(ControlError, match="Unknown"):
-        service.jobs_cancel("missing")
 
 
 def test_mcp_over_authenticated_http(tmp_path: Path) -> None:
@@ -385,7 +374,7 @@ def test_mcp_over_authenticated_http(tmp_path: Path) -> None:
         def receive_event() -> str:
             with httpx.stream(
                 "GET",
-                f"http://127.0.0.1:{port}/api/events/jobs?max_events=1",
+                f"http://127.0.0.1:{port}/api/events/apps?max_events=1",
                 headers=HEADERS,
                 timeout=10,
             ) as response:
@@ -396,8 +385,8 @@ def test_mcp_over_authenticated_http(tmp_path: Path) -> None:
         with ThreadPoolExecutor(max_workers=1) as pool:
             event = pool.submit(receive_event)
             assert subscribed.wait(timeout=10)
-            ControlService(tmp_path).record_work("jobs", "live-job", {"status": "complete"})
-            assert '"status": "complete"' in event.result(timeout=10)
+            ControlService(tmp_path).notify_app("exchange-status", {"status": "stopped"})
+            assert '"status": "stopped"' in event.result(timeout=10)
     finally:
         server.should_exit = True
         thread.join(timeout=10)

@@ -45,8 +45,7 @@ def test_the_old_remote_run_routes_are_gone(tmp_path: Path) -> None:
             (verb, url): rest.request(verb, url, headers=headers).status_code
             for verb, url in REMOVED_ROUTES
         }
-    # `runs_get` still serves GET /api/runs/{run_id}, so this one path answers "wrong method".
-    assert answers == {**dict.fromkeys(REMOVED_ROUTES, 404), ("POST", "/api/runs/remote"): 405}
+    assert answers == dict.fromkeys(REMOVED_ROUTES, 404)
 
 
 def test_no_catalog_row_or_tool_starts_old_remote_work(tmp_path: Path) -> None:
