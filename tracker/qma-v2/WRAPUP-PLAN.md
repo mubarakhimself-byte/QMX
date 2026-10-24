@@ -574,6 +574,7 @@ The pass design is `60-wrapup-seams.md` seam C (engine AD-28, Library AD-12).
 - [ ] Wire the quiesce check and the doctor row.
 - [ ] Make the pass secret durable and per home, and set the default door address.
 - [ ] Point the remote providers at the sidecar.
+- [ ] Make `qmx node vault install` build the PC's vault document itself (`Vault` and `sync_document` have no production caller today, so the sealed `qmx/read/ctrader-app` copy has no producer), add `R/vault.py` to this block if the builder needs it, and let the door admit the host-pass header on the forward routes the way WU8 admits it on the venue routes, because `Forwarder.read` sends no bearer and a PC forward to a real server host answers 401 today (both found by WU8).
 - [ ] After a secret rotation (re-pairing, or pairing an unpaired PC) the previous secret is accepted for one pass lifetime, and the pair procedure reloads the key on both hosts. `setup` and `pair` move an existing `/etc/qmx/vault/pairing-key` to `<home>/vault/pairing-key` once (edge cases).
 - [ ] While `[library] primary` is `pc`, the server host refuses puts onto `main` and takes the PC's history only through sync. Server-run steps land on `refs/runs` and reach `main` through the PC. Check the epoch code first, since it may already hold this (edge case).
 
