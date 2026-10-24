@@ -184,14 +184,14 @@ def test_a_cancelled_waiter_gives_its_turn_to_the_next() -> None:
     assert asyncio.run(served()) == (True, 1)
 
 
-def test_the_pc_table_is_cores_less_one_cpu_slots_and_three_container_slots(
+def test_the_pc_table_is_cores_less_one_cpu_three_container_and_one_gpu_slot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(qmx_engine.admission.os, "cpu_count", lambda: 8)
 
     table = {name: slots.size for name, slots in Capacity.of(DEFAULTS).slots.items()}
 
-    assert table == {"cpu": 7, "container": 3}
+    assert table == {"cpu": 7, "container": 3, "gpu": 1}
 
 
 def test_the_engine_keeps_no_chat_slot_counter(tmp_path: Path) -> None:

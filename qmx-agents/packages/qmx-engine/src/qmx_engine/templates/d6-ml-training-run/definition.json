@@ -50,7 +50,7 @@
     {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1, "position": [2420, 0], "retry": {"max_tries": 1}, "parameters": {"script": "scripts/stop.py"}, "effect": "none"}
   ],
   "connections": {
-    "On request": {"main": [[{"node": "Settle the slot, label and features", "port": "in", "map": "one"}, {"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "On request": {"main": [[{"node": "Settle the slot, label and features", "port": "in", "map": "one"}, {"node": "Build and split the dataset", "port": "in", "map": "one"}, {"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Settle the slot, label and features": {"main": [[{"node": "Build and split the dataset", "port": "in", "map": "one"}, {"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Assemble the model card", "port": "in", "map": "one"}]]},
     "Build and split the dataset": {"main": [[{"node": "Leakage and cost checks", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Leakage and cost checks": {"main": [[{"node": "No leak and within budget?", "port": "in", "map": "one"}, {"node": "Assemble the model card", "port": "in", "map": "one"}]]},

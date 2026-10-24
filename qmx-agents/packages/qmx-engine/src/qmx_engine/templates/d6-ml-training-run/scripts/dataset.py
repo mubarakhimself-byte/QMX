@@ -148,16 +148,16 @@ def learn(features, labels, epochs):
     return float((guessed == labels).mean())
 
 
-def split_of(rows, purge, embargo):
+def split_of(count, purge, embargo):
     """Point-in-time splits: two thirds train, one sixth validation, one sixth the sealed test, with
     the purge and embargo bars dropped between them so no feature window crosses a boundary."""
-    edge = len(rows) // 6
+    edge = count // 6
     first = edge * 4
     second = edge * 5
     return {
         "train": [0, max(0, first - purge)],
         "validation": [first + embargo, max(first + embargo, second - purge)],
-        "test": [second + embargo, len(rows)],
+        "test": [second + embargo, count],
     }
 
 
@@ -177,56 +177,63 @@ def opened(shared):
     return opened_door.value
 
 
-given = json.load(sys.stdin).get("in") or []
-row = ask(given)
-if not row:
-    fail("the run names no series and months to train on")
-series = series_of(row)
-if not series:
-    fail(f"{row} names no series")
-months = [str(month) for month in row["months"]]
-into = Path(os.environ["QMX_WORK"]) / "partitions"
-door = opened(Path(os.environ["QMX_WORK_SHARED"]))
-landed, why = partitions(door, series, months, into)
-if landed is None:
-    fail(f"the door did not serve {series} for {months}: {why}")
-ticks = read_ticks([Path(found["path"]) for found in landed])
-rows = len(ticks["t"])
-if rows < 100:
-    fail(f"{series} served {rows} rows, too few to train on")
-purge = int(row.get("purge_bars") or DEFAULT_PURGE_BARS)
-embargo = int(row.get("embargo_bars") or DEFAULT_EMBARGO_BARS)
-seed = int(row.get("seed") or DEFAULT_SEED)
-shuffle_score, chance_score = scored(ticks, seed)
-print(
-    json.dumps(
-        {
-            "slot": str(row.get("slot") or "the model's slot"),
-            "label": str(row.get("label") or "the next bar's direction"),
-            "horizon_bars": int(row.get("horizon_bars") or DEFAULT_HORIZON_BARS),
-            "features": [str(name) for name in row.get("features") or []],
-            "family": str(row.get("family") or ""),
-            "questions": [str(question) for question in row.get("questions") or []],
-            "series": series,
-            "months": [str(found["month"]) for found in landed],
-            "partitions": [
-                {key: found[key] for key in ("month", "fingerprint", "bytes")} for found in landed
-            ],
-            "rows": rows,
-            "splits": split_of(rows, purge, embargo),
-            "purge_bars": purge,
-            "embargo_bars": embargo,
-            "feature_lag_bars": DEFAULT_HORIZON_BARS,
-            "seed": seed,
-            "shuffle_score": shuffle_score,
-            "chance_score": chance_score,
-            "sealed_test": {"created": True, "touched": 0},
-            "estimate_usd": 0.0,
-            "code": {
-                "digest": code_digest(os.environ["QMX_CODE"]),
-                "folder": os.environ["QMX_CODE"],
-            },
-            "runs_on": {"placement": "pc", "gpu_slot": int(row.get("gpu_slot") or 0)},
-        }
+def main():
+    """The step: read the case the run names, materialise its partitions and print the dataset."""
+    given = json.load(sys.stdin).get("in") or []
+    row = ask(given)
+    if not row:
+        fail("the run names no series and months to train on")
+    series = series_of(row)
+    if not series:
+        fail(f"{row} names no series")
+    months = [str(month) for month in row["months"]]
+    into = Path(os.environ["QMX_WORK"]) / "partitions"
+    door = opened(Path(os.environ["QMX_WORK_SHARED"]))
+    landed, why = partitions(door, series, months, into)
+    if landed is None:
+        fail(f"the door did not serve {series} for {months}: {why}")
+    ticks = read_ticks([Path(found["path"]) for found in landed])
+    rows = len(ticks["t"])
+    if rows < 100:
+        fail(f"{series} served {rows} rows, too few to train on")
+    purge = int(row.get("purge_bars") or DEFAULT_PURGE_BARS)
+    embargo = int(row.get("embargo_bars") or DEFAULT_EMBARGO_BARS)
+    seed = int(row.get("seed") or DEFAULT_SEED)
+    shuffle_score, chance_score = scored(ticks, seed)
+    print(
+        json.dumps(
+            {
+                "slot": str(row.get("slot") or "the model's slot"),
+                "label": str(row.get("label") or "the next bar's direction"),
+                "horizon_bars": int(row.get("horizon_bars") or DEFAULT_HORIZON_BARS),
+                "features": [str(name) for name in row.get("features") or []],
+                "family": str(row.get("family") or ""),
+                "questions": [str(question) for question in row.get("questions") or []],
+                "series": series,
+                "months": [str(found["month"]) for found in landed],
+                "partitions": [
+                    {key: found[key] for key in ("month", "fingerprint", "bytes")}
+                    for found in landed
+                ],
+                "rows": rows,
+                "splits": split_of(rows, purge, embargo),
+                "purge_bars": purge,
+                "embargo_bars": embargo,
+                "feature_lag_bars": DEFAULT_HORIZON_BARS,
+                "seed": seed,
+                "shuffle_score": shuffle_score,
+                "chance_score": chance_score,
+                "sealed_test": {"created": True, "touched": 0},
+                "estimate_usd": 0.0,
+                "code": {
+                    "digest": code_digest(os.environ["QMX_CODE"]),
+                    "folder": os.environ["QMX_CODE"],
+                },
+                "runs_on": {"placement": "pc", "gpu_slot": int(row.get("gpu_slot") or 0)},
+            }
+        )
     )
-)
+
+
+if __name__ == "__main__":
+    main()

@@ -3,9 +3,10 @@
 The step reads the dataset the previous step built from the partitions the door materialised. It
 trains the smallest model that can learn something over those partitions, choosing the device from
 what the machine has: the GPU slot the placement declares when a card is there, the CPU otherwise,
-and it says which. The PC's own reading (probe P-GPU: a Quadro T1000 with 4,096 MB, 21.4 MB peak
-while training, 0.5 s per epoch on 80,000 rows) is what the template ships as its default, and the
-CPU is the named fallback, never a silent one.
+and it says which. The PC's own reading (probe P-GPU: a Quadro T1000 with 4,095.8 MB, 21.4 MB peak
+while training, 0.318 s per epoch on 80,000 rows) is what the template ships as its default, and the
+CPU is the named fallback, never a silent one. At that toy size the CPU's 0.14 s epoch is faster, so
+the slot is the default for the models that grow into it, not a claim about this one.
 
 The lineage is written here, by the template: the partitions with their fingerprints, the digest of
 the code that trained the model, the seed, the framework, the hardware and the seconds per epoch.
@@ -140,6 +141,8 @@ def trained(device, features, labels, split, seed, epochs):
 
 def score(model, inputs, target):
     """Accuracy of the fitted model on one window, to four places."""
+    import torch  # noqa: PLC0415 (the model's framework, imported where it is used)
+
     with torch.no_grad():
         guessed = (model(inputs) > 0).float().reshape(-1)
     return round(float((guessed == target.reshape(-1)).float().mean()), 4)
@@ -152,70 +155,67 @@ def digest_of(path):
     return f"sha256:{found.hexdigest()}"
 
 
-given = json.load(sys.stdin).get("in") or []
-data = shaped(given)
-if not data:
-    fail("the run names no dataset: the previous step served no partitions")
-try:
-    import torch
-except ImportError:
-    fail("this attempt has no torch, and a training run never guesses a framework")
-
-device, hardware = device_of(torch)
-columns = reads([str(part["path"]) for part in data["partitions"]])
-features, labels = windows(columns)
-if len(labels) < 100:
-    fail(f"{data['series']} served {len(labels)} rows, too few to train on")
-ran = trained(
-    device,
-    features,
-    labels,
-    data["splits"],
-    int(data.get("seed") or SEED),
-    EPOCHS,
-)
-spread = [
-    trained(
-        device, features, labels, data["splits"], int(data.get("seed") or SEED) + extra, EPOCHS
-    )["validation_score"]
-    for extra in range(1, BAND_SEEDS)
-]
-work = Path(os.environ["QMX_WORK"])
-work.mkdir(parents=True, exist_ok=True)
-torch.save({"features": features.shape[1], "seed": data.get("seed")}, work / WEIGHTS)
-print(
-    json.dumps(
-        {
-            "configs": [
-                {
-                    "id": 0,
-                    "train_score": ran["train_score"],
-                    "validation_score": ran["validation_score"],
-                }
-            ],
-            "chosen": 0,
-            "sealed_score": ran["test_score"],
-            "validation_band": [
-                round(min([ran["validation_score"], *spread]), 4),
-                round(max([ran["validation_score"], *spread]), 4),
-            ],
-            "ablation": None,
-            "trials": 1,
-            "model_ref": {
-                "weights": str(work / WEIGHTS),
-                "digest": digest_of(work / WEIGHTS),
-            },
-            "lineage": {
-                "series": data["series"],
-                "months": data["months"],
-                "partitions": data["partitions"],
-                "seed": int(data.get("seed") or SEED),
-                "code": data["code"],
-                "framework": f"torch {torch.__version__}",
-                "hardware": {"placement": "pc", "device": device, "found": hardware},
-                "seconds_per_epoch": ran["seconds_per_epoch"],
-                "peak_memory_mb": ran["peak_memory_mb"],
-            },
-        }
+def main():
+    """The step: train on the dataset the previous step served and print the lineage it carries."""
+    given = json.load(sys.stdin).get("in") or []
+    data = shaped(given)
+    if not data:
+        fail("the run names no dataset: the previous step served no partitions")
+    try:
+        import torch  # noqa: PLC0415 (the step imports it here, never at module load)
+    except ImportError:
+        fail("this attempt has no torch, and a training run never guesses a framework")
+    device, hardware = device_of(torch)
+    columns = reads([str(part["path"]) for part in data["partitions"]])
+    features, labels = windows(columns)
+    if len(labels) < 100:
+        fail(f"{data['series']} served {len(labels)} rows, too few to train on")
+    seed = int(data.get("seed") or SEED)
+    ran = trained(device, features, labels, data["splits"], seed, EPOCHS)
+    spread = [
+        trained(device, features, labels, data["splits"], seed + extra, EPOCHS)["validation_score"]
+        for extra in range(1, BAND_SEEDS)
+    ]
+    work = Path(os.environ["QMX_WORK"])
+    work.mkdir(parents=True, exist_ok=True)
+    torch.save({"features": features.shape[1], "seed": data.get("seed")}, work / WEIGHTS)
+    print(
+        json.dumps(
+            {
+                "configs": [
+                    {
+                        "id": 0,
+                        "train_score": ran["train_score"],
+                        "validation_score": ran["validation_score"],
+                    }
+                ],
+                "chosen": 0,
+                "sealed_score": ran["test_score"],
+                "validation_band": [
+                    round(min([ran["validation_score"], *spread]), 4),
+                    round(max([ran["validation_score"], *spread]), 4),
+                ],
+                "ablation": None,
+                "trials": 1,
+                "model_ref": {
+                    "weights": str(work / WEIGHTS),
+                    "digest": digest_of(work / WEIGHTS),
+                },
+                "lineage": {
+                    "series": data["series"],
+                    "months": data["months"],
+                    "partitions": data["partitions"],
+                    "seed": seed,
+                    "code": data["code"],
+                    "framework": f"torch {torch.__version__}",
+                    "hardware": {"placement": "pc", "device": device, "found": hardware},
+                    "seconds_per_epoch": ran["seconds_per_epoch"],
+                    "peak_memory_mb": ran["peak_memory_mb"],
+                },
+            }
+        )
     )
-)
+
+
+if __name__ == "__main__":
+    main()

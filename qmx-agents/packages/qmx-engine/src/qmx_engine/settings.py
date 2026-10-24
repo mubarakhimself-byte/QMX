@@ -140,7 +140,7 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "inline_limit_bytes": 65_536,  # Claude's default, UI-editable
         "placement.pc.cpu_slots": None,  # Claude's default, UI-editable; unset is cores minus one
         "placement.pc.container_slots": 3,  # Claude's default, UI-editable
-        "placement.pc.gpu_slots": 1,  # the Quadro T1000 P-GPU measured (DR13), UI-editable
+        "placement.pc.gpu_slots": 1,  # Claude's default, UI-editable; the one Quadro T1000 (DR13)
         "placement.contabo.kind": "owned",  # Claude's default, UI-editable; AD-30 row
         "placement.contabo.relay": "local",  # Claude's default, UI-editable; the central relay
         "placement.contabo.attempt_cpus": 2,  # Claude's default, UI-editable
