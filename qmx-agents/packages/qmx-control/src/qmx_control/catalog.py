@@ -57,6 +57,16 @@ CORE_PACK: Final = "qmx"
 APP_PREFIX: Final = "app:"
 """A pack's toolset is `app:<id>` (AD-61). The wire form of a toolset may not carry `:`, so it
 becomes `_` where the CLI's tool name is built."""
+OBSERVER_TOOLSETS: Final[frozenset[str]] = frozenset({"ops"})
+"""The toolset an observer token lists (engine AD-69, HARNESS-REQUESTS H61): the `ops` rows, reads
+only. The rule is a toolset and an approval, not a path list, so a `broker_read` row and a Library
+content row are refused by construction rather than by a list that drifts."""
+OBSERVER_WRITES: Final[frozenset[str]] = frozenset({"ops_note"})
+"""The one write an observer may make: the diagnosis note, on the observer's own ref. Every other
+`domain_write`, `manage` and `propose_money` row is refused, so an outside agent still only looks
+and leaves one note (AD-69)."""
+OBSERVER_PATHS: Final[tuple[str, ...]] = ("/api/doctor",)
+"""The one route an observer reads that is no catalog row: the harness's doctor page."""
 CALL_DEPTH_SETTING: Final = "apps.call_depth"
 """The host setting that bounds a ring of asks (AD-64). There is no default number: a host that
 sets none lets a ring run until the stuck detector sees it."""

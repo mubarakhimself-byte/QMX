@@ -37,10 +37,11 @@ from typing import IO, Final, Self, cast
 
 from qmx_ledger.journal import encoded
 
+from qmx_engine import telemetry
 from qmx_engine.ledger import spans
 from qmx_engine.ledger.events import KINDS, Event, EventKind, JsonObject
 from qmx_engine.ledger.migrations import migrate, schema_version
-from qmx_engine.ledger.redact import redact_json
+from qmx_engine.ledger.redact import exported, redact_json
 
 BATCH_LIMIT: Final = 256
 BUSY_TIMEOUT_S: Final = 5.0
@@ -160,6 +161,7 @@ class Ledger:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
+        telemetry.opened(path.parent.parent)
         self._lock = _WriterLock(path.with_name(path.name + ".lock"))
         self._queue: queue.SimpleQueue[_Item | object] = queue.SimpleQueue()
         self._ready = threading.Event()
@@ -237,7 +239,20 @@ class Ledger:
             spans.apply(txn.connection, event, redactions)
             return event
 
-        return self.write(operation)
+        event = self.write(operation)
+        exported(
+            "event",
+            encoded(
+                {
+                    "run_id": event.run_id,
+                    "seq": event.seq,
+                    "at": event.at,
+                    "kind": event.kind,
+                    "data": event.data,
+                }
+            ).decode(),
+        )
+        return event
 
     def close(self) -> None:
         with self._close_mutex:

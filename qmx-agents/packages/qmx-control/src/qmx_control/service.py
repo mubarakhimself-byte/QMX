@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import secrets
 import sqlite3
 import threading
 import tomllib
 import uuid
 from collections.abc import AsyncIterator, Callable, Generator, Mapping, Sequence
 from contextlib import closing, contextmanager
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 from typing import Any, Final, Literal, NoReturn, Protocol, cast
 from urllib.parse import urlsplit
@@ -29,12 +32,15 @@ from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
 from qmx_broker.service import read_proposals
+from qmx_library.cards import SERIES_PREFIX
+from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
 from qmx_remote.models import RemoteSettings
 
 from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
 from qmx_control.catalog import operation
+from qmx_control.library import OPERATOR as LIBRARY_OPERATOR
 from qmx_control.library import Library
 from qmx_control.models import ControlError as ControlError  # noqa: PLC0414 - public re-export
 from qmx_control.models import DelegateCompletion as DelegateCompletion  # noqa: PLC0414
@@ -57,6 +63,7 @@ type SettingsSection = Literal[
     "engine",
     "roles",
     "rules",
+    "observers",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -72,6 +79,18 @@ EVAL_RUN: Final = "eval-run"
 """The tag of a battery result, the item a change card reads."""
 SLOT_KINDS: Final = frozenset({"persona", "methodology", "skill"})
 """The Library kinds whose drafts the battery tests before he publishes them."""
+OBSERVERS: Final = "observers.json"
+"""The operator's observer tokens under the home. A row keeps a token's hash, never the token."""
+OBSERVER_PREFIX: Final = "obs-"
+OBSERVER_TTL_DAYS: Final = 30
+"""Appendix D: an observer token expires after 30 days (Claude's default, a Settings value)."""
+OBSERVER_REF: Final = "refs/agents/{observer}/diagnosis"
+"""Where an outside agent's diagnosis note says it belongs: the observer's own ref (AD-69)."""
+NOTE_TITLE: Final = "an outside agent left a diagnosis"
+"""How the inbox names a diagnosis note. `info` never enters the engine's trouble inbox, so the
+note is a control row the inbox lists beside the engine's items."""
+LOGS: Final = "logs"
+"""The home's log folder: heartbeat, connection, feed and telemetry reads live here as JSON."""
 
 
 def model_subject(current: str | None, new: str) -> str:
@@ -121,6 +140,11 @@ class SessionBlock(BaseModel):
         "needs_you",
     ]
     content: Document
+
+
+class NoteInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(min_length=1, max_length=10_000)
 
 
 def _document(value: str) -> Document:
@@ -257,6 +281,146 @@ def legacy_brokers(stored: Document) -> Document:
     }
 
 
+@dataclass(frozen=True, slots=True)
+class Observer:
+    """One live observer token's row, as the door reads it."""
+
+    id: str
+    name: str
+    expires_at: str
+
+
+_OBSERVERS_LOCK: Final = threading.Lock()
+
+
+def _token_hash(token: str) -> str:
+    return sha256(token.encode()).hexdigest()
+
+
+def _instant(value: str) -> datetime | None:
+    try:
+        found = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return found if found.tzinfo is not None else found.replace(tzinfo=UTC)
+
+
+class Observers:
+    """The operator's observer tokens: minted in Settings, revocable, expiring (AD-69, H61).
+
+    The file under the home keeps each token's hash and never the token, so reading it gives no
+    bearer. A token is refused once its row is revoked or its `expires_at` passed; a minted token
+    is shown to the operator once, in the answer that created it.
+    """
+
+    def __init__(self, home: Path) -> None:
+        self.path = home / OBSERVERS
+
+    def rows(self) -> list[Document]:
+        return [self._row(entry) for entry in self._load()]
+
+    def create(self, name: str) -> Document:
+        cleaned = name.strip()
+        if not cleaned:
+            raise ControlError("invalid_observer", "An observer needs a name.")
+        token = secrets.token_urlsafe(32)
+        now = datetime.now(UTC)
+        entry: dict[str, Any] = {
+            "id": f"{OBSERVER_PREFIX}{uuid.uuid4().hex[:12]}",
+            "name": cleaned,
+            "token_hash": _token_hash(token),
+            "created_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=OBSERVER_TTL_DAYS)).isoformat(),
+            "revoked_at": None,
+        }
+        with _OBSERVERS_LOCK:
+            entries = self._load()
+            entries.append(entry)
+            self._store(entries)
+        return {
+            **self._row(entry),
+            "token": token,
+            "ref": OBSERVER_REF.format(observer=entry["id"]),
+        }
+
+    def revoke(self, observer_id: str) -> Document:
+        with _OBSERVERS_LOCK:
+            entries = self._load()
+            found = next((entry for entry in entries if entry.get("id") == observer_id), None)
+            if found is None:
+                raise ControlError("not_found", f"no observer {observer_id}", 404)
+            found["revoked_at"] = datetime.now(UTC).isoformat()
+            self._store(entries)
+        return self._row(found)
+
+    def verify(self, token: str, *, now: datetime | None = None) -> Observer | None:
+        """The observer a presented token names, or None when no live row holds it."""
+        digest = _token_hash(token)
+        for entry in self._load():
+            held = entry.get("token_hash")
+            if not isinstance(held, str) or not secrets.compare_digest(held, digest):
+                continue
+            if entry.get("revoked_at"):
+                return None
+            expires = _instant(str(entry.get("expires_at") or ""))
+            if expires is None or expires <= (now or datetime.now(UTC)):
+                return None
+            return Observer(str(entry["id"]), str(entry.get("name") or ""), expires.isoformat())
+        return None
+
+    def _row(self, entry: Mapping[str, Any]) -> Document:
+        return {
+            "id": entry["id"],
+            "name": entry.get("name") or "",
+            "created_at": entry.get("created_at") or "",
+            "expires_at": entry.get("expires_at") or "",
+            "revoked_at": entry.get("revoked_at"),
+            "ref": OBSERVER_REF.format(observer=entry["id"]),
+        }
+
+    def _load(self) -> list[dict[str, Any]]:
+        try:
+            raw: object = json.loads(self.path.read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            return []
+        if not isinstance(raw, dict):
+            return []
+        rows = cast("dict[str, object]", raw).get("observers")
+        if not isinstance(rows, list):
+            return []
+        return [cast("dict[str, Any]", row) for row in cast("list[object]", rows)]
+
+    def _store(self, entries: Sequence[Mapping[str, Any]]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        scratch = self.path.with_suffix(".tmp")
+        scratch.write_text(json.dumps({"observers": list(entries)}, indent=2), encoding="utf-8")
+        scratch.replace(self.path)
+
+
+class _Adopted:
+    """The home this process's one door reads observer rows from."""
+
+    home: Path | None = None
+
+
+_adopted = _Adopted()
+
+
+def adopt_observers(home: Path | None) -> None:
+    """Point this process at the home whose observer rows its door reads.
+
+    A host builds one `ControlService`, for its own home, and the one door it mounts asks this
+    module. A process that builds no service adopts nothing, so no door recognizes a token.
+    """
+    _adopted.home = None if home is None else home.resolve()
+
+
+def observers() -> Observers | None:
+    """This process's observer store, or None while no home adopted one."""
+    found = _adopted.home
+    return None if found is None else Observers(found)
+
+
 class ControlService:
     def __init__(
         self,
@@ -281,6 +445,7 @@ class ControlService:
         self.library = Library(self.home)
         self.run_index = RunIndex(self.home)
         self._aggregate = read_cache(ttl=5)(self._aggregate_read)
+        adopt_observers(self.home)
         with self._connect() as db:
             db.executescript("""
                 PRAGMA journal_mode=WAL;
@@ -295,6 +460,9 @@ class ControlService:
                     ON delegate_completions(parent_session, delivered_at);
                 CREATE TABLE IF NOT EXISTS operator_cursor (name TEXT PRIMARY KEY,
                     position INTEGER NOT NULL, at TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS observer_notes (id TEXT PRIMARY KEY,
+                    observer TEXT NOT NULL, ref TEXT NOT NULL, body TEXT NOT NULL,
+                    at TEXT NOT NULL);
             """)
 
     @contextmanager
@@ -385,7 +553,9 @@ class ControlService:
 
     @operation("settings_read", "get", "read", rest=("GET", "/api/settings/{section}"))
     def settings_get(self, section: SettingsSection) -> Document:
-        """Read UI-editable provider, MCP, budget or memory settings."""
+        """Read UI-editable provider, MCP, budget, memory or observer settings."""
+        if section == "observers":
+            return cast("Document", {"observers": Observers(self.home).rows()})
         with self._lock:
             path = self.home / "settings.toml"
             values: Document = {}
@@ -434,7 +604,27 @@ class ControlService:
         with self._lock:
             return self._settings_put(section, values)
 
+    def _observers_put(self, values: Document) -> Document:
+        """Mint or revoke one observer token, as a Settings write by the operator (AD-69).
+
+        A mint sends a `name` and answers once with the token; a revoke sends the row's `revoke`
+        id. The token never lands in `settings.toml`, and the answer lists every row without one.
+        """
+        store = Observers(self.home)
+        name = values.get("name")
+        revoke = values.get("revoke")
+        if isinstance(revoke, str) and revoke:
+            return cast("Document", {"revoked": store.revoke(revoke), "observers": store.rows()})
+        if isinstance(name, str) and name.strip():
+            return cast("Document", {"created": store.create(name), "observers": store.rows()})
+        raise ControlError(
+            "invalid_observer",
+            "Send a name to mint an observer token, or a revoke id to end one.",
+        )
+
     def _settings_put(self, section: SettingsSection, values: Document) -> Document:
+        if section == "observers":
+            return self._observers_put(values)
         _no_secrets(values)
         stored_rows: list[dict[str, Any]] | None = None
         if section in HOST_SECTIONS:
@@ -1283,6 +1473,61 @@ class ControlService:
             ],
         }
 
+    @operation("ops", "health", "read", rest=("GET", "/api/ops/health"))
+    def ops_health(self) -> Document:
+        """Read the data health: card freshness, feeds, connections, free disk and telemetry."""
+        return data_health(self.home, self.library)
+
+    @operation("ops", "note", "domain_write", rest=("POST", "/api/ops/notes"))
+    def ops_note(self, note: NoteInput, observer: str = "") -> Document:
+        """Save a diagnosis note on an observer's own ref; the inbox says it arrived.
+
+        `observer` is the id the door vouched for, appended to the query it forwards; a call
+        without one (a local-token client) has no observer ref to write on and is refused.
+        """
+        if not observer.strip():
+            raise ControlError(
+                "observer_required", "A diagnosis note is saved by an observer token's call.", 403
+            )
+        return self._save_note(observer.strip(), note.body)
+
+    def _save_note(self, observer: str, body: str) -> Document:
+        note_id = f"note-{uuid.uuid4().hex[:12]}"
+        at = datetime.now(UTC).isoformat()
+        ref = OBSERVER_REF.format(observer=observer)
+        with self._lock, self._connect() as db:
+            db.execute(
+                "INSERT INTO observer_notes(id,observer,ref,body,at) VALUES(?,?,?,?,?)",
+                (note_id, observer, ref, body, at),
+            )
+        return {
+            "id": note_id,
+            "kind": "info",
+            "title": NOTE_TITLE,
+            "observer": observer,
+            "ref": ref,
+            "body": body,
+            "at": at,
+        }
+
+    def _notes(self) -> list[Document]:
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT id,observer,ref,body,at FROM observer_notes ORDER BY at"
+            ).fetchall()
+        return [
+            {
+                "id": row[0],
+                "kind": "info",
+                "title": NOTE_TITLE,
+                "observer": row[1],
+                "ref": row[2],
+                "body": row[3],
+                "at": row[4],
+            }
+            for row in rows
+        ]
+
     @operation(
         "workflows", "runs_cancel", "manage", rest=("POST", "/api/workflow-runs/{run_id}/cancel")
     )
@@ -1338,13 +1583,188 @@ class ControlService:
 
     @operation("workflows", "inbox_list", "read", rest=("GET", "/api/inbox"))
     def workflow_inbox_list(self) -> list[Document]:
-        """List open workflow inbox items."""
-        return self._engine("workflow_inbox.list").workflow_inbox_list()
+        """List open workflow inbox items, then the diagnoses outside agents left."""
+        return [*self._notes(), *self._engine("workflow_inbox.list").workflow_inbox_list()]
 
     @operation("apps_admin", "archive", "manage", rest=("POST", "/api/apps/{app_id}/archive"))
     def apps_archive(self, app_id: str) -> Document:
         """Archive a mini app."""
         return self._unavailable("apps.archive", ENGINE)
+
+
+def _json_file(path: Path) -> object | None:
+    """One log file as JSON, or None when it is absent or unreadable."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return None
+
+
+def _age_s(at: object, now: datetime) -> float | None:
+    found = _instant(at) if isinstance(at, str) else None
+    return None if found is None else round((now - found).total_seconds(), 1)
+
+
+def _host_rows(latest: object) -> list[Document]:
+    """Each machine's newest heartbeat row: free disk, Library facts, Lab facts."""
+    if not isinstance(latest, dict):
+        return []
+    found: list[Document] = []
+    for row in cast("dict[str, object]", latest).values():
+        if not isinstance(row, dict):
+            continue
+        fields = cast("dict[str, object]", row)
+        if fields.get("subject") != "host":
+            continue
+        found.append(
+            cast(
+                "Document",
+                {
+                    "id": fields.get("id"),
+                    "at": fields.get("at"),
+                    "paused": fields.get("paused"),
+                    "pause_state": fields.get("pause_state"),
+                    "free_disk_bytes": fields.get("free_disk_bytes"),
+                    "disk_floor_bytes": fields.get("disk_floor_bytes"),
+                    "free_ram_bytes": fields.get("free_ram_bytes"),
+                    "library": fields.get("library"),
+                    "lab": fields.get("lab"),
+                },
+            )
+        )
+    return sorted(found, key=lambda row: str(row.get("id")))
+
+
+def _card_rows(library: Library, now: datetime) -> list[Document]:
+    """Every series card on `main`: its coverage, quality, and how long ago it was written."""
+    found: list[Document] = []
+    for item, object_id in library.store.heads_on("main"):
+        if not item.startswith(SERIES_PREFIX):
+            continue
+        try:
+            view = library.store.get(LIBRARY_OPERATOR, object_id)
+        except LibraryRefused:
+            continue
+        coverage = view.fields.get("coverage")
+        months = cast("dict[str, object]", coverage) if isinstance(coverage, dict) else {}
+        at = view.annotations.get("created")
+        found.append(
+            cast(
+                "Document",
+                {
+                    "item": item,
+                    "kind": view.kind,
+                    "title": view.title,
+                    "at": at,
+                    "age_s": _age_s(at, now),
+                    "months": months.get("months"),
+                    "last_month": months.get("last"),
+                    "quality": view.fields.get("quality") or {},
+                },
+            )
+        )
+    return found
+
+
+def _feed_rows(raw: object) -> Document:
+    """DR6's feeds file: each feed's last run and its downloads. Absent until a feed writes it."""
+    if raw is None:
+        return cast("Document", {"present": False, "feeds": [], "downloads": []})
+    if isinstance(raw, dict):
+        fields = cast("dict[str, object]", raw)
+        feeds = fields.get("feeds")
+        downloads = fields.get("downloads")
+        return cast(
+            "Document",
+            {
+                "present": True,
+                "at": fields.get("at"),
+                "feeds": feeds if isinstance(feeds, list) else [],
+                "downloads": downloads if isinstance(downloads, list) else [],
+            },
+        )
+    return cast("Document", {"present": True, "feeds": [], "downloads": []})
+
+
+def _connection_rows(raw: object) -> Document:
+    """The health workflow's newest reading per external connection (AD-67)."""
+    if raw is None:
+        return cast("Document", {"present": False, "readings": []})
+    fields = cast("dict[str, object]", raw) if isinstance(raw, dict) else {}
+    readings = fields.get("readings")
+    return cast(
+        "Document",
+        {
+            "present": True,
+            "at": fields.get("at"),
+            "readings": readings if isinstance(readings, list) else [],
+        },
+    )
+
+
+def _telemetry_row(raw: object) -> Document:
+    """The exporter's counters (sent, dropped, failed, the last error) under `logs/`."""
+    if not isinstance(raw, dict):
+        return cast("Document", {"present": False})
+    return cast("Document", {"present": True, **cast("dict[str, object]", raw)})
+
+
+def _bucket_row(home: Path) -> Document:
+    """The bucket remote `hub.toml` names, and what this home records about the last push."""
+    said = "the server's host holds the last push in memory; no copy age is written to the home"
+    try:
+        document = tomllib.loads((home / "hub.toml").read_text(encoding="utf-8"))
+    except OSError, UnicodeDecodeError, tomllib.TOMLDecodeError:
+        return cast(
+            "Document",
+            {
+                "configured": False,
+                "remote": None,
+                "copies": 1,
+                "last_push_at": None,
+                "age_s": None,
+                "said": said,
+            },
+        )
+    section = document.get("bucket")
+    remote = cast("dict[str, object]", section).get("remote") if isinstance(section, dict) else None
+    named = remote if isinstance(remote, str) and remote else None
+    return cast(
+        "Document",
+        {
+            "configured": named is not None,
+            "remote": named,
+            "copies": 2 if named is not None else 1,
+            "last_push_at": None,
+            "age_s": None,
+            "said": said,
+        },
+    )
+
+
+def data_health(home: Path, library: Library) -> Document:
+    """The data health read (AD-69): facts from the home's JSON logs and the Library's cards.
+
+    A host without an engine reads the files the engine's own write points leave, never the
+    engine's models, because QMX control depends on no engine. An absent file is absent, never a
+    zero: the read says so and the UI shows that.
+    """
+    now = datetime.now(UTC)
+    logs = home / LOGS
+    latest = _json_file(logs / "heartbeat-latest.json")
+    return cast(
+        "Document",
+        {
+            "at": now.isoformat(),
+            "home": str(home),
+            "hosts": _host_rows(latest),
+            "cards": _card_rows(library, now),
+            "feeds": _feed_rows(_json_file(logs / "feeds.json")),
+            "connections": _connection_rows(_json_file(logs / "connections-health.json")),
+            "telemetry": _telemetry_row(_json_file(logs / "telemetry.json")),
+            "bucket": _bucket_row(home),
+        },
+    )
 
 
 class WorkflowEngine(Protocol):

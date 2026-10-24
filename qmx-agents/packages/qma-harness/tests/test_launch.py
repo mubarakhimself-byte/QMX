@@ -25,6 +25,7 @@ from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import (
     CONSTANT_ENV,
     GATE_TIMEOUT_S,
+    TELEMETRY_ENV,
     Background,
     Budgets,
     ChatConfig,
@@ -114,11 +115,23 @@ def test_a_plan_launch_sets_only_the_plan_home_and_the_launcher_inputs(home: Qmx
         "CLAUDE_CODE_DISABLE_WORKFLOWS": "1",
         "CLAUDE_AGENT_SDK_CLIENT_APP": "QMA",
         **windows,
+        **TELEMETRY_ENV,
         "CLAUDE_CONFIG_DIR": str(home.root / "claude"),
         "QMA_CHAT_ID": CHAT,
         "QMA_PROC_DIR": str(home.root / "procs"),
         "QMA_CAP": "Local\\qma-cap",
     }
+
+
+def test_a_chat_launch_env_turns_cli_telemetry_on_to_the_servers_collector(
+    home: QmxHome,
+) -> None:
+    env = launch_env(PlanLaunch(), home=home, session_id=CHAT, cap="c")
+
+    assert env["CLAUDE_CODE_ENABLE_TELEMETRY"] == "1"
+    assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://155.133.27.86:4318"
+    assert env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "http/json"
+    assert (env["OTEL_METRICS_EXPORTER"], env["OTEL_LOGS_EXPORTER"]) == ("otlp", "otlp")
 
 
 def surface_of(config: ChatConfig, home: QmxHome) -> Surface:
@@ -262,6 +275,7 @@ def test_a_relayed_launch_carries_the_relay_and_its_grant_never_a_key(home: QmxH
     grant = RelayGrant("http://127.0.0.1:5123", GrantSecret("grant-secret"), CHAT, profile)
     assert launch_env(RelayedLaunch(grant), home=home, session_id=CHAT, cap="c") == {
         **CONSTANT_ENV,
+        **TELEMETRY_ENV,
         "ENABLE_TOOL_SEARCH": "true",
         "CLAUDE_CONFIG_DIR": str(home.root / "claude-relayed"),
         "ANTHROPIC_BASE_URL": "http://127.0.0.1:5123",
