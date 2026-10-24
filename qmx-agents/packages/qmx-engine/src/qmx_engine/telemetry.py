@@ -25,7 +25,6 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -61,6 +60,9 @@ CAPACITY: Final = 512
 expendable (F42)."""
 FLUSH_S: Final = 2.0
 TIMEOUT_S: Final = 5.0
+"""The collector client's own timeout, per post."""
+SEND_WAIT_S: Final = 3 * TIMEOUT_S
+"""How long a flush waits for a send already in flight: its three posts at their timeout."""
 LEVELS: Final[Mapping[str, int]] = {"debug": 5, "info": 9, "warning": 13, "error": 17}
 SEVERITY: Final[Mapping[int, str]] = {5: "DEBUG", 9: "INFO", 13: "WARN", 17: "ERROR"}
 STATUS: Final[Mapping[str, int]] = {"ok": 1, "failed": 2, "cancelled": 2}
@@ -90,6 +92,14 @@ class Counters:
             "last_sent_at": self.last_sent_at,
             "queue_capacity": CAPACITY,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class Unsent:
+    """Why a flush returned before its records reached the collector."""
+
+    code: Literal["send_in_flight", "timeout"]
+    message: str
 
 
 @dataclass
@@ -348,7 +358,6 @@ class Telemetry:
         post: Post | None = None,
         service: str = "qmx-host",
         state: Path | None = None,
-        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self.endpoint = endpoint.rstrip("/")
         self.headers = dict(headers or {})
@@ -356,13 +365,14 @@ class Telemetry:
         self.service = service
         self.state = state
         self._post = post or _post
-        self._clock = clock
         self._batch = _Batch([], [], [])
         self._lock = threading.Lock()
+        """Guards the batch only, so an emitter holds it for an append and never for a send."""
+        self._sending = threading.Lock()
+        """Held across a flush's swap and its posts, so one send runs at a time."""
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        self._last_flush = clock()
 
     def start(self) -> None:
         if self._thread is not None:
@@ -393,10 +403,20 @@ class Telemetry:
         except Exception:  # telemetry never fails a write
             LOG.debug("telemetry dropped a %s record", kind)
 
-    def flush(self) -> None:
-        with self._lock:
-            batch, self._batch = self._batch, _Batch([], [], [])
-        self._send(batch)
+    def flush(self) -> Unsent | None:
+        """Send what is held. None means every record handed before this call was posted, or
+        dropped and counted: a send the sender thread had in flight finishes first.
+
+        A hung collector cannot hold a caller longer than `SEND_WAIT_S` for a send in flight, or
+        `TIMEOUT_S` per post of its own; either comes back as an `Unsent` with its reason."""
+        if not self._sending.acquire(timeout=SEND_WAIT_S):
+            return Unsent("send_in_flight", f"another send held the collector past {SEND_WAIT_S} s")
+        try:
+            with self._lock:
+                batch, self._batch = self._batch, _Batch([], [], [])
+            return self._send(batch)
+        finally:
+            self._sending.release()
 
     def _take(self, kind: str, record: str) -> None:
         made = _made(kind, record)
@@ -413,27 +433,26 @@ class Telemetry:
         if over:
             self.counters.dropped += max(1, len(made))
         self._wake.set()
-        if self._clock() - self._last_flush >= FLUSH_S:
-            self.flush()
 
     def _run(self) -> None:
         while not self._stop.is_set():
             self._wake.wait(timeout=FLUSH_S)
             self._wake.clear()
             self.flush()
-            self._last_flush = self._clock()
 
-    def _send(self, batch: _Batch) -> None:
+    def _send(self, batch: _Batch) -> Unsent | None:
         held: list[tuple[Signal, list[Otlp]]] = [
             ("traces", batch.spans),
             ("metrics", batch.metrics),
             ("logs", batch.logs),
         ]
+        unsent: Unsent | None = None
         for signal, items in held:
             if items:
-                self._post_batch(signal, items)
+                unsent = self._post_batch(signal, items) or unsent
+        return unsent
 
-    def _post_batch(self, signal: Signal, items: list[Otlp]) -> None:
+    def _post_batch(self, signal: Signal, items: list[Otlp]) -> Unsent | None:
         body = json.dumps(self._body(signal, items), allow_nan=False).encode()
         try:
             self._post(f"{self.endpoint}/v1/{signal}", body)
@@ -443,10 +462,16 @@ class Telemetry:
             self.counters.last_error = redact.redact(f"{type(error).__name__}: {error}")[:200]
             LOG.warning("telemetry: %s not sent: %s", signal, self.counters.last_error)
             self._write_state()
-            return
+            timed_out = isinstance(error, TimeoutError) or isinstance(
+                getattr(error, "reason", None), TimeoutError
+            )
+            if timed_out:
+                return Unsent("timeout", f"the {signal} post ran past {TIMEOUT_S} s")
+            return None
         self.counters.sent += len(items)
         self.counters.last_sent_at = _now()
         self._write_state()
+        return None
 
     def _body(self, signal: Signal, items: list[Otlp]) -> Otlp:
         scope: Otlp = {"name": SCOPE, "version": _service_version()}

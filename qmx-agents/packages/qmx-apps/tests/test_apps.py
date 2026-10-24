@@ -19,6 +19,11 @@ from qmx_apps.supervisor import Supervisor, refuse_tool
 from qmx_apps.volume import Volume
 
 EXAMPLES = Path(__file__).resolve().parents[4] / "examples/apps"
+DEEP_HOME = 144
+"""The home's length in characters, whatever the temp root. Below it, `environments/<hash>/Lib/
+site-packages` adds 96 and the native `_cffi_backend.cp314-win_amd64.pyd` 34 more, so the `.pyd`
+lands at 274, past 260. `site-packages` stays at 240, under the 258 that Windows allows a process's
+working directory, which uv's bytecode compile starts in (it fails with os error 267 past it)."""
 
 
 @pytest.fixture
@@ -172,7 +177,9 @@ def test_install_start_registry_stop_and_restart(supervisor: Supervisor, fixture
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows native DLL path handling")
 def test_deep_windows_home_loads_native_dependencies(tmp_path: Path, fixture_app: Path) -> None:
-    owner = Supervisor(tmp_path / ("nested-" * 5) / "home")
+    padding = DEEP_HOME - len(str(tmp_path / "home")) - 1
+    deep = tmp_path / ("nested" * 50)[:padding] if padding > 0 else tmp_path
+    owner = Supervisor(deep / "home")
     try:
         install(owner, fixture_app)
         definition_hash = cast(str, owner.get("exchange-status")["definition_hash"])
