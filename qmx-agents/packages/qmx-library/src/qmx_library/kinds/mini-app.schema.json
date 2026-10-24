@@ -13,35 +13,43 @@
       "media_type": "application/x-tar"
     }
   },
+  "card": {
+    "facts": [
+      "title",
+      "summary"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "About",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Outputs",
+        "renderer": "graph",
+        "source": "walk:produced-by:in"
+      },
+      {
+        "tab": "Versions",
+        "renderer": "table",
+        "source": "computed:versions"
+      },
+      {
+        "tab": "History",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key",
     "semver"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "bundle.tar",
-      "renderer": "text",
-      "source": "blobs.bundle.tar"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

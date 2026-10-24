@@ -1,0 +1,187 @@
+{
+  "kind": "trade",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "required": [
+      "account",
+      "instrument",
+      "side",
+      "world",
+      "money_digits"
+    ],
+    "properties": {
+      "account": {
+        "type": "string"
+      },
+      "broker": {
+        "type": "string"
+      },
+      "position_id": {
+        "type": "string"
+      },
+      "broker_ids": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "run_id": {
+        "type": "string"
+      },
+      "sequence": {
+        "type": "integer"
+      },
+      "world": {
+        "type": "string",
+        "enum": [
+          "backtest",
+          "paper",
+          "demo",
+          "live",
+          "synthetic"
+        ]
+      },
+      "instrument": {
+        "type": "string"
+      },
+      "side": {
+        "type": "string",
+        "enum": [
+          "long",
+          "short"
+        ]
+      },
+      "volume": {
+        "type": "string"
+      },
+      "entry_ns": {
+        "type": "integer"
+      },
+      "exit_ns": {
+        "type": "integer"
+      },
+      "entry_price": {
+        "type": "integer"
+      },
+      "exit_price": {
+        "type": "integer"
+      },
+      "price_digits": {
+        "type": "integer"
+      },
+      "money_digits": {
+        "type": "integer"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "gross_result": {
+        "type": "integer"
+      },
+      "net_result": {
+        "type": "integer"
+      },
+      "fees": {
+        "type": "integer"
+      },
+      "swap": {
+        "type": "integer"
+      },
+      "initial_risk": {
+        "type": "integer"
+      },
+      "r": {
+        "type": "number"
+      },
+      "worst_swing": {
+        "type": "integer"
+      },
+      "best_swing": {
+        "type": "integer"
+      },
+      "holding_ns": {
+        "type": "integer"
+      },
+      "fills": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "fills_key": {
+        "type": "string"
+      },
+      "consumed_cards": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "blobs": {
+    "screenshots/*": {
+      "media_type": "image/png"
+    }
+  },
+  "card": {
+    "facts": [
+      "instrument",
+      "side",
+      "r",
+      "holding_time",
+      "world"
+    ],
+    "thumbnail": "computed:entry-exit",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fills",
+        "renderer": "table",
+        "source": "computed:fills"
+      },
+      {
+        "tab": "Chart",
+        "renderer": "chart",
+        "source": "computed:entry-exit"
+      },
+      {
+        "tab": "Notes and tags",
+        "renderer": "json",
+        "source": "annotations"
+      },
+      {
+        "tab": "Screenshots",
+        "renderer": "image",
+        "source": "blobs.screenshots/*"
+      },
+      {
+        "tab": "Produced by",
+        "renderer": "graph",
+        "source": "walk:produced-by:out"
+      },
+      {
+        "tab": "History",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key",
+    "notes",
+    "setups",
+    "mistakes"
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

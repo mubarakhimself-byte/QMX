@@ -34,29 +34,33 @@
     ]
   },
   "blobs": {},
+  "card": {
+    "facts": [
+      "into",
+      "entries",
+      "used_in"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Diff",
+        "renderer": "diff",
+        "source": "fields.entries"
+      },
+      {
+        "tab": "Resolve",
+        "renderer": "json",
+        "source": "fields"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

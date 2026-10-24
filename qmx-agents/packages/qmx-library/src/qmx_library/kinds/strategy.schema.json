@@ -9,29 +9,48 @@
     "properties": {}
   },
   "blobs": {},
+  "card": {
+    "facts": [
+      "version",
+      "state",
+      "used_in"
+    ],
+    "thumbnail": "computed:equity",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Logic",
+        "renderer": "graph",
+        "source": "walk:uses:out"
+      },
+      {
+        "tab": "Results",
+        "renderer": "graph",
+        "source": "walk:produced-by:in"
+      },
+      {
+        "tab": "Family tree",
+        "renderer": "graph",
+        "source": "walk:variant-of:both"
+      },
+      {
+        "tab": "Markets",
+        "renderer": "json",
+        "source": "fields.markets"
+      },
+      {
+        "tab": "Versions",
+        "renderer": "table",
+        "source": "computed:versions"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

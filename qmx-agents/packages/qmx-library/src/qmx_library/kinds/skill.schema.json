@@ -16,40 +16,43 @@
       "media_type": "application/octet-stream"
     }
   },
+  "card": {
+    "facts": [
+      "title",
+      "summary"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "SKILL.md",
+        "renderer": "markdown",
+        "source": "blobs.SKILL.md"
+      },
+      {
+        "tab": "files/*",
+        "renderer": "text",
+        "source": "blobs.files/*"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key",
     "semver"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "SKILL.md",
-      "renderer": "markdown",
-      "source": "blobs.SKILL.md"
-    },
-    {
-      "tab": "files/*",
-      "renderer": "text",
-      "source": "blobs.files/*"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"

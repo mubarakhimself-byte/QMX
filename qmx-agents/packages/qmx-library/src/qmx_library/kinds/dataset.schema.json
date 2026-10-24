@@ -70,34 +70,55 @@
     }
   },
   "blobs": {},
+  "card": {
+    "facts": [
+      "source",
+      "subject",
+      "kind",
+      "coverage",
+      "quality"
+    ],
+    "thumbnail": "computed:coverage-strip",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Partitions",
+        "renderer": "table",
+        "source": "fields.partitions"
+      },
+      {
+        "tab": "Quality",
+        "renderer": "json",
+        "source": "fields.quality"
+      },
+      {
+        "tab": "Sample",
+        "renderer": "table",
+        "source": "blobs.sample"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      },
+      {
+        "tab": "History",
+        "renderer": "table",
+        "source": "computed:history"
+      }
+    ]
+  },
   "annotations": [
     "tags",
     "aliases",
     "intent_key"
-  ],
-  "preview": {
-    "card": [
-      "title",
-      "summary"
-    ],
-    "badge": "state"
-  },
-  "detail": [
-    {
-      "tab": "Fields",
-      "renderer": "json",
-      "source": "fields"
-    },
-    {
-      "tab": "Coverage",
-      "renderer": "json",
-      "source": "fields.coverage"
-    },
-    {
-      "tab": "Used in",
-      "renderer": "graph",
-      "source": "walk:*:both"
-    }
   ],
   "merge": {
     "default": "pick-one"
