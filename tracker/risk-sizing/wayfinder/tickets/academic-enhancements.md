@@ -2,7 +2,7 @@
 title: Academic and practitioner work that strengthens QML, the MIS and the unit
 type: decision
 mode: AFK
-status: open
+status: closed
 blocked_by: [ground-truth-algo-side]
 claimed_by: "opus research agent 2026-10-24"
 created: 2026-10-24
