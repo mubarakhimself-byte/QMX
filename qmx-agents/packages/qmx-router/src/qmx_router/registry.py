@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 import os
 import re
 import time
@@ -29,6 +30,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from qmx_router import chat_lane
 from qmx_router.profiles import (
     ROW_NAME,
     SECRET_REF,
@@ -461,6 +463,7 @@ type PlanTurn = Callable[[ModelRow], Awaitable[RowTestResult]]
 TEST_PROMPT: Final = "Reply with the single word OK."
 ANTHROPIC_VERSION: Final = "2023-06-01"
 HTTP_OK: Final = 200
+CHAT_PATH: Final = "/v1/chat/completions"
 
 
 async def one_token_test(
@@ -483,9 +486,9 @@ async def one_token_test(
         case "gpt":
             return RowTestResult(qmx_id, "not_run", "GPT rows test through the GPT lane (RTR4)")
         case "key":
-            if row.wire != "anthropic":
+            if row.wire == "responses":
                 return RowTestResult(
-                    qmx_id, "not_run", f"the {row.wire} lane has not landed (RTR3)"
+                    qmx_id, "not_run", "a key row on the responses wire has no lane"
                 )
             return await _key_test(provider, row, secrets or _keyring, transport)
 
@@ -536,6 +539,23 @@ def plan_test(plan_dir: Path, cwd: Path) -> PlanTurn:
     return turn
 
 
+def _served(row: ModelRow, answer: httpx.Response) -> tuple[str, object]:
+    """The served model and the output tokens: a chat-wire row's stream read through the chat
+    lane's own state machine, an Anthropic-wire row's one JSON document."""
+    if row.wire == "openai_chat":
+        state = chat_lane.StreamState(chat_lane.Translation({}, {}), row.native)
+        for block in answer.text.replace("\r\n", "\n").split("\n\n"):
+            for chunk in chat_lane.parse_sse(block.splitlines()):
+                state.feed(chunk)
+        state.finish()
+        if state.error is not None:
+            raise ValueError(state.error[2])
+        return state.served or "", state.usage.get("output_tokens")
+    document = cast("dict[str, Any]", answer.json())
+    usage = cast("dict[str, Any]", document.get("usage") or {})
+    return str(document.get("model", "")), usage.get("output_tokens")
+
+
 def _keyring(reference: str) -> str:
     from qmx_router.relay import keyring_secret  # noqa: PLC0415  (relay imports profiles)
 
@@ -555,24 +575,29 @@ async def _key_test(
         key = await asyncio.to_thread(secrets, reference)
     except Exception:  # keyring backends raise their own types
         return RowTestResult(row.qmx_id, "no_key", f"the key {reference} is missing; nothing spent")
-    headers = {
-        "anthropic-version": ANTHROPIC_VERSION,
-        "content-type": "application/json",
-        **(
-            {"x-api-key": key}
-            if provider.auth == "x-api-key"
-            else {"authorization": f"Bearer {key}"}
-        ),
-    }
-    body = {
-        "model": row.native,
-        "max_tokens": 1,
-        "messages": [{"role": "user", "content": TEST_PROMPT}],
-    }
+    auth = (
+        {"x-api-key": key} if provider.auth == "x-api-key" else {"authorization": f"Bearer {key}"}
+    )
+    message = [{"role": "user", "content": TEST_PROMPT}]
+    if row.wire == "openai_chat":
+        from qmx_router.complete import Ask, chat_request  # noqa: PLC0415  (complete imports this)
+
+        url = f"{provider.url}{CHAT_PATH}"
+        headers = {"content-type": "application/json", "accept": "text/event-stream", **auth}
+        content = chat_request(row, Ask(message, max_tokens=1), row.native)
+    else:
+        url = f"{provider.url}/v1/messages"
+        headers = {
+            "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json",
+            **auth,
+        }
+        body = {"model": row.native, "max_tokens": 1, "messages": message}
+        content = json.dumps(body).encode()
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(transport=transport, timeout=60.0) as client:
-            answer = await client.post(f"{provider.url}/v1/messages", headers=headers, json=body)
+            answer = await client.post(url, headers=headers, content=content)
     except httpx.HTTPError as error:
         return RowTestResult(row.qmx_id, "failed", f"transport: {type(error).__name__}", spent=True)
     ms = round((time.perf_counter() - started) * 1000)
@@ -581,13 +606,14 @@ async def _key_test(
         return RowTestResult(
             row.qmx_id, "failed", f"HTTP {answer.status_code}: {text[:200]}", ms=ms, spent=True
         )
-    document = cast("dict[str, Any]", answer.json())
-    served = str(document.get("model", ""))
+    try:
+        served, tokens = _served(row, answer)
+    except ValueError as error:
+        detail = f"unreadable answer: {str(error).replace(key, '[key]')[:200]}"
+        return RowTestResult(row.qmx_id, "failed", detail, ms=ms, spent=True)
     refusal = family_refusal(served) if served else None
     if refusal:
         return RowTestResult(row.qmx_id, "failed", f"served {refusal}", ms=ms, spent=True)
-    usage = cast("dict[str, Any]", document.get("usage") or {})
-    tokens = usage.get("output_tokens")
     return RowTestResult(
         row.qmx_id,
         "ok",

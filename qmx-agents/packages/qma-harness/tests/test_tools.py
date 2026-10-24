@@ -273,6 +273,49 @@ def test_an_app_that_stopped_after_the_tool_list_answers_app_not_running(tmp_pat
     assert json.loads(answer["content"][0]["text"])["error"]["code"] == "app_not_running"
 
 
+def test_the_host_reads_serve_provider_rows_their_test_and_the_mark(tmp_path: Path) -> None:
+    async def echo(arguments: dict[str, Any]) -> Mapping[str, object]:
+        return {"asked": arguments}
+
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    reads = {"provider_rows": echo, "provider_test": echo, "mark": echo}
+    defs = asyncio.run(
+        tool_defs(
+            control=control,
+            broker=BrokerService(home.root),
+            domain=domain,
+            delegate=None,
+            host=reads,
+        )
+    )
+    served = {tool.name: tool for tool in defs}
+    test = served["ops_provider_test"]
+    answer = asyncio.run(test.call({"qmx_id": "openrouter/z-ai/glm-5.3"}))
+    mark = served["library_mark"]
+    rules = guard_rules(
+        defs,
+        domain_write="allow",
+        home=home,
+        config_dir=home.plan_dir,
+        keyring_names=frozenset(),
+        unattended=False,
+        external_unattended=frozenset(),
+    )
+    assert served["ops_providers"].effect is Effect.READ
+    assert (test.effect, test.input_schema["required"]) == (Effect.DOMAIN_WRITE, ["qmx_id"])
+    assert json.loads(answer["content"][0]["text"]) == {
+        "asked": {"qmx_id": "openrouter/z-ai/glm-5.3"}
+    }
+    assert (mark.effect, mark.input_schema["required"]) == (
+        Effect.MANAGE,
+        ["item", "quarantined", "reason"],
+    )
+    assert "mcp__qmx_library__mark" in rules.mandatory_asks
+
+
 class ListedApps:
     def list(self) -> list[dict[str, Any]]:
         def app(app_id: str, status: str) -> dict[str, Any]:
