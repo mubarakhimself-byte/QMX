@@ -18,12 +18,19 @@ registers with its own redactor, so a traceback that echoes it still ships redac
 The attempt itself is executed through the engine's own executor table on the runner host
 (`run_attempt`); the import is deferred because `qmx-remote` must stay importable on a machine
 that carries only the sidecar. `main()` is the process entry the provider starts.
+
+Price data reaches a remote attempt only through the server's market-data door (AD-70, Lib AD-28).
+Before a node that names a `data_scope` runs, the sidecar reads each series it names through the
+door with the run pass as its bearer and the pass's own `data_scope`, and writes the answers under
+`work/data/`. The door checks the scope; the sidecar refuses to ask at all with a pass that has
+none. An unreachable door ends the attempt waiting `placement`, never failed.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import datetime
 import hashlib
 import json
@@ -51,10 +58,101 @@ REDACTED: Final = "[redacted]"
 SECRET_FRAGMENTS: Final = ("key", "token", "secret", "pass", "authorization", "credential")
 """Environment names whose value the sidecar treats as a declared secret even when the bundle's
 `secrets` list missed it. The list is a floor, not the rule: the bundle names the rest."""
+DOOR_ENV: Final = "QMX_DOOR_URL"
+"""The server door's base URL on the tailnet, when the bundle does not name one."""
+DOOR_READ: Final = "/api/data/read"
+PLACEMENT_RETRY_SECONDS: Final = 60
+"""How long an attempt that cannot reach the door waits before the engine places it again."""
 
 
 class BundleError(ValueError):
     """A bundle the sidecar refuses: a shape it does not know, or a file whose hash is wrong."""
+
+
+class DoorRefused(BundleError):
+    """The door read is refused: by the sidecar before asking, or by the door's typed refusal."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
+
+class DoorUnreachable(BundleError):
+    """No answer from the door: the attempt waits `placement` instead of failing."""
+
+
+type Post = Callable[[str, bytes, Mapping[str, str]], bytes]
+
+
+def _post(url: str, body: bytes, headers: Mapping[str, str]) -> bytes:
+    request = urllib.request.Request(  # noqa: S310 - the server door's tailnet URL
+        url, data=body, method="POST", headers=dict(headers)
+    )
+    with urllib.request.urlopen(request, timeout=60.0) as answer:  # noqa: S310 - the door
+        return answer.read()
+
+
+def pass_scope(run_pass: str) -> tuple[str, ...]:
+    """The `data_scope` a run pass carries, read from its body without its MAC.
+
+    The sidecar holds no router secret, so it cannot verify the pass; the door does. Reading the
+    scope here only lets the sidecar send it and refuse early when there is none.
+    """
+    parts = run_pass.split(".")
+    if len(parts) != 3:
+        return ()
+    try:
+        body: object = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+    except ValueError:
+        return ()
+    if not isinstance(body, dict):
+        return ()
+    scope = cast(dict[str, object], body).get("data_scope")
+    return tuple(str(item) for item in cast(list[object], scope)) if isinstance(scope, list) else ()
+
+
+@dataclass(frozen=True, slots=True)
+class Door:
+    """The server's market-data door, as a remote attempt reaches it over the tailnet."""
+
+    base_url: str
+    run_pass: str
+    post: Post = _post
+
+    def read(self, series: str, *, purpose: str = "exploration") -> JsonObject:
+        """One series through the door, checked there against this pass's `data_scope`."""
+        scope = pass_scope(self.run_pass)
+        if not scope:
+            raise DoorRefused(
+                "data_scope", "this run pass carries no data_scope, so the sidecar asks no door"
+            )
+        if not self.base_url:
+            raise DoorUnreachable(f"no door URL: set the bundle's door_url or {DOOR_ENV}")
+        body = json.dumps({"series": series, "purpose": purpose, "data_scope": list(scope)})
+        try:
+            raw = self.post(
+                self.base_url.rstrip("/") + DOOR_READ,
+                body.encode("utf-8"),
+                {"authorization": "Bearer " + self.run_pass, "content-type": "application/json"},
+            )
+        except urllib.error.HTTPError as error:
+            detail = _refusal(error.read())
+            raise DoorRefused(
+                detail or f"http_{error.code}", f"the door refused {series}"
+            ) from error
+        except (urllib.error.URLError, OSError) as error:
+            raise DoorUnreachable(f"the door did not answer: {type(error).__name__}") from error
+        return cast(JsonObject, json.loads(raw))
+
+
+def _refusal(raw: bytes) -> str:
+    try:
+        found: object = json.loads(raw)
+    except ValueError:
+        return ""
+    detail = cast(dict[str, object], found).get("detail") if isinstance(found, dict) else None
+    refused = cast(dict[str, object], detail).get("refused") if isinstance(detail, dict) else None
+    return str(refused) if refused else ""
 
 
 class HubPort(Protocol):
@@ -132,6 +230,7 @@ class Attempt:
     file_hashes: dict[str, str] = field(default_factory=dict[str, str])
     idempotency_key: str = ""
     priority: int = 0
+    door_url: str = ""
 
     @classmethod
     def from_bundle(cls, bundle: Mapping[str, JsonValue]) -> Attempt:
@@ -168,6 +267,7 @@ class Attempt:
             file_hashes=_texts(bundle.get("file_hashes")),
             idempotency_key=str(found.get("idempotency_key") or ""),
             priority=_whole(found.get("priority")),
+            door_url=str(found.get("door_url") or os.environ.get(DOOR_ENV, "")),
         )
 
 
@@ -406,6 +506,31 @@ def materialise(attempt: Attempt, code: Path) -> dict[str, str]:
     return dict(attempt.file_hashes)
 
 
+def read_data(attempt: Attempt, sidecar: Sidecar, into: Path) -> None:
+    """Read every series the node's `data_scope` names through the server door, one file each."""
+    parameters = attempt.node_definition.get("parameters")
+    wanted = (
+        cast(dict[str, JsonValue], parameters).get("data_scope")
+        if isinstance(parameters, dict)
+        else None
+    )
+    if not isinstance(wanted, list) or not wanted:
+        return
+    door = Door(attempt.door_url, attempt.run_pass)
+    into.mkdir(parents=True, exist_ok=True)
+    for series in (str(item) for item in wanted):
+        answer = door.read(series)
+        (into / (series.replace("/", "__") + ".json")).write_text(
+            json.dumps(answer), encoding="utf-8"
+        )
+        sidecar.log(f"read {series} through the door")
+
+
+def placement_wait(now: float) -> dict[str, Any]:
+    resume = datetime.datetime.fromtimestamp(now + PLACEMENT_RETRY_SECONDS, datetime.UTC)
+    return {"status": "waiting", "reason": "placement", "resume_at": resume.isoformat()}
+
+
 def run_attempt(attempt: Attempt, sidecar: Sidecar, work: Path) -> dict[str, Any]:
     """Execute the attempt's node through the engine's executor table on this host.
 
@@ -455,6 +580,11 @@ def run_attempt(attempt: Attempt, sidecar: Sidecar, work: Path) -> dict[str, Any
             executor = Monitor(host, work / "monitors")
         case other:
             raise BundleError(f"the sidecar does not serve a {other or 'unknown'} attempt")
+    try:
+        read_data(attempt, sidecar, work / "data")
+    except DoorUnreachable as error:
+        sidecar.log(str(error))
+        return placement_wait(sidecar.clock())
     sidecar.emit("node_started", {"idempotency_key": attempt.idempotency_key})
     outcome = executor.run(job)
     result = asyncio.run(outcome) if asyncio.iscoroutine(outcome) else outcome
