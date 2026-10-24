@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from qmx_engine.ledger import redact
@@ -73,9 +74,10 @@ def test_a_clean_text_merge_keeps_both_edits(store: Store) -> None:
     assert merged.outcome == "merged"
     assert body(store, merged.object_id) == "ONE\ntwo\nTHREE\n"
     assert store.get(OPERATOR, merged.object_id).parents == (alice, bob)
-    assert store.merge(
-        BOB, item, from_ref=agent_ref("bob", item), into=drafts_ref(item)
-    ).outcome == "up-to-date"
+    assert (
+        store.merge(BOB, item, from_ref=agent_ref("bob", item), into=drafts_ref(item)).outcome
+        == "up-to-date"
+    )
     held = store.head(item, drafts_ref(item))
     assert held is not None and held[0] == merged.object_id
 
@@ -95,7 +97,7 @@ def test_a_clashing_edit_mints_one_conflict_holding_the_marked_text(store: Store
     conflict = conflicts[0]
     assert conflict.object_id == merged.object_id
     assert conflict.fields["ours"] == alice
-    entry = conflict.fields["entries"][0]
+    (entry,) = cast(list[dict[str, Any]], conflict.fields["entries"])
     marked = str(entry["text"])
     assert marked.startswith("one\n<<<<<<< ours\n")
     assert "||||||| base\n" in marked
@@ -105,9 +107,7 @@ def test_a_clashing_edit_mints_one_conflict_holding_the_marked_text(store: Store
 
 
 def test_a_json_merge_with_one_clashing_key_mints_one_conflict_entry(store: Store) -> None:
-    found = store.put(
-        OPERATOR, setup({"a": 0, "b": 0}, "s"), on=MAIN, expected_head=None
-    )
+    found = store.put(OPERATOR, setup({"a": 0, "b": 0}, "s"), on=MAIN, expected_head=None)
     item = found.item
     edit(store, ALICE, found.object_id, setup({"a": 1, "b": 0}, item), item)
     edit(store, BOB, found.object_id, setup({"a": 2, "b": 5}, item), item)
@@ -117,7 +117,7 @@ def test_a_json_merge_with_one_clashing_key_mints_one_conflict_entry(store: Stor
 
     assert merged.outcome == "conflict"
     (conflict,) = store.conflicts(OPERATOR, item)
-    (entry,) = conflict.fields["entries"]
+    (entry,) = cast(list[dict[str, Any]], conflict.fields["entries"])
     assert entry == {
         "path": "blobs.spec.a",
         "slot": "spec",

@@ -1,15 +1,16 @@
 """Blame a text slot line by line without storing anything (AD-30).
 
-`Store.blame` walks a version's first-parent chain to the root and calls `walk_back` once. A line
-the diff says the parent already holds keeps travelling back; a line no ancestor holds was
-introduced by the version that holds it, so it keeps that version's name. The answer is computed
-at read, from the parents and one line diff per version.
+A line travels back from the blamed version through whichever parent the diff says already holds
+it, first parent first, until no parent holds it; the version it stops in introduced that line.
+Walking every parent (not just the first) is what makes a merge honest: a line that arrived from
+the second side of a merge is blamed on the version that wrote it, not on the merge that carried
+it in. The answer is computed at read, from the parents and one line diff per version and parent.
 """
 
 from __future__ import annotations
 
 import difflib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 
 def lines(text: str) -> list[str]:
@@ -29,26 +30,29 @@ def carried(parent: Sequence[str], child: Sequence[str]) -> dict[int, int]:
     return found
 
 
-def walk_back(chain: Sequence[Sequence[str]]) -> list[int]:
-    """Which version of a youngest-first chain introduced each line of the youngest one.
-
-    `chain[0]` is the blamed version's lines and `chain[-1]` the root's; the answer holds one
-    index into `chain` per line of `chain[0]`.
-    """
-    if not chain:
-        return []
-    origin = [0] * len(chain[0])
-    live = dict.fromkeys(range(len(chain[0])), 0) | {
-        index: index for index in range(len(chain[0]))
-    }
-    for version in range(len(chain) - 1):
-        kept = carried(chain[version + 1], chain[version])
-        moved: dict[int, int] = {}
-        for mine, held in live.items():
-            if held in kept:
-                moved[mine] = kept[held]
-                origin[mine] = version + 1
-        live = moved
-        if not live:
-            break
-    return origin
+def origins(
+    target: str,
+    text: Mapping[str, list[str]],
+    parents: Mapping[str, Sequence[str]],
+) -> list[str]:
+    """The version that introduced each line of `target`, in line order."""
+    diffs: dict[tuple[str, str], dict[int, int]] = {}
+    found: list[str] = []
+    for index in range(len(text[target])):
+        here, at = target, index
+        while True:
+            moved: tuple[str, int] | None = None
+            for parent in parents.get(here, ()):
+                if parent not in text:
+                    continue
+                kept = diffs.get((here, parent))
+                if kept is None:
+                    kept = diffs[(here, parent)] = carried(text[parent], text[here])
+                if at in kept:
+                    moved = (parent, kept[at])
+                    break
+            if moved is None:
+                break
+            here, at = moved
+        found.append(here)
+    return found

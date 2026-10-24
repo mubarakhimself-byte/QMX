@@ -51,7 +51,7 @@ from typing import IO, Any, Final, Literal, Protocol, Self, cast
 
 from pydantic import JsonValue
 
-from qmx_library.blame import lines, walk_back
+from qmx_library.blame import lines, origins
 from qmx_library.fts import Catalog, norm
 from qmx_library.kinds import Kind, kind, roster, schema_files
 from qmx_library.marks import CLEAR, QUARANTINED, Marks, marks, marks_ref
@@ -60,6 +60,7 @@ from qmx_library.port import (
     AsOf,
     Blame,
     BlameLine,
+    BlobId,
     BlobRef,
     BlobView,
     Claim,
@@ -67,8 +68,8 @@ from qmx_library.port import (
     Commit,
     Draft,
     Grounding,
-    Hit,
     HistoryEntry,
+    Hit,
     JsonObject,
     LibraryRefused,
     MergeResult,
@@ -122,7 +123,7 @@ CLASH: Final = _Clash()
 
 def _pick_key(ours: JsonValue | None, theirs: JsonValue | None, base: JsonValue | None) -> object:
     """The one side to keep for a JSON key, or `CLASH`: the same rule `pick` applies to fields."""
-    if theirs == ours or theirs == base:
+    if theirs in (ours, base):
         return ours
     if ours == base:
         return theirs
@@ -132,7 +133,7 @@ def _pick_key(ours: JsonValue | None, theirs: JsonValue | None, base: JsonValue 
 def _json_object(data: bytes) -> JsonObject | None:
     try:
         found = json.loads(data.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
+    except UnicodeDecodeError, ValueError:
         return None
     return cast(JsonObject, found) if isinstance(found, dict) else None
 
@@ -164,8 +165,8 @@ def merge_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, int]:
         for path, data in zip(paths, (ours, base, theirs), strict=True):
             path.write_bytes(data)
         try:
-            done = subprocess.run(  # noqa: S603
-                [
+            done = subprocess.run(
+                [  # noqa: S607 - git from PATH is the pinned 2.x the contract names
                     "git",
                     "merge-file",
                     "-p",
@@ -189,6 +190,8 @@ def merge_text(ours: bytes, base: bytes, theirs: bytes) -> tuple[bytes, int]:
         detail = done.stderr.decode("utf-8", "replace").strip()
         raise LibraryRefused("storage_failure", f"git merge-file failed: {detail}")
     return done.stdout, done.returncode
+
+
 CAPTURE_VERSION: Final = "capture-1"
 """The extractor version a capture's text hash is compared within (AD-27)."""
 RENAME_TRIES: Final = 8
@@ -1052,7 +1055,9 @@ class Store:
                 self._move(who, item, into, theirs, reason=f"merge {from_ref}")
                 return MergeResult("fast-forward", theirs)
             if strategy == "ff-only":
-                return self._conflict(who, item, into, None, ours, theirs, [{"path": "history"}])
+                return self._conflict(
+                    who, item, into, None, ours, theirs, [{"path": "history"}], {}
+                )
             return self._three_way(who, item, into, from_ref, ours, theirs)
 
     def _descends(self, child: ObjectId, ancestor: ObjectId) -> bool:
@@ -1109,10 +1114,9 @@ class Store:
             ours_id, theirs_id = ours_b and ours_b.blob_id, theirs_b and theirs_b.blob_id
             base_id = base_b and base_b.blob_id
             both = bool(
-                ours_b and theirs_b and ours_id != theirs_id and ours_id != base_id
-                and theirs_id != base_id
+                ours_b and theirs_b and ours_id != theirs_id and base_id not in (ours_id, theirs_id)
             )
-            media = (ours_b or theirs_b).media_type
+            media = cast(BlobView, ours_b or theirs_b).media_type
             if both and (media.startswith("text/") or media == JSON_MEDIA):
                 merged, found, would = self._merge_slot(o, t, spec, slot, base_id, media)
                 entries.extend(found)
@@ -1165,15 +1169,19 @@ class Store:
         merged, conflicts = merge_text(mine, before, other)
         if not conflicts:
             return self._slot_blob(spec, slot, merged), [], None
-        return None, [
-            {
-                "path": f"blobs.{slot}",
-                "slot": slot,
-                "media_type": media,
-                "conflicts": conflicts,
-                "text": merged.decode("utf-8", "replace"),
-            }
-        ], None
+        return (
+            None,
+            [
+                {
+                    "path": f"blobs.{slot}",
+                    "slot": slot,
+                    "media_type": media,
+                    "conflicts": conflicts,
+                    "text": merged.decode("utf-8", "replace"),
+                }
+            ],
+            None,
+        )
 
     def _merge_keys(
         self, spec: Kind, slot: str, base: bytes, ours: bytes, theirs: bytes
@@ -1181,15 +1189,19 @@ class Store:
         """An `application/json` slot key by key, with one entry per clashing key (AD-30)."""
         sides = [_json_object(data) for data in (base, ours, theirs)]
         if any(side is None for side in sides):
-            return None, [
-                {
-                    "path": f"blobs.{slot}",
-                    "slot": slot,
-                    "media_type": JSON_MEDIA,
-                    "ours": ours.decode("utf-8", "replace"),
-                    "theirs": theirs.decode("utf-8", "replace"),
-                }
-            ], ours
+            return (
+                None,
+                [
+                    {
+                        "path": f"blobs.{slot}",
+                        "slot": slot,
+                        "media_type": JSON_MEDIA,
+                        "ours": ours.decode("utf-8", "replace"),
+                        "theirs": theirs.decode("utf-8", "replace"),
+                    }
+                ],
+                ours,
+            )
         before, mine, other = (cast(JsonObject, side) for side in sides)
         merged: JsonObject = {}
         entries: list[JsonObject] = []
@@ -1247,7 +1259,7 @@ class Store:
             "entries": cast(list[JsonValue], entries),
         }
         if would:
-            fields["merged"] = cast(JsonObject, dict(would))
+            fields["merged"] = dict(would)
         draft = Draft("merge-conflict", title=f"Conflict merging into {into}", fields=fields)
         conflict = str(uuid.uuid7())
         object_id, _ = self._mint(who, draft, conflict, [])
@@ -1364,7 +1376,7 @@ class Store:
                 item,
                 title,
                 summary,
-                cast(JsonObject, fields),
+                fields,
                 blobs,
                 relations,
                 [ours, theirs],
@@ -1374,9 +1386,7 @@ class Store:
             self._annotate(who, conflict, {"resolved_by": object_id})
         return MergeResult("merged", object_id)
 
-    def history_of(
-        self, who: Principal, item: str, ref: str | None = None
-    ) -> list[HistoryEntry]:
+    def history_of(self, who: Principal, item: str, ref: str | None = None) -> list[HistoryEntry]:
         """The item's ref log, oldest first: a READ, answered from the moves this store wrote
         (AD-30). `ref` narrows it to one ref; without it every ref the item moved on is listed."""
         query = "SELECT seq, item, ref, principal, prev_head, new_head, at, reason FROM moves "
@@ -1407,26 +1417,26 @@ class Store:
         back while the diff says its parent already held it. Nothing is written."""
         head = self.resolve(who, item, ref)
         with self._mutex:
-            chain: list[list[str]] = []
-            versions: list[ObjectView] = []
-            here: ObjectId | None = head
-            while here is not None:
+            text: dict[str, list[str]] = {}
+            parents: dict[str, tuple[str, ...]] = {}
+            pending = [head]
+            while pending:
+                here = pending.pop()
+                if here in text:
+                    continue
                 view = self._view(here)
                 blob = view.blobs.get(slot)
                 if blob is None or not blob.media_type.startswith("text/"):
-                    break
-                found = self._slot_bytes(kind(view.kind), slot, blob.blob_id)
-                versions.append(view)
-                chain.append(lines(found.decode("utf-8", "replace")))
-                here = view.parents[0] if view.parents else None
-            origin = walk_back(chain)
+                    continue
+                raw = self._slot_bytes(kind(view.kind), slot, blob.blob_id)
+                text[here] = lines(raw.decode("utf-8", "replace"))
+                parents[here] = view.parents
+                pending.extend(view.parents)
+            origin = origins(head, text, parents)
         blamed: list[BlameLine] = []
-        for index, line in enumerate(chain[0]):
-            version = versions[origin[index]]
-            author, at = self._author(version.object_id, item)
-            blamed.append(
-                BlameLine(index + 1, line.rstrip("\r\n"), version.object_id, author, at)
-            )
+        for index, line in enumerate(text[head]):
+            author, at = self._author(origin[index], item)
+            blamed.append(BlameLine(index + 1, line.rstrip("\r\n"), origin[index], author, at))
         return Blame(item, slot, ref, head, tuple(blamed))
 
     def _would_be(
@@ -1445,10 +1455,13 @@ class Store:
         return held
 
     def _author(self, object_id: ObjectId, item: str) -> tuple[str, str]:
-        """Who moved this object onto one of the item's refs, and when; its birth if nothing did."""
+        """Who first placed this version, and when: the write that changed the line.
+
+        The first move of the object is its birth, which names the chat or run that made it; a
+        later move of the same object (a fast-forward) is another ref carrying it, not an edit."""
         row = self.catalog.db.execute(
             "SELECT principal, at FROM moves WHERE new_head = ? AND item = ? "
-            "ORDER BY seq DESC LIMIT 1",
+            "ORDER BY seq ASC LIMIT 1",
             (object_id, item),
         ).fetchone()
         if row is not None:

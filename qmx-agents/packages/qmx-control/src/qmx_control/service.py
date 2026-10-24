@@ -41,7 +41,7 @@ from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
 from qmx_control.catalog import operation
 from qmx_control.library import OPERATOR as LIBRARY_OPERATOR
-from qmx_control.library import Library
+from qmx_control.library import Library, refused
 from qmx_control.models import ControlError as ControlError  # noqa: PLC0414 - public re-export
 from qmx_control.models import DelegateCompletion as DelegateCompletion  # noqa: PLC0414
 from qmx_control.models import Document, MemoKey
@@ -996,6 +996,141 @@ class ControlService:
     def library_links(self, artifact_id: str) -> list[Document]:
         """Read incoming and outgoing artifact links."""
         return self.library.links(artifact_id)
+
+    def _item_of(self, artifact_id: str) -> str:
+        """The item the object `artifact_id` names belongs to."""
+        try:
+            return self.library.store.get(LIBRARY_OPERATOR, artifact_id).item
+        except LibraryRefused as error:
+            raise refused(error) from error
+
+    @operation(
+        "library", "branch", "domain_write", rest=("POST", "/api/library/{artifact_id}/branch")
+    )
+    def library_branch(self, artifact_id: str, name: str, from_ref: str = "main") -> Document:
+        """Put one item's ref under a new name, so a chat edits it there and nothing else moves."""
+        try:
+            commit = self.library.store.branch(
+                LIBRARY_OPERATOR, self._item_of(artifact_id), from_ref=from_ref, name=name
+            )
+        except LibraryRefused as error:
+            raise refused(error) from error
+        with self._lock, self._connect() as db:
+            self._event(db, "library", commit.object_id, {"type": "branched", "ref": commit.ref})
+        return {"item": commit.item, "ref": commit.ref, "object_id": commit.object_id}
+
+    @operation(
+        "library", "merge", "domain_write", rest=("POST", "/api/library/{artifact_id}/merge")
+    )
+    def library_merge(
+        self,
+        artifact_id: str,
+        from_ref: str,
+        into: str = "main",
+        strategy: Literal["auto", "ff-only"] = "auto",
+    ) -> Document:
+        """Merge one ref of an item into another. A text slot merges line by line, a JSON slot key
+        by key, and a clash mints one `merge-conflict` instead of picking a side."""
+        try:
+            merged = self.library.store.merge(
+                LIBRARY_OPERATOR,
+                self._item_of(artifact_id),
+                from_ref=from_ref,
+                into=into,
+                strategy=strategy,
+            )
+        except LibraryRefused as error:
+            raise refused(error) from error
+        with self._lock, self._connect() as db:
+            self._event(
+                db,
+                "library",
+                merged.object_id,
+                {"type": merged.outcome, "into": into, "from_ref": from_ref},
+            )
+        return {"outcome": merged.outcome, "object_id": merged.object_id}
+
+    @operation("library", "conflicts", "read", rest=("GET", "/api/library/conflicts"))
+    def library_conflicts(self, artifact_id: str | None = None) -> list[Document]:
+        """Read the open merge conflicts of one item, or of the Library when no item is named."""
+        try:
+            item = None if artifact_id is None else self._item_of(artifact_id)
+            found = self.library.store.conflicts(LIBRARY_OPERATOR, item)
+        except LibraryRefused as error:
+            raise refused(error) from error
+        return [
+            {
+                "id": view.object_id,
+                "item": str(view.fields.get("item")),
+                "into": str(view.fields.get("into")),
+                "base": view.fields.get("base"),
+                "ours": view.fields.get("ours"),
+                "theirs": view.fields.get("theirs"),
+                "entries": view.fields.get("entries"),
+            }
+            for view in found
+        ]
+
+    @operation(
+        "library", "resolve", "domain_write", rest=("POST", "/api/library/{artifact_id}/resolve")
+    )
+    def library_resolve(
+        self,
+        artifact_id: str,
+        text: str | None = None,
+        values: Document | None = None,
+    ) -> Document:
+        """Close one merge conflict: `text` is the resolved text of its text slot and `values`
+        closes its clashing JSON keys. An entry left open refuses the whole resolve."""
+        try:
+            merged = self.library.store.resolve_conflict(
+                LIBRARY_OPERATOR, artifact_id, text=text, values=values
+            )
+        except LibraryRefused as error:
+            raise refused(error) from error
+        with self._lock, self._connect() as db:
+            self._event(db, "library", merged.object_id, {"type": "resolved"})
+        return {"outcome": merged.outcome, "object_id": merged.object_id}
+
+    @operation("library", "history", "read", rest=("GET", "/api/library/{artifact_id}/history"))
+    def library_history(self, artifact_id: str, ref: str | None = None) -> list[Document]:
+        """Read an item's ref log: every move of a ref, who made it, when and to what."""
+        try:
+            moved = self.library.store.history_of(LIBRARY_OPERATOR, self._item_of(artifact_id), ref)
+        except LibraryRefused as error:
+            raise refused(error) from error
+        return [
+            {
+                "seq": entry.seq,
+                "ref": entry.ref,
+                "principal": entry.principal,
+                "prev_head": entry.prev_head,
+                "new_head": entry.new_head,
+                "at": entry.at,
+                "reason": entry.reason,
+            }
+            for entry in moved
+        ]
+
+    @operation("library", "blame", "read", rest=("GET", "/api/library/{artifact_id}/blame"))
+    def library_blame(self, artifact_id: str, slot: str, ref: str = "main") -> list[Document]:
+        """Read which version and principal last changed each line of a text slot."""
+        try:
+            blamed = self.library.store.blame(
+                LIBRARY_OPERATOR, self._item_of(artifact_id), slot, ref
+            )
+        except LibraryRefused as error:
+            raise refused(error) from error
+        return [
+            {
+                "number": line.number,
+                "text": line.text,
+                "object_id": line.object_id,
+                "principal": line.principal,
+                "at": line.at,
+            }
+            for line in blamed.lines
+        ]
 
     @operation(
         "ops",
