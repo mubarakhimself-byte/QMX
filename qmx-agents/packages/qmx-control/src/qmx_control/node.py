@@ -10,6 +10,10 @@ the node run unprivileged as `qmx`, because a long-lived server process is not r
 `qmx node verify` is the doctor: one `PASS`/`FAIL` line per fact, including the primary store the
 setting names and whether the Hub answers.
 
+`qmx node rebuild` puts a new server's Library back from the bucket and rebuilds its catalog from
+what came back (MIGRATION "When the server is lost", step 3), and `qmx node pair` writes a fresh
+pairing code on both ends (step 5). Neither prints a key: a code is written to a file, never shown.
+
 `qmx node update` drains the node before it installs anything (AD-65, Appendix F): it asks the
 host to stop claiming fires, waits until no attempt is in flight, and only then runs the bootstrap
 at the pinned revision and lets it restart the services. An update that cannot drain says so and
@@ -33,7 +37,7 @@ import time
 import tomllib
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Final, cast
 
@@ -217,8 +221,14 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
     return checks
 
 
-def flip_primary(home: Path, url: str) -> None:
-    """Write `[library] primary = server` into `home`'s settings, leaving every other line."""
+def flip_primary(home: Path, url: str, *, primary: str = "server") -> None:
+    """Write `[library] primary` and `hub_url` into `home`'s settings, leaving every other line.
+
+    The flip writes `server`; the reverse flip of MIGRATION step 8 writes `pc` with the same Hub,
+    which is then a replica. Either value only caches the record on `refs/primary` (AD-14, AD-19).
+    """
+    if primary not in ("pc", "server"):
+        raise ValueError("The primary store is `pc` or `server`.")
     path = home / "settings.toml"
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -229,7 +239,7 @@ def flip_primary(home: Path, url: str) -> None:
         if stripped.startswith("[") and stripped.endswith("]"):
             inside = stripped == "[library]"
             if inside:
-                kept.extend([line, 'primary = "server"', f'hub_url = "{url}"'])
+                kept.extend([line, f'primary = "{primary}"', f'hub_url = "{url}"'])
                 continue
         if inside and re.match(r"^(primary|hub_url)\s*=", stripped):
             continue
@@ -237,8 +247,103 @@ def flip_primary(home: Path, url: str) -> None:
     if "[library]" not in "\n".join(kept):
         if kept and kept[-1] != "":
             kept.append("")
-        kept.extend(["[library]", 'primary = "server"', f'hub_url = "{url}"'])
+        kept.extend(["[library]", f'primary = "{primary}"', f'hub_url = "{url}"'])
     path.write_text("\n".join(kept).rstrip("\n") + "\n", encoding="utf-8")
+
+
+PAIRING_KEY: Final = "pairing-key"
+"""The key both ends hold after a pairing: this machine's name on the Hub, not a right (AD-11)."""
+BUCKET_PREFIX: Final = "library"
+"""The folder on the bucket, beside the push that writes it (`qmx_hub.bucket` writes the name once
+on each side, because the two packages do not depend on each other)."""
+BUCKET_FRAMES: Final = ("objects", "edges", "annotations", "blobs")
+BUCKET_FILES: Final = ("refs/log.jsonl", "refs/epoch.json")
+
+
+def pairing_code() -> str:
+    """A fresh pairing code. It is written to a file and never printed (MIGRATION step 8.5)."""
+    return secrets.token_urlsafe(32)
+
+
+def pair(home: Path, code: str | None = None) -> Path:
+    """Write a fresh pairing code into `home`'s vault, owner-only, and return its path.
+
+    Re-pairing replaces the code both ends hold: the old one stops opening this machine's store,
+    which is why the server-loss step 5 pairs again rather than reusing it.
+    """
+    found = code or pairing_code()
+    target = home / "vault" / PAIRING_KEY
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(".tmp")
+    temporary.write_text(found + "\n", encoding="utf-8")
+    if os.name == "posix":
+        temporary.chmod(0o600)
+    temporary.replace(target)
+    return target
+
+
+def rebuild(
+    home: Path,
+    *,
+    remote: str | None = None,
+    root: Path | None = None,
+    prefix: str = BUCKET_PREFIX,
+    runner: Callable[[Sequence[str]], str] | None = None,
+) -> dict[str, object]:
+    """Put the bucket's Library evidence back under `root` and rebuild the catalog from it.
+
+    MIGRATION "When the server is lost" step 3: the old server pushed objects, refs, edges and
+    durable blobs after each commit batch, so a new server restores those and rebuilds its index;
+    the catalog is never copied, because it is derived (AD-16). Without a bucket remote nothing is
+    restored and the answer says so in the same words the push uses.
+    """
+    from qmx_hub.bucket import NO_BUCKET  # noqa: PLC0415 (the sentence has one owner)
+
+    target = root or home / "library"
+    if not remote:
+        return {"restored": False, "said": NO_BUCKET}
+    calls: list[tuple[str, ...]] = [
+        (
+            "rclone",
+            "copy",
+            f"{remote}:{prefix}/{name}",
+            str(target / name),
+            "--checksum",
+            "--stats=0",
+        )
+        for name in BUCKET_FRAMES
+    ] + [
+        (
+            "rclone",
+            "copyto",
+            f"{remote}:{prefix}/{name}",
+            str(target / name),
+            "--checksum",
+            "--stats=0",
+        )
+        for name in BUCKET_FILES
+    ]
+    for call in calls:
+        (runner or _rclone)(call)
+    from qmx_engine.ledger import redact  # noqa: PLC0415
+    from qmx_library.store import Store  # noqa: PLC0415
+
+    with Store.open(target, redactor=redact, name="server") as store:
+        counts: dict[str, object] = {
+            "restored": True,
+            "objects": len(store.object_ids()),
+            "refs": len(store.refs()),
+            "blobs": len(store.blob_ids()),
+            "said": f"restored {len(store.object_ids())} objects and rebuilt the catalog",
+        }
+    return counts
+
+
+def _rclone(call: Sequence[str]) -> str:
+    done = subprocess.run(list(call), capture_output=True, check=False, text=True)
+    if done.returncode:
+        raise RuntimeError((done.stderr or done.stdout).strip() or "rclone failed")
+    return done.stdout
 
 
 DRAIN_ROUTE: Final = "/api/node/drain"
@@ -395,6 +500,13 @@ def main() -> int:
     importer = commands.add_parser("import")
     importer.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     importer.add_argument("--bucket", type=Path, default=None)
+    rebuilding = commands.add_parser("rebuild")
+    rebuilding.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    rebuilding.add_argument("--root", type=Path, default=None)
+    rebuilding.add_argument("--remote", default=None, help="the rclone remote holding the bucket")
+    pairing = commands.add_parser("pair")
+    pairing.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    pairing.add_argument("--ssh-host", default="", help="also install the same code on that host")
     check = commands.add_parser("verify")
     check.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     check.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
@@ -429,6 +541,31 @@ def main() -> int:
             f"imported {done.runs} runs, {done.artifacts} artifacts, {done.blobs} blobs, "
             f"{done.skipped} skipped"
         )
+        return 0
+    if args.command == "rebuild":
+        found = rebuild(
+            cast(Path, args.home),
+            remote=cast(str | None, args.remote),
+            root=cast(Path | None, args.root),
+        )
+        print(f"{'PASS' if found.get('restored') else 'no bucket, '}{found['said']}")
+        return 0 if found.get("restored") else 1
+    if args.command == "pair":
+        code = pairing_code()
+        target = pair(cast(Path, args.home), code)
+        host = cast(str, args.ssh_host)
+        if host:
+            if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
+                parser.error("Use an SSH hostname or user@hostname.")
+            ssh = shutil.which("ssh")
+            if ssh is None:
+                raise RuntimeError("Install SSH before pairing a node.")
+            run(
+                [ssh, host, "sudo sh -c 'umask 077; cat > /etc/qmx/vault/pairing-key'"],
+                input_text=code,
+            )
+            print(f"PASS paired {host}")
+        print(f"PASS pairing code written to {target}")
         return 0
     if args.command == "setup":
         host = cast(str, args.ssh_host)

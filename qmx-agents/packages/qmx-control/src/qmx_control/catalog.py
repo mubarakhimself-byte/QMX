@@ -29,7 +29,11 @@ MANAGE and PROPOSE_MONEY always ask."""
 type Reversibility = Literal[
     "none", "reversible", "compensable", "irreversible", "irreversible_external"
 ]
-type Binds = Literal["control_op", "domain_fn", "broker", "app_server", "agent_tool", "delegate"]
+type Binds = Literal[
+    "control_op", "domain_fn", "broker", "app_server", "agent_tool", "delegate", "primary_op"
+]
+"""`primary_op` is `qmx_control.primary`: the primary store's own operations, served at the host's
+user door and on no model's surface (migration step 8, "When the server is lost")."""
 type Caller = Literal["model", "code"]
 type Verb = Literal["GET", "POST", "PUT"]
 
@@ -499,6 +503,37 @@ volume. A caller reaches it as `apps_admin_move`, `MANAGE` because a move takes 
 from the machine that had it."""
 
 
+PRIMARY_ROWS: Final = (
+    _row(
+        "library",
+        "move",
+        "primary_op",
+        "press",
+        "manage",
+        "Move the Library to the server: say so, pause saves, push until the PC and the server "
+        "agree, then wait for his click. Nothing moves until he presses the card.",
+        agent=False,
+        left_out="it moves the one record of which store is primary, so only his click asks it",
+        reversibility="compensable",
+    ),
+    _row(
+        "library",
+        "server_lost",
+        "primary_op",
+        "server_lost",
+        "manage",
+        "Run the procedure for a server that is gone: promote the PC, list the refs that may be "
+        "behind, name what has one copy only, then rebuild and re-pair when he is ready.",
+        agent=False,
+        left_out="it promotes the PC, which raises the epoch; an agent never promotes a store",
+        reversibility="compensable",
+    ),
+)
+"""The primary store's two operations (migration step 8 and "When the server is lost"; DATA-PLAN
+DR2D). Both are the operator's, so neither is on any model's surface: `qmx_control.primary` serves
+them at the host's user door, which is the same `user` the inbox answers as."""
+
+
 def control_rows() -> tuple[OperationSpec, ...]:
     """Every `@operation` row on `ControlService`, in definition order."""
     from qmx_control.service import ControlService  # noqa: PLC0415
@@ -581,6 +616,7 @@ def rows(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
         *MEMORY_ROWS,
         *ROUTER_ROWS,
         *INSTANCE_ROWS,
+        *PRIMARY_ROWS,
         *apps,
     )
     check(found)
