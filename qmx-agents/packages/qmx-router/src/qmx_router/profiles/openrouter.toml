@@ -1,10 +1,11 @@
-# OpenRouter, for provider-proof lanes only. Tool search stays off: with it on, OpenRouter answers
-# 400 "Deferred custom tools are only supported on Anthropic models" for Kimi K2.5 (HP12 check 8)
-# and DeepSeek (HP1); with it off, Kimi K2.5 ran a Bash call and DeepSeek V4.1 Flash answered.
+# OpenRouter, the operator's key provider for Kimi and DeepSeek models (wrap-up decisions 1). Tool
+# search stays off: with it on, OpenRouter answers 400 "Deferred custom tools are only supported on
+# Anthropic models" for Kimi K2.5 (HP12 check 8) and DeepSeek (HP1); with it off, Kimi K2.5 ran a
+# Bash call and DeepSeek V4.1 Flash answered.
 base_url = { global = "https://openrouter.ai/api" }
 auth = "bearer"
 credentials = ["qmx/openrouter"]
-use = "test_only"
+use = "any"
 cheap_aux = "openrouter/deepseek/deepseek-v4.1-flash"
 
 [defaults]

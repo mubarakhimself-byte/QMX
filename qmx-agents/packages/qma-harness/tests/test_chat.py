@@ -12,6 +12,7 @@ from typing import Any, ClassVar, cast
 
 import httpx
 import pytest
+import qmx_router.registry
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
@@ -1116,6 +1117,43 @@ def test_a_key_chat_launches_through_a_relay_grant_revoked_when_its_cli_ends(
 
     run(body, home)
     assert statuses == [404, 401]
+
+
+KIMI_ROW: Document = {
+    "base_url": "https://api.moonshot.ai/anthropic",
+    "credential_ref": "qmx/kimi",
+    "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "kimi-k3"),
+}
+
+
+def test_a_removed_or_keyless_provider_offers_no_sub_agent(
+    home: QmxHome, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(qma.harness.chat, "plan_auth_method", no_plan_login)
+    monkeypatch.setattr(qma.harness.harness, "keyring_secret", lambda _ref: "key")  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    keys = {"qmx/openrouter", "qmx/kimi"}
+    monkeypatch.setattr(qmx_router.registry, "key_stored", lambda ref: ref in keys)  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    control = control_service(home)
+    models: list[set[str]] = []
+
+    async def body(harness: Harness) -> None:
+        chat = await harness.start_chat(NewChat(title="k", model="opus", profile="openrouter"))
+        await harness.send(chat, OperatorText("hi"))
+        agents = FakeClient.made[-1].options.agents or {}
+        models.append({str(agent.model) for agent in agents.values()})
+
+    control.settings_put("providers", {"openrouter": ROUTER_ROW, "kimi": KIMI_ROW})
+    run(body, home)
+    keys.discard("qmx/kimi")
+    run(body, home)
+    control.settings_put("providers", {"openrouter": ROUTER_ROW})
+    keys.add("qmx/kimi")
+    run(body, home)
+    with_kimi, keyless, removed = models
+    assert any(model.startswith("kimi/") for model in with_kimi)
+    assert not any(model.startswith("kimi/") for model in keyless)
+    assert not any(model.startswith("kimi/") for model in removed)
+    assert all(model.startswith("openrouter/") for model in keyless | removed)
 
 
 def record_grants(monkeypatch: pytest.MonkeyPatch) -> list[RelayGrant]:
