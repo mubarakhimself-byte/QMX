@@ -219,8 +219,9 @@ def walk(
     """Walk one connection from `available` to `healthy` and read its word.
 
     A missing declaration, credential reference or probe reads `needs_you`, because a person has
-    to finish the setup. A credential that can trade and is homed on the PC reads `needs_you`
-    before any probe runs: it belongs on a trading server. A provider's slow-down signal is a
+    to finish the setup; a type whose declaration says `auth == "none"` needs no reference. A
+    credential that can trade and is homed on the PC reads `needs_you` before any probe runs: it
+    belongs on a trading server. A provider's slow-down signal is a
     `slowed` reading with `slowed_until`; while that wait is live the probe is not called. A
     failed probe reads `down`, or `maintenance` while the instrument's market is closed.
     """
@@ -231,7 +232,7 @@ def walk(
     except KeyError:
         return Reading(connection.id, "available", "needs_you", code="adapter_unknown")
     configured = (
-        bool(connection.credential_ref)
+        (declaration.auth == "none" or bool(connection.credential_ref))
         and bool(connection.home)
         and (declaration.name != "ccxt" or bool(provider.exchange))
     )

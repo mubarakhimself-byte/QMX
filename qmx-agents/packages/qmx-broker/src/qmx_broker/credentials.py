@@ -19,12 +19,25 @@ from keyring.errors import PasswordDeleteError
 READ_PREFIX = "qmx/read/"
 DATA_PREFIX = "qmx/data/"
 FILED_PREFIXES = (READ_PREFIX, DATA_PREFIX)
+CTRADER_CLIENT_ID = "qmx/ctrader-client-id"
+CTRADER_CLIENT_SECRET = "qmx/ctrader-client-secret"  # noqa: S105 - an entry name, not a secret
+CTRADER_APP = "qmx/read/ctrader-app"
+"""The read app's id and secret as one static entry, which the vault seals for the server."""
 
 
 class SecretStore(Protocol):
     def get_password(self, service: str, username: str) -> str | None: ...
     def set_password(self, service: str, username: str, password: str) -> None: ...
     def delete_password(self, service: str, username: str) -> None: ...
+
+
+class Held(Protocol):
+    @property
+    def password(self) -> str: ...
+
+
+class TargetStore(SecretStore, Protocol):
+    def get_credential(self, service: str, username: str | None) -> Held | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,3 +128,48 @@ def refile(
     with suppress(PasswordDeleteError):
         secrets.delete_password(old_reference, old_reference.removeprefix("qmx/"))
     return Filing(connection_id, reference, True, "ok")
+
+
+@dataclass(frozen=True, slots=True)
+class Joined:
+    """What the cTrader app copy did. `changed` means the vault copy must be carried again."""
+
+    word: Literal["ok", "needs_you"]
+    changed: bool
+    reason: str = ""
+
+
+def join_ctrader_app(store: TargetStore | None = None) -> Joined:
+    """Copy his two typed entries into `qmx/read/ctrader-app` as `{clientId, clientSecret}`.
+
+    Each entry is read by its target name, whatever user name it was saved under, and both are
+    left where he typed them. A run whose copy already matches writes nothing, so it is safe to
+    run before every sign-in. No value is printed or returned.
+    """
+    secrets = cast(TargetStore, keyring) if store is None else store
+    found: dict[str, str] = {}
+    for name in (CTRADER_CLIENT_ID, CTRADER_CLIENT_SECRET):
+        held = secrets.get_credential(name, None)
+        value = "" if held is None else (held.password or "").strip()
+        if not value:
+            return Joined("needs_you", False, f"{name} is not in Credential Manager")
+        found[name] = value
+    joined = json.dumps(
+        {"clientId": found[CTRADER_CLIENT_ID], "clientSecret": found[CTRADER_CLIENT_SECRET]},
+        sort_keys=True,
+    )
+    user = CTRADER_APP.removeprefix("qmx/")
+    if secrets.get_password(CTRADER_APP, user) == joined:
+        return Joined("ok", False)
+    secrets.set_password(CTRADER_APP, user, joined)
+    return Joined("ok", True)
+
+
+if __name__ == "__main__":
+    import sys
+
+    done = join_ctrader_app()
+    if done.word != "ok":
+        print(f"{CTRADER_APP}: {done.reason}")
+        sys.exit(1)
+    print(f"{CTRADER_APP}: {'written' if done.changed else 'already current'}")

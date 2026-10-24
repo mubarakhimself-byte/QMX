@@ -817,12 +817,16 @@ def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor |
 
 
 def answering_router(home: Path, engine: EngineDoor) -> list[APIRouter]:
-    """The node's forwarding route, served only where a pairing key lets another host ask."""
+    """The node's forwarding route, served only where a pairing key lets another host ask, and
+    the cTrader sign-in routes, which refuse by name until a pairing key exists (AD-67)."""
+    from qmx_host.venue_session import for_host  # noqa: PLC0415 - kept beside the mount (WU8)
+
+    venue = for_host(home, engine)
     key_file = home / "vault" / "pairing-key"
     if not key_file.exists():
-        return []
+        return [venue]
     key = key_file.read_text(encoding="utf-8").strip()
-    return [forward_router(engine.svc.remote(), key)]
+    return [forward_router(engine.svc.remote(), key), venue]
 
 
 def drain_router(core: Engine) -> APIRouter:
