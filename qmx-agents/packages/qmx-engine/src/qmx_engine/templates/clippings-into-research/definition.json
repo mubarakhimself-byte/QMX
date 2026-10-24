@@ -22,6 +22,9 @@
     {"id": "scan", "name": "Read the clippings", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
      "parameters": {"script": "scripts/scan.py", "fixture_ref": "fixtures/clippings.json"}},
+    {"id": "save_source", "name": "Save each clipping as one source", "type": "script",
+     "typeVersion": 1, "position": [220, 160], "effect": "none",
+     "parameters": {"script": "scripts/save_source.py", "artifacts": ["library/sources/"]}},
     {"id": "dedupe", "name": "Dedupe by hash and intent key", "type": "script", "typeVersion": 1,
      "position": [440, 0], "effect": "none", "parameters": {"script": "scripts/dedupe.py"}},
     {"id": "summarise", "name": "Summarise the new ones", "type": "llm", "typeVersion": 1,
@@ -43,6 +46,8 @@
   "connections": {
     "Hourly clippings watch": {"main": [[{"node": "Read the clippings", "port": "in", "map": "one"}]]},
     "Read the clippings": {"main": [[{"node": "Dedupe by hash and intent key", "port": "in",
+                                       "map": "one"},
+                                      {"node": "Save each clipping as one source", "port": "in",
                                        "map": "one"}]]},
     "Dedupe by hash and intent key": {"main": [
       [{"node": "Summarise the new ones", "port": "in", "map": "one"},
