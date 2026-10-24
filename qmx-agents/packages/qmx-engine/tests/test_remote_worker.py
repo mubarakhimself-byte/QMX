@@ -262,3 +262,23 @@ def test_a_placed_job_with_code_passes_the_provider_envelope() -> None:
     assert isinstance(result, Ok)
     assert provider.bundle is not None
     assert list(provider.bundle["files"]) == ["count.py"]
+
+
+def test_a_placed_job_carries_its_placements_door_url() -> None:
+    provider = FakeProvider()
+    placed = PlacementWorker(
+        gateway=FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}),
+        providers={"contabo": provider},
+        settings=DEFAULTS,
+        mint=lambda _job: PASS,
+        remote={"contabo"},
+        poll_seconds=0.0,
+        clock=Clock(),
+        doors={"contabo": "http://qmx-server:8765"},
+    )
+
+    result, _ = run(placed, job("contabo"))
+
+    assert isinstance(result, Ok)
+    assert provider.bundle is not None
+    assert provider.bundle["definition"]["job"]["door_url"] == "http://qmx-server:8765"

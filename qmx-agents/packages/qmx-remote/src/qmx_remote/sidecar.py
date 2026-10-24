@@ -151,8 +151,12 @@ def _refusal(raw: bytes) -> str:
     except ValueError:
         return ""
     detail = cast(dict[str, object], found).get("detail") if isinstance(found, dict) else None
-    refused = cast(dict[str, object], detail).get("refused") if isinstance(detail, dict) else None
-    return str(refused) if refused else ""
+    if not isinstance(detail, dict):
+        return ""
+    fields = cast(dict[str, object], detail)
+    context = fields.get("context")
+    named = cast(dict[str, object], context).get("field") if isinstance(context, dict) else None
+    return str(named or fields.get("refused") or "")
 
 
 class HubPort(Protocol):

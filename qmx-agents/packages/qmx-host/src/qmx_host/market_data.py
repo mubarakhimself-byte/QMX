@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Final, cast
 
 import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from qmf.core import (
     CalendarIdentity,
@@ -53,6 +53,9 @@ from qmf.data.store.refusals import (
     storage_failure,
 )
 from qmx_engine.control_door import PRINCIPAL
+from qmx_router.passes import Pass
+
+from qmx_host.door import RUN_PASS
 
 __all__ = [
     "HANDLE_ROWS",
@@ -955,6 +958,34 @@ class VerifyBody(BaseModel):
     fingerprints: list[str]
 
 
+def read_scope(body: ReadBody, request: Request) -> list[str] | None:
+    """The scope a read is checked against. A run-pass caller's comes from the pass the principal
+    door verified, never from the body; a body that asks for more than the pass is refused. A
+    local-bearer caller's comes from the body, as before. A run pass reads by series only: a
+    target folder or a fingerprint list on this machine is not its to name."""
+    minted: object = getattr(request.state, RUN_PASS, None)
+    if not isinstance(minted, Pass):
+        return body.data_scope
+    scope = list(minted.data_scope)
+    wider = sorted(set(body.data_scope or ()) - set(scope))
+    if wider:
+        raise _pass_refusal("data_scope", "the body asks for more than the run pass", wider=wider)
+    if body.into is not None or body.fingerprints:
+        raise _pass_refusal("into", "a run pass reads by series, never into a path or by file")
+    return scope
+
+
+def _pass_refusal(field: str, reason: str, **extra: object) -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail={
+            "refused": "policy rejection",
+            "retryability": "no",
+            "context": {"field": field, "reason": reason, **extra},
+        },
+    )
+
+
 def market_router(door: MarketDoor) -> APIRouter:
     """The door's routes, mounted by the host behind its bearer and its principal door.
 
@@ -978,14 +1009,14 @@ def market_router(door: MarketDoor) -> APIRouter:
         return found.value
 
     @router.post("/api/data/read")
-    def read(body: ReadBody) -> dict[str, object]:
+    def read(body: ReadBody, request: Request) -> dict[str, object]:
         answered = door.read(
             body.series,
             fingerprints=body.fingerprints,
             start_ns=body.start_ns,
             end_ns=body.end_ns,
             purpose=body.purpose,
-            data_scope=body.data_scope,
+            data_scope=read_scope(body, request),
             into=Path(body.into) if body.into else None,
         )
         if is_refusal(answered):

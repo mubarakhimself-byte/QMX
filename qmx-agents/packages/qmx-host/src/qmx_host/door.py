@@ -22,6 +22,13 @@ the observer's id, so the rows behind it answer, and any other path is refused h
 content row and every ops write but the note are refused because the catalog says so, not because
 someone remembered to leave them out. The principal stays `agent:observer:<id>`, never `user`, so
 the acts only the operator may take stay refused.
+
+A run pass (engine AD-70, Lib AD-28). A remote attempt's bearer is the run pass this host minted
+for it. The door admits one only on `POST /api/data/read`, and only when its MAC verifies, it has
+not expired and neither it nor its run is revoked. The request is restamped with the local bearer
+and the verified pass is left in the request's state under `RUN_PASS`, so the read takes its
+`data_scope` from the pass and never from the body. Any other route, and any pass that fails a
+check, answers 401 here. The principal is `workflow:<run_id>`.
 """
 
 from __future__ import annotations
@@ -41,6 +48,7 @@ from qmx_control.catalog import (
 from qmx_control.service import Observer, observers
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.service.context import Caller
+from qmx_router.passes import PREFIX, Ask, Pass, PassAuthority
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Match
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -55,6 +63,10 @@ for it."""
 OBSERVER_PARAM: Final = "observer"
 """The query parameter the door appends, naming the observer it vouched for. The note row reads
 it; every other row ignores it."""
+RUN_PASS: Final = "run_pass"  # noqa: S105 - a request state key, not a credential
+"""The request state key the verified run pass rides under to the one route that reads it."""
+RUN_PASS_ROUTE: Final = ("POST", "/api/data/read")
+"""The only route a run pass reaches."""
 _PARAM: Final = re.compile(r"\{[^/}]+\}")
 """One route path parameter, such as `{run_id}`: it matches one segment and never a slash."""
 
@@ -115,6 +127,25 @@ def _restamped(scope: Scope, observer: Observer, bearer: str) -> Scope:
     return {**scope, "headers": headers, "query_string": rewritten}
 
 
+def _pass_restamped(scope: Scope, minted: Pass, bearer: str) -> Scope:
+    """The same request behind the local bearer, carrying the verified pass in its state."""
+    headers = [
+        (name, value) for name, value in scope["headers"] if name.lower() != b"authorization"
+    ]
+    headers.append((b"authorization", f"Bearer {bearer}".encode("latin-1")))
+    state = {**scope.get("state", {}), RUN_PASS: minted}
+    return {**scope, "headers": headers, "state": state}
+
+
+async def _pass_refused(scope: Scope, receive: Receive, send: Send, reason: str) -> None:
+    response = JSONResponse(
+        {"error": {"code": "run_pass_refused", "message": reason}},
+        status_code=401,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    await response(scope, receive, send)
+
+
 def _local_bearer() -> str:
     from qmx_control.server import local_token  # noqa: PLC0415 - the host's own gate token
 
@@ -160,10 +191,17 @@ class PrincipalDoor:
     """ASGI middleware that sets `PRINCIPAL` for the length of each HTTP request."""
 
     def __init__(
-        self, app: ASGIApp, *, chat_routes: Sequence[BaseRoute], bearer: str | None = None
+        self,
+        app: ASGIApp,
+        *,
+        chat_routes: Sequence[BaseRoute],
+        bearer: str | None = None,
+        passes: PassAuthority | None = None,
     ) -> None:
         self.app = app
         self.chat_routes = chat_routes
+        self.passes = passes
+        """The authority that minted this host's run passes; None admits no run pass."""
         self.bearer = bearer
         """The local bearer an observer's call is restamped with. None reads the host's own token
         from the OS vault on the first observer call, which is what a host in production uses."""
@@ -171,6 +209,23 @@ class PrincipalDoor:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
+            return
+        token = _presented(scope)
+        if self.passes is not None and token.startswith(f"{PREFIX}."):
+            minted, refused = self.passes.check(token, Ask())
+            route = (str(scope["method"]).upper(), str(scope["path"]))
+            if refused is not None:
+                await _pass_refused(scope, receive, send, str(refused))
+                return
+            if route != RUN_PASS_ROUTE:
+                await _pass_refused(scope, receive, send, "a run pass reaches only the data read")
+                return
+            scope = _pass_restamped(scope, minted, self.bearer or _local_bearer())
+            token_set = PRINCIPAL.set(Caller("workflow", minted.run))
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                PRINCIPAL.reset(token_set)
             return
         observer = presented_observer(scope)
         if observer is not None:

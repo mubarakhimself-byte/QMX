@@ -149,6 +149,7 @@ def attempt_bundle(
     settings: Mapping[str, object] | None = None,
     files: Mapping[str, str] | None = None,
     live: Heartbeat | None = None,
+    door_url: str = "",
 ) -> Document:
     """The job as the sidecar receives it: definition, inputs by hash, refs, resources.
 
@@ -157,6 +158,7 @@ def attempt_bundle(
     itself. The run pass is not in the bundle: it travels in the provider's one secret name
     (`provider_secrets`), so a bundle written to a disk or a bucket never holds it. `live` is the
     host row whose measured session size stands in for a memory the node did not declare.
+    `door_url` is the market-data door this placement reads price data through (AD-70).
     """
     settings = settings or DEFAULTS
     refs = dict(job.credentials)
@@ -180,6 +182,7 @@ def attempt_bundle(
                 "now": job.now,
                 "placement": job.placement,
                 "priority": job.priority,
+                "door_url": door_url,
             },
             "files": code,
             "file_hashes": {name: text_hash(text) for name, text in code.items()},
@@ -296,6 +299,7 @@ class PlacementWorker(LocalWorker):
         clock: Callable[[], float] = time.time,
         code: Callable[[NodeJob], Mapping[str, str]] | None = None,
         live: Callable[[], Heartbeat | None] | None = None,
+        doors: Mapping[str, str] | None = None,
     ) -> None:
         super().__init__()
         self.gateway = gateway
@@ -310,6 +314,8 @@ class PlacementWorker(LocalWorker):
         self.live = live
         """The newest heartbeat row of the machines this host dispatches to, read per attempt: it
         carries the live RAM and measured session size a bundle's resources come from (D-11)."""
+        self.doors = dict(doors or {})
+        """Placement to the market-data door URL its attempts read price data through (AD-70)."""
         self.handles: dict[str, tuple[Any, Any]] = {}
         """Run id to `(provider, handle)` of the attempt in flight, so `cancel` reaches it."""
 
@@ -327,7 +333,11 @@ class PlacementWorker(LocalWorker):
             message = f"no provider serves placement {job.placement}"
             return Failed("placement", message, signature("placement", message), False, "before")
         bundle = attempt_bundle(
-            job, settings=self.settings, files=self.code(job), live=self.reading()
+            job,
+            settings=self.settings,
+            files=self.code(job),
+            live=self.reading(),
+            door_url=self.doors.get(job.placement, ""),
         )
         return await self.dispatch(job, provider, bundle, emit)
 
