@@ -180,17 +180,20 @@ class Doctor(Protocol):
 
 
 INTENT_TTL_S: Final = 900
-"""How long a node's intent claim holds without a renewal, when the store's own TTL is not used."""
+"""How long a node's intent claim holds. Nothing renews it yet (AD-65), so a longer node can lose
+it to the next caller."""
+
+
+class ClaimAnswer(Protocol):
+    @property
+    def granted(self) -> bool: ...
 
 
 class Claims(Protocol):
-    """AD-24's compare-and-swap on an intent key, as the runner reaches it.
+    """AD-24's compare-and-swap on an intent key, as the runner reaches it. `LibraryClient` fits
+    it as it stands: `claim` takes the transient ref `refs/claims/<key>` for one run."""
 
-    The Library store is the implementation: `claim` is a transient ref `refs/claims/<key>` held
-    for one run and released when the node's output lands, so two runs that declare one key never
-    both do the work."""
-
-    def claim(self, intent_key: str, run_id: str, ttl: int) -> bool: ...
+    def claim(self, intent_key: str, run_id: str, ttl: int) -> ClaimAnswer: ...
 
     def release(self, intent_key: str, run_id: str) -> None: ...
 
@@ -344,17 +347,6 @@ class Engine:
         home = self.home.resolve()
         found = [str(home), str(home / "claude"), os.environ.get("CLAUDE_CONFIG_DIR", "")]
         return tuple(value for value in found if value)
-
-    def claim_intent(self, intent: str, run_id: str) -> bool:
-        """Take the node's intent key for this run and say whether this run holds it (AD-24)."""
-        if self.claims is None:
-            return False
-        return self.claims.claim(intent, run_id, INTENT_TTL_S)
-
-    def release_intent(self, intent: str, run_id: str) -> None:
-        """Give the intent key back when the node's output has landed or its attempt has ended."""
-        if self.claims is not None:
-            self.claims.release(intent, run_id)
 
     async def start(
         self,
@@ -1059,8 +1051,8 @@ class Run:
     async def attempt(self, job: NodeJob, gate: asyncio.Event | None = None) -> None:
         if gate is not None:
             await gate.wait()
-        intent = intent_key(self.node(job.node_id))
-        claimed = intent is not None and self.engine.claim_intent(intent, job.run_id)
+        intent, claims = intent_key(self.node(job.node_id)), self.engine.claims
+        held = bool(intent and claims and claims.claim(intent, job.run_id, INTENT_TTL_S).granted)
         try:
             result = await self.engine.worker.run(job, self.append)
             if isinstance(result, Waiting) and result.resume_at is not None:
@@ -1077,8 +1069,8 @@ class Run:
             if isinstance(result, Failed):
                 self.late(slot, job.attempt)
         finally:
-            if claimed and intent is not None:
-                self.engine.release_intent(intent, job.run_id)
+            if held and intent and claims:
+                claims.release(intent, job.run_id)
 
     def late(self, slot: Slot, attempt: int) -> None:
         """A partition that fails after a join reading it fired is late: it is never merged, and

@@ -1029,8 +1029,9 @@ class ControlService:
         into: str = "main",
         strategy: Literal["auto", "ff-only"] = "auto",
     ) -> Document:
-        """Merge one ref of an item into another. A text slot merges line by line, a JSON slot key
-        by key, and a clash mints one `merge-conflict` instead of picking a side."""
+        """Merge one ref of an item into another; a clash mints a conflict and picks no side.
+
+        A text slot merges line by line and a JSON slot key by key."""
         try:
             merged = self.library.store.merge(
                 LIBRARY_OPERATOR,
@@ -1080,8 +1081,10 @@ class ControlService:
         text: str | None = None,
         values: Document | None = None,
     ) -> Document:
-        """Close one merge conflict: `text` is the resolved text of its text slot and `values`
-        closes its clashing JSON keys. An entry left open refuses the whole resolve."""
+        """Close one merge conflict by answering each of its entries; an open entry refuses it.
+
+        `values` answers each entry by its path, and `text` is the resolved text when the
+        conflict holds one text slot."""
         try:
             merged = self.library.store.resolve_conflict(
                 LIBRARY_OPERATOR, artifact_id, text=text, values=values

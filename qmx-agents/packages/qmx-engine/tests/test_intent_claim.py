@@ -12,21 +12,22 @@ import json
 from pathlib import Path
 
 from flows import ONE_TRY, Script, edge, node, workflow
+from qmx_library.port import Claim
 
 from qmx_engine.ledger.store import Ledger
 from qmx_engine.runner import Engine, Outcome
 
 
 class Recording:
-    """Records every claim and release the runner makes, and answers claim with `granted`."""
+    """Records every claim and release the runner makes, answering as the Library's client does."""
 
     def __init__(self, *, granted: bool = True) -> None:
         self.granted = granted
         self.calls: list[tuple[str, str, str]] = []
 
-    def claim(self, intent_key: str, run_id: str, ttl: int) -> bool:
+    def claim(self, intent_key: str, run_id: str, ttl: int) -> Claim:
         self.calls.append(("claim", intent_key, run_id))
-        return self.granted
+        return Claim(self.granted, run_id if self.granted else "run-0", None)
 
     def release(self, intent_key: str, run_id: str) -> None:
         self.calls.append(("release", intent_key, run_id))
