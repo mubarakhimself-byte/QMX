@@ -54,6 +54,25 @@ From 07-funnel §9, plus the router split from 09:
 7. **Router split:** the planning half of the MIS on the PC, cheap live checks on the node (his seed said the node holds the MIS).
 8. **Scalper types and seed additions:** report 09 + file 02's verdict.
 
+## QMB backtest door: handed to the unit work (2026-10-24)
+
+The operator ruled that the unit work owns QMB. Source: `../qma-v2/QMB-BACKTEST-DOOR-HANDOFF.md`.
+
+- **Today:** an agent's `run_backtest` refuses ("binds no qmb_backtest door").
+- **PR 204** (`build/wu4`, head `aabb813b`) is open and not stacked. Treat it as a reference, not a finished piece.
+  - **Proved:** one function lands every backtest (`backtest_and_land`), copilot and workflow land the same object, the replay runs in one child process, and status/results read by object id.
+  - **Blocked by QMB house rules:** subprocess outside `qmb/orchestrator/`, threading, and the word "engine". The fix is mechanical.
+- **The real gap is a backtest that trades.** The only runner is `silent`: no trades, no equity, no ledger line. Three things are missing:
+  1. A typed-partition entry to `execute_recorded_replay_request`, which today refuses the Library's typed monthly partitions.
+  2. Execution inputs as data: `BoundExecution`, `BookAdmissionContext`, journal reader, ledger root, split fingerprint. All are built in Python today.
+  3. A shipped bot nameable by reference. Only test fixtures trade.
+- **Smaller gaps:**
+  - `compare_runs` can't compare landed results by object id.
+  - Run configs are files, not UI-editable.
+  - The child's memory limit works on POSIX only.
+  - ~16 GB per month of 1m data: bound runs to ~1,000 steps until the reader is windowed.
+- **Fit with the funnel:** items 1-3 overlap foundations 2, 3 and 8 (windowed reader, unit spec and journal schemas, library verbs). The reference unit (foundation 10) is the "shipped bot nameable by reference".
+
 ## Conflicts with existing rules (to settle in architecture)
 
 - **DEC-0162** bans stored composite scores. Fitness-bank ideas must stay sort-only, or the rule gets amended.
