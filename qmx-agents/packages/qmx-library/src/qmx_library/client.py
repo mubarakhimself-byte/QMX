@@ -59,6 +59,17 @@ class Ref:
     principal: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class Move:
+    """One row of a store's ref log: an object placed on a ref at a sequence (AD-10, N1)."""
+
+    seq: int
+    item: str
+    ref: str
+    head: str
+    kind: str = ""
+
+
 class OwnerTable:
     """Which store owns which ref namespace, from AD-11 and AD-19, for one `primary` value.
 
@@ -75,8 +86,10 @@ class OwnerTable:
         if ref == "main":
             return self.primary
         parts = ref.split("/")
-        if len(parts) < 3 or parts[0] != "refs":
+        if len(parts) < 2 or parts[0] != "refs":
             return "either"
+        if len(parts) == 2:
+            return self.primary if parts[1] == "primary" else "either"
         space, rest = parts[1], parts[2:]
         match space:
             case "drafts" | "variants" | "purges" if len(rest) == 1:
@@ -209,8 +222,41 @@ class HubClient:
             for row in rows
         ]
 
+    def moves(self, after: int) -> list[Move]:
+        """The Hub's ref-log tail after a sequence, for the selective sync (AD-10, N1)."""
+        rows = cast(list[dict[str, JsonValue]], self.call("events", after=after, limit=5000))
+        return [
+            Move(
+                int(cast(int, row["seq"])),
+                str(row["item"]),
+                str(row["ref"]),
+                str(row["object_id"]),
+                str(row.get("kind") or ""),
+            )
+            for row in rows
+        ]
+
+    def versions(self) -> Mapping[str, int]:
+        """The kinds and schema versions the Hub can read, for the version handshake (N17)."""
+        found = cast(Mapping[str, JsonValue], self.call("kinds"))
+        return {str(name): int(cast(int, version)) for name, version in found.items()}
+
+    def alarms(self) -> tuple[str, ...]:
+        """The Hub answers no epoch alarm of its own: the PC is the side that learns one."""
+        return ()
+
+    def edges_since(self, after: int) -> list[dict[str, Any]]:
+        rows = cast(list[dict[str, Any]], self.call("edges", after=after))
+        return [dict(row) for row in rows]
+
+    def ingest_edge(self, edge: Mapping[str, Any]) -> bool:
+        return bool(self.call("put_edge", edge=cast(JsonValue, dict(edge))))
+
     def object_ids(self) -> set[str]:
         return {str(object_id) for object_id in cast(Sequence[str], self.call("object_ids"))}
+
+    def has_object(self, object_id: ObjectId) -> bool:
+        return bool(self.call("has_object", object_id=object_id))
 
     def manifest(self, object_id: ObjectId) -> Mapping[str, JsonValue] | None:
         found = self.call("manifest", object_id=object_id)
@@ -227,6 +273,10 @@ class HubClient:
 
     def blob_ids(self) -> set[str]:
         return {str(blob_id) for blob_id in cast(Sequence[str], self.call("blob_ids"))}
+
+    def has_blob(self, blob_id: str) -> bool:
+        """Whether the Hub holds the bytes, by id alone, never by moving them."""
+        return bool(self.call("has_blob", blob_id=blob_id))
 
     def ancestry(self, object_id: ObjectId) -> set[str]:
         return {

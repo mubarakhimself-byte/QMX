@@ -12,6 +12,10 @@ A store survives a torn append. `inspect_logs` reads every append-only log once 
 damage: a last line with no newline or that does not parse, NUL bytes included, is `TornTail` and
 the store may quarantine it and open; a bad line before the last is `BadLine` and the store opens
 read-only until a replica restores it.
+
+A write this store has not sent yet is not a lie on a screen: `pending_writes` names each one and
+says "waiting for the server" (AD-14), because the save exists here and nowhere else until it
+lands.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from typing import TYPE_CHECKING, Final, Literal
 from qmx_library.port import LibraryRefused, ObjectId
 
 if TYPE_CHECKING:
+    from qmx_library.outbox import Outbox
     from qmx_library.principal import Principal
     from qmx_library.store import Store
 
@@ -139,6 +144,20 @@ def verdict(outcomes: Iterable[str]) -> Verdict:
     if "refutes" in found:
         return "refuted"
     return "open"
+
+
+@dataclass(frozen=True, slots=True)
+class PendingWrite:
+    """One save the PC holds and the primary has not taken yet (AD-14)."""
+
+    item: str
+    ref: str
+    phrase: str = "waiting for the server"
+
+
+def pending_writes(outbox: Outbox) -> tuple[PendingWrite, ...]:
+    """Every unlanded save, in the order it was made, so a read says what is still out."""
+    return tuple(PendingWrite(entry.item, entry.ref) for entry in outbox.entries())
 
 
 def status(store: Store, who: Principal, hypothesis: str) -> Status:

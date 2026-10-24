@@ -4,7 +4,8 @@ append-only edge and annotation logs (Library AD-1, AD-2, AD-5, AD-6, AD-7).
 Evidence is the files under the store's root:
 
     objects/ab/cd/<hex>.json    one canonical identity manifest per object, written once
-    blobs/ab/cd/<hex>           the bytes of a durable blob, written once
+    blobs/ab/cd/<hex>           the bytes of a blob born on this store, written once
+    blobs/fetched/ab/cd/<hex>   a cache copy, fetched from another store and evictable (AD-10)
     blobs/transient/<hex>       a transient blob (checkpoints), kept on this store only
     blobs/tombstones/<hex>.json an operator purge: the bytes are gone, this names why (AD-6)
     refs/log.jsonl              every ref move, append-only
@@ -39,7 +40,7 @@ import uuid
 from collections import deque
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
@@ -48,7 +49,7 @@ from typing import IO, Any, Final, Literal, Protocol, Self, cast
 from pydantic import JsonValue
 
 from qmx_library.fts import Catalog, norm
-from qmx_library.kinds import Kind, kind, schema_files
+from qmx_library.kinds import Kind, kind, roster, schema_files
 from qmx_library.marks import CLEAR, QUARANTINED, Marks, marks, marks_ref
 from qmx_library.port import (
     RELATIONS,
@@ -80,6 +81,13 @@ MANIFEST: Final = "qmx.library.object/1"
 CHECKOUT_FILE: Final = ".checkout.json"
 TEXT_LIMIT: Final = 1_000_000
 """Bytes of one text blob read into the search index."""
+TEXT_SLOTS: Final = frozenset({"text", "transcript"})
+"""The slots a sync copies (AD-10, N1): a document's words travel so the replica can search them,
+and every other blob of the object waits until something on that store opens it."""
+PRIMARY_REF: Final = "refs/primary"
+PRIMARY_ITEM: Final = "refs/primary"
+EPOCH: Final = "epoch.json"
+"""The highest primary epoch this store has seen, kept beside the ref log so a restore keeps it."""
 MIB: Final = 1024 * 1024
 CLAIMS: Final = "claims.json"
 CLAIM_KEY: Final = re.compile(r"[A-Za-z0-9_.:+-]{1,200}")
@@ -282,6 +290,43 @@ def _lines(path: Path) -> Generator[dict[str, Any]]:
                     yield cast(dict[str, Any], record)
 
 
+def text_blob_ids(manifest: Mapping[str, Any]) -> set[str]:
+    """The blob ids of one manifest's text slots: the only blobs a selective sync copies (N1)."""
+    try:
+        spec = kind(str(manifest.get("kind") or ""))
+    except LibraryRefused:
+        return set()
+    found: set[str] = set()
+    blobs = cast(Mapping[str, Mapping[str, Any]], manifest.get("blobs") or {})
+    for slot, blob in blobs.items():
+        try:
+            pattern = spec.slot(slot).pattern
+        except LibraryRefused:
+            continue
+        if pattern in TEXT_SLOTS:
+            found.add(str(blob["sha256"]))
+    return found
+
+
+@dataclass(frozen=True, slots=True)
+class Epoch:
+    """Which store is primary and how many flips it has taken (AD-14, F12, F15).
+
+    The record lives on `refs/primary` and every store remembers the highest epoch it has seen,
+    because a store restored from an old backup has the old record and no memory of the new one.
+    """
+
+    primary: str
+    epoch: int
+    seq: int = 0
+    """The ref-log position both sides shared when this store learned it, and so the moves a
+    parked store must not replay."""
+    stale: bool = False
+    """This store held the primary and learned a higher epoch: it stops acting as primary."""
+    parked: tuple[str, ...] = ()
+    """The `refs/conflicts/*` refs its primary moves were parked on, one per move (N13, N19)."""
+
+
 class Store:
     """The writer of one store. Every verb of `LibraryPort` is here; the reads the engine adapter
     needs beside them (`head`, `placed`, `moves`, `read_blob`) are catalog queries."""
@@ -320,6 +365,7 @@ class Store:
             "SELECT count(*) FROM relations WHERE origin = 'edge'"
         ).fetchone()
         self._edge_seq = int(edges)
+        self._epoch: Epoch | None = self._read_epoch()
 
     @classmethod
     def open(
@@ -404,11 +450,21 @@ class Store:
     def _object_path(self, object_id: ObjectId) -> Path:
         return _sharded(self.root / "objects", object_id.rsplit(":", 1)[-1], ".json")
 
-    def _blob_path(self, blob_id: str, *, transient: bool) -> Path:
+    def _blob_path(self, blob_id: str, *, transient: bool, fetched: bool = False) -> Path:
         hexdigest = blob_id.removeprefix("sha256:")
         if transient:
             return self.root / "blobs" / "transient" / hexdigest
+        if fetched:
+            return _sharded(self.root / "blobs" / "fetched", hexdigest)
         return _sharded(self.root / "blobs", hexdigest)
+
+    def _held(self, blob_id: str) -> Path | None:
+        """Where this store holds a blob's bytes: its own copy first, then a cache copy (AD-10)."""
+        born = self._blob_path(blob_id, transient=False)
+        if born.exists():
+            return born
+        cached = self._blob_path(blob_id, transient=False, fetched=True)
+        return cached if cached.exists() else None
 
     def _stamp(self) -> str:
         logs = [*sorted((self.root / "edges").glob("*.jsonl")), self.ref_log, self.annotation_log]
@@ -438,12 +494,44 @@ class Store:
     def _index_object(self, object_id: ObjectId, manifest: Mapping[str, Any]) -> None:
         texts: list[str] = []
         for spec in cast(dict[str, dict[str, Any]], manifest["blobs"]).values():
-            path = self._blob_path(str(spec["sha256"]), transient=False)
-            if path.exists() and int(spec["size"]) <= TEXT_LIMIT:
-                with suppress(UnicodeDecodeError):
+            path = self._held(str(spec["sha256"]))
+            if path is not None and int(spec["size"]) <= TEXT_LIMIT:
+                with suppress(UnicodeDecodeError, OSError):
                     texts.append(path.read_bytes().decode("utf-8"))
         klass = kind(str(manifest["kind"])).klass
         self.catalog.index_object(object_id, manifest, klass, " ".join(texts))
+
+    def _reindex_object(self, object_id: ObjectId, manifest: Mapping[str, Any]) -> None:
+        """Index one object again, now that a blob it names has arrived (AD-10, N1). The index is
+        never evidence: the object and its manifest are, and they are unchanged."""
+        with self._writing():
+            self.catalog.db.execute("DELETE FROM search WHERE object_id = ?", (object_id,))
+            self.catalog.db.execute("DELETE FROM objects WHERE object_id = ?", (object_id,))
+            self._index_object(object_id, manifest)
+
+    def _reindex_blob(self, blob_id: str) -> tuple[str, ...]:
+        """Re-index the objects whose text slot this blob is, when its bytes arrive here.
+
+        An object that arrives before its text slots was indexed without their words. The
+        arrival is the one moment to read them, and a blob no text slot names re-indexes nothing.
+        """
+        named = [
+            str(row[0])
+            for row in self.catalog.db.execute(
+                "SELECT object_id FROM objects WHERE blobs LIKE ?", (f"%{blob_id}%",)
+            )
+        ]
+        done: list[str] = []
+        for object_id in named:
+            try:
+                manifest = self.manifest(object_id)
+            except LibraryRefused:
+                continue
+            if blob_id not in text_blob_ids(manifest):
+                continue
+            self._reindex_object(object_id, manifest)
+            done.append(object_id)
+        return tuple(done)
 
     def _now(self) -> str:
         return self.wall().astimezone(UTC).isoformat().replace("+00:00", "Z")
@@ -532,6 +620,12 @@ class Store:
 
     def _check_writer(self, act: str) -> None:
         self._refuse_read_only(act)
+        if self._epoch is not None and self._epoch.stale:
+            raise LibraryRefused(
+                "ref_not_owned",
+                f"this store learned epoch {self._epoch.epoch}, whose primary is "
+                f"{self._epoch.primary}, so {act} waits for it (library:epoch:{self.name})",
+            )
         if self.role != "writer":
             raise LibraryRefused(
                 "read_only_replica", f"this store is a {self.role}; {act} goes to the primary"
@@ -618,12 +712,14 @@ class Store:
             self._active(item)
             found = self.catalog.head(item, on)
             head = None if found is None else found[0]
-            if head != expected_head:
-                raise LibraryRefused("stale_head", f"{on} of {item} is at {head}")
             parents = list(draft.parents) if draft.parents is not None else [h for h in [head] if h]
             object_id, _ = self._mint(who, draft, item, parents)
             if object_id == head:
                 return Commit(object_id, item, on, head, self._seq)
+            # A replayed save is not a conflict: the ref log says this object was placed here
+            # already, whether it is the head or the ref has moved past it (AD-14, F11).
+            if head != expected_head and not self.ever_placed(object_id, item, on):
+                raise LibraryRefused("stale_head", f"{on} of {item} is at {head}")
             return self._move(who, item, on, object_id)
 
     def relate(self, who: Principal, from_id: ObjectId, relation: str, to_id: ObjectId) -> str:
@@ -920,8 +1016,22 @@ class Store:
         return int(seq), at
 
     def _placed_by(self, object_id: ObjectId, seq: int) -> bool:
+        """Whether a move at or before `seq` put `object_id` on a ref. The outbox asks the same
+        question of one ref by name, in `ever_placed`."""
         row = self.catalog.db.execute(
             "SELECT 1 FROM moves WHERE new_head = ? AND seq <= ? LIMIT 1", (object_id, seq)
+        ).fetchone()
+        return row is not None
+
+    def ever_placed(self, object_id: ObjectId, item: str, ref: str) -> bool:
+        """Whether this store's ref log ever put `object_id` on `item`'s `ref` (AD-14, F11).
+
+        This is the outbox's whole evidence: a save whose reply was lost is done, and the entry
+        is dropped, without the head comparison that would call it a conflict.
+        """
+        row = self.catalog.db.execute(
+            "SELECT 1 FROM moves WHERE new_head = ? AND item = ? AND ref = ? LIMIT 1",
+            (object_id, item, ref),
         ).fetchone()
         return row is not None
 
@@ -984,11 +1094,12 @@ class Store:
 
     def read_blob(self, blob_id: str, *, transient: bool = False) -> bytes:
         """The blob's bytes. A purge tombstone refuses `blob_purged` (AD-6); on a replica or a
-        cache a durable blob it does not hold comes from `upstream` and stays cached (AD-10)."""
+        cache a durable blob it does not hold comes from `upstream` and stays cached, as a cache
+        copy it may give up at any time (AD-10)."""
         if (self.tombstones / f"{blob_id.removeprefix('sha256:')}.json").exists():
             raise LibraryRefused("blob_purged", f"{blob_id} was purged by the operator")
-        path = self._blob_path(blob_id, transient=transient)
-        if not path.exists():
+        path = self._held(blob_id) if not transient else self._blob_path(blob_id, transient=True)
+        if path is None or not path.exists():
             if transient or self.upstream is None:
                 raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
             fetched = self.upstream.fetch(blob_id)
@@ -996,7 +1107,8 @@ class Store:
                 raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
             if f"sha256:{sha256(fetched).hexdigest()}" != blob_id:
                 raise LibraryRefused("corrupt_blob", f"{blob_id} does not hash to its name")
-            _write_once(path, fetched)
+            _write_once(self._blob_path(blob_id, transient=False, fetched=True), fetched)
+            self._reindex_blob(blob_id)
             return fetched
         data = path.read_bytes()
         if f"sha256:{sha256(data).hexdigest()}" != blob_id:
@@ -1005,7 +1117,42 @@ class Store:
 
     def has_blob(self, blob_id: str) -> bool:
         """Whether the bytes are here, for a replicator deciding what to copy."""
-        return self._blob_path(blob_id, transient=False).exists()
+        return self._held(blob_id) is not None
+
+    def blob_class(self, blob_id: str) -> Literal["born", "cache"] | None:
+        """`born` when the bytes were made, uploaded or written on this store, `cache` when they
+        were fetched or synced here, and None when this store does not hold them (AD-10, N3)."""
+        if self._blob_path(blob_id, transient=False).exists():
+            return "born"
+        if self._blob_path(blob_id, transient=False, fetched=True).exists():
+            return "cache"
+        return None
+
+    def cached_blob_ids(self) -> list[str]:
+        return sorted(
+            f"sha256:{path.name}"
+            for path in (self.root / "blobs" / "fetched").glob("??/??/*")
+            if path.is_file()
+        )
+
+    def evict_cache(self, want: int = 0) -> list[str]:
+        """Drop cache copies, oldest first, until `want` bytes are back (AD-10; D-11's table).
+
+        A cache copy comes back by hash on the next open. A blob born here never goes: it is one
+        of the copies that makes the bytes durable, and only replication removes it.
+        """
+        taken: list[str] = []
+        freed = 0
+        for blob_id in self.cached_blob_ids():
+            if want > 0 and freed >= want:
+                break
+            path = self._blob_path(blob_id, transient=False, fetched=True)
+            with suppress(OSError):
+                size = path.stat().st_size
+                path.unlink()
+                freed += size
+                taken.append(blob_id)
+        return taken
 
     def purged(self, blob_id: str) -> bool:
         """Whether an operator purge tombstoned `blob_id` on this store (AD-6)."""
@@ -1215,6 +1362,75 @@ class Store:
             keys = ("seq", "item", "ref", "new_head", "kind")
             return [dict(zip(keys, row, strict=True)) for row in rows]
 
+    def park_entry(
+        self,
+        item: str,
+        ref: str,
+        *,
+        expected_head: str | None,
+        intended: str,
+        who: Principal | None = None,
+    ) -> str:
+        """Mint a `merge-conflict` for one save that can no longer apply (AD-26, AD-14).
+
+        The head moved under an entry whose object was never placed, so nobody can say which side
+        is right: the entry is parked on `refs/conflicts/<item>/<n>` and he picks.
+        """
+        self._check_writer("a conflict")
+        number = self.catalog.refs_like(f"refs/conflicts/{item}/") + 1
+        target = f"refs/conflicts/{item}/{number}"
+        fields: JsonObject = {
+            "base": expected_head,
+            "ours": intended,
+            "theirs": "",
+            "into": ref,
+            "entries": cast(list[JsonValue], [{"path": ref, "item": item}]),
+        }
+        draft = Draft(
+            "merge-conflict",
+            title=f"Conflict on {ref} of {item}",
+            summary="a save replayed onto a head that had moved; he picks the side",
+            fields=fields,
+        )
+        with self._writing():
+            object_id, _ = self._mint(who or self.engine, draft, item, [])
+            self._move(who or self.engine, item, target, object_id, reason=f"conflict on {item}")
+        return target
+
+    def edges_since(self, after: int = 0) -> list[dict[str, Any]]:
+        """The after-birth edges recorded after ref-log position `after`, the sync's edge tail."""
+        with self._mutex:
+            rows = self.catalog.db.execute(
+                "SELECT seq, edge_id, from_id, type, to_id, writer, at FROM relations "
+                "WHERE origin = 'edge' AND seq > ? ORDER BY seq",
+                (after,),
+            )
+            keys = ("seq", "edge_id", "from", "type", "to", "writer", "at")
+            return [dict(zip(keys, row, strict=True)) for row in rows]
+
+    def ingest_edge(self, edge: Mapping[str, Any]) -> bool:
+        """Record a peer's after-birth edge here, once. True when this call added it."""
+        edge_id = str(edge["edge_id"])
+        seen = self.catalog.db.execute(
+            "SELECT 1 FROM relations WHERE edge_id = ? AND origin = 'edge'", (edge_id,)
+        ).fetchone()
+        if seen is not None:
+            return False
+        with self._writing():
+            self._edge_seq += 1
+            entry = {
+                "seq": self._edge_seq,
+                "edge_id": edge_id,
+                "from": str(edge["from"]),
+                "type": str(edge["type"]),
+                "to": str(edge["to"]),
+                "writer": str(edge.get("writer") or "hub"),
+                "at": str(edge.get("at") or self._now()),
+            }
+            _append(self.edge_log, entry)
+            self.catalog.index_edge(entry)
+        return True
+
     def heads_on(self, ref: str) -> list[tuple[str, ObjectId]]:
         with self._mutex:
             return self.catalog.heads_on(ref)
@@ -1413,6 +1629,7 @@ class Store:
             with self._writing():
                 tombstone = self._tombstone(blob_id, reason, who)
                 path.unlink(missing_ok=True)
+                self._blob_path(blob_id, transient=False, fetched=True).unlink(missing_ok=True)
                 ref = f"refs/purges/{hexdigest}"
                 found = self.catalog.head(f"purge:{hexdigest}", ref)
                 if found is None or found[0] != "purged":
@@ -1431,6 +1648,7 @@ class Store:
         with self._mutex:
             self._tombstone(blob_id, reason, Principal("operator"), at=at)
             self._blob_path(blob_id, transient=False).unlink(missing_ok=True)
+            self._blob_path(blob_id, transient=False, fetched=True).unlink(missing_ok=True)
         return True
 
     def _tombstone(
@@ -1483,15 +1701,24 @@ class Store:
         return object_id
 
     def store_blob(self, data: bytes) -> str:
-        """Copy one durable blob from a peer, verified by its hash (AD-10)."""
+        """Copy one durable blob from a peer, verified by its hash (AD-10).
+
+        On the writer the bytes are the main copy; on a store that replicates they are a cache
+        copy it may give up, because the peer that sent them holds the born one.
+        """
         blob_id = f"sha256:{sha256(data).hexdigest()}"
-        _write_once(self._blob_path(blob_id, transient=False), data)
+        _write_once(self._blob_path(blob_id, transient=False, fetched=self.role != "writer"), data)
+        self._reindex_blob(blob_id)
         return blob_id
 
     def object_ids(self) -> list[ObjectId]:
         with self._mutex:
             rows = self.catalog.db.execute("SELECT object_id FROM objects ORDER BY object_id")
             return [str(object_id) for (object_id,) in rows]
+
+    def has_object(self, object_id: ObjectId) -> bool:
+        """Whether this store holds the object, by its manifest file: one stat, never a listing."""
+        return self._object_path(object_id).exists()
 
     def manifest(self, object_id: ObjectId) -> dict[str, Any]:
         """The object's identity manifest, as it was written."""
@@ -1501,11 +1728,14 @@ class Store:
         return cast(dict[str, Any], json.loads(path.read_bytes()))
 
     def blob_ids(self) -> list[str]:
-        """Every durable blob this store holds; transient blobs are never replicated."""
+        """Every durable blob this store holds, cache copies included; transient never."""
         return sorted(
-            f"sha256:{path.name}"
-            for path in (self.root / "blobs").glob("??/??/*")
-            if path.is_file()
+            {
+                f"sha256:{path.name}"
+                for base in (self.root / "blobs", self.root / "blobs" / "fetched")
+                for path in base.glob("??/??/*")
+                if path.is_file()
+            }
         )
 
     def refs(self) -> list[tuple[str, str, str, str, str]]:
@@ -1522,3 +1752,136 @@ class Store:
     def ancestry_of(self, object_id: ObjectId) -> set[ObjectId]:
         """Every ancestor of `object_id`, itself included: the parent-hash order AD-14 means."""
         return set(self._ancestry(object_id))
+
+    @property
+    def epoch(self) -> Epoch | None:
+        """The highest primary epoch this store has seen, and which store it names (AD-14)."""
+        return self._epoch
+
+    @property
+    def alarms(self) -> tuple[str, ...]:
+        """Every alarm this store raised: a torn tail it quarantined, a primary epoch it lost."""
+        found = list(self.state.alarms)
+        if self._epoch is not None and self._epoch.stale:
+            found.append(f"library:epoch:{self.name}")
+        return tuple(found)
+
+    def versions(self) -> dict[str, int]:
+        """Every kind this store reads, with the schema version it was written with (N17)."""
+        return {name: found.schema_version for name, found in roster().items() if not found.retired}
+
+    def can_read(self, kind_name: str, version: int) -> bool:
+        """Whether this store has the kind and a schema version at least as new as the entry's."""
+        found = roster().get(kind_name)
+        return found is not None and not found.retired and found.schema_version >= version
+
+    def record_primary(self, who: Principal, primary: str, *, epoch: int | None = None) -> Epoch:
+        """The operator's flip: name the primary and raise the epoch in one record (AD-14, F12).
+
+        The record is an object on `refs/primary`, so it replicates like any other ref; each store
+        keeps the highest epoch it has seen beside its own log, because a store restored from an
+        older backup carries the older record and no memory of the flip.
+        """
+        self._check_writer("a primary flip")
+        if who.who != "operator":
+            raise LibraryRefused("ref_not_owned", f"{who} may not flip the primary; he does")
+        known = 0 if self._epoch is None else self._epoch.epoch
+        raised = known + 1 if epoch is None else int(epoch)
+        if raised <= known:
+            raise LibraryRefused("stale_head", f"epoch {raised} is not above the seen {known}")
+        with self._writing():
+            found = self.catalog.head(PRIMARY_ITEM, PRIMARY_REF)
+            parents = [] if found is None else [found[0]]
+            draft = Draft(
+                "note",
+                PRIMARY_ITEM,
+                title=f"primary = {primary}",
+                fields={"primary": primary, "epoch": raised},
+                parents=parents,
+            )
+            object_id, _ = self._mint(who, draft, PRIMARY_ITEM, parents)
+            if found is None or found[0] != object_id:
+                self._move(who, PRIMARY_ITEM, PRIMARY_REF, object_id, reason="primary flip")
+        return self._remember(Epoch(primary, raised, seq=self._seq))
+
+    def learn_epoch(self, other: Epoch, *, shared_seq: int | None = None) -> Epoch:
+        """Take a peer's epoch record (AD-14).
+
+        A higher epoch makes this store stop acting as primary, and the moves it made as primary
+        since the ref-log position both sides shared are parked as `merge-conflict` items for him
+        (N13, N19). A peer that is behind changes nothing here.
+        """
+        known = self._epoch
+        if known is not None and known.epoch >= other.epoch:
+            return known
+        shared = other.seq if shared_seq is None else int(shared_seq)
+        stale = self.role == "writer" and other.primary != self.name
+        parked = self.park_primary_moves(shared) if stale else ()
+        return self._remember(Epoch(other.primary, other.epoch, shared, stale=stale, parked=parked))
+
+    def park_primary_moves(self, since_seq: int = 0) -> tuple[str, ...]:
+        """Mint one `merge-conflict` per ref move this store made as primary after `since_seq`.
+
+        The move stays in this store's log; what it loses is the right to be replayed as if it had
+        won. He reads the conflicts and picks a side (AD-14, AD-26).
+        """
+        rows = self.catalog.db.execute(
+            "SELECT item, ref, new_head, prev_head FROM moves WHERE seq > ? "
+            "AND ref NOT LIKE 'refs/conflicts/%' AND ref NOT LIKE 'refs/purges/%' "
+            "AND ref NOT LIKE 'refs/hub/%' AND ref != ? ORDER BY seq",
+            (since_seq, PRIMARY_REF),
+        ).fetchall()
+        parked: list[str] = []
+        with self._writing():
+            for item, ref, head, prev in rows:
+                number = self.catalog.refs_like(f"refs/conflicts/{item}/") + 1
+                target = f"refs/conflicts/{item}/{number}"
+                fields: JsonObject = {
+                    "base": None if prev is None else str(prev),
+                    "ours": str(head),
+                    "theirs": "",
+                    "into": str(ref),
+                    "entries": cast(list[JsonValue], [{"path": str(ref), "item": str(item)}]),
+                }
+                draft = Draft(
+                    "merge-conflict",
+                    title=f"Parked {ref} of {item}",
+                    summary=f"this store was primary and lost the epoch; {ref} was not replayed",
+                    fields=fields,
+                )
+                object_id, _ = self._mint(self.engine, draft, str(item), [])
+                self._move(
+                    self.engine, str(item), target, object_id, reason=f"parked {ref} of {item}"
+                )
+                parked.append(target)
+        return tuple(parked)
+
+    def _read_epoch(self) -> Epoch | None:
+        path = self.root / "refs" / EPOCH
+        try:
+            found = cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+            return Epoch(
+                str(found["primary"]),
+                int(found["epoch"]),
+                int(found.get("seq", 0)),
+                bool(found.get("stale", False)),
+                tuple(str(ref) for ref in found.get("parked", [])),
+            )
+        except OSError, ValueError, KeyError, TypeError:
+            return None
+
+    def _remember(self, found: Epoch) -> Epoch:
+        path = self.root / "refs" / EPOCH
+        path.parent.mkdir(parents=True, exist_ok=True)
+        entry = {
+            "primary": found.primary,
+            "epoch": found.epoch,
+            "seq": found.seq,
+            "stale": found.stale,
+            "parked": list(found.parked),
+        }
+        temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}")
+        temp.write_text(json.dumps(entry, sort_keys=True), encoding="utf-8")
+        _replace(temp, path)
+        self._epoch = found
+        return found

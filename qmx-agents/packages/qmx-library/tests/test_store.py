@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 from typing import Literal
 
@@ -15,7 +16,7 @@ from qmx_engine.ledger import redact
 from qmx_library.landing import land
 from qmx_library.port import BlobRef, Draft, LibraryPort, LibraryRefused
 from qmx_library.principal import Principal
-from qmx_library.store import Store
+from qmx_library.store import Epoch, Store
 
 OPERATOR = Principal("operator")
 ALICE = Principal("agent", "alice")
@@ -286,3 +287,55 @@ def test_a_blob_ref_reuses_stored_bytes(store: Store) -> None:
     )
 
     assert store.get(OPERATOR, second.object_id, blobs="fetch").data["body.md"] == b"shared body"
+
+
+class Fetched:
+    """An upstream that answers one blob, the way a replica's Library server does."""
+
+    def __init__(self, blob_id: str, data: bytes) -> None:
+        self.blob_id = blob_id
+        self.data = data
+
+    def fetch(self, blob_id: str) -> bytes | None:
+        return self.data if blob_id == self.blob_id else None
+
+
+def test_a_fetched_blob_is_a_cache_copy_and_a_blob_born_here_is_not(store: Store) -> None:
+    born = store.put(OPERATOR, note("born here", "a"), on="main", expected_head=None)
+    born_id = store.get(OPERATOR, born.object_id).blobs["body.md"].blob_id
+    fetched = b"the server's copy, opened here"
+    fetched_id = f"sha256:{sha256(fetched).hexdigest()}"
+    store.upstream = Fetched(fetched_id, fetched)
+
+    assert store.read_blob(fetched_id) == fetched
+    assert (store.blob_class(fetched_id), store.blob_class(born_id)) == ("cache", "born")
+    assert store.evict_cache() == [fetched_id]
+    assert (store.blob_class(fetched_id), store.blob_class(born_id)) == (None, "born")
+    assert store.read_blob(born_id) == b"born here"
+
+
+def test_a_store_that_learns_a_higher_epoch_parks_its_move_as_a_conflict(
+    store: Store,
+) -> None:
+    store.record_primary(OPERATOR, "pc")
+    first = store.put(OPERATOR, note("mine", "n1"), on="main", expected_head=None)
+
+    learned = store.learn_epoch(Epoch("server", 2, seq=0))
+
+    assert learned.stale
+    assert learned.parked == ("refs/conflicts/n1/1",)
+    assert store.alarms == ("library:epoch:pc",)
+    parked = store.resolve(OPERATOR, "n1", "refs/conflicts/n1/1")
+    assert store.get(OPERATOR, parked).fields["ours"] == first.object_id
+    assert store.head("n1", "main") == (first.object_id, 1)
+    with pytest.raises(LibraryRefused, match=r"^ref_not_owned:"):
+        store.put(OPERATOR, note("after", "n1"), on="main", expected_head=first.object_id)
+
+
+def test_a_peer_behind_this_store_changes_nothing(store: Store) -> None:
+    store.record_primary(OPERATOR, "server", epoch=4)
+
+    learned = store.learn_epoch(Epoch("pc", 3, seq=0))
+
+    assert (learned.primary, learned.epoch, learned.stale) == ("server", 4, False)
+    assert store.alarms == ()
