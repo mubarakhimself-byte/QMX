@@ -41,7 +41,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Literal, Protocol, cast
 
-from qmx_control.catalog import CORE_TOOLSETS
+from qmx_control.catalog import APP_PREFIX, CORE_TOOLSETS
 from qmx_control.context import Budget
 from qmx_router.agents import Main as AgentMain
 from qmx_router.agents import definitions as agent_definitions
@@ -60,7 +60,7 @@ from qma.harness.launch import (
     Interactive,
     SubAgent,
 )
-from qma.harness.packs import View, views_in
+from qma.harness.packs import PLUGIN_JSON, View, views_in
 
 if TYPE_CHECKING:
     from qma.harness.home import QmxHome
@@ -450,6 +450,27 @@ def known_toolset(name: str) -> bool:
     return name in CORE_TOOLSETS or dynamic
 
 
+def app_rows(views: Sequence[View]) -> Mapping[str, tuple[str, ...]]:
+    """The rows each published pack serves, by app id, read from the `operations` its view's
+    `plugin.json` names (AD-55, AD-61). A view that names none binds no row."""
+    found: dict[str, tuple[str, ...]] = {}
+    for view in views:
+        operations = _manifest(view.folder).get("operations")
+        if isinstance(operations, Mapping):
+            table = cast("Mapping[str, object]", operations)
+            found[view.name] = tuple(str(name) for name in table)
+    return found
+
+
+def _manifest(folder: Path) -> Mapping[str, object]:
+    """A materialised view's `plugin.json`, or an empty table when it cannot be read."""
+    try:
+        found = json.loads((folder / PLUGIN_JSON).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else {}
+
+
 def _names(value: object) -> tuple[str, ...] | None:
     if isinstance(value, list | tuple):
         return tuple(str(name) for name in value)  # pyright: ignore[reportUnknownVariableType, reportUnknownArgumentType]
@@ -561,6 +582,7 @@ def _toolsets(
     wanted: Declaration,
     supply: Supply,
     parent: Surface | None,
+    apps: Mapping[str, tuple[str, ...]],
 ) -> tuple[str, ...]:
     if wanted.toolsets is not None:
         asked = wanted.toolsets
@@ -570,7 +592,8 @@ def _toolsets(
         asked = parent.toolsets
     else:
         asked = home_preset(home, supply.settings)
-    keep = {tool.toolset for tool in supply.tools} - denied_toolsets(kind)
+    served = {tool.toolset for tool in supply.tools} | {f"{APP_PREFIX}{app_id}" for app_id in apps}
+    keep = served - denied_toolsets(kind)
     if parent is not None:
         keep &= set(parent.toolsets)
     return _ordered(asked, keep)
@@ -612,9 +635,14 @@ def _texts(
     skills: Sequence[str],
     own: Mapping[str, str],
     workspace: Path,
+    apps: Mapping[str, tuple[str, ...]],
 ) -> dict[SlotName, str]:
     source = supply.slots
     counts = dict.fromkeys(toolsets, 0)
+    for app_id, rows in apps.items():
+        name = f"{APP_PREFIX}{app_id}"
+        if name in counts:
+            counts[name] = len(rows)
     for tool in supply.tools:
         if tool.toolset in counts:
             counts[tool.toolset] += 1
@@ -653,14 +681,15 @@ def build(
     """Everything one launch of a chat gets. Reads slot texts and the pack views on disk."""
     own = supply.slots.skills()
     views = supply.slots.plugin_views(packs)
+    apps = app_rows(views)
     skills = list(_skills(wanted, own, parent))
     from_views = [f"{view.name}:{name}" for view in views for name in view.skills]
     if parent is not None:
         from_views = [name for name in from_views if name in parent.skills]
     skills += from_views
     builtins = _builtins(kind, wanted, bool(skills), parent)
-    toolsets = _toolsets(kind, home, wanted, supply, parent)
-    texts = _texts(kind, home, packs, wanted, supply, toolsets, skills, own, workspace)
+    toolsets = _toolsets(kind, home, wanted, supply, parent, apps)
+    texts = _texts(kind, home, packs, wanted, supply, toolsets, skills, own, workspace, apps)
     limits = budgets(supply.settings)
     per_item = {"pack_layers": len(packs) + 1, "skills_index": max(1, len(skills))}
     slots: list[Slot] = []

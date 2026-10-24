@@ -33,6 +33,8 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Final, Literal, Protocol, cast
 
+from pydantic import JsonValue
+
 type Pin = Literal["version", "follow"]
 type Status = Literal["ready", "pending", "archived", "not_cached"]
 
@@ -75,6 +77,13 @@ landed output, which their own resolvers do."""
 TEXT_SLOTS: Final[tuple[str, ...]] = ("content", "body.md")
 """The blob slots an excerpt may be read from, asked for every kind: a store answers the slots the
 object has. A session's transcript is never asked for, since it is the CLI's, not the model's."""
+
+RUN_INPUT_KINDS: Final[tuple[str, ...]] = ("run", "library")
+"""The kinds a workflow's `inputs` may reference (engine AD-63, AD-19): what a run reads from the
+Library. `@library:<object id>` names one object; `@run:<run id>` names a run and
+`@run:<run id>/<output>` one output it landed. A run start reads them through the engine's own
+Library port, which answers by id and run, so `@library` here is an id and not a search text: the
+composer's search form stays the copilot's."""
 
 
 class ContextRefused(ValueError):
@@ -513,6 +522,79 @@ def _span(text: str, span: str) -> str:
     if start < 0 or end <= start:
         raise ContextRefused("invalid_arguments", f"{span!r} is not a range; a range reads a-b")
     return text[start:end]
+
+
+@dataclass(frozen=True)
+class Pinned:
+    """One reference a run start resolved, as `run_created` records it: the reference and the
+    Library object it pinned."""
+
+    ref: str
+    object_id: str
+
+    def document(self) -> dict[str, JsonValue]:
+        return {"ref": self.ref, "object_id": self.object_id}
+
+
+class InputReads(Protocol):
+    """The Library reads a run start needs to resolve its `inputs`: an object by id, a run's
+    summaries, and the artifacts a run produced. The engine answers these from its own port."""
+
+    def object(self, object_id: str) -> LibraryObject | None: ...
+    def summaries(self, run: str) -> list[str]: ...
+    def produced(self, producer: str) -> list[str]: ...
+
+
+def references(inputs: JsonValue) -> tuple[str, ...]:
+    """Every `@run` and `@library` reference a workflow's `inputs` carries, once each, in the
+    order they read. A string that is not a reference is left alone."""
+    found: list[str] = []
+
+    def walk(value: JsonValue) -> None:
+        if isinstance(value, str):
+            if value.startswith("@") and ":" in value:
+                kind, _ = parse(value)
+                if kind in RUN_INPUT_KINDS:
+                    found.append(value)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+
+    walk(inputs)
+    return tuple(dict.fromkeys(found))
+
+
+def pins_of(refs: Sequence[str], reads: InputReads) -> tuple[Pinned, ...]:
+    """Each reference pinned to the object it names. The first that does not resolve refuses the
+    start with one `ContextRefused` naming it."""
+    return tuple(_pin(ref, reads) for ref in refs)
+
+
+def _pin(ref: str, reads: InputReads) -> Pinned:
+    kind, target = parse(ref)
+    if kind not in RUN_INPUT_KINDS:
+        raise ContextRefused(
+            "invalid_arguments",
+            f"{ref} is @{kind}, and a run's inputs read only {', '.join(RUN_INPUT_KINDS)}",
+        )
+    if kind == "library":
+        if reads.object(target) is None:
+            raise ContextRefused("not_found", f"{ref} names no Library object")
+        return Pinned(ref, target)
+    run_id, _, output = target.partition("/")
+    summaries = reads.summaries(run_id)
+    if not summaries:
+        raise ContextRefused("not_found", f"{ref} names no run {run_id!r}")
+    if not output:
+        return Pinned(ref, summaries[-1])
+    for artifact in reads.produced(summaries[-1]):
+        found = reads.object(artifact)
+        if found is not None and _names_output(found, output):
+            return Pinned(ref, artifact)
+    raise ContextRefused("not_found", f"{ref} names an output the run has not landed")
 
 
 @dataclass(frozen=True)

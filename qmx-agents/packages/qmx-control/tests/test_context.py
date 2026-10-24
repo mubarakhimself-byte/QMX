@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from types import MappingProxyType
 
 import pytest
+from pydantic import JsonValue
 
 from qmx_control.catalog import rows
 from qmx_control.context import (
@@ -18,9 +19,12 @@ from qmx_control.context import (
     LibraryHit,
     LibraryObject,
     MemoryRowHit,
+    Pinned,
     Resolvers,
     listing,
     parse,
+    pins_of,
+    references,
 )
 
 BUDGET = Budget(soft_chars=200, hard_chars=400)
@@ -307,3 +311,62 @@ def test_the_context_toolset_is_five_rows_within_the_wire_name(library: Fixture)
         "domain_write",
         "read",
     ]
+
+
+class PinnedReads:
+    """`InputReads` over the fixture: by object id, a run's summaries, a producer's artifacts."""
+
+    def __init__(self, library: Fixture) -> None:
+        self.library = library
+
+    def object(self, object_id: str) -> LibraryObject | None:
+        return self.library.objects.get(object_id)
+
+    def summaries(self, run: str) -> list[str]:
+        return [
+            found.object_id
+            for found in self.library.objects.values()
+            if found.item == run and found.kind == "workflow-run"
+        ]
+
+    def produced(self, producer: str) -> list[str]:
+        return self.library.produced(producer)
+
+
+def test_a_runs_inputs_name_each_reference_once_and_in_order() -> None:
+    inputs: dict[str, JsonValue] = {
+        "today": "@run:run1/nightly-bias",
+        "also": ["@library:fp1:sha256::pod7", "@run:run1/nightly-bias"],
+        "note": "no reference here",
+        "deep": {"pinned": "@library:fp1:sha256::unit"},
+    }
+
+    assert references(inputs) == (
+        "@run:run1/nightly-bias",
+        "@library:fp1:sha256::pod7",
+        "@library:fp1:sha256::unit",
+    )
+
+
+def test_a_reference_pins_the_object_the_library_holds(library: Fixture) -> None:
+    pinned = pins_of(["@run:" + RUN + "/bias", "@library:" + POD_V7], PinnedReads(library))
+
+    assert pinned == (
+        Pinned("@run:" + RUN + "/bias", "fp1:sha256::bias"),
+        Pinned("@library:" + POD_V7, POD_V7),
+    )
+    assert [pin.document() for pin in pinned] == [
+        {"ref": "@run:" + RUN + "/bias", "object_id": "fp1:sha256::bias"},
+        {"ref": "@library:" + POD_V7, "object_id": POD_V7},
+    ]
+
+
+def test_a_reference_that_names_nothing_refuses_the_start(library: Fixture) -> None:
+    reads = PinnedReads(library)
+
+    with pytest.raises(ContextRefused, match="names no run 'run-gone'"):
+        pins_of(["@run:run-gone"], reads)
+    with pytest.raises(ContextRefused, match="names an output the run has not landed"):
+        pins_of(["@run:" + RUN + "/not-landed"], reads)
+    with pytest.raises(ContextRefused, match="read only run, library"):
+        pins_of(["@pod:pod-7"], reads)

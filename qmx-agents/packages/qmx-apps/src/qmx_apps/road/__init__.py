@@ -1,12 +1,22 @@
-"""Immutable versions, current proof, CAS activation and evidenced rollback."""
+"""Immutable versions, current proof, CAS activation and evidenced rollback.
+
+A publish also lands the app's pack: one `mini-app` Library item whose `bundle.tar` blob is the
+plugin tree a chat loads (engine AD-19, AD-55). The item is what a host materialises at its next
+start, so publishing is how a mini app reaches a chat's surface.
+"""
 
 from __future__ import annotations
 
 import hmac
+import io
+import json
 import sqlite3
 import sys
+import tarfile
 import time
-from typing import TYPE_CHECKING, cast
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Final, cast
 
 from qmx_ledger.journal import encoded, fingerprint
 
@@ -20,11 +30,75 @@ from qmx_apps.volume import Volume
 if TYPE_CHECKING:
     from qmx_apps.supervisor import Supervisor
 
+PLUGIN_JSON: Final = ".claude-plugin/plugin.json"
+"""The one file a chat's CLI reads to see a pack. The view keeps the app's `skills/` beside it
+and nothing else, since a pack ships no hook and starts no server (AD-55)."""
+SKILLS: Final = "skills"
+
+
+@dataclass(frozen=True, slots=True)
+class Pack:
+    """What a publish hands the Library: the app's plugin tree as one `bundle.tar`, and the few
+    facts the `mini-app` item carries beside it."""
+
+    app_id: str
+    version: str
+    definition_hash: str
+    operations: tuple[str, ...]
+    bundle: bytes
+
+
+type PackSink = Callable[[Pack], str]
+"""`Pack -> the Library object id`. The host closes over the store it writes the item on; a host
+that attaches no sink keeps the publish local, as before."""
+
+
+def pack_bundle(app_id: str, image: Definition) -> bytes:
+    """The published pack as one tar: its `plugin.json`, naming the app and the rows it serves,
+    and its `skills/` folder when the definition ships one."""
+    manifest = image.manifest
+    plugin = {
+        "name": app_id,
+        "version": manifest.version,
+        "description": manifest.name,
+        "operations": {
+            name: {"approval": operation.approval, "description": operation.description}
+            for name, operation in manifest.operations.items()
+        },
+    }
+    files: dict[str, bytes] = {
+        PLUGIN_JSON: (json.dumps(plugin, indent=2, sort_keys=True) + "\n").encode()
+    }
+    skills = image.root / SKILLS
+    for path in sorted(skills.rglob("*")):
+        if path.is_file():
+            files[f"{SKILLS}/{path.relative_to(skills).as_posix()}"] = path.read_bytes()
+    return tarball(files)
+
+
+def tarball(files: Mapping[str, bytes]) -> bytes:
+    """One tar of these files by posix path, with no timestamps and no owner: the bytes are the
+    identity, so two publishes of one version make one blob."""
+    with io.BytesIO() as buffer:
+        with tarfile.open(fileobj=buffer, mode="w") as archive:
+            for name in sorted(files):
+                body = files[name]
+                info = tarfile.TarInfo(name)
+                info.size = len(body)
+                info.mtime = 0
+                archive.addfile(info, io.BytesIO(body))
+        return buffer.getvalue()
+
 
 class Road:
     def __init__(self, owner: Supervisor) -> None:
         self.owner = owner
         self._signing_key: bytes | None = None
+        self.packs: PackSink | None = None
+
+    def attach_packs(self, sink: PackSink | None) -> None:
+        """Give the road the Library its published packs go to, or take it away."""
+        self.packs = sink
 
     def signing_key(self, key: str) -> None:
         self._signing_key = key.encode()
@@ -319,5 +393,22 @@ class Road:
                     "Publication committed; read app evidence to reconcile its catalog.",
                     503,
                 ) from error
+            self._landed(app_id, image)
         self.owner.emit(app_id, {"type": "published", **record})
         return record
+
+    def _landed(self, app_id: str, image: Definition) -> None:
+        """Hand the published pack to the Library sink (AD-19, AD-55). A host that attached no
+        sink keeps the publish local; the next publish lands the item."""
+        sink = self.packs
+        if sink is None:
+            return
+        sink(
+            Pack(
+                app_id=app_id,
+                version=image.manifest.version,
+                definition_hash=image.hash,
+                operations=tuple(sorted(image.manifest.operations)),
+                bundle=pack_bundle(app_id, image),
+            )
+        )

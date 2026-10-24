@@ -5,11 +5,13 @@ A change to what a model sees shows here as a reviewed diff.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from qma.harness import packs
 from qma.harness.chat import unexpected_extensions
 from qma.harness.home import QmxHome, SessionId
 from qma.harness.launch import Background, ChatKind, Child, Home, Interactive, SubAgent
@@ -113,6 +115,39 @@ COPILOT_TOOLS = (
     "mcp__qmx_delegate__run",
     "mcp__qmx_ops__capacity",
 )
+
+
+def test_a_materialised_pack_binds_its_app_rows_to_the_chat(home: QmxHome) -> None:
+    published = json.dumps(
+        {
+            "name": "macro-bias",
+            "version": "1.2.0",
+            "operations": {"bias": {"approval": "read"}, "refresh": {"approval": "domain_write"}},
+        }
+    ).encode()
+    packs.materialise(
+        home.packs_dir,
+        [
+            packs.PackSource(
+                "macro-bias",
+                ("fp1:sha256::app",),
+                {".claude-plugin/plugin.json": published},
+            )
+        ],
+    )
+    found = build(
+        Interactive(),
+        Home(),
+        ("macro-bias",),
+        Declaration(toolsets=("app:macro-bias", "library")),
+        supply(home, None, TOOLS),
+        workspace=home.root / "ws",
+    )
+
+    assert found.toolsets == ("app:macro-bias", "library")
+    assert found.tools == COPILOT_TOOLS[:2]
+    layers = next(slot for slot in found.slots if slot.name == "pack_layers")
+    assert "- app:macro-bias: 2 tools" in layers.text
 
 
 def test_the_copilot_gets_its_home_preset_and_loses_only_the_cli_schedulers(
