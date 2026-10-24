@@ -12,9 +12,68 @@ from qmf.core import is_refusal
 from qmf.venue.spot import SpotMarket
 
 from qmx_broker.models import Account, Connection
+from qmx_broker.registry import Declaration, PublishedLimit, declare
 
 type Document = dict[str, Any]
 type Request = Callable[[str, Document], Awaitable[Document]]
+
+CTRADER_DECLARATION = Declaration(
+    name="ctrader",
+    kind="platform",
+    auth="oauth2",
+    credential_fields=("clientId", "clientSecret", "accessToken", "refreshToken"),
+    environments=("demo", "live"),
+    reads=("accounts", "balances", "positions", "quotes", "bars", "instrument_specs"),
+    runs_on=("any",),
+    session="host",
+    limit_signals=("error code 108", "ProtoOAAccountsTokenInvalidatedEvent"),
+    limit_scope="connection",
+    error_map={"108": "retry", "CH_CLIENT_AUTH_FAILURE": "needs_you", "TOKEN_EXPIRED": "needs_you"},
+    health_check="App auth, the account list, account auth and ProtoOAVersionReq",
+    published_limits=(
+        PublishedLimit(
+            "connections per app",
+            "one demo and one live connection per registered app",
+            "Spotware Open API documentation, method note",
+            "2026-10-22",
+        ),
+    ),
+)
+
+CCXT_DECLARATION = Declaration(
+    name="ccxt",
+    kind="broker",
+    auth="api_key",
+    credential_fields=("apiKey", "secret", "password"),
+    environments=("demo", "live"),
+    reads=("balances", "positions", "quotes", "bars", "instrument_specs"),
+    runs_on=("any",),
+    session="host",
+    limit_signals=("HTTP 429 with Retry-After", "HTTP 418"),
+    limit_scope="connection",
+    error_map={"429": "retry", "418": "retry", "InvalidNonce": "unknown"},
+    health_check="Server time, then fetch_balance",
+    published_limits=(),
+)
+
+MT5_DECLARATION = Declaration(
+    name="mt5",
+    kind="platform",
+    auth="terminal_session",
+    credential_fields=("login", "password", "server"),
+    environments=("demo", "live"),
+    reads=("accounts", "balances", "positions", "quotes", "bars", "instrument_specs"),
+    runs_on=("windows", "windows_or_wine"),
+    session="host",
+    limit_signals=("terminal disconnect", "request timeout"),
+    limit_scope="connection",
+    error_map={"10004": "retry", "10006": "needs_you", "10009": "retry"},
+    health_check="initialize, terminal_info, account_info",
+    published_limits=(),
+)
+
+declare(CTRADER_DECLARATION, CCXT_DECLARATION, MT5_DECLARATION)
+"""The three broker-side types; DR5A declares them and DR5B gives cTrader and MT5 their homes."""
 
 
 class ReadAdapter(Protocol):

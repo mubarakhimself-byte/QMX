@@ -29,6 +29,11 @@ A placement also has the five preflight states of AD-30 (`available | configured
 reachable | healthy`), and a node placed on a provider's machine is refused when its role resolves
 to a plan row: a plan login stays on the machine he signed in on (AD-28, AD-30), and a provider VM
 holds key rows by design. That refusal is a configuration fault, so it costs a digest line.
+
+A node that names `connection: <id>` in its parameters fires only when that connection's newest
+reading is `ok` and the node runs on the connection's home machine (AD-67). A missing or unhealthy
+reading is `blocked_config` with one item and no model call. Readings arrive in `connections` or
+from `connection.<id>.word` rows in `settings`; the scheduler passes them from the heartbeat.
 """
 
 from __future__ import annotations
@@ -108,12 +113,21 @@ def preflight(
     credentials: Collection[str] | None,
     skills: Collection[str] | None,
     kinds: Mapping[str, str] | None = None,
+    connections: Mapping[str, str] | None = None,
 ) -> Blocked | None:
     """The first fault, or None. A `None` inventory is not checked. `kinds` is each placement's
-    registry kind (`owned`, `managed_vm`, ...); a provider placement refuses a plan-row role."""
+    registry kind (`owned`, `managed_vm`, ...); a provider placement refuses a plan-row role.
+    `connections` maps a connection id to its reading word; a node that names one fires only on
+    `ok`, on the connection's home (AD-67)."""
+    words = _connection_words(settings, connections)
     for node in workflow.nodes:
         if node.disabled:
             continue
+        named = node.parameters.get("connection")
+        if isinstance(named, str) and named:
+            blocked = connection_fault(node.name, placements_of(node), named, words, settings)
+            if blocked is not None:
+                return blocked
         if node.role is not None:
             candidates = order(settings, node.role, "live")
             if not candidates:
@@ -141,6 +155,49 @@ def preflight(
                     message = f"{node.name}: skill {skill} is not installed"
                     return Blocked("config", "skill_missing", message)
     return None
+
+
+def connection_fault(
+    name: str,
+    placements: tuple[str, ...],
+    connection: str,
+    words: Mapping[str, str],
+    settings: Mapping[str, object],
+) -> Blocked | None:
+    """A node that names a connection fires only on an `ok` reading on that connection's home."""
+    word = words.get(connection)
+    if word is None:
+        return Blocked(
+            "config",
+            "connection_unknown",
+            f"{name}: connection {connection} is not configured",
+        )
+    if word != "ok":
+        return Blocked(
+            "config",
+            "connection_unhealthy",
+            f"{name}: connection {connection} reads {word}",
+        )
+    home = settings.get(f"connection.{connection}.home")
+    if isinstance(home, str) and home and placements and home not in placements:
+        return Blocked(
+            "config",
+            "connection_unreachable",
+            f"{name}: connection {connection} is homed on {home}, not {' or '.join(placements)}",
+        )
+    return None
+
+
+def _connection_words(
+    settings: Mapping[str, object], connections: Mapping[str, str] | None
+) -> Mapping[str, str]:
+    if connections is not None:
+        return dict(connections)
+    found: dict[str, str] = {}
+    for key, value in settings.items():
+        if key.startswith("connection.") and key.endswith(".word") and isinstance(value, str):
+            found[key.removeprefix("connection.").removesuffix(".word")] = value
+    return found
 
 
 def quarantined_input(object_id: str, library: LibraryPort) -> Blocked | None:

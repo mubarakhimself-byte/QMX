@@ -2,8 +2,9 @@
 
 A host, a remote run sidecar and every supervised app write the same `Heartbeat` row. The live
 facts travel only here: CPU, memory, capacity in use per class, intent claims, the version and
-node kinds a host runs, and the pause flag it sees. Preflight reads a host's kinds before it places
-a node there (AD-20), and the `ops` toolset reads the rows.
+node kinds a host runs, the pause flag it sees, and the newest reading per external connection.
+Preflight reads a host's kinds before it places a node there (AD-20), the `ops` toolset reads the
+rows, and a workflow that names a `connection` reads the reading word here (AD-67).
 
 The row is also what the Hub hears: `HubLink.push` sends it and the reply carries the authoritative
 `autonomy_paused` flag and how many claims the batch renewed (AD-65, review 48 M5). A host that
@@ -26,7 +27,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from importlib import metadata
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 from qmx_ledger.journal import fingerprint
@@ -48,6 +49,24 @@ UNKNOWN: Final = "pause state unknown"
 HEARTBEAT_ROUTE: Final = "/v1/heartbeat"
 """The Hub's one route for a row, and its reply."""
 CALL_TIMEOUT_S: Final = 10.0
+CONNECTIONS: Final = "connections-health.json"
+"""The health workflow's file under `logs/`; the host attaches its readings to its next row."""
+type ConnectionWord = Literal["ok", "slowed", "maintenance", "needs_you", "down"]
+
+
+class ConnectionReading(BaseModel):
+    """One connection's reading word, as the `connections-health` workflow left it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connection: str
+    word: ConnectionWord
+    setup: str = ""
+    """The setup state the health walk reached: `available` to `healthy` (AD-30, AD-67)."""
+    code: str = ""
+    latency_ms: int | None = None
+    clock_offset_ms: int | None = None
+    at: str = ""
 
 
 class ClassUse(BaseModel):
@@ -89,6 +108,10 @@ class Heartbeat(BaseModel):
     session_bytes: int | None = None
     """What one session of this host really holds: this host's process tree, measured here, and
     the figure that replaces a reserved constant once it is known (D-11)."""
+    connections: tuple[ConnectionReading, ...] = ()
+    """The newest reading per external connection on this home (AD-67)."""
+    clock_offset_ms: int | None = None
+    """The largest absolute provider clock offset this home measured, signed as measured."""
 
 
 def node_kinds() -> tuple[str, ...]:
@@ -122,7 +145,7 @@ class HeartbeatLog:
         logs_dir(home).mkdir(parents=True, exist_ok=True)
 
     def write(self, rows: Iterable[Heartbeat]) -> None:
-        found = list(rows)
+        found = [_attached(self.home, row) for row in rows]
         if not found:
             return
         by_day: dict[date, list[str]] = {}
@@ -185,6 +208,58 @@ def host_kinds(home: Path) -> Mapping[str, frozenset[str]]:
     return {
         row.id: frozenset(row.node_kinds) for row in latest(home).values() if row.subject == "host"
     }
+
+
+def _health(home: Path) -> dict[str, object]:
+    try:
+        raw: object = json.loads((logs_dir(home) / CONNECTIONS).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    return cast("dict[str, object]", raw) if isinstance(raw, dict) else {}
+
+
+def connection_readings(home: Path) -> tuple[ConnectionReading, ...]:
+    """The health workflow's newest reading per connection; empty before its first run."""
+    rows = _health(home).get("readings")
+    if not isinstance(rows, list):
+        return ()
+    found: list[ConnectionReading] = []
+    for row in cast("list[object]", rows):
+        try:
+            found.append(ConnectionReading.model_validate(row))
+        except ValueError:
+            continue
+    return tuple(found)
+
+
+def connection_words(home: Path) -> Mapping[str, str]:
+    """Each connection's reading word by connection id, which preflight checks before a fire."""
+    return {reading.connection: reading.word for reading in connection_readings(home)}
+
+
+def measured_clock_offset(home: Path) -> int | None:
+    """The largest absolute provider clock offset the connections measured, signed as measured."""
+    stored = _health(home).get("clock_offset_ms")
+    if isinstance(stored, int) and not isinstance(stored, bool):
+        return stored
+    offsets = [
+        reading.clock_offset_ms
+        for reading in connection_readings(home)
+        if reading.clock_offset_ms is not None
+    ]
+    return max(offsets, key=abs) if offsets else None
+
+
+def _attached(home: Path, row: Heartbeat) -> Heartbeat:
+    """A host row carries the newest connection readings, so one row answers both questions."""
+    if row.subject != "host" or row.connections:
+        return row
+    readings = connection_readings(home)
+    if not readings:
+        return row
+    return row.model_copy(
+        update={"connections": readings, "clock_offset_ms": measured_clock_offset(home)}
+    )
 
 
 class HubReply(BaseModel):

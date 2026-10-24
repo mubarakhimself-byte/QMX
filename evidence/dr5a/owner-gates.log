@@ -1,0 +1,132 @@
+fmt/lint/types, 2026-10-23T18:05:42.5152417+03:00
+Poe => ruff format --config pyproject.toml --check src tests ../../../scripts/live/smoke_broker.py
+19 files already formatted
+qmx-broker fmt-check exit 0
+Poe => ruff check --config pyproject.toml src tests ../../../scripts/live/smoke_broker.py
+All checks passed!
+qmx-broker lint exit 0
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+qmx-broker types exit 0
+Poe => ruff format --config pyproject.toml --check src tests
+33 files already formatted
+qmx-control fmt-check exit 0
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+qmx-control lint exit 0
+Poe => python -m pyright
+d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\src\qmx_control\service.py
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\src\qmx_control\service.py:508:27 - error: Type "list[dict[str, Any]]" is not assignable to declared type "JsonValue"
+    Type "list[dict[str, Any]]" is not assignable to type "JsonValue"
+      "list[dict[str, Any]]" is not assignable to "list[JsonValue]"
+        Type parameter "_T@list" is invariant, but "dict[str, Any]" is not the same as "JsonValue"
+        Consider switching from "list" to "Sequence" which is covariant
+      "list[dict[str, Any]]" is not assignable to "dict[str, JsonValue]"
+      "list[dict[str, Any]]" is not assignable to "str"
+      "list[dict[str, Any]]" is not assignable to "bool"
+      "list[dict[str, Any]]" is not assignable to "int"
+    ... (reportAssignmentType)
+d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:40:19 - error: Unnecessary "cast" call; type is already "Document" (reportUnnecessaryCast)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:41:19 - error: Unnecessary "cast" call; type is already "Document" (reportUnnecessaryCast)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: Argument of type "Literal[0]" cannot be assigned to parameter "key" of type "str" in function "__getitem__"
+    "Literal[0]" is not assignable to "str" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: No overloads for "__getitem__" match the provided arguments (reportCallIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: Argument of type "Literal['adapter']" cannot be assigned to parameter "s" of type "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" in function "__getitem__"
+    "Literal['adapter']" is not assignable to "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: Argument of type "Literal['adapter']" cannot be assigned to parameter "key" of type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" in function "__getitem__"
+    Type "Literal['adapter']" is not assignable to type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]"
+      "Literal['adapter']" is incompatible with protocol "SupportsIndex"
+        "__index__" is not present
+      "Literal['adapter']" is not assignable to "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:43:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Argument of type "Literal[0]" cannot be assigned to parameter "key" of type "str" in function "__getitem__"
+    "Literal[0]" is not assignable to "str" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: No overloads for "__getitem__" match the provided arguments (reportCallIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Argument of type "Literal['connections']" cannot be assigned to parameter "s" of type "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" in function "__getitem__"
+    "Literal['connections']" is not assignable to "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Argument of type "Literal['connections']" cannot be assigned to parameter "key" of type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" in function "__getitem__"
+    Type "Literal['connections']" is not assignable to type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]"
+      "Literal['connections']" is incompatible with protocol "SupportsIndex"
+        "__index__" is not present
+      "Literal['connections']" is not assignable to "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Argument of type "Literal[0]" cannot be assigned to parameter "key" of type "str" in function "__getitem__"
+    "Literal[0]" is not assignable to "str" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: No overloads for "__getitem__" match the provided arguments (reportCallIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Argument of type "Literal['scope']" cannot be assigned to parameter "s" of type "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" in function "__getitem__"
+    "Literal['scope']" is not assignable to "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Argument of type "Literal['scope']" cannot be assigned to parameter "key" of type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" in function "__getitem__"
+    Type "Literal['scope']" is not assignable to type "SupportsIndex | slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]"
+      "Literal['scope']" is incompatible with protocol "SupportsIndex"
+        "__index__" is not present
+      "Literal['scope']" is not assignable to "slice[SupportsIndex | None, SupportsIndex | None, SupportsIndex | None]" (reportArgumentType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "bool" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "int" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: "__getitem__" method not defined on type "float" (reportIndexIssue)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-control\tests\test_connections.py:44:12 - error: Object of type "None" is not subscriptable (reportOptionalSubscript)
+39 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+qmx-control types exit 1
+Poe => ruff format --config pyproject.toml --check src tests
+605 files already formatted
+qmx-engine fmt-check exit 0
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+qmx-engine lint exit 0
+Poe => python -m pyright
+d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-engine\src\qmx_engine\heartbeat.py
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-engine\src\qmx_engine\heartbeat.py:218:12 - error: Return type, "dict[Unknown, Unknown] | dict[str, object]", is partially unknown (reportUnknownVariableType)
+  d:\QMX-worktrees\bld-dr5a\qmx-agents\packages\qmx-engine\src\qmx_engine\heartbeat.py:227:9 - error: Type of "row" is unknown (reportUnknownVariableType)
+2 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+qmx-engine types exit 1
+Poe => ruff format --config pyproject.toml --check src tests
+33 files already formatted
+qmx-control fmt-check exit 0
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+qmx-control lint exit 0
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+qmx-control types exit 0
+Poe => ruff format --config pyproject.toml --check src tests
+605 files already formatted
+qmx-engine fmt-check exit 0
+Poe => ruff check --config pyproject.toml src tests
+All checks passed!
+qmx-engine lint exit 0
+Poe => python -m pyright
+0 errors, 0 warnings, 0 informations
+WARNING: there is a new pyright version available (v1.1.411 -> v1.1.414).
+Please install the new version or set PYRIGHT_PYTHON_FORCE_VERSION to `latest`
+
+qmx-engine types exit 0

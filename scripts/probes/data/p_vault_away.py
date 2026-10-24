@@ -11,10 +11,16 @@ lane's own, and no provider is called.
 Then the key file is left out and the same lookup must raise `vault:unavailable:contabo` instead of
 waiting for another host.
 
+The W13 half adds a server-homed data connection. Its data key is installed on the PC, sealed for
+the server, handed over in the sync document, and opened on the server from its own key file with
+the PC's objects gone. The connection's health check then runs against a stub provider answer and
+reads `ok` (AD-67).
+
 **Pass:** the server opens the entry with the key in its own key file, the relay serves a model call
-with it as the bearer, and a missing key file raises `vault:unavailable:contabo`.
-**Fail:** the server cannot open without the PC, the relay makes no call, or a missing key file
-waits or fails without the incident code.
+with it as the bearer, a missing key file raises `vault:unavailable:contabo`, and the server-homed
+data connection's health check reads `ok` with the PC off.
+**Fail:** the server cannot open without the PC, the relay makes no call, a missing key file
+waits or fails without the incident code, or the data connection's health walk cannot run.
 
     uv run --no-sync python scripts/probes/data/p_vault_away.py
     uv run --no-sync python scripts/probes/data/p_vault_away.py --keep
@@ -30,12 +36,17 @@ import shutil
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
+from email.utils import formatdate
 from pathlib import Path
 from typing import Final
 
 import httpx
 
 from common import Report
+
+from qmx_broker.models import Broker, Connection
+from qmx_broker.providers.http import Response
+from qmx_broker.registry import probe_for, walk
 
 from qmx_router.ids import SessionId
 from qmx_router.profiles import ProfileName, parse_profiles
@@ -53,6 +64,7 @@ from qmx_router.vault import (
 
 ROOT: Final = Path(os.environ.get("QMX_PROBE_SCRATCH", "D:/Temp/dr2c")) / "p-vault-away"
 ENTRY: Final = "qmx/kimi"
+DATA_REF: Final = "qmx/data/databento"
 VALUE: Final = "lanes-only-value"
 CHAT: Final = SessionId("6f1d2c3b-4a59-4e8d-9b7a-0c1d2e3f4a5b")
 MISSING: Final = "vault:unavailable:contabo"
@@ -180,13 +192,17 @@ def main(argv: list[str] | None = None) -> int:
             peers={"contabo": VaultKey.from_public_bytes(server_key.public_bytes())},
         )
         entry = pc.install(ENTRY, VALUE)
+        data_entry = pc.install(DATA_REF, json.dumps({"apiKey": VALUE}))
         report.numbers["sealed for"] = sorted(entry.sealed)
+        report.numbers["data key sealed for"] = sorted(data_entry.sealed)
         if sorted(entry.sealed) != ["contabo", "pc"]:
             report.fail(f"the entry is sealed for {sorted(entry.sealed)}, not both machines")
+        if sorted(data_entry.sealed) != ["contabo", "pc"]:
+            report.fail(f"the data key is sealed for {sorted(data_entry.sealed)}, not both machines")
         (server_home / "vault-store.json").write_text(
             json.dumps(pc.sync_document()), encoding="utf-8"
         )
-        del pc, entry  # the PC is off from here on: the server has two files and nothing else
+        del pc, entry, data_entry  # the PC is off from here on: the server has two files only
 
         store = VaultStore("contabo")
         store.sync(json.loads((server_home / "vault-store.json").read_text(encoding="utf-8")))
@@ -228,6 +244,38 @@ def main(argv: list[str] | None = None) -> int:
             report.fail("a server with no key file still made a model call")
         elif "VaultUnavailable" not in detail:
             report.fail(f"the refusal does not name the missing key: {detail}")
+
+        opened_data = json.loads(store.open(DATA_REF, key))
+        if opened_data != {"apiKey": VALUE}:
+            report.fail("the server did not open the data key its own key file sealed")
+
+        def answer(_url: str, _headers: dict[str, str], _method: str) -> Response:
+            return Response(
+                200,
+                {"Date": formatdate(usegmt=True), "Content-Type": "application/json"},
+                b'{"datasets": []}',
+            )
+
+        data_provider = Broker(id="databento", name="Databento", adapter="databento", kind="data")
+        data_connection = Connection(
+            id="databento-history", credential_ref=DATA_REF, home="contabo"
+        )
+        data_probe = probe_for("databento")
+        reading = walk(
+            data_provider,
+            data_connection,
+            probe=None
+            if data_probe is None
+            else lambda p, c: data_probe(p, c, fetch=answer, secret=opened_data),
+            now=time.time(),
+        )
+        report.numbers["server-homed data connection"] = (
+            f"{reading.word} {reading.latency_ms} ms"
+        )
+        if reading.word != "ok":
+            report.fail(
+                f"the server-homed data connection read {reading.word} {reading.code}"
+            )
     finally:
         if not arguments.keep:
             shutil.rmtree(ROOT, ignore_errors=True)

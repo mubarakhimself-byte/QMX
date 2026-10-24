@@ -1,4 +1,4 @@
-"""The broker MCP door exposes six reads and one local proposal writer."""
+"""The broker MCP door exposes seven reads and one local proposal writer."""
 
 import os
 from pathlib import Path
@@ -12,6 +12,7 @@ from qmx_broker.service import BrokerService
 def create_server(service: BrokerService) -> FastMCP:
     server = FastMCP("qmx-broker")
     server.tool(annotations={"readOnlyHint": True})(service.list_accounts)
+    server.tool(annotations={"readOnlyHint": True})(service.list_connections)
 
     async def account_state(broker_id: str, connection_id: str, account_id: str) -> dict[str, Any]:
         """Read account balances and leverage for one configured account."""

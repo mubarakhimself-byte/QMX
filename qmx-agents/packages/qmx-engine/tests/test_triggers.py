@@ -6,12 +6,13 @@ failures are one incident with spend-neutral re-runs."""
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from flows import CHAIN, edited, node, workflow
+from flows import CHAIN, edge, edited, folder, node, workflow
 from scheduled import Clock, Flags, enabled, fires_of
 
 from qmx_engine.definition.validate import checked
@@ -77,6 +78,47 @@ def test_a_missing_role_is_the_workflows_fault_and_a_missing_key_the_providers()
     assert unkeyed is not None
     assert (unkeyed.cause, unkeyed.code) == ("provider", "credential_missing")
     assert scripted is None
+
+
+def test_the_live_ticker_passes_connection_readings_to_preflight(tmp_path: Path) -> None:
+    clock = Clock(MONDAY)
+    flow = folder(
+        tmp_path / "flow",
+        [
+            node("Start", "trigger", kinds=["manual"]),
+            node("Fetch", "script", script="scripts/fetch.py", connection="vision"),
+        ],
+        {"Start": {"main": [edge("Fetch")]}},
+        {"fetch": "print('{}')"},
+    )
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "connections-health.json").write_text(
+        json.dumps({"readings": [{"connection": "vision", "word": "down", "code": "http_503"}]}),
+        encoding="utf-8",
+    )
+    with enabled(tmp_path, clock, bundle=flow) as (svc, version):
+        trigger = rows.create(
+            svc.ctx.engine.ledger,
+            workflow_item=svc.versions.get(version).item,
+            pinned_object=version,
+            spec=rows.Manual(),
+            caller=OPERATOR,
+            now=clock.now(),
+        )
+        rows.fire_now(svc.ctx.engine.ledger, trigger.id, clock.now(), {})
+        ticker = Scheduler(svc.ctx)
+
+        asyncio.run(ticker.tick())
+        asyncio.run(ticker.settle())
+        found = fires_of(tmp_path, trigger.id)
+
+    blocked = found[0]
+    assert (blocked.status, blocked.detail, blocked.run_id) == (
+        "blocked_config",
+        "Fetch: connection vision reads down",
+        None,
+    )
 
 
 def test_old_trigger_rows_survive_the_kind_migration_and_new_kinds_store(tmp_path: Path) -> None:
