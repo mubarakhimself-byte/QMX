@@ -10,14 +10,74 @@
       "url": {
         "type": "string"
       },
+      "canonical_url": {
+        "type": "string"
+      },
+      "origin": {
+        "enum": [
+          "upload",
+          "agent",
+          "feed",
+          "capture",
+          "import"
+        ]
+      },
       "fetched_date": {
         "type": "string"
+      },
+      "fetched_at": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "media_type": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer"
+      },
+      "pages": {
+        "type": "integer"
+      },
+      "text_hash": {
+        "type": "string"
+      },
+      "extractor_version": {
+        "type": "string"
+      },
+      "replaces": {
+        "type": "string"
+      },
+      "collection": {
+        "type": "string"
+      },
+      "licence": {
+        "type": "string"
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
       }
     }
   },
   "blobs": {
+    "original": {
+      "media_type": "application/octet-stream"
+    },
+    "text": {
+      "media_type": "text/plain"
+    },
+    "pages/*": {
+      "media_type": "text/plain"
+    },
     "transcript": {
       "media_type": "text/plain"
+    },
+    "frames/*": {
+      "media_type": "image/png"
     },
     "content": {
       "media_type": "application/octet-stream"
@@ -25,8 +85,10 @@
   },
   "card": {
     "facts": [
-      "url",
-      "fetched_date",
+      "origin",
+      "canonical_url",
+      "pages",
+      "extractor_version",
       "used_in"
     ],
     "thumbnail": "icon",
@@ -43,6 +105,11 @@
         "tab": "Original",
         "renderer": "text",
         "source": "blobs.original"
+      },
+      {
+        "tab": "Transcript",
+        "renderer": "text",
+        "source": "blobs.transcript"
       },
       {
         "tab": "Derived",

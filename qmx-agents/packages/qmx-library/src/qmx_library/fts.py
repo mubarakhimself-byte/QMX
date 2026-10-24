@@ -277,7 +277,15 @@ class Catalog:
         row = self.db.execute("SELECT state FROM items WHERE item = ?", (item,)).fetchone()
         return None if row is None else str(row[0])
 
-    def search(self, text: str, kind: str | None, include_archived: bool, limit: int) -> list[Hit]:
+    def search(
+        self, text: str, kind: str | None, include_archived: bool, limit: int, offset: int = 0
+    ) -> list[Hit]:
+        """FTS5 over the whole indexed text of every object, trusted first, paged by `offset`.
+
+        The whole text is one FTS5 row per object, so a phrase at the end of a 400-page book
+        matches exactly like one in its title (AD-27); `offset` answers the next page of a
+        result list without re-reading the query's head.
+        """
         words = norm(text).split()
         if not words:
             raise LibraryRefused("invalid_search", "the search names no word")
@@ -293,7 +301,8 @@ class Catalog:
         for object_id, item, found_kind, title, rank in rows:
             if item not in best:
                 best[str(item)] = Hit(str(object_id), str(item), str(found_kind), str(title), -rank)
-        return self.trusted_first(list(best.values()))[:limit]
+        ranked = self.trusted_first(list(best.values()))
+        return ranked[offset : offset + limit]
 
     def trusted_first(self, hits: list[Hit]) -> list[Hit]:
         """Stable: hits of equal trust keep their text rank."""
