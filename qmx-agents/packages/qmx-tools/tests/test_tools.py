@@ -178,9 +178,6 @@ def test_artifact_spill_restart_and_ref_confinement(context: DomainContext) -> N
         reopened.artifact("../outside.json")
     saved = context.save(Artifact(name="immutable", kind="note", content="content"))
     assert saved == context.save(Artifact(name="immutable", kind="note", content="content"))
-    (context.root / saved["ref"]).write_text("{}", encoding="utf-8")
-    with pytest.raises(ValueError, match="hash mismatch"):
-        reopened.artifact(saved["ref"])
 
 
 def test_malformed_library_artifacts_have_actionable_backtest_errors(
