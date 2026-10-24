@@ -48,6 +48,7 @@ type Code = Literal[
     "write_scope",
     "key_scope",
     "model_scope",
+    "data_scope",
     "handle_mismatch",
 ]
 """Every way a pass is refused. E25 drives one request per code."""
@@ -77,6 +78,7 @@ class Pass:
     issued_at: float
     expires_at: float
     handle: str = ""
+    data_scope: tuple[str, ...] = ()
 
     @property
     def owner(self) -> str:
@@ -97,6 +99,7 @@ class Ask:
     key: str = ""
     model: str = ""
     handle: str = ""
+    data: str = ""
 
 
 @dataclass(frozen=True)
@@ -122,26 +125,30 @@ def canonical(
     issued_at: float,
     expires_at: float,
     handle: str,
+    data_scope: tuple[str, ...] = (),
+    *,
+    legacy: bool = False,
 ) -> bytes:
     """The bytes the MAC covers, in one fixed order. JSON with sorted keys and no spaces, so a
-    pass minted on one Python and checked on another signs the same bytes."""
-    return json.dumps(
-        {
-            "id": pass_id,
-            "run": run,
-            "attempt": attempt,
-            "placement": placement,
-            "read_scope": list(read_scope),
-            "write_prefix": write_prefix,
-            "key_scope": list(key_scope),
-            "model_scope": list(model_scope),
-            "issued_at": issued_at,
-            "expires_at": expires_at,
-            "handle": handle,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    pass minted on one Python and checked on another signs the same bytes. `legacy` leaves
+    `data_scope` out, which is how a bearer minted before that field existed was signed: the
+    router still reads it, and the door refuses it for holding no data scope."""
+    fields: dict[str, object] = {
+        "id": pass_id,
+        "run": run,
+        "attempt": attempt,
+        "placement": placement,
+        "read_scope": list(read_scope),
+        "write_prefix": write_prefix,
+        "key_scope": list(key_scope),
+        "model_scope": list(model_scope),
+        "issued_at": issued_at,
+        "expires_at": expires_at,
+        "handle": handle,
+    }
+    if not legacy:
+        fields["data_scope"] = list(data_scope)
+    return json.dumps(fields, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _b64(raw: bytes) -> str:
@@ -244,6 +251,7 @@ class PassAuthority:
         write_prefix: str = "",
         key_scope: tuple[str, ...] = (),
         model_scope: tuple[str, ...] = (),
+        data_scope: tuple[str, ...] = (),
         handle: str = "",
         ttl_s: float = DEFAULT_TTL_S,
         pass_id: str = "",
@@ -263,6 +271,7 @@ class PassAuthority:
             issued_at=now,
             expires_at=now + float(ttl_s),
             handle=handle,
+            data_scope=tuple(str(item) for item in data_scope),
         )
         return minted, self.bearer(minted)
 
@@ -279,6 +288,7 @@ class PassAuthority:
             minted.issued_at,
             minted.expires_at,
             minted.handle,
+            minted.data_scope,
         )
         mac = hmac.new(self.secret, body, hashlib.sha256).digest()
         return f"{PREFIX}.{_b64(body)}.{_b64(mac)}"
@@ -304,7 +314,12 @@ class PassAuthority:
         data = cast("dict[str, Any]", document)
         wanted = hmac.new(self.secret, body, hashlib.sha256).digest()
         if not hmac.compare_digest(mac, wanted):
-            return _blank(), Refusal("bad_mac", "the bearer was not signed by this router")
+            # A pass minted before `data_scope` existed signed the same fields without it. It
+            # still verifies, and it carries no data scope, so the door refuses it by name.
+            stripped = {key: value for key, value in data.items() if key != "data_scope"}
+            legacy = json.dumps(stripped, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            if not hmac.compare_digest(mac, hmac.new(self.secret, legacy, hashlib.sha256).digest()):
+                return _blank(), Refusal("bad_mac", "the bearer was not signed by this router")
         try:
             minted = Pass(
                 id=str(data["id"]),
@@ -318,6 +333,7 @@ class PassAuthority:
                 issued_at=float(data["issued_at"]),
                 expires_at=float(data["expires_at"]),
                 handle=str(data.get("handle", "")),
+                data_scope=tuple(str(item) for item in data.get("data_scope", ())),
             )
         except KeyError, TypeError, ValueError:
             return _blank(), Refusal("malformed", "the bearer is missing a scope")
@@ -374,6 +390,13 @@ class PassAuthority:
             found.append(Refusal("key_scope", f"{minted.key_scope} does not cover {ask.key}"))
         if ask.model and not _scoped(minted.model_scope, ask.model):
             found.append(Refusal("model_scope", f"{minted.model_scope} does not cover {ask.model}"))
+        if ask.data and not _scoped(minted.data_scope, ask.data):
+            found.append(
+                Refusal(
+                    "data_scope",
+                    f"{minted.data_scope or 'no data scope'} does not cover {ask.data}",
+                )
+            )
         return tuple(found)
 
     def end_run(self, run_id: str) -> None:
@@ -402,6 +425,7 @@ def _blank() -> Pass:
         model_scope=(),
         issued_at=0.0,
         expires_at=0.0,
+        data_scope=(),
     )
 
 

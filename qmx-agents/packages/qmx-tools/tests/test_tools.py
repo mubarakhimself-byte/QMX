@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import runpy
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastmcp import Client
-from qmf.core import World
-from qmf.data import EvidenceStore
+from qmf.core import Ok, Result
+from qmf.data.store.refusals import policy_rejection
 from qml.protocol import construct_bot
 from qmn.doors.api import DoorRuntime
 from qmx_control.models import MemoKey
@@ -16,27 +17,81 @@ from qmx_control.models import MemoKey
 from qmx_tools import DomainContext
 from qmx_tools.functions import domain_functions
 from qmx_tools.servers import create_server
-from qmx_tools.service import Artifact, Dataset, OrderProposal, unwrap
+from qmx_tools.service import Artifact, OrderProposal, unwrap
 
 ROOT = Path(__file__).resolve().parents[4]
+FIRST = 1_700_000_000_000_000_000
+
+
+@dataclass(frozen=True)
+class FakeSeries:
+    series: str
+    subject: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class FakeRead:
+    series: str
+    fingerprints: tuple[str, ...]
+    rows: tuple[dict[str, object], ...]
+
+
+class FakeDoor:
+    """The host's market-data door, answering the tools with three series of three rows."""
+
+    kind_of: ClassVar[dict[str, str]] = {
+        "dukascopy/EURUSD/bar-1m/-": "bars",
+        "derived/EURUSD/feature-1m/-": "features",
+        "dukascopy/EURUSD/calendar/-": "calendar",
+    }
+
+    def instruments(self) -> Result[Any]:
+        return Ok(
+            tuple(
+                FakeSeries(series=series, subject="EURUSD", kind=series.split("/")[2])
+                for series in self.kind_of
+            )
+        )
+
+    def card(self, series: str) -> Result[Any]:
+        return Ok({"card": series, "digests": ["fp1:sha256:recorded"]})
+
+    def read(self, series: str = "", **arguments: Any) -> Result[Any]:
+        return Ok(
+            FakeRead(
+                series=series,
+                fingerprints=("fp1:sha256:recorded",),
+                rows=self._rows(
+                    self.kind_of[series], arguments.get("start_ns"), arguments.get("end_ns")
+                ),
+            )
+        )
+
+    def _rows(self, kind: str, start: int | None, end: int | None) -> tuple[dict[str, object], ...]:
+        return tuple(
+            {"t": FIRST + i * 60_000_000_000, "value": i, "kind": kind}
+            for i in range(3)
+            if (start is None or FIRST + i * 60_000_000_000 >= start)
+            and (end is None or FIRST + i * 60_000_000_000 <= end)
+        )
+
+
+class SealedDoor(FakeDoor):
+    """The same door, refusing the month the test asks for the way the real one refuses."""
+
+    def read(self, series: str = "", **arguments: Any) -> Result[Any]:
+        return policy_rejection(
+            "seal",
+            "this month is sealed for the final look; a read into the sealed no-peek window is "
+            "refused at the split-governed research door",
+            months=[series],
+        )
 
 
 @pytest.fixture
 def context(tmp_path: Path) -> DomainContext:
-    ctx = DomainContext(root=tmp_path)
-    ctx.store = unwrap(EvidenceStore(tmp_path / "market").for_world(World.REPLAY)).append_store
-    assert ctx.store is not None
-    for kind in ("bars", "features", "calendar"):
-        rows = [
-            {"t": 1_700_000_000_000_000_000 + i * 60_000_000_000, "value": i, "kind": kind}
-            for i in range(3)
-        ]
-        receipt = unwrap(ctx.store.append_raw(rows))
-        ctx.datasets.append(
-            Dataset(
-                kind=kind, symbol="EURUSD", timeframe="1m", fingerprint=receipt.fingerprint.value
-            )
-        )
+    ctx = DomainContext(root=tmp_path, market=FakeDoor())
     # Reuse the engine's accepted configurations and recorded-slice fixtures.
     qmb = runpy.run_path(str(ROOT / "qmb/tests/test_ct32_artifact.py"))
     ctx.backtests["recorded"] = {
@@ -66,13 +121,31 @@ def context(tmp_path: Path) -> DomainContext:
     return ctx
 
 
+def test_a_sealed_month_is_refused_with_its_reason(tmp_path: Path) -> None:
+    context = DomainContext(root=tmp_path, market=SealedDoor())
+    with pytest.raises(ValueError, match="this month is sealed for the final look"):
+        domain_functions(context)["data"]["read_bars"](symbol="EURUSD", timeframe="1m")
+
+
 def test_all_thirteen_tools_use_engines(context: DomainContext) -> None:
     functions = domain_functions(context)
     data = functions["data"]
-    assert data["list_instruments"]()["result"] == [{"symbol": "EURUSD", "timeframe": "1m"}]
+    assert data["list_instruments"]()["result"] == [
+        {"symbol": "EURUSD", "timeframe": "bar-1m", "series": "dukascopy/EURUSD/bar-1m/-"},
+        {"symbol": "EURUSD", "timeframe": "feature-1m", "series": "derived/EURUSD/feature-1m/-"},
+        {"symbol": "EURUSD", "timeframe": "calendar", "series": "dukascopy/EURUSD/calendar/-"},
+    ]
     for name in ("read_bars", "read_features", "calendar"):
         page = data[name](symbol="EURUSD", timeframe="1m", limit=2)
         assert len(page["result"]) == 2
+        assert (
+            page["card"]
+            == {
+                "read_bars": "dukascopy/EURUSD/bar-1m/-",
+                "read_features": "derived/EURUSD/feature-1m/-",
+                "calendar": "dukascopy/EURUSD/calendar/-",
+            }[name]
+        )
         expected_kind = {"read_bars": "bars", "read_features": "features", "calendar": "calendar"}
         assert all(row["kind"] == expected_kind[name] for row in page["result"])
         instant = 1_700_000_000_000_000_000 + 60_000_000_000

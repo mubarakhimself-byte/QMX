@@ -516,6 +516,7 @@ class SplitManifest:
     seal_boundary: SplitBoundary
     purge_width: Duration
     embargo_width: Duration
+    gap: Duration
     world: World
     cited_producers: tuple[ProducerHorizon, ...]
     fingerprint: Fingerprint
@@ -540,6 +541,7 @@ class SplitManifest:
         purge_width: object,
         embargo_width: object,
         world: object,
+        gap: object = 0,
         cited_producers: Sequence[ProducerHorizon] = (),
     ) -> Result[SplitManifest]:
         """Validate every part, compute the ``fp1`` split id, and build the manifest.
@@ -592,6 +594,14 @@ class SplitManifest:
                 "non-negative Duration (or int64 nanoseconds); omitting it is refused (DEC-0131)",
                 given=repr(embargo_width),
             )
+        resolved_gap = _as_duration(gap)
+        if resolved_gap is None:
+            return invalid_input(
+                "gap",
+                "gap is the width a segment gives up before the next one starts, entered in the "
+                "split fingerprint: a non-negative Duration (or int64 nanoseconds), 0 for none",
+                given=repr(gap),
+            )
         producers = tuple(cited_producers)
         widest = ProducerHorizon.max_bound(producers).value_ns
         if resolved_purge.value_ns < widest:
@@ -626,6 +636,7 @@ class SplitManifest:
             seal_boundary=seal_boundary,
             purge_width=resolved_purge,
             embargo_width=resolved_embargo,
+            gap_width=resolved_gap,
             world=resolved_world,
             cited_producers=ordered_producers,
         )
@@ -639,6 +650,7 @@ class SplitManifest:
                 seal_boundary=seal_boundary,
                 purge_width=resolved_purge,
                 embargo_width=resolved_embargo,
+                gap=resolved_gap,
                 world=resolved_world,
                 cited_producers=ordered_producers,
                 fingerprint=fp.value,
@@ -797,6 +809,7 @@ class SplitManifest:
             seal_boundary=self.seal_boundary,
             purge_width=self.purge_width,
             embargo_width=self.embargo_width,
+            gap_width=self.gap,
             world=self.world,
             cited_producers=self.cited_producers,
         )
@@ -812,6 +825,58 @@ class SplitManifest:
                 given=repr(identity),
             )
         return None
+
+    def apply_gap(self, role: object, start_ns: int, end_ns: int) -> Result[tuple[int, int]]:
+        """The window a split read of ``role`` may serve, with the gap removed (55 D-5).
+
+        ``gap`` is the width a segment gives up before the next one starts, so the tail of
+        every segment but the last is served by neither split. ``start_ns`` and ``end_ns`` are
+        the caller's half-open UTC-nanosecond window; the answer is that window clipped to the
+        segment's shrunk end. A trading-date boundary has no nanosecond position without the
+        calendar, so a manifest whose boundaries are trading dates is refused with the reason
+        rather than served a guessed window.
+        """
+        if not isinstance(role, SegmentRole):
+            return invalid_input(
+                "role",
+                "a split read names one of the closed SegmentRole set",
+                given=repr(role),
+                allowed=[member.value for member in SegmentRole],
+            )
+        index = next(
+            (position for position, segment in enumerate(self.segments) if segment.role is role),
+            None,
+        )
+        if index is None:
+            return invalid_input(
+                "role",
+                "this split has no segment with that role",
+                given=role.value,
+                allowed=[segment.role.value for segment in self.segments],
+            )
+        if index == len(self.segments) - 1:
+            return Ok((start_ns, end_ns))
+        boundary = self.segments[index].boundary.instant
+        if boundary is None:
+            return invalid_input(
+                "gap",
+                "the gap is applied between segments whose boundaries are Instants; this "
+                "manifest's boundaries are trading dates, which the split's calendar, not the "
+                "door, positions",
+                given=self.boundary_kind,
+            )
+        previous = self.segments[index - 1].boundary.instant if index > 0 else None
+        if index > 0 and previous is None:
+            return invalid_input(
+                "gap",
+                "the gap is applied between segments whose boundaries are Instants; this "
+                "manifest's boundaries are trading dates, which the split's calendar, not the "
+                "door, positions",
+                given=self.boundary_kind,
+            )
+        shrunk_end = min(end_ns, boundary.value_ns - self.gap.value_ns)
+        clipped_start = start_ns if previous is None else max(start_ns, previous.value_ns)
+        return Ok((clipped_start, max(clipped_start, shrunk_end)))
 
     def instant_segment_index(self, instant: Instant) -> int | None:
         """The index of the first segment whose instant boundary is strictly after ``instant``.
@@ -942,6 +1007,7 @@ def _manifest_content(
     seal_boundary: SplitBoundary,
     purge_width: Duration,
     embargo_width: Duration,
+    gap_width: Duration,
     world: World,
     cited_producers: tuple[ProducerHorizon, ...],
 ) -> dict[str, object]:
@@ -959,6 +1025,7 @@ def _manifest_content(
         "seal_boundary": seal_boundary.fp1_identity(),
         "purge_width": purge_width.fp1_identity(),
         "embargo_width": embargo_width.fp1_identity(),
+        "gap_width": gap_width.fp1_identity(),
         "world": world.value,
         "cited_producers": [producer.fp1_identity() for producer in cited_producers],
         "format_version": CONTRACT_FORMAT_VERSION,

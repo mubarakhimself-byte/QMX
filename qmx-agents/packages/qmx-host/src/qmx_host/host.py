@@ -46,6 +46,7 @@ from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_service
 from qma.harness.tools import HostRead
+from qmf.core import is_refusal
 from qmx_control.models import Document
 from qmx_control.service import ControlService
 from qmx_engine.admission import setting
@@ -104,6 +105,7 @@ from qmx_router.server import (
 
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor
+from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 
@@ -113,6 +115,8 @@ opens the store as its one writer and answers the Library routes in process (AD-
 
 LOCK: Final = "engine.lock"
 LIBRARY: Final = "library"
+MARKET: Final = "market"
+"""The home's market-data root: the price partitions the door writes, and its handles (AD-28)."""
 STATE: Final = "control-process.json"
 """The running host's pid, port and start time, for `status`, `stop` and the refusal line."""
 START_S: Final = 30.0
@@ -505,8 +509,12 @@ async def serve(
     supervising = asyncio.create_task(router.supervise())
     sidecar = asyncio.create_task(node_sidecar(home)) if role in ("node", "server") else None
     try:
+        door = market_door(home, control, role)
         harness = await RecordedHarness.open(
-            qmx_home, control=control, host_reads={"heartbeats": heartbeats_read(home)}
+            qmx_home,
+            control=control,
+            host_reads={"heartbeats": heartbeats_read(home)},
+            market=door,
         )
         try:
             floor = floor_bytes(section(control, "engine"), free_bytes(home))
@@ -540,6 +548,8 @@ async def serve(
                         origin = ui_origin if role == "pc" else ""
                         bearer = qmx_control.server.local_token()
                         answering = [*answering_router(home, engine), drain_router(core)]
+                        if door is not None:
+                            answering.append(market_router(door))
                         answering.extend(library_service(home, store, serving))
                         app = compose(control, engine, harness_api, bearer, origin, answering)
                         app_host = TAILNET if serving else "127.0.0.1"
@@ -747,6 +757,25 @@ def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forw
         Forwarder(instance, key=key, source=name, principal="operator", now=wall)
         for instance in owned_instances(placement_rows(core.settings), home=name)
     ]
+
+
+def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor | None:
+    """This machine's market-data door, or None when its `[data]` settings name no seal (AD-28).
+
+    A host with no seal boundary configured keeps its door shut: the door will not guess where
+    his holdout starts, so the data tools say why instead of serving a month they should not.
+    """
+    root = home / MARKET
+    built = MarketDoor.open(
+        root, section(control, "data"), placement=Placement(role), handles=root / "handles"
+    )
+    if is_refusal(built):
+        print(
+            f"market-data: the door stays closed: {built.category} {dict(built.context)}",
+            file=sys.stderr,
+        )
+        return None
+    return built.value
 
 
 def answering_router(home: Path, engine: EngineDoor) -> list[APIRouter]:
