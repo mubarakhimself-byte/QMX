@@ -59,13 +59,15 @@ NO_RENDER = frozenset(
         "download-binance",
         "download-ccxt",
         "download-dukascopy",
+        "extract-source",
         "feed",
     }
 )
 """Script-first templates with no grader and no deliver step, so they carry no block copy.
 
 `backup-weekly` and `connections-health` were the first two; the feed and the three downloaders
-land their own output and have nothing to render or grade (DR6).
+land their own output and have nothing to render or grade (DR6); `extract-source` hands the
+extraction back to its caller and lands no Library object of its own (DR7).
 """
 
 BLOCK_COPIES = {
@@ -252,11 +254,11 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
         ]
 
 
-def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_folder() -> None:
+def test_the_catalogue_lists_46_templates_each_with_a_source_card_and_its_own_folder() -> None:
     ids = [t.id for t in CATALOG]
 
-    assert len(ids) == 45
-    assert len(set(ids)) == 45
+    assert len(ids) == 46
+    assert len(set(ids)) == 46
     assert all(t.cards and all(c.file in ("15", "16", "17", "44", "46") and c.card for c in t.cards)
                for t in CATALOG)  # fmt: skip
     assert [t.id for t in CATALOG if not t.needs] == [
@@ -282,6 +284,7 @@ def test_the_catalogue_lists_45_templates_each_with_a_source_card_and_its_own_fo
         "download-dukascopy",
         "download-binance",
         "download-ccxt",
+        "extract-source",
     ]
     assert find("portfolio-combination-study").needs == ("trading-node", "risk-session")
     assert sorted(str(t.folder) for t in CATALOG) == sorted(
@@ -333,6 +336,7 @@ def test_every_id_the_pack_used_before_tpl1_still_finds_its_template() -> None:
         "download-dukascopy",
         "download-binance",
         "download-ccxt",
+        "extract-source",
     }
     for old, new in ALIASES.items():
         assert find(old).id == new, old
@@ -463,7 +467,11 @@ def test_a_lands_its_cards_as_run_artifacts_produced_by_the_run(tmp_path: Path) 
     assert produced_files(tmp_path, report.run_id) == sorted(
         [f"library/cards/{c['library_id']}.json" for c in entry["cards"]]
         + [f"library/sources/{s['library_id']}.json" for s in entry["sources"]]
-        + ["library/inventory.json"]
+        + [
+            "library/inventory.json",
+            "library/sources/68591196f5a58e9a65dd7d30f9efe689.json",
+            "library/sources/index.json",
+        ]
     )
 
 
@@ -581,7 +589,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     assert [p.code for p in validate(unknown)] == ["schema_invalid"]
 
 
-def test_install_publishes_22_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
+def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
     tmp_path: Path,
 ) -> None:
     with EngineService.open(tmp_path, harness=answers()) as svc:
@@ -597,9 +605,9 @@ def test_install_publishes_22_disabled_saves_23_drafts_and_a_second_install_chan
     assert [(i.template.id, i.action) for i in first] == [
         (template.id, "saved draft" if template.needs else "published") for template in CATALOG
     ]
-    assert [i.action for i in second] == ["unchanged"] * 45
+    assert [i.action for i in second] == ["unchanged"] * 46
     assert library_after == seen
-    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 22
+    assert [status[t] for t in built] == [("published, disabled", "0.1.0")] * 23
     assert status["trading-guards-alive"] == ("validated draft, needs: trading-node", None)
     assert status["daily-book-report"] == ("validated draft, needs: broker-read-token", None)
     assert status["change-bundle-for-approval"] == (

@@ -27,6 +27,7 @@ prunes them when released or expired, which the log can never do.
 
 from __future__ import annotations
 
+import codecs
 import json
 import logging
 import os
@@ -38,7 +39,7 @@ import time
 import unicodedata
 import uuid
 from collections import deque
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -79,8 +80,11 @@ from qmx_library.status import QUARANTINE, Damage, StoreState, TornTail, inspect
 
 MANIFEST: Final = "qmx.library.object/1"
 CHECKOUT_FILE: Final = ".checkout.json"
-TEXT_LIMIT: Final = 1_000_000
-"""Bytes of one text blob read into the search index."""
+CHUNK: Final = 1 << 20
+"""Bytes one blob read, one blob write or one upload move at a time (Library AD-10, AD-27). No
+constant here bounds a file's size: a text blob of any length is indexed whole, in these chunks."""
+UPLOAD: Final = "uploads"
+"""Where a partial upload waits, `<root>/uploads/<id>.part`, until its last byte arrives (AD-27)."""
 TEXT_SLOTS: Final = frozenset({"text", "transcript"})
 """The slots a sync copies (AD-10, N1): a document's words travel so the replica can search them,
 and every other blob of the object waits until something on that store opens it."""
@@ -92,6 +96,13 @@ MIB: Final = 1024 * 1024
 CLAIMS: Final = "claims.json"
 CLAIM_KEY: Final = re.compile(r"[A-Za-z0-9_.:+-]{1,200}")
 """An intent key is a fingerprint; a path segment it must also be, so `/` is out."""
+UPLOAD_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,128}")
+"""An upload id names one partial file under `uploads/`, so it is one path segment."""
+CAPTURE_ORIGIN: Final = "capture"
+"""The origin a computer or browser capture lands with (AD-27)."""
+REDACTED_ACCOUNT: Final = "[redacted account]"
+CAPTURE_VERSION: Final = "capture-1"
+"""The extractor version a capture's text hash is compared within (AD-27)."""
 RENAME_TRIES: Final = 8
 """A rename Windows refuses because the target is open is retried this many times."""
 RENAME_WAIT_S: Final = 0.01
@@ -290,6 +301,62 @@ def _lines(path: Path) -> Generator[dict[str, Any]]:
                     yield cast(dict[str, Any], record)
 
 
+def _decoded(path: Path, *, chunk: int = CHUNK) -> str:
+    """The file's UTF-8 text, read in `chunk`-sized pieces so no single read copies it whole."""
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    pieces: list[str] = []
+    with path.open("rb") as handle:
+        while data := handle.read(chunk):
+            pieces.append(decoder.decode(data))
+    pieces.append(decoder.decode(b"", final=True))
+    return "".join(pieces)
+
+
+PREVIEW_CHARS: Final = 200
+"""Characters of a capture's text its summary carries, the same cut search previews (AD-8)."""
+
+
+def redact_accounts(text: str, account_ids: Sequence[str]) -> str:
+    """Every account id Connections knows, replaced, longest first so no prefix wins (AD-27)."""
+    found = sorted((account for account in account_ids if account), key=len, reverse=True)
+    for account in found:
+        text = text.replace(account, REDACTED_ACCOUNT)
+    return text
+
+
+def capture_source(
+    text: str,
+    pixels: bytes,
+    *,
+    account_ids: Sequence[str] = (),
+    title: str = "",
+    surface: str = "computer",
+    media_type: str = "image/png",
+) -> Draft:
+    """A screen or browser capture as one `source`: text redacted, pixels kept (AD-27).
+
+    The capture's text is redacted against the account ids in Connections, because a broker
+    screen carries them and never should reach a search index; the pixels stay whole, because
+    they are the evidence of what he saw. The text hash names the extractor version it was
+    compared within, so a better extractor does not read as the same document.
+    """
+    clean = redact_accounts(text, account_ids)
+    digest = sha256(" ".join(clean.split()).encode("utf-8")).hexdigest()
+    return Draft(
+        "source",
+        title=title or f"{surface} capture",
+        summary=clean[:PREVIEW_CHARS],
+        fields={
+            "origin": CAPTURE_ORIGIN,
+            "captured_from": surface,
+            "media_type": media_type,
+            "text_hash": digest,
+            "extractor_version": CAPTURE_VERSION,
+        },
+        blobs={"text": clean.encode("utf-8"), "original": pixels, "frames/0": pixels},
+    )
+
+
 def text_blob_ids(manifest: Mapping[str, Any]) -> set[str]:
     """The blob ids of one manifest's text slots: the only blobs a selective sync copies (N1)."""
     try:
@@ -325,6 +392,79 @@ class Epoch:
     """This store held the primary and learned a higher epoch: it stops acting as primary."""
     parked: tuple[str, ...] = ()
     """The `refs/conflicts/*` refs its primary moves were parked on, one per move (N13, N19)."""
+
+
+class Upload:
+    """One resumable upload: an open append handle, the hash of every byte it holds, and its size.
+
+    The partial file is the state, so a closed client or a crash leaves exactly the bytes whose
+    hash the next caller re-reads before it appends (AD-27). `write` takes one chunk at a time,
+    so a 3 GB recording never sits in memory on either side of the door.
+    """
+
+    def __init__(
+        self,
+        store: Store,
+        upload_id: str,
+        *,
+        offset: int = 0,
+        partial_sha256: str | None = None,
+    ) -> None:
+        self.store = store
+        self.upload_id = upload_id
+        self.path = store.upload_path(upload_id)
+        self.hasher = sha256()
+        self.held = 0
+        if offset == 0:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.unlink(missing_ok=True)
+        else:
+            if not self.path.exists() or self.path.stat().st_size != offset:
+                raise LibraryRefused(
+                    "offset_mismatch",
+                    f"{upload_id} does not hold the {offset} bytes resumed from",
+                )
+            with self.path.open("rb") as handle:
+                while data := handle.read(CHUNK):
+                    self.hasher.update(data)
+                    self.held += len(data)
+            if partial_sha256 is not None and self.hasher.hexdigest() != partial_sha256:
+                raise LibraryRefused(
+                    "hash_mismatch", f"{upload_id} does not hash to what the client resumed"
+                )
+        self._handle = self.path.open("ab")
+
+    @property
+    def sha256(self) -> str:
+        """The hash of every byte this upload holds, including bytes it resumed from."""
+        return self.hasher.hexdigest()
+
+    def write(self, chunk: bytes) -> int:
+        """Append one chunk, hashing it as it lands; returns the bytes now held."""
+        if chunk:
+            self._handle.write(chunk)
+            self.hasher.update(chunk)
+            self.held += len(chunk)
+        return self.held
+
+    def close(self) -> None:
+        if not self._handle.closed:
+            self._handle.flush()
+            os.fsync(self._handle.fileno())
+            self._handle.close()
+
+    def finish(self, expect_sha256: str | None = None) -> str:
+        """Close and promote the partial to its blob, refusing a hash the client disagrees with."""
+        self.close()
+        return self.store.complete_upload(
+            self.upload_id,
+            expect_sha256=self.sha256 if expect_sha256 is None else expect_sha256,
+        )
+
+    def discard(self) -> None:
+        """Drop this upload: a partial nobody will resume is not a durable blob (AD-27)."""
+        self.close()
+        self.store.discard_upload(self.upload_id)
 
 
 class Store:
@@ -495,9 +635,9 @@ class Store:
         texts: list[str] = []
         for spec in cast(dict[str, dict[str, Any]], manifest["blobs"]).values():
             path = self._held(str(spec["sha256"]))
-            if path is not None and int(spec["size"]) <= TEXT_LIMIT:
+            if path is not None:
                 with suppress(UnicodeDecodeError, OSError):
-                    texts.append(path.read_bytes().decode("utf-8"))
+                    texts.append(_decoded(path))
         klass = kind(str(manifest["kind"])).klass
         self.catalog.index_object(object_id, manifest, klass, " ".join(texts))
 
@@ -1166,13 +1306,14 @@ class Store:
         kind: str | None = None,
         include_archived: bool = False,
         limit: int = 20,
+        offset: int = 0,
         as_of: AsOf | None = None,
     ) -> list[Hit]:
         """FTS5 over the objects; with `as_of`, over the objects that were the head of a ref
-        then, and the items active then."""
+        then, and the items active then. `offset` reads the next page of the same answer."""
         with self._mutex:
             if as_of is None:
-                return self.catalog.search(text, kind, include_archived, limit)
+                return self.catalog.search(text, kind, include_archived, limit, offset)
             words = norm(text).split()
             if not words:
                 raise LibraryRefused("invalid_search", "the search names no word")
@@ -1199,9 +1340,7 @@ class Store:
                 best.setdefault(
                     str(item), Hit(str(object_id), str(item), str(found_kind), str(title), -rank)
                 )
-                if len(best) == limit:
-                    break
-            return list(best.values())
+            return list(best.values())[offset : offset + limit]
 
     def search_runs(self, who: Principal, text: str, workflow: str | None = None) -> list[Hit]:
         hits = self.search(who, text, kind="workflow-run", limit=1000)
@@ -1710,6 +1849,102 @@ class Store:
         _write_once(self._blob_path(blob_id, transient=False, fetched=self.role != "writer"), data)
         self._reindex_blob(blob_id)
         return blob_id
+
+    def upload_path(self, upload_id: str) -> Path:
+        """The partial file one upload id names (AD-27). Refuses a name that is not one segment."""
+        if UPLOAD_ID.fullmatch(upload_id) is None:
+            raise LibraryRefused("invalid_upload", f"{upload_id!r} is not an upload id")
+        return self.root / UPLOAD / f"{upload_id}.part"
+
+    def upload_held(self, upload_id: str) -> tuple[int, str]:
+        """`(bytes held, sha256 of those bytes)` of a partial upload, re-hashed from disk."""
+        path = self.upload_path(upload_id)
+        hasher = sha256()
+        held = 0
+        if path.exists():
+            with path.open("rb") as handle:
+                while data := handle.read(CHUNK):
+                    hasher.update(data)
+                    held += len(data)
+        return held, hasher.hexdigest()
+
+    def begin_upload(
+        self, upload_id: str, *, offset: int = 0, partial_sha256: str | None = None
+    ) -> Upload:
+        """Open one resumable upload: from zero, or continuing the bytes at `offset` (AD-27)."""
+        return Upload(self, upload_id, offset=offset, partial_sha256=partial_sha256)
+
+    def append_upload(
+        self,
+        chunks: Iterable[bytes],
+        *,
+        upload_id: str,
+        offset: int = 0,
+        partial_sha256: str | None = None,
+    ) -> tuple[int, str]:
+        """Write the bytes a client sent from `offset` on, hashing as it writes (AD-27).
+
+        A resumed upload re-hashes the partial file before it takes one more byte, and refuses
+        `hash_mismatch` when the client's copy of that hash disagrees: the two sides would
+        otherwise append different bytes to one name. Returns `(bytes held, sha256 of them)`.
+        """
+        upload = self.begin_upload(upload_id, offset=offset, partial_sha256=partial_sha256)
+        try:
+            for chunk in chunks:
+                upload.write(chunk)
+        finally:
+            upload.close()
+        return upload.held, upload.sha256
+
+    def complete_upload(self, upload_id: str, *, expect_sha256: str | None = None) -> str:
+        """Promote a finished partial to its blob, by hash, in one rename (AD-27).
+
+        The whole part is hashed again before the rename, so a crash mid-upload can never make a
+        name stand for bytes it does not hash to. A part whose hash is already held is deleted:
+        the bytes and the name are both here.
+        """
+        path = self.upload_path(upload_id)
+        if not path.exists():
+            raise LibraryRefused("invalid_upload", f"{upload_id} holds no bytes")
+        hasher = sha256()
+        with path.open("rb") as handle:
+            while data := handle.read(CHUNK):
+                hasher.update(data)
+        digest = hasher.hexdigest()
+        if expect_sha256 is not None and digest != expect_sha256:
+            path.unlink(missing_ok=True)
+            raise LibraryRefused("hash_mismatch", f"{upload_id} does not hash to the upload's own")
+        blob_id = f"sha256:{digest}"
+        target = self._blob_path(blob_id, transient=False, fetched=self.role != "writer")
+        if target.exists():
+            path.unlink(missing_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _replace(path, target)
+        self._reindex_blob(blob_id)
+        return blob_id
+
+    def discard_upload(self, upload_id: str) -> None:
+        """Delete a partial nobody will resume: it is not a durable blob (AD-27)."""
+        self.upload_path(upload_id).unlink(missing_ok=True)
+
+    def blob_size(self, blob_id: str) -> int:
+        path = self._held(blob_id)
+        if path is None or not path.exists():
+            raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
+        return path.stat().st_size
+
+    def blob_stream(self, blob_id: str, *, chunk: int = CHUNK) -> Iterator[bytes]:
+        """The blob's bytes, one chunk at a time, so a 3 GB recording never sits in memory (AD-27).
+
+        The bytes were verified against their name when they were written; this reads them once.
+        """
+        path = self._held(blob_id)
+        if path is None or not path.exists():
+            raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
+        with path.open("rb") as handle:
+            while data := handle.read(chunk):
+                yield data
 
     def object_ids(self) -> list[ObjectId]:
         with self._mutex:

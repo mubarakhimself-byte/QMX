@@ -1,0 +1,33 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "extract-source",
+  "name": "Extract one file's text and page or minute locators",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "path": {"type": "string", "description": "the uploaded bytes on this host"},
+      "media_type": {"type": "string"},
+      "fixture": {"type": "boolean", "description": "replay fixtures/extracted.json"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the whole text, one text per page or the transcript, the extractor version, the seconds and the peak memory"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any"
+  },
+  "nodes": [
+    {"id": "start", "name": "One uploaded document", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "extract", "name": "Extract with Docling", "type": "subworkflow", "typeVersion": 1,
+     "position": [220, 0], "parameters": {"workflow": "extract"}}
+  ],
+  "connections": {
+    "One uploaded document": {"main": [[{"node": "Extract with Docling", "port": "in",
+                                         "map": "one"}]]}
+  },
+  "meta": {"template": "extract-source"}
+}

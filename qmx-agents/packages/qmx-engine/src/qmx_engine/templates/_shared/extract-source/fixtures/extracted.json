@@ -1,0 +1,15 @@
+{
+  "status": "extracted",
+  "kind": "pdf",
+  "text": "page one opens the manual\n\nthe margin call is here",
+  "pages": [
+    {"page": 1, "text": "page one opens the manual"},
+    {"page": 2, "text": "the margin call is here"}
+  ],
+  "transcript": "",
+  "frames": [],
+  "extractor_version": "docling-2.134.0",
+  "seconds": 1.0,
+  "peak_mb": 10,
+  "capped": true
+}

@@ -30,17 +30,18 @@ from __future__ import annotations
 import argparse
 import hmac
 import json
+import secrets
 import signal
 import ssl
 import sys
 import threading
 import traceback
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import TYPE_CHECKING, Any, Final, NoReturn, cast
 
 from pydantic import JsonValue
 from qmx_engine.heartbeat import WINDOW_DAYS, Heartbeat, HeartbeatLog, latest
@@ -57,13 +58,21 @@ from qmx_library.port import (
     StoreRole,
 )
 from qmx_library.principal import Principal
-from qmx_library.store import Store
+from qmx_library.store import Store, Upload
+
+if TYPE_CHECKING:  # the router's annotations resolve from module globals when the host mounts it
+    from fastapi import Request
 
 from qmx_hub.purge import Purged, purge_everywhere
 
 VERSION: Final = "qmx-hub/1"
 CONFIG: Final = "hub.toml"
-BODY_LIMIT: Final = 64 * 1024 * 1024
+CHUNK: Final = 1 << 20
+"""Bytes one blob or one upload moves at a time. No route here bounds a file's size any more:
+QMX sets no size limit of its own (Library AD-27); the provider's limits and the bucket's
+multipart rule are the only ones, and neither lives in this process."""
+UPLOAD_ROUTE: Final = "/api/library/upload"
+"""The one upload door on this host (AD-27): `POST` appends, `GET`/`DELETE` ask about a partial."""
 ALLOWED: Final = frozenset({"operator", "hub", "migrator", "agent", "run", "engine"})
 """The principals the door accepts. A pairing key names a machine, not a right (AD-11)."""
 HEARTBEAT_ROUTE: Final = "/v1/heartbeat"
@@ -103,6 +112,24 @@ class Hub:
             "claims": len(self.store.live_claims()),
             "seq": self.store.catalog.last_seq(),
         }
+
+    def copies(self) -> int:
+        """How many durable copies an upload lands in: this store, plus the bucket when configured.
+
+        The PC keeps its staging copy until this count is two (AD-10, AD-27); a server with no
+        bucket honest answers one.
+        """
+        return 1 + (1 if self.buckets else 0)
+
+    def upload_status(self, upload_id: str) -> dict[str, Any]:
+        """What a broken client asks before it resumes: the bytes held and their hash (AD-27)."""
+        held, digest = self.store.upload_held(upload_id)
+        return {"upload_id": upload_id, "offset": held, "sha256": digest}
+
+    def discard_upload(self, upload_id: str) -> dict[str, Any]:
+        """Delete a partial nobody will resume; it was never a durable blob (AD-27)."""
+        self.store.discard_upload(upload_id)
+        return {"discarded": upload_id}
 
     def door(self, who: str) -> Principal:
         """The caller's principal, mapped onto this store's engine.
@@ -557,6 +584,24 @@ def _view_payload(view: ObjectView) -> dict[str, JsonValue]:
     }
 
 
+def _finishes(total: str | None, upload: Upload) -> bool:
+    """Whether this request completed the upload: its declared total, or a single-shot body."""
+    return True if total is None else upload.held >= int(total)
+
+
+def _landed(hub: Hub, upload: Upload) -> dict[str, Any]:
+    """The answer a finished upload earns: its blob, its size, its hash and its copy count."""
+    blob_id = upload.finish()
+    return {
+        "ok": True,
+        "blob_id": blob_id,
+        "bytes": hub.store.blob_size(blob_id),
+        "sha256": blob_id.removeprefix("sha256:"),
+        "copies": hub.copies(),
+        "upload_id": upload.upload_id,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     hub: Hub
     key: str
@@ -568,24 +613,44 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/healthz":
             self._json(HTTPStatus.OK, self.hub.health())
             return
+        if self.path.startswith(f"{UPLOAD_ROUTE}/"):
+            try:
+                self._json(
+                    HTTPStatus.OK,
+                    self.hub.upload_status(self.path.removeprefix(f"{UPLOAD_ROUTE}/")),
+                )
+            except LibraryRefused as refused:
+                self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "code": refused.code})
+            return
         if self.path.startswith("/v1/blob/"):
             blob_id = f"sha256:{self.path.removeprefix('/v1/blob/')}"
             try:
-                self._bytes(HTTPStatus.OK, self.hub.store.read_blob(blob_id))
+                self._stream(HTTPStatus.OK, self.hub.store.blob_stream(blob_id))
             except LibraryRefused as refused:
                 self._json(HTTPStatus.NOT_FOUND, {"ok": False, "code": refused.code})
+            return
+        self._json(HTTPStatus.NOT_FOUND, {"ok": False, "code": "not_found"})
+
+    def do_DELETE(self) -> None:
+        if not self._authorised():
+            return
+        if self.path.startswith(f"{UPLOAD_ROUTE}/"):
+            upload_id = self.path.removeprefix(f"{UPLOAD_ROUTE}/")
+            try:
+                self._json(HTTPStatus.OK, self.hub.discard_upload(upload_id))
+            except LibraryRefused as refused:
+                self._json(HTTPStatus.BAD_REQUEST, {"ok": False, "code": refused.code})
             return
         self._json(HTTPStatus.NOT_FOUND, {"ok": False, "code": "not_found"})
 
     def do_POST(self) -> None:
         if not self._authorised():
             return
+        if self.path in ("/v1/blob", UPLOAD_ROUTE):
+            self._receive_upload()
+            return
         body = self._body()
         if body is None:
-            return
-        if self.path == "/v1/blob":
-            blob_id = self.hub.store.store_blob(body)
-            self._json(HTTPStatus.OK, {"blob_id": blob_id})
             return
         if self.path == HEARTBEAT_ROUTE:
             try:
@@ -620,6 +685,45 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(HTTPStatus.OK, {"ok": True, "value": value})
 
+    def _receive_upload(self) -> None:
+        """Take one request's bytes into the partial, then answer status or the finished blob.
+
+        `Content-Length` is the only framing this server reads, and it is never compared with a
+        QMX limit: the door takes whatever the client declares (AD-27). A request that stops
+        early leaves its partial in place for the resume, whose offset the client asks for.
+        """
+        upload_id = self.headers.get("X-Upload-Id") or secrets.token_hex(16)
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            upload = self.hub.store.begin_upload(
+                upload_id,
+                offset=int(self.headers.get("X-Upload-Offset") or 0),
+                partial_sha256=self.headers.get("X-Upload-Partial-Sha256"),
+            )
+        except LibraryRefused as refused:
+            self._json(HTTPStatus.CONFLICT, {"ok": False, "code": refused.code})
+            return
+        remaining = length
+        try:
+            while remaining > 0:
+                data = self.rfile.read(min(CHUNK, remaining))
+                if not data:
+                    break
+                upload.write(data)
+                remaining -= len(data)
+        except OSError:
+            upload.close()
+            self._json(
+                HTTPStatus.BAD_REQUEST,
+                {"ok": False, "code": "incomplete_upload", **self.hub.upload_status(upload_id)},
+            )
+            return
+        if length and remaining == 0 and _finishes(self.headers.get("X-Upload-Total"), upload):
+            self._json(HTTPStatus.OK, _landed(self.hub, upload))
+            return
+        upload.close()
+        self._json(HTTPStatus.ACCEPTED, self.hub.upload_status(upload_id))
+
     def _authorised(self) -> bool:
         given = self.headers.get("Authorization", "").removeprefix("Bearer ").strip()
         if hmac.compare_digest(given, self.key):
@@ -628,13 +732,16 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _body(self) -> bytes | None:
-        length = int(self.headers.get("Content-Length") or 0)
-        if length > BODY_LIMIT:
-            self._json(
-                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "code": "storage_failure"}
-            )
-            return None
-        return self.rfile.read(length)
+        return self.rfile.read(int(self.headers.get("Content-Length") or 0))
+
+    def _stream(self, status: HTTPStatus, chunks: Iterable[bytes]) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        for chunk in chunks:
+            self.wfile.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
+        self.wfile.write(b"0\r\n\r\n")
 
     def _bytes(self, status: HTTPStatus, body: bytes) -> None:
         self.send_response(status)
@@ -699,9 +806,15 @@ def in_process(hub: Hub, key: str) -> Any:
 
     The host already binds one port and holds the one store the Library and the engine share, so
     the Library service is mounted there rather than listening on a second port beside it: one
-    process, one store, one writer. Blob bytes still move whole; the streaming door is DR7's.
+    process, one store, one writer. Blob bytes move as streams in both directions, and the upload
+    door writes one chunk at a time on a worker thread, so a 3 GB file is never in memory here.
     """
+    import anyio  # noqa: PLC0415 (only the host's process has it)
     from fastapi import APIRouter, HTTPException, Request  # noqa: PLC0415 (only the host needs it)
+    from fastapi.responses import JSONResponse, StreamingResponse  # noqa: PLC0415
+
+    globals()["Request"] = Request
+    """The annotation above is a string resolved from this module's globals by FastAPI."""
 
     router = APIRouter()
 
@@ -710,24 +823,79 @@ def in_process(hub: Hub, key: str) -> Any:
         if not hmac.compare_digest(given, key):
             raise HTTPException(HTTPStatus.UNAUTHORIZED, detail="ref_not_owned")
 
+    def refused(error: LibraryRefused, status: HTTPStatus = HTTPStatus.BAD_REQUEST) -> NoReturn:
+        raise HTTPException(status, detail={"code": error.code, "message": str(error)}) from None
+
     @router.get("/healthz")
     def healthz(request: Request) -> Mapping[str, object]:
         authorised(request)
         return hub.health()
 
     @router.get("/v1/blob/{hexdigest}")
-    def blob(hexdigest: str, request: Request) -> bytes:
+    def blob(hexdigest: str, request: Request) -> Any:
         authorised(request)
+        blob_id = f"sha256:{hexdigest}"
         try:
-            return hub.store.read_blob(f"sha256:{hexdigest}")
-        except LibraryRefused as refused:
-            raise HTTPException(HTTPStatus.NOT_FOUND, detail=refused.code) from None
+            size = hub.store.blob_size(blob_id)
+            stream = hub.store.blob_stream(blob_id)
+        except LibraryRefused as error:
+            refused(error, HTTPStatus.NOT_FOUND)
+        return StreamingResponse(
+            stream,
+            media_type="application/octet-stream",
+            headers={"Content-Length": str(size)},
+        )
 
     @router.post("/v1/blob")
-    async def put_blob(request: Request) -> Mapping[str, object]:
+    async def put_blob(request: Request) -> Any:
+        return await upload(request)
+
+    @router.post(UPLOAD_ROUTE)
+    async def upload(request: Request) -> Any:
+        """The one upload door (AD-27): append this request's bytes, hash them, answer the rest."""
         authorised(request)
-        body = await request.body()
-        return {"blob_id": hub.store.store_blob(body)}
+        upload_id = request.headers.get("X-Upload-Id") or secrets.token_hex(16)
+        try:
+            part: Upload = await anyio.to_thread.run_sync(
+                lambda: hub.store.begin_upload(
+                    upload_id,
+                    offset=int(request.headers.get("X-Upload-Offset") or 0),
+                    partial_sha256=request.headers.get("X-Upload-Partial-Sha256"),
+                )
+            )
+        except LibraryRefused as error:
+            refused(error, HTTPStatus.CONFLICT)
+        total = request.headers.get("X-Upload-Total")
+        try:
+            async for chunk in request.stream():
+                if chunk:
+                    await anyio.to_thread.run_sync(part.write, chunk)
+        except OSError:
+            part.close()
+            raise HTTPException(
+                HTTPStatus.BAD_REQUEST,
+                detail={"code": "incomplete_upload", **hub.upload_status(upload_id)},
+            ) from None
+        if _finishes(total, part):
+            return JSONResponse(await anyio.to_thread.run_sync(lambda: _landed(hub, part)))
+        part.close()
+        return JSONResponse(hub.upload_status(upload_id), status_code=HTTPStatus.ACCEPTED)
+
+    @router.get(UPLOAD_ROUTE + "/{upload_id}")
+    def upload_status(upload_id: str, request: Request) -> Mapping[str, object]:
+        authorised(request)
+        try:
+            return hub.upload_status(upload_id)
+        except LibraryRefused as error:
+            refused(error)
+
+    @router.delete(UPLOAD_ROUTE + "/{upload_id}")
+    def discard_upload(upload_id: str, request: Request) -> Mapping[str, object]:
+        authorised(request)
+        try:
+            return hub.discard_upload(upload_id)
+        except LibraryRefused as error:
+            refused(error)
 
     @router.post(HEARTBEAT_ROUTE)
     async def heartbeat(request: Request) -> Mapping[str, object]:
@@ -735,8 +903,8 @@ def in_process(hub: Hub, key: str) -> Any:
         try:
             call = cast(dict[str, JsonValue], await request.json())
             paused, renewed = hub.hear(cast(Mapping[str, JsonValue], call["heartbeat"]))
-        except (LibraryRefused, ValueError, KeyError) as refused:
-            code = refused.code if isinstance(refused, LibraryRefused) else "bad_heartbeat"
+        except (LibraryRefused, ValueError, KeyError) as failed:
+            code = failed.code if isinstance(failed, LibraryRefused) else "bad_heartbeat"
             raise HTTPException(HTTPStatus.BAD_REQUEST, detail=code) from None
         return {"autonomy_paused": paused, "claims_renewed": renewed}
 
@@ -747,13 +915,13 @@ def in_process(hub: Hub, key: str) -> Any:
         try:
             who = hub.door(str(call["who"]))
             value = hub.op(verb, who, cast(Mapping[str, JsonValue], call.get("args") or {}))
-        except LibraryRefused as refused:
+        except LibraryRefused as error:
             raise HTTPException(
-                HTTPStatus.BAD_REQUEST, detail={"code": refused.code, "message": str(refused)}
+                HTTPStatus.BAD_REQUEST, detail={"code": error.code, "message": str(error)}
             ) from None
         return {"ok": True, "value": value}
 
-    _ = (healthz, blob, put_blob, heartbeat, op)
+    _ = (healthz, blob, put_blob, heartbeat, op, upload, upload_status, discard_upload)
     return router
 
 

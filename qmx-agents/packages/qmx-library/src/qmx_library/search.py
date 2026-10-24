@@ -11,13 +11,15 @@ so fan-out test output never outranks a trusted item.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final, cast
 
 from qmx_library.fts import TRUST, Catalog, norm
 from qmx_library.port import (
     Answer,
     AsOf,
+    JsonObject,
     LibraryRefused,
     Match,
     ObjectId,
@@ -40,6 +42,10 @@ FILTER_WEIGHT: Final = 0.5
 MIN_WORD: Final = 4
 """A one-word alias shorter than this never matches (LLD section 5)."""
 WALK_DEPTH: Final = 1
+PAGE_SLOT: Final = re.compile(r"pages/(\d+)")
+"""A slot extraction writes one page of a document into (Library AD-27)."""
+STAMP: Final = re.compile(r"\[(?:(\d+):)?(\d{1,2}):(\d{2})\]")
+"""A transcript's `[mm:ss]` or `[hh:mm:ss]` marker at the start of a line (AD-4, AD-27)."""
 STOP: Final = frozenset(
     {
         "a",
@@ -169,9 +175,11 @@ def answer(
     as_of: AsOf | None = None,
     include_archived: bool = False,
     limit: int = 20,
+    offset: int = 0,
     preview_chars: int | None = PREVIEW_CHARS,
 ) -> Answer:
-    """`preview_chars` None reads each item's whole indexed text; the truncation check compares."""
+    """`preview_chars` None reads each item's whole indexed text; the truncation check compares.
+    `offset` reads the next page of the same ranked answer (AD-27)."""
     catalog = store.catalog
     grounded = ground(catalog, text)
     if not grounded.matches:
@@ -223,7 +231,7 @@ def answer(
         )
         ranked.append((key, result))
     ranked.sort(key=lambda pair: pair[0])
-    results = tuple(r for _, r in ranked[:limit])
+    results = tuple(r for _, r in ranked[offset : offset + limit])
     signals: list[Signal] = []
     if all(m.role == "filter" for m in grounded.matches):
         signals.append("too_few_concepts")
@@ -239,3 +247,46 @@ def answer(
         grounded.matches,
         results,
     )
+
+
+def _slot_text(store: Store, blob: dict[str, Any]) -> str:
+    try:
+        return store.read_blob(str(blob["sha256"])).decode("utf-8", "replace")
+    except LibraryRefused, KeyError:
+        return ""
+
+
+def locate(store: Store, object_id: ObjectId, phrase: str) -> JsonObject | None:
+    """Where in its source a phrase sits: `{"page": n}` or `{"seconds": n}` (AD-4, AD-27).
+
+    A document extraction writes one `pages/<n>` slot per page, so the page is the slot the phrase
+    is in and a hit can open there. An audio extraction writes a `transcript` with a `[mm:ss]`
+    marker per segment, so the minute is the last marker before the phrase.
+    """
+    blobs = cast(
+        dict[str, dict[str, Any]],
+        store.manifest(object_id).get("blobs") or {},
+    )
+    words = [re.escape(word) for word in phrase.split()]
+    if not words:
+        return None
+    wanted = re.compile(r"\s+".join(words), re.IGNORECASE)
+    pages = sorted(
+        (int(found.group(1)), slot)
+        for slot in blobs
+        if (found := PAGE_SLOT.fullmatch(slot)) is not None
+    )
+    for number, slot in pages:
+        if wanted.search(_slot_text(store, blobs[slot])):
+            return {"page": number}
+    transcript = blobs.get("transcript")
+    if transcript is not None:
+        text = _slot_text(store, transcript)
+        found = wanted.search(text)
+        if found is not None:
+            stamps = list(STAMP.finditer(text, 0, found.start()))
+            if stamps:
+                stamp = stamps[-1]
+                hours = int(stamp.group(1) or 0)
+                return {"seconds": hours * 3600 + int(stamp.group(2)) * 60 + int(stamp.group(3))}
+    return None

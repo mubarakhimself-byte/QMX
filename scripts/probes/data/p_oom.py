@@ -1,5 +1,5 @@
-"""P-OOM (W4; F39, D-11; engine AD-30, AD-58), acceptance: a memory limit takes a child process,
-never `qmx_host`.
+"""P-OOM (W4; F39, D-11; engine AD-30, AD-58; DR7's Docling leg), acceptance: a memory limit takes
+a child process, never `qmx_host`.
 
 The W4 half. Two processes, and which one is where is the point:
 
@@ -9,13 +9,14 @@ The W4 half. Two processes, and which one is where is the point:
   server: systemd stops a scope whose member was OOM-killed, and that SIGTERM took the driver with
   it before it could write a result.
 * **The host stand-in** is one small process inside the scope that answers every 50 ms and starts
-  the children: three synthetic memory-heavy children, each growing without a bound, and two
-  node-like children holding a fixed block, standing in for two agent nodes until DR7 adds Docling
-  and DR3B the door read. Its answers stand in for the Library and the door.
+  the children: three synthetic memory-heavy children, each growing without a bound, two node-like
+  children holding a fixed block, and, when DR7's `--docling PDF` is given, Docling reading a real
+  PDF in a child of its own. Its answers stand in for the Library and the door.
 
-The scope takes `MemoryMax` below what the three heavy children together need, `MemorySwapMax=0`
-so the kernel must free memory rather than swap, and `OOMPolicy=continue` so a kill does not stop
-the scope and take the rest with it.
+The scope takes `MemoryMax` below what the children together need, `MemorySwapMax=0` so the kernel
+must free memory rather than swap, and `OOMPolicy=continue` so a kill does not stop the scope and
+take the rest with it. With Docling the limit is raised to `DOCLING_LIMIT_MB`, below P-DOCLING's
+7,334 MB peak, so the extraction child is the one that has to give way.
 
 PASS is 55's line: the kernel kills a child by signal, never the host, and the host stand-in still
 answers after that kill. FAIL: the host stand-in was killed, or it stopped answering, or nothing
@@ -25,6 +26,8 @@ The host stand-in has to sit inside the scope, or "the host is killed" could nev
 that is the one thing this shape departs from the scope holding only the children.
 
     uv run --no-sync --project qmx-agents python scripts/probes/data/p_oom.py
+    uv run --no-sync --project qmx-agents python scripts/probes/data/p_oom.py \
+        --docling /srv/qmx/check/prb-ds/downloads/p_docling-400.pdf
 
 Scratch goes to `D:/Temp/prb-dp/oom/` and is removed before the probe exits. Windows has no cgroup,
 so the probe prints SKIP there and the server lane is where it runs.
@@ -32,6 +35,7 @@ so the probe prints SKIP there and the server lane is where it runs.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import shutil
@@ -44,6 +48,8 @@ PROBE = "P-OOM"
 SCRATCH = Path(os.environ.get("QMX_PROBE_SCRATCH", "D:/Temp/prb-dp")) / "oom"
 LIMIT_MB = 256
 """One limit below the three heavy children's combined need, and above one of them."""
+DOCLING_LIMIT_MB = 6144
+"""Below P-DOCLING's 7,334 MB peak, so the extraction child is the one the kernel takes."""
 HEAVY_MB = 128
 """What one synthetic heavy child holds before the three together have outgrown the limit."""
 NODE_MB = 32
@@ -65,6 +71,7 @@ heavy_mb, node_mb, heavy, nodes, seconds, beat_s = (
     int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]),
     float(sys.argv[7]), float(sys.argv[8]),
 )
+docling_pdf = sys.argv[9] if len(sys.argv) > 9 else ""
 HEAVY = (
     "import time\n"
     "block = bytearray(%d * 1024 * 1024)\n"
@@ -74,11 +81,19 @@ HEAVY = (
     "    time.sleep(0.005)\n"
 )
 NODE = "import time\nblock = bytearray(%d * 1024 * 1024)\nwhile True:\n    time.sleep(0.05)\n"
+DOCLING = (
+    "import sys\n"
+    "from docling.document_converter import DocumentConverter\n"
+    "document = DocumentConverter().convert(sys.argv[1]).document\n"
+    "print(len(document.export_to_markdown()))\n"
+)
 kids = []
 for _ in range(heavy):
     kids.append(("heavy", subprocess.Popen([sys.executable, "-c", HEAVY % heavy_mb])))
 for _ in range(nodes):
     kids.append(("node", subprocess.Popen([sys.executable, "-c", NODE % node_mb])))
+if docling_pdf:
+    kids.append(("docling", subprocess.Popen([sys.executable, "-c", DOCLING, docling_pdf])))
 Path(str(answers) + ".pids").write_text(
     json.dumps({"host": os.getpid(), "children": [{"kind": k, "pid": c.pid} for k, c in kids]})
 )
@@ -102,7 +117,7 @@ outcome.write_text(json.dumps({"beats": beats, "host": os.getpid(), "children": 
 """
 
 
-def helper_argv(answers: Path, outcome: Path) -> list[str]:
+def helper_argv(answers: Path, outcome: Path, docling_pdf: str) -> list[str]:
     return [
         sys.executable,
         "-c",
@@ -115,10 +130,11 @@ def helper_argv(answers: Path, outcome: Path) -> list[str]:
         str(NODES),
         str(SECONDS),
         BEAT_S,
+        docling_pdf,
     ]
 
 
-def scope(argv: list[str], unit: str) -> tuple[list[str], str]:
+def scope(argv: list[str], unit: str, limit_mb: int) -> tuple[list[str], str]:
     """The command that runs `argv` inside one memory limit, and the mechanism it names."""
     systemd = shutil.which("systemd-run")
     if systemd is None:
@@ -131,7 +147,7 @@ def scope(argv: list[str], unit: str) -> tuple[list[str], str]:
             "--quiet",
             f"--unit=qmx-po-{unit}",
             "-p",
-            f"MemoryMax={LIMIT_MB}M",
+            f"MemoryMax={limit_mb}M",
             "-p",
             "MemorySwapMax=0",
             "-p",
@@ -168,15 +184,20 @@ def pids_of(path: Path) -> dict[int, str]:
     return {int(row["pid"]): str(row["kind"]) for row in found.get("children", [])}
 
 
-def linux(problems: list[str]) -> None:
+def linux(problems: list[str], docling_pdf: str) -> None:
     SCRATCH.mkdir(parents=True, exist_ok=True)
     answers = SCRATCH / "answers.txt"
     outcome = SCRATCH / "outcome.json"
     listing = SCRATCH / "answers.txt.pids"
     for stale in (answers, outcome, listing):
         stale.unlink(missing_ok=True)
-    argv, mechanism = scope(helper_argv(answers, outcome), str(os.getpid()))
-    print(f"limit {LIMIT_MB} MB, {HEAVY} heavy children of {HEAVY_MB} MB, {NODES} node children")
+    limit = DOCLING_LIMIT_MB if docling_pdf else LIMIT_MB
+    argv, mechanism = scope(helper_argv(answers, outcome, docling_pdf), str(os.getpid()), limit)
+    print(f"limit {limit} MB, {HEAVY} heavy children of {HEAVY_MB} MB, {NODES} node children")
+    if docling_pdf:
+        print(f"Docling leg: {docling_pdf}, above the {DOCLING_LIMIT_MB} MB the scope allows")
+    else:
+        print("Docling leg: not run (pass --docling PATH on the server lane)")
     if not mechanism:
         print("no cgroup mechanism here: systemd-run is missing")
         return
@@ -222,12 +243,20 @@ def linux(problems: list[str]) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(prog="p_oom")
+    parser.add_argument(
+        "--docling",
+        default=os.environ.get("P_OOM_PDF", ""),
+        help="a PDF for the extraction child; the server lane points it at P-DOCLING's corpus",
+    )
+    given = parser.parse_args()
+    docling_pdf = given.docling if given.docling and Path(given.docling).is_file() else ""
     if sys.platform == "win32":
         print(f"{PROBE} SKIP: Windows has no cgroup; the server lane runs this")
         return 0
     problems: list[str] = []
     try:
-        linux(problems)
+        linux(problems, docling_pdf)
     finally:
         shutil.rmtree(SCRATCH.parent, ignore_errors=True)
     for problem in problems:

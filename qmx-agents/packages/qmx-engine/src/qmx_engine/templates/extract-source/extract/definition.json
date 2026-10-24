@@ -1,0 +1,33 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "extract",
+  "name": "Extract one document with Docling",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "path": {"type": "string", "description": "the uploaded bytes on this host"},
+      "media_type": {"type": "string"},
+      "fixture": {"type": "boolean", "description": "replay fixtures/extracted.json"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the whole text, one text per page or the transcript, the extractor version, the seconds and the peak memory"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "workflows_only"
+  },
+  "nodes": [
+    {"id": "start", "name": "One uploaded document", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "extract", "name": "Extract with Docling", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/extract.py", "fixture_ref": "fixtures/extracted.json"}}
+  ],
+  "connections": {
+    "One uploaded document": {"main": [[{"node": "Extract with Docling", "port": "in",
+                                         "map": "one"}]]}
+  }
+}

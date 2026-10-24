@@ -474,6 +474,14 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("0 3 * * *", "UTC"),),
         test_inputs={"dry_run": True},
     ),
+    Template(
+        "extract-source",
+        "Extract one file's text and page or minute locators",
+        card("15", "R5"),
+        "DR7",
+        folder="extract-source",
+        test_inputs={"fixture": True},
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {
