@@ -163,6 +163,8 @@ class Part:
 
 def _hub_connection(url: str) -> http.client.HTTPConnection:
     parts = urlsplit(url)
+    if not parts.hostname:
+        raise ValueError(f"{url!r} names no host")
     if parts.scheme == "https":
         return http.client.HTTPSConnection(
             parts.hostname, parts.port, timeout=300, context=ssl.create_default_context()

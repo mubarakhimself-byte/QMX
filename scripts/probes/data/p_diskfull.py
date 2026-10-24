@@ -139,7 +139,10 @@ def upload_case(folder: Path, problems: list[str]) -> None:
         except OSError as error:
             print(f"the upload stopped: {error}")
         held, partial = store.upload_held("full-1")
-        print(f"held {held} of {len(whole)} bytes, prefix hashes {partial == sha256(first).hexdigest()}")
+        print(
+            f"held {held} of {len(whole)} bytes, "
+            f"prefix hashes {partial == sha256(first).hexdigest()}"
+        )
         resumed, _ = store.append_upload(
             [rest], upload_id="full-1", offset=held, partial_sha256=partial
         )

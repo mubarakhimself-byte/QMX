@@ -26,7 +26,8 @@ The host stand-in has to sit inside the scope, or "the host is killed" could nev
 that is the one thing this shape departs from the scope holding only the children.
 
     uv run --no-sync --project qmx-agents python scripts/probes/data/p_oom.py
-    uv run --no-sync --project qmx-agents python scripts/probes/data/p_oom.py --docling /srv/qmx/check/prb-ds/downloads/p_docling-400.pdf
+    uv run --no-sync --project qmx-agents python scripts/probes/data/p_oom.py \
+        --docling /srv/qmx/check/prb-ds/downloads/p_docling-400.pdf
 
 Scratch goes to `D:/Temp/prb-dp/oom/` and is removed before the probe exits. Windows has no cgroup,
 so the probe prints SKIP there and the server lane is where it runs.

@@ -75,7 +75,7 @@ class FakeHub(BaseHTTPRequestHandler):
 
 
 @pytest.fixture
-def door(tmp_path: Path) -> Iterator[tuple[TestClient, Path, FakeHub]]:
+def door(tmp_path: Path) -> Iterator[tuple[TestClient, Path, type[FakeHub]]]:
     FakeHub.held, FakeHub.seen, FakeHub.copies = {}, [], COPIES_REQUIRED
     hub = ThreadingHTTPServer(("127.0.0.1", 0), FakeHub)
     thread = threading.Thread(target=hub.serve_forever, daemon=True)
@@ -98,7 +98,7 @@ def door(tmp_path: Path) -> Iterator[tuple[TestClient, Path, FakeHub]]:
 
 
 def test_the_bytes_reach_the_server_and_the_staging_copy_goes_with_two_copies(
-    door: tuple[TestClient, Path, FakeHub],
+    door: tuple[TestClient, Path, type[FakeHub]],
 ) -> None:
     client, home, hub = door
     data = b"the book that must be searchable" * 100_000
@@ -117,10 +117,10 @@ def test_the_bytes_reach_the_server_and_the_staging_copy_goes_with_two_copies(
 
 
 def test_one_copy_keeps_the_staging_part_and_its_manifest(
-    door: tuple[TestClient, Path, FakeHub],
+    door: tuple[TestClient, Path, type[FakeHub]],
 ) -> None:
-    client, home, hub = door
-    hub.copies = 1
+    client, home, _hub = door
+    FakeHub.copies = 1
     data = b"kept until the bucket has it"
 
     answer = client.post(UPLOAD_ROUTE, content=data, headers={"X-Upload-Id": "up-2"})
@@ -137,7 +137,7 @@ def test_one_copy_keeps_the_staging_part_and_its_manifest(
 
 
 def test_a_resumed_upload_asks_the_partial_hash_before_it_takes_more(
-    door: tuple[TestClient, Path, FakeHub],
+    door: tuple[TestClient, Path, type[FakeHub]],
 ) -> None:
     client, _, hub = door
     head, tail = b"a" * 4096, b"b" * 8192

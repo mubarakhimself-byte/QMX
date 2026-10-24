@@ -56,7 +56,9 @@ KEY = "probe-pairing-key"
 
 
 def peak_mb() -> int:
-    return 0 if resource is None else int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) // 1024
+    return (
+        0 if resource is None else int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) // 1024
+    )
 
 
 def write_file(path: Path, size: int) -> str:
@@ -83,9 +85,7 @@ class Hub:
         from qmx_library.store import Store  # noqa: PLC0415
 
         self.opened = Store.open(store, redactor=redact, name="server")
-        self.server = serve(
-            LibraryHub(self.opened.__enter__()), host="127.0.0.1", port=0, key=KEY
-        )
+        self.server = serve(LibraryHub(self.opened.__enter__()), host="127.0.0.1", port=0, key=KEY)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
@@ -186,7 +186,11 @@ def send(
             remaining -= len(data)
         response = connection.getresponse()
         payload = response.read()
-        return response.status, json.loads(payload) if payload else {}, int(time.monotonic() - started)
+        return (
+            response.status,
+            json.loads(payload) if payload else {},
+            int(time.monotonic() - started),
+        )
     finally:
         connection.close()
 
@@ -208,7 +212,8 @@ def stream_hash(url: str, digest: str) -> tuple[int, int]:
             total += len(data)
     finally:
         connection.close()
-    assert hasher.hexdigest() == digest, "the blob does not hash to its name"
+    if hasher.hexdigest() != digest:
+        raise ValueError(f"the blob does not hash to its name: {digest}")
     return total, int(time.monotonic() - began)
 
 

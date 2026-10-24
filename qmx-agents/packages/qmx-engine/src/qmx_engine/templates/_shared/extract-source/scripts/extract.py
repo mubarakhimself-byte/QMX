@@ -11,7 +11,6 @@ Docling says so and lands nothing rather than guessing at text.
 """
 
 import json
-import os
 import sys
 import time
 from pathlib import Path
@@ -36,7 +35,7 @@ def cap_memory(limit_mb: int = LIMIT_MB) -> bool:
         cap = limit_mb * 1024 * 1024
         resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
         return True
-    except (AttributeError, OSError, ValueError):
+    except AttributeError, OSError, ValueError:
         return False
 
 
@@ -84,8 +83,10 @@ def extract(path: Path, kind: str) -> dict[str, Any]:
     import docling  # noqa: PLC0415 (the extraction child's own install)
     from docling.document_converter import DocumentConverter  # noqa: PLC0415
 
-    converter = DocumentConverter() if kind != "audio" else DocumentConverter(
-        allowed_formats=[audio_format()]
+    converter = (
+        DocumentConverter()
+        if kind != "audio"
+        else DocumentConverter(allowed_formats=[audio_format()])
     )
     document = converter.convert(str(path)).document
     text = whole_text(document)
@@ -136,7 +137,7 @@ def main() -> int:
             )
         )
         return 0
-    except Exception as error:  # noqa: BLE001 (one failed extraction names itself)
+    except Exception as error:
         print(json.dumps({"status": "failed", "reason": f"{type(error).__name__}: {error}"}))
         return 0
     print(json.dumps(result))
@@ -144,5 +145,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    os.environ.setdefault("TMPDIR", os.environ.get("QMX_TMP", "/tmp"))
     raise SystemExit(main())

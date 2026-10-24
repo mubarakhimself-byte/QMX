@@ -41,7 +41,7 @@ from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Final, NoReturn, cast
+from typing import TYPE_CHECKING, Any, Final, NoReturn, cast
 
 from pydantic import JsonValue
 from qmx_engine.heartbeat import WINDOW_DAYS, Heartbeat, HeartbeatLog, latest
@@ -60,10 +60,8 @@ from qmx_library.port import (
 from qmx_library.principal import Principal
 from qmx_library.store import Store, Upload
 
-try:  # the host's one process mounts this router; a standalone hub has no fastapi
+if TYPE_CHECKING:  # the router's annotations resolve from module globals when the host mounts it
     from fastapi import Request
-except ImportError:  # pragma: no cover (only the host calls `in_process`)
-    Request = Any  # type: ignore[assignment,misc]
 
 from qmx_hub.purge import Purged, purge_everywhere
 
@@ -812,8 +810,11 @@ def in_process(hub: Hub, key: str) -> Any:
     door writes one chunk at a time on a worker thread, so a 3 GB file is never in memory here.
     """
     import anyio  # noqa: PLC0415 (only the host's process has it)
-    from fastapi import APIRouter, HTTPException  # noqa: PLC0415 (only the host needs it)
+    from fastapi import APIRouter, HTTPException, Request  # noqa: PLC0415 (only the host needs it)
     from fastapi.responses import JSONResponse, StreamingResponse  # noqa: PLC0415
+
+    globals()["Request"] = Request
+    """The annotation above is a string resolved from this module's globals by FastAPI."""
 
     router = APIRouter()
 
