@@ -19,8 +19,8 @@ def problems(folder: Path) -> list[tuple[str, str]]:
 
 
 def with_parameters(tmp_path: Path, parameters: dict[str, object]) -> Path:
-    """`bad-money`'s llm node, its parameters replaced."""
-    folder = Path(shutil.copytree(FIXTURES / "bad-money", tmp_path / "wf"))
+    """`llm-node`'s llm node, its parameters replaced."""
+    folder = Path(shutil.copytree(FIXTURES / "llm-node", tmp_path / "wf"))
     path = folder / "definition.json"
     document = json.loads(path.read_text(encoding="utf-8"))
     document["nodes"][1]["parameters"] = parameters
@@ -33,7 +33,6 @@ def with_parameters(tmp_path: Path, parameters: dict[str, object]) -> Path:
     [
         ("bad-settings-write", [("settings_write", "nodes[1].parameters.op")]),
         ("bad-trigger-creation", [("trigger_creation", "nodes[1].parameters.op")]),
-        ("bad-money", [("money_act", "nodes[1].parameters.action")]),
         ("bad-broadcast", [("chunk_required", "connections.List papers.main[0][0]")]),
         ("bad-loop-no-max-iterations", [("loop_max_iterations_missing", "nodes[1].parameters")]),
         ("bad-human-gate", [("human_gate_misplaced", "nodes[1]")]),
@@ -43,38 +42,15 @@ def test_each_lint_rule_refuses_its_fixture(fixture: str, expected: list[tuple[s
     assert problems(FIXTURES / fixture) == expected
 
 
-@pytest.mark.parametrize(
-    "spelling",
-    [
-        "submit-order",
-        "Close position",
-        "mcp__broker__place_order",
-        "qmb.cancel_order",
-        "paper_buy",
-        "closeAllPositions",
-        "update_stop_loss",
-    ],
-)
-def test_a_money_act_is_refused_in_any_spelling_or_nesting(tmp_path: Path, spelling: str) -> None:
-    folder = with_parameters(tmp_path, {"tools": ["Read", spelling]})
+def test_a_node_named_for_an_order_act_lints_clean(tmp_path: Path) -> None:
+    folder = Path(shutil.copytree(FIXTURES / "llm-node", tmp_path / "wf"))
+    path = folder / "definition.json"
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["nodes"][1] |= {"id": "submit_order", "name": "submit_order"}
+    document["connections"]["Start"]["main"][0][0]["node"] = "submit_order"
+    path.write_text(json.dumps(document), encoding="utf-8")
 
-    assert problems(folder) == [("money_act", "nodes[1].parameters.tools[1]")]
-
-
-@pytest.mark.parametrize(
-    ("parameters", "path"),
-    [
-        ({"place_order": True}, "nodes[1].parameters.place_order"),
-        (
-            {"tools": {"Read": {"allow": True}, "mcp__broker__place_order": {"allow": True}}},
-            "nodes[1].parameters.tools.mcp__broker__place_order",
-        ),
-    ],
-)
-def test_a_money_act_named_by_a_key_is_refused(
-    tmp_path: Path, parameters: dict[str, object], path: str
-) -> None:
-    assert problems(with_parameters(tmp_path, parameters)) == [("money_act", path)]
+    assert problems(folder) == []
 
 
 def test_settings_writes_and_trigger_creation_named_by_a_key_are_refused(tmp_path: Path) -> None:
@@ -86,14 +62,14 @@ def test_settings_writes_and_trigger_creation_named_by_a_key_are_refused(tmp_pat
     ]
 
 
-def test_words_that_only_look_like_an_act_or_a_key_pass(tmp_path: Path) -> None:
+def test_ordinary_parameters_pass(tmp_path: Path) -> None:
     folder = with_parameters(
         tmp_path,
         {
             "sort_by": "position",
             "expr": "items.size",
-            "kind": "order",
-            "metric": "risk-adjusted-returns-model-2026",
+            "op": "settings_read",
+            "call": "create_note",
             "prompt": "Explain why traders place orders before the close.",
             "tool": "add_trade_note",
         },

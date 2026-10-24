@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from fastmcp import Client
-from qma.harness.money_words import named_money_act
 
 from qmx_control.catalog import (
     CatalogError,
@@ -88,13 +87,10 @@ def test_a_long_answer_spills_to_the_library_as_head_tail_and_id(tmp_path: Path)
     assert saved["content"] == {"operation": "qmx.library_get", "text": text}
 
 
-def test_no_row_names_an_order_act() -> None:
-    assert [found.name for found in rows() if named_money_act(found.name)] == []
-    assert [found.name for found in rows() if named_money_act(found.target)] == []
+def test_only_the_broker_row_proposes_an_order() -> None:
     assert [found.name for found in rows() if found.approval == "propose_money"] == [
         "node_propose_order"
     ]
-    assert named_money_act("place_order") == "submit_order"
 
 
 def test_rest_only_rows_stay_off_the_agent_surface() -> None:

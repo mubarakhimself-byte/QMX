@@ -125,7 +125,7 @@ def test_an_unavailable_kind_validates_in_a_draft_and_a_run_refuses_it() -> None
 
 
 def test_a_pack_type_is_checked_against_its_base_kind(tmp_path: Path) -> None:
-    folder = copy("bad-money", tmp_path)
+    folder = copy("llm-node", tmp_path)
     document = json.loads((folder / "definition.json").read_text(encoding="utf-8"))
     document["nodes"][1] = {"id": "l", "name": "Decide", "type": "lab.cell", "typeVersion": 1}
     (folder / "definition.json").write_text(json.dumps(document), encoding="utf-8")

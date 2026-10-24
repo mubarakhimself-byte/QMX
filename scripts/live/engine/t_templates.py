@@ -31,8 +31,8 @@ No lane touches the plan login or the ship home.
 - `drafts` (TP3 lane 4, no model): each of the 10 drafts saved, then its test run and its enable
   tried. Pass when all 20 calls are refused with the draft's own need. Publish refuses an untested
   draft, so the enable is tried on a version published straight through the Library.
-- `money` (TP3 lane 6, no model): the money lint over every TP3 folder, with a planted money act as
-  the control. Pass when every folder is clean and the control is caught.
+- `money` (TP3 lane 6, no model): every TP3 folder holds no credential and no broker ref, and a
+  planted order act in a parameter draws no problem now that the word list is retired.
 - `readmes` (TP3 lane 8, no model): each draft's README names its need in one line.
 - `gw` (TP3 lane 9, no model): GW validates and holds no model-bearing node.
 - `t4-fake` (TP3 lane 10) and `db-fake`: the template on the fake switch with no harness at all, so
@@ -48,7 +48,7 @@ No lane touches the plan login or the ship home.
 - `doc` (TP4 lane 6, no model): every row of `docs/TEMPLATES.md` matches the catalogue.
 - `variant` (TP4 lane 7): RS1 cloned through `extends` and test-run; the published variant records
   `variant-of` RS1's version. `variant-recorded` runs it on the recorded answers.
-- `money-pack` (TP4 lane 9, no model): the money lint over all 31 folders.
+- `money-pack` (TP4 lane 9, no model): the same checks over all 31 folders.
 - `all-plan`, `install-plan` and `variant-plan`: `all`, the install and `variant` with model
   turns through the plan login on the ship home, under the lane lock, every role on
   `claude/haiku` for the lane only. The engine runs on a throwaway home, and the ship home's
@@ -551,7 +551,6 @@ def money(folders: list[Path], log: Log, home: Path) -> None:
     clean = 0
     for folder in folders:
         definition = json.loads((folder / "definition.json").read_text("utf-8"))
-        acts = [p for p in validate(load(folder)) if p.code == "money_act"]
         held = [n["id"] for n in definition["nodes"] if n.get("credentials")]
         refs = [
             p.name
@@ -559,18 +558,18 @@ def money(folders: list[Path], log: Log, home: Path) -> None:
             if p.is_file()
             and any(w in p.read_text("utf-8") for w in ("qmn", "qmx/ctrader", "qmx/broker"))
         ]
-        log(f"{folder.name}: money acts {acts}, credentials {held}, qmn or broker refs {refs}")
-        clean += not (acts or held or refs)
+        log(f"{folder.name}: credentials {held}, qmn or broker refs {refs}")
+        clean += not (held or refs)
     control = shutil.copytree(T4, home / "t4-control")
     planted = json.loads((control / "definition.json").read_text("utf-8"))
     planted["nodes"][2]["parameters"]["after"] = "close_all_positions"
     (control / "definition.json").write_text(json.dumps(planted), "utf-8")
-    caught = [p.message for p in validate(load(control)) if p.code == "money_act"]
-    log(f"control with a planted money act: {caught}")
+    codes = [p.code for p in validate(load(control))]
+    log(f"control with an order act planted in a parameter: problems {codes}")
     log.check(
-        f"all {len(folders)} folders pass the money lint and the planted act is caught",
-        clean == len(folders) and bool(caught),
-        {"clean": clean, "folders": len(folders), "control caught": bool(caught)},
+        f"{len(folders)} folders hold no credential or broker ref, and the planted act passes",
+        clean == len(folders) and codes == [],
+        {"clean": clean, "folders": len(folders), "control problems": codes},
     )
 
 
