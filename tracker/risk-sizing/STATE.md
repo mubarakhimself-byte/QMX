@@ -70,6 +70,9 @@ From 07-funnel §9, plus the router split from 09:
 
 ## Next steps, in order
 
+**PAUSED (operator, 2026-10-25):** no architecture step yet. A deeper conversation with him comes first. Then planning, architecture and PRs, then coding in another session.
+
+
 1. DONE: the funnel converged (07).
 2. An explainer page for him, then his decisions 1-8 above.
 3. Settle the technical tickets: `domain-expansion-rule`, `self-tuning-sizing-and-exits`.
