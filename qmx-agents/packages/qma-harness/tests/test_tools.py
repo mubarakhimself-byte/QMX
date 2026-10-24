@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -199,6 +200,57 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
     assert all(home.endswith("/.claude") for home in rules.personal_homes)
 
 
+ROOT = Path(__file__).resolve().parents[4]
+PING = '\n[operations.ping]\ndescription = "Answer pong"\napproval = "read"\n'
+
+
+def operated_app(tmp_path: Path) -> Path:
+    """The exchange-status example with the supervisor test server and one declared operation."""
+    target = tmp_path / "app"
+    shutil.copytree(
+        ROOT / "examples/apps/exchange-status",
+        target,
+        ignore=shutil.ignore_patterns(".venv", "__pycache__"),
+    )
+    shutil.copyfile(
+        ROOT / "qmx-agents/packages/qmx-apps/tests/fixture_server.py", target / "server.py"
+    )
+    manifest = target / "app.toml"
+    manifest.write_text(manifest.read_text(encoding="utf-8") + PING, encoding="utf-8")
+    return target
+
+
+def test_a_running_app_serves_its_operations_to_a_chat_until_it_stops(tmp_path: Path) -> None:
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+
+    broker = BrokerService(home.root)
+
+    def served() -> dict[str, ToolDef]:
+        found = asyncio.run(tool_defs(control=control, broker=broker, domain=domain, delegate=None))
+        return {tool.name: tool for tool in found}
+
+    try:
+        control.apps_create(str(operated_app(tmp_path)), trust="first_party")
+        control.apps_start("exchange-status")
+        running = served()
+        ping = running["app_exchange-status_ping"]
+        answer = asyncio.run(ping.call({}))
+        servers = build_servers(list(running.values()), grants=Grants(), domain_write="ask")
+        control.apps_stop("exchange-status")
+        stopped = served()
+    finally:
+        control.close()
+    assert (ping.full, ping.effect) == ("mcp__qmx_app_exchange-status__ping", Effect.READ)
+    assert '"pong": true' in answer["content"][0]["text"]
+    assert "qmx_app_exchange-status" in servers
+    assert running["apps_admin_move"].effect is Effect.MANAGE
+    assert "app_exchange-status_ping" not in stopped
+    assert "apps_admin_move" in stopped
+
+
 def test_keyring_refs_reads_names_from_three_sections(tmp_path: Path) -> None:
     control = ControlService(tmp_path)
     control.settings_put(
@@ -315,6 +367,9 @@ class FakeRuntime:
 
     def get(self, app_id: str) -> dict[str, Any]:
         return {"id": app_id, "definition_hash": "h1"}
+
+    def list(self) -> list[dict[str, Any]]:
+        return []
 
     def __getattr__(self, name: str) -> Callable[..., dict[str, str]]:
         def called(*args: object, **kwargs: object) -> dict[str, str]:
@@ -530,7 +585,11 @@ def test_a_row_missing_on_its_server_refuses_the_tool_list(
 
     gone = OperationSpec("data", "gone", binds, "gone_tool", "read", "", "none")
     found = rows()
-    monkeypatch.setattr(tools, "rows", lambda: (*found, gone))
+
+    def with_gone(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
+        return (*found, *apps, gone)
+
+    monkeypatch.setattr(tools, "rows", with_gone)
     home = QmxHome(tmp_path / "home")
     control = ControlService(home.root)
     domain = DomainContext(root=home.root)

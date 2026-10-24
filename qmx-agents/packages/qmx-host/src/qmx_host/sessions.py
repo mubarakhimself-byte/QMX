@@ -301,10 +301,12 @@ class Landed(Protocol):
 
 class PackLanding:
     """`qmx_apps.road.PackSink` over the host's store: a publish writes its `mini-app` item on
-    `refs/apps/<id>` and lands it on `main`, where the next start materialises it."""
+    `refs/apps/<id>` and lands it on `main`, then materialises the published packs, so the next
+    chat loads the new view without a restart."""
 
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Store, home: QmxHome) -> None:
         self.store = store
+        self.home = home
 
     def __call__(self, pack: Landed) -> str:
         ref = APPS_REF.format(app_id=pack.app_id)
@@ -328,6 +330,10 @@ class PackLanding:
         self.store.merge(
             self.store.engine, pack.app_id, from_ref=ref, into=MAIN, strategy="ff-only"
         )
+        try:
+            materialise_packs(self.home, self.store)
+        except (OSError, ValueError, LibraryRefused) as error:
+            _skipped("pack views", error)
         return commit.object_id
 
 
@@ -661,7 +667,7 @@ class RecordedHarness(Harness):
         except (OSError, ValueError, LibraryRefused) as error:
             _skipped("pack views", error)
         try:
-            self._deps.control.app_runtime().attach_packs(PackLanding(store))
+            self._deps.control.app_runtime().attach_packs(PackLanding(store, self.home))
         except (OSError, ValueError, LibraryRefused) as error:
             _skipped("pack sink", error)
 
