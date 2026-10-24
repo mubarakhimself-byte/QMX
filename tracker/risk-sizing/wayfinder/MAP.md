@@ -23,7 +23,7 @@ An agreed design, reviewed for edge cases and ready for `bmad-architecture`, cov
 - **Broaden before architecture.** StrategyQuant (SQ X, the What-If scenario generator, the fitness/ranking ideas, QuantAnalyzer, QuantDataManager, its AI assistant) is the anchor for testing, QMB and the Lab. Expand on it hard; look for hybrids and novel improvements. QuantConnect, NinjaTrader and MT5 are also donors.
 - **Inputs, in rank order:**
   1. The operator's word.
-  2. `workroom/risk-lab-2026-10-05/seeds.md` (his seeds).
+  2. `../seeds.md` (his seeds) and `../STATE.md` (state of play, read first).
   3. `decisions.md` there.
   4. `grounding/09-original-design-recovery.md`.
   5. `docs/` and `_docwork/` (QMB's intended design is there).
