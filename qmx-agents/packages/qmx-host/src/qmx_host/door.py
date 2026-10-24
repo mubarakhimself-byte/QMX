@@ -6,6 +6,12 @@ turn, is `agent:<session_id>`: the chat that request starts inherits it, so ever
 that chat makes in-process acts as that agent and never as the operator who typed the turn. A
 client of `/mcp` over HTTP is an agent too. Work a workflow run starts is `workflow:<run_id>`,
 which the engine sets on the run's own task (`qmx_engine.control_door.as_run`).
+
+The one exception is `SECRET_INTAKE`, the route that receives a secret once for this home (AD-28,
+N5): it is named `user` before any chat route is matched, so no chat's route pattern can shadow it
+into `agent:<session_id>` and a key is never entered on a machine as an agent. A handler mounted
+there must still refuse a caller that is not `user`; the door's part is that no other principal can
+be named for that path.
 """
 
 from __future__ import annotations
@@ -21,10 +27,16 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 USER: Final = Caller("user")
 MCP_CLIENT: Final = Caller("agent", "mcp")
 MCP: Final = "/mcp"
+SECRET_INTAKE: Final = "/v1/secret"  # noqa: S105  a route path, not a credential
+"""Where a home receives a secret once, for itself: an OAuth code exchanged on its own machine, or
+a static key whose connection lives here. `user` only, and the route table never names an agent
+for it."""
 
 
 def principal_of(scope: Scope, chat_routes: Sequence[BaseRoute]) -> Caller:
     path = str(scope["path"])
+    if path == SECRET_INTAKE or path.startswith(f"{SECRET_INTAKE}/"):
+        return USER
     if path == MCP or path.startswith(f"{MCP}/"):
         return MCP_CLIENT
     for route in chat_routes:
