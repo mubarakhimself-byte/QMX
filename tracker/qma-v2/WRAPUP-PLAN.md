@@ -716,7 +716,7 @@ Facts read at `f05fc64b` on 2026-10-24 by a read-only Opus pass (no edits, no sp
 | WU5, WU10 | `T/catalog.py` (WU4 too) | WU4, then WU10 |
 | WU7, WU9 | none (`QX/server.py` in WU7, `QX/node.py` in WU9) | free |
 
-Parallel pairs and their intersections, checked from the Files blocks above. WU1 and WU5 share none. WU2 and WU6 share none. WU3 and WU7 share none. WU3 and WU4 share none, so WU4 runs beside WU3 on a fresh builder, both from WU2's head, and WU4 is rebased onto WU3 when stacked. WU4, WU8 and WU9 all edit `HO/host.py`, so they run one after another, WU4 first.
+Parallel pairs and their intersections, checked from the Files blocks above. WU1 and WU5 share none. WU2 and WU6 share none. WU3 and WU7 share none. WU3 and WU4 share none, so WU4 runs beside WU3 on a fresh builder, both from WU2's head, and WU4 is rebased onto WU3 when stacked. WU4, WU8 and WU9 all edit `HO/host.py`. WU8 runs beside WU4 from WU7's head, because WU8 only mounts routes beside `forward_router` while WU4 binds where `control.attach_library(store)` runs, and the coordinator resolves the two regions when stacking. WU9 waits for both.
 
 ## Appendix D. Defaults
 
