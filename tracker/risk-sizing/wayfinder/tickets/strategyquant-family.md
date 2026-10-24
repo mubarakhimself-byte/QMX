@@ -2,7 +2,7 @@
 title: StrategyQuant family as the anchor for testing, QMB and the Lab
 type: decision
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: "opus research agent 2026-10-24"
 created: 2026-10-24

@@ -4,7 +4,7 @@ type: decision
 mode: AFK
 status: open
 blocked_by: []
-claimed_by: ""
+claimed_by: "opus research agent 2026-10-24"
 created: 2026-10-24
 ---
 

@@ -30,6 +30,7 @@ An agreed design, reviewed for edge cases and ready for `bmad-architecture`, cov
   6. Code, only to confirm.
 - **The compounding test:** a part is good if it raises edge per trade, trade count, right size, or cuts drag, and the Judge step can prove it.
 - **Skills:** `research` for research tickets; `bmad-party-mode`, `bmad-brainstorming`, `bmad-cis-*` and `bmad-forge-idea` in the funnel, uncapped; `grilling` and `domain-modeling` on HITL tickets; `bmad-review` (adversarial, edge-case, verification-gap) for the review; `bmad-architecture`, `domain-modeling` and `codebase-design` last.
+- **Fresh, production lens.** Study live sources, as a human would, through the browser. Older notes (for example the 14 Sep donor files) are only a cross-check. Web search and fetch go through Exa, plus the browser. Firecrawl only as a last resort, because its credits are low.
 - **Preferences:** plain short English; explainer pages for the operator; claims labelled checked, remembered or inferred; every number configurable; Opus agents, at most three at once.
 - Frontier: `python frontier.py`.
 
