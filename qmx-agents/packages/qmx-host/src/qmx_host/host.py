@@ -48,6 +48,7 @@ from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_servic
 from qma.harness.tools import HostRead
 from qmf.core import is_refusal
 from qmx_control.models import Document
+from qmx_control.node import library_primary
 from qmx_control.service import ControlService
 from qmx_engine.admission import setting
 from qmx_engine.control_door import EngineDoor
@@ -82,7 +83,7 @@ from qmx_engine.service.forward import (
 from qmx_engine.service.rest import engine_router
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_library.adapter import EngineLibraryAdapter
-from qmx_library.port import LibraryRefused
+from qmx_library.port import LibraryRefused, StoreRole
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
@@ -507,6 +508,12 @@ async def node_sidecar(home: Path) -> None:
         server.should_exit = True
 
 
+def store_role(home: Path, serving: bool) -> StoreRole:
+    """The server's store is the writer, and so is the PC's while `[library] primary` is `pc`, the
+    default before the flip. After the flip the PC keeps a replica (AD-14, AD-19)."""
+    return "writer" if serving or library_primary(home) == "pc" else "replica"
+
+
 async def serve(
     home: Path,
     port: int,
@@ -547,7 +554,7 @@ async def serve(
                 redactor=redact,
                 floor_bytes=floor,
                 name="server" if serving else "pc",
-                role="writer" if serving else "replica",
+                role=store_role(home, serving),
                 upstream=None if serving else HubBlobs(library_client(home)),
             ) as store:
                 control.attach_library(store)

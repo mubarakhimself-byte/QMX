@@ -9,17 +9,23 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 from qma.harness import QmxHome, control_service
 from qmx_engine import __main__ as cli
 from qmx_engine.control_door import EngineDoor
 from qmx_engine.ledger import redact
+from qmx_engine.ports.library import Bundle
+from qmx_engine.ports.library import LibraryRefused as EngineRefused
+from qmx_engine.service.api import EngineService
+from qmx_engine.service.context import OPERATOR
+from qmx_engine.templates.catalog import PACK
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.store import Store
 
 from qmx_host import host
 from qmx_host.door import templates_router
-from qmx_host.host import compose
+from qmx_host.host import compose, store_role
 
 KEY = "templates-check"
 BEARER = {"Authorization": f"Bearer {KEY}"}
@@ -76,3 +82,27 @@ def test_an_install_through_the_route_lands_in_the_hosts_store(tmp_path: Path) -
 
 def test_the_cli_reads_the_record_the_host_writes() -> None:
     assert (cli.HOST_STATE, cli.INSTALL_ROUTE) == (host.STATE, "/api/templates/install")
+
+
+def draft_on_a_pc(home: Path, primary: str) -> str:
+    """One engine draft put into a store opened the way a `pc` host opens it."""
+    home.mkdir(parents=True)
+    (home / "settings.toml").write_text(f'[library]\nprimary = "{primary}"\n', "utf-8")
+    role = store_role(home, serving=False)
+    with (
+        Store.open(home / "library", redactor=redact, role=role) as store,
+        EngineService.open(home, library=EngineLibraryAdapter(store)) as svc,
+    ):
+        bundle = Bundle.read(PACK / "backup-weekly")
+        return svc.drafts.put("backup-weekly", bundle, 0, caller=OPERATOR).item
+
+
+def test_a_pc_host_writes_while_the_pc_is_primary_and_refuses_after_the_flip(
+    tmp_path: Path,
+) -> None:
+    landed = draft_on_a_pc(tmp_path / "before", "pc")
+    with pytest.raises(EngineRefused) as refused:
+        draft_on_a_pc(tmp_path / "after", "server")
+
+    assert landed == "backup-weekly"
+    assert refused.value.code == "read_only_replica"
