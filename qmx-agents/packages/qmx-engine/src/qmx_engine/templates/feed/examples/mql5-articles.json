@@ -1,0 +1,12 @@
+{
+  "name": "MQL5 articles",
+  "method": "rss",
+  "url": "https://www.mql5.com/en/articles/rss",
+  "cadence": "0 */6 * * *",
+  "lands_as": "source",
+  "collection": "mql5-articles",
+  "tags": ["mql5", "articles", "trading-systems"],
+  "licence": "MQL5 site terms: the article stays MQL5's, the find and its summary are ours",
+  "extract": {"text": true, "notes": false},
+  "note": "The mql5-articles mini app's collector becomes this feed; its app.db finds are imported once."
+}

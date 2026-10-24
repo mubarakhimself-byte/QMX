@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "download-binance",
+  "name": "Download Binance bulk files",
+  "inputs": {
+    "type": "object",
+    "description": "the source definition: one dataset, one symbol and one month, checked against the bucket's own checksums",
+    "properties": {
+      "source": {
+        "type": "object",
+        "description": "{dataset (trades | aggTrades | bookDepth | bookTicker), symbol, month, market, base, licence}"
+      }
+    },
+    "required": ["source"]
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the partition this run landed: its key, rows, fingerprint, the days checked, and whether the month is frozen"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Daily at 02:30 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "download", "name": "One month, one dataset", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 2, "backoff_seconds": [900], "retry_on": ["script_exit"]},
+     "parameters": {"script": "scripts/download.py", "artifacts": ["library/cards/"]}}
+  ],
+  "connections": {
+    "Daily at 02:30 UTC": {"main": [[{"node": "One month, one dataset", "port": "in",
+                                     "map": "one"}]]}
+  },
+  "meta": {"template": "download-binance"}
+}

@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "download-ccxt",
+  "name": "Top up recent crypto days",
+  "inputs": {
+    "type": "object",
+    "description": "the source definition: one exchange, one symbol and the month to top up from the exchange's public API",
+    "properties": {
+      "source": {
+        "type": "object",
+        "description": "{exchange, symbol, month, timeframe, price_scale, licence}"
+      }
+    },
+    "required": ["source"]
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the partition this run landed: its key, rows, fingerprint and whether the month is frozen"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Daily at 03:00 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "download", "name": "Recent days of one month", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 2, "backoff_seconds": [900], "retry_on": ["script_exit"]},
+     "parameters": {"script": "scripts/download.py", "artifacts": ["library/cards/"]}}
+  ],
+  "connections": {
+    "Daily at 03:00 UTC": {"main": [[{"node": "Recent days of one month", "port": "in",
+                                     "map": "one"}]]}
+  },
+  "meta": {"template": "download-ccxt"}
+}

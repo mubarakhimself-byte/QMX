@@ -1,0 +1,12 @@
+{
+  "name": "arXiv q-fin",
+  "method": "rss",
+  "url": "http://export.arxiv.org/api/query?search_query=cat:q-fin.*&sortBy=submittedDate&sortOrder=descending&max_results=50",
+  "cadence": "0 5 * * *",
+  "lands_as": "source",
+  "collection": "arxiv-q-fin",
+  "tags": ["arxiv", "q-fin", "papers"],
+  "licence": "arXiv's own terms; the abstract is quoted, the paper is linked",
+  "extract": {"text": true, "notes": true},
+  "note": "arXiv's API answers Atom, which is the rss method's shape: one entry per paper."
+}

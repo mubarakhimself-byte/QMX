@@ -431,6 +431,49 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("*/5 * * * *", "UTC"),),
         test_inputs={"dry_run": True},
     ),
+    Template(
+        "feed",
+        "Watch one source and land what is new",
+        card("16", "T3"),
+        "DR6",
+        folder="feed",
+        test_inputs={
+            "source": {
+                "name": "the example blog",
+                "method": "page-diff",
+                "url": "definition.json",
+                "lands_as": "source",
+                "collection": "example",
+            }
+        },
+    ),
+    Template(
+        "download-dukascopy",
+        "Download a month of Dukascopy ticks",
+        card("16", "T3"),
+        "DR6",
+        folder="download-dukascopy",
+        triggers=(Cron("0 2 * * *", "UTC"),),
+        test_inputs={"dry_run": True},
+    ),
+    Template(
+        "download-binance",
+        "Download a month of Binance bulk files",
+        card("16", "T3"),
+        "DR6",
+        folder="download-binance",
+        triggers=(Cron("30 2 * * *", "UTC"),),
+        test_inputs={"dry_run": True},
+    ),
+    Template(
+        "download-ccxt",
+        "Top up recent crypto days from an exchange",
+        card("16", "T3"),
+        "DR6",
+        folder="download-ccxt",
+        triggers=(Cron("0 3 * * *", "UTC"),),
+        test_inputs={"dry_run": True},
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {

@@ -32,9 +32,10 @@ from __future__ import annotations
 
 import lzma
 import struct
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final, Protocol, cast
@@ -63,13 +64,17 @@ __all__ = [
     "NS_PER_MS",
     "PERSONAL_USE_LICENSE",
     "TICK_RECORD_BYTES",
+    "VOLUME_LIQUIDITY",
     "DecodedTick",
     "DukascopyAdapter",
     "DukascopyHourKey",
     "DukascopyTransport",
     "LicenseTag",
     "LicensedSourceWindow",
+    "NodeTick",
     "decode_bi5_ticks",
+    "decode_node_csv",
+    "node_tick_rows",
     "offer_for_governed_evidence",
     "refuse_complete_corpus_download",
     "refuse_external_recovery",
@@ -92,6 +97,14 @@ FACTORY_MAX_WINDOW_NS: Final[int] = 24 * NS_PER_HOUR
 TICK_RECORD_BYTES: Final[int] = 20
 # Most FX majors: Dukascopy raw int / 100_000 → price; scale digits = 5.
 DEFAULT_PRICE_SCALE: Final[int] = 5
+
+VOLUME_LIQUIDITY: Final[str] = "dukascopy-own"
+"""What a Dukascopy row's volume is, and what its card must say.
+
+The provider publishes the volume it saw on its own book, so the figure is that venue's
+liquidity and not a consolidated tape. A card that lists it says so with this label
+(DATA-PLAN DR6); nothing adds it to another venue's volume.
+"""
 
 _EMPTY_PROVENANCE: Final[Mapping[str, object]] = MappingProxyType({})
 _TICK_STRUCT: Final[struct.Struct] = struct.Struct("!IIIff")
@@ -337,6 +350,170 @@ def decode_bi5_ticks(
             )
         )
     return Ok(tuple(ticks))
+
+
+# --- dukascopy-node's own output --------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class NodeTick:
+    """One tick as `dukascopy-node` wrote it: absolute time, one price side, its volume."""
+
+    event_time_ns: int
+    price_verbatim: int
+    volume: float
+
+
+def _node_time_ns(text: str) -> Result[int]:
+    """A CSV time cell as UTC ns: epoch digits at any width, or an ISO instant."""
+    token = text.strip()
+    if token.isdigit():
+        value = int(token)
+        for width, step in ((19, 1), (16, 1_000), (13, 1_000_000), (10, 1_000_000_000)):
+            if value >= 10 ** (width - 1):
+                return Ok(value * step)
+        return invalid_input(
+            "time", "a dukascopy-node time cell is epoch seconds or finer", given=token[:40]
+        )
+    try:
+        moment = datetime.fromisoformat(token.replace("Z", "+00:00"))
+    except ValueError:
+        return invalid_input(
+            "time", "a dukascopy-node time cell is an ISO instant or epoch digits", given=token[:40]
+        )
+    if moment.tzinfo is None:
+        return invalid_input(
+            "time", "a dukascopy-node time cell carries a zone or offset", given=token[:40]
+        )
+    return Ok(int(moment.timestamp() * 1_000_000_000))
+
+
+def _node_column(header: Sequence[str], *, names: Sequence[str], wanted: str) -> int | None:
+    lowered = [cell.strip().lower() for cell in header]
+    for name in names:
+        if name in lowered:
+            return lowered.index(name)
+    return None
+
+
+def decode_node_csv(
+    payload: object,
+    *,
+    side: object,
+    price_scale: int = DEFAULT_PRICE_SCALE,
+) -> Result[tuple[NodeTick, ...]]:
+    """Decode one `dukascopy-node -f csv` file into that side's ticks.
+
+    This is the seam that takes the node's output into QMX: the node writes a header line and
+    one row per tick, its price as a decimal string and its time as epoch seconds or an ISO
+    instant. Prices become the same scaled integers the bi5 decoder produces, read through
+    :class:`decimal.Decimal` so no binary float touches them, and two rows for one moment keep
+    the later one. P-DUKA failed with node 1.50.0 returning nothing, so the node is not the
+    downloader's fetcher; this seam keeps its output readable for the cross-check adapter.
+    """
+    token = _clean_str(side)
+    if token is None or token.lower() not in ("bid", "ask"):
+        return invalid_input(
+            "side", "a dukascopy-node CSV names the price side it holds", given=repr(side)
+        )
+    lowered = token.lower()
+    if not isinstance(payload, (bytes, bytearray, str)):
+        return invalid_input(
+            "payload", "a dukascopy-node CSV is text or bytes", given=repr(type(payload))
+        )
+    text = (
+        bytes(payload).decode("utf-8", "replace")
+        if isinstance(payload, (bytes, bytearray))
+        else payload
+    )
+    lines = [line for line in text.splitlines() if line.strip()]
+    if not lines:
+        return Ok(())
+    header = lines[0].split(",")
+    time_at = _node_column(header, names=("timestamp", "time", "date", "utc"), wanted="time")
+    price_at = _node_column(header, names=(lowered, "price", "close"), wanted="price")
+    volume_at = _node_column(header, names=("volume", "vol"), wanted="volume")
+    if time_at is None or price_at is None:
+        return invalid_input(
+            "header",
+            "a dukascopy-node CSV names its time column and the price side it holds",
+            header=header,
+            side=lowered,
+        )
+    found: dict[int, NodeTick] = {}
+    for number, line in enumerate(lines[1:], start=2):
+        cells = line.split(",")
+        try:
+            moment = _node_time_ns(cells[time_at])
+            if is_refusal(moment):
+                return moment
+            price = int(Decimal(cells[price_at].strip()) * (10**price_scale))
+            volume = float(cells[volume_at]) if volume_at is not None else 0.0
+        except (IndexError, ValueError, InvalidOperation):
+            return invalid_input(
+                "row",
+                "a dukascopy-node CSV row carries its time, price and volume",
+                line=number,
+                row=cells,
+            )
+        found[moment.value] = NodeTick(moment.value, price, volume)
+    return Ok(tuple(found[key] for key in sorted(found)))
+
+
+def node_tick_rows(
+    bid: Sequence[NodeTick],
+    ask: Sequence[NodeTick],
+    *,
+    side: str = "both",
+) -> Result[tuple[tuple[object, ...], ...]]:
+    """Merge the two sides into the tick partition's rows, one side per run when asked.
+
+    ``side`` is ``bid``, ``ask`` or ``both``: the node fetches one price side per run, so a run
+    that asked for one side writes rows whose other side is empty rather than half-filling it
+    with the same number twice. Every moment the wanted sides carry becomes one row, in time
+    order; a side that lacks a moment the other has is refused, because a half pair would
+    read as a spread that was never quoted.
+    """
+    wanted = _clean_str(side) or "both"
+    if wanted not in ("bid", "ask", "both"):
+        return invalid_input(
+            "side", "a tick run names bid, ask or both price sides", given=repr(side)
+        )
+    prices: dict[int, dict[str, NodeTick]] = {}
+    for name, ticks in (("bid", bid), ("ask", ask)):
+        if wanted not in (name, "both"):
+            continue
+        for tick in ticks:
+            prices.setdefault(tick.event_time_ns, {})[name] = tick
+    rows: list[tuple[object, ...]] = []
+    for moment in sorted(prices):
+        pair = prices[moment]
+        if wanted in ("bid", "both") and "bid" not in pair:
+            return invalid_input(
+                "bid",
+                "the ask side carries a moment the bid side lacks, so the pair is refused",
+                at_ns=moment,
+            )
+        if wanted == "ask" and "ask" not in pair:
+            return invalid_input(
+                "ask", "the ask side is missing a moment it was asked for", at_ns=moment
+            )
+        if wanted == "bid" and "bid" not in pair:
+            return invalid_input(
+                "bid", "the bid side is missing a moment it was asked for", at_ns=moment
+            )
+        bought = pair.get("bid")
+        sold = pair.get("ask")
+        rows.append(
+            (
+                moment // NS_PER_MS,
+                bought.price_verbatim if bought is not None else None,
+                sold.price_verbatim if sold is not None else None,
+                bought.volume if bought is not None else None,
+                sold.volume if sold is not None else None,
+            )
+        )
+    return Ok(tuple(rows))
 
 
 # --- transport / hour key ---------------------------------------------------

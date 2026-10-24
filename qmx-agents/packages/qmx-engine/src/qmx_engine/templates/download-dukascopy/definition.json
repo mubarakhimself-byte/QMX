@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "download-dukascopy",
+  "name": "Download Dukascopy ticks",
+  "inputs": {
+    "type": "object",
+    "description": "the source definition: one symbol and one month of ticks, one price side per run when the source asks for one",
+    "properties": {
+      "source": {
+        "type": "object",
+        "description": "{symbol, month, side (bid | ask | both), price_scale, licence}"
+      }
+    },
+    "required": ["source"]
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the partition this run landed: its key, rows, fingerprint, whether the month is frozen, and the card's volume label"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Daily at 02:00 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "download", "name": "One month, one partition", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 2, "backoff_seconds": [900], "retry_on": ["script_exit"]},
+     "parameters": {"script": "scripts/download.py", "artifacts": ["library/cards/"]}}
+  ],
+  "connections": {
+    "Daily at 02:00 UTC": {"main": [[{"node": "One month, one partition", "port": "in",
+                                     "map": "one"}]]}
+  },
+  "meta": {"template": "download-dukascopy"}
+}

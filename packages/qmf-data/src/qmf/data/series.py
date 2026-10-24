@@ -56,12 +56,16 @@ from qmf.data.store.refusals import (
 
 __all__ = [
     "BAR_KIND",
+    "BOOK_COLUMNS",
+    "BOOK_KIND",
     "GAP_MAX_MS",
     "GAP_MIN_MS",
     "OPEN_NAME",
     "RULES",
     "STATE_NAME",
     "TICKS_KIND",
+    "TRADES_COLUMNS",
+    "TRADES_KIND",
     "CommitReceipt",
     "Correction",
     "FreezeKind",
@@ -76,6 +80,17 @@ __all__ = [
 TICKS_KIND: Final[str] = "ticks"
 BAR_KIND: Final[str] = "bar-m1"
 FILL_KIND: Final[str] = "fill"
+TRADES_KIND: Final[str] = "trades"
+"""Trade prints: one row per print, from a Binance bulk file or a broker's tape (DR6)."""
+
+BOOK_KIND: Final[str] = "book"
+"""A book's levels over time: one row per level reading (DR6)."""
+
+TRADES_COLUMNS: Final[tuple[str, ...]] = ("t", "price", "volume")
+"""A trade row: epoch milliseconds, the int64 scaled price, and the size as a float."""
+
+BOOK_COLUMNS: Final[tuple[str, ...]] = ("t", "value", "volume")
+"""A book row: epoch milliseconds, the level or percentage, and its notional as a float."""
 DERIVED_SOURCE: Final[str] = "derived"
 OPEN_NAME: Final[str] = "open.parquet"
 STATE_NAME: Final[str] = "state.json"
@@ -117,6 +132,8 @@ RULES: Final[dict[str, KindRule]] = {
     TICKS_KIND: KindRule(FreezeKind.GAP, TICK_COLUMNS, hole_bounds=(GAP_MIN_MS, GAP_MAX_MS)),
     BAR_KIND: KindRule(FreezeKind.CHECKSUM, BAR_COLUMNS),
     FILL_KIND: KindRule(FreezeKind.MONTH_END, BAR_COLUMNS, SETTLEMENT_DAYS),
+    TRADES_KIND: KindRule(FreezeKind.CHECKSUM, TRADES_COLUMNS),
+    BOOK_KIND: KindRule(FreezeKind.CHECKSUM, BOOK_COLUMNS),
 }
 _DERIVED_RULE: Final[KindRule] = KindRule(FreezeKind.CHECKSUM, VALUE_COLUMNS)
 

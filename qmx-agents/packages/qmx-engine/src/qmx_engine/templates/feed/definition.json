@@ -1,0 +1,42 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "feed",
+  "name": "Feed",
+  "inputs": {
+    "type": "object",
+    "description": "the source definition (AD-68): method, url or endpoint, selectors or query, cadence, connection, lands_as, tags, licence, extract and collection",
+    "properties": {
+      "source": {
+        "type": "object",
+        "description": "one source: method is rss, sitemap, page-diff, api or bulk-files; lands_as is source or partitions"
+      }
+    },
+    "required": ["source"]
+  },
+  "outputs": {
+    "type": "object",
+    "description": "the new items this fire claimed and fetched, each with its intent key, and the partition or card a partitions feed landed"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "On the feed's cadence", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "watch", "name": "Source changed?", "type": "monitor", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"source": "scripts/monitor.py", "wake_when": "changed"}},
+    {"id": "land", "name": "Claim and land the new items", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none",
+     "parameters": {"script": "scripts/land.py", "artifacts": ["library/sources/"]}}
+  ],
+  "connections": {
+    "On the feed's cadence": {"main": [[{"node": "Source changed?", "port": "in", "map": "one"}]]},
+    "Source changed?": {"changed": [[{"node": "Claim and land the new items", "port": "in",
+                                      "map": "one"}]]}
+  },
+  "meta": {"template": "feed"}
+}
