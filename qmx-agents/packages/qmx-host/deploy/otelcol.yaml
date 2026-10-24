@@ -1,0 +1,84 @@
+# The server's OpenTelemetry Collector: the one collector, on the server (engine AD-69, F46).
+#
+# Every machine sends OTLP here over the tailnet: the PC's in-process exporter (spans, heartbeat
+# gauges, logs), every Claude Code chat the harness starts (HARNESS-REQUESTS H60), Hindsight's own
+# traces, and later a trading server. There is no collector on the PC.
+#
+# Two things this file is for. The receiving queue is backed by `file_storage`, so a collector that
+# restarts or an OpenObserve that is briefly away loses nothing the disk holds; when the queue
+# itself is full the collector drops and counts, and `otelcol_exporter_queue_size` and
+# `otelcol_exporter_enqueue_failed_*` on the Prometheus reader are those counts. The engine's own
+# drop and failure counters are written beside the home in `logs/telemetry.json`.
+#
+# What is redacted stays redacted: every QMX exporter is fed the record after the redaction seam
+# (AD-37, P-REDACT), and the CLI sends its own prompt text redacted by default.
+#
+# Install, once, as root (the real step, gate G-LAND):
+#   install -d -o qmx -g qmx -m 0700 /srv/qmx/monitoring/otelcol/queue
+#   install -m 0644 otelcol.yaml /etc/qmx/otelcol.yaml
+#   printf 'OO_AUTH=Basic <base64 of the OpenObserve user and password>\n' > /etc/qmx/otelcol.env
+#   chmod 0600 /etc/qmx/otelcol.env
+# The password is made at install and never written to this repository. The host firewall admits
+# 4317 and 4318 only over the tailnet, and 8888 is bound to loopback for the same reason.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 70
+    spike_limit_percentage: 20
+  batch:
+    send_batch_size: 8192
+    timeout: 2s
+
+exporters:
+  otlphttp:
+    endpoint: ${env:OO_OTLP_ENDPOINT}
+    headers:
+      Authorization: ${env:OO_AUTH}
+    sending_queue:
+      enabled: true
+      num_consumers: 4
+      queue_size: 10000
+      storage: file_storage
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+
+extensions:
+  file_storage:
+    directory: ${env:QMX_OTEL_QUEUE}
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 127.0.0.1
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp]
+  extensions: [file_storage, health_check]

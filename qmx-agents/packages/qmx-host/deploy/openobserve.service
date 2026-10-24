@@ -1,0 +1,44 @@
+# OpenObserve, the external monitoring store, as a service (engine AD-69; DATA-PLAN DR10).
+#
+# The collector forwards traces, metrics and logs here over loopback; OpenObserve keeps a short
+# window (14 days is the default in Appendix D, a Settings value) and the Library keeps each run's
+# trace and logs, so the viewer can be rebuilt or swapped.
+#
+# It runs as the ordinary user `qmx`, never root, and its data folder is outside the QMX home. The
+# root sign-in is made at install and written to `/etc/qmx/openobserve.env` (mode 0600), never to
+# this repository; no key in that file can trade anything.
+#
+# Install, once, as root (the real step, gate G-LAND and, if the install asks for an account, G-OO),
+# with the binary pinned at install and its version recorded in the evidence:
+#   install -d -o qmx -g qmx -m 0700 /srv/qmx/monitoring/openobserve
+#   install -m 0644 openobserve.service /etc/systemd/system/openobserve.service
+#   printf 'ZO_ROOT_USER_EMAIL=qmx-observer@example.com\nZO_ROOT_USER_PASSWORD=<made here>\n' \
+#     > /etc/qmx/openobserve.env && chmod 0600 /etc/qmx/openobserve.env
+#   systemctl daemon-reload && systemctl enable --now openobserve
+# Its address on this machine is http://127.0.0.1:5080 and its health line is GET /healthz.
+
+[Unit]
+Description=OpenObserve: the traces, metrics and logs QMX sends out
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qmx
+Group=qmx
+Environment=HOME=/srv/qmx/home
+Environment=ZO_DATA_DIR=/srv/qmx/monitoring/openobserve
+Environment=ZO_HTTP_PORT=5080
+Environment=ZO_TELEMETRY=false
+EnvironmentFile=/etc/qmx/openobserve.env
+ExecStart=/usr/local/bin/openobserve
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/srv/qmx/monitoring/openobserve
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
