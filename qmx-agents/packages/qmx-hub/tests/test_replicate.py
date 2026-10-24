@@ -198,3 +198,41 @@ def test_the_server_refuses_a_mirror_of_a_ref_it_owns(tmp_path: Path) -> None:
         replica = Hub(store, home=tmp_path / "home")
         replica.op("mirror", OPERATOR, {"item": "n1", "ref": "main", "head": head})
         assert store.head("n1", "main") == (head, 1)
+
+
+def test_a_sync_learns_the_peers_higher_epoch_and_parks_the_pcs_own_move(
+    tmp_path: Path,
+) -> None:
+    """A PC restored at `primary = pc` syncs with the server that is primary at epoch 2."""
+    with (
+        Store.open(tmp_path / "pc", redactor=redact, name="pc") as pc,
+        Store.open(tmp_path / "server", redactor=redact, name="server") as server,
+    ):
+        pc.record_primary(OPERATOR, "pc")
+        offline = pc.put(OPERATOR, note("offline", "n1"), on="main", expected_head=None)
+        server.record_primary(OPERATOR, "server", epoch=2)
+        theirs = server.put(
+            OPERATOR, note("the server's own", "shared"), on="main", expected_head=None
+        )
+
+        synced = sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=0)
+
+        learned = pc.epoch
+        assert learned is not None
+        assert (learned.primary, learned.epoch, learned.stale) == ("server", 2, True)
+        assert learned.parked == ("refs/conflicts/n1/1",)
+        parked = pc.get(OPERATOR, pc.resolve(OPERATOR, "n1", "refs/conflicts/n1/1"))
+        assert parked.fields["ours"] == offline.object_id
+        assert pc.alarms == ("library:epoch:pc",)
+        assert synced.pushed_refs == []
+        assert any("library:epoch:pc" in alarm for alarm in synced.alarms)
+        assert server.head("shared", "main") == (theirs.object_id, 1)
+        assert pc.head("n1", "main") == (offline.object_id, 1)
+        with pytest.raises(LibraryRefused, match=r"^ref_not_owned:"):
+            pc.put(OPERATOR, note("after", "n1"), on="main", expected_head=offline.object_id)
+
+        again = sync_since(
+            StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=synced.cursor
+        )
+
+        assert (pc.epoch, again.pushed_refs) == (learned, [])
