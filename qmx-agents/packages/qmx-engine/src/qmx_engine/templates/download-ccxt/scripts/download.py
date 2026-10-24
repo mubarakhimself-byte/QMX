@@ -20,6 +20,7 @@ import tomllib
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from qmf.core import is_refusal
 from qmf.data.series import SeriesKey
@@ -88,6 +89,37 @@ def claim(root: Path, key_text: str) -> Path | None:
     return path
 
 
+def page_limit(exchange: Any) -> int | None:
+    """The exchange's own declared most bars per request, or None to let the exchange choose."""
+    try:
+        limit: object = exchange.features["spot"]["fetchOHLCV"]["limit"]
+    except AttributeError, KeyError, TypeError:
+        return None
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+        return None
+    return limit
+
+
+def fetch_bars(
+    exchange: Any, symbol: str, timeframe: str, start_ms: int, end_ms: int
+) -> list[list[Any]]:
+    """Every bar in `[start_ms, end_ms)`, paged by the exchange's own declared limit."""
+    page = {} if (limit := page_limit(exchange)) is None else {"limit": limit}
+    bars: list[list[Any]] = []
+    cursor = start_ms
+    while cursor < end_ms:
+        try:
+            batch = exchange.fetch_ohlcv(symbol, timeframe, since=cursor, **page)
+        except Exception as error:  # the exchange's own refusals reach us as exceptions
+            fail(f"{exchange_name} refused the read at {cursor}: {type(error).__name__}: {error}")
+        fresh = [row for row in batch if cursor <= int(row[0]) < end_ms]
+        if not fresh:
+            break
+        bars.extend(fresh)
+        cursor = max(int(row[0]) for row in fresh) + 60_000
+    return bars
+
+
 given = json.load(sys.stdin).get("in") or {}
 if isinstance(given, dict) and given.get("dry_run"):
     (Path(os.environ["QMX_WORK"]) / "library" / "cards").mkdir(parents=True, exist_ok=True)
@@ -142,31 +174,19 @@ try:
     start_ms = key.value.start_ns // 1_000_000
     end_ms = key.value.end_ns // 1_000_000
     exchange = library({"enableRateLimit": True})
-    rows: list[tuple[object, ...]] = []
-    cursor = start_ms
-    while cursor < end_ms:
-        try:
-            batch = exchange.fetch_ohlcv(symbol, timeframe, since=cursor, limit=1000)
-        except Exception as error:  # the exchange's own refusals reach us as exceptions
-            fail(f"{exchange_name} refused the read at {cursor}: {type(error).__name__}: {error}")
-        if not batch:
-            break
-        for moment, opened_price, high, low, close, volume in batch:
-            if moment < start_ms or moment >= end_ms:
-                continue
-            rows.append(
-                (
-                    int(moment),
-                    scaled(opened_price, scale),
-                    scaled(high, scale),
-                    scaled(low, scale),
-                    scaled(close, scale),
-                    float(volume),
-                )
-            )
-            cursor = max(cursor + 60_000, int(moment) + 60_000)
-        if len(batch) < 1000:
-            break
+    rows: list[tuple[object, ...]] = [
+        (
+            int(moment),
+            scaled(opened_price, scale),
+            scaled(high, scale),
+            scaled(low, scale),
+            scaled(close, scale),
+            float(volume),
+        )
+        for moment, opened_price, high, low, close, volume in fetch_bars(
+            exchange, symbol, timeframe, start_ms, end_ms
+        )
+    ]
     if not rows:
         print(json.dumps({"status": "empty", "key": key.value.text}))
         raise SystemExit(0)
