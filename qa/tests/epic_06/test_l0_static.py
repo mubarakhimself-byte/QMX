@@ -116,5 +116,5 @@ def test_l0_003_no_dukascopy_node_donor_code() -> None:
     duk_imports = _imported_modules(_SRC / "dukascopy.py")
     third_party = {n for n in duk_imports if n.split(".")[0] not in {
         "qmf", "lzma", "struct", "datetime", "enum", "types", "typing", "collections",
-        "dataclasses", "__future__"}}
+        "dataclasses", "decimal", "__future__"}}
     assert not third_party, f"dukascopy.py imports an unexpected third-party module: {sorted(third_party)}"

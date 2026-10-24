@@ -15,6 +15,12 @@ the purge refs, and the transient claims in `refs/claims.json` are never buckete
 A batch is the commits that land between two pushes. Every commit calls `note`, and a burst is
 pushed once when it settles: the push never runs twice over in a second, and no commit is waited on
 for a bucket that is not there.
+
+A series that cannot be downloaded again has one more thing to lose: the open month, whose file
+sits under a fixed name while rows still arrive. `keep_series` registers it, and every push
+copies it to `<remote>:<prefix>/series/<name>.parquet` — the same fixed name each batch, so the
+newer file overwrites the older one. A series that can be re-downloaded is not registered and
+costs the bucket nothing.
 """
 
 from __future__ import annotations
@@ -37,6 +43,8 @@ FRAMES: Final = ("objects", "edges", "annotations")
 REF_FILES: Final = ("refs/log.jsonl", "refs/epoch.json")
 CACHE_DIRS: Final = ("fetched/**", "transient/**", "tombstones/**")
 """The blob folders a push leaves behind: a cache copy, a transient blob, a purge tombstone."""
+SERIES_DIR: Final = "series"
+"""Where a series' open month lands on the remote, under a fixed name."""
 BATCH: Final = 1
 """Commits in one batch (Claude's default): every commit is pushed, and the settle below folds a
 burst into one rclone run."""
@@ -79,6 +87,8 @@ class Bucket:
     wall: Callable[[], datetime] = lambda: datetime.now(UTC)
     pending: int = 0
     last: Pushed | None = field(default=None)
+    series: dict[str, Path] = field(default_factory=dict[str, Path])
+    """The open month of each non-redownloadable series, under the fixed name it is pushed as."""
 
     @classmethod
     def from_home(
@@ -96,6 +106,14 @@ class Bucket:
         self.pending += 1
         return self.due
 
+    def keep_series(self, name: str, path: Path) -> None:
+        """Register the open file of a non-redownloadable series for every later batch.
+
+        ``name`` is the fixed name it lands under: the series key and the month, so each
+        batch overwrites the same object rather than piling up a file per commit.
+        """
+        self.series[name] = path
+
     @property
     def due(self) -> bool:
         return self.pending >= self.batch
@@ -108,6 +126,7 @@ class Bucket:
             self.last = Pushed(None, said=NO_BUCKET, at=at)
             return self.last
         calls = [self._call(item) for item in (*FRAMES, "blobs", *REF_FILES)]
+        calls.extend(self._series_calls())
         try:
             for call in calls:
                 self.runner(call)
@@ -131,6 +150,20 @@ class Bucket:
             "last": None if self.last is None else self.last.said,
             "pending": self.pending,
         }
+
+    def _series_calls(self) -> list[tuple[str, ...]]:
+        """One copyto per open series file: the fixed name on the remote is overwritten."""
+        return [
+            (
+                "rclone",
+                "copyto",
+                str(path),
+                f"{self.target()}/{SERIES_DIR}/{name}.parquet",
+                "--checksum",
+                "--stats=0",
+            )
+            for name, path in sorted(self.series.items())
+        ]
 
     def _call(self, name: str) -> tuple[str, ...]:
         source = self.store.root / name
