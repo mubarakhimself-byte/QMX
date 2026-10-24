@@ -50,7 +50,9 @@ The table is the build order. Two builders run at once only when their Files blo
 | 9 | WU9 | engine | 7 | The server is ready to be home | none | setup sequence and one root |
 | 10 | WU10 | broker | added | cTrader reads through the server, broker history | none | a forwarded read after a refresh |
 
-- [ ] Spawn one Opus builder per chain in the background with `subagent_type: poteto-agent` and `model: opus`. The prompt is `PROMPT-DATA.md`'s builder template, filled from this plan, pointing at the store's `BRIEF-BUILDER.md`, saved as `dispatch/<id>.md` before it is sent. It says "Do not spawn sub-agents."
+- [ ] Spawn one Opus builder per chain in the background with `subagent_type: poteto-agent` and `model: opus`. The prompt is `PROMPT-DATA.md`'s builder template, filled from this plan, pointing at the store's `BRIEF-BUILDER.md`, saved as `dispatch/<id>.md` before it is sent. Its first words are exactly "Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents."
+- [ ] Every change traces to a handover item, a plan section and the check that proves it. Anything that needs design rather than a fix is not built here. It goes to `BACKLOG.md`, to be designed with the operator's saved planning workflow (audit, research, alignment, inventory, studies, funnel, fold, review, check-plan).
+- [ ] Never stop to ask the operator during the build. A question goes to `QUESTIONS-FOR-OPERATOR.md` and the build goes on.
 - [ ] Record the empty Files intersection of each parallel pair in `ledger.tsv` before the second dispatch.
 - [ ] No PR touches `apps/qmx-ui/`, `~/.claude`, his real home `~/.qmx`, `C:/Users/Mubarak/Documents`, `C:/Users/Mubarak/Desktop/DATA_NARL`, or any vault value.
 - [ ] WU10 is skipped until gate G-CT opens (Appendix E). WU9 waits for WU4 to be stacked, because both edit `HO/host.py`.
@@ -68,6 +70,7 @@ The table is the build order. Two builders run at once only when their Files blo
 ### Verdict and merge, for every PR (append to the stack, merge on his go)
 
 - [ ] At the code-ready head the coordinator reads the full diff, then runs the touched suites with `-n 2` and lanes 1 to 4 in the background, and reads every exit code. It writes `review/<id>-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] On a PR that touches data, sync, the vault or connections (WU4, WU5, WU7, WU8, WU9, WU10), the coordinator also runs the `bmad-review-edge-case-hunter` skill itself on the diff and saves `review/<id>-edge-cases.md`. No checker sub-agent.
 - [ ] Blockers go back to the same builder for one fix round. Low findings go to `lows.md`.
 - [ ] `ledger.tsv` gets head, parent and patch-id.
 - [ ] The coordinator runs the full `just ci` twice in the program, at WU6's head and at the stack tip, under the lock `D:/QMX-worktrees/.ci-lock`, with `D:/Tools/rclone` on `PATH` (Appendix D).
