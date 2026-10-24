@@ -119,8 +119,20 @@ class Door:
     run_pass: str
     post: Post = _post
 
-    def read(self, series: str, *, purpose: str = "exploration") -> JsonObject:
-        """One series through the door, checked there against this pass's `data_scope`."""
+    def read(
+        self,
+        series: str,
+        *,
+        purpose: str = "exploration",
+        start_ns: int | None = None,
+        end_ns: int | None = None,
+    ) -> JsonObject:
+        """One series through the door, checked there against this pass's `data_scope`.
+
+        With no range the door serves the series' months before its seal; a range is sent as
+        given, and the door refuses it if it reaches a sealed month. The sidecar never guesses
+        where the seal sits.
+        """
         scope = pass_scope(self.run_pass)
         if not scope:
             raise DoorRefused(
@@ -128,7 +140,12 @@ class Door:
             )
         if not self.base_url:
             raise DoorUnreachable(f"no door URL: set the bundle's door_url or {DOOR_ENV}")
-        body = json.dumps({"series": series, "purpose": purpose, "data_scope": list(scope)})
+        asked: JsonObject = {"series": series, "purpose": purpose, "data_scope": list(scope)}
+        if start_ns is not None:
+            asked["start_ns"] = start_ns
+        if end_ns is not None:
+            asked["end_ns"] = end_ns
+        body = json.dumps(asked)
         try:
             raw = self.post(
                 self.base_url.rstrip("/") + DOOR_READ,
@@ -511,23 +528,34 @@ def materialise(attempt: Attempt, code: Path) -> dict[str, str]:
 
 
 def read_data(attempt: Attempt, sidecar: Sidecar, into: Path) -> None:
-    """Read every series the node's `data_scope` names through the server door, one file each."""
+    """Read every series the node's `data_scope` names through the server door, one file each.
+
+    A `start_ns` or `end_ns` the node declares in its `parameters` bounds every read; without
+    them the door serves each series' months before its seal.
+    """
     parameters = attempt.node_definition.get("parameters")
-    wanted = (
-        cast(dict[str, JsonValue], parameters).get("data_scope")
-        if isinstance(parameters, dict)
-        else None
-    )
+    declared = cast(dict[str, JsonValue], parameters) if isinstance(parameters, dict) else {}
+    wanted = declared.get("data_scope")
     if not isinstance(wanted, list) or not wanted:
         return
+    start_ns, end_ns = _bound(declared, "start_ns"), _bound(declared, "end_ns")
     door = Door(attempt.door_url, attempt.run_pass)
     into.mkdir(parents=True, exist_ok=True)
     for series in (str(item) for item in wanted):
-        answer = door.read(series)
+        answer = door.read(series, start_ns=start_ns, end_ns=end_ns)
         (into / (series.replace("/", "__") + ".json")).write_text(
             json.dumps(answer), encoding="utf-8"
         )
         sidecar.log(f"read {series} through the door")
+
+
+def _bound(parameters: Mapping[str, JsonValue], name: str) -> int | None:
+    value = parameters.get(name)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise BundleError(f"parameters.{name}: a read bound is whole nanoseconds")
+    return value
 
 
 def placement_wait(now: float) -> dict[str, Any]:

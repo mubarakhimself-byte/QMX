@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from qmx_control.server import BearerGate
 from qmx_router.passes import PassAuthority, RevocationList
-from test_market_data import FEB, JAN, _committed, _door  # pyright: ignore[reportPrivateUsage]
+from test_market_data import FEB, JAN, MAR, _committed, _door  # pyright: ignore[reportPrivateUsage]
 
 from qmx_host.door import PrincipalDoor
 from qmx_host.market_data import Placement, market_router
@@ -115,3 +115,44 @@ def test_the_local_bearer_still_reads_with_the_body_scope(tmp_path: Path) -> Non
     assert unscoped.status_code == 400
     assert unscoped.json()["detail"]["context"]["field"] == "data_scope"
     assert nobody.status_code == 401
+
+
+def test_a_pass_read_with_no_range_gets_only_the_months_before_the_seal(tmp_path: Path) -> None:
+    passes = authority(tmp_path)
+    _, token = passes.mint(run="run-1", placement="contabo", data_scope=(SERIES,))
+
+    with TestClient(door_app(tmp_path, passes)) as rest:
+        whole = rest.post("/api/data/read", json={"series": SERIES}, headers=bearer(token))
+
+    assert whole.status_code == 200
+    assert (whole.json()["months"], whole.json()["rows"]) == ([f"{SERIES}/2026-01"], 4)
+
+
+def test_a_pass_read_that_names_a_sealed_month_is_refused(tmp_path: Path) -> None:
+    passes = authority(tmp_path)
+    _, token = passes.mint(run="run-1", placement="contabo", data_scope=(SERIES,))
+    sealed = {"series": SERIES, "start_ns": FEB, "end_ns": MAR}
+
+    with TestClient(door_app(tmp_path, passes)) as rest:
+        bounded = rest.post("/api/data/read", json=sealed, headers=bearer(token))
+        final = rest.post(
+            "/api/data/read",
+            json={"series": SERIES, "purpose": "final_look"},
+            headers=bearer(token),
+        )
+
+    assert bounded.status_code == 400
+    assert bounded.json()["detail"]["context"]["field"] == "seal"
+    assert (final.status_code, final.json()["detail"]["context"]["field"]) == (403, "purpose")
+
+
+def test_the_local_bearer_no_range_read_is_still_refused_by_the_seal(tmp_path: Path) -> None:
+    passes = authority(tmp_path)
+    whole = {"series": SERIES, "data_scope": [SERIES]}
+
+    with TestClient(door_app(tmp_path, passes)) as rest:
+        refused = rest.post("/api/data/read", json=whole, headers=bearer(LOCAL))
+
+    assert refused.status_code == 400
+    assert refused.json()["detail"]["context"]["field"] == "seal"
+    assert refused.json()["detail"]["context"]["months"] == [f"{SERIES}/2026-02"]

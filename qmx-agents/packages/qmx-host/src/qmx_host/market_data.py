@@ -337,6 +337,7 @@ class MarketDoor:
         purpose: Purpose | str = Purpose.EXPLORATION,
         data_scope: Sequence[str] | None = None,
         into: Path | None = None,
+        open_months: bool = False,
     ) -> Result[ReadAnswer]:
         """Serve one read through the seal and the split, or refuse it by name.
 
@@ -344,6 +345,10 @@ class MarketDoor:
         answers remote callers refuses a read with no scope; the PC's own door, whose caller
         is the operator and his copilot, needs none. ``purpose`` arrives as a word from a
         route or a tool and is parsed here into the closed vocabulary it names.
+
+        ``open_months`` serves only the months before the seal instead of refusing the read
+        for holding a sealed one. It is for a remote attempt's read with no range, which cannot
+        know where this door's seal sits; a read that names its range is refused as before.
         """
         if not isinstance(purpose, Purpose):
             try:
@@ -392,7 +397,7 @@ class MarketDoor:
                 refused.append(key.text)
             else:
                 served.append(key)
-        if refused:
+        if refused and not (open_months and served):
             return policy_rejection(
                 "seal",
                 f"{SEAL_READ_REASON}; a read into the sealed no-peek window is refused at the "
@@ -958,20 +963,19 @@ class VerifyBody(BaseModel):
     fingerprints: list[str]
 
 
-def read_scope(body: ReadBody, request: Request) -> list[str] | None:
-    """The scope a read is checked against. A run-pass caller's comes from the pass the principal
-    door verified, never from the body; a body that asks for more than the pass is refused. A
-    local-bearer caller's comes from the body, as before. A run pass reads by series only: a
-    target folder or a fingerprint list on this machine is not its to name."""
-    minted: object = getattr(request.state, RUN_PASS, None)
-    if not isinstance(minted, Pass):
-        return body.data_scope
+def pass_scope(body: ReadBody, minted: Pass) -> list[str]:
+    """The scope a run-pass read is checked against: the pass's own, never the body's. A body that
+    asks for more than the pass is refused. A run pass reads by series only: a target folder or a
+    fingerprint list on this machine is not its to name, and the journaled final look is the
+    operator's, never a remote attempt's."""
     scope = list(minted.data_scope)
     wider = sorted(set(body.data_scope or ()) - set(scope))
     if wider:
         raise _pass_refusal("data_scope", "the body asks for more than the run pass", wider=wider)
     if body.into is not None or body.fingerprints:
         raise _pass_refusal("into", "a run pass reads by series, never into a path or by file")
+    if body.purpose is Purpose.FINAL_LOOK:
+        raise _pass_refusal("purpose", "a run pass never takes the final look")
     return scope
 
 
@@ -1010,14 +1014,18 @@ def market_router(door: MarketDoor) -> APIRouter:
 
     @router.post("/api/data/read")
     def read(body: ReadBody, request: Request) -> dict[str, object]:
+        # A local-bearer caller keeps the body's scope and the whole-read seal refusal. A run
+        # pass with no range gets the series' open months: it cannot know where the seal sits.
+        minted: object = getattr(request.state, RUN_PASS, None)
         answered = door.read(
             body.series,
             fingerprints=body.fingerprints,
             start_ns=body.start_ns,
             end_ns=body.end_ns,
             purpose=body.purpose,
-            data_scope=read_scope(body, request),
+            data_scope=pass_scope(body, minted) if isinstance(minted, Pass) else body.data_scope,
             into=Path(body.into) if body.into else None,
+            open_months=isinstance(minted, Pass) and body.start_ns is None and body.end_ns is None,
         )
         if is_refusal(answered):
             raise _refused(answered)
