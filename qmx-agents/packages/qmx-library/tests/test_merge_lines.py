@@ -128,7 +128,7 @@ def test_a_json_merge_with_one_clashing_key_mints_one_conflict_entry(store: Stor
         "theirs": 2,
     }
 
-    resolved = store.resolve_conflict(ALICE, conflict.object_id, values={"a": 3})
+    resolved = store.resolve_conflict(ALICE, conflict.object_id, values={"blobs.spec.a": 3})
 
     assert resolved.outcome == "merged"
     spec = json.loads(store.get(OPERATOR, resolved.object_id, blobs="fetch").data["spec"])
@@ -150,6 +150,11 @@ def test_a_binary_slot_changed_on_both_sides_keeps_pick_one(store: Store) -> Non
     assert merged.outcome == "conflict"
     (conflict,) = store.conflicts(OPERATOR, "a")
     assert conflict.fields["entries"] == [{"path": "blobs.content"}]
+    theirs = store.get(OPERATOR, str(conflict.fields["theirs"])).blobs["content"].blob_id
+
+    resolved = store.resolve_conflict(ALICE, conflict.object_id, values={"blobs.content": theirs})
+
+    assert store.get(OPERATOR, resolved.object_id, blobs="fetch").data["content"] == b"bob"
 
 
 def test_blame_names_the_version_that_last_changed_each_line(store: Store) -> None:
@@ -201,7 +206,9 @@ def test_resolve_refuses_a_conflict_it_cannot_close(store: Store) -> None:
     merged = store.merge(BOB, item, from_ref=agent_ref("bob", item), into=drafts_ref(item))
     assert merged.outcome == "conflict"
 
-    with pytest.raises(LibraryRefused, match=r"^merge_conflict: .* needs text for body\.md"):
+    with pytest.raises(
+        LibraryRefused, match=r"^merge_conflict: .* needs a value for blobs\.body\.md"
+    ):
         store.resolve_conflict(BOB, merged.object_id)
 
     closed = store.resolve_conflict(BOB, merged.object_id, text="one\ntwo\n")
@@ -209,3 +216,65 @@ def test_resolve_refuses_a_conflict_it_cannot_close(store: Store) -> None:
         store.resolve_conflict(BOB, merged.object_id, text="again\n")
     assert store.conflicts(OPERATOR, item) == []
     assert body(store, closed.object_id) == "one\ntwo\n"
+
+
+@pytest.mark.parametrize(
+    ("theirs", "outcome", "text"),
+    [
+        ("stop: 20 pips\n\nexit: 3R\n", "merged", "stop: 15 pips\n\nexit: 3R\n"),
+        (
+            "stop: 25 pips\n\nexit: 2R\n",
+            "conflict",
+            "<<<<<<< ours\nstop: 15 pips\n||||||| base\nstop: 20 pips\n=======\n"
+            "stop: 25 pips\n>>>>>>> theirs\n\nexit: 2R\n",
+        ),
+    ],
+)
+def test_p_merge_cases_through_the_store(
+    store: Store, theirs: str, outcome: str, text: str
+) -> None:
+    """git merge-file calls edits on adjacent lines one clash, so the two lines sit apart."""
+    found = store.put(OPERATOR, note("stop: 20 pips\n\nexit: 2R\n"), on=MAIN, expected_head=None)
+    item = found.item
+    edit(store, ALICE, found.object_id, note("stop: 15 pips\n\nexit: 2R\n"), item)
+    edit(store, BOB, found.object_id, note(theirs), item)
+    store.merge(ALICE, item, from_ref=agent_ref("alice", item), into=drafts_ref(item))
+
+    merged = store.merge(BOB, item, from_ref=agent_ref("bob", item), into=drafts_ref(item))
+
+    assert merged.outcome == outcome
+    if outcome == "merged":
+        assert body(store, merged.object_id) == text
+    else:
+        conflict = store.get(OPERATOR, merged.object_id)
+        (entry,) = cast(list[dict[str, Any]], conflict.fields["entries"])
+        assert (entry["text"], entry["conflicts"]) == (text, 1)
+
+
+def test_a_resolve_keeps_the_clean_changes_of_both_sides(store: Store) -> None:
+    found = store.put(OPERATOR, note("one\ntwo\n"), on=MAIN, expected_head=None)
+    item = found.item
+    edit(store, ALICE, found.object_id, note("one\nTWO\n"), item)
+    renamed = Draft("note", item, title="renamed", blobs={"body.md": b"one\n2\n"})
+    edit(store, BOB, found.object_id, renamed, item)
+    store.merge(ALICE, item, from_ref=agent_ref("alice", item), into=drafts_ref(item))
+    merged = store.merge(BOB, item, from_ref=agent_ref("bob", item), into=drafts_ref(item))
+
+    closed = store.resolve_conflict(ALICE, merged.object_id, text="one\nTWO\n")
+
+    landed = store.get(OPERATOR, closed.object_id)
+    assert (landed.title, body(store, closed.object_id)) == ("renamed", "one\nTWO\n")
+
+
+def test_a_json_merge_keeps_a_null_and_a_deleted_key(store: Store) -> None:
+    found = store.put(OPERATOR, setup({"a": 0, "b": 0, "c": 0}), on=MAIN, expected_head=None)
+    item = found.item
+    edit(store, ALICE, found.object_id, setup({"a": None, "b": 0, "c": 0}, item), item)
+    edit(store, BOB, found.object_id, setup({"a": 0, "b": 0}, item), item)
+    store.merge(ALICE, item, from_ref=agent_ref("alice", item), into=drafts_ref(item))
+
+    merged = store.merge(BOB, item, from_ref=agent_ref("bob", item), into=drafts_ref(item))
+
+    assert merged.outcome == "merged"
+    spec = json.loads(store.get(OPERATOR, merged.object_id, blobs="fetch").data["spec"])
+    assert spec == {"a": None, "b": 0}
