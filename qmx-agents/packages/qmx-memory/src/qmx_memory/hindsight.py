@@ -210,7 +210,12 @@ class HindsightIndex:
             self.bank(bank)
 
     def _isolate(self) -> None:
-        """Hindsight's own folders and its embedder's downloads, under the memory home on `D:`."""
+        """Hindsight's own folders and its embedder's downloads, under the memory home on `D:`.
+
+        The tracing names are `setdefault` because a lane that starts an embedded server and must
+        not send to the real collector can name them first; the host scrubs the environment, so
+        production takes the defaults.
+        """
         home = self.config.home
         home.mkdir(parents=True, exist_ok=True)
         for name in ("HF_HOME", "SENTENCE_TRANSFORMERS_HOME"):
@@ -218,9 +223,9 @@ class HindsightIndex:
         os.environ["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_RERANKER_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_ENABLE_OBSERVATIONS"] = "false"
-        os.environ[OTEL_ENABLED] = "1"
-        os.environ[OTEL_ENDPOINT] = COLLECTOR_ENDPOINT
-        os.environ[OTEL_SERVICE] = SERVICE
+        os.environ.setdefault(OTEL_ENABLED, "1")
+        os.environ.setdefault(OTEL_ENDPOINT, COLLECTOR_ENDPOINT)
+        os.environ.setdefault(OTEL_SERVICE, SERVICE)
 
     def bank(self, bank_id: str) -> str:
         """The bank, made once per process with the plan's two settings."""
