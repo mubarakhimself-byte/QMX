@@ -39,7 +39,8 @@
   "annotations": [
     "tags",
     "aliases",
-    "intent_key"
+    "intent_key",
+    "workspace"
   ],
   "merge": {
     "default": "pick-one"

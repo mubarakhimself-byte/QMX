@@ -15,6 +15,21 @@
       "ask_above_usd": {
         "type": "number",
         "description": "his ask-above number for compute"
+      },
+      "series": {
+        "type": "string",
+        "description": "the market-data series this model trains on, read through the door"
+      },
+      "months": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "the months to materialise, as YYYY-MM; no other partition is read"
+      },
+      "seed": {
+        "type": "integer",
+        "description": "the seed the model records and a rerun reproduces"
       }
     }
   },
@@ -46,5 +61,10 @@
     "Assemble the model card": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]], "fail": [[{"node": "Stop on a failed check", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "ml-training-run-with-a-holdout", "needs": ["qmb-door", "sandbox"]}
+  "meta": {
+    "template": "ml-training-run-with-a-holdout",
+    "needs": ["qmb-door", "sandbox"],
+    "levels": ["experiment"],
+    "gpu_slot": 1
+  }
 }
