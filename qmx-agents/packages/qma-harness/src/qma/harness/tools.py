@@ -540,6 +540,12 @@ def _app_def(row: OperationSpec, schema: Mapping[str, object], control: ControlS
         try:
             found = await asyncio.to_thread(runtime.call, row.owner, row.op, arguments, pin=pin)
         except Exception as error:
+            if getattr(error, "code", None) == "not_running":
+                return failure(
+                    "app_not_running",
+                    f"{row.owner} stopped after this chat's tools were listed; start it, then "
+                    "open a new chat",
+                )
             return _app_failure(error)
         text = json.dumps(found, default=str)
         answer = await asyncio.to_thread(spill, text, row, control.library_save)

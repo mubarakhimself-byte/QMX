@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import sys
 from collections.abc import Callable, Iterable, Mapping
@@ -251,6 +252,25 @@ def test_a_running_app_serves_its_operations_to_a_chat_until_it_stops(tmp_path: 
     assert running["apps_admin_move"].effect is Effect.MANAGE
     assert "app_exchange-status_ping" not in stopped
     assert "apps_admin_move" in stopped
+
+
+def test_an_app_that_stopped_after_the_tool_list_answers_app_not_running(tmp_path: Path) -> None:
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    try:
+        control.apps_create(str(operated_app(tmp_path)), trust="first_party")
+        control.apps_start("exchange-status")
+        broker = BrokerService(home.root)
+        defs = asyncio.run(tool_defs(control=control, broker=broker, domain=domain, delegate=None))
+        [ping] = [tool for tool in defs if tool.name == "app_exchange-status_ping"]
+        control.apps_stop("exchange-status")
+        answer = asyncio.run(ping.call({}))
+    finally:
+        control.close()
+    assert answer["is_error"] is True
+    assert json.loads(answer["content"][0]["text"])["error"]["code"] == "app_not_running"
 
 
 class ListedApps:

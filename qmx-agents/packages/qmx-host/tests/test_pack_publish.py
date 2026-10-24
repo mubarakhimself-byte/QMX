@@ -1,5 +1,5 @@
-"""A publish lands the pack in the Library and materialises its view at once, so the next chat
-loads its skills with no restart."""
+"""A publish lands the pack on `main` as the operator's act and materialises its view at once, so
+the next chat's surface holds the pack's skills with no restart."""
 
 from __future__ import annotations
 
@@ -9,19 +9,28 @@ import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
-from qma.harness import QmxHome, packs
+from qma.harness import QmxHome
+from qma.harness.launch import Home, Interactive
+from qma.harness.surface import Declaration, HomeSlots, Supply, build
 from qmx_engine.ledger import redact
-from qmx_library.port import LibraryRefused
+from qmx_library.principal import MAIN
 from qmx_library.store import Store
 
 from qmx_host.sessions import PackLanding
 
-PLUGIN: dict[str, object] = {"name": "macro-bias", "version": "1.2.0", "operations": {"bias": {}}}
-SKILL = "---\nname: brief\ndescription: Read the morning bias\n---\nRead it.\n"
+SKILL = "---\nname: {name}\ndescription: Read the morning bias\n---\nRead it.\n"
 
 
-def bundle(files: dict[str, str]) -> bytes:
+def bundle(version: str, skill: str) -> bytes:
+    plugin: dict[str, object] = {
+        "name": "macro-bias",
+        "version": version,
+        "operations": {"bias": {}},
+    }
+    files = {
+        ".claude-plugin/plugin.json": json.dumps(plugin),
+        f"skills/{skill}/SKILL.md": SKILL.format(name=skill),
+    }
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w") as tar:
         for name, text in files.items():
@@ -41,26 +50,29 @@ class Pack:
     bundle: bytes
 
 
-@pytest.mark.xfail(
-    raises=LibraryRefused,
-    strict=True,
-    reason="the engine principal may not put on refs/apps/<id>, nor land a definition on main "
-    "(qmx_library.principal.may_advance, Store.merge); the landing's authority is open",
-)
-def test_a_published_pack_is_a_loadable_view_before_any_restart(tmp_path: Path) -> None:
-    home = QmxHome(tmp_path / "home")
-    published = Pack(
-        "macro-bias",
-        "1.2.0",
-        "sha256:aa",
-        ("bias",),
-        bundle({".claude-plugin/plugin.json": json.dumps(PLUGIN), "skills/brief/SKILL.md": SKILL}),
+def chat_skills(home: QmxHome) -> tuple[str, ...]:
+    """The pack skills a new chat in the `macro-bias` pack set launches with."""
+    supply = Supply((), HomeSlots(home), {}, (home.plugin_dir,), home.root / "spill")
+    found = build(
+        Interactive(), Home(), ("macro-bias",), Declaration(), supply, workspace=home.root / "ws"
     )
+    return tuple(name for name in found.skills if name.startswith("macro-bias:"))
+
+
+def test_a_published_pack_reaches_the_next_chat_before_any_restart(tmp_path: Path) -> None:
+    home = QmxHome(tmp_path / "home")
+    first = Pack("macro-bias", "1.2.0", "sha256:aa", ("bias",), bundle("1.2.0", "brief"))
+    second = Pack("macro-bias", "1.3.0", "sha256:bb", ("bias",), bundle("1.3.0", "outlook"))
     with Store.open(tmp_path / "library", redactor=redact) as store:
-        before = packs.survey(home.packs_dir, ["macro-bias"])
-        landed = PackLanding(store, home)(published)
-    after = packs.survey(home.packs_dir, ["macro-bias"])
-    assert before.views == ()
-    assert [(view.name, view.skills, view.objects) for view in after.views] == [
-        ("macro-bias", ("brief",), (landed,))
-    ]
+        before = chat_skills(home)
+        land = PackLanding(store, home)
+        landed = land(first)
+        after_first = chat_skills(home)
+        republished = land(second)
+        after_second = chat_skills(home)
+        head = store.head("macro-bias", MAIN)
+    assert before == ()
+    assert after_first == ("macro-bias:brief",)
+    assert after_second == ("macro-bias:outlook",)
+    assert head is not None
+    assert head[0] == republished != landed
