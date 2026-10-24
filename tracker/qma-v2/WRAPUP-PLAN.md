@@ -322,6 +322,7 @@ Closes list A item 4. Sources are build BACKLOG HYG0, RTR4 and RTR6. Real step n
 - [ ] Edit `E/ports/harness_adapter.py` (`profiles()` drops a row with no keyring entry or a disabled row) and `E/settings.py` (read `ROLE_TIERS` from the router).
 - [ ] Edit `R/registry.py` (one helper restricting `load(home / "profiles")` to the configured, enabled `[providers]` rows) and `R/agents.py` if the helper needs it.
 - [ ] Edit `H/chat.py` (pass `Supply(registry=...)`) and `H/delegate.py` (line 421).
+- [ ] Edit `R/complete.py` (`streamed_answer` splits the stream into SSE blocks on blank lines before `parse_sse`, as `R/relay.py:1436-1446` does, because a multi-chunk chat-completions stream parses to an empty answer today, found by WU2) and the bundled `openrouter.toml` profile (`use = "test_only"` becomes a real provider row, because OpenRouter is his key provider, `decisions.md` 1). Add one router test for each.
 - [ ] Add tests in `ET/`, the router's `tests/` and `HT/`.
 
 **Build.**
@@ -715,7 +716,7 @@ Facts read at `f05fc64b` on 2026-10-24 by a read-only Opus pass (no edits, no sp
 | WU5, WU10 | `T/catalog.py` (WU4 too) | WU4, then WU10 |
 | WU7, WU9 | none (`QX/server.py` in WU7, `QX/node.py` in WU9) | free |
 
-Parallel pairs and their intersections, checked from the Files blocks above. WU1 and WU5 share none. WU2 and WU6 share none. WU3 and WU7 share none. WU4, WU8 and WU9 all edit `HO/host.py`, so they run one after another, WU4 first.
+Parallel pairs and their intersections, checked from the Files blocks above. WU1 and WU5 share none. WU2 and WU6 share none. WU3 and WU7 share none. WU3 and WU4 share none, so WU4 runs beside WU3 on a fresh builder, both from WU2's head, and WU4 is rebased onto WU3 when stacked. WU4, WU8 and WU9 all edit `HO/host.py`, so they run one after another, WU4 first.
 
 ## Appendix D. Defaults
 
