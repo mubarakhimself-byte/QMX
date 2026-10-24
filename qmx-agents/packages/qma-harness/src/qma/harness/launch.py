@@ -557,7 +557,7 @@ def assert_scrubbed(environ: Mapping[str, str]) -> None:
     a library sets at run time never stops every launch."""
     found = sorted(name for name in environ if banned_fragment(name))
     if found:
-        raise LaunchRefused(f"the host environment holds {', '.join(found)}; restart qma.serve")
+        raise LaunchRefused(f"the host environment holds {', '.join(found)}; restart qmx_host")
 
 
 ARGV_BUDGET: Final = 30_000

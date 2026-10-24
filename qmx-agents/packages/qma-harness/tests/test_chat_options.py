@@ -12,6 +12,7 @@ import test_chat
 from claude_agent_sdk import AgentDefinition, PermissionResultAllow, PermissionResultDeny
 from claude_agent_sdk.types import ToolPermissionContext
 from qmx_router.agents import ROLE_TIERS
+from qmx_router.profiles import PLAN
 from test_chat import FakeClient, run
 from test_table import read_plan
 
@@ -43,7 +44,6 @@ from qma.harness.home import (
 )
 from qma.harness.launch import COMPACT_PCT_ENV as COMPACT
 from qma.harness.launch import Budgets, ChatConfig, ChatKind, build_options
-from qma.harness.profiles import PLAN
 from qma.harness.routes import control_service
 from qma.harness.surface import HomeSlots, Supply, build, declaration
 

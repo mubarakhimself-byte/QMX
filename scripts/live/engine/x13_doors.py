@@ -17,11 +17,11 @@ Lanes are `regression rest tools cancel menu perf`; none named runs all. Each wr
   with no ask; publish raises exactly one ask and then returns a card, and no version exists.
 - `cancel` (lane 4): a run held on a `wait` node is cancelled over REST and ends `stopped`
   (reason `operator`); `GET /api/runs` lists none of the engine's runs.
-- `menu` (lanes 5 to 9): `qma.serve` forwards to `qmx_host` and serves the workflow doors; REST
-  explain equals the CLI's; a second host on one home is refused in one line naming the pid; a
-  run's events stream in `seq` order; no bearer, 401.
-- `perf`: start to a healthy `/api/health`, five starts of `qma.serve` in the `--parent` tree
-  first, then five of `qmx_host`.
+- `menu` (lanes 5 to 9): `qmx_host` serves the workflow doors; REST explain equals the CLI's; a
+  second host on one home is refused in one line naming the pid; a run's events stream in `seq`
+  order; no bearer, 401.
+- `perf`: start to a healthy `/api/health`, five starts of `qmx_host` in the `--parent` tree
+  first, then five at head.
 
 No model, no key, no ship home. Hosts run on throwaway homes through `lane_host.py`, with a
 bearer made for each home and kept in its `lane-bearer` file; the operator's control token in the
@@ -432,13 +432,13 @@ def explain_cli(home: Path, run_id: str) -> dict[str, Any]:
 
 
 def menu(log: Log) -> None:
-    plain = throwaway_home(PR, "menu-serve")
-    with started(log, ["qma.serve"], plain, "qma-serve") as (client, process, _):
+    plain = throwaway_home(PR, "menu-host")
+    with started(log, ["qmx_host"], plain, "qmx-host") as (client, process, _):
         serving = client.get("/api/health").json()["pid"]
         saved = client.put("/api/workflows/chain/draft", json=chain("chain")).json()
         tree = {process.pid} | {child.pid for child in psutil.Process(process.pid).children()}
         log.check(
-            "lane 5: qma.serve forwards to qmx_host in its own process, which serves the doors",
+            "lane 5: qmx_host serves the workflow doors in its own process",
             serving in tree and saved.get("state") == "validated",
             (serving, sorted(tree), saved.get("state")),
         )
@@ -494,13 +494,13 @@ def perf(log: Log, parent: Path) -> None:
                 times.append(seconds)
         return times
 
-    baseline = starts(["qma.serve"], "qma-serve", parent)
+    baseline = starts(["qmx_host"], "host-parent", parent)
     head = starts(["qmx_host"], "host", None)
-    log(f"qma.serve at the parent {parent}, to healthy, s: {[round(t, 2) for t in baseline]}")
-    log(f"qmx_host start to healthy, s: {[round(t, 2) for t in head]}")
+    log(f"qmx_host at the parent {parent}, to healthy, s: {[round(t, 2) for t in baseline]}")
+    log(f"qmx_host at head to healthy, s: {[round(t, 2) for t in head]}")
     log(
-        f"perf median: qma.serve at the parent {statistics.median(baseline):.2f} s, "
-        f"qmx_host {statistics.median(head):.2f} s (recorded, not gated)"
+        f"perf median: qmx_host at the parent {statistics.median(baseline):.2f} s, "
+        f"at head {statistics.median(head):.2f} s (recorded, not gated)"
     )
 
 

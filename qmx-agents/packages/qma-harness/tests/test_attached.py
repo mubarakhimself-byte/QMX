@@ -9,10 +9,10 @@ from typing import cast
 import pytest
 from qmx_control.context import AttachedRef
 from qmx_router.ids import SessionId
+from qmx_router.profiles import PLAN
 
 from qma.harness.home import ChatRecord, QmxHome, read_record, write_record
 from qma.harness.launch import ChatConfig, Home, Interactive
-from qma.harness.profiles import PLAN
 from qma.harness.surface import (
     CHARS_PER_TOKEN,
     EXCERPT_HARD,

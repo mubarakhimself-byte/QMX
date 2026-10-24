@@ -1,5 +1,5 @@
-"""Start a host module (`qmx_host`, or a forwarder such as `qma.serve`) for a lane, with a lane
-bearer in place of the operator's control token in the OS vault.
+"""Start a host module (`qmx_host`, or another lane module) for a lane, with a lane bearer in
+place of the operator's control token in the OS vault.
 
 `python lane_host.py <module> serve --home <home> --port <port>`
 

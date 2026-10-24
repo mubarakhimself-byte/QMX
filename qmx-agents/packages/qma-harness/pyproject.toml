@@ -28,7 +28,7 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-# qma.boot, qma.serve, qma.launcher, qma.console, qma.harness and qma.gpt live in the PEP 420
+# qma.boot, qma.launcher, qma.console, qma.harness and qma.gpt live in the PEP 420
 # namespace `qma`. uv_build takes only packages in a module list, so the whole namespace under
 # src/qma ships, and test_import_rules.py holds the module boundaries.
 module-name = "qma"

@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from qmx_control.models import ControlError, Document
 from qmx_control.server import create_app
+from qmx_router.profiles import PLAN
 
 from qma.harness import packs
 from qma.harness.home import (
@@ -32,7 +33,6 @@ from qma.harness.home import (
     write_record,
 )
 from qma.harness.launch import ChatConfig, Child, Interactive, LaunchRefused
-from qma.harness.profiles import PLAN
 from qma.harness.routes import control_service, router
 
 BEARER = "test-token"

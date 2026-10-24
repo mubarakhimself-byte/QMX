@@ -60,7 +60,7 @@ class Log:
 
 
 def boot() -> tuple[str, ...]:
-    """What `qma.serve` will do first: scrub this process, then set the scratch dirs."""
+    """What `qmx_host` will do first: scrub this process, then set the scratch dirs."""
     removed = scrub_process_env(os.environ)
     for folder in throwaway_env().values():
         Path(folder).mkdir(parents=True, exist_ok=True)
@@ -341,7 +341,7 @@ USAGE_EVENTS = ("model_call", "token_count")
 
 def capture_grants() -> list[Any]:
     """Every grant the relay mints from now on, so a check can grep for its secret."""
-    from qma.harness.relay import Relay  # noqa: PLC0415
+    from qmx_router.relay import Relay  # noqa: PLC0415
 
     minted: list[Any] = []
     original = Relay.grant

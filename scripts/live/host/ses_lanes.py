@@ -207,7 +207,7 @@ def lane_ship() -> bool:
 def record(chat: str) -> Any:
     from qma.harness import Home, NewChat, SessionId  # noqa: PLC0415
     from qma.harness.home import ChatRecord  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName  # noqa: PLC0415
 
     config = NewChat(TITLE).config(ProfileName("claude"), Path(), Home("lab", "ses-pod"))
     return ChatRecord(SessionId(chat), config, True, "idle")

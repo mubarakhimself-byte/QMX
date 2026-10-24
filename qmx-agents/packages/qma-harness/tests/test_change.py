@@ -14,6 +14,8 @@ import pytest
 import test_chat
 from claude_agent_sdk import Message, TaskStartedMessage
 from qmx_control.server import create_app
+from qmx_router.profiles import ProfileName
+from qmx_router.relay import Relay, RelayGrant
 from test_chat import (
     ROUTER_ROW,
     STOP_RULE_2,
@@ -50,8 +52,6 @@ from qma.harness.launch import (
     classify_change,
     resets_cache,
 )
-from qma.harness.profiles import ProfileName
-from qma.harness.relay import Relay, RelayGrant
 from qma.harness.routes import chat_router, control_service
 
 home = test_chat.home

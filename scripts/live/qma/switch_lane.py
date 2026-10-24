@@ -107,7 +107,7 @@ async def fake_pair(
 
 async def quote(log: Log, session: Session, **change: Any) -> Any:
     from qma.harness import ConfigChange  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName  # noqa: PLC0415
 
     if "profile" in change:
         change["profile"] = ProfileName(change["profile"])

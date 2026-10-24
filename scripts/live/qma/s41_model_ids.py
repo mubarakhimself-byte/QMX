@@ -28,8 +28,8 @@ IDS = (
 
 async def run(log: Log) -> None:
     from qma.harness import Harness, LaunchRefused, NewChat, QmxHome, TestMode  # noqa: PLC0415
-    from qma.harness.profiles import ProfileName  # noqa: PLC0415
     from qma.harness.routes import control_service  # noqa: PLC0415
+    from qmx_router.profiles import ProfileName  # noqa: PLC0415
 
     root = throwaway_home("hp7-s41")
     fake = FakeModel([], every_request=True).start()

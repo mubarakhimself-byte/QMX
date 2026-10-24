@@ -47,7 +47,7 @@ class Need(StrEnum):
     OPENROUTER = "the OpenRouter key"
     GPT = "the ChatGPT sign-in"
     KEYRING = "this PC's keyring"
-    HOST = "a running qma.serve host"
+    HOST = "a running qmx_host host"
     OPERATOR = "the operator"
 
 
@@ -235,8 +235,8 @@ def spawn(
 
 @contextlib.contextmanager
 def host(plan: Plan, env: dict[str, str]) -> Generator[None]:
-    """`qma.serve` on `HOST_PORT`, up until `/api/health` answers."""
-    argv = [sys.executable, "-m", "qma.serve", "serve", "--home", str(plan.host_home)]
+    """`qmx_host` on `HOST_PORT`, up until `/api/health` answers."""
+    argv = [sys.executable, "-m", "qmx_host", "serve", "--home", str(plan.host_home)]
     out = plan.evidence / "run_all" / "host.out"
     process = spawn([*argv, "--port", str(HOST_PORT)], cwd=plan.scripts, env=env, out=out)
     try:

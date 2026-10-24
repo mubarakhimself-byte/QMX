@@ -56,17 +56,11 @@ def test_the_old_paths_are_the_moved_modules() -> None:
     import qma.gpt.probe
     import qma.gpt.siwc
     import qma.gpt.translate
-    import qma.harness.profiles
-    import qma.harness.relay
 
     import qmx_router.gpt.probe
     import qmx_router.gpt.siwc
     import qmx_router.gpt.translate
-    import qmx_router.profiles
-    import qmx_router.relay
 
-    assert qma.harness.relay is qmx_router.relay
-    assert qma.harness.profiles is qmx_router.profiles
     assert qma.gpt.translate is qmx_router.gpt.translate
     assert qma.gpt.siwc is qmx_router.gpt.siwc
     assert qma.gpt.probe is qmx_router.gpt.probe

@@ -52,6 +52,7 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qmx_control.models import ControlError, Document
 from qmx_control.service import ControlService
+from qmx_router.profiles import ProfileName
 
 from qma.boot import KeepListRefused, parse_keep_names
 from qma.harness.chat import (
@@ -88,7 +89,6 @@ from qma.harness.launch import (
     LaunchRefused,
     PermissionMode,
 )
-from qma.harness.profiles import ProfileName
 from qma.harness.project import Delta, InChild
 from qma.harness.usage import token_sums
 

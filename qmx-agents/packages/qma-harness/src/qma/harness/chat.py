@@ -71,6 +71,8 @@ from claude_agent_sdk._internal import message_parser
 from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
+from qmx_router.profiles import PLAN
+from qmx_router.relay import GrantRefused
 
 from qma.harness.guard import Deny, guard
 from qma.harness.home import (
@@ -108,7 +110,6 @@ from qma.harness.launch import (
     unattended,
     verbatim,
 )
-from qma.harness.profiles import PLAN
 from qma.harness.project import (
     Block,
     Compacted,
@@ -129,7 +130,6 @@ from qma.harness.project import (
     redact,
     redacted,
 )
-from qma.harness.relay import GrantRefused
 from qma.harness.surface import (
     SLOTS_PLUGIN,
     HomeSlots,
@@ -165,11 +165,11 @@ if TYPE_CHECKING:
     from claude_agent_sdk.types import McpStatusResponse, ToolPermissionContext
     from qmx_broker.service import BrokerService
     from qmx_control.service import ControlService
+    from qmx_router.relay import Relay, RelayGrant
     from qmx_tools.service import DomainContext
 
     from qma.harness.guard import GuardRules
     from qma.harness.procs import AgentProcessCap
-    from qma.harness.relay import Relay, RelayGrant
 
 _sdk_parse = message_parser.parse_message
 
