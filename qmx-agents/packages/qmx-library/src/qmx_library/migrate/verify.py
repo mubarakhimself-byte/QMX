@@ -12,13 +12,14 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, cast
 
+from qmx_library.migrate import pre
 from qmx_library.migrate.snapshot import Counts
 
 LEGACY_B = "json_extract(fields, '$.legacy_id') IS NOT NULL"
@@ -114,8 +115,46 @@ def chain_problem(by_id: dict[str, dict[str, Any]], found: dict[str, Any]) -> st
     return None
 
 
-def verify(home: Path, store_root: Path) -> Verification:
-    before = Counts.read(home)
+def without_junk(home: Path, counts: Counts, junk: Sequence[str]) -> Counts:
+    """Step 0's numbers with the filtered test junk taken out, by id (fix-check 58, N18)."""
+    frozen = pre(home)
+    if not junk or not (frozen / "library.db").exists():
+        return counts
+    skipped = set(junk)
+    kinds, roots = dict(counts.kinds), dict(counts.versions)
+    with read_only(frozen / "library.db") as db:
+        rows = [
+            cast(dict[str, Any], json.loads(r)) for (r,) in db.execute("SELECT data FROM items")
+        ]
+    dropped: set[str] = set()
+    kept: set[str] = set()
+    for row in rows:
+        if str(row["id"]) in skipped:
+            dropped.add(str(row["sha256"]))
+        else:
+            kept.add(str(row["sha256"]))
+        if str(row["id"]) not in skipped:
+            continue
+        kind, root = str(row["kind"]), str(row["root_id"])
+        kinds[kind] = kinds.get(kind, 0) - 1
+        roots[root] = roots.get(root, 0) - 1
+    gone = dropped - kept
+    sizes = {
+        path.name: path.stat().st_size
+        for path in (frozen / "artifacts").glob("*")
+        if path.is_file() and path.name in gone
+    }
+    return replace(
+        counts,
+        kinds={kind: n for kind, n in kinds.items() if n},
+        versions={root: n for root, n in roots.items() if n},
+        blobs=counts.blobs - len(gone),
+        blob_bytes=counts.blob_bytes - sum(sizes.values()),
+    )
+
+
+def verify(home: Path, store_root: Path, *, junk: Sequence[str] = ()) -> Verification:
+    before = without_junk(home, Counts.read(home), junk)
     with read_only(store_root / "catalog.db") as db:
         library_b = objects(db, LEGACY_B)
         registry = objects(db, "json_extract(fields, '$.governed_fp1') IS NOT NULL")

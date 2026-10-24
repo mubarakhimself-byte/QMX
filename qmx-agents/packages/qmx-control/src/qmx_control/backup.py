@@ -15,15 +15,30 @@ from pathlib import Path
 from qmx_control.models import ControlError, Document
 
 MAX_BYTES = 95_000_000
+LIBRARY = Path("library")
+"""The one Library store `<home>/library/` (MIGRATION step 6)."""
+LIBRARY_EVIDENCE = frozenset({"objects", "refs", "edges", "annotations", "kinds"})
+"""The store's objects, its three logs, its annotations and the kind schemas. `catalog.db` and
+`writer.lock` stay out because both are derived from those files, and `blobs/` is excluded like
+every other blob folder, so the snapshot stays a small-store backup that rebuilds the index on
+restore."""
 DATABASES = {
     "memory.db",
     "runs.db",
-    "library.db",
     "experiments.db",
     "experiment.db",
     "app.db",
     "apps.db",
 }
+
+
+def evidence(relative: Path) -> bool:
+    """Whether a home path is one of the Library store's evidence files."""
+    return (
+        relative.is_relative_to(LIBRARY)
+        and len(relative.parts) > 2
+        and relative.parts[1] in LIBRARY_EVIDENCE
+    )
 
 
 def _git(directory: Path, *args: str) -> str:
@@ -111,6 +126,7 @@ def weekly_backup(home: Path, repository: str, *, dry_run: bool = False) -> Docu
                 allowed = (
                     path.name in DATABASES
                     or relative == Path("settings.toml")
+                    or evidence(relative)
                     or (definition and path.suffix.lower() in {".toml", ".json", ".yaml", ".yml"})
                 )
                 if (

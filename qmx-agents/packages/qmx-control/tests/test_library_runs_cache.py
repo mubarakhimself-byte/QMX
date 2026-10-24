@@ -24,7 +24,7 @@ TOKEN = secrets.token_urlsafe(32)
 HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
 
-def test_library_versions_fts_links_and_restart(tmp_path: Path) -> None:
+def test_library_versions_links_and_restart(tmp_path: Path) -> None:
     service = ControlService(tmp_path)
     first = service.library_save(
         LibraryInput(
@@ -46,8 +46,9 @@ def test_library_versions_fts_links_and_restart(tmp_path: Path) -> None:
     assert service.library_get(str(first["id"])) == first
     assert service.library_versions(str(second["id"])) == [first, second]
     assert first["root_id"] == first["id"]
-    for query in ("macro", "momentum", 'title:"Rates"'):
-        assert first in service.library_search(query)
+    for query in ("macro", "momentum", "Rates"):
+        found = service.library_search(query)
+        assert [item["root_id"] for item in found] == [first["root_id"]]
     assert service.library_search("nonsense") == []
     with pytest.raises(ControlError, match="latest"):
         service.library_save(
@@ -57,15 +58,16 @@ def test_library_versions_fts_links_and_restart(tmp_path: Path) -> None:
         service.library_save(
             LibraryInput(title="wrong", kind="pod", content={}, previous_id=str(second["id"]))
         )
-    linked = service.library_link(str(first["id"]), str(second["id"]), "derived")
+    linked = service.library_link(str(first["id"]), str(second["id"]), "cites")
     assert service.library_links(str(second["id"])) == [linked]
     reopened = ControlService(tmp_path)
     assert reopened.library_versions(str(second["id"])) == [first, second]
-    assert (tmp_path / str(first["ref"])).read_bytes() == encoded(first["content"])
-    assert (tmp_path / "library.db").exists()
-    with pytest.raises(ControlError, match="FTS5"):
+    blob = tmp_path / "library" / "blobs" / str(first["sha256"])[:2] / str(first["sha256"])[2:4]
+    assert (blob / str(first["sha256"])).read_bytes() == encoded(first["content"])
+    assert not (tmp_path / "library.db").exists()
+    with pytest.raises(ControlError, match="search"):
         service.library_search('"')
-    (tmp_path / str(first["ref"])).write_bytes(b"tampered")
+    (blob / str(first["sha256"])).write_bytes(b"tampered")
     with pytest.raises(ControlError, match="hash"):
         reopened.library_get(str(first["id"]))
 
@@ -86,42 +88,6 @@ def test_web_results_are_saved_once_per_url_and_day(tmp_path: Path) -> None:
     assert next_day["sha256"] == first["sha256"]
     with pytest.raises(ControlError, match="valid"):
         service.library_save(item.model_copy(update={"fetched_date": "2026-02-30"}))
-
-
-def test_old_control_catalog_is_migrated(tmp_path: Path) -> None:
-    tmp_path.mkdir(exist_ok=True)
-    with closing(sqlite3.connect(tmp_path / "control.db")) as db, db:
-        db.execute("CREATE TABLE library(id TEXT PRIMARY KEY,data TEXT)")
-        db.execute(
-            "INSERT INTO library VALUES(?,?)",
-            (
-                "saved-id",
-                json.dumps(
-                    {
-                        "id": "saved-id",
-                        "title": "old",
-                        "kind": "pod",
-                        "content": {"value": 1},
-                    }
-                ),
-            ),
-        )
-    service = ControlService(tmp_path)
-    assert service.library_get("saved-id")["content"] == {"value": 1}
-    assert ControlService(tmp_path).library_get("saved-id")["id"] == "saved-id"
-
-
-def test_legacy_domain_envelopes_enter_the_shared_catalog(tmp_path: Path) -> None:
-    artifacts = tmp_path / "artifacts"
-    artifacts.mkdir()
-    body = json.dumps({"name": "legacy note", "kind": "note", "content": "precious"}).encode()
-    digest = sha256(body).hexdigest()
-    (artifacts / f"{digest}.json").write_bytes(body)
-    service = ControlService(tmp_path)
-    saved = service.library_search("precious")[0]
-    assert saved["id"] == digest
-    assert service.library.by_ref(f"artifacts/{digest}.json") == saved
-    assert len(ControlService(tmp_path).library_search()) == 1
 
 
 def test_aggregate_cache_detects_another_owner_event(tmp_path: Path) -> None:

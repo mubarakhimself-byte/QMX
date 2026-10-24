@@ -29,6 +29,7 @@ from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
 from qmx_broker.service import read_proposals
+from qmx_library.store import Store
 from qmx_remote.models import RemoteSettings
 
 from qmx_control.backup import weekly_backup
@@ -91,16 +92,6 @@ def eval_run_input(result: Document) -> LibraryInput:
         tags=[EVAL_RUN],
         source="ev-copilot-eval-battery",
     )
-
-
-class LibraryMirror(Protocol):
-    """The Library store's side of the dual write (MIGRATION step 5,
-    `qmx_library.migrate.from_library_b.DualWrite`). Each call returns a refusal code, or None
-    when the store holds the save."""
-
-    def saved(self, document: Document) -> str | None: ...
-
-    def linked(self, source_id: str, target_id: str) -> str | None: ...
 
 
 class SessionInput(BaseModel):
@@ -231,7 +222,6 @@ class ControlService:
         self.node = node
         self.secret_getter = secret_getter
         self.library = Library(self.home)
-        self._mirror: LibraryMirror | None = None
         self.run_index = RunIndex(self.home)
         self._aggregate = read_cache(ttl=5)(self._aggregate_read)
         with self._connect() as db:
@@ -249,25 +239,6 @@ class ControlService:
                 CREATE TABLE IF NOT EXISTS operator_cursor (name TEXT PRIMARY KEY,
                     position INTEGER NOT NULL, at TEXT NOT NULL);
             """)
-            db.execute("BEGIN IMMEDIATE")
-            legacy_catalog = db.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='library'"
-            ).fetchone()
-            # Preserve IDs returned by the first service version when moving its catalog.
-            old_items = (
-                db.execute("SELECT id,data FROM library").fetchall() if legacy_catalog else []
-            )
-            for item_id, raw in old_items:
-                try:
-                    self.library.get(item_id)
-                except ControlError as error:
-                    if error.code != "not_found":
-                        raise
-                    item = _document(raw)
-                    item.pop("id")
-                    self.library.save(LibraryInput.model_validate(item), item_id=item_id)
-            if legacy_catalog:
-                db.execute("DROP TABLE library")
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:
@@ -619,22 +590,17 @@ class ControlService:
                 marked += cursor.rowcount
         return marked
 
-    def attach_library_mirror(self, mirror: LibraryMirror) -> None:
-        """Start the dual write: every save and link from now on also reaches `mirror`."""
-        self._mirror = mirror
-
-    def _mirrored(self, data: Document) -> Document:
-        event: Document = {"type": "saved", "item_id": data["id"]}
-        if self._mirror is not None:
-            event["mirror"] = self._mirror.saved(data) or "ok"
-        return event
+    def attach_library(self, store: Store) -> None:
+        """This home's store is the one Library from here on (MIGRATION step 6): every `library_*`
+        row, the copilot's search and the apps' landings read and write it."""
+        self.library.attach(store)
 
     @operation("library", "save", "domain_write", rest=("POST", "/api/library"))
     def library_save(self, item: LibraryInput) -> Document:
-        """Save an immutable artifact, optionally a new version or URL/date result."""
+        """Save an immutable object, optionally a new version or URL/date result."""
         with self._lock, self._connect() as db:
             data = self.library.save(item)
-            self._event(db, "library", str(data["id"]), self._mirrored(data))
+            self._event(db, "library", str(data["id"]), {"type": "saved", "item_id": data["id"]})
         return data
 
     @operation("library", "search", "read", rest=("GET", "/api/library"), cursor=True)
@@ -649,14 +615,7 @@ class ControlService:
 
     def _tagged(self, tag: str) -> list[Document]:
         """The latest version of every item carrying `tag`."""
-        found: dict[str, Document] = {}
-        for item in self.library.search(f'tags:"{tag}"', limit=1000):
-            if tag not in cast(list[str], item["tags"]):
-                continue
-            root = str(item["root_id"])
-            if root not in found or cast(int, found[root]["version"]) < cast(int, item["version"]):
-                found[root] = item
-        return sorted(found.values(), key=lambda item: str(item["created"]))
+        return self.library.tagged(tag)
 
     @operation("library", "eval_tasks", "read", rest=("GET", "/api/eval/tasks"))
     def library_eval_tasks(self) -> list[Document]:
@@ -743,7 +702,11 @@ class ControlService:
             result = self.library.memoized(identity, compute)
             if produced:
                 with self._connect() as db:
-                    event = self._mirrored(result) | {"memo_key": result["memo_key"]}
+                    event: Document = {
+                        "type": "saved",
+                        "item_id": result["id"],
+                        "memo_key": result["memo_key"],
+                    }
                     self._event(db, "library", str(result["id"]), event)
         return result
 
@@ -754,13 +717,10 @@ class ControlService:
 
     @operation("library", "link", "domain_write", rest=("POST", "/api/library/links"))
     def library_link(self, source_id: str, target_id: str, relation: str = "related") -> Document:
-        """Link two existing artifacts without changing their contents."""
+        """Link two existing objects without changing their contents."""
         with self._lock, self._connect() as db:
             data = self.library.link(source_id, target_id, relation)
-            event: Document = {"type": "linked", **data}
-            if self._mirror is not None:
-                event["mirror"] = self._mirror.linked(source_id, target_id) or "ok"
-            self._event(db, "library", source_id, event)
+            self._event(db, "library", source_id, {"type": "linked", **data})
         return data
 
     @operation("library", "links", "read", rest=("GET", "/api/library/{artifact_id}/links"))
@@ -1050,6 +1010,7 @@ class ControlService:
                     self.apps_backup,
                     self._backup_failed,
                 )
+                self._apps.attach_library(self.library.landed)
             return self._apps
 
     def _backup_settings(self) -> BackupSettings | None:

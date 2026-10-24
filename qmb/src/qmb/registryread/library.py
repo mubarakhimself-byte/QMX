@@ -10,10 +10,10 @@ UX-DR2, DEC-0284).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Protocol
 
 from qmf.core.refusal import Ok, Result, TypedRefusal
 
@@ -36,6 +36,7 @@ __all__ = [
     "LibraryKindRoster",
     "enumerate_library_kinds",
     "library_kinds_identity",
+    "read_library_records",
     "register_library_kind",
 ]
 
@@ -235,6 +236,34 @@ def enumerate_library_kinds() -> LibraryKindRoster:
     return LibraryKindRoster()
 
 
+class Records(Protocol):
+    @property
+    def records(self) -> Sequence[object]: ...
+
+
+class AsOfRead(Protocol):
+    """QMB's one registry-read port (B-15), as much of it as the projection reads."""
+
+    @property
+    def bound(self) -> Records: ...
+
+
+def read_library_records(port: AsOfRead) -> tuple[object, ...]:
+    """Every record of the ten Library kinds, read through the one registry-read port.
+
+    The projection holds no records of its own: it names the existing fp1 kinds, and their
+    records come from the same as-of set every other consumer resolves through (DEC-0165), so a
+    door and the Library can never answer with different records.
+    """
+    return tuple(
+        record
+        for record in port.bound.records
+        # The port's records are duck-typed (`Record` in the importer), so the kind is read off
+        # whatever the caller's as-of set holds rather than assumed to be one class.
+        if isinstance(found := getattr(record, "kind", None), str) and found in _BY_KIND
+    )
+
+
 def register_library_kind(
     kind: object,
     *,
@@ -279,7 +308,10 @@ def register_library_kind(
     resolved_lane = _coerce_lane(lane)
     if isinstance(resolved_lane, TypedRefusal):
         return resolved_lane
-    if member.coordinated_lane_only and resolved_lane in {_LANE_GOVERNED, _LANE_UNGOVERNED}:
+    if member.coordinated_lane_only and resolved_lane in {
+        _LANE_GOVERNED,
+        _LANE_UNGOVERNED,
+    }:
         return policy(
             "lane",
             "CT-47 ExperimentSpec is a Library kind on the coordinated lane only "
