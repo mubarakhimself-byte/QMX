@@ -2,7 +2,7 @@
 title: Generative funnel: party mode, brainstorming and CIS over all lenses
 type: decision
 mode: AFK
-status: open
+status: closed
 blocked_by: [ground-truth-algo-side, instruments-and-trader-needs, platform-study, academic-enhancements, strategyquant-family]
 claimed_by: "opus funnel agents 2026-10-24"
 created: 2026-10-24

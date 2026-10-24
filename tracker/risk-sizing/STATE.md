@@ -2,7 +2,7 @@
 
 **Read this first.** It is the single entry point for the unit work: every finding, operator correction and open decision in one place, with links to the detail. Updated after every agent result and every operator message.
 
-Last updated: 2026-10-25.
+Last updated: 2026-10-25 (after 07 funnel).
 
 ## Where everything is
 
@@ -38,18 +38,21 @@ Last updated: 2026-10-25.
 | [05 academic](research/05-academic.md) | Router speed comes from information per bar: run on volatility, spread, liquidity and cost against the usual level for the time of day. Meta-labeling = routing per trade. No single test predicts live survival (Quantopian, 888 algos): count tries, deflated Sharpe + PBO. Domain expansion as a stream of tests with a numeric stop rule; cells borrow strength from the parent. Gaps: QMB results aren't in R, and backtest trades carry no market state. |
 | [06 MQL5 pilot](research/06-mql5-pilot.md) | 1,970 of 3,128 articles pass screening (1,185 distinct). Evidence thin: 5 of 37 have out-of-sample tests. Codebook, idea-mining skill draft and starter prompt are ready but parked. Best finds: 19460, 21833, 5373, 23543, 21976. |
 | [07a party](research/07a-funnel-party.md), [07b CIS](research/07b-funnel-cis.md) | ~300 raw ideas, 28 disagreements. Strongest: the two-speed router; the ratchet on the account floor; exits as a variant axis; labelers inside QMB plus results in R; proof grades from uncalibrated to live; "judging is the product". |
-| [07 funnel](research/07-funnel.md) | **In progress:** convergence, forging, a recommendation per decision, at most 7 questions for the operator. |
+| [07 funnel](research/07-funnel.md) | 304 ideas → 33 clusters, forged. **Shape:** a unit = one complete algorithm (entry, exits, self-calibrating risk and sizing from its own journal, condition needs, session profile, exam baseline, one journal: backtest and stress written only by QMB, paper and live only by the node). Outside it, only: the account guard (stops, never resizes), the pod (shared budget, same-bet limits), the router (switches units on and off; precomputed table cached on the node). The judge: count tries per family, correct the best, sealed months, cost stress, live vs own exam baseline. **QML → unit library**, upgraded in place: verbs `new`, `check`, `test`, `promote`, `watch`, `find` over two JSON schemas (unit spec, journal). Foundations in order: record overrules → QMB windowed reader → unit spec + journal schemas → tries at the QMB door → instrument spec → published-cost calibration → MIS labelers in QMB → library verbs → exits and scalper indicators → one reference unit to paper on the cTrader demo. Note: §10 still says 1,400 trades for decay; 08 corrected it to ~240. |
 | [08 old QMX testing and decay](research/08-old-qmx-testing-and-decay.md) | Old QMX had fixed pass numbers in R (200 trades, +0.15R after costs, PBO < 0.25 pass, > 0.50 dead). New QMB has more tests but no pass numbers, no tries correction, no calibrated costs, no R. Recommended QMB set: tries ledger + deflated Sharpe, 2× cost stress, out-of-sample in R, plateau check, PBO per family, block-bootstrap Monte Carlo for sizing and the live cone only; one frozen baseline card per unit. WF3 recovered (daily spotting, fortnightly action, maths never written). Decay check: nightly per unit journal (CUSUM on R, cone, cost/fill drift, trade-rate drift) → OK / Watch / Alarm, inform only. CUSUM catches +0.1R → 0 in ~240 trades (corrects 05's 1,400). |
 | [09 router](research/09-router-architecture.md) | Split the router. A planner on the PC writes a signed placement plan with an expiry. The node runs a cheap gate per bar that only blocks new entries. With the PC offline the node runs from the plan; after expiry no new entries, open trades and the kill switch continue. |
 
-## Open decisions for the operator
+## Open decisions for the operator (filtered; each has a recommended "yes")
 
-1. **The unit's structure**, given correction 2. Agents draft it; he agrees it. Ticket: `unit-structure`.
-2. **The identity rule:** new strategy vs variant vs profile version. Ticket: `identity-rule`.
-3. **The registry and router:** confirm the split (the planning half of the MIS on the PC, live checks on the node). His seed says the node holds the MIS. Ticket: `registry-and-router`.
-4. **The kit:** the QML unit library's interface. Ticket: `agent-and-creator-kit`.
-5. **The 9 scalper types and the 12 seed additions** (report 09 plus file 02's verdict). Ticket: `scalper-types-and-seed-additions`.
-6. Whatever the funnel's ≤7 questions add (to be filtered before they reach him).
+From 07-funnel §9, plus the router split from 09:
+1. **Same logic on a new instrument, timeframe or broker = a sibling unit** in one family tree. Shared try count; counted as one bet where they move together. Sessions and sniping windows stay inside one unit. (Sources clash: 13 Oct vs 20 Oct.)
+2. **When something is "new":** logic or exit change = new version linked to its parent; a setting moved inside its range = same unit, each value counted as a try; self-recalibration = a journal entry; a model rewrite = a new unit marked "rewritten from".
+3. **Promotion:** his click admits each unit. A sibling of an admitted unit may go live at minimum lot without his click, paid from a monthly evidence budget he sets (start 5% of equity), after its own backtest and stress test. New brokers and market kinds still need his click. Reopens DEC-0261.
+4. **Size may grow back** after a cut, only on fresh trades that still show the edge, after a minimum time, never above his ranges. (This is the "tighten, never loosen" explanation: the one-way ratchet goes on the account floor.)
+5. **House money per unit**, switched on only when its own record shows streaks.
+6. **Keep the word "unit"** in QMX; "bot" is fine in conversation.
+7. **Router split:** the planning half of the MIS on the PC, cheap live checks on the node (his seed said the node holds the MIS).
+8. **Scalper types and seed additions:** report 09 + file 02's verdict.
 
 ## Conflicts with existing rules (to settle in architecture)
 
@@ -67,8 +70,8 @@ Last updated: 2026-10-25.
 
 ## Next steps, in order
 
-1. The funnel convergence lands → add it here → filter its questions.
-2. An explainer page for him, then his decisions 1-5.
+1. DONE: the funnel converged (07).
+2. An explainer page for him, then his decisions 1-8 above.
 3. Settle the technical tickets: `domain-expansion-rule`, `self-tuning-sizing-and-exits`.
 4. The edge-case review (bmad-review) over the money paths.
 5. Architecture: bmad-architecture, domain-modeling, codebase-design.
