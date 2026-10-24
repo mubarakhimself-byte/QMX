@@ -19,9 +19,9 @@ write. Nothing else on the door answers you, and a refusal is final.
 curl -s -H "Authorization: Bearer $QMX_OBSERVER_TOKEN" "$QMX_DOOR/api/doctor"
 ```
 
-- The token reaches the `ops` rows and the doctor. A broker row, a Library content row, a
-  workflow, a settings write and everything else answer 403 with
-  `{"error": {"code": "observer_refused", ...}}`. Do not retry a refusal and do not look for a
+- The token reaches the `ops` reads, the doctor and the one note row. A broker row, a Library
+  content row, a settings write, an ops write other than the note, and everything else answer 403
+  with `{"error": {"code": "observer_refused", ...}}`. Do not retry a refusal and do not look for a
   second way in.
 
 ## Read 1: the doctor
@@ -69,8 +69,8 @@ Logs are not on this door. The same collector sends them to OpenObserve, the ope
 
 ## Read 4: what is running
 
-`GET $QMX_DOOR/api/aggregates`, `GET $QMX_DOOR/api/sessions` and
-`GET $QMX_DOOR/api/ops/spans/{run_id}` are the `ops` rows' reads. Every other route refuses.
+`GET $QMX_DOOR/api/aggregates` and `GET $QMX_DOOR/api/sessions` are the `ops` reads around the
+runs and chats. Every other route refuses.
 
 ## The one write: a diagnosis note
 

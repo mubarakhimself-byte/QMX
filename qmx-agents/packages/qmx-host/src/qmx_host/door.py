@@ -17,10 +17,11 @@ The observer (AD-69, HARNESS-REQUESTS H61). A token the operator minted in Setti
 local bearer, and this door is the outermost middleware, so it recognizes the token before
 `BearerGate` sees it. An observer call that is allowed is restamped with the local bearer and with
 the observer's id, so the rows behind it answer, and any other path is refused here with a typed
-403. The allowed set is derived from the catalog and never kept by hand: every REST row of an `ops`
-toolset, plus the doctor. A `broker_read` row and a Library content row are refused because no
-toolset names them, not because someone remembered to leave them out. The principal stays
-`agent:observer:<id>`, never `user`, so the acts only the operator may take stay refused.
+403. The allowed set is derived from the catalog and never kept by hand: every REST read of an
+`ops` toolset, plus the doctor and the one diagnosis-note row. A `broker_read` row, a Library
+content row and every ops write but the note are refused because the catalog says so, not because
+someone remembered to leave them out. The principal stays `agent:observer:<id>`, never `user`, so
+the acts only the operator may take stay refused.
 """
 
 from __future__ import annotations
@@ -30,7 +31,13 @@ from collections.abc import Sequence
 from typing import Final
 from urllib.parse import urlencode
 
-from qmx_control.catalog import OBSERVER_PATHS, OBSERVER_TOOLSETS, rest_routes, rows
+from qmx_control.catalog import (
+    OBSERVER_PATHS,
+    OBSERVER_TOOLSETS,
+    OBSERVER_WRITES,
+    rest_routes,
+    rows,
+)
 from qmx_control.service import Observer, observers
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.service.context import Caller
@@ -59,11 +66,13 @@ def _pattern(path: str) -> re.Pattern[str]:
 
 
 def observer_routes() -> tuple[tuple[str, re.Pattern[str]], ...]:
-    """Every REST route an observer may reach, with its verb: the `ops` toolset, the doctor."""
+    """Every REST route an observer may reach, with its verb: the `ops` reads, the note, the
+    doctor."""
     found = [
         (rest.verb, _pattern(rest.path))
         for row, rest in rest_routes(rows())
         if row.toolset in OBSERVER_TOOLSETS
+        and (row.approval == "read" or row.name in OBSERVER_WRITES)
     ]
     return (*found, *(("GET", _pattern(path)) for path in OBSERVER_PATHS))
 

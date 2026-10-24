@@ -45,7 +45,11 @@ def observer_app() -> FastAPI:
     def library() -> Document:
         return {"items": []}
 
-    _ = trace, doctor, proposals, library
+    @app.post("/api/backup/weekly")
+    def backup() -> Document:
+        return {"ran": True}
+
+    _ = trace, doctor, proposals, library, backup
     app.add_middleware(PrincipalDoor, chat_routes=[], bearer=LOCAL)
     return app
 
@@ -62,6 +66,7 @@ def test_an_observer_reads_the_ops_rows_and_the_doctor_and_is_refused_the_rest(
             doctor = rest.get("/api/doctor", headers=observer)
             broker = rest.get("/api/portfolio/proposals", headers=observer)
             library = rest.get("/api/library", headers=observer)
+            backup = rest.post("/api/backup/weekly", headers=observer)
             local = rest.get("/api/library", headers={"Authorization": f"Bearer {LOCAL}"})
     finally:
         adopt_observers(None)
@@ -76,4 +81,5 @@ def test_an_observer_reads_the_ops_rows_and_the_doctor_and_is_refused_the_rest(
     assert (doctor.status_code, doctor.json()) == (200, {"lines": []})
     assert (broker.status_code, broker.json()["error"]["code"]) == (403, "observer_refused")
     assert (library.status_code, library.json()["error"]["code"]) == (403, "observer_refused")
+    assert (backup.status_code, backup.json()["error"]["code"]) == (403, "observer_refused")
     assert local.status_code == 200
