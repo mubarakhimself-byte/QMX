@@ -93,6 +93,7 @@ from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.model import Node, Workflow, dropped, edges
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked
+from qmx_engine.heartbeat import latest, placement
 from qmx_engine.ledger import mirror
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
 from qmx_engine.ledger.inbox_table import InboxTable
@@ -100,6 +101,7 @@ from qmx_engine.ledger.mirror import MirrorRefused, journal_of
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.agent import Agent
+from qmx_engine.nodes.app_op import PLACEMENT_RETRY_SECONDS
 from qmx_engine.nodes.base import Failed, Look, NodeJob, Waiting, ending
 from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
 from qmx_engine.nodes.fake_provider import FakeProvider
@@ -202,6 +204,15 @@ def intent_key(node: Node) -> str | None:
     """The intent key a node declares in its parameters, or None when it declares none (AD-30)."""
     found = node.parameters.get("intent_key")
     return found if isinstance(found, str) and found else None
+
+
+def placed(node: Node, home: Path, now: datetime) -> str | None:
+    """The node's placement from its `runs_on` list and the series its `data_scope` parameter
+    names, read against each host's partition summary (AD-70); None waits `placement`."""
+    runs_on = [node.runs_on] if isinstance(node.runs_on, str) else node.runs_on or ["pc"]
+    found = node.parameters.get("data_scope")
+    wants = [str(item) for item in found] if isinstance(found, list) else []
+    return placement(runs_on, wants, latest(home) if wants else {}, now)
 
 
 def recorded_settings(
@@ -1051,10 +1062,18 @@ class Run:
     async def attempt(self, job: NodeJob, gate: asyncio.Event | None = None) -> None:
         if gate is not None:
             await gate.wait()
-        intent, claims = intent_key(self.node(job.node_id)), self.engine.claims
-        held = bool(intent and claims and claims.claim(intent, job.run_id, INTENT_TTL_S).granted)
+        node, now = self.node(job.node_id), self.engine.wall()
+        where = placed(node, self.engine.home, now)
+        intent, claims = intent_key(node), self.engine.claims
+        held = bool(
+            where and intent and claims and claims.claim(intent, job.run_id, INTENT_TTL_S).granted
+        )
         try:
-            result = await self.engine.worker.run(job, self.append)
+            if where is None:
+                retry = now + timedelta(seconds=PLACEMENT_RETRY_SECONDS)
+                result = Waiting("placement", utc_text(retry), span={"reason": "placement"})
+            else:
+                result = await self.engine.worker.run(replace(job, placement=where), self.append)
             if isinstance(result, Waiting) and result.resume_at is not None:
                 result = replace(
                     result, resume_at=utc_text(datetime.fromisoformat(result.resume_at))

@@ -251,20 +251,6 @@ def test_a_bundle_carries_files_by_hash() -> None:
     assert bundle["files"] == files
 
 
-def test_runs_on_in_the_definition_selects_the_machine() -> None:
-    provider = FakeProvider()
-    local = job("pc")
-    routed = replace(local, node_definition={**local.node_definition, "runs_on": "contabo"})
-    result, _ = run(
-        worker(FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}), provider),
-        routed,
-    )
-
-    assert isinstance(result, Ok)
-    assert provider.bundle is not None
-    assert provider.bundle["definition"]["job"]["placement"] == "contabo"
-
-
 def test_a_placed_job_with_code_passes_the_provider_envelope() -> None:
     provider = FakeProvider()
     placed = worker(

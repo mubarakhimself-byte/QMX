@@ -17,7 +17,8 @@ either way: the attempt folds `effect_state: unknown` and retries by its effect 
 machine that is merely slow keeps beating, so the two cases stay apart.
 
 `PlacementWorker` is a `LocalWorker` subclass because the engine's type says so; it routes by the
-job's placement and defers every other attempt to the local table.
+job's placement, which the runner set from `runs_on` and the data's locality (AD-70), and defers
+every other attempt to the local table.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import asyncio
 import hashlib
 import time
 from collections.abc import Callable, Collection, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
@@ -188,22 +189,6 @@ def attempt_bundle(
     )
 
 
-def placement_of(job: NodeJob) -> str:
-    """The placement this attempt belongs to.
-
-    The runner builds the job from the node's definition but leaves `NodeJob.placement` at its
-    `pc` default, so the adapter reads `runs_on` from the definition slice it already carries. A
-    list names its placements in preference order; health is preflight's question (AD-20), so the
-    first one is the one this attempt is for.
-    """
-    found = job.node_definition.get("runs_on")
-    if isinstance(found, str) and found:
-        return found
-    if isinstance(found, list) and found:
-        return str(found[0])
-    return job.placement
-
-
 def text_hash(text: str) -> str:
     """A file's content hash, the same raw sha256 the sidecar checks on the runner host."""
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -335,18 +320,16 @@ class PlacementWorker(LocalWorker):
         return placement in self.remote
 
     async def run(self, job: NodeJob, emit: Emit) -> NodeResult:
-        placement = placement_of(job)
-        if not self.routes(placement):
+        if not self.routes(job.placement):
             return await super().run(job, emit)
-        provider = self.providers.get(placement)
+        provider = self.providers.get(job.placement)
         if provider is None:
-            message = f"no provider serves placement {placement}"
+            message = f"no provider serves placement {job.placement}"
             return Failed("placement", message, signature("placement", message), False, "before")
-        placed = replace(job, placement=placement)
         bundle = attempt_bundle(
-            placed, settings=self.settings, files=self.code(placed), live=self.reading()
+            job, settings=self.settings, files=self.code(job), live=self.reading()
         )
-        return await self.dispatch(placed, provider, bundle, emit)
+        return await self.dispatch(job, provider, bundle, emit)
 
     async def dispatch(
         self, job: NodeJob, provider: Any, bundle: Document, emit: Emit
