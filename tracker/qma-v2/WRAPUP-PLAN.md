@@ -147,14 +147,15 @@ Closes list A item 5 and three engine follow-ups in the same files. Sources are 
 **Files.**
 
 - [ ] Edit `E/__main__.py` (`--template`, repeatable, and the host route call) and `E/service/api.py` (no silent `LibraryFake` fallback outside tests).
-- [ ] Add the route `POST /api/templates/install` in `HO/door.py`.
+- [ ] Add the route `POST /api/templates/install` as `templates_router(engine)` in `HO/door.py`, and serve it with one line in `HO/host.py` `serve` beside the other routers (granted 2026-10-24, because `door.py` is middleware with no engine handle).
+- [ ] `LibraryFake` stays the default for test callers of `EngineService.open`. The CLI always passes the real Store, so no production path reaches the fake.
 - [ ] Edit `E/nodes/script.py` (read the marker on either exit code).
 - [ ] Edit `T/feed/land.py` (call `T/_shared/save_source.py`).
 - [ ] Add tests in `ET/test_templates.py`, `ET/` for the script marker, and `HOT/` for the route.
 
 **Build.**
 
-- [ ] With a host running on the home, the CLI posts to the route. With none, it opens `Store.open(home / "library")` through `EngineLibraryAdapter`. `LibraryFake` stays only for tests.
+- [ ] With a host running on the home, the CLI posts to the route. With none, it opens `Store.open(home / "library")` through `EngineLibraryAdapter`.
 - [ ] Add `--template`.
 - [ ] Read `[QMX_FAILURE]` on any exit code.
 - [ ] Land feed items as `source` items.
@@ -685,7 +686,7 @@ Facts read at `f05fc64b` on 2026-10-24 by a read-only Opus pass (no edits, no sp
 |---|---|---|
 | WU1, WU2 | `H/tools.py`, `HT/test_tools.py` | WU1 first |
 | WU2, WU3 | `R/registry.py` | WU2 first |
-| WU2, WU4, WU9 | `HO/host.py` | WU2, WU4, WU9 |
+| WU5, WU2, WU4, WU9 | `HO/host.py` (WU5 adds one line) | WU5, WU2, WU4, WU9 |
 | WU1, WU4 | `E/control_door.py` | WU1 first |
 | WU5, WU8 | `HO/door.py` | WU5 first |
 | WU8, WU10 | `BR/credentials.py`, `BR/registry.py`, `HO/venue_session.py` | WU8 first |
