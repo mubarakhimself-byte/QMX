@@ -45,7 +45,9 @@ class RecordingLibrary:
         return f"{from_id}-{relation}-{to_id}"
 
 
-def _result(*, report: bytes = b'{"ledger": 1}', outcome: str | None = "supports") -> BacktestResult:
+def _result(
+    *, report: bytes = b'{"ledger": 1}', outcome: str | None = "supports"
+) -> BacktestResult:
     return BacktestResult(
         run_id="fp1:sha256:run-1",
         title="EURUSD breakout, August",
