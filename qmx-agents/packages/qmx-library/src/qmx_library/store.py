@@ -344,6 +344,79 @@ class Epoch:
     """The `refs/conflicts/*` refs its primary moves were parked on, one per move (N13, N19)."""
 
 
+class Upload:
+    """One resumable upload: an open append handle, the hash of every byte it holds, and its size.
+
+    The partial file is the state, so a closed client or a crash leaves exactly the bytes whose
+    hash the next caller re-reads before it appends (AD-27). `write` takes one chunk at a time,
+    so a 3 GB recording never sits in memory on either side of the door.
+    """
+
+    def __init__(
+        self,
+        store: Store,
+        upload_id: str,
+        *,
+        offset: int = 0,
+        partial_sha256: str | None = None,
+    ) -> None:
+        self.store = store
+        self.upload_id = upload_id
+        self.path = store.upload_path(upload_id)
+        self.hasher = sha256()
+        self.held = 0
+        if offset == 0:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.unlink(missing_ok=True)
+        else:
+            if not self.path.exists() or self.path.stat().st_size != offset:
+                raise LibraryRefused(
+                    "offset_mismatch",
+                    f"{upload_id} does not hold the {offset} bytes resumed from",
+                )
+            with self.path.open("rb") as handle:
+                while data := handle.read(CHUNK):
+                    self.hasher.update(data)
+                    self.held += len(data)
+            if partial_sha256 is not None and self.hasher.hexdigest() != partial_sha256:
+                raise LibraryRefused(
+                    "hash_mismatch", f"{upload_id} does not hash to what the client resumed"
+                )
+        self._handle = self.path.open("ab")
+
+    @property
+    def sha256(self) -> str:
+        """The hash of every byte this upload holds, including bytes it resumed from."""
+        return self.hasher.hexdigest()
+
+    def write(self, chunk: bytes) -> int:
+        """Append one chunk, hashing it as it lands; returns the bytes now held."""
+        if chunk:
+            self._handle.write(chunk)
+            self.hasher.update(chunk)
+            self.held += len(chunk)
+        return self.held
+
+    def close(self) -> None:
+        if not self._handle.closed:
+            self._handle.flush()
+            os.fsync(self._handle.fileno())
+            self._handle.close()
+
+    def finish(self, expect_sha256: str | None = None) -> str:
+        """Close and promote the partial to its blob, refusing a hash the client disagrees with."""
+        self.close()
+        return self.store.complete_upload(
+            self.upload_id,
+            expect_sha256=self.sha256 if expect_sha256 is None else expect_sha256,
+        )
+
+    def discard(self) -> None:
+        """Drop this upload: a partial nobody will resume is not a durable blob (AD-27)."""
+        self.close()
+        self.store.discard_upload(self.upload_id)
+
+
 class Store:
     """The writer of one store. Every verb of `LibraryPort` is here; the reads the engine adapter
     needs beside them (`head`, `placed`, `moves`, `read_blob`) are catalog queries."""
@@ -1745,6 +1818,12 @@ class Store:
                     held += len(data)
         return held, hasher.hexdigest()
 
+    def begin_upload(
+        self, upload_id: str, *, offset: int = 0, partial_sha256: str | None = None
+    ) -> Upload:
+        """Open one resumable upload: from zero, or continuing the bytes at `offset` (AD-27)."""
+        return Upload(self, upload_id, offset=offset, partial_sha256=partial_sha256)
+
     def append_upload(
         self,
         chunks: Iterable[bytes],
@@ -1759,35 +1838,13 @@ class Store:
         `hash_mismatch` when the client's copy of that hash disagrees: the two sides would
         otherwise append different bytes to one name. Returns `(bytes held, sha256 of them)`.
         """
-        path = self.upload_path(upload_id)
-        hasher = sha256()
-        held = 0
-        if offset == 0:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.unlink(missing_ok=True)
-        else:
-            if not path.exists() or path.stat().st_size != offset:
-                raise LibraryRefused(
-                    "offset_mismatch", f"{upload_id} does not hold the {offset} bytes resumed from"
-                )
-            with path.open("rb") as handle:
-                while data := handle.read(CHUNK):
-                    hasher.update(data)
-                    held += len(data)
-            if partial_sha256 is not None and hasher.hexdigest() != partial_sha256:
-                raise LibraryRefused(
-                    "hash_mismatch", f"{upload_id} does not hash to what the client resumed"
-                )
-        with path.open("ab") as handle:
+        upload = self.begin_upload(upload_id, offset=offset, partial_sha256=partial_sha256)
+        try:
             for chunk in chunks:
-                if not chunk:
-                    continue
-                handle.write(chunk)
-                hasher.update(chunk)
-                held += len(chunk)
-            handle.flush()
-            os.fsync(handle.fileno())
-        return held, hasher.hexdigest()
+                upload.write(chunk)
+        finally:
+            upload.close()
+        return upload.held, upload.sha256
 
     def complete_upload(self, upload_id: str, *, expect_sha256: str | None = None) -> str:
         """Promote a finished partial to its blob, by hash, in one rename (AD-27).
