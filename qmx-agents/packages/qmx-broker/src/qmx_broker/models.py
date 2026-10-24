@@ -36,7 +36,8 @@ class Account(BaseModel):
 class Connection(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: str = Field(min_length=1, max_length=128)
-    credential_ref: str = Field(pattern=r"^qmx/.+")
+    credential_ref: str = Field(default="", pattern=r"^(qmx/.+)?$")
+    """Empty only for a provider whose declaration says `auth == "none"`; `Broker` checks."""
     environment: Literal["demo", "live"] = "demo"
     accounts: list[Account] = Field(default_factory=list[Account])
     # A credential is `read` only when its probe proves it cannot trade (AD-67).
@@ -82,6 +83,18 @@ class Broker(BaseModel):
             raise ValueError("CCXT brokers require an exchange id")
         if len({connection.id for connection in self.connections}) != len(self.connections):
             raise ValueError("Connection ids must be unique within a broker")
+        if any(not connection.credential_ref for connection in self.connections):
+            from qmx_broker.registry import describe  # noqa: PLC0415 - the registry imports models
+
+            try:
+                keyless = describe(self.adapter).auth == "none"
+            except KeyError:
+                keyless = False
+            if not keyless:
+                raise ValueError(
+                    f"A {self.adapter} connection needs a qmx/* credential_ref; only a provider"
+                    " with no sign-in may leave it empty"
+                )
         for connection in self.connections:
             if self.adapter == "ctrader" and any(
                 not account.id.isdecimal() or int(account.id) <= 0
@@ -119,6 +132,8 @@ class BrokerSettings(BaseModel):
             for connection in broker.connections:
                 if len({account.id for account in connection.accounts}) != len(connection.accounts):
                     raise ValueError("Account ids must be unique within a connection")
+                if not connection.credential_ref:
+                    continue
                 earlier = homes.setdefault(connection.credential_ref, connection.home)
                 if earlier != connection.home:
                     raise ValueError(

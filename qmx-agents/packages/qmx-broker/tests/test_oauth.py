@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from pydantic import ValidationError
 
 from qmx_broker.credentials import (
     CTRADER_APP,
@@ -19,7 +20,7 @@ from qmx_broker.credentials import (
     Joined,
     join_ctrader_app,
 )
-from qmx_broker.models import Broker, Connection
+from qmx_broker.models import Broker, BrokerSettings, Connection
 from qmx_broker.oauth import (
     AppCredential,
     Forwarded,
@@ -178,22 +179,59 @@ def test_the_app_copy_joins_his_two_entries_once_and_keeps_them() -> None:
     )
 
 
-def test_a_keyless_provider_walks_as_ok_with_no_credential_reference() -> None:
+def test_keyless_settings_rows_validate_with_no_reference_and_walk_as_ok() -> None:
     def answered(_provider: Broker, _connection: Connection) -> ProbeResult:
         return ProbeResult(latency_ms=12)
 
-    keyless = Connection.model_construct(
-        id="duka", credential_ref="", home="pc", scope="read", environment="live"
+    saved = BrokerSettings.model_validate(
+        {
+            "connections": [
+                {
+                    "id": "dukascopy",
+                    "name": "Dukascopy",
+                    "adapter": "dukascopy",
+                    "kind": "data",
+                    "connections": [{"id": "duka", "home": "pc"}],
+                },
+                {
+                    "id": "binance-vision",
+                    "name": "Binance public files",
+                    "adapter": "binance-vision",
+                    "kind": "data",
+                    "connections": [{"id": "vision", "credential_ref": "", "home": "contabo"}],
+                },
+            ]
+        }
     )
-    duka = Broker(id="dukascopy", name="Dukascopy", adapter="dukascopy", kind="data")
-    keyed = Broker(id="databento", name="Databento", adapter="databento", kind="data")
 
-    assert walk(duka, keyless, probe=answered, now=0.0) == Reading(
-        "duka", "healthy", "ok", latency_ms=12
-    )
-    assert walk(keyed, keyless, probe=answered, now=0.0) == Reading(
-        "duka", "available", "needs_you", code="not_configured"
-    )
+    readings = [
+        walk(provider, connection, probe=answered, now=0.0)
+        for provider in saved.providers
+        for connection in provider.connections
+    ]
+    assert readings == [
+        Reading("duka", "healthy", "ok", latency_ms=12),
+        Reading("vision", "healthy", "ok", latency_ms=12),
+    ]
+
+
+def test_a_keyed_provider_still_refuses_an_empty_reference() -> None:
+    for adapter in ("databento", "ctrader", "no-such-adapter"):
+        with pytest.raises(ValidationError) as refused:
+            Broker.model_validate(
+                {
+                    "id": adapter,
+                    "name": adapter,
+                    "adapter": adapter,
+                    "connections": [{"id": "one", "home": "pc"}],
+                }
+            )
+        assert (
+            f"A {adapter} connection needs a qmx/* credential_ref; only a provider with no "
+            "sign-in may leave it empty"
+        ) in str(refused.value)
+    with pytest.raises(ValidationError):
+        Connection.model_validate({"id": "one", "credential_ref": "plain-name"})
 
 
 def test_a_redirect_off_the_loopback_is_refused() -> None:
