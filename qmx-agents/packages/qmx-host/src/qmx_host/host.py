@@ -104,7 +104,7 @@ from qmx_router.server import (
 )
 
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
-from qmx_host.door import PrincipalDoor
+from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
@@ -576,6 +576,7 @@ async def serve(
                         origin = ui_origin if role == "pc" else ""
                         bearer = qmx_control.server.local_token()
                         answering = [*answering_router(home, engine), drain_router(core)]
+                        answering.append(templates_router(engine))
                         if door is not None:
                             answering.append(market_router(door))
                         answering.extend(library_service(home, store, serving))
