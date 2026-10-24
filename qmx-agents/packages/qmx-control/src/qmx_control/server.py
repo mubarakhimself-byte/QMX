@@ -1,14 +1,21 @@
 """Transport adapters over the same bound service methods."""
 
+import http.client
 import json
 import os
+import re
 import secrets
-from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence
+import ssl
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from functools import wraps
+from hashlib import sha256
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
+from urllib.parse import urlsplit
 
+import anyio
 import keyring
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +25,23 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from qmx_apps.errors import AppError
+from qmx_library.client import HubClient
+from qmx_library.port import LibraryRefused
 from qmx_remote.models import RemoteError
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_control.catalog import control_rows, rest_routes
 from qmx_control.service import ControlError, ControlService, EventTopic
+
+CHUNK: Final = 1 << 20
+"""Bytes one upload moves at a time on its way through this host (Library AD-27)."""
+UPLOAD_ROUTE: Final = "/api/library/upload"
+"""The one upload door on the PC (AD-27). The bytes go on to the server as they arrive, and the
+staging copy stays here until the server says two durable copies exist (AD-10)."""
+STAGING: Final = "uploads"
+COPIES_REQUIRED: Final = 2
+"""Durable copies an uploaded blob needs before this PC gives up its staging copy (AD-10)."""
+UPLOAD_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
 def local_token() -> str:
@@ -32,6 +51,230 @@ def local_token() -> str:
         token = secrets.token_urlsafe(32)
         keyring.set_password("qmx/control-token", "control-token", token)
     return token
+
+
+class Part:
+    """One upload staged on the PC while its bytes stream on to the server (Library AD-27).
+
+    The part is the state: a resumed request re-hashes the bytes it holds before it appends one
+    more, so the two sides of the door cannot disagree about what offset means. A finished upload
+    keeps this copy until the server reports two durable copies, then gives it up (AD-10).
+    """
+
+    def __init__(
+        self,
+        home: Path,
+        upload_id: str,
+        *,
+        offset: int = 0,
+        partial_sha256: str | None = None,
+    ) -> None:
+        if UPLOAD_ID.fullmatch(upload_id) is None:
+            raise LibraryRefused("invalid_upload", f"{upload_id!r} is not an upload id")
+        self.folder = home / STAGING
+        self.path = self.folder / f"{upload_id}.part"
+        self.manifest_path = self.folder / f"{upload_id}.json"
+        self.hasher = sha256()
+        self.held = 0
+        if offset == 0:
+            self.folder.mkdir(parents=True, exist_ok=True)
+            self.path.unlink(missing_ok=True)
+        else:
+            if not self.path.exists() or self.path.stat().st_size != offset:
+                raise LibraryRefused(
+                    "offset_mismatch", f"{upload_id} does not hold the {offset} bytes resumed from"
+                )
+            with self.path.open("rb") as handle:
+                while data := handle.read(CHUNK):
+                    self.hasher.update(data)
+                    self.held += len(data)
+            if partial_sha256 is not None and self.hasher.hexdigest() != partial_sha256:
+                raise LibraryRefused(
+                    "hash_mismatch", f"{upload_id} does not hash to what the client resumed"
+                )
+        self.handle = self.path.open("ab")
+
+    @property
+    def sha256(self) -> str:
+        return self.hasher.hexdigest()
+
+    def write(self, chunk: bytes) -> int:
+        if chunk:
+            self.handle.write(chunk)
+            self.hasher.update(chunk)
+            self.held += len(chunk)
+        return self.held
+
+    def close(self) -> None:
+        if not self.handle.closed:
+            self.handle.flush()
+            os.fsync(self.handle.fileno())
+            self.handle.close()
+
+    def keep(self, landed: dict[str, Any], *, name: str, media_type: str) -> bool:
+        """Record what the server holds; say whether this staging copy stays (AD-10)."""
+        self.close()
+        manifest = {
+            "upload_id": self.path.stem,
+            "blob_id": landed.get("blob_id"),
+            "sha256": landed.get("sha256"),
+            "offset": self.held,
+            "bytes": landed.get("bytes"),
+            "copies": landed.get("copies", 0),
+            "name": name,
+            "media_type": media_type,
+        }
+        self.manifest_path.write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+        if int(manifest["copies"] or 0) >= COPIES_REQUIRED:
+            self.release()
+            return False
+        return True
+
+    def release(self) -> None:
+        self.path.unlink(missing_ok=True)
+        self.manifest_path.unlink(missing_ok=True)
+
+    @classmethod
+    def staged(cls, home: Path, upload_id: str) -> dict[str, Any] | None:
+        """What this PC holds for one upload id: its partial, or the finished copy it kept."""
+        if UPLOAD_ID.fullmatch(upload_id) is None:
+            raise LibraryRefused("invalid_upload", f"{upload_id!r} is not an upload id")
+        folder = home / STAGING
+        part = folder / f"{upload_id}.part"
+        manifest = folder / f"{upload_id}.json"
+        if manifest.exists():
+            found = json.loads(manifest.read_text(encoding="utf-8"))
+            found["staging"] = part.exists()
+            return found
+        if not part.exists():
+            return None
+        hasher = sha256()
+        held = 0
+        with part.open("rb") as handle:
+            while data := handle.read(CHUNK):
+                hasher.update(data)
+                held += len(data)
+        return {"upload_id": upload_id, "offset": held, "sha256": hasher.hexdigest(), "staging": True}
+
+
+def _hub_connection(url: str) -> http.client.HTTPConnection:
+    parts = urlsplit(url)
+    if parts.scheme == "https":
+        return http.client.HTTPSConnection(
+            parts.hostname, parts.port, timeout=300, context=ssl.create_default_context()
+        )
+    return http.client.HTTPConnection(parts.hostname, parts.port, timeout=300)
+
+
+def _answer(connection: http.client.HTTPConnection) -> tuple[int, dict[str, Any]]:
+    answer = connection.getresponse()
+    body = answer.read()
+    return answer.status, {} if not body else json.loads(body)
+
+
+def upload_router(home: Path) -> APIRouter:
+    """`POST /api/library/upload` on the PC: stream the bytes on, keep the staging copy (AD-27).
+
+    The PC does not hold the Library store after the flip (AD-19), so the bytes go to the server
+    the moment they arrive here: one read from the client, one write to the staging part, one
+    socket send to the hub. `Content-Length` frames one request; a resumed request carries the
+    offset and the hash of what the PC already holds. QMX sets no size limit of its own.
+    """
+    router = APIRouter()
+
+    @router.post(UPLOAD_ROUTE)
+    async def upload(request: Request) -> JSONResponse:
+        given = request.headers.get("Content-Length")
+        if given is None:
+            raise HTTPException(http.client.LENGTH_REQUIRED, detail={"code": "length_required"})
+        upload_id = request.headers.get("X-Upload-Id") or secrets.token_hex(16)
+        name = request.headers.get("X-Upload-Name", "")
+        media_type = request.headers.get("Content-Type", "application/octet-stream")
+        try:
+            offset = int(request.headers.get("X-Upload-Offset") or 0)
+        except ValueError:
+            raise HTTPException(
+                http.client.BAD_REQUEST, detail={"code": "invalid_offset"}
+            ) from None
+        try:
+            client = await anyio.to_thread.run_sync(HubClient.connect, home)
+            part = await anyio.to_thread.run_sync(
+                lambda: Part(
+                    home,
+                    upload_id,
+                    offset=offset,
+                    partial_sha256=request.headers.get("X-Upload-Partial-Sha256"),
+                )
+            )
+        except LibraryRefused as refused:
+            raise HTTPException(
+                http.client.CONFLICT, detail={"code": refused.code, "message": str(refused)}
+            ) from None
+        try:
+            connection = _hub_connection(client.url)
+        except ValueError as error:
+            raise HTTPException(
+                http.client.BAD_GATEWAY, detail={"code": "no_hub_url", "message": str(error)}
+            ) from None
+        partial = part.sha256
+        total = request.headers.get("X-Upload-Total")
+        try:
+            connection.putrequest("POST", UPLOAD_ROUTE)
+            connection.putheader("Authorization", f"Bearer {client.key}")
+            connection.putheader("Content-Type", media_type)
+            connection.putheader("Content-Length", given)
+            connection.putheader("X-Upload-Id", upload_id)
+            connection.putheader("X-Upload-Offset", str(offset))
+            connection.putheader("X-Upload-Partial-Sha256", partial)
+            if total is not None:
+                connection.putheader("X-Upload-Total", total)
+            connection.endheaders()
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                await anyio.to_thread.run_sync(part.write, chunk)
+                await anyio.to_thread.run_sync(connection.send, chunk)
+            status, landed = await anyio.to_thread.run_sync(_answer, connection)
+        except OSError as error:
+            part.close()
+            staged = Part.staged(home, upload_id) or {}
+            raise HTTPException(
+                http.client.BAD_GATEWAY,
+                detail={"code": "hub_unreachable", "message": str(error), **staged},
+            ) from None
+        finally:
+            connection.close()
+        if status == http.client.OK:
+            kept = await anyio.to_thread.run_sync(
+                lambda: part.keep(landed, name=name, media_type=media_type)
+            )
+            return JSONResponse({**landed, "staging_kept": kept})
+        part.close()
+        if status == http.client.ACCEPTED:
+            return JSONResponse(landed, status_code=http.client.ACCEPTED)
+        raise HTTPException(status, detail=landed)
+
+    @router.get(UPLOAD_ROUTE + "/{upload_id}")
+    def staged(upload_id: str) -> Mapping[str, Any]:
+        try:
+            found = Part.staged(home, upload_id)
+        except LibraryRefused as refused:
+            raise HTTPException(http.client.BAD_REQUEST, detail={"code": refused.code}) from None
+        if found is None:
+            raise HTTPException(http.client.NOT_FOUND, detail={"code": "not_found"})
+        return found
+
+    @router.delete(UPLOAD_ROUTE + "/{upload_id}")
+    def discard(upload_id: str) -> Mapping[str, Any]:
+        if UPLOAD_ID.fullmatch(upload_id) is None:
+            raise HTTPException(http.client.BAD_REQUEST, detail={"code": "invalid_upload"})
+        folder = home / STAGING
+        for path in (folder / f"{upload_id}.part", folder / f"{upload_id}.json"):
+            path.unlink(missing_ok=True)
+        return {"discarded": upload_id}
+
+    _ = (upload, staged, discard)
+    return router
 
 
 class BearerGate:
@@ -164,6 +407,8 @@ def create_app(
 
     for extra in extra_routers:
         app.include_router(extra, dependencies=[Depends(authenticate)])
+
+    app.include_router(upload_router(service.home), dependencies=[Depends(authenticate)])
 
     # Keep decorated callables visible to strict type checking.
     _ = control_error, stream_events, health, sign
