@@ -82,7 +82,7 @@ OBSERVER_ROUTES: Final = observer_routes()
 
 
 def observer_allows(scope: Scope) -> bool:
-    """Whether an observer may reach this request's route: an `ops` row or the doctor."""
+    """Whether an observer may reach this request's route: an ops read, the note or the doctor."""
     method = str(scope["method"]).upper()
     path = str(scope["path"])
     return any(verb == method and pattern.fullmatch(path) for verb, pattern in OBSERVER_ROUTES)
@@ -104,15 +104,9 @@ def presented_observer(scope: Scope) -> Observer | None:
 
 
 def _restamped(scope: Scope, observer: Observer, bearer: str) -> Scope:
-    """The same request as the local user's: the local bearer, and the observer's id appended.
-
-    Any `authorization` or `x-qmx-observer` a client sent is dropped first, so an observer's call
-    cannot name another observer and a local-token call cannot claim one.
-    """
+    """The same request as the local user's: the local bearer, and the observer's id appended."""
     headers = [
-        (name, value)
-        for name, value in scope["headers"]
-        if name.lower() not in (b"authorization", b"x-qmx-observer")
+        (name, value) for name, value in scope["headers"] if name.lower() != b"authorization"
     ]
     headers.append((b"authorization", f"Bearer {bearer}".encode("latin-1")))
     query = scope.get("query_string", b"")
@@ -134,7 +128,7 @@ async def _refused(scope: Scope, receive: Receive, send: Send) -> None:
             "error": {
                 "code": "observer_refused",
                 "message": (
-                    "an observer token lists the ops rows and the doctor; "
+                    "an observer token lists the ops reads, the doctor and one note; "
                     f"{path} is not one of them"
                 ),
             }
