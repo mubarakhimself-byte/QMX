@@ -139,6 +139,28 @@ def test_a_collector_that_is_down_drops_and_counts_and_never_fails_the_write(
     assert state["endpoint"] == ENDPOINT
 
 
+def test_an_exported_span_carries_no_value_the_redactor_masks(tmp_path: Path) -> None:
+    sent: list[tuple[str, bytes]] = []
+    telemetry.reset()
+    exporter = telemetry.configure(ENDPOINT, post=lambda url, body: sent.append((url, body)))
+    secret = "sk-or-v1-" + "a" * 32
+    key: JsonObject = {"node_id": "step", "iteration": 0, "partition": None, "attempt": 1}
+    with Ledger.open(tmp_path) as ledger:
+        ledger.append(RUN, "node_started", key, at=T0.isoformat())
+        ledger.append(
+            RUN,
+            "tool_called",
+            {**key, "tool": {"id": "t-1", "name": f"read {secret}", "duration_ms": 4}},
+            at=T0.isoformat(),
+        )
+    exporter.flush()
+
+    body = b"".join(body for path, body in sent if path.endswith("/v1/traces"))
+    assert body and secret.encode() not in body
+    spans = json.loads(body)["resourceSpans"][0]["scopeSpans"][0]["spans"]
+    assert [span["name"] for span in spans] == ["read [redacted]"]
+
+
 def test_a_span_write_reaches_the_exporter_once_it_closes(tmp_path: Path) -> None:
     seen: list[tuple[str, str]] = []
 

@@ -38,7 +38,7 @@ from qmx_ledger.journal import fingerprint
 
 from qmx_engine import telemetry
 from qmx_engine.definition.registry import BASE_KINDS
-from qmx_engine.ledger.redact import exported
+from qmx_engine.ledger.redact import exported, redact
 
 type Subject = Literal["host", "run", "app"]
 type PauseState = Literal["known", "unknown"]
@@ -201,7 +201,7 @@ class HeartbeatLog:
         scratch.write_text(json.dumps(document), encoding="utf-8")
         os.replace(scratch, target)
         for row in found:
-            exported("heartbeat", row.model_dump_json())
+            exported("heartbeat", redact(row.model_dump_json()))
 
     def prune(self, now: datetime) -> int:
         """Drop every row older than the window; returns how many went. Whole day files before
