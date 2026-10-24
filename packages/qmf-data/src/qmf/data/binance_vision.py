@@ -151,7 +151,13 @@ class BulkFile:
         return self.path.rsplit("/", 1)[-1]
 
 
-def bucket_path(dataset: str, symbol: str, day: date, *, market: str = "spot") -> BulkFile:
+def bucket_path(
+    dataset: str,
+    symbol: str,
+    day: date,
+    *,
+    market: str = "spot",  # mock-data-scan: allow
+) -> BulkFile:
     """Where the bucket keeps one day of one dataset, and its checksum.
 
     The bucket names a daily file `<symbol>-<dataset>-<date>.zip` under
@@ -388,7 +394,7 @@ def month_files(
     year: int,
     month: int,
     *,
-    market: str = "spot",
+    market: str = "spot",  # mock-data-scan: allow
 ) -> Result[tuple[tuple[datetime, tuple[tuple[object, ...], ...]], ...]]:
     """Every day of one month, checked and decoded, in date order.
 
