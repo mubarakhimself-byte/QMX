@@ -32,29 +32,19 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import Final
 
+from qmx_router import agents
+
 from qmx_engine.ports.router import Row
 
 type Setting = int | float | str | tuple[int, ...] | tuple[str, ...] | None
 
-ROLE_TIERS: Final[Mapping[str, str]] = {
-    "triage": "cheap",
-    "clarifier": "cheap",
-    "scanner": "cheap",
-    "doctor": "cheap",
-    "judge": "cheap",
-    "reader": "mid",
-    "searcher": "mid",
-    "writer": "mid",
-    "extractor": "mid",
-    "memory_extractor": "mid",
-    "planner": "strong",
-    "synthesiser": "strong",
-    "builder": "strong",
-    "reviewer": "strong",
-}
-"""Each role's class: what kind of work it is, never a provider or a model name.
-`memory_extractor` is Hindsight's own extraction and reflection calls (AD-18, §28.6): its grant
-goes through the router's key lane, so the memory engine never holds a provider key."""
+ROLE_TIERS: Final[Mapping[str, str]] = MappingProxyType(
+    {**agents.ROLE_TIERS, "memory_extractor": "mid"}
+)
+"""Each role's class, from the router, which owns the table its sub-agents are generated from,
+plus `memory_extractor`: Hindsight's own extraction and reflection calls (AD-18, §28.6), an
+engine role with no sub-agent, whose grant goes through the router's key lane so the memory
+engine never holds a provider key."""
 CHINESE: Final = frozenset({"kimi", "moonshot", "deepseek", "glm", "zai", "qwen", "minimax"})
 """The profiles whose models lead every tier (ruling 107)."""
 BUNDLED_ROWS: Final = (

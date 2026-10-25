@@ -50,7 +50,7 @@ from qmx_control.context import (
     listing,
 )
 from qmx_library.port import Draft, JsonObject, LibraryRefused, ObjectView
-from qmx_library.principal import MAIN, sessions_ref, state_ref
+from qmx_library.principal import MAIN, Principal, drafts_ref, sessions_ref, state_ref
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.retain import RetainWorker
@@ -63,7 +63,8 @@ if TYPE_CHECKING:
 
 KIND: Final = "session"
 MINI_APP: Final = "mini-app"
-APPS_REF: Final = "refs/apps/{app_id}"
+PUBLISHER: Final = Principal.parse("operator")
+"""Who lands a published pack: the operator, whose card click the publish is."""
 """Where a publish writes its `mini-app` item before landing it on `main`."""
 BUNDLE: Final = "bundle.tar"
 IDLE: Final = timedelta(hours=24)
@@ -300,16 +301,20 @@ class Landed(Protocol):
 
 
 class PackLanding:
-    """`qmx_apps.road.PackSink` over the host's store: a publish writes its `mini-app` item on
-    `refs/apps/<id>` and lands it on `main`, where the next start materialises it."""
+    """`qmx_apps.road.PackSink` over the host's store. A publish is the operator's own card
+    click, so the operator writes its `mini-app` item on `refs/drafts/<id>` and merges it onto
+    `main`, then the published packs are materialised, so the next chat loads the new view
+    without a restart."""
 
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Store, home: QmxHome) -> None:
         self.store = store
+        self.home = home
 
     def __call__(self, pack: Landed) -> str:
-        ref = APPS_REF.format(app_id=pack.app_id)
+        ref = drafts_ref(pack.app_id)
+        found = self.store.head(pack.app_id, ref)
         commit = self.store.put(
-            self.store.engine,
+            PUBLISHER,
             Draft(
                 MINI_APP,
                 item=pack.app_id,
@@ -323,11 +328,19 @@ class PackLanding:
                 blobs={BUNDLE: pack.bundle},
             ),
             on=ref,
-            expected_head=None,
+            expected_head=None if found is None else found[0],
         )
-        self.store.merge(
-            self.store.engine, pack.app_id, from_ref=ref, into=MAIN, strategy="ff-only"
+        merged = self.store.merge(
+            PUBLISHER, pack.app_id, from_ref=ref, into=MAIN, strategy="ff-only"
         )
+        if merged.outcome == "conflict":
+            raise LibraryRefused(
+                "stale_head", f"{pack.app_id} on main moved past its draft; publish again"
+            )
+        try:
+            materialise_packs(self.home, self.store)
+        except (OSError, ValueError, LibraryRefused) as error:
+            _skipped("pack views", error)
         return commit.object_id
 
 
@@ -661,7 +674,7 @@ class RecordedHarness(Harness):
         except (OSError, ValueError, LibraryRefused) as error:
             _skipped("pack views", error)
         try:
-            self._deps.control.app_runtime().attach_packs(PackLanding(store))
+            self._deps.control.app_runtime().attach_packs(PackLanding(store, self.home))
         except (OSError, ValueError, LibraryRefused) as error:
             _skipped("pack sink", error)
 

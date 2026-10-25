@@ -26,6 +26,7 @@ process dies, so a crashed host never blocks the next one, and two hosts cannot 
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import socket
@@ -84,12 +85,14 @@ from qmx_engine.service.rest import engine_router
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.port import LibraryRefused, StoreRole
+from qmx_library.principal import Principal
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
 from qmx_remote.models import Target
 from qmx_remote.providers import registry as provider_registry
 from qmx_router import complete as router_complete
+from qmx_router import registry as model_registry
 from qmx_router.passes import PassAuthority, RevocationList
 from qmx_router.pool import NoAccount
 from qmx_router.profiles import ProfileName
@@ -544,7 +547,7 @@ async def serve(
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
-            host_reads={"heartbeats": heartbeats_read(home)},
+            host_reads=host_reads(qmx_home, control),
             market=door,
         )
         try:
@@ -845,6 +848,72 @@ def drain_router(core: Engine) -> APIRouter:
 
     _ = drain
     return router
+
+
+def host_reads(home: QmxHome, control: ControlService) -> dict[str, HostRead]:
+    """The reads this host serves to a chat's `agent_tool` rows, by target."""
+    return {
+        "heartbeats": heartbeats_read(home.root),
+        "provider_rows": provider_rows_read(home.root),
+        "provider_test": provider_test_read(home),
+        "mark": mark_read(control),
+    }
+
+
+def provider_rows_read(home: Path) -> HostRead:
+    """The `ops_providers` read: every provider profile and model row, bundled and the home's
+    own, read fresh each call so a profile edited in Settings shows at once."""
+
+    async def read(_arguments: dict[str, Any]) -> Mapping[str, object]:
+        def load() -> Mapping[str, object]:
+            return model_registry.describe(model_registry.load(home / "profiles"))
+
+        return await asyncio.to_thread(load)
+
+    return read
+
+
+def provider_test_read(home: QmxHome) -> HostRead:
+    """The `ops_provider_test` read: one row's one-token Test, the plan row through the plan
+    login. A key value never leaves the keyring lookup."""
+
+    async def read(arguments: dict[str, Any]) -> Mapping[str, object]:
+        qmx_id = arguments.get("qmx_id")
+        if not isinstance(qmx_id, str):
+            raise ValueError("qmx_id is a model row's id, for example openrouter/z-ai/glm-5.3")
+        found = await asyncio.to_thread(model_registry.load, home.root / "profiles")
+        result = await model_registry.one_token_test(
+            found, qmx_id, plan_turn=model_registry.plan_test(home.plan_dir, home.root)
+        )
+        return dataclasses.asdict(result)
+
+    return read
+
+
+OPERATOR: Final = Principal.parse("operator")
+
+
+def mark_read(control: ControlService) -> HostRead:
+    """The `library_mark` read: the row is MANAGE, so it runs only after his approval, and the
+    mark is written as the operator, the one principal who marks (Library AD-22)."""
+
+    async def read(arguments: dict[str, Any]) -> Mapping[str, object]:
+        item, quarantined = arguments.get("item"), arguments.get("quarantined")
+        reason = arguments.get("reason")
+        if not isinstance(item, str) or not isinstance(quarantined, bool):
+            raise ValueError("item is a string and quarantined is true or false")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("reason says why, in a sentence")
+        store = control.library.store
+        try:
+            await asyncio.to_thread(store.mark, OPERATOR, item, quarantined, reason)
+        except LibraryRefused as refused:
+            if refused.code == "not_found":
+                raise KeyError(item) from None
+            raise ValueError(str(refused)) from None
+        return {"item": item, "quarantined": quarantined, "reason": reason}
+
+    return read
 
 
 def heartbeats_read(home: Path) -> HostRead:

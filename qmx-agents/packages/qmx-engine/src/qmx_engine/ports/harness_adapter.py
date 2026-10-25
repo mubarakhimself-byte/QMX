@@ -39,9 +39,9 @@ from qma.harness import (
     TurnResult,
 )
 from qma.launcher import pid_path, read_pid_record
+from qmx_router.registry import KeyCheck, usable
 
 from qmx_engine.policy import engine_policy
-from qmx_engine.roles import PLAN
 from qmx_engine.sink import ENGINE, EngineSink, Listener
 
 CONTEXT_FIELDS: Final = ("input_tokens", "cache_read_tokens", "cache_write_tokens")
@@ -202,10 +202,12 @@ class Running:
 
 
 class HarnessAdapter:
-    def __init__(self, harness: Harness) -> None:
+    def __init__(self, harness: Harness, *, stored: KeyCheck | None = None) -> None:
         """Registers the `engine` sink and policy on `harness`, so build the adapter before any
-        engine chat launches or reloads."""
+        engine chat launches or reloads. `stored` says whether a key row's keyring entry exists,
+        the router's `key_stored` when None."""
         self.harness = harness
+        self.stored = stored
         self.sink = EngineSink()
         harness.register_sink(ENGINE, self.sink)
         harness.register_policy(ENGINE, engine_policy)
@@ -213,8 +215,11 @@ class HarnessAdapter:
         """Each chat's turn in flight, dropped when `wait_turn` returns it."""
 
     def profiles(self) -> frozenset[str]:
+        """The plan and the `[providers]` rows a run may use. A row that does not parse, or a key
+        row whose keyring entry is missing, is left out, so role resolution moves to the next
+        candidate instead of a provider that would refuse."""
         rows = self.harness.control.settings_get("providers")
-        return frozenset({PLAN, *rows})
+        return frozenset(usable(rows, stored=self.stored))
 
     async def plan_use(self) -> PlanUse:
         page = await self.harness.usage()

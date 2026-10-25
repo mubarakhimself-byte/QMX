@@ -16,7 +16,15 @@ from typing import Any
 import httpx
 import pytest
 
-from qmx_router.complete import Ask, Completion, Refused, ask_body, chat_request, check
+from qmx_router.complete import (
+    Ask,
+    Completion,
+    Refused,
+    ask_body,
+    chat_request,
+    check,
+    streamed_answer,
+)
 from qmx_router.ids import SessionId
 from qmx_router.pool import AccountPool, AccountSpec
 from qmx_router.profiles import ModelId, ProfileName, Profiles, SecretRef, parse_profiles
@@ -265,3 +273,21 @@ def test_a_chat_wire_row_carries_the_schema_as_response_format() -> None:
     plain = ask_body(Ask(MESSAGES), "glm-5.3")
     assert "system" not in plain
     assert bundled().model(row.qmx_id) == row or row.provider in bundled().providers
+
+
+CHAT_CHUNKS: list[dict[str, object]] = [
+    {"id": "c1", "model": "glm-5.3", "choices": [{"index": 0, "delta": {"content": "bull"}}]},
+    {"id": "c1", "choices": [{"index": 0, "delta": {"content": "ish"}}]},
+    {"id": "c1", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+    {"id": "c1", "choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": 2}},
+]
+
+
+def test_a_multi_chunk_chat_stream_reads_as_one_answer() -> None:
+    lines: list[str] = []
+    for chunk in CHAT_CHUNKS:
+        lines += [f"data: {json.dumps(chunk)}", ""]
+    lines += ["data: [DONE]", ""]
+    row = bundled().model("opencode-go/glm-5.3")
+    answer = streamed_answer(lines, row, "glm-5.3")
+    assert (answer.text, answer.model, answer.usage["output_tokens"]) == ("bullish", "glm-5.3", 2)
