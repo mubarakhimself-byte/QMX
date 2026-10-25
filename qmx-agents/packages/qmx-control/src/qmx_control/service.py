@@ -1338,11 +1338,19 @@ class ControlService:
             trigger_id = str(engine.workflow_triggers_create(item, spec)["id"])
         return {"app": app, "trigger": engine.workflow_triggers_enable(trigger_id)}
 
-    def app_job(self, app_id: str, job: str) -> Document:
+    def app_job(
+        self,
+        app_id: str,
+        job: str,
+        *,
+        pin: Document | None = None,
+        profile: str | None = None,
+    ) -> Document:
         """Run one of an app's jobs in its supervised process; the engine's `app_op` node
-        calls this when the app's trigger fires (engine AD-57)."""
+        calls this when the app's trigger fires (engine AD-57). The supervisor revalidates a
+        `pin` and refuses a run aimed at another `profile` (AD-64)."""
         try:
-            return self.app_runtime().run_job(app_id, job)
+            return self.app_runtime().run_job(app_id, job, pin=pin, profile=profile)
         except AppError as error:
             raise ControlError(error.code, str(error), error.status) from error
 

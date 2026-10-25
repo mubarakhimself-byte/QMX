@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import shutil
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -30,6 +33,7 @@ from qma.harness.tools import (
     guard_rules,
     keyring_refs,
     sdk_tools,
+    served_apps,
     server_config,
     tool_defs,
     unvetted_tools,
@@ -199,6 +203,134 @@ def test_the_real_tool_list_builds_and_derives_the_gate(tmp_path: Path) -> None:
     assert all(home.endswith("/.claude") for home in rules.personal_homes)
 
 
+ROOT = Path(__file__).resolve().parents[4]
+PING = '\n[operations.ping]\ndescription = "Answer pong"\napproval = "read"\n'
+
+
+def operated_app(tmp_path: Path) -> Path:
+    """The exchange-status example with the supervisor test server and one declared operation."""
+    target = tmp_path / "app"
+    shutil.copytree(
+        ROOT / "examples/apps/exchange-status",
+        target,
+        ignore=shutil.ignore_patterns(".venv", "__pycache__"),
+    )
+    shutil.copyfile(
+        ROOT / "qmx-agents/packages/qmx-apps/tests/fixture_server.py", target / "server.py"
+    )
+    manifest = target / "app.toml"
+    manifest.write_text(manifest.read_text(encoding="utf-8") + PING, encoding="utf-8")
+    return target
+
+
+def test_a_running_app_serves_its_operations_to_a_chat_until_it_stops(tmp_path: Path) -> None:
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+
+    broker = BrokerService(home.root)
+
+    def served() -> dict[str, ToolDef]:
+        found = asyncio.run(tool_defs(control=control, broker=broker, domain=domain, delegate=None))
+        return {tool.name: tool for tool in found}
+
+    try:
+        control.apps_create(str(operated_app(tmp_path)), trust="first_party")
+        control.apps_start("exchange-status")
+        running = served()
+        ping = running["app_exchange-status_ping"]
+        answer = asyncio.run(ping.call({}))
+        servers = build_servers(list(running.values()), grants=Grants(), domain_write="ask")
+        control.apps_stop("exchange-status")
+        stopped = served()
+    finally:
+        control.close()
+    assert (ping.full, ping.effect) == ("mcp__qmx_app_exchange-status__ping", Effect.READ)
+    assert '"pong": true' in answer["content"][0]["text"]
+    assert "qmx_app_exchange-status" in servers
+    assert running["apps_admin_move"].effect is Effect.MANAGE
+    assert "app_exchange-status_ping" not in stopped
+    assert "apps_admin_move" in stopped
+
+
+def test_an_app_that_stopped_after_the_tool_list_answers_app_not_running(tmp_path: Path) -> None:
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    try:
+        control.apps_create(str(operated_app(tmp_path)), trust="first_party")
+        control.apps_start("exchange-status")
+        broker = BrokerService(home.root)
+        defs = asyncio.run(tool_defs(control=control, broker=broker, domain=domain, delegate=None))
+        [ping] = [tool for tool in defs if tool.name == "app_exchange-status_ping"]
+        control.apps_stop("exchange-status")
+        answer = asyncio.run(ping.call({}))
+    finally:
+        control.close()
+    assert answer["is_error"] is True
+    assert json.loads(answer["content"][0]["text"])["error"]["code"] == "app_not_running"
+
+
+def test_the_host_reads_serve_provider_rows_their_test_and_the_mark(tmp_path: Path) -> None:
+    async def echo(arguments: dict[str, Any]) -> Mapping[str, object]:
+        return {"asked": arguments}
+
+    home = QmxHome(tmp_path / "home")
+    control = ControlService(home.root)
+    domain = DomainContext(root=home.root)
+    domain.control, domain.library = control, control.library
+    reads = {"provider_rows": echo, "provider_test": echo, "mark": echo}
+    defs = asyncio.run(
+        tool_defs(
+            control=control,
+            broker=BrokerService(home.root),
+            domain=domain,
+            delegate=None,
+            host=reads,
+        )
+    )
+    served = {tool.name: tool for tool in defs}
+    test = served["ops_provider_test"]
+    answer = asyncio.run(test.call({"qmx_id": "openrouter/z-ai/glm-5.3"}))
+    mark = served["library_mark"]
+    rules = guard_rules(
+        defs,
+        domain_write="allow",
+        home=home,
+        config_dir=home.plan_dir,
+        keyring_names=frozenset(),
+        unattended=False,
+        external_unattended=frozenset(),
+    )
+    assert served["ops_providers"].effect is Effect.READ
+    assert (test.effect, test.input_schema["required"]) == (Effect.DOMAIN_WRITE, ["qmx_id"])
+    assert json.loads(answer["content"][0]["text"]) == {
+        "asked": {"qmx_id": "openrouter/z-ai/glm-5.3"}
+    }
+    assert (mark.effect, mark.input_schema["required"]) == (
+        Effect.MANAGE,
+        ["item", "quarantined", "reason"],
+    )
+    assert "mcp__qmx_library__mark" in rules.mandatory_asks
+
+
+class ListedApps:
+    def list(self) -> list[dict[str, Any]]:
+        def app(app_id: str, status: str) -> dict[str, Any]:
+            operations = {"ping": {"approval": "read"}}
+            definition = {"id": app_id, "version": "1.0.0", "operations": operations}
+            return {"runtime": {"status": status}, "definition": definition}
+
+        return [app("a" * 60, "running"), app("idle", "stopped"), app("ok", "running")]
+
+
+def test_only_running_apps_the_catalog_accepts_serve_tools() -> None:
+    control = cast("ControlService", SimpleNamespace(app_runtime=ListedApps))
+    assert [row.name for row, _ in served_apps(control)] == ["app:ok_ping"]
+
+
 def test_keyring_refs_reads_names_from_three_sections(tmp_path: Path) -> None:
     control = ControlService(tmp_path)
     control.settings_put(
@@ -315,6 +447,9 @@ class FakeRuntime:
 
     def get(self, app_id: str) -> dict[str, Any]:
         return {"id": app_id, "definition_hash": "h1"}
+
+    def list(self) -> list[dict[str, Any]]:
+        return []
 
     def __getattr__(self, name: str) -> Callable[..., dict[str, str]]:
         def called(*args: object, **kwargs: object) -> dict[str, str]:
@@ -530,7 +665,11 @@ def test_a_row_missing_on_its_server_refuses_the_tool_list(
 
     gone = OperationSpec("data", "gone", binds, "gone_tool", "read", "", "none")
     found = rows()
-    monkeypatch.setattr(tools, "rows", lambda: (*found, gone))
+
+    def with_gone(apps: Iterable[OperationSpec] = ()) -> tuple[OperationSpec, ...]:
+        return (*found, *apps, gone)
+
+    monkeypatch.setattr(tools, "rows", with_gone)
     home = QmxHome(tmp_path / "home")
     control = ControlService(home.root)
     domain = DomainContext(root=home.root)

@@ -25,12 +25,11 @@ cannot reach now is left out and one it can join at the next relaunch by resumin
 
 A plan or GPT row under a key main, and a plan row under a GPT main, is refused by the router,
 which is why none is offered: a Claude id on a chat with no plan grant goes through `delegate` v2.
-A provider whose `use` is `test_only` (OpenRouter) reaches only a chat whose own main is that
-provider, which is a provider-proof lane.
+A provider whose `use` is `test_only` reaches only a chat whose own main is that provider, which is
+a provider-proof lane.
 
-`ROLE_TIERS` is the same table as `qmx_engine.settings.ROLE_TIERS`: the engine generates its role
-lists from the registry by the same rule, and one module should own both once the engine reads its
-lists from here. The description and prompt of each role are this module's own.
+`ROLE_TIERS` is the one role table: `qmx_engine.settings` reads it and adds only its own
+`memory_extractor`. The description and prompt of each role are this module's own.
 """
 
 from __future__ import annotations
