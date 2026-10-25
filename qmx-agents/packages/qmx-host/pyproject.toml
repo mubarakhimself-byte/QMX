@@ -7,8 +7,15 @@ dependencies = [
     "qma-harness",
     "qmx-control",
     "qmx-engine",
+    "qmx-broker",
     "qmx-hub",
     "qmx-library",
+    "qmx-memory",
+    "qmx-remote",
+    "qmx-router",
+    "qmx-tools",
+    "qmf-core",
+    "qmf-data",
     "fastapi==0.142.2",
     "httpx==0.28.1",
     "psutil>=7,<9",
@@ -23,8 +30,15 @@ build-backend = "uv_build"
 qma-harness = { workspace = true }
 qmx-control = { workspace = true }
 qmx-engine = { workspace = true }
+qmx-broker = { workspace = true }
 qmx-hub = { workspace = true }
 qmx-library = { workspace = true }
+qmx-memory = { workspace = true }
+qmx-remote = { workspace = true }
+qmx-router = { workspace = true }
+qmx-tools = { workspace = true }
+qmf-core = { workspace = "../../.." }
+qmf-data = { workspace = "../../.." }
 
 [dependency-groups]
 dev = [

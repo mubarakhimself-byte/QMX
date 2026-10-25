@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
 import socket
 import threading
 import time
+from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import httpx
+import keyring
 import pytest
 import uvicorn
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
 from fastmcp import Client
+from keyring.backend import KeyringBackend
+from keyring.backends import fail, null
 
 from qmx_control.catalog import control_rows, rest_routes
 from qmx_control.server import create_app, create_mcp, local_token
@@ -221,25 +227,70 @@ def test_auth_required(tmp_path: Path, path: str) -> None:
         assert client.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 401
 
 
-def test_cors_and_token_created_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    saved: dict[tuple[str, str], str] = {}
+class MemoryKeyring(KeyringBackend):
+    """An OS keyring that lives in this test only."""
 
-    def get_password(service: str, username: str) -> str | None:
-        return saved.get((service, username))
+    def __init__(self) -> None:
+        super().__init__()
+        self.saved: dict[tuple[str, str], str] = {}
 
-    def set_password(service: str, username: str, password: str) -> None:
-        saved[service, username] = password
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.saved.get((service, username))
 
-    monkeypatch.setattr(
-        "qmx_control.server.keyring.get_password",
-        get_password,
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.saved[service, username] = password
+
+    def delete_password(self, service: str, username: str) -> None:
+        self.saved.pop((service, username), None)
+
+
+@contextmanager
+def os_keyring(backend: KeyringBackend) -> Generator[None]:
+    before = keyring.get_keyring()
+    keyring.set_keyring(backend)
+    try:
+        yield
+    finally:
+        keyring.set_keyring(before)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="a Windows PC always has Credential Manager")
+@pytest.mark.parametrize("missing", [fail.Keyring, null.Keyring])
+def test_local_token_uses_the_home_file_without_a_keyring(
+    tmp_path: Path, missing: type[KeyringBackend]
+) -> None:
+    token = tmp_path / "vault" / "control-token"
+    with os_keyring(missing()):
+        made = local_token(tmp_path, create=True)
+        again = local_token(tmp_path)
+        with pytest.raises(RuntimeError, match=r"^No control token at .*elsewhere"):
+            local_token(tmp_path / "elsewhere")
+        mode = token.stat().st_mode & 0o777
+        token.chmod(0o640)
+        with pytest.raises(PermissionError, match="can be read by other users"):
+            local_token(tmp_path)
+
+    assert (again, mode, len(made)) == (made, 0o600, 43)
+    assert not (tmp_path / "elsewhere").exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the refusal is Windows' own")
+def test_a_windows_pc_without_its_credential_store_is_refused_by_name(tmp_path: Path) -> None:
+    with os_keyring(fail.Keyring()), pytest.raises(RuntimeError) as refused:
+        local_token(tmp_path, create=True)
+
+    assert str(refused.value) == (
+        "Windows Credential Manager is not answering, so QMX cannot read its control token."
     )
-    monkeypatch.setattr(
-        "qmx_control.server.keyring.set_password",
-        set_password,
-    )
-    assert local_token() == local_token()
-    assert list(saved) == [("qmx/control-token", "control-token")]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_cors_and_token_created_once(tmp_path: Path) -> None:
+    memory = MemoryKeyring()
+    with os_keyring(memory):
+        assert local_token(tmp_path, create=True) == local_token()
+    assert list(memory.saved) == [("qmx/control-token", "control-token")]
+    assert list(tmp_path.iterdir()) == []
     with TestClient(create_app(ControlService(tmp_path), TOKEN, "http://localhost:5000")) as client:
         allowed = client.options(
             "/api/sessions",

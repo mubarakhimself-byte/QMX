@@ -429,19 +429,30 @@ def host_row(home: Path) -> Heartbeat | None:
     return next((row for row in latest(home).values() if row.subject == "host"), None)
 
 
+def hindsight_runs(control: ControlService, role: Role) -> bool:
+    """Hindsight is the PC's index (ruling 119). On the `node` and `server` roles it runs only
+    when `[memory] hindsight` says so (PRB-S measured it over the server's RAM line), and recall
+    there runs on the built FTS5 engine otherwise (engine AD-52)."""
+    return role == "pc" or section(control, "memory").get("hindsight") is True
+
+
 def compose_memory(
-    harness: RecordedHarness, store: Store, home: Path, control: ControlService
+    harness: RecordedHarness, store: Store, home: Path, control: ControlService, role: Role
 ) -> RecallEngine:
     """Build the home's memory engine and feed it to the port the engine reads and to the
     harness's retain worker, then render the snapshot slot (AD-18).
 
-    Hindsight is the index and it starts lazily on the first read or retain, so a host that never
-    touches memory pays nothing. Its extractor calls go through the router's key lane on a
-    `memory_extractor` grant: Hindsight holds the grant, never a provider key. A grant the relay
-    refuses is reported and left out, and Hindsight then retains without a model call, because a
-    row is already QMX's own digest.
+    Hindsight is the index where `hindsight_runs` says so, and it starts lazily on the first read
+    or retain, so a host that never touches memory pays nothing. Its extractor calls go through
+    the router's key lane on a `memory_extractor` grant: Hindsight holds the grant, never a
+    provider key. A grant the relay refuses is reported and left out, and Hindsight then retains
+    without a model call, because a row is already QMX's own digest.
     """
-    index = HindsightIndex(_hindsight(harness, home, control))
+    index = (
+        HindsightIndex(_hindsight(harness, home, control))
+        if hindsight_runs(control, role)
+        else None
+    )
     engine = RecallEngine(store, index=index, home=home / MEMORY_FOLDER)
     install(engine)
     harness.remember_into(engine)
@@ -616,6 +627,8 @@ async def serve(
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
     serving = role == "server"
+    # Computed once, so the REST gate, the door's restamp and the Library routes share one bearer.
+    bearer = qmx_control.server.local_token(home, create=True)
     root = (library_root or home / LIBRARY) if serving else home / LIBRARY
     router = await RouterService(
         home, bind=TAILNET if role in ("node", "server") else LOOPBACK
@@ -646,7 +659,9 @@ async def serve(
                 control.attach_library(store)
                 harness.doctor_from(lambda: library_line(store))
                 harness.record_into(SessionRecorder(store))
-                memory = await asyncio.to_thread(compose_memory, harness, store, home, control)
+                memory = await asyncio.to_thread(
+                    compose_memory, harness, store, home, control, role
+                )
                 adopt_router(RelayRouter(harness_relay(harness)))
                 try:
                     async with EngineDoor.open(
@@ -668,7 +683,6 @@ async def serve(
                         engine.svc.watching(name=name, forwarders=asking.forwarders)
                         harness_api = chat_routes(harness, scrubbed=scrubbed, keep=keep)
                         origin = ui_origin if role == "pc" else ""
-                        bearer = qmx_control.server.local_token()
                         answering = [*answering_router(home, engine), drain_router(core)]
                         answering.append(templates_router(engine))
                         if door is not None:
@@ -1056,6 +1070,7 @@ def compose(
     routes = [route for api in harness_api for route in api.routes]
     app.add_middleware(
         PrincipalDoor,
+        bearer=bearer,
         chat_routes=routes,
         passes=passes,
         library_key=key,
@@ -1091,15 +1106,17 @@ def webhook_door(engine: EngineDoor) -> APIRouter:
     return router
 
 
-def health(port: int) -> int | None:
-    """The pid the host on `port` reports, or None."""
+def health(port: int, home: Path) -> int | None:
+    """The pid the host of `home` on `port` reports, or None, also while a starting host has not
+    yet written the token file a machine without a keyring reads."""
     try:
+        bearer = qmx_control.server.local_token(home)
         response = httpx.get(
             f"http://127.0.0.1:{port}/api/health",
-            headers={"Authorization": f"Bearer {qmx_control.server.local_token()}"},
+            headers={"Authorization": f"Bearer {bearer}"},
             timeout=2,
         )
-    except httpx.HTTPError:
+    except httpx.HTTPError, RuntimeError:
         return None
     pid = response.json().get("pid") if response.status_code == 200 else None
     return pid if isinstance(pid, int) else None
@@ -1136,7 +1153,7 @@ def start(
         if process.poll() is not None:
             print("The host failed to start; see control.log.", file=sys.stderr)
             return 1
-        pid = health(port)
+        pid = health(port, home)
         if pid is not None and pid == recorded_host(home):
             print(f"Started qmx_host as PID {pid} on port {port}.")
             return 0
@@ -1152,7 +1169,7 @@ def status(home: Path) -> int:
         print("qmx_host is stopped.")
         return 0
     port = json.loads((home / STATE).read_text(encoding="utf-8"))["port"]
-    if health(port) != pid:
+    if health(port, home) != pid:
         print(f"Recorded PID {pid} does not answer on port {port}.", file=sys.stderr)
         return 1
     print(f"qmx_host is running as PID {pid} on port {port}.")

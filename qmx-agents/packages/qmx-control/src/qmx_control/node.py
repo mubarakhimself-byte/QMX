@@ -1,19 +1,23 @@
 """Ubuntu node installation and a Tailscale-only, token-protected control service.
 
-`qmx node setup` is the server step of the plan (LIB4, MIGRATION step 7; DATA-PLAN DR2B, DR2D):
-it runs the bootstrap, installs the host's unit with the `server` role and the one store root
-`/srv/qmx/library`, stops and disables the standalone Hub and node service, moves the pairing key
-into the host's home, imports the bucket's run folders into that root as `qmx`, and only then
-starts `qmx-host`, the store's one writer. On the PC it writes the pairing key and `[library]
-hub_url`, never `primary`: the flip is his click (G-FLIP). `--dry-run` prints the steps in order.
+`qmx node setup` is the server step of the plan (LIB4, MIGRATION step 7; DATA-PLAN DR2B, DR2D;
+engine AD-71): it runs the bootstrap, installs the recovery script `qmx-recover` and its settings,
+closes the firewall and keeps it closed only once a fresh SSH login works, installs the host's
+unit with the `server` role and the one store root `/srv/qmx/library`, stops and disables the
+standalone Hub and node service, moves the pairing key and the control token into the host's home,
+imports the bucket's run folders into that root as `qmx`, and only then starts `qmx-host`, the
+store's one writer. On the PC it writes the pairing key, `[library] hub_url` and the recovery
+script's PC twin in `<home>/bin`, never `primary`: the flip is his click (G-FLIP). `--dry-run`
+prints the steps in order.
 
-`qmx node verify` is the doctor: one `PASS`/`FAIL` line per fact, including the primary store the
-setting names and whether the Hub answers.
+`qmx node verify` is the doctor: one `PASS`/`FAIL` line per fact, the firewall included, and the
+primary store the setting names.
 
 `qmx node rebuild` stops the services, puts a new server's Library back from the bucket and
 rebuilds its catalog from what came back (MIGRATION "When the server is lost", step 3), and `qmx
 node pair` writes a fresh pairing code on both ends (step 5), at `<home>/vault/pairing-key`, the
-file the host and the Hub read. Neither prints a key: a code is written to a file, never shown.
+file the host and the Hub read; the server's half is `qmx-recover pair`, which takes the code on
+stdin. Neither prints a key: a code is written to a file, never shown.
 
 `qmx node vault install --ssh-host` builds the PC's vault document from Credential Manager, sealed
 for the server's own public key, and installs it there; without `--ssh-host` it installs a
@@ -86,12 +90,23 @@ SERVER_LIBRARY: Final = "/srv/qmx/library"
 """The server store's one root (Appendix D): `import`, `rebuild` and the host's unit all name it."""
 SERVER_HOME: Final = "/srv/qmx/home/.qmx"
 """The server host's home, as its unit's `--home` names it; its `vault/pairing-key` is the key."""
+SERVER_VAULT: Final = f"{SERVER_HOME}/vault"
+"""The folder the server's own commands read: the pairing key and the host's control token."""
 NODE_STATE: Final = "/var/lib/qmx"
 """The bootstrap's folder: the bucket, `rclone.conf` and the old Hub's home."""
 SERVER_VENV: Final = "/opt/qmx/qmx-agents/.venv"
 """The environment the bootstrap syncs, which the host's unit runs from."""
-OLD_PAIRING_KEY: Final = "/etc/qmx/vault/pairing-key"
-"""Where the bootstrap and the old `pair` wrote the key; setup and pair move it once."""
+OLD_VAULT: Final = "/etc/qmx/vault"
+"""Where the bootstrap and the old `pair` wrote the pairing key and the control token; setup and
+`qmx-recover repair` move each into the host's home once."""
+RECOVER: Final = "/usr/local/sbin/qmx-recover"
+"""The recovery script, outside the version folders, because `/opt/qmx` can be the broken thing."""
+RECOVER_CONF: Final = "/etc/qmx-recover.conf"
+"""Its settings, root's alone: root acts on the paths it names, and the bootstrap gives everything
+under `/etc/qmx` and `/var/lib/qmx` to `qmx`."""
+UNIT_COPY: Final = "/usr/local/lib/qmx-recover/qmx-host.service"
+"""Setup's copy of the host's unit, which `qmx-recover repair` puts back; root's for the same
+reason."""
 SERVER_UNITS: Final = ("qmx-host", "qmx-hub")
 """The services that hold the server store's writer lock."""
 STANDALONE: Final = ("qmx-hub", "qmx-node")
@@ -199,27 +214,6 @@ def pc_vault_document(home: Path, server_key: str, *, machine: str, source: Any)
     return json_document(publish(source, own, machine="pc", peers={machine: peer}))
 
 
-def pair_script(code: str, server_home: str = SERVER_HOME) -> str:
-    """The server's half of `qmx node pair`: the new key where its host reads it, the outgoing one
-    kept as `pairing-key.previous`, the old `/etc` copy removed, and the host restarted so every
-    reader of the key takes the new one. The code rides stdin, never argv or a log."""
-    vault = f"{server_home}/vault"
-    return (
-        "set -eu\n"
-        "umask 077\n"
-        f"install -d -o qmx -g qmx -m 700 {vault}\n"
-        f"cat > {vault}/{PAIRING_KEY}.tmp <<'QMXKEY'\n{code}\nQMXKEY\n"
-        f"if [ -s {vault}/{PAIRING_KEY} ]; then\n"
-        f"  mv {vault}/{PAIRING_KEY} {vault}/{PREVIOUS_PAIRING_KEY}\n"
-        f"  rm -f {vault}/{RUN_PASS_KEY}\n"
-        "fi\n"
-        f"mv {vault}/{PAIRING_KEY}.tmp {vault}/{PAIRING_KEY}\n"
-        f"chown qmx:qmx {vault}/{PAIRING_KEY}*\n"
-        f"rm -f {OLD_PAIRING_KEY}\n"
-        "systemctl try-restart qmx-host\n"
-    )
-
-
 def bootstrap_script(revision: str, *, hindsight: bool = False, hub_port: int = 0) -> str:
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Bootstrap needs an exact Git commit.")
@@ -266,7 +260,8 @@ def verify(
     root: Path | None = None,
     state: Path = Path(NODE_STATE),
 ) -> dict[str, bool]:
-    """The server's doctor: the host's unit, the one store root, no standalone Hub left."""
+    """The server's doctor: the host's unit, the one store root, no standalone Hub left, and the
+    firewall on with incoming denied (engine AD-71)."""
     checks: dict[str, bool] = {}
     commands = {
         "docker": ["docker", "info"],
@@ -280,6 +275,7 @@ def verify(
             checks[name] = bool(run(command))
         except OSError, RuntimeError:
             checks[name] = False
+    checks["firewall"] = firewall_closed()
     checks["no_standalone_hub"] = all(
         _refused(["systemctl", verb, "qmx-hub"]) for verb in ("is-active", "is-enabled")
     )
@@ -295,6 +291,15 @@ def verify(
         else False
     )
     return checks
+
+
+def firewall_closed() -> bool:
+    """ufw is on and denies incoming by default, as `qmx-recover firewall close` leaves it."""
+    try:
+        shown = run(["ufw", "status", "verbose"])
+    except OSError, RuntimeError:
+        return False
+    return "Status: active" in shown and "deny (incoming)" in shown
 
 
 def _refused(command: list[str]) -> bool:
@@ -505,25 +510,64 @@ def host_unit_script(role: str = "server") -> str:
         f"cat > /etc/systemd/system/{HOST_UNIT} <<'QMXUNIT'\n"
         f"{host_unit(role)}"
         "QMXUNIT\n"
+        f"install -D -o root -g root -m 644 /etc/systemd/system/{HOST_UNIT} {UNIT_COPY}\n"
         "systemctl daemon-reload\n"
     )
 
 
-def move_key_script(server_home: str = SERVER_HOME) -> str:
-    """Move the bootstrap's `/etc/qmx/vault/pairing-key` into the host's home, once.
+MOVED: Final = (PAIRING_KEY, "control-token")
+"""What the bootstrap and the old node service kept in `OLD_VAULT`; the host reads both from its
+own vault folder."""
 
-    The bootstrap writes a fresh one whenever none is at the old path, so on a rerun the home
-    already holds the key and the new copy at the old path is removed unread.
+
+def move_key_script(server_home: str = SERVER_HOME, old_vault: str = OLD_VAULT) -> str:
+    """Move the pairing key and the control token from `old_vault` into the host's home, once.
+
+    The bootstrap writes a fresh key whenever none is at the old path, and the old `qmx node
+    bootstrap` a token, so on a rerun the home already holds both: the copy at the old path is
+    then removed unread and the one the running host uses is kept.
     """
-    target = f"{server_home}/vault/{PAIRING_KEY}"
+    vault = f"{server_home}/vault"
+    lines = ["set -eu"]
+    for name in MOVED:
+        lines += [
+            f"if [ -s {vault}/{name} ]; then rm -f {old_vault}/{name}",
+            f"elif [ -s {old_vault}/{name} ]; then mv {old_vault}/{name} {vault}/{name}",
+            "fi",
+            f"if [ -e {vault}/{name} ]; then chown qmx:qmx {vault}/{name}; "
+            f"chmod 600 {vault}/{name}; fi",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def recover_script(pc_name: str = "") -> str:
+    """Install `qmx-recover` from the source tree the bootstrap just unpacked, with its settings."""
+    source = "/opt/qmx/qmx-agents/packages/qmx-control/src/qmx_control/qmx-recover.sh"
+    conf = {
+        "HOST_UNIT": HOST_UNIT.removesuffix(".service"),
+        "QMX_HOME": SERVER_HOME,
+        "LIBRARY": SERVER_LIBRARY,
+        "PORT": str(host_port(host_unit())),
+        "PROJECT": "/opt/qmx/qmx-agents",
+        "VENV": SERVER_VENV,
+        "VERSIONS": "/opt/qmx-versions",
+        "CURRENT": "/opt/qmx",
+        "QMX_USER": "qmx",
+        "OLD_VAULT": OLD_VAULT,
+        "UNIT_COPY": UNIT_COPY,
+        "PC_NAME": pc_name,
+    }
+    rows = "".join(f"{key}={value}\n" for key, value in conf.items())
     return (
         "set -eu\n"
-        f"if [ -s {target} ]; then rm -f {OLD_PAIRING_KEY}\n"
-        f"elif [ -s {OLD_PAIRING_KEY} ]; then mv {OLD_PAIRING_KEY} {target}\n"
-        "fi\n"
-        f"chown qmx:qmx {target}\n"
-        f"chmod 600 {target}\n"
+        f"install -o root -g root -m 755 {source} {RECOVER}\n"
+        f"cat > {RECOVER_CONF} <<'QMXCONF'\n{rows}QMXCONF\n"
+        f"chown root:root {RECOVER_CONF}\n"
+        f"chmod 644 {RECOVER_CONF}\n"
     )
+
+
+FIREWALL_STEP: Final = "close the firewall"
 
 
 type Call = Callable[[list[str], str | None], str]
@@ -531,22 +575,26 @@ type Call = Callable[[list[str], str | None], str]
 
 
 def setup_steps(
-    revision: str, *, hindsight: bool = False, hub_port: int = 0
+    revision: str, *, hindsight: bool = False, hub_port: int = 0, pc_name: str = ""
 ) -> list[tuple[str, str]]:
     """The server's half of `qmx node setup`, in order, as `(step, script for sudo bash)`.
 
-    The standalone Hub stops before the import because it would hold the old store's lock and
-    serve a second root; the host starts last, so it opens the store the import wrote.
+    The recovery script comes straight after the bootstrap, because it owns the firewall's rules
+    and is his way in if a later step fails. The standalone Hub stops before the import because it
+    would hold the old store's lock and serve a second root; the host starts last, so it opens the
+    store the import wrote.
     """
     return [
         ("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
+        ("install the recovery script", recover_script(pc_name)),
+        (FIREWALL_STEP, f"set -eu\n{RECOVER} firewall close\n"),
         ("install the host", host_unit_script()),
         (
             "stop and disable the standalone Hub",
             "set -eu\nsystemctl stop qmx-host || true\n"
             f"systemctl disable --now {' '.join(STANDALONE)}\n",
         ),
-        ("move the pairing key", move_key_script()),
+        ("move the pairing key and the control token", move_key_script()),
         (
             "import as qmx",
             f"set -eu\nrunuser -u qmx -- {SERVER_VENV}/bin/qmx node import "
@@ -570,37 +618,86 @@ def setup(
     """`qmx node setup` after the source archive is on `host`: the server steps, then the PC's
     pairing key and `hub_url`, then the server's own doctor. `primary` is not written.
 
-    `dry_run` prints every step's script and the PC's two writes, and runs and writes nothing.
+    `dry_run` prints every step's script and the PC's three writes, and runs and writes nothing.
+    A fresh SSH login that fails once the firewall closes stops setup there, before the host.
     """
     ssh = ["ssh", host]
     port = host_port(host_unit())
-    for number, (step, script) in enumerate(
-        setup_steps(revision, hindsight=hindsight, hub_port=hub_port), start=1
-    ):
+    steps = setup_steps(
+        revision, hindsight=hindsight, hub_port=hub_port, pc_name=socket.gethostname().lower()
+    )
+    for number, (step, script) in enumerate(steps, start=1):
         say(f"step {number}: {step}")
         if dry_run:
             say(f"node-bootstrap.sh at {revision}" if step == "bootstrap" else script.rstrip())
             continue
         call([*ssh, "sudo bash -s"], script)
+        if step == FIREWALL_STEP and not kept_closed(host, call, say):
+            return 1
     if dry_run:
-        say(f"then on this PC: copy {SERVER_HOME}/vault/{PAIRING_KEY} to {home}/vault")
+        say(f"then on this PC: copy {SERVER_VAULT}/{PAIRING_KEY} to {home}/vault")
         say(f'then on this PC: [library] hub_url = "http://<tailnet address>:{port}"')
+        say(f"then on this PC: write the recovery twin to {home / TWIN_FOLDER}")
         return 0
     address = call([*ssh, "tailscale ip -4"], None).splitlines()[0]
     url = f"http://{address}:{port}"
-    key = call([*ssh, f"sudo cat {SERVER_HOME}/vault/{PAIRING_KEY}"], None).strip()
+    key = call([*ssh, f"sudo cat {SERVER_VAULT}/{PAIRING_KEY}"], None).strip()
     # The key is written, never printed, so it cannot land in a log (MIGRATION step 7, AD-11).
     held = home / "vault" / PAIRING_KEY
     if not held.exists() or held.read_text(encoding="utf-8").strip() != key:
         pair(home, key)
     set_hub_url(home, url)
+    twin = write_twin(home, host, address)
     say(f"hub: {url}")
+    say(f"recovery on this PC: {twin}")
     say(f"primary: {library_primary(home)} (the flip is his click)")
     checks = call(
         [*ssh, f"sudo {SERVER_VENV}/bin/qmx node verify --home {SERVER_HOME} || true"], None
     )
     say(checks)
     return int("FAIL" in checks)
+
+
+def kept_closed(host: str, call: Call, say: Callable[[str], None]) -> bool:
+    """After the firewall closes, keep it closed only when a fresh SSH login works (AD-71).
+
+    The close armed a timer that turns ufw off in five minutes, so a failed login undoes itself.
+    """
+    try:
+        call(["ssh", "-o", "ConnectTimeout=10", host, "true"], None)
+    except RuntimeError:
+        say(
+            "A fresh SSH login to the server failed after the firewall closed. The firewall turns "
+            "itself off within five minutes; then run setup again. If SSH stays shut, use "
+            "Contabo's VNC console and run: sudo qmx-recover firewall open"
+        )
+        return False
+    call(["ssh", host, f"sudo {RECOVER} firewall keep"], None)
+    return True
+
+
+TWIN_FOLDER: Final = "bin"
+TWIN: Final = "qmx-recover.ps1"
+
+
+def write_twin(home: Path, host: str, address: str) -> Path:
+    """The PC twin of `qmx-recover` in `<home>/bin`, with the server's SSH target and tailnet
+    address and this PC's Python beside it. No secret is written."""
+    folder = home / TWIN_FOLDER
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / TWIN
+    shutil.copyfile(Path(__file__).with_name(TWIN), target)
+    rows = {
+        "TARGET": host,
+        "SERVER_TAILNET": address,
+        "SERVER_HOME": SERVER_HOME,
+        "QMX_HOME": str(home.resolve()),
+        "PYTHON": sys.executable,
+    }
+    (folder / "qmx-recover.conf").write_text(
+        "".join(f"{key}={value}\n" for key, value in rows.items()), encoding="utf-8"
+    )
+    return target
 
 
 def post(url: str, body: Mapping[str, object], headers: Mapping[str, str]) -> Mapping[str, object]:
@@ -737,15 +834,15 @@ def main() -> int:
     pairing.add_argument("--ssh-host", default="", help="also install the same code on that host")
     check = commands.add_parser("verify")
     check.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    check.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    check.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
     check.add_argument("--root", type=Path, default=Path(SERVER_LIBRARY))
     login = commands.add_parser("login")
     login.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    login.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    login.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
     login.add_argument("--machine", default="")
     refresh = commands.add_parser("update")
     refresh.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    refresh.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    refresh.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
     refresh.add_argument("--revision", default="")
     refresh.add_argument("--timeout", type=float, default=3600.0)
     vault_command = commands.add_parser("vault")
@@ -766,7 +863,7 @@ def main() -> int:
     vault_key_command.add_argument("--machine", default=SERVER_MACHINE)
     serve = commands.add_parser("serve")
     serve.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
-    serve.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    serve.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
     args = parser.parse_args()
     if args.command == "import":
         from qmx_engine.ledger import redact  # noqa: PLC0415
@@ -800,7 +897,7 @@ def main() -> int:
             ssh = shutil.which("ssh")
             if ssh is None:
                 raise RuntimeError("Install SSH before pairing a node.")
-            run([ssh, host, "sudo bash -s"], input_text=pair_script(code))
+            run([ssh, host, f"sudo {RECOVER} pair --from-stdin"], input_text=code)
             print(f"PASS paired {host}; its host restarted with the new key")
             print("restart this PC's host so its Hub link and forwarders read the new key")
         print(f"PASS pairing code written to {target}")

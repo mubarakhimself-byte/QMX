@@ -23,6 +23,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
+from keyring.backends import fail, null
 from qmx_apps.errors import AppError
 from qmx_library.client import HubClient
 from qmx_library.port import LibraryRefused
@@ -43,12 +44,57 @@ COPIES_REQUIRED: Final = 2
 UPLOAD_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
-def local_token() -> str:
-    """Keep the laptop token in the OS vault, never in the home directory."""
-    token = keyring.get_password("qmx/control-token", "control-token")
-    if token is None:
+CONTROL_TOKEN: Final = "vault/control-token"  # noqa: S105 - a file name, not a token
+"""The host's bearer on a machine whose OS has no keyring, beside its pairing key (engine AD-52)."""
+
+
+def local_token(home: Path | None = None, *, create: bool = False) -> str:
+    """The host's bearer: the OS keyring wherever it has a backend, created there when missing.
+
+    A headless Linux server has none (the keyring library's `fail` backend, or `null`, which
+    stores nothing), so the token lives in `<home>/vault/control-token`, owner-only. Only the
+    host's `serve` passes `create`; every other reader of a missing file gets a plain error naming
+    the home, so a wrong home never mints a second token. Windows always has Credential Manager,
+    so a missing backend there is refused rather than quietly moved to a file the console and the
+    PC's other readers would not read.
+    """
+    backend = keyring.get_keyring()
+    if not isinstance(backend, fail.Keyring | null.Keyring):
+        token = keyring.get_password("qmx/control-token", "control-token")
+        if token is None:
+            token = secrets.token_urlsafe(32)
+            keyring.set_password("qmx/control-token", "control-token", token)
+        return token
+    if os.name == "nt":
+        raise RuntimeError(
+            "Windows Credential Manager is not answering, so QMX cannot read its control token."
+        )
+    return _file_token((home or default_home()) / CONTROL_TOKEN, create=create)
+
+
+def _file_token(path: Path, *, create: bool) -> str:
+    try:
+        found = path.stat()
+    except FileNotFoundError:
+        if not create:
+            raise RuntimeError(
+                f"No control token at {path}. Start the host on {path.parents[1]} first, "
+                "or name the home it serves."
+            ) from None
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         token = secrets.token_urlsafe(32)
-        keyring.set_password("qmx/control-token", "control-token", token)
+        try:
+            handle = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            return _file_token(path, create=False)
+        with os.fdopen(handle, "w", encoding="utf-8") as written:
+            written.write(token + "\n")
+        return token
+    if found.st_mode & 0o077:
+        raise PermissionError(f"{path} can be read by other users; set it owner-only (chmod 600).")
+    token = path.read_text(encoding="utf-8").strip()
+    if not token:
+        raise RuntimeError(f"The control token at {path} is empty.")
     return token
 
 

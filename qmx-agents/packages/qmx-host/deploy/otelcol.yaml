@@ -18,8 +18,9 @@
 #   install -m 0644 otelcol.yaml /etc/qmx/otelcol.yaml
 #   printf 'OO_AUTH=Basic <base64 of the OpenObserve user and password>\n' > /etc/qmx/otelcol.env
 #   chmod 0600 /etc/qmx/otelcol.env
-# The password is made at install and never written to this repository. The host firewall admits
-# 4317 and 4318 only over the tailnet, and 8888 is bound to loopback for the same reason.
+# The password is made at install and never written to this repository. The server's firewall
+# (`qmx-recover firewall close`, engine AD-71) admits 4317, 4318 and 13133 only over the tailnet,
+# and 8888 is bound to loopback for the same reason.
 
 receivers:
   otlp:

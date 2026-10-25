@@ -36,9 +36,11 @@ if TYPE_CHECKING:
     from qmx_router.relay import Relay
 
 LOOPBACK: Final = "127.0.0.1"
-TAILNET: Final = "0.0.0.0"  # noqa: S104  (a node is reached over Tailscale or not at all)
-"""The `node` role's bind. The server's only reachable network is the tailnet, so every
-interface there is the tailnet one; the PC's roles keep the loopback bind."""
+TAILNET: Final = "0.0.0.0"  # noqa: S104  (the server's firewall admits only the tailnet, AD-71)
+"""The `node` and `server` roles' bind: every interface, so the loopback health probe and the
+Docker bridge reach it too. The tailnet is the only way in from outside because the server's
+firewall (`qmx-recover firewall close`, engine AD-71) denies every other incoming connection but
+SSH; the PC's roles keep the loopback bind."""
 PORT_FILE: Final = "router.port"
 """The pinned port, one line of text, read by every launch."""
 CHECK_S: Final = 5.0
