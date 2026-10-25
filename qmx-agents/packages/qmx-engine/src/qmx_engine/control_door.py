@@ -291,7 +291,7 @@ class EngineDoor:
             settings=settings or ControlSettings(control),
             harness=harness,
             clock=clock,
-            executors={"app_op": AppOp(control.app_job)},
+            executors={"app_op": AppOp(control.app_job, dispatch=control.app_job)},
         ) as svc:
             scheduler = Scheduler(
                 svc.ctx, credentials=configured_refs(control), skills=shipped_skills()
