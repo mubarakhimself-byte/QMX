@@ -55,6 +55,10 @@ from qmx_control.server import create_app
 from qmx_control.service import ControlService
 
 
+class SessionLost(RuntimeError):
+    """ssh's own exit code 255: the connection failed or dropped, whatever the command did."""
+
+
 def run(command: list[str], *, input_text: str | None = None) -> str:
     # Windows text-mode pipes turn shell-script LF into CRLF, which bash rejects.
     result = subprocess.run(
@@ -64,7 +68,9 @@ def run(command: list[str], *, input_text: str | None = None) -> str:
         check=False,
     )
     if result.returncode:
-        raise RuntimeError(f"{command[0]} failed ({result.returncode}); inspect the node logs.")
+        lost = result.returncode == 255 and Path(command[0]).stem == "ssh"
+        failed = SessionLost if lost else RuntimeError
+        raise failed(f"{command[0]} failed ({result.returncode}); inspect the node logs.")
     return result.stdout.decode("utf-8").strip()
 
 
@@ -614,6 +620,7 @@ def setup(
     hub_port: int = 0,
     say: Callable[[str], None] = print,
     dry_run: bool = False,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     """`qmx node setup` after the source archive is on `host`: the server steps, then the PC's
     pairing key and `hub_url`, then the server's own doctor. `primary` is not written.
@@ -631,8 +638,13 @@ def setup(
         if dry_run:
             say(f"node-bootstrap.sh at {revision}" if step == "bootstrap" else script.rstrip())
             continue
-        call([*ssh, "sudo bash -s"], script)
-        if step == FIREWALL_STEP and not kept_closed(host, call, say):
+        try:
+            call([*ssh, "sudo bash -s"], script)
+        except SessionLost:
+            # Switching ufw on can reset the session that asked; the fresh login below decides.
+            if step != FIREWALL_STEP:
+                raise
+        if step == FIREWALL_STEP and not kept_closed(host, call, say, sleep):
             return 1
     if dry_run:
         say(f"then on this PC: copy {SERVER_VAULT}/{PAIRING_KEY} to {home}/vault")
@@ -658,22 +670,44 @@ def setup(
     return int("FAIL" in checks)
 
 
-def kept_closed(host: str, call: Call, say: Callable[[str], None]) -> bool:
-    """After the firewall closes, keep it closed only when a fresh SSH login works (AD-71).
+CLOSE_WAIT_S: Final = 5.0
+CLOSE_TRIES: Final = 6
+"""`firewall close` switches ufw on about three seconds after it returns; this many fresh logins,
+each after the wait, give it half a minute to say on."""
+
+
+def kept_closed(
+    host: str, call: Call, say: Callable[[str], None], sleep: Callable[[float], None]
+) -> bool:
+    """After the firewall closes, keep it closed only when a fresh SSH login works and the
+    server's own `firewall status` says on (AD-71).
 
     The close armed a timer that turns ufw off in five minutes, so a failed login undoes itself.
     """
-    try:
-        call(["ssh", "-o", "ConnectTimeout=10", host, "true"], None)
-    except RuntimeError:
-        say(
-            "A fresh SSH login to the server failed after the firewall closed. The firewall turns "
-            "itself off within five minutes; then run setup again. If SSH stays shut, use "
-            "Contabo's VNC console and run: sudo qmx-recover firewall open"
-        )
-        return False
-    call(["ssh", host, f"sudo {RECOVER} firewall keep"], None)
-    return True
+    shown = ""
+    for _ in range(CLOSE_TRIES):
+        sleep(CLOSE_WAIT_S)
+        try:
+            shown = call(
+                ["ssh", "-o", "ConnectTimeout=10", host, f"sudo {RECOVER} firewall status"], None
+            )
+        except RuntimeError:
+            say(
+                "A fresh SSH login to the server failed after the firewall closed. The undo "
+                "switches the firewall off within five minutes; then run setup again. If SSH "
+                "stays shut, Contabo's VNC console is the way back: log in there and run: "
+                "sudo qmx-recover firewall open"
+            )
+            return False
+        if any(row.startswith("firewall ") and row.endswith("PASS") for row in shown.splitlines()):
+            call(["ssh", host, f"sudo {RECOVER} firewall keep"], None)
+            return True
+    say(
+        "The firewall did not say on within half a minute, so setup stops here. If it came on "
+        f"later, the undo switches it off within five minutes. The server said:\n{shown}\n"
+        "Run setup again once that is fixed."
+    )
+    return False
 
 
 TWIN_FOLDER: Final = "bin"

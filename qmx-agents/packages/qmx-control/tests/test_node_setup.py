@@ -18,12 +18,14 @@ import pytest
 from qmx_router.vault import MemorySource, VaultKey, VaultStore, as_text
 
 from qmx_control.node import (
+    SessionLost,
     host_unit,
     main,
     move_key_script,
     pair,
     pc_vault_document,
     rebuild,
+    run,
     setup,
     setup_steps,
     source_archive,
@@ -45,37 +47,64 @@ class Server:
             return "100.64.0.9\n"
         if command[-1].startswith("sudo cat "):
             return "pairing-code\n"
+        if command[-1].endswith("firewall status"):
+            return (
+                "firewall    on: only SSH, Tailscale and QMX's containers get in  PASS\n"
+                "last close  switched on at 2026-10-25 09:00:03 UTC  PASS"
+            )
         return "PASS host"
+
+    def sleep(self, seconds: float) -> None:
+        self.sent.append(f"wait {seconds:g}")
+
+
+class DropsOnClose(Server):
+    """A server that resets the session which ran the close, as the real one did."""
+
+    def __call__(self, command: list[str], text: str | None) -> str:
+        answer = super().__call__(command, text)
+        if text is not None and "firewall close" in text:
+            raise SessionLost("ssh failed (255); inspect the node logs.")
+        return answer
 
 
 class ShutOut(Server):
     """A server whose fresh SSH login fails once the firewall is on."""
 
     def __call__(self, command: list[str], text: str | None) -> str:
-        if command[-1] == "true":
-            self.sent.append("true")
-            raise RuntimeError("ssh failed (255); inspect the node logs.")
+        if command[-1].endswith("firewall status"):
+            self.sent.append(command[-1])
+            raise SessionLost("ssh failed (255); inspect the node logs.")
         return super().__call__(command, text)
 
 
 def acts(sent: Sequence[str]) -> list[str]:
-    """The service, firewall and login acts setup sent after the bootstrap, in order."""
+    """The service, firewall, wait and login acts setup sent after the bootstrap, in order."""
     return [
         line
         for text in sent[1:]
         for line in text.splitlines()
-        if line.startswith(("systemctl", RECOVER, f"sudo {RECOVER}", "true"))
+        if line.startswith(("systemctl", RECOVER, f"sudo {RECOVER}", "wait"))
     ]
 
 
-def test_setup_keeps_the_firewall_after_a_fresh_login_then_imports_and_starts_the_host(
-    tmp_path: Path,
+@pytest.mark.parametrize("server", [Server(), DropsOnClose()], ids=["kept", "dropped"])
+def test_setup_keeps_the_firewall_after_a_fresh_login_says_on_then_starts_the_host(
+    tmp_path: Path, server: Server
 ) -> None:
-    server = Server()
-    assert setup("qmx-server", tmp_path, revision=REVISION, call=server, say=lambda _: None) == 0
+    done = setup(
+        "qmx-server",
+        tmp_path,
+        revision=REVISION,
+        call=server,
+        say=lambda _: None,
+        sleep=server.sleep,
+    )
+    assert done == 0
     assert acts(server.sent) == [
         f"{RECOVER} firewall close",
-        "true",
+        "wait 5",
+        f"sudo {RECOVER} firewall status",
         f"sudo {RECOVER} firewall keep",
         "systemctl daemon-reload",
         "systemctl stop qmx-host || true",
@@ -104,10 +133,46 @@ def test_a_failed_fresh_login_stops_setup_before_the_host_and_lets_the_undo_fire
 ) -> None:
     server = ShutOut()
     said: list[str] = []
-    assert setup("qmx-server", tmp_path, revision=REVISION, call=server, say=said.append) == 1
-    assert acts(server.sent) == [f"{RECOVER} firewall close", "true"]
-    assert said[-1].startswith("A fresh SSH login to the server failed after the firewall closed.")
+    done = setup(
+        "qmx-server",
+        tmp_path,
+        revision=REVISION,
+        call=server,
+        say=said.append,
+        sleep=server.sleep,
+    )
+    assert done == 1
+    assert acts(server.sent) == [
+        f"{RECOVER} firewall close",
+        "wait 5",
+        f"sudo {RECOVER} firewall status",
+    ]
+    assert said[-1] == (
+        "A fresh SSH login to the server failed after the firewall closed. The undo switches the "
+        "firewall off within five minutes; then run setup again. If SSH stays shut, Contabo's VNC "
+        "console is the way back: log in there and run: sudo qmx-recover firewall open"
+    )
     assert list(tmp_path.iterdir()) == []
+
+
+def test_a_dropped_ssh_session_is_told_apart_from_a_command_that_failed(tmp_path: Path) -> None:
+    def ssh_exiting(code: int) -> str:
+        folder = tmp_path / str(code)
+        folder.mkdir()
+        if os.name == "nt":
+            path = folder / "ssh.bat"
+            path.write_text(f"@exit /b {code}\r\n", encoding="utf-8")
+        else:
+            path = folder / "ssh"
+            path.write_text(f"#!/bin/sh\nexit {code}\n", encoding="utf-8")
+            path.chmod(0o755)
+        return str(path)
+
+    with pytest.raises(SessionLost):
+        run([ssh_exiting(255), "qmx-server", "true"])
+    with pytest.raises(RuntimeError) as failed:
+        run([ssh_exiting(1), "qmx-server", "true"])
+    assert type(failed.value) is RuntimeError
 
 
 def test_the_import_and_the_host_unit_name_the_one_root() -> None:

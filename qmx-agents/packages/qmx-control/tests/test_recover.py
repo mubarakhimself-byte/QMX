@@ -41,7 +41,15 @@ case "$*" in
 esac
 """,
     "sshd": '[[ -e "$PWD/state/no-sshd" ]] || printf "port 22\\nlistenaddress 0.0.0.0:22\\n"',
-    "systemd-run": 'echo "systemd-run $*" >> "$PWD/calls.log"',
+    "systemd-run": """
+echo "systemd-run $*" >> "$PWD/calls.log"
+unit=
+while [[ "${1:-}" == --* ]]; do
+  [[ "$1" == --unit ]] && { unit="$2"; shift; }
+  shift
+done
+printf '%q ' "$@" > "$PWD/state/queued-$unit"
+""",
     "journalctl": 'echo "journalctl $*" >> "$PWD/calls.log"',
     "tailscale": '[[ "$1" == ip ]] && echo 100.64.0.9; exit 0',
     "curl": '[[ -e "$PWD/state/stopped-qmx-host" ]] && printf 000 || printf 401',
@@ -126,9 +134,16 @@ class Server:
         (root / "recover.conf").write_text(rows, encoding="utf-8", newline="\n")
 
     def run(self, *words: str) -> subprocess.CompletedProcess[str]:
+        return self.bash('PATH="$PWD/bin:$PATH" exec bash "$0" "$@"', SCRIPT.as_posix(), *words)
+
+    def fire(self, unit: str) -> subprocess.CompletedProcess[str]:
+        """What systemd does when the timer `systemd-run` set for `unit` comes due."""
+        return self.bash(f'PATH="$PWD/bin:$PATH"; eval "$(cat state/queued-{unit})"')
+
+    def bash(self, script: str, *words: str) -> subprocess.CompletedProcess[str]:
         assert BASH is not None
         return subprocess.run(
-            [BASH, "-c", 'PATH="$PWD/bin:$PATH" exec bash "$0" "$@"', SCRIPT.as_posix(), *words],
+            [BASH, "-c", script, *words],
             cwd=self.root,
             env={**os.environ, "QMX_RECOVER_CONF": posix(self.root / "recover.conf")},
             capture_output=True,
@@ -144,24 +159,47 @@ class Server:
         return [row.replace(ufw, "ufw") for row in rows if row.startswith(tools)]
 
 
-def test_firewall_close_lets_ssh_in_then_arms_the_undo_then_denies_then_enables(
+def test_firewall_close_returns_before_ufw_switches_on_and_status_reports_the_switch(
     tmp_path: Path,
 ) -> None:
-    server = Server(tmp_path)
-    done = server.run("firewall", "close")
+    server = Server(tmp_path, FIREWALL_STATUS=posix(tmp_path / "status" / "firewall-close"))
+    closed = server.run("firewall", "close")
+    sent_by_close = server.calls("ufw", "systemd-run")
+    waiting = server.run("firewall", "status").stdout.splitlines()
+    switched = server.fire("qmx-firewall-close")
+    sent_by_switch = server.calls("ufw")
+    after = server.run("firewall", "status").stdout.splitlines()
 
-    assert done.returncode == 0, done.stderr
-    assert server.calls("ufw", "systemd-run") == [
+    assert closed.returncode == 0, closed.stderr
+    assert closed.stdout.splitlines() == [
+        "The firewall is being switched on: SSH (port 22), Tailscale and QMX's containers only.",
+        "This SSH session may drop when it does. Log in again and check: "
+        "sudo qmx-recover firewall status",
+        "It turns itself off in five minutes unless you keep it: sudo qmx-recover firewall keep",
+    ]
+    assert sent_by_close[:5] == [
         "ufw allow 22/tcp",
         "ufw allow in on tailscale0",
         "ufw allow 41641/udp",
         "ufw allow in on docker0",
         "systemd-run --unit qmx-firewall-undo --on-active=300 ufw --force disable",
+    ]
+    assert sent_by_close[5].startswith("systemd-run --unit qmx-firewall-close --on-active=3 ")
+    assert sent_by_close[5].endswith(" firewall switch-on")
+    assert len(sent_by_close) == 6
+    assert waiting[0].endswith("FAIL")
+    assert waiting[1].startswith("last close  still being switched on since ")
+    assert waiting[1].endswith("; check again in a few seconds  FAIL")
+    assert switched.returncode == 0, switched.stderr
+    assert sent_by_switch[-4:] == [
         "ufw default deny incoming",
         "ufw default allow outgoing",
         "ufw --force enable",
+        "ufw status verbose",
     ]
-    assert server.run("firewall", "status").stdout.rstrip().endswith("PASS")
+    assert after[0] == "firewall    on: only SSH, Tailscale and QMX's containers get in  PASS"
+    assert after[1].startswith("last close  switched on at ")
+    assert after[1].endswith(" UTC  PASS")
 
 
 @pytest.mark.parametrize(

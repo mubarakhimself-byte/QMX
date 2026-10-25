@@ -25,6 +25,8 @@ MONITORING_UNITS="otelcol openobserve"
 PC_NAME=
 WAIT_S=60
 UNDO_UNIT=qmx-firewall-undo
+CLOSE_UNIT=qmx-firewall-close
+FIREWALL_STATUS=/var/lib/qmx-recover/firewall-close
 CONF="${QMX_RECOVER_CONF:-/etc/qmx-recover.conf}"
 
 say() { printf '%s\n' "$*"; }
@@ -54,7 +56,7 @@ Run it as: sudo qmx-recover <what>
   rollback          Go back to the version before the last update.
   pair              Make a fresh pairing code here. Then run "qmx-recover pair" on your PC.
   vault             Check the key copy your PC sent (names only, never values).
-  firewall status   Say whether the firewall is on.
+  firewall status   Say whether the firewall is on, and how the last close went.
   firewall close    Turn it on: SSH, Tailscale and QMX's containers only.
   firewall keep     Keep it on. Without this it turns itself off five minutes after a close.
   firewall open     Turn it off. Every door then answers the internet, each still behind its key.
@@ -85,7 +87,7 @@ load_conf() {
     case "$key" in
       HOST_UNIT | QMX_HOME | LIBRARY | PORT | PROJECT | VENV | VERSIONS | CURRENT | QMX_USER | \
         OLD_VAULT | UNIT_DIR | UNIT_COPY | UFW_DEFAULTS | SHIPPING_UNIT | MONITORING_UNITS | \
-        PC_NAME | WAIT_S)
+        PC_NAME | WAIT_S | FIREWALL_STATUS)
         printf -v "$key" '%s' "$value"
         ;;
     esac
@@ -460,19 +462,36 @@ firewall_on() {
 }
 
 firewall_line() {
+  local state words
   if firewall_on; then
     line firewall "on: only SSH, Tailscale and QMX's containers get in" PASS
   else
     line firewall "off: every door answers the internet, each behind its key; run: sudo qmx-recover firewall close" FAIL
   fi
+  [[ -s "$FIREWALL_STATUS" ]] || return 0
+  read -r state words <"$FIREWALL_STATUS"
+  if [[ "$state" == on ]]; then
+    line "last close" "$words" PASS
+  else
+    line "last close" "$words" FAIL
+  fi
 }
 
-disarm_undo() {
-  systemctl stop "$UNDO_UNIT.timer" "$UNDO_UNIT.service" >/dev/null 2>&1
-  systemctl reset-failed "$UNDO_UNIT.timer" "$UNDO_UNIT.service" >/dev/null 2>&1
+stop_unit() {
+  systemctl stop "$1.timer" "$1.service" >/dev/null 2>&1
+  systemctl reset-failed "$1.timer" "$1.service" >/dev/null 2>&1
   return 0
 }
 
+stamp() { date -u '+%Y-%m-%d %H:%M:%S UTC'; }
+
+close_result() {
+  install -d -m 700 "${FIREWALL_STATUS%/*}"
+  printf '%s\n' "$*" >"$FIREWALL_STATUS"
+}
+
+# Switching ufw on resets the SSH session that asked for it, so the switch runs in its own unit a
+# few seconds after this returns, and writes its result where `firewall status` reads it.
 firewall_close() {
   local ports port ufw
   ufw="$(command -v ufw)" || stop_here "The firewall program ufw is not installed. Nothing changed."
@@ -490,27 +509,43 @@ firewall_close() {
   ufw allow in on tailscale0 >/dev/null
   ufw allow 41641/udp >/dev/null
   ufw allow in on docker0 >/dev/null
-  disarm_undo
+  stop_unit "$UNDO_UNIT"
   systemd-run --unit "$UNDO_UNIT" --on-active=300 "$ufw" --force disable >/dev/null ||
     stop_here "Could not set the five-minute undo, so the firewall stays as it is."
-  ufw default deny incoming >/dev/null
-  ufw default allow outgoing >/dev/null
-  ufw --force enable >/dev/null || stop_here "The firewall did not turn on."
-  say "The firewall is on: SSH (port ${ports//$'\n'/, }), Tailscale and QMX's containers only."
+  stop_unit "$CLOSE_UNIT"
+  close_result pending "still being switched on since $(stamp); check again in a few seconds"
+  local env=()
+  [[ -n "${QMX_RECOVER_CONF:-}" ]] && env=(--setenv="QMX_RECOVER_CONF=$QMX_RECOVER_CONF")
+  systemd-run --unit "$CLOSE_UNIT" --on-active=3 "${env[@]}" \
+    "$BASH" "$(readlink -f "${BASH_SOURCE[0]}")" firewall switch-on >/dev/null ||
+    stop_here "Could not start switching the firewall on, so it stays as it is."
+  say "The firewall is being switched on: SSH (port ${ports//$'\n'/, }), Tailscale and QMX's containers only."
+  say "This SSH session may drop when it does. Log in again and check: sudo qmx-recover firewall status"
   say "It turns itself off in five minutes unless you keep it: sudo qmx-recover firewall keep"
+}
+
+firewall_switch_on() {
+  if ufw default deny incoming >/dev/null && ufw default allow outgoing >/dev/null &&
+    ufw --force enable >/dev/null && firewall_on; then
+    close_result on "switched on at $(stamp)"
+  else
+    close_result failed "did not switch on at $(stamp); run: sudo qmx-recover firewall close"
+  fi
 }
 
 firewall() {
   case "${1:-status}" in
     status) firewall_line ;;
     close) firewall_close ;;
+    switch-on) firewall_switch_on ;;
     keep)
-      disarm_undo
+      stop_unit "$UNDO_UNIT"
       say "The firewall stays on."
       ;;
     open)
       say "Turning the firewall off. Every door then answers the internet, each still behind its key."
-      disarm_undo
+      stop_unit "$CLOSE_UNIT"
+      stop_unit "$UNDO_UNIT"
       ufw --force disable >/dev/null && say "The firewall is off."
       ;;
     *) stop_here "Use: sudo qmx-recover firewall status, close, keep or open." ;;
