@@ -72,6 +72,7 @@ from claude_agent_sdk.types import TERMINAL_TASK_STATUSES, PermissionRuleValue
 from qmx_control.service import SessionBlock, SessionInput
 from qmx_ledger.journal import RunJournal
 from qmx_router.profiles import PLAN
+from qmx_router.registry import home_registry
 from qmx_router.relay import GrantRefused
 
 from qma.harness.guard import Deny, guard
@@ -1308,12 +1309,15 @@ class Chat:
         """The Surface of this chat's record over the tools the host serves now (AD-62)."""
         deps, config = self._deps, self.record.config
         settings = await asyncio.to_thread(deps.control.settings_get, "agents")
+        rows = await asyncio.to_thread(deps.control.settings_get, "providers")
+        registry = await asyncio.to_thread(home_registry, deps.home.root / "profiles", rows)
         supply = Supply(
             tools=tuple(defs),
             slots=HomeSlots(deps.home),
             settings=settings,
             plugins=(deps.home.plugin_dir,),
             spill_dir=deps.home.launch_dir(self.session_id) / SLOTS_PLUGIN / "skills",
+            registry=registry,
         )
         return await asyncio.to_thread(
             build,

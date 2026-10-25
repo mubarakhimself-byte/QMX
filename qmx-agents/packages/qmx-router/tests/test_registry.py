@@ -12,8 +12,10 @@ from qmx_router.registry import (
     UnknownModel,
     bundled,
     describe,
+    home_registry,
     load,
     one_token_test,
+    usable,
 )
 
 BUNDLED = {
@@ -35,8 +37,8 @@ def test_every_bundled_provider_loads() -> None:
     registry = bundled()
     assert registry.errors == {}
     assert set(registry.providers) == BUNDLED
-    assert {provider.use for provider in registry.providers.values()} == {"any", "test_only"}
-    assert registry.provider("openrouter").use == "test_only"
+    assert {provider.use for provider in registry.providers.values()} == {"any"}
+    assert registry.provider("openrouter").use == "any"
 
 
 def test_a_user_file_overrides_a_bundled_one_key_by_key(tmp_path: Path) -> None:
@@ -179,9 +181,81 @@ def test_a_claude_model_served_behind_a_key_fails_the_test() -> None:
     assert "claude model" in result.detail
 
 
-def test_rows_without_a_landed_lane_are_not_run() -> None:
-    registry = bundled()
-    plan = asyncio.run(one_token_test(registry, "claude/haiku"))
-    chat = asyncio.run(one_token_test(registry, "opencode-go/kimi-k3", secrets=lambda ref: "fake"))
+def test_a_plan_row_with_no_plan_turn_is_not_run() -> None:
+    plan = asyncio.run(one_token_test(bundled(), "claude/haiku"))
     assert (plan.status, plan.spent) == ("not_run", False)
-    assert (chat.status, chat.detail) == ("not_run", "the openai_chat lane has not landed (RTR3)")
+
+
+CHUNKS: list[dict[str, object]] = [
+    {"id": "c1", "model": "kimi-k3", "choices": [{"index": 0, "delta": {"content": "OK"}}]},
+    {"id": "c1", "choices": [{"index": 0, "delta": {}, "finish_reason": "length"}]},
+    {"id": "c1", "choices": [], "usage": {"prompt_tokens": 9, "completion_tokens": 1}},
+]
+
+
+def test_a_chat_wire_row_test_sends_one_token_through_the_chat_lane() -> None:
+    seen: list[httpx.Request] = []
+
+    def stream(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        events = [*(f"data: {json.dumps(chunk)}" for chunk in CHUNKS), "data: [DONE]"]
+        body = "".join(f"{event}\n\n" for event in events)
+        return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    def refusing(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"error": {"message": "bad key"}})
+
+    ok = asyncio.run(
+        one_token_test(
+            bundled(),
+            "opencode-go/kimi-k3",
+            secrets=lambda ref: f"fake-{ref}",
+            transport=httpx.MockTransport(stream),
+        )
+    )
+    refused = asyncio.run(
+        one_token_test(
+            bundled(),
+            "opencode-go/kimi-k3",
+            secrets=lambda ref: "fake",
+            transport=httpx.MockTransport(refusing),
+        )
+    )
+    assert (ok.status, ok.detail, ok.output_tokens, ok.spent) == ("ok", "served kimi-k3", 1, True)
+    [request] = seen
+    assert request.url.path.endswith("/v1/chat/completions")
+    sent = json.loads(request.content)
+    assert (sent["model"], sent["max_tokens"], sent["stream"]) == ("kimi-k3", 1, True)
+    assert sent["messages"] == [{"role": "user", "content": "Reply with the single word OK."}]
+    assert (refused.status, refused.detail) == (
+        "failed",
+        'HTTP 401: {"error":{"message":"bad key"}}',
+    )
+
+
+ROUTER_TIERS = dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "deepseek/deepseek-v4.1-flash")
+ROWS: dict[str, object] = {
+    "kimi": {
+        "base_url": "https://api.moonshot.ai/anthropic",
+        "credential_ref": "qmx/kimi",
+        "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "kimi-k3"),
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api",
+        "credential_ref": "qmx/openrouter",
+        "tiers": ROUTER_TIERS,
+    },
+}
+
+
+def test_only_configured_rows_with_a_stored_key_reach_the_home_registry(tmp_path: Path) -> None:
+    def stored(reference: str) -> bool:
+        return reference == "qmx/openrouter"
+
+    found = home_registry(tmp_path, ROWS, stored=stored)
+    every = home_registry(tmp_path, ROWS, stored=lambda _ref: True)
+    removed = home_registry(tmp_path, {"kimi": ROWS["kimi"]}, stored=lambda _ref: True)
+    assert usable(ROWS, stored=stored) == {"claude", "openrouter"}
+    assert sorted(found.providers) == ["claude", "openrouter"]
+    assert sorted(every.providers) == ["claude", "kimi", "openrouter"]
+    assert sorted(removed.providers) == ["claude", "kimi"]

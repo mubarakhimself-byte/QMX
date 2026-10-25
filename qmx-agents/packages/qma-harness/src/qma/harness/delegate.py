@@ -49,7 +49,7 @@ from qmx_router.complete import Refused as SchemaRefused
 from qmx_router.complete import check as check_schema
 from qmx_router.passes import PassAuthority
 from qmx_router.profiles import GptPlan, Profile, Profiles, resolve_model
-from qmx_router.registry import ModelRow, Registry, UnknownModel, bundled
+from qmx_router.registry import ModelRow, Registry, UnknownModel, home_registry
 
 from qma.harness.launch import PermissionMode
 from qma.harness.stuck import Pulse, Quiet, StuckTimeouts, watch_progress
@@ -418,7 +418,9 @@ class Helpers:
         gets its handle in milliseconds whatever the model or the provider does."""
         host, profiles = self._host, await self._host.provider_profiles()
         bundle = host.parent_bundle(parent)
-        resolved = resolve(start, profiles=profiles, registry=bundled(), parent=bundle)
+        rows = await asyncio.to_thread(host.control.settings_get, "providers")
+        registry = await asyncio.to_thread(home_registry, host.control.home / "profiles", rows)
+        resolved = resolve(start, profiles=profiles, registry=registry, parent=bundle)
         for name in (start.profile, resolved.profile):
             refusal = None if name is None else profiles.delegate_refusal(name)
             if refusal is not None:
