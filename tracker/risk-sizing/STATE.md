@@ -11,6 +11,7 @@ Last updated: 2026-10-25 (after 07 funnel).
 | The operator's seeds (his ideas, newest corrections) | `seeds.md` (this folder; moved from the git-ignored workroom) |
 | The map and decision tickets | `wayfinder/MAP.md`, `wayfinder/tickets/`, run `python wayfinder/frontier.py` |
 | Research, one file per question | `research/01` … `research/09` (table below) |
+| Visual explainer (14-page site, phone-friendly) | https://claude.ai/artifact/CXKb3w5rsfm1zcUeNP7BXN ; source `explainers/` (rebuild: `node explainers/src/build.mjs`) |
 | Older context | `C:\Users\Mubarak\Desktop\QMX\workroom\risk-lab-2026-10-05\` (HANDOFF, decisions.md, grounding 01-09) |
 
 ## Operator corrections (binding; outrank every research file)
