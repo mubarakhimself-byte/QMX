@@ -671,9 +671,9 @@ def setup(
 
 
 CLOSE_WAIT_S: Final = 5.0
-CLOSE_TRIES: Final = 6
+CLOSE_TRIES: Final = 18
 """`firewall close` switches ufw on about three seconds after it returns; this many fresh logins,
-each after the wait, give it half a minute to say on."""
+each after the wait, give it a minute and a half to say on."""
 
 
 def kept_closed(
@@ -703,8 +703,9 @@ def kept_closed(
             call(["ssh", host, f"sudo {RECOVER} firewall keep"], None)
             return True
     say(
-        "The firewall did not say on within half a minute, so setup stops here. If it came on "
-        f"later, the undo switches it off within five minutes. The server said:\n{shown}\n"
+        "The firewall did not say on within a minute and a half, so setup stops here. If it "
+        "came on later, the undo switches it off within five minutes. The server said:\n"
+        f"{shown}\n"
         "Run setup again once that is fixed."
     )
     return False

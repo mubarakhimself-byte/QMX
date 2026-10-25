@@ -78,6 +78,26 @@ class ShutOut(Server):
         return super().__call__(command, text)
 
 
+class LateSwitch(Server):
+    """A server whose queued switch-on fires only after `pending` status checks."""
+
+    def __init__(self, pending: int) -> None:
+        super().__init__()
+        self.pending = pending
+
+    def __call__(self, command: list[str], text: str | None) -> str:
+        if command[-1].endswith("firewall status") and self.pending:
+            self.pending -= 1
+            self.sent.append(command[-1])
+            return (
+                "firewall    off: every door answers the internet, each behind its key; run: "
+                "sudo qmx-recover firewall close  FAIL\n"
+                "last close  still being switched on since 2026-10-25 09:00:00 UTC; "
+                "check again in a few seconds  FAIL"
+            )
+        return super().__call__(command, text)
+
+
 def acts(sent: Sequence[str]) -> list[str]:
     """The service, firewall, wait and login acts setup sent after the bootstrap, in order."""
     return [
@@ -152,6 +172,54 @@ def test_a_failed_fresh_login_stops_setup_before_the_host_and_lets_the_undo_fire
         "firewall off within five minutes; then run setup again. If SSH stays shut, Contabo's VNC "
         "console is the way back: log in there and run: sudo qmx-recover firewall open"
     )
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_setup_waits_past_six_checks_for_a_late_switch_on_then_keeps_the_firewall(
+    tmp_path: Path,
+) -> None:
+    server = LateSwitch(pending=6)
+    done = setup(
+        "qmx-server",
+        tmp_path,
+        revision=REVISION,
+        call=server,
+        say=lambda _: None,
+        sleep=server.sleep,
+    )
+    assert done == 0
+    assert acts(server.sent)[:16] == [
+        f"{RECOVER} firewall close",
+        *["wait 5", f"sudo {RECOVER} firewall status"] * 7,
+        f"sudo {RECOVER} firewall keep",
+    ]
+    assert acts(server.sent)[-1] == "systemctl enable --now qmx-host"
+
+
+def test_setup_stops_when_the_firewall_never_says_on_and_lets_the_undo_fire(
+    tmp_path: Path,
+) -> None:
+    server = LateSwitch(pending=1000)
+    said: list[str] = []
+    done = setup(
+        "qmx-server",
+        tmp_path,
+        revision=REVISION,
+        call=server,
+        say=said.append,
+        sleep=server.sleep,
+    )
+    assert done == 1
+    assert acts(server.sent) == [
+        f"{RECOVER} firewall close",
+        *["wait 5", f"sudo {RECOVER} firewall status"] * 18,
+    ]
+    assert said[-1].startswith(
+        "The firewall did not say on within a minute and a half, so setup stops here. If it "
+        "came on later, the undo switches it off within five minutes. The server said:\n"
+        "firewall    off: "
+    )
+    assert said[-1].endswith("\nRun setup again once that is fixed.")
     assert list(tmp_path.iterdir()) == []
 
 

@@ -510,13 +510,14 @@ firewall_close() {
   ufw allow 41641/udp >/dev/null
   ufw allow in on docker0 >/dev/null
   stop_unit "$UNDO_UNIT"
-  systemd-run --unit "$UNDO_UNIT" --on-active=300 "$ufw" --force disable >/dev/null ||
+  systemd-run --unit "$UNDO_UNIT" --on-active=300 --timer-property=AccuracySec=1s \
+    "$ufw" --force disable >/dev/null ||
     stop_here "Could not set the five-minute undo, so the firewall stays as it is."
   stop_unit "$CLOSE_UNIT"
   close_result pending "still being switched on since $(stamp); check again in a few seconds"
   local env=()
   [[ -n "${QMX_RECOVER_CONF:-}" ]] && env=(--setenv="QMX_RECOVER_CONF=$QMX_RECOVER_CONF")
-  systemd-run --unit "$CLOSE_UNIT" --on-active=3 "${env[@]}" \
+  systemd-run --unit "$CLOSE_UNIT" --on-active=3 --timer-property=AccuracySec=1s "${env[@]}" \
     "$BASH" "$(readlink -f "${BASH_SOURCE[0]}")" firewall switch-on >/dev/null ||
     stop_here "Could not start switching the firewall on, so it stays as it is."
   say "The firewall is being switched on: SSH (port ${ports//$'\n'/, }), Tailscale and QMX's containers only."

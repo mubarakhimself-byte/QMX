@@ -182,9 +182,12 @@ def test_firewall_close_returns_before_ufw_switches_on_and_status_reports_the_sw
         "ufw allow in on tailscale0",
         "ufw allow 41641/udp",
         "ufw allow in on docker0",
-        "systemd-run --unit qmx-firewall-undo --on-active=300 ufw --force disable",
+        "systemd-run --unit qmx-firewall-undo --on-active=300 --timer-property=AccuracySec=1s "
+        "ufw --force disable",
     ]
-    assert sent_by_close[5].startswith("systemd-run --unit qmx-firewall-close --on-active=3 ")
+    assert sent_by_close[5].startswith(
+        "systemd-run --unit qmx-firewall-close --on-active=3 --timer-property=AccuracySec=1s "
+    )
     assert sent_by_close[5].endswith(" firewall switch-on")
     assert len(sent_by_close) == 6
     assert waiting[0].endswith("FAIL")
