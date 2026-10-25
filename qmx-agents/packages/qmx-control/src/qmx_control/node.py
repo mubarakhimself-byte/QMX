@@ -777,18 +777,24 @@ def update(
     return answered | {"restarted": True, "revision": revision}
 
 
+def source_archive(git: str, repository: str, revision: str) -> bytes:
+    """The tar of `revision` as the index holds it. `git archive` applies `core.autocrlf`, which
+    on a Windows checkout turns every shell script's LF into CRLF that bash on the server rejects;
+    the repository's `.gitattributes` pins them to LF, and this switch covers an older revision."""
+    return subprocess.run(
+        [git, "-c", "core.autocrlf=false", "-C", repository, "archive", "--format=tar", revision],
+        capture_output=True,
+        check=True,
+    ).stdout
+
+
 def transfer(host: str, revision: str) -> str:
     """Ship the pinned source archive to the host and run the bootstrap script there."""
     ssh = shutil.which("ssh")
     git = shutil.which("git")
     if ssh is None or git is None:
         raise RuntimeError("Install Git and SSH before setting up a node.")
-    repository = run(["git", "rev-parse", "--show-toplevel"])
-    archive = subprocess.run(
-        [git, "-C", repository, "archive", "--format=tar", revision],
-        capture_output=True,
-        check=True,
-    ).stdout
+    archive = source_archive(git, run(["git", "rev-parse", "--show-toplevel"]), revision)
     sent = subprocess.run(
         [
             ssh,

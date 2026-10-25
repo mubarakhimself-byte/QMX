@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
 import subprocess
 import sys
+import tarfile
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -24,6 +26,7 @@ from qmx_control.node import (
     rebuild,
     setup,
     setup_steps,
+    source_archive,
 )
 
 REVISION = "0" * 40
@@ -180,6 +183,39 @@ def test_the_move_keeps_the_token_the_running_host_uses_and_takes_a_first_key(
     assert (home / "vault" / "control-token").read_text(encoding="utf-8") == "in-use\n"
     assert (home / "vault" / "pairing-key").read_text(encoding="utf-8") == "first-key\n"
     assert list(old.iterdir()) == []
+
+
+def test_the_source_archive_ships_shell_scripts_with_lf_from_an_autocrlf_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("no git on this machine")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    repository = tmp_path / "repository"
+    repository.mkdir()
+
+    def git_in(*words: str) -> str:
+        done = subprocess.run(
+            [git, "-C", str(repository), *words], capture_output=True, text=True, check=True
+        )
+        return done.stdout.strip()
+
+    git_in("init", "-q")
+    git_in("config", "core.autocrlf", "true")
+    (repository / "start.sh").write_bytes(b"#!/usr/bin/env bash\necho up\n")
+    git_in("add", "start.sh")
+    tree = git_in("write-tree")
+    revision = git_in(
+        "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit-tree", tree, "-m", "s"
+    )
+
+    archive = source_archive(git, str(repository), revision)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        member = tar.extractfile("start.sh")
+        assert member is not None
+        assert member.read() == b"#!/usr/bin/env bash\necho up\n"
 
 
 def test_pair_hands_the_new_code_to_the_servers_recovery_script_on_stdin(
