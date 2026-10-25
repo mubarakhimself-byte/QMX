@@ -7,6 +7,7 @@ dependencies = [
     "qma-harness",
     "qmx-control",
     "qmx-ledger",
+    "qmx-router",
     "pydantic==2.13.4",
     "jsonschema==4.26.0",
     "cronsim==2.7",
@@ -20,6 +21,7 @@ build-backend = "uv_build"
 qma-harness = { workspace = true }
 qmx-control = { workspace = true }
 qmx-ledger = { workspace = true }
+qmx-router = { workspace = true }
 
 [dependency-groups]
 dev = [

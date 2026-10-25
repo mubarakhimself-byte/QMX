@@ -33,7 +33,7 @@ import socket
 import subprocess
 import sys
 import time
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -46,10 +46,12 @@ import uvicorn
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_service
+from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qmf.core import is_refusal
 from qmx_control.models import Document
 from qmx_control.node import library_primary
+from qmx_control.primary import CARD_REF, HOLD, Flip
 from qmx_control.service import ControlService
 from qmx_engine.admission import setting
 from qmx_engine.control_door import EngineDoor
@@ -83,9 +85,11 @@ from qmx_engine.service.forward import (
 )
 from qmx_engine.service.rest import engine_router
 from qmx_engine.workers.remote import PlacementWorker
+from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.client import OwnerTable
 from qmx_library.port import LibraryRefused, StoreRole
-from qmx_library.principal import Principal
+from qmx_library.principal import MAIN, Act, Principal
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
@@ -93,7 +97,7 @@ from qmx_remote.models import Target
 from qmx_remote.providers import registry as provider_registry
 from qmx_router import complete as router_complete
 from qmx_router import registry as model_registry
-from qmx_router.passes import PassAuthority, RevocationList
+from qmx_router.passes import PassAuthority
 from qmx_router.pool import NoAccount
 from qmx_router.profiles import ProfileName
 from qmx_router.relay import Relay
@@ -343,7 +347,9 @@ class HubGateway:
         return cast(Document, body) if isinstance(body, dict) else None
 
 
-def remote_worker(home: Path, core: Engine, authority: PassAuthority) -> PlacementWorker | None:
+def remote_worker(
+    home: Path, core: Engine, authority: PassAuthority, own_door: str = ""
+) -> PlacementWorker | None:
     """The `node` role's worker: an attempt placed on another owned machine runs there (AD-20).
 
     A `[placement]` row with a provider is a machine this host dispatches to; the row's
@@ -351,7 +357,8 @@ def remote_worker(home: Path, core: Engine, authority: PassAuthority) -> Placeme
     this host keeps its local worker, which is the one-machine case. The pass is minted here and
     travels in `QMX_RUN_PASS`; no key does. It carries the node's `parameters.data_scope`, which
     this host's door checks a remote read against, and a row's `door_url` is the door its
-    attempts read price data through (AD-70). `authority` is the one the door verifies with.
+    attempts read price data through (AD-70). A row that names none reads through `own_door`,
+    this host's door, which verifies the pass it minted. `authority` is the one it verifies with.
     """
     settings = core.settings
     names = sorted(
@@ -376,8 +383,8 @@ def remote_worker(home: Path, core: Engine, authority: PassAuthority) -> Placeme
         )
         bucket = settings.get(f"placement.{name}.bucket")
         providers[name] = provider_registry(target, str(bucket) if bucket is not None else "")
-        door = settings.get(f"placement.{name}.door_url")
-        if door is not None:
+        door = settings.get(f"placement.{name}.door_url") or own_door
+        if door:
             doors[name] = str(door)
         found = settings.get(f"placement.{name}.gateway_url")
         if found is not None:
@@ -473,11 +480,11 @@ def _extractor(control: ControlService) -> tuple[ProfileName, str]:
     return ProfileName(""), ""
 
 
-async def node_sidecar(home: Path) -> None:
+async def node_sidecar(home: Path, authority: PassAuthority) -> None:
     """The `node` role's tailnet app (AD-12, AD-41): the facts this machine holds, the vault
     ciphertext it was given, and the pass list. It binds every interface on an ephemeral port,
-    pinned in `<home>/node.port`, and every route but health needs a pass."""
-    authority = PassAuthority(revocations=RevocationList(home / "passes" / "revoked.json"))
+    pinned in `<home>/node.port`, and every route but health needs a pass from `authority`, the
+    host's one."""
     state = NodeState(site=socket.gethostname(), passes=authority)
     stored = home / VAULT_STORE
     if stored.exists():
@@ -517,6 +524,84 @@ def store_role(home: Path, serving: bool) -> StoreRole:
     return "writer" if serving or library_primary(home) == "pc" else "replica"
 
 
+def primary_of(home: Path, store: Store) -> str:
+    """Which store is primary: the record on `refs/primary` once a flip wrote one, else the
+    home's `[library] primary` (AD-14, AD-19)."""
+    learned = store.epoch
+    return library_primary(home) if learned is None else learned.primary
+
+
+class HostStore(Store):
+    """The host's one store, with the two refusals the host owes before every ref move.
+
+    While a flip holds (MIGRATION step 8.2), every move but the flip's own card is refused
+    `primary_moving`; reads keep working. On the server, while the PC is primary, `main` is
+    refused: the PC's history arrives by sync, which mirrors and never puts, and a server run
+    lands on `refs/runs` and reaches `main` through the PC.
+    """
+
+    flip: Flip | None = None
+    """The flip he started, while one is in progress."""
+    primary: Callable[[], str] | None = None
+    """On the server only: which store is primary right now."""
+
+    def _check_owner(self, who: Principal, ref: str, act: Act) -> None:
+        super()._check_owner(who, ref, act)
+        if self.flip is not None and self.flip.held and ref != CARD_REF:
+            raise LibraryRefused(HOLD, f"the Library is moving to the server; {ref} waits for it")
+        if ref == MAIN and self.primary is not None and self.primary() != "server":
+            raise LibraryRefused(
+                "ref_not_owned", "the PC is primary, so main moves on the server only by sync"
+            )
+
+
+def open_store(home: Path, root: Path, *, serving: bool, floor: int) -> HostStore:
+    """The host's store at `root`, as the writer or replica its role names."""
+    opened = HostStore.open(
+        root,
+        redactor=redact,
+        floor_bytes=floor,
+        name="server" if serving else "pc",
+        role=store_role(home, serving),
+        upstream=None if serving else HubBlobs(library_client(home)),
+    )
+    store = cast("HostStore", opened)
+    if serving:
+        store.primary = lambda: primary_of(home, store)
+    return store
+
+
+def library_line(store: Store) -> DoctorLine:
+    """The doctor's Library row: the store's health, its alarms and the line that stopped it."""
+    state = store.state
+    alarms = ", ".join(store.alarms) or "none"
+    incident = f"; stopped at {state.incident}" if state.incident else ""
+    return DoctorLine(
+        "library",
+        state.health == "open" and not store.alarms,
+        f"store {store.name} ({store.role}) is {state.health}; alarms: {alarms}{incident}",
+    )
+
+
+def own_door(role: Role, port: int) -> str:
+    """This host's door on the tailnet, the default `door_url` of every placement it dispatches
+    to, or "" where Tailscale gives no address."""
+    if role == "pc":
+        return ""
+    try:
+        found = subprocess.run(
+            ["tailscale", "ip", "-4"],  # noqa: S607 - the node's own CLI, as `qmx node` runs it
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return ""
+    address = next(iter(found.stdout.split()), "") if found.returncode == 0 else ""
+    return f"http://{address}:{port}" if address else ""
+
+
 async def serve(
     home: Path,
     port: int,
@@ -539,28 +624,26 @@ async def serve(
     # reached over Tailscale or not at all, and the relay is still the only caller on that port
     # (AD-12).
     supervising = asyncio.create_task(router.supervise())
-    sidecar = asyncio.create_task(node_sidecar(home)) if role in ("node", "server") else None
+    # One authority per process, from the home's secret: the door, the node sidecar and the
+    # harness's helpers mint and verify with it, and so does every other machine of the home.
+    passes = PassAuthority.for_home(home)
+    sidecar = (
+        asyncio.create_task(node_sidecar(home, passes)) if role in ("node", "server") else None
+    )
     try:
         door = market_door(home, control, role)
-        # One authority mints the remote attempts' passes and verifies them at this host's door.
-        passes = PassAuthority(revocations=RevocationList(home / "passes" / "revoked.json"))
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
             host_reads=host_reads(qmx_home, control),
             market=door,
         )
+        harness.adopt_passes(passes)
         try:
             floor = floor_bytes(section(control, "engine"), free_bytes(home))
-            with Store.open(
-                root,
-                redactor=redact,
-                floor_bytes=floor,
-                name="server" if serving else "pc",
-                role=store_role(home, serving),
-                upstream=None if serving else HubBlobs(library_client(home)),
-            ) as store:
+            with open_store(home, root, serving=serving, floor=floor) as store:
                 control.attach_library(store)
+                harness.doctor_from(lambda: library_line(store))
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(compose_memory, harness, store, home, control)
                 adopt_router(RelayRouter(harness_relay(harness)))
@@ -572,7 +655,7 @@ async def serve(
                     ) as engine:
                         core = engine.svc.ctx.engine
                         placed = (
-                            remote_worker(home, core, passes)
+                            remote_worker(home, core, passes, own_door(role, port))
                             if role in ("node", "server")
                             else None
                         )
@@ -589,9 +672,15 @@ async def serve(
                         answering.append(templates_router(engine))
                         if door is not None:
                             answering.append(market_router(door))
-                        answering.extend(library_service(home, store, serving))
                         app = compose(
-                            control, engine, harness_api, bearer, origin, answering, passes
+                            control,
+                            engine,
+                            harness_api,
+                            bearer,
+                            origin,
+                            answering,
+                            passes,
+                            library_service(home, store, serving, bearer),
                         )
                         app_host = TAILNET if serving else "127.0.0.1"
                         server = uvicorn.Server(uvicorn.Config(app, host=app_host, port=port))
@@ -943,19 +1032,34 @@ def compose(
     ui_origin: str,
     extra: Sequence[APIRouter] = (),
     passes: PassAuthority | None = None,
+    library: tuple[str, Sequence[APIRouter]] = ("", ()),
 ) -> FastAPI:
     """The one REST app: control, chat and engine routes behind one bearer and the principal
     door. `ui_origin` is the one origin CORS allows, none when empty. `extra` carries the node's
     forwarding route, which has its own host pass and no bearer (AD-65). `passes` is the authority
-    whose run passes the door admits on the one data read (AD-70)."""
+    whose run passes the door admits on the one data read (AD-70). `library` is the pairing key
+    and the in-process Hub's routes, which the door admits that key on."""
+    key, library_api = library
     app = qmx_control.server.create_app(
         control,
         bearer,
         ui_origin,
-        extra_routers=[*harness_api, engine_router(engine), webhook_door(engine), *extra],
+        extra_routers=[
+            *harness_api,
+            engine_router(engine),
+            webhook_door(engine),
+            *extra,
+            *library_api,
+        ],
     )
     routes = [route for api in harness_api for route in api.routes]
-    app.add_middleware(PrincipalDoor, chat_routes=routes, passes=passes)
+    app.add_middleware(
+        PrincipalDoor,
+        chat_routes=routes,
+        passes=passes,
+        library_key=key,
+        library_routes=[route for api in library_api for route in api.routes],
+    )
     return app
 
 
@@ -1117,18 +1221,40 @@ def library_client(home: Path) -> Any:
         return None
 
 
-def library_service(home: Path, store: Store, serving: bool) -> list[Any]:
-    """The Library service inside the server's one host (AD-19, AD-26): one store, one writer."""
+class HomeHub(Hub):
+    """The server host's Hub. Its store is the writer either way, so which refs a mirror may
+    move follows the primary (the flip's record, else the home's setting), not the store's role:
+    while the PC is primary the PC's `main` arrives here by sync."""
+
+    def __init__(self, store: Store, *, home: Path) -> None:
+        super().__init__(store, home=home)
+        self.primary_home = home
+
+    def refuse_owned(self, ref: str) -> None:
+        primary = "server" if primary_of(self.primary_home, self.store) == "server" else "pc"
+        if OwnerTable(primary).owner(ref) == "server":
+            raise LibraryRefused("ref_not_owned", f"the server owns {ref}; a mirror never moves it")
+
+    def health(self) -> dict[str, Any]:
+        return super().health() | {"primary": primary_of(self.primary_home, self.store)}
+
+
+def library_service(
+    home: Path, store: Store, serving: bool, bearer: str
+) -> tuple[str, Sequence[APIRouter]]:
+    """The Library service inside the server's one host (AD-19, AD-26): one store, one writer.
+
+    Returns the pairing key and the Hub's routes. The routes check the local `bearer`, because the
+    host's bearer gate sits in front of them; the door turns a call carrying the pairing key into
+    one carrying `bearer` (`PrincipalDoor`)."""
     if not serving:
-        return []
+        return "", ()
     key_file = home / PAIRING_KEY
     if not key_file.exists():
         print("library: no pairing key, so the Library routes are not mounted", file=sys.stderr)
-        return []
-    from qmx_hub.server import Hub, in_process  # noqa: PLC0415 (the server role's Library)
-
-    hub = Hub(store, home=home)
-    return [in_process(hub, key_file.read_text(encoding="utf-8").strip())]
+        return "", ()
+    hub = HomeHub(store, home=home)
+    return key_file.read_text(encoding="utf-8").strip(), [in_process(hub, bearer)]
 
 
 class HubTarget:

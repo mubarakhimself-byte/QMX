@@ -1,18 +1,23 @@
 """Ubuntu node installation and a Tailscale-only, token-protected control service.
 
-`qmx node setup` is the server step of the plan (LIB4, MIGRATION steps 7 and 8): it installs the
-Library Hub, the node service and, only when the setting asks for it, Hindsight; imports the
-bucket's run folders into the server store; installs the host's unit with the `server` role and
-the store root `/srv/qmx/library` owned by `qmx`, so the one host process is the server store's
-one writer (DATA-PLAN DR2B); and flips `[library] primary = server` on the PC's home. The Hub and
-the node run unprivileged as `qmx`, because a long-lived server process is not root's job.
+`qmx node setup` is the server step of the plan (LIB4, MIGRATION step 7; DATA-PLAN DR2B, DR2D):
+it runs the bootstrap, installs the host's unit with the `server` role and the one store root
+`/srv/qmx/library`, stops and disables the standalone Hub and node service, moves the pairing key
+into the host's home, imports the bucket's run folders into that root as `qmx`, and only then
+starts `qmx-host`, the store's one writer. On the PC it writes the pairing key and `[library]
+hub_url`, never `primary`: the flip is his click (G-FLIP). `--dry-run` prints the steps in order.
 
 `qmx node verify` is the doctor: one `PASS`/`FAIL` line per fact, including the primary store the
 setting names and whether the Hub answers.
 
-`qmx node rebuild` puts a new server's Library back from the bucket and rebuilds its catalog from
-what came back (MIGRATION "When the server is lost", step 3), and `qmx node pair` writes a fresh
-pairing code on both ends (step 5). Neither prints a key: a code is written to a file, never shown.
+`qmx node rebuild` stops the services, puts a new server's Library back from the bucket and
+rebuilds its catalog from what came back (MIGRATION "When the server is lost", step 3), and `qmx
+node pair` writes a fresh pairing code on both ends (step 5), at `<home>/vault/pairing-key`, the
+file the host and the Hub read. Neither prints a key: a code is written to a file, never shown.
+
+`qmx node vault install --ssh-host` builds the PC's vault document from Credential Manager, sealed
+for the server's own public key, and installs it there; without `--ssh-host` it installs a
+document it is given.
 
 `qmx node update` drains the node before it installs anything (AD-65, Appendix F): it asks the
 host to stop claiming fires, waits until no attempt is in flight, and only then runs the bootstrap
@@ -35,7 +40,6 @@ import subprocess
 import sys
 import time
 import tomllib
-import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -78,6 +82,21 @@ VAULT_STORE: Final = "vault-store.json"
 name is the router's (`qmx_router.server`), which reads it when the `node` role starts; the two
 packages do not depend on each other, so the name is written once on each side."""
 PLAN_MARKER: Final = "home.toml"
+SERVER_LIBRARY: Final = "/srv/qmx/library"
+"""The server store's one root (Appendix D): `import`, `rebuild` and the host's unit all name it."""
+SERVER_HOME: Final = "/srv/qmx/home/.qmx"
+"""The server host's home, as its unit's `--home` names it; its `vault/pairing-key` is the key."""
+NODE_STATE: Final = "/var/lib/qmx"
+"""The bootstrap's folder: the bucket, `rclone.conf` and the old Hub's home."""
+SERVER_VENV: Final = "/opt/qmx/qmx-agents/.venv"
+"""The environment the bootstrap syncs, which the host's unit runs from."""
+OLD_PAIRING_KEY: Final = "/etc/qmx/vault/pairing-key"
+"""Where the bootstrap and the old `pair` wrote the key; setup and pair move it once."""
+SERVER_UNITS: Final = ("qmx-host", "qmx-hub")
+"""The services that hold the server store's writer lock."""
+STANDALONE: Final = ("qmx-hub", "qmx-node")
+"""The bootstrap's own services. The host replaces both: it is the Library service and the node
+(engine AD-52), and `qmx-node` binds the host's port 8766 on the tailnet address."""
 
 
 def plan_login(home: Path, vault: Path, machine: str) -> tuple[bool, str]:
@@ -134,6 +153,73 @@ def vault_install(home: Path, document: str) -> tuple[tuple[str, ...], tuple[str
     return tuple(sorted(names)), tuple(sorted(gone))
 
 
+SERVER_MACHINE: Final = "contabo"
+"""The server's machine name, the server host's placement name, which its vault share is under."""
+READ_APP: Final = "qmx/read/ctrader-app"
+"""The cTrader read app WU8 files, which the server's sign-in opens from its vault copy. The PC's
+document asks Credential Manager for it and for every bundled model-provider row; `--name` adds a
+`qmx/read/*` or `qmx/data/*` one. Credential Manager cannot list names, so a name nobody asks for
+is never sealed."""
+
+
+def vault_key(home: Path, machine: str) -> str:
+    """This machine's public vault key, after creating its key pair once (`<home>/.qmx/vault.key`,
+    owner-only). The private half never leaves the file; the public half is not a secret."""
+    from qmx_router.vault import (  # noqa: PLC0415 (the server's own key)
+        VaultKey,
+        as_text,
+        key_file,
+        read_machine_key,
+        write_machine_key,
+    )
+
+    if not key_file(home).exists():
+        write_machine_key(home, VaultKey.generate())
+    return as_text(read_machine_key(home, machine).public_bytes())
+
+
+def pc_vault_document(home: Path, server_key: str, *, machine: str, source: Any) -> str:
+    """The PC's vault document: every replicable value `source` holds, sealed for this PC and for
+    `machine`'s public key. Nothing is written to `source`, and no value is in the answer."""
+    import base64  # noqa: PLC0415
+
+    from qmx_router.vault import (  # noqa: PLC0415 (the PC's own seal)
+        VaultKey,
+        json_document,
+        key_file,
+        publish,
+        read_machine_key,
+        write_machine_key,
+    )
+
+    if not key_file(home).exists():
+        write_machine_key(home, VaultKey.generate())
+    own = read_machine_key(home, "pc")
+    peer = VaultKey.from_public_bytes(base64.b64decode(server_key.strip()))
+    return json_document(publish(source, own, machine="pc", peers={machine: peer}))
+
+
+def pair_script(code: str, server_home: str = SERVER_HOME) -> str:
+    """The server's half of `qmx node pair`: the new key where its host reads it, the outgoing one
+    kept as `pairing-key.previous`, the old `/etc` copy removed, and the host restarted so every
+    reader of the key takes the new one. The code rides stdin, never argv or a log."""
+    vault = f"{server_home}/vault"
+    return (
+        "set -eu\n"
+        "umask 077\n"
+        f"install -d -o qmx -g qmx -m 700 {vault}\n"
+        f"cat > {vault}/{PAIRING_KEY}.tmp <<'QMXKEY'\n{code}\nQMXKEY\n"
+        f"if [ -s {vault}/{PAIRING_KEY} ]; then\n"
+        f"  mv {vault}/{PAIRING_KEY} {vault}/{PREVIOUS_PAIRING_KEY}\n"
+        f"  rm -f {vault}/{RUN_PASS_KEY}\n"
+        "fi\n"
+        f"mv {vault}/{PAIRING_KEY}.tmp {vault}/{PAIRING_KEY}\n"
+        f"chown qmx:qmx {vault}/{PAIRING_KEY}*\n"
+        f"rm -f {OLD_PAIRING_KEY}\n"
+        "systemctl try-restart qmx-host\n"
+    )
+
+
 def bootstrap_script(revision: str, *, hindsight: bool = False, hub_port: int = 0) -> str:
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("Bootstrap needs an exact Git commit.")
@@ -173,30 +259,19 @@ def hindsight_enabled(home: Path) -> bool:
     return bool(cast(dict[str, Any], settings(home).get("memory", {})).get("hindsight", False))
 
 
-def hub_answers(home: Path) -> bool:
-    """One authenticated `/healthz` against the Hub this home names."""
-    url = hub_url(home)
-    key_file = home / "vault" / "pairing-key"
-    if url is None or not key_file.exists():
-        return False
-    request = urllib.request.Request(  # noqa: S310 (the home's own setting)
-        f"{url}/healthz",
-        headers={"Authorization": f"Bearer {key_file.read_text(encoding='utf-8').strip()}"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=5) as answer:  # noqa: S310
-            return bool(json.loads(answer.read()).get("ok"))
-    except OSError, urllib.error.URLError, ValueError:
-        return False
-
-
-def verify(home: Path, vault: Path) -> dict[str, bool]:
+def verify(
+    home: Path,
+    vault: Path,
+    *,
+    root: Path | None = None,
+    state: Path = Path(NODE_STATE),
+) -> dict[str, bool]:
+    """The server's doctor: the host's unit, the one store root, no standalone Hub left."""
     checks: dict[str, bool] = {}
     commands = {
         "docker": ["docker", "info"],
         "tailscale": ["tailscale", "ip", "-4"],
-        "supervisor": ["systemctl", "is-active", "qmx-node"],
-        "hub": ["systemctl", "is-active", "qmx-hub"],
+        "host": ["systemctl", "is-active", "qmx-host"],
         "shipping": ["systemctl", "is-active", "qmx-ship.timer"],
         "rclone": ["rclone", "version"],
     }
@@ -205,13 +280,14 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
             checks[name] = bool(run(command))
         except OSError, RuntimeError:
             checks[name] = False
+    checks["no_standalone_hub"] = all(
+        _refused(["systemctl", verb, "qmx-hub"]) for verb in ("is-active", "is-enabled")
+    )
     checks["node_token"] = bool(read_secret(vault, "qmx/control-token", "control-token"))
-    checks["pairing_key"] = (vault / "pairing-key").exists()
-    checks["bucket"] = (home / "bucket").is_dir()
-    checks["library_db"] = (home / "library").is_dir()
-    checks["shipping_config"] = (home / "rclone.conf").is_file()
-    checks["library_primary"] = library_primary(home) == "server"
-    checks["hub_answers"] = hub_answers(home)
+    checks["pairing_key"] = (home / "vault" / PAIRING_KEY).exists()
+    checks["bucket"] = (state / "bucket").is_dir()
+    checks["library_db"] = (root or Path(SERVER_LIBRARY)).is_dir()
+    checks["shipping_config"] = (state / "rclone.conf").is_file()
     # CLIProxy requires live subscriptions and is provisioned separately by the operator.
     checks["cliproxy"] = (
         bool(run(["docker", "ps", "--filter", "name=qmx-cliproxy", "--format", "{{.Names}}"]))
@@ -221,17 +297,40 @@ def verify(home: Path, vault: Path) -> dict[str, bool]:
     return checks
 
 
+def _refused(command: list[str]) -> bool:
+    """True when the command ran and answered no; a machine without it proves nothing."""
+    try:
+        run(command)
+    except RuntimeError:
+        return True
+    except OSError:
+        return False
+    return False
+
+
 def flip_primary(home: Path, url: str, *, primary: str = "server") -> None:
     """Write `[library] primary` and `hub_url` into `home`'s settings, leaving every other line.
 
     The flip writes `server`; the reverse flip of MIGRATION step 8 writes `pc` with the same Hub,
     which is then a replica. Either value only caches the record on `refs/primary` (AD-14, AD-19).
+    Only the flip's press calls this; setup writes `hub_url` alone (`set_hub_url`).
     """
     if primary not in ("pc", "server"):
         raise ValueError("The primary store is `pc` or `server`.")
+    _write_library(home, {"primary": primary, "hub_url": url})
+
+
+def set_hub_url(home: Path, url: str) -> None:
+    """Write `[library] hub_url` and nothing else: `primary` stays his click's (G-FLIP)."""
+    _write_library(home, {"hub_url": url})
+
+
+def _write_library(home: Path, values: Mapping[str, str]) -> None:
     path = home / "settings.toml"
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    written = [f'{name} = "{value}"' for name, value in values.items()]
+    replaced = re.compile(rf"^({'|'.join(map(re.escape, values))})\s*=")
     kept: list[str] = []
     inside = False
     for line in existing:
@@ -239,20 +338,23 @@ def flip_primary(home: Path, url: str, *, primary: str = "server") -> None:
         if stripped.startswith("[") and stripped.endswith("]"):
             inside = stripped == "[library]"
             if inside:
-                kept.extend([line, f'primary = "{primary}"', f'hub_url = "{url}"'])
+                kept.extend([line, *written])
                 continue
-        if inside and re.match(r"^(primary|hub_url)\s*=", stripped):
+        if inside and replaced.match(stripped):
             continue
         kept.append(line)
     if "[library]" not in "\n".join(kept):
         if kept and kept[-1] != "":
             kept.append("")
-        kept.extend(["[library]", f'primary = "{primary}"', f'hub_url = "{url}"'])
+        kept.extend(["[library]", *written])
     path.write_text("\n".join(kept).rstrip("\n") + "\n", encoding="utf-8")
 
 
 PAIRING_KEY: Final = "pairing-key"
 """The key both ends hold after a pairing: this machine's name on the Hub, not a right (AD-11)."""
+PREVIOUS_PAIRING_KEY: Final = "pairing-key.previous"
+RUN_PASS_KEY: Final = "run-pass-key"  # noqa: S105 - a file name, not a key
+"""Both names are the router's too (`qmx_router.passes`), written once on each side."""
 BUCKET_PREFIX: Final = "library"
 """The folder on the bucket, beside the push that writes it (`qmx_hub.bucket` writes the name once
 on each side, because the two packages do not depend on each other)."""
@@ -269,11 +371,17 @@ def pair(home: Path, code: str | None = None) -> Path:
     """Write a fresh pairing code into `home`'s vault, owner-only, and return its path.
 
     Re-pairing replaces the code both ends hold: the old one stops opening this machine's store,
-    which is why the server-loss step 5 pairs again rather than reusing it.
+    which is why the server-loss step 5 pairs again rather than reusing it. The run-pass secret
+    rotates with it, so the outgoing key is kept as `pairing-key.previous`, which the pass
+    authority accepts for one pass lifetime (engine AD-28). A first pairing leaves the unpaired
+    home's `run-pass-key` in place for the same reason.
     """
     found = code or pairing_code()
     target = home / "vault" / PAIRING_KEY
     target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists():
+        target.replace(target.with_name(PREVIOUS_PAIRING_KEY))
+        (target.parent / RUN_PASS_KEY).unlink(missing_ok=True)
     temporary = target.with_suffix(".tmp")
     temporary.write_text(found + "\n", encoding="utf-8")
     if os.name == "posix":
@@ -283,25 +391,28 @@ def pair(home: Path, code: str | None = None) -> Path:
 
 
 def rebuild(
-    home: Path,
     *,
     remote: str | None = None,
     root: Path | None = None,
     prefix: str = BUCKET_PREFIX,
     runner: Callable[[Sequence[str]], str] | None = None,
+    units: Sequence[str] = SERVER_UNITS,
 ) -> dict[str, object]:
-    """Put the bucket's Library evidence back under `root` and rebuild the catalog from it.
+    """Stop `units`, put the bucket's Library evidence back under `root` and rebuild the catalog.
 
     MIGRATION "When the server is lost" step 3: the old server pushed objects, refs, edges and
     durable blobs after each commit batch, so a new server restores those and rebuilds its index;
-    the catalog is never copied, because it is derived (AD-16). Without a bucket remote nothing is
-    restored and the answer says so in the same words the push uses.
+    the catalog is never copied, because it is derived (AD-16). The host and the Hub are stopped
+    first, because whichever runs holds the store's writer lock. Without a bucket remote nothing
+    is stopped or restored and the answer says so in the same words the push uses.
     """
     from qmx_hub.bucket import NO_BUCKET  # noqa: PLC0415 (the sentence has one owner)
 
-    target = root or home / "library"
+    target = root or Path(SERVER_LIBRARY)
     if not remote:
         return {"restored": False, "said": NO_BUCKET}
+    if units:
+        (runner or _rclone)(("systemctl", "stop", *units))
     calls: list[tuple[str, ...]] = [
         (
             "rclone",
@@ -350,34 +461,146 @@ DRAIN_ROUTE: Final = "/api/node/drain"
 CONTROL_PORT: Final = 8766
 """The control service `qmx node serve` binds on the tailnet address."""
 HOST_UNIT: Final = "qmx-host.service"
-SERVER_LIBRARY: Final = "/srv/qmx/library"
-"""The server store's root (Appendix D), owned by `qmx` because the host is its one writer."""
+
+
+UNIT_PYTHON: Final = "/srv/qmx/home/.venv/bin/python"
+"""The interpreter DR2A's unit names; the setup points it at the environment it syncs."""
 
 
 def host_unit(role: str = "server") -> str:
     """The unit DR2A ships, with the role the server runs (AD-19, AD-26; DATA-PLAN DR2B).
 
     On the server the one host process opens the store as its writer and answers the Library
-    routes, so its role is `server`. The file DR2A wrote names `--role node`, so this rewrites that
-    one flag and leaves everything else as it stands, `OOMScoreAdjust` included (P-OOM reads it).
+    routes, so its role is `server` and its store is the one root `/srv/qmx/library`. The file
+    DR2A wrote names `--role node` and a virtual environment nothing installs, so this rewrites
+    those two and leaves everything else as it stands, `OOMScoreAdjust` included (P-OOM reads it).
     """
     path = Path(__file__).parents[3] / "qmx-host" / "deploy" / HOST_UNIT
     if not path.is_file():
         raise RuntimeError(f"the host's unit is missing at {path}; install the source tree first")
-    return path.read_text(encoding="utf-8").replace("--role node", f"--role {role}")
+    text = path.read_text(encoding="utf-8")
+    if "--role node" not in text or UNIT_PYTHON not in text:
+        raise RuntimeError(f"the host's unit at {path} no longer names --role node or its python")
+    return text.replace("--role node", f"--role {role} --library-root {SERVER_LIBRARY}").replace(
+        UNIT_PYTHON, f"{SERVER_VENV}/bin/python"
+    )
+
+
+def host_port(unit: str) -> int:
+    """The port the host's unit serves on, which the PC's `hub_url` names."""
+    found = re.search(r"--port (\d+)", unit)
+    if found is None:
+        raise RuntimeError("the host's unit names no --port")
+    return int(found.group(1))
 
 
 def host_unit_script(role: str = "server") -> str:
-    """The shell the setup step runs on the server: the store root, then DR2A's unit enabled."""
+    """Install the host: its home and the store root owned by `qmx`, its package in the
+    environment, and its unit, not yet started (the import comes first)."""
     return (
         "set -eu\n"
-        f"install -d -o qmx -g qmx -m 750 {SERVER_LIBRARY}\n"
+        f"install -d -o qmx -g qmx -m 750 /srv/qmx/home {SERVER_HOME} {SERVER_LIBRARY}\n"
+        f"install -d -o qmx -g qmx -m 700 {SERVER_HOME}/vault\n"
+        "uv sync --project /opt/qmx/qmx-agents --package qmx-host --frozen --no-default-groups\n"
         f"cat > /etc/systemd/system/{HOST_UNIT} <<'QMXUNIT'\n"
         f"{host_unit(role)}"
         "QMXUNIT\n"
         "systemctl daemon-reload\n"
-        "systemctl enable qmx-host\n"
     )
+
+
+def move_key_script(server_home: str = SERVER_HOME) -> str:
+    """Move the bootstrap's `/etc/qmx/vault/pairing-key` into the host's home, once.
+
+    The bootstrap writes a fresh one whenever none is at the old path, so on a rerun the home
+    already holds the key and the new copy at the old path is removed unread.
+    """
+    target = f"{server_home}/vault/{PAIRING_KEY}"
+    return (
+        "set -eu\n"
+        f"if [ -s {target} ]; then rm -f {OLD_PAIRING_KEY}\n"
+        f"elif [ -s {OLD_PAIRING_KEY} ]; then mv {OLD_PAIRING_KEY} {target}\n"
+        "fi\n"
+        f"chown qmx:qmx {target}\n"
+        f"chmod 600 {target}\n"
+    )
+
+
+type Call = Callable[[list[str], str | None], str]
+"""One command on this PC or over ssh, with its stdin; returns stdout and raises on failure."""
+
+
+def setup_steps(
+    revision: str, *, hindsight: bool = False, hub_port: int = 0
+) -> list[tuple[str, str]]:
+    """The server's half of `qmx node setup`, in order, as `(step, script for sudo bash)`.
+
+    The standalone Hub stops before the import because it would hold the old store's lock and
+    serve a second root; the host starts last, so it opens the store the import wrote.
+    """
+    return [
+        ("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
+        ("install the host", host_unit_script()),
+        (
+            "stop and disable the standalone Hub",
+            "set -eu\nsystemctl stop qmx-host || true\n"
+            f"systemctl disable --now {' '.join(STANDALONE)}\n",
+        ),
+        ("move the pairing key", move_key_script()),
+        (
+            "import as qmx",
+            f"set -eu\nrunuser -u qmx -- {SERVER_VENV}/bin/qmx node import "
+            f"--home {NODE_STATE} --root {SERVER_LIBRARY}\n",
+        ),
+        ("start the host", "set -eu\nsystemctl enable --now qmx-host\n"),
+    ]
+
+
+def setup(
+    host: str,
+    home: Path,
+    *,
+    revision: str,
+    call: Call,
+    hindsight: bool = False,
+    hub_port: int = 0,
+    say: Callable[[str], None] = print,
+    dry_run: bool = False,
+) -> int:
+    """`qmx node setup` after the source archive is on `host`: the server steps, then the PC's
+    pairing key and `hub_url`, then the server's own doctor. `primary` is not written.
+
+    `dry_run` prints every step's script and the PC's two writes, and runs and writes nothing.
+    """
+    ssh = ["ssh", host]
+    port = host_port(host_unit())
+    for number, (step, script) in enumerate(
+        setup_steps(revision, hindsight=hindsight, hub_port=hub_port), start=1
+    ):
+        say(f"step {number}: {step}")
+        if dry_run:
+            say(f"node-bootstrap.sh at {revision}" if step == "bootstrap" else script.rstrip())
+            continue
+        call([*ssh, "sudo bash -s"], script)
+    if dry_run:
+        say(f"then on this PC: copy {SERVER_HOME}/vault/{PAIRING_KEY} to {home}/vault")
+        say(f'then on this PC: [library] hub_url = "http://<tailnet address>:{port}"')
+        return 0
+    address = call([*ssh, "tailscale ip -4"], None).splitlines()[0]
+    url = f"http://{address}:{port}"
+    key = call([*ssh, f"sudo cat {SERVER_HOME}/vault/{PAIRING_KEY}"], None).strip()
+    # The key is written, never printed, so it cannot land in a log (MIGRATION step 7, AD-11).
+    held = home / "vault" / PAIRING_KEY
+    if not held.exists() or held.read_text(encoding="utf-8").strip() != key:
+        pair(home, key)
+    set_hub_url(home, url)
+    say(f"hub: {url}")
+    say(f"primary: {library_primary(home)} (the flip is his click)")
+    checks = call(
+        [*ssh, f"sudo {SERVER_VENV}/bin/qmx node verify --home {SERVER_HOME} || true"], None
+    )
+    say(checks)
+    return int("FAIL" in checks)
 
 
 def post(url: str, body: Mapping[str, object], headers: Mapping[str, str]) -> Mapping[str, object]:
@@ -491,25 +714,31 @@ def main() -> int:
     commands = node.add_subparsers(dest="command", required=True)
     bootstrap = commands.add_parser("bootstrap")
     bootstrap.add_argument("ssh_host")
-    setup = commands.add_parser("setup")
-    setup.add_argument("ssh_host")
-    setup.add_argument("--home", type=Path, default=Path("./qmx-home"))
-    setup.add_argument("--remote-home", type=Path, default=Path("/var/lib/qmx"))
-    setup.add_argument("--hub-port", type=int, default=0)
-    setup.add_argument("--hindsight", action="store_true")
+    setting_up = commands.add_parser("setup")
+    setting_up.add_argument("ssh_host")
+    setting_up.add_argument("--home", type=Path, default=Path("./qmx-home"))
+    setting_up.add_argument("--hub-port", type=int, default=0)
+    setting_up.add_argument("--hindsight", action="store_true")
+    setting_up.add_argument("--dry-run", action="store_true", help="print the steps, run nothing")
     importer = commands.add_parser("import")
-    importer.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    importer.add_argument("--home", type=Path, default=Path(NODE_STATE))
     importer.add_argument("--bucket", type=Path, default=None)
+    importer.add_argument("--root", type=Path, default=Path(SERVER_LIBRARY))
     rebuilding = commands.add_parser("rebuild")
-    rebuilding.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     rebuilding.add_argument("--root", type=Path, default=None)
     rebuilding.add_argument("--remote", default=None, help="the rclone remote holding the bucket")
+    rebuilding.add_argument(
+        "--units",
+        default=",".join(SERVER_UNITS),
+        help="the services stopped first, comma-separated; empty stops none",
+    )
     pairing = commands.add_parser("pair")
-    pairing.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    pairing.add_argument("--home", type=Path, default=Path("./qmx-home"))
     pairing.add_argument("--ssh-host", default="", help="also install the same code on that host")
     check = commands.add_parser("verify")
-    check.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    check.add_argument("--home", type=Path, default=Path(SERVER_HOME))
     check.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
+    check.add_argument("--root", type=Path, default=Path(SERVER_LIBRARY))
     login = commands.add_parser("login")
     login.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     login.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
@@ -522,8 +751,19 @@ def main() -> int:
     vault_command = commands.add_parser("vault")
     vault_commands = vault_command.add_subparsers(dest="vault_command", required=True)
     vault_install_command = vault_commands.add_parser("install")
-    vault_install_command.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
+    vault_install_command.add_argument("--home", type=Path, default=Path(SERVER_HOME))
     vault_install_command.add_argument("--document", type=Path, default=None)
+    vault_install_command.add_argument(
+        "--ssh-host", default="", help="build the PC's document here and install it on that host"
+    )
+    vault_install_command.add_argument("--machine", default=SERVER_MACHINE)
+    vault_install_command.add_argument("--pc-home", type=Path, default=Path("./qmx-home"))
+    vault_install_command.add_argument(
+        "--name", action="append", default=[], help="one more qmx/read/* or qmx/data/* name"
+    )
+    vault_key_command = vault_commands.add_parser("key")
+    vault_key_command.add_argument("--home", type=Path, default=Path(SERVER_HOME))
+    vault_key_command.add_argument("--machine", default=SERVER_MACHINE)
     serve = commands.add_parser("serve")
     serve.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     serve.add_argument("--vault", type=Path, default=Path("/etc/qmx/vault"))
@@ -535,7 +775,7 @@ def main() -> int:
 
         home = cast(Path, args.home)
         bucket = cast(Path | None, args.bucket) or home / "bucket"
-        with Store.open(home / "library", redactor=redact, name="server") as store:
+        with Store.open(cast(Path, args.root), redactor=redact, name="server") as store:
             done = import_bucket(store, bucket)
         print(
             f"imported {done.runs} runs, {done.artifacts} artifacts, {done.blobs} blobs, "
@@ -544,9 +784,9 @@ def main() -> int:
         return 0
     if args.command == "rebuild":
         found = rebuild(
-            cast(Path, args.home),
             remote=cast(str | None, args.remote),
             root=cast(Path | None, args.root),
+            units=tuple(unit for unit in cast(str, args.units).split(",") if unit),
         )
         print(f"{'PASS' if found.get('restored') else 'no bucket, '}{found['said']}")
         return 0 if found.get("restored") else 1
@@ -560,11 +800,9 @@ def main() -> int:
             ssh = shutil.which("ssh")
             if ssh is None:
                 raise RuntimeError("Install SSH before pairing a node.")
-            run(
-                [ssh, host, "sudo sh -c 'umask 077; cat > /etc/qmx/vault/pairing-key'"],
-                input_text=code,
-            )
-            print(f"PASS paired {host}")
+            run([ssh, host, "sudo bash -s"], input_text=pair_script(code))
+            print(f"PASS paired {host}; its host restarted with the new key")
+            print("restart this PC's host so its Hub link and forwarders read the new key")
         print(f"PASS pairing code written to {target}")
         return 0
     if args.command == "setup":
@@ -575,43 +813,18 @@ def main() -> int:
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise RuntimeError("Setup needs an exact Git commit.")
         home = cast(Path, args.home)
-        remote = cast(Path, args.remote_home)
-        hindsight = bool(args.hindsight) or hindsight_enabled(home)
-        ssh = transfer(host, revision)
-        run(
-            [ssh, host, "sudo bash -s"],
-            input_text=bootstrap_script(revision, hindsight=hindsight, hub_port=int(args.hub_port)),
+        dry_run = bool(args.dry_run)
+        if not dry_run:
+            transfer(host, revision)
+        return setup(
+            host,
+            home,
+            revision=revision,
+            call=lambda command, text: run(command, input_text=text),
+            hindsight=bool(args.hindsight) or hindsight_enabled(home),
+            hub_port=int(args.hub_port),
+            dry_run=dry_run,
         )
-        # The Hub holds the store's writer lock, so the import stops it first and starts it after,
-        # and it runs as `qmx` because the store's files belong to that user.
-        run([ssh, host, "sudo systemctl stop qmx-hub || true"])
-        run(
-            [
-                ssh,
-                host,
-                "sudo runuser -u qmx -- /opt/qmx/qmx-agents/.venv/bin/qmx node import "
-                f"--home {remote}",
-            ]
-        )
-        run([ssh, host, "sudo systemctl restart qmx-hub qmx-node"])
-        # DR2B: the server's Library service is the host's, so the setup installs DR2A's unit with
-        # the `server` role and makes the store root `/srv/qmx/library` belong to `qmx`.
-        run([ssh, host, "sudo bash -s"], input_text=host_unit_script())
-        address = run([ssh, host, "tailscale ip -4"]).splitlines()[0]
-        port = run([ssh, host, f"sudo cat {remote}/hub.port"]).strip()
-        url = f"http://{address}:{port}"
-        (home / "vault").mkdir(parents=True, exist_ok=True)
-        # The pairing key is generated on the server by the bootstrap and copied down; its bytes
-        # are never printed, so they cannot land in a log (MIGRATION step 7, AD-11).
-        key = run([ssh, host, "sudo cat /etc/qmx/vault/pairing-key"])
-        (home / "vault" / "pairing-key").write_text(key + "\n", encoding="utf-8")
-        flip_primary(home, url)
-        print(f"primary: {library_primary(home)}")
-        print(f"hub: {url}")
-        checks = verify(home, home / "vault")
-        for name, passed in checks.items():
-            print(f"{'PASS' if passed else 'FAIL'} {name}")
-        return int(not all(checks.values()))
     if args.command == "bootstrap":
         host = cast(str, args.ssh_host)
         if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
@@ -642,7 +855,7 @@ def main() -> int:
         )
         return checklist.returncode
     if args.command == "verify":
-        checks = verify(args.home, args.vault)
+        checks = verify(args.home, args.vault, root=args.root)
         for name, passed in checks.items():
             print(f"{'PASS' if passed else 'FAIL'} {name}")
         print(f"primary: {library_primary(args.home)}")
@@ -665,6 +878,24 @@ def main() -> int:
         print(f"{'PASS' if done.get('restarted') else 'FAIL'} drained={done.get('drained')}")
         print(json.dumps(done, sort_keys=True))
         return 0 if done.get("restarted") else 1
+    if args.command == "vault" and args.vault_command == "key":
+        print(vault_key(cast(Path, args.home), cast(str, args.machine)))
+        return 0
+    if args.command == "vault" and args.ssh_host:
+        host = cast(str, args.ssh_host)
+        if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
+            parser.error("Use an SSH hostname or user@hostname.")
+        machine = cast(str, args.machine)
+        as_qmx = f"sudo runuser -u qmx -- {SERVER_VENV}/bin/qmx node vault"
+        public = run(["ssh", host, f"{as_qmx} key --home {SERVER_HOME} --machine {machine}"])
+        from qmx_router.vault import PROVIDERS, KeyringSource  # noqa: PLC0415 (the PC's keyring)
+
+        names = (*(f"qmx/{row}" for row in PROVIDERS), READ_APP, *cast(list[str], args.name))
+        document = pc_vault_document(
+            cast(Path, args.pc_home), public, machine=machine, source=KeyringSource(names)
+        )
+        print(run(["ssh", host, f"{as_qmx} install --home {SERVER_HOME}"], input_text=document))
+        return 0
     if args.command == "vault":
         home = cast(Path, args.home)
         source = cast(Path | None, args.document)

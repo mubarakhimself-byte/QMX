@@ -402,7 +402,8 @@ class Helpers:
         self._host = host
         self._batch = asyncio.Semaphore(batch)
         self._timeouts = timeouts
-        self._passes = passes or PassAuthority()
+        self.passes = passes or PassAuthority()
+        """The authority helper passes are minted with: the host's one, once it adopts it."""
         self._machine = machine
         self._by_handle: dict[str, Helper] = {}
         self._tasks: set[asyncio.Task[None]] = set()
@@ -446,7 +447,7 @@ class Helpers:
         # starts with a token scoped to this helper's model and write prefix (AD-41). A chat
         # helper needs none: its turns go through the harness, not a child process.
         if start.target == "cli":
-            minted, helper.pass_bearer = self._passes.mint(
+            minted, helper.pass_bearer = self.passes.mint(
                 run=str(parent),
                 placement=self._machine,
                 read_scope=("runs", "vault"),

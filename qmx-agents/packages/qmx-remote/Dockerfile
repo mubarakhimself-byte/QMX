@@ -6,4 +6,4 @@ COPY . /image
 ENV UV_PROJECT_ENVIRONMENT=/opt/remote-env UV_PYTHON_DOWNLOADS=never
 RUN uv sync --frozen --no-dev --no-editable --project /image/qmx-agents/packages/qmx-remote
 ENV PATH=/opt/remote-env/bin:/usr/local/bin:/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1
-ENTRYPOINT ["python", "-m", "qmx_remote.worker"]
+ENTRYPOINT ["python", "-m", "qmx_remote.sidecar"]

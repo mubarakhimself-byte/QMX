@@ -4037,6 +4037,7 @@ dependencies = [
     { name = "qma-harness" },
     { name = "qmx-control" },
     { name = "qmx-ledger" },
+    { name = "qmx-router" },
 ]
 
 [package.dev-dependencies]
@@ -4058,6 +4059,7 @@ requires-dist = [
     { name = "qma-harness", editable = "packages/qma-harness" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
+    { name = "qmx-router", editable = "packages/qmx-router" },
 ]
 
 [package.metadata.requires-dev]
@@ -4082,6 +4084,7 @@ dependencies = [
     { name = "qma-harness" },
     { name = "qmx-control" },
     { name = "qmx-engine" },
+    { name = "qmx-hub" },
     { name = "qmx-library" },
     { name = "uvicorn" },
 ]
@@ -4103,6 +4106,7 @@ requires-dist = [
     { name = "qma-harness", editable = "packages/qma-harness" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-engine", editable = "packages/qmx-engine" },
+    { name = "qmx-hub", editable = "packages/qmx-hub" },
     { name = "qmx-library", editable = "packages/qmx-library" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]
