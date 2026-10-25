@@ -2,7 +2,7 @@
 
 This program fixes list A of `HANDOFF-2026-10-24.md` section 2, plus the small follow-ups that touch the same files, and adds the cTrader half of Connections on the operator's word of 2026-10-24.
 After it lands, the data round's real steps run behind their gates, QMX boots on his real home, and the branches converge on `main`.
-There are 10 PRs. Seven fix list A items 1 to 8, two build the cTrader sign-in and its reads, and one makes the server ready to be the Library's home.
+There are 12 PRs. Seven fix list A items 1 to 8, two build the cTrader sign-in and its reads, two make the server ready (WU9 and its second round WU9b), and one removes the default lock on the price door (WU11, ruling 137).
 The stack roots on `origin/engine/base` at `f05fc64b`, the merge of the whole data round (PRs 171 to 197), confirmed with `gh pr list` and `git fetch` on 2026-10-24.
 Code truth for every Files block was read at `f05fc64b` on 2026-10-24 (Appendix A).
 
@@ -615,6 +615,69 @@ The pass design is `60-wrapup-seams.md` seam C (engine AD-28, Library AD-12).
 - [ ] Stacked on the tip.
 - [ ] Real step (G-LAND). After he lands the stack, the coordinator runs the server setup on the real server as DATA-PLAN's DR2B real step describes, with the store at `/srv/qmx/library`. The PC stays primary until his flip click.
 
+## The server starts, stays private, and can be recovered by hand (WU9b)
+
+WU9's second round, on his yes of 2026-10-25, planned first through his workflow (`research/methodology/61-server-substitute-and-wu9b.md` sections A and B, engine AD-52 and new AD-71). It closes the three blockers WU9's server lanes found (`review/wu9-check-546d06f1.md`) and adds the recovery script of ruling 139. Rulings 136 to 139 bind. It is pushed onto `build/wu9` and checked again in PR 206. Real step the server setup (G-LAND). Done when a fresh `uv sync --package qmx-host` imports the host, the server host starts under its unit with a file token and no workaround, every QMX port is closed to the public address while SSH works there and the tailnet door answers, and he can see what is wrong, stop, repair and restart the server with `sudo qmx-recover` and no agent.
+
+**Depends on.** WU9 at `546d06f1`.
+
+**Files.**
+
+- [ ] Edit `QA/qmx-host/pyproject.toml` and `qmx-agents/uv.lock` (declare `qmx-memory`, `qmx-router`, `qmx-remote`, `qmx-broker`, `qmf-core` and `qmf-data`).
+- [ ] Edit `HO/host.py` (`compose_memory` follows `[memory] hindsight` on the node and server roles; `serve` computes the bearer once with `local_token(home, create=True)` and passes it to `compose` and `PrincipalDoor(bearer=...)`; `health(port)` passes the home).
+- [ ] Edit `QX/server.py` (`local_token(home=None, *, create=False)`).
+- [ ] Edit `QX/node.py` (setup steps in 61's order, `pair` through `qmx-recover pair --from-stdin`, the server commands' `--vault` default `SERVER_HOME/vault`, a `firewall` line in `verify`, the PC twin written to `<home>/bin/`).
+- [ ] Add `QX/qmx-recover.sh` and `QX/qmx-recover.ps1`.
+- [ ] Edit `qmx-agents/packages/qmx-engine/src/qmx_engine/__main__.py` (`local_token(home)`).
+- [ ] Edit `R/server.py` and `QA/qmx-host/deploy/otelcol.yaml` (comments only).
+- [ ] Add tests in `QXT/test_control.py`, `QXT/test_recover.py`, `QXT/test_node*.py` and `HOT/test_host.py`.
+
+**Build.**
+
+- [ ] Declare the imports, and add the guard test that fails on the next undeclared one.
+- [ ] Write the token file path. It is taken only where the keyring library reports its fail or null backend on a platform other than Windows; on Windows a keyring failure is refused by name (edge case 2, `review/plan-wu9b-wu11-edge-cases.md`).
+- [ ] Write the setup steps. The token and pairing key move from `/etc/qmx/vault` only when the home has none, otherwise the `/etc` copy is deleted and the home's kept (edge case 1).
+- [ ] Write the firewall step with the five-minute undo. With no SSH port read from `sshd -T`, or with IPv6 off in `/etc/default/ufw`, it refuses and leaves ufw untouched (edge cases 4 and 5).
+- [ ] Write `qmx-recover.sh` and its PC twin with 61's help text. `repair` touches only the paths in `recover.conf`, `rollback` with one version answers by name, `reinstall` tries offline then online and reports both failures plainly, and the twin's `pair` keeps `pairing-key.previous` and tells him to restart the PC host (edge cases 6 to 9).
+
+**You see.**
+
+- [ ] `sudo qmx-recover status` on the server prints one plain line per part, each ending PASS or FAIL with a reason.
+
+**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] The token test with the fail backend, the stub-PATH order test for `firewall close`, the setup order and move tests, and the server-role memory and declared-imports tests pass. Run the control, host, router, engine and remote suites with `-n 2`.
+
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
+
+- [ ] Lane 1. The suites at parent `546d06f1` and head. Save `wu9b-regression.log`. Pass when head fails nothing the parent passes.
+- [ ] Lane 2. A fresh host-only sync on the server, then import the four host modules. Save `wu9b-imports.log`. Pass when the import exits 0.
+- [ ] Lane 3. WU9's lane 2 again under `/srv/qmx/check/wu9b` as `qmx`, with no workaround. Save `wu9b-setup.log`. Pass when the host starts, answers with the file token, serves the one root, and no standalone Hub is left.
+- [ ] Lane 4. The firewall on the real server, from a session that keeps one SSH connection open, with the undo armed first. Save `wu9b-firewall.log`. Pass when the public address answers no QMX port, a fresh SSH login works, the tailnet door answers 401, and the lane ends with ufw as it found it (edge case 3).
+- [ ] Lane 5. The recovery script on a scratch conf, `status`, `stop host`, `repair`, `status`. Save `wu9b-recover.log`. Pass when the last status shows the host answering.
+- [ ] Lane 6. WU9's sync and pass lanes again at this head. Save `wu9b-sync-pass.log`. Pass when both pass as before.
+- [ ] Lane 7. Grep every lane log for the planted token and key values. Save `wu9b-leak.log`. Pass when none appears.
+- [ ] Lane 8. `tools/secret_scan.py`. Save `wu9b-secrets.log`. Pass when it is clean.
+- [ ] Lane 9. Gates in the control, host, router and engine packages. Save `wu9b-gates.log`. Pass when every exit code is 0.
+- [ ] Lane 10. Remove `/srv/qmx/check/wu9b` and list processes on both machines. Save `wu9b-processes.log`. Pass when nothing from the lanes is left.
+
+**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Metric. Seconds for the setup steps on the server.
+- [ ] Probe. Lane 3.
+- [ ] Baseline. None, first measure.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** WU9b gives him a tool he runs by hand.
+
+- [ ] Post to the operator a screenshot of `qmx-recover status` and its help text from lane 5, and a short video of `stop`, `repair` and `status`, with one plain sentence on when to use it.
+
+**Merge.**
+
+- [ ] The coordinator's CLEAN verdict at the exact head. This is WU9's second round on his word; no further round.
+- [ ] Lows in `lows.md`, new findings in `BACKLOG.md`, the verdict in `ledger.tsv`.
+- [ ] Stacked on the tip as PR 206.
+
 ## cTrader reads through the server, and broker history (WU10)
 
 The rest of DATA-PLAN's DR5B, on the facts PRB-CT's probes record after his sign-in. The MT5 adapter is left out, because he asked for the cTrader half and gave no investor login (`BACKLOG.md`). Real step his first real cTrader demo connection read through the server (G-CT). Gate G-CT and PRB-CT's rows without the P-CTREFRESH fallback. Done when `qmx_broker`'s cTrader reads go through the home host's one long-running `qmf-venue` session, other machines' reads forward to it, existing `qmx/ctrader-*` entries are re-filed with the client id and secret as `qmx/read/ctrader-app` and no token left on the PC, the health walk gains a liveness read if P-CT2CONN says so, and a `download-broker` template pages demo history into one partition.
@@ -672,6 +735,64 @@ The rest of DATA-PLAN's DR5B, on the facts PRB-CT's probes record after his sign
 - [ ] The coordinator's CLEAN verdict at the exact head, or after the one fix round.
 - [ ] Lows in `lows.md`, new findings in `BACKLOG.md`, the verdict in `ledger.tsv`.
 - [ ] Stacked on the tip, after the first stack has landed, as its own short stack.
+
+## The price door opens by default, and a holdout is his choice per study (WU11)
+
+Ruling 137 in code, designed in `research/methodology/61-server-substitute-and-wu9b.md` section C (Library AD-28 amended). Today the market-data door stays shut until a holdout boundary is set, the downloaders and the old-ticks import cannot save without one, and nothing about it is editable in Settings. Real step none. Gate none. Done when a door opened with an empty `[data]` serves a 1996 partition with `exploration`, a study holdout seals only that study's reads, Settings has a `data` section with the holdout off by default, and the door's `primary` follows `[library] primary`.
+
+**Depends on.** WU9b (both edit `HO/host.py`, `market_door` only).
+
+**Files.**
+
+- [ ] Edit `HO/market_data.py` (optional seal, a per-read `holdout`, named answers when there is none, `primary` from `[library] primary`).
+- [ ] Edit `HO/host.py` (`market_door` returns `None` only for a store it cannot read; the market router always mounts).
+- [ ] Edit `QX/service.py` (`data` in `SettingsSection`, with a parser for the holdout fields).
+- [ ] Edit `TL/service.py` (passes the optional holdout; a narrower message when there is no door).
+- [ ] Edit `scripts/data/import_old_ticks.py` (`--seal-boundary-ns` optional) and the `download-dukascopy` README line.
+- [ ] Add tests in `HOT/test_market_data.py` and `scripts/data/test_import_old_ticks.py`.
+
+**Build.**
+
+- [ ] Make the seal optional and the door always open on a readable store.
+- [ ] Add the per-read holdout. A run's holdout is fixed on its first read, and a later read in that run asking for a different one is refused by name (edge case 11). An agent may read with no holdout, by design (edge case 10).
+- [ ] Add the Settings `data` section, off by default.
+- [ ] Make the import's seal flag optional.
+
+**You see.**
+
+- [ ] From a chat, `read_bars` for a 1996 window answers rows on a throwaway home with an empty `[data]`.
+
+**Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Three tests. A door with no holdout serves 1996. A study holdout seals only its own reads. A final look with no holdout is answered by name. Run the host, tools, control and engine suites with `-n 2`.
+
+**Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
+
+- [ ] Lane 1. The four suites at parent and head. Save `wu11-regression.log`. Pass when head fails nothing the parent passes.
+- [ ] Lane 2. A chat on haiku reads a 1996 window on a throwaway home with a synthetic 1996 partition. Save `wu11-1996.log`. Pass when rows come back.
+- [ ] Lane 3. The same home with Settings `data.holdout` on for 2025. Save `wu11-default-on.log`. Pass when a 2025 read with `exploration` is refused by name and a 1996 read still answers.
+- [ ] Lane 4. One run that asks for two different holdouts. Save `wu11-mixed.log`. Pass when the second is refused by name.
+- [ ] Lane 5. `import_old_ticks.py --help` and a dry import with no seal flag. Save `wu11-import.log`. Pass when it runs.
+- [ ] Lane 6. `PUT /api/settings/data` with a bad month. Save `wu11-settings.log`. Pass when it is refused by name.
+- [ ] Lane 7. Grep lane logs for key values. Save `wu11-leak.log`. Pass when none appears.
+- [ ] Lane 8. `tools/secret_scan.py`. Save `wu11-secrets.log`. Pass when it is clean.
+- [ ] Lane 9. Gates in the host, tools and control packages. Save `wu11-gates.log`. Pass when every exit code is 0.
+- [ ] Lane 10. Remove the throwaway home and list processes. Save `wu11-processes.log`. Pass when nothing from the lanes is left.
+
+**Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+
+- [ ] Metric. Milliseconds for one unsealed month read.
+- [ ] Probe. Lane 2.
+- [ ] Baseline. The same read through a sealed door at the parent.
+- [ ] Rule. No fail rule. Recorded for the trail.
+
+**Review gate.** None. The Settings row on screen belongs to the UI session.
+
+**Merge.**
+
+- [ ] The coordinator's CLEAN verdict at the exact head, or after the one fix round.
+- [ ] Lows in `lows.md`, new findings in `BACKLOG.md`, the verdict in `ledger.tsv`.
+- [ ] Stacked on the tip after WU9b.
 
 ## Close the program
 
@@ -732,7 +853,7 @@ Parallel pairs and their intersections, checked from the Files blocks above. WU1
 - G-LAND. Real steps run only on landed code.
 - G-FLIP. His click on "Move the Library to the server". The coordinator never presses it. It also waits on a design item that is not in this program, how the PC writes after the flip (Library spine Deferred, `60-wrapup-seams.md`), so the card is not posted in this run.
 - G-CT. His demo sign-in, walked through click by click after WU8 lands and the server host runs.
-- G-SEAL. The month his holdout starts. Until he names it, the price door stays shut.
+- G-SEAL. Withdrawn on 2026-10-25 (ruling 137). A holdout is his optional choice per study; WU11 removes the default lock.
 - G-R2. Closed by his decision. Anything that needs a bucket waits and says so.
-- G-CAL. His yes to remove the old calendar task on his PC.
+- G-CAL. Withdrawn on 2026-10-25 (ruling 136). His PC keeps its own calendar task.
 - G-OO. His OpenObserve sign-up, only if the install asks.
