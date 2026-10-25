@@ -88,6 +88,7 @@ from qmx_engine.workers.remote import PlacementWorker
 from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
+from qmx_library.landing import NOT_PRIMARY
 from qmx_library.port import LibraryRefused, StoreRole
 from qmx_library.principal import MAIN, Act, Principal
 from qmx_library.store import Store
@@ -551,7 +552,7 @@ class HostStore(Store):
             raise LibraryRefused(HOLD, f"the Library is moving to the server; {ref} waits for it")
         if ref == MAIN and self.primary is not None and self.primary() != "server":
             raise LibraryRefused(
-                "ref_not_owned", "the PC is primary, so main moves on the server only by sync"
+                NOT_PRIMARY, "primary is pc; main moves on the server only by sync from it"
             )
 
 

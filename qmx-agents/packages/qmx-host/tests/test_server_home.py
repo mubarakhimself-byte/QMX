@@ -11,6 +11,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.testclient import TestClient
 from qmx_control.primary import Flip
 from qmx_control.server import BearerGate
+from qmx_library.landing import Deferred, land
 from qmx_library.port import Draft, LibraryRefused
 from qmx_library.principal import Principal
 
@@ -48,8 +49,28 @@ def test_the_server_refuses_main_while_the_pc_is_primary(tmp_path: Path) -> None
         hub.refuse_owned("main")
         with pytest.raises(LibraryRefused):
             hub.refuse_owned("refs/hub/health")
-        assert (refused.value.code, landed.ref) == ("ref_not_owned", "refs/runs/r1")
+        assert (refused.value.code, landed.ref) == ("not_primary", "refs/runs/r1")
         assert hub.health()["primary"] == "pc"
+
+
+def test_a_server_run_that_ends_before_the_flip_stays_on_its_run_ref(tmp_path: Path) -> None:
+    with open_store(tmp_path, tmp_path / "library", serving=True, floor=0) as store:
+        put = store.put(
+            Principal("run", "r1"), note("result"), on="refs/runs/r1", expected_head=None
+        )
+        landed = land(store, "r1", mode="live", status="passed")
+        assert [(row.item, row.into, row.result) for row in landed] == [
+            (
+                "result",
+                "main",
+                Deferred(
+                    put.object_id,
+                    "not_primary: primary is pc; main moves on the server only by sync from it",
+                ),
+            )
+        ]
+        assert store.head("result", "main") is None
+        assert store.head("result", "refs/runs/r1") == (put.object_id, 1)
 
 
 def test_the_doctor_row_names_the_store_health(tmp_path: Path) -> None:

@@ -2,9 +2,10 @@
 
 Two runs, one per machine, under the read app. `--role hold` runs on the PC: it opens a demo
 connection, authorises the app with the PC's `qmx/read/ctrader-app` and listens, recording every
-unasked message and whether the socket drops. `--role second` runs on the server while the first
-is held: it opens another demo connection under the same app and authorises it with the server's
-vault copy. Neither run reads or needs the grant's tokens, so the PC still holds none.
+unasked message and whether the socket drops; it names the PC's home with `--home`. `--role
+second` runs on the server's home, the default, while the first is held: it opens another demo
+connection under the same app and authorises it with the server's vault copy. Neither run reads
+or needs the grant's tokens, so the PC still holds none.
 
 **Pass:** the result is recorded either way. The row says whether the second was refused with
 error 67 or the first was dropped, and whether the drop came with an event.
