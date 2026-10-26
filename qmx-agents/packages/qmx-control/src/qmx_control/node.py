@@ -174,8 +174,9 @@ def vault_install(home: Path, document: str) -> tuple[tuple[str, ...], tuple[str
     return tuple(sorted(names)), tuple(sorted(gone))
 
 
-SERVER_MACHINE: Final = "contabo"
-"""The server's machine name, the server host's placement name, which its vault share is under."""
+PLACE: Final = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
+"""A server's place name, the placement its host runs under and its vault share is sealed for. No
+place is assumed: setup names it."""
 READ_APP: Final = "qmx/read/ctrader-app"
 """The cTrader read app WU8 files, which the server's sign-in opens from its vault copy. The PC's
 document asks Credential Manager for it and for every bundled model-provider row; `--name` adds a
@@ -894,14 +895,14 @@ def main() -> int:
     vault_install_command.add_argument(
         "--ssh-host", default="", help="build the PC's document here and install it on that host"
     )
-    vault_install_command.add_argument("--machine", default=SERVER_MACHINE)
+    vault_install_command.add_argument("--machine", default="", help="the server's place name")
     vault_install_command.add_argument("--pc-home", type=Path, default=Path("./qmx-home"))
     vault_install_command.add_argument(
         "--name", action="append", default=[], help="one more qmx/read/* or qmx/data/* name"
     )
     vault_key_command = vault_commands.add_parser("key")
     vault_key_command.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    vault_key_command.add_argument("--machine", default=SERVER_MACHINE)
+    vault_key_command.add_argument("--machine", default="", help="the server's place name")
     serve = commands.add_parser("serve")
     serve.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
     serve.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
@@ -1016,6 +1017,10 @@ def main() -> int:
         print(f"{'PASS' if done.get('restarted') else 'FAIL'} drained={done.get('drained')}")
         print(json.dumps(done, sort_keys=True))
         return 0 if done.get("restarted") else 1
+    if args.command == "vault" and (args.vault_command == "key" or args.ssh_host):
+        machine = cast(str, args.machine)
+        if not PLACE.fullmatch(machine):
+            parser.error("Name the server's place with --machine, the name its host runs under.")
     if args.command == "vault" and args.vault_command == "key":
         print(vault_key(cast(Path, args.home), cast(str, args.machine)))
         return 0

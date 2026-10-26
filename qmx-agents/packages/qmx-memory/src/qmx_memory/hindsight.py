@@ -15,9 +15,9 @@ No provider key reaches this module. The extractor's model call, when a `reflect
 host's relay grant: a base URL on the router's key lane and a grant secret minted for the
 `memory_extractor` role (SOLUTION-DESIGN 28.6). The grant is held in memory and never printed.
 
-The server's own traces go to the one collector on the server (AD-69): Hindsight's OTel switch and
-its OTLP endpoint are set in `_isolate`, before its configuration is built, so its retain and
-reflect spans join the run they serve.
+Hindsight traces only where `[telemetry] send_to` names a target (AD-69, design 62 E1): its OTel
+switch and OTLP endpoint are set in `_isolate`, before its configuration is built, so its retain
+and reflect spans join the run they serve.
 """
 
 from __future__ import annotations
@@ -32,8 +32,6 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Protocol, cast
-
-from qmx_engine.telemetry import DEFAULT_ENDPOINT
 
 from qmx_memory.rows import MemoryRow
 
@@ -60,8 +58,6 @@ OTEL_ENDPOINT: Final = "HINDSIGHT_API_OTEL_EXPORTER_OTLP_ENDPOINT"
 OTEL_SERVICE: Final = "HINDSIGHT_API_OTEL_SERVICE_NAME"
 """Hindsight reads its tracing switch and its OTLP target from these names, never from the
 standard `OTEL_*` ones (`hindsight_api.config`)."""
-COLLECTOR_ENDPOINT: Final = DEFAULT_ENDPOINT
-"""The server's collector, which the engine's exporter also sends to (AD-69, F46)."""
 SERVICE: Final = "qmx-memory"
 
 
@@ -85,6 +81,9 @@ class HindsightConfig:
     grant: str = field(default="", repr=False)
     """The relay grant minted for the `memory_extractor` role. Never printed, never written."""
     model: str = ""
+    telemetry: str = ""
+    """The OTLP/HTTP root `[telemetry] send_to` names (`qma.telemetry.configured`).
+    Empty traces nothing."""
     timeout_s: float = 120.0
     start_timeout_s: float = 600.0
 
@@ -212,9 +211,9 @@ class HindsightIndex:
     def _isolate(self) -> None:
         """Hindsight's own folders and its embedder's downloads, under the memory home on `D:`.
 
-        The tracing names are `setdefault` because a lane that starts an embedded server and must
-        not send to the real collector can name them first; the host scrubs the environment, so
-        production takes the defaults.
+        Tracing is on only when `telemetry` names a target. Its names are `setdefault`, so a lane
+        that starts an embedded server can name its own collector first; the host scrubs the
+        environment, so production takes the setting.
         """
         home = self.config.home
         home.mkdir(parents=True, exist_ok=True)
@@ -223,9 +222,10 @@ class HindsightIndex:
         os.environ["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_RERANKER_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_ENABLE_OBSERVATIONS"] = "false"
-        os.environ.setdefault(OTEL_ENABLED, "1")
-        os.environ.setdefault(OTEL_ENDPOINT, COLLECTOR_ENDPOINT)
-        os.environ.setdefault(OTEL_SERVICE, SERVICE)
+        if self.config.telemetry:
+            os.environ.setdefault(OTEL_ENABLED, "1")
+            os.environ.setdefault(OTEL_ENDPOINT, self.config.telemetry)
+            os.environ.setdefault(OTEL_SERVICE, SERVICE)
 
     def bank(self, bank_id: str) -> str:
         """The bank, made once per process with the plan's two settings."""

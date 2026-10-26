@@ -10,7 +10,7 @@ from typing import NamedTuple
 from qma.boot import KEEP_NAMES, banned_fragment
 
 SRC = Path(__file__).resolve().parents[1] / "src"
-STDLIB_ONLY = ("qma.boot", "qma.launcher")
+STDLIB_ONLY = ("qma.boot", "qma.launcher", "qma.telemetry")
 SDK_ALLOWED = ("qma.harness", "qma.gpt.probe")
 
 

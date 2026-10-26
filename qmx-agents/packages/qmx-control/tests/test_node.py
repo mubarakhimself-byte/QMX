@@ -7,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from qmx_apps.docker import DockerSupervisor
 
-from qmx_control.node import bootstrap_script, read_secret, run, verify
+from qmx_control.node import bootstrap_script, main, read_secret, run, verify
 from qmx_control.server import create_app
 from qmx_control.service import ControlService
 
@@ -49,6 +49,26 @@ def test_installer_is_pinned_and_has_no_subscription_material() -> None:
     assert "systemctl enable qmx-node" in script
     with pytest.raises(ValueError):
         bootstrap_script("main; exit")
+
+
+def test_the_server_setup_keeps_this_pc_primary() -> None:
+    lines = bootstrap_script("a" * 40).splitlines()
+
+    assert [line for line in lines if line.startswith("primary = ")] == ['primary = "pc"']
+
+
+def test_a_vault_key_names_the_servers_place_or_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["qmx", "node", "vault", "key", "--home", str(tmp_path)])
+    with pytest.raises(SystemExit):
+        main()
+    refused = capsys.readouterr().err
+    monkeypatch.setattr(sys, "argv", [*sys.argv, "--machine", "home-server"])
+
+    assert main() == 0
+    assert "Name the server's place with --machine" in refused
+    assert len(capsys.readouterr().out.strip()) == 44
 
 
 def test_remote_script_pipe_preserves_linux_newlines() -> None:

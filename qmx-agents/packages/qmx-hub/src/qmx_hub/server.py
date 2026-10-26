@@ -1,8 +1,8 @@
 """`qmx_hub`, the Library Hub: the same `LibraryPort` over the tailnet (Library AD-11, AD-19).
 
 One process, one store, one writer. The store is the server's Library; the Hub opens it as the
-`writer` when `hub.toml` says `primary = server` and as a `replica` when the PC is still primary,
-which is the whole of AD-19's flip. Every call carries the pairing key, because identity is not
+`writer` when `hub.toml` says `primary = server` and as a `replica` while the PC is primary, which
+is the default (ruling 136). Every call carries the pairing key, because identity is not
 authorisation (AD-11); the principal travels beside it and the door refuses one that does not
 parse.
 
@@ -952,6 +952,11 @@ def config(home: Path) -> dict[str, Any]:
     return document
 
 
+def store_role(found: Mapping[str, Any], primary: str | None = None) -> StoreRole:
+    """The store's role from `--primary`, else `hub.toml`, else the PC as primary (ruling 136)."""
+    return "writer" if (primary or str(found.get("primary", "pc"))) == "server" else "replica"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="qmx-hub")
     parser.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
@@ -966,8 +971,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     found = config(args.home)
-    primary = args.primary or str(found.get("primary", "server"))
-    role: StoreRole = "writer" if primary == "server" else "replica"
+    role = store_role(found, args.primary)
     root = args.root or args.home / "library"
     key_file = args.key_file or args.home / "vault" / "pairing-key"
     buckets = args.bucket or [Path(str(item)) for item in found.get("bucket", [])]

@@ -5,16 +5,15 @@ records: spans become OTLP traces with the GenAI conventions pinned to one versi
 become gauges, and ledger events and log lines become OTLP logs. The four records stay the source of
 truth; a collector that is down loses telemetry and never a record.
 
-One collector runs, on the server, and the PC runs none (F46). This exporter therefore holds one
-bounded batch in memory and nothing on disk: a send that fails or a batch that overflows is
-dropped and counted, in `stats()`, which the data health read lists. The durable queue belongs to
-the server's collector (`deploy/otelcol.yaml`), whose queue and drop metrics are the other half of
-that reading.
+This exporter holds one bounded batch in memory and nothing on disk: a send that fails or a batch
+that overflows is dropped and counted, in `stats()`, which the data health read lists. A server's
+collector (`deploy/otelcol.yaml`) keeps the durable queue, whose queue and drop metrics are the
+other half of that reading.
 
-Nothing here is enabled by default. A process turns it on with `configure`, from
-`<home>/telemetry.json` (`{"endpoint": ..., "headers": {...}}`) or `QMX_OTLP_ENDPOINT`, so a test,
-a lane or a scratch home never sends a record anywhere. An endpoint is enough: the exporter speaks
-OTLP/HTTP with JSON bodies and no third-party SDK, which keeps the engine's dependency set as it is.
+Nothing here is enabled by default. A process turns it on from `settings.toml [telemetry] send_to`
+(`qma.telemetry`), which is `off` until he names a target, so a test, a lane or a scratch
+home never sends a record anywhere. An endpoint is enough: the exporter speaks OTLP/HTTP with JSON
+bodies and no third-party SDK, which keeps the engine's dependency set as it is.
 
 A write point hands over the JSON text it stored (or would store), never an object, so the record
 crosses no second redaction and no second serialisation.
@@ -35,19 +34,15 @@ from pathlib import Path
 from typing import Final, Literal, cast
 
 from pydantic import JsonValue
+from qma.telemetry import configured
 
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.spans import Span, from_record
 
 LOG = logging.getLogger(__name__)
 
-ENDPOINT_ENV: Final = "QMX_OTLP_ENDPOINT"
-"""Where a process sends when its home names no collector."""
-CONFIG_FILE: Final = "telemetry.json"
 STATE_FILE: Final = "logs/telemetry.json"
 """The exporter's counters under the home, which the data health read lists."""
-DEFAULT_ENDPOINT: Final = "http://155.133.27.86:4318"
-"""The server's collector, OTLP/HTTP. Claude's default: one machine, one collector (F46)."""
 GENAI: Final = "1.36.0"
 """The one version of the GenAI conventions this exporter pins. `gen_ai.system`,
 `gen_ai.request.model`, `gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens` are that
@@ -552,28 +547,13 @@ def configure(
 
 
 def opened(home: Path, *, service: str = "qmx-host") -> Telemetry | None:
-    """Configure from a home, once: `<home>/telemetry.json`, else `QMX_OTLP_ENDPOINT`, else off."""
+    """Configure from a home's `[telemetry] send_to`, once, or stay off while it names none."""
     if _resident.found is not None:
         return _resident.found
-    endpoint, headers, name = "", {}, service
-    try:
-        raw: object = json.loads((home / CONFIG_FILE).read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        raw = None
-    if isinstance(raw, dict):
-        fields = cast("dict[str, object]", raw)
-        endpoint = str(fields.get("endpoint") or "")
-        name = str(fields.get("service") or service)
-        found = fields.get("headers")
-        if isinstance(found, dict):
-            headers = {str(k): str(v) for k, v in cast("dict[object, object]", found).items()}
-    if not endpoint:
-        import os  # noqa: PLC0415
-
-        endpoint = os.environ.get(ENDPOINT_ENV, "")
+    endpoint = configured(home)
     if not endpoint:
         return None
-    return configure(endpoint, headers=headers, service=name, state=home / STATE_FILE)
+    return configure(endpoint, service=service, state=home / STATE_FILE)
 
 
 def reset() -> None:

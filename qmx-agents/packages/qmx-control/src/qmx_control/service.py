@@ -64,6 +64,7 @@ type SettingsSection = Literal[
     "roles",
     "rules",
     "observers",
+    "telemetry",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
