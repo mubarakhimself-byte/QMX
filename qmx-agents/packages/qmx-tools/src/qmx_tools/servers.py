@@ -14,6 +14,7 @@ from typing import Final
 
 from fastmcp import FastMCP
 from qmx_control.catalog import DOMAIN_ROWS
+from qmx_home import NoQmxFolder, resolve
 
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
@@ -40,7 +41,11 @@ def create_server(name: str, ctx: DomainContext) -> FastMCP:
 
 def from_environment() -> DomainContext:
     """The bare context a stdio door starts with: this host's volume, and no door of its own."""
-    root = Path(os.environ.get("QMX_TOOLS_ROOT", str(Path.home() / ".qmx"))).resolve()
+    named = os.environ.get("QMX_TOOLS_ROOT")
+    try:
+        root = resolve(Path(named) if named else None).home
+    except NoQmxFolder as missing:
+        raise SystemExit(str(missing)) from None
     return DomainContext(root=root)
 
 

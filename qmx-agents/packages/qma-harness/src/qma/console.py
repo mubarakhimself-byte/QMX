@@ -3,8 +3,8 @@
 It uses only the HTTP routes in `qma.harness.routes` and the existing SSE streams, the same
 doors the UI will use, so talking to it tests the real path. It never imports `qma.harness` or
 `claude_agent_sdk`. It scrubs its own environment first, because `/login` starts the bundled
-CLI from this process. With no host answering on `--port`, it starts `qmx_host` for `--home`
-and stops it again on exit.
+CLI from this process. With no host answering on `--port`, it starts `qmx_host` for the QMX
+folder (`--home`, or the one `qmx_home.resolve` finds) and stops it again on exit.
 
 Commands, mirroring Claude Code where a twin exists:
     /login chatgpt         Sign in with ChatGPT for QMA: the stored sign-in, or OpenAI's page
@@ -46,6 +46,7 @@ from typing import Any, Final, Protocol, cast
 
 import httpx
 import keyring
+from qmx_home import NoQmxFolder, resolve
 
 from qma.boot import read_keep_names, scrub_process_env
 
@@ -819,14 +820,19 @@ def prepare_terminal() -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="qma.console", description="Talk to the QMA harness.")
-    parser.add_argument("--home", type=Path, default=Path.home() / ".qmx")
+    parser.add_argument(
+        "--home", type=Path, default=None, help="the QMX folder; found when left out"
+    )
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
     parser.add_argument("--model", help="model for new chats; the host's default otherwise")
     parser.add_argument("--resume", help="a session id to continue")
     parser.add_argument("--timing", action="store_true", help="print the first-delta delay")
     args = parser.parse_args(argv)
-    home: Path = args.home.resolve()
+    try:
+        home = resolve(args.home).home
+    except NoQmxFolder as missing:
+        parser.exit(2, f"{missing}\n")
     scrub_process_env(os.environ, read_keep_names(home / "settings.toml"))
     stdout: Any = sys.stdout
     if isinstance(stdout, io.TextIOWrapper):

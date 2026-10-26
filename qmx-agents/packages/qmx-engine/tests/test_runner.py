@@ -19,7 +19,16 @@ CHECK = """
 def test_the_cli_runs_the_script_chain_to_run_finished(tmp_path: Path) -> None:
     chain = str(FIXTURES / "script-chain")
     done = subprocess.run(
-        [sys.executable, "-m", "qmx_engine", "run", chain, "--home", str(tmp_path / "home")],
+        [
+            sys.executable,
+            "-m",
+            "qmx_engine",
+            "run",
+            chain,
+            "--home",
+            str(tmp_path / "home"),
+            "--create",
+        ],
         capture_output=True,
         text=True,
         check=False,
