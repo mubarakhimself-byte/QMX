@@ -568,15 +568,16 @@ def _label_of(layout: Layout) -> Label | None:
 
 
 def _pragma(connection: sqlite3.Connection, name: str) -> int:
-    row = connection.execute(f"PRAGMA {name}").fetchone()
-    return int(row[0]) if row else 0
+    """Read to the end, so no statement stays open to hold the file's read lock."""
+    rows = connection.execute(f"PRAGMA {name}").fetchall()
+    return int(rows[0][0]) if rows else 0
 
 
 def _meta_int(connection: sqlite3.Connection, table: str, key: str, tables: set[str]) -> int | None:
     if not key or table not in tables:
         return None
-    row = connection.execute(f"SELECT value FROM {table} WHERE key = ?", (key,)).fetchone()  # noqa: S608
-    return None if row is None else int(row[0])
+    rows = connection.execute(f"SELECT value FROM {table} WHERE key = ?", (key,)).fetchall()  # noqa: S608
+    return int(rows[0][0]) if rows else None
 
 
 def _file_of(connection: sqlite3.Connection) -> Path | None:

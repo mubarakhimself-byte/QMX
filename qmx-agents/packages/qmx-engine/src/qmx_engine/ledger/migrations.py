@@ -1,19 +1,28 @@
-"""The ledger schema: a `schema_version` row in `meta` and forward-only steps.
+"""The ledger schema: forward-only steps, and the gate that opens, upgrades or refuses a file.
 
 Step N moves the schema from version N-1 to N. Step 3 rebuilds `triggers` for the wider kind
 check (SQLite cannot alter a CHECK) and adds a trigger's `priority` and `ready_by`, and a fire's
 webhook `delivery_id`, its `delivery` outcome and its re-run count. Step 4 rebuilds `triggers`
 without the `home_engine IN ('pc', 'contabo')` check, every row kept: a trigger's home is any
-place in his list, which the service checks when it writes (AD-72). A file whose version is newer
-than this code knows is refused, never downgraded. The SQLite library version is recorded in
-`meta` at every writer open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can
-corrupt a WAL database, which is why only the writer thread ever checkpoints, whatever the version.
+place in his list, which the service checks when it writes (AD-72).
+
+The version lives in `meta` as `schema_version` (the release before this one reads it) and in
+`PRAGMA user_version`, beside `min_reader` in `meta` (design 62 B1). Step 3 changes what a
+trigger's kind may mean, so it raises `min_reader` to 3; step 4 only widens a check and leaves it,
+so a version 3 engine may still open a version 4 ledger. `qmx_home.versions.open_sqlite` applies
+design 62 B2: a newer ledger whose `min_reader` this engine meets opens as it is, one it does not
+meet is refused by name and never written, and an older one is copied into the folder's
+`backups/` before its first step. The SQLite library version is recorded in `meta` at every
+writer open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can corrupt a WAL
+database, which is why only the writer thread ever checkpoints, whatever the version.
 """
 
 from __future__ import annotations
 
 import sqlite3
 from typing import Final
+
+from qmx_home.versions import open_sqlite
 
 TRIGGER_COLUMNS: Final = (
     "id, workflow_item, pinned_object, follow_champion, home_engine, kind, spec, enabled,"
@@ -108,10 +117,6 @@ STEPS: Final[tuple[tuple[str, ...], ...]] = (
 )
 
 
-class LedgerSchemaError(Exception):
-    pass
-
-
 def schema_version(connection: sqlite3.Connection) -> int:
     has_meta = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'meta'"
@@ -123,31 +128,14 @@ def schema_version(connection: sqlite3.Connection) -> int:
 
 
 def migrate(connection: sqlite3.Connection) -> list[int]:
-    """Apply every step the file lacks, each in its own transaction, and return the versions
-    applied. `connection` must be in autocommit mode (`isolation_level=None`)."""
-    current = schema_version(connection)
-    if current > len(STEPS):
-        raise LedgerSchemaError(
-            f"ledger schema version {current} is newer than this engine's {len(STEPS)}"
-        )
-    applied: list[int] = []
-    for version in range(current + 1, len(STEPS) + 1):
-        connection.execute("BEGIN IMMEDIATE")
-        try:
-            for statement in STEPS[version - 1]:
-                connection.execute(statement)
-            connection.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?)",
-                (str(version),),
-            )
-            connection.execute("COMMIT")
-        except BaseException:
-            connection.execute("ROLLBACK")
-            raise
-        applied.append(version)
+    """Bring the ledger to this engine's version and return the versions applied, each step in its
+    own transaction after the pre-change copy. Raises `StoreRefused` for a ledger too new, a file
+    that is not a ledger, an upgrade whose copy cannot be made and a step that fails.
+    `connection` must be in autocommit mode (`isolation_level=None`)."""
+    opened = open_sqlite(connection, "engine", STEPS)
     connection.execute(
         "INSERT INTO meta (key, value) VALUES ('sqlite_version', ?)"
         " ON CONFLICT (key) DO UPDATE SET value = excluded.value WHERE value != excluded.value",
         (sqlite3.sqlite_version,),
     )
-    return applied
+    return list(opened.applied)
