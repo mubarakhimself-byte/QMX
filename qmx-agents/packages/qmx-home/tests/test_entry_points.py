@@ -18,7 +18,15 @@ PROGRAMS = {
     "engine": (["-m", "qmx_engine", "templates", "list"], 1),
     "node pair": (["-c", "from qmx_control.node import main; main()", "node", "pair"], 2),
     "node setup": (
-        ["-c", "from qmx_control.node import main; main()", "node", "setup", "qmx-server"],
+        [
+            "-c",
+            "from qmx_control.node import main; main()",
+            "node",
+            "setup",
+            "qmx-server",
+            "--machine",
+            "home-server",
+        ],
         2,
     ),
     "broker": (["-c", "from qmx_broker.server import main; main()"], 1),
