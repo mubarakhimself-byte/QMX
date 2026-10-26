@@ -134,7 +134,6 @@ class InboxTable:
         self.connection = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_S)
         try:
             open_sqlite(self.connection, "inbox", ((SCHEMA, INCIDENTS, APP_INCIDENTS),))
-            self.connection.execute("PRAGMA journal_mode = WAL").fetchall()
             self.connection.execute(SCHEMA)
             self.connection.execute(INCIDENTS)
             self.connection.execute(APP_INCIDENTS)

@@ -270,9 +270,6 @@ class Ledger:
             opened = sqlite3.connect(
                 self.path, isolation_level=None, timeout=BUSY_TIMEOUT_S, check_same_thread=True
             )
-            # Refused before the first write: a ledger too new or not QMX's is never written.
-            check_sqlite(opened, "engine")
-            opened.execute("PRAGMA journal_mode = WAL")
             opened.execute("PRAGMA synchronous = FULL")
             self.applied = migrate(opened)
         except BaseException as error:
