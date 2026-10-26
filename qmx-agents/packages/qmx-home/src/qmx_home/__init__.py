@@ -67,17 +67,19 @@ Everything else at a flat home's top moves into `data/` under its own name, and 
 `control.log` moves last, to `logs/host.log`, once the flat `logs/` has gone to `data/logs`."""
 HOST_LOG: Final = ("control.log", "logs/host.log")
 FLAT_MARKERS: Final = (
-    ".qmx",
-    "vault",
-    "chats",
-    "claude",
-    "claude-relayed",
     "control.db",
     "runs.db",
+    "claude-relayed",
+    "vault/pairing-key",
+    "vault/control-token",
+    JOURNAL,
 )
-"""Names only a flat QMX home holds at its top: a PC host writes its chats, Claude homes and
-stores there, a server setup its `vault/` and `.qmx/`. An unlabelled folder holding none of them
-is not a QMX folder, and nothing in it is ever moved."""
+"""Files only QMX writes at a flat home's top: a PC host's stores and relayed Claude home, a
+server setup's pairing key and control token, and this module's own plan. Bare folder names such
+as `.qmx` or `vault` are not markers, because a user profile or a notes vault holds them too. An
+unlabelled folder holding none of these is not a QMX folder, and nothing in it is ever moved."""
+PROFILE_FILE: Final = "NTUSER.DAT"
+"""The registry hive at the top of every Windows user profile."""
 
 
 class NoQmxFolder(Exception):
@@ -228,6 +230,9 @@ def _opened(root: Path) -> Layout:
         return Layout(root)
     if label is None and not any(root.iterdir()):
         raise NoQmxFolder(f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)")
+    kept_out = _kept_out(root) if label is None or label.format_version == FLAT else None
+    if kept_out is not None:
+        raise NoQmxFolder(kept_out)
     if label is None and not _flat_home(root):
         raise NoQmxFolder(_not_qmx(root))
     if label is None or label.format_version == FLAT:
@@ -306,8 +311,9 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     """Move a flat format 1 home into the tree (design 62 A3 and A5, guard 4) and label it format
     2. Every move is a rename inside the folder, so nothing is copied and nothing is taken away.
     Returns the moves made, as paths relative to `root`; a folder already in the tree returns none.
-    An empty folder is labelled with its five parts. An unlabelled folder holding none of
-    `FLAT_MARKERS` is not a QMX home: it is refused and nothing in it moves.
+    An empty folder is labelled with its five parts. A drive's root, the user's profile and any
+    folder holding `NTUSER.DAT` are refused whatever they hold, and so is an unlabelled folder
+    holding none of `FLAT_MARKERS`; nothing in a refused folder moves.
 
     Run it with QMX closed. A move the OS refuses (a file still open) stops the step; running it
     again finishes the same plan from where it stopped, because the plan is written to
@@ -323,6 +329,9 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
         return []
     if label is not None and label.format_version != FLAT:
         raise LayoutRefused(f"{root} is a QMX folder of format {label.format_version}")
+    kept_out = _kept_out(root)
+    if kept_out is not None:
+        raise LayoutRefused(f"{kept_out}; nothing in it was moved")
     if label is None and any(root.iterdir()) and not _flat_home(root):
         raise LayoutRefused(f"{_not_qmx(root)}; nothing in it was moved")
     plan = _read_plan(journal) if journal.is_file() else _plan(root)
@@ -341,7 +350,20 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
 
 def _flat_home(root: Path) -> bool:
     """Whether `root` holds a flat home's own files, or a layout step this module started."""
-    return any((root / name).exists() for name in (*FLAT_MARKERS, JOURNAL))
+    return any((root / name).exists() for name in FLAT_MARKERS)
+
+
+def _kept_out(root: Path) -> str | None:
+    """Why `root` is never moved into the tree, marker or not: the refusal, or None."""
+    if root.parent == root:
+        why = "a drive's root"
+    elif root == Path.home().resolve():
+        why = "your user profile"
+    elif (root / PROFILE_FILE).exists():
+        why = f"a user profile (it holds {PROFILE_FILE})"
+    else:
+        return None
+    return f"{root} is not a QMX folder: it is {why}; pass the folder QMX made"
 
 
 def _not_qmx(root: Path) -> str:
@@ -380,7 +402,10 @@ def _read_plan(journal: Path) -> list[tuple[str, str]]:
     try:
         found: object = json.loads(journal.read_text(encoding="utf-8"))
     except (OSError, ValueError) as broken:
-        raise LayoutRefused(f"{journal} cannot be read as a layout plan ({broken})") from None
+        raise LayoutRefused(
+            f"{journal} cannot be read as a layout plan ({broken}); nothing has moved yet, so "
+            "removing that file and running the step again is safe"
+        ) from None
     rows = cast("list[object]", found) if isinstance(found, list) else []
     plan: list[tuple[str, str]] = []
     for row in rows:

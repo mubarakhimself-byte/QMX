@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from qmx_home import LABEL, Label, Layout, LayoutRefused, resolve, step_to_tree
+from qmx_home import LABEL, Label, Layout, LayoutRefused, NoQmxFolder, resolve, step_to_tree
 from qmx_home.__main__ import main
 
 PC_HOME = {
@@ -148,6 +148,102 @@ def test_a_folder_that_is_not_a_qmx_home_is_refused_and_nothing_moves(tmp_path: 
     assert folders(documents) == ["cv.docx", "taxes"]
 
 
+PROFILE = {
+    ".qmx/chats/chat-1.json": '{"id": "chat-1"}',
+    ".qmx/control.db": "sqlite",
+    "Documents/cv.docx": "cv",
+    "Desktop/note.txt": "note",
+}
+NOTES = {"vault/notes/idea.md": "# idea", "cv.docx": "cv"}
+HIVE = {"NTUSER.DAT": "hive", "control.db": "sqlite"}
+LANE_4_FLAT = {
+    "agent-memory/flat-6fc76d0bcccf/MEMORY.md": "",
+    "apps.db": "sqlite",
+    "artifacts.db": "sqlite",
+    "chats/chat-1.json": '{"id": "chat-1"}',
+    "claude-relayed/settings.json": "{}",
+    "control-process.json": '{"pid": 7}',
+    "control.db": "sqlite",
+    "engine/engine.sqlite": "ledger",
+    "library/catalog.db": "sqlite",
+    "logs/heartbeat.jsonl": "",
+    "memory/memory.db": "fts5",
+    "plugins/research/skill.md": "",
+    "portfolio.db": "sqlite",
+    "procs/chat-1.json": '{"pid": 41}',
+    "router.port": "18000",
+    "runs.db": "sqlite",
+    "runs/chat-1/journal.jsonl": "",
+    "state/gpt-probe.json": "{}",
+    "workspaces/wf-1/notes.md": "",
+}
+
+
+@pytest.mark.parametrize(
+    ("before", "why"),
+    [
+        (PROFILE, "none of a QMX home's own files"),
+        (NOTES, "none of a QMX home's own files"),
+        (HIVE, "it is a user profile (it holds NTUSER.DAT)"),
+    ],
+    ids=["profile-holding-the-old-home", "notes-vault", "ntuser-dat"],
+)
+def test_a_folder_that_only_looks_like_a_home_is_refused_and_nothing_moves(
+    tmp_path: Path, before: dict[str, str], why: str
+) -> None:
+    root = flat(tmp_path / "someone", before)
+
+    with pytest.raises(NoQmxFolder) as not_opened:
+        resolve(root, drives=[])
+    with pytest.raises(LayoutRefused) as not_moved:
+        step_to_tree(root)
+
+    assert why in str(not_opened.value)
+    assert "python -m qmx_home layout" not in str(not_opened.value)
+    assert str(not_moved.value).endswith("; nothing in it was moved")
+    assert files(root) == before
+
+
+def test_the_users_own_profile_is_refused_even_with_a_marker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = flat(tmp_path / "Mubarak", {"control.db": "sqlite", "Documents/cv.docx": "cv"})
+    monkeypatch.setenv("USERPROFILE", str(root))
+    monkeypatch.setenv("HOME", str(root))
+
+    with pytest.raises(LayoutRefused) as refused:
+        step_to_tree(root)
+
+    assert str(refused.value) == (
+        f"{root.resolve()} is not a QMX folder: it is your user profile; pass the folder QMX "
+        "made; nothing in it was moved"
+    )
+    assert files(root) == {"control.db": "sqlite", "Documents/cv.docx": "cv"}
+
+
+def test_a_drive_root_is_refused_without_looking_inside() -> None:
+    drive = Path(Path.cwd().anchor)
+
+    with pytest.raises(LayoutRefused) as refused:
+        step_to_tree(drive)
+
+    assert str(refused.value) == (
+        f"{drive.resolve()} is not a QMX folder: it is a drive's root; pass the folder QMX made; "
+        "nothing in it was moved"
+    )
+
+
+def test_a_flat_home_a_parent_host_made_still_moves_into_the_tree(tmp_path: Path) -> None:
+    root = flat(tmp_path / "flat", LANE_4_FLAT)
+
+    step_to_tree(root)
+
+    assert folders(root) == ["backups", "cache", "data", "keys", "logs", LABEL]
+    assert len(files(root)) == len(LANE_4_FLAT)
+    assert files(root)["data/chats/chat-1.json"] == '{"id": "chat-1"}'
+    assert files(root)["cache/run/procs/chat-1.json"] == '{"pid": 41}'
+
+
 def test_a_layout_plan_cut_short_is_refused_by_name_and_moves_nothing(tmp_path: Path) -> None:
     root = flat(tmp_path / "home", {"control.db": "", "layout-step.json": '[["control.db", "da'})
 
@@ -156,6 +252,9 @@ def test_a_layout_plan_cut_short_is_refused_by_name_and_moves_nothing(tmp_path: 
 
     assert str(refused.value).startswith(
         f"{root.resolve() / 'layout-step.json'} cannot be read as a layout plan ("
+    )
+    assert str(refused.value).endswith(
+        "); nothing has moved yet, so removing that file and running the step again is safe"
     )
     assert files(root) == {"control.db": "", "layout-step.json": '[["control.db", "da'}
 
@@ -189,12 +288,12 @@ def test_a_step_stopped_by_an_open_file_finishes_on_the_next_run(tmp_path: Path)
 
 
 def test_the_command_reports_each_move(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    root = flat(tmp_path / "home", {"chats/c.json": "", "settings.toml": "", "control.log": ""})
+    root = flat(tmp_path / "home", {"control.db": "", "settings.toml": "", "control.log": ""})
 
     assert main(["layout", str(root)]) == 0
 
     assert capsys.readouterr().out.splitlines() == [
-        "moved chats to data/chats",
+        "moved control.db to data/control.db",
         "moved settings.toml to data/settings.toml",
         "moved control.log to logs/host.log",
         f"{root.resolve()} is in the folder tree",
