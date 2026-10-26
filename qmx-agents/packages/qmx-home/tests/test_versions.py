@@ -44,8 +44,9 @@ def connect(path: Path) -> sqlite3.Connection:
 
 
 def made(path: Path, *, version: int, min_reader: int | None = None, rows: int = 2) -> Path:
-    """A demo store at `version`, marked as QMX's, holding `rows` rows."""
+    """A demo store at `version`, marked as QMX's, holding `rows` rows, in WAL as QMX keeps it."""
     with closing(connect(path)) as db:
+        db.execute("PRAGMA journal_mode = WAL").fetchall()
         for step in STEPS[:version]:
             for statement in step:
                 db.execute(statement)

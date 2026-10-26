@@ -10,10 +10,11 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, closing
 from functools import partial
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Final, Protocol, cast
 
 from qmf.core import is_refusal
 from qmf.venue.proto import CompiledProto, compile_descriptor_set
+from qmx_home.versions import open_sqlite
 
 from qmx_broker.adapters import CCXTAdapter, CTraderAdapter, Document, LiveGrant, ReadAdapter
 from qmx_broker.credentials import (
@@ -153,6 +154,12 @@ async def open_adapter(
         await transport.close()
 
 
+PORTFOLIO_SCHEMA: Final = (
+    "CREATE TABLE IF NOT EXISTS order_proposals (id TEXT PRIMARY KEY, body TEXT NOT NULL)",
+)
+"""`portfolio.db` at version 1 (design 62 B1)."""
+
+
 class BrokerService:
     def __init__(
         self,
@@ -170,12 +177,10 @@ class BrokerService:
         # cTrader permits a small number of sessions; concurrent MCP reads share
         # this gate instead of opening a socket for every simultaneous request.
         self._read_lock = asyncio.Lock()
-        with closing(sqlite3.connect(self.home / "portfolio.db")) as db, db:
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute(
-                "CREATE TABLE IF NOT EXISTS order_proposals "
-                "(id TEXT PRIMARY KEY, body TEXT NOT NULL)"
-            )
+        with closing(sqlite3.connect(self.home / "portfolio.db", isolation_level=None)) as db:
+            open_sqlite(db, "portfolio", (PORTFOLIO_SCHEMA,))
+            for statement in PORTFOLIO_SCHEMA:
+                db.execute(statement)
 
     def configured_settings(self) -> BrokerSettings:
         """`settings` when given, else the `connections` section from the reader the composition

@@ -126,16 +126,19 @@ def open_sqlite(
     in autocommit mode (`isolation_level=None`). `steps[n]` moves the store from version n to
     n + 1, and there are exactly as many steps as this release's version of the store.
 
-    A store whose file held none of this store's tables is made at this release in one go; it has
-    nothing to copy. An unmarked file of today's version is marked in place. Raises StoreRefused
-    for a store too new, a file that is not QMX's, an upgrade whose copy cannot be made, and a
-    step that fails.
+    The file is judged before anything is written to it, and only then switched to WAL (every
+    QMX store runs in WAL; switching after a step that drops a table leaves SQLite unable to
+    checkpoint on that connection). A store whose file held none of this store's tables is made
+    at this release in one go; it has nothing to copy. An unmarked file of today's version is
+    marked in place. Raises StoreRefused for a store too new, a file that is not QMX's, an upgrade
+    whose copy cannot be made, and a step that fails.
     """
     store = STORES[name]
     if len(steps) != store.release.version:
         raise ValueError(f"{name} has {len(steps)} steps for version {store.release.version}")
     path = _file_of(connection)
     found = _judge(store, _found(connection, store, path), path)
+    connection.execute("PRAGMA journal_mode = WAL").fetchall()
     if found is not None and found.version.version > store.release.version:
         return Opened(found.version, (), None, newer=True)
     if found is not None and found.marked and found.version.version == store.release.version:

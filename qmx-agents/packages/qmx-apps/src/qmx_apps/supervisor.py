@@ -28,6 +28,7 @@ from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from pydantic import JsonValue
 from qmx_home import Layout
+from qmx_home.versions import open_sqlite
 
 from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
 from qmx_apps.backup import checksum, snapshot
@@ -99,6 +100,16 @@ def _verify_snapshot(root: Path, app_id: str, snapshot_id: str) -> Document:
     return manifest
 
 
+APPS_SCHEMA: Final = (
+    "CREATE TABLE IF NOT EXISTS definitions"
+    " (id TEXT, version TEXT, hash TEXT PRIMARY KEY, trust TEXT, UNIQUE(id,version))",
+    "CREATE TABLE IF NOT EXISTS selected (id TEXT PRIMARY KEY, hash TEXT)",
+    "CREATE TABLE IF NOT EXISTS runtime (id TEXT PRIMARY KEY, data TEXT)",
+    "CREATE TABLE IF NOT EXISTS active (id TEXT PRIMARY KEY, hash TEXT, revision TEXT)",
+    "CREATE TABLE IF NOT EXISTS homes"
+    " (id TEXT PRIMARY KEY, placement TEXT, generation INTEGER, moved_at TEXT)",
+)
+"""`apps.db` at version 1 (design 62 B1). A later version adds a step; it never edits these."""
 JOB_QUEUE: Final = "data/jobs"
 """Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
 JOB_POLL_SECONDS: Final = 0.25
@@ -269,16 +280,10 @@ class Supervisor:
         self._instances: dict[str, Instance] = {}
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
-        with closing(sqlite3.connect(self.catalog)) as db, db:
-            db.executescript(
-                "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS definitions "
-                "(id TEXT, version TEXT, hash TEXT PRIMARY KEY, trust TEXT, "
-                "UNIQUE(id,version)); CREATE TABLE IF NOT EXISTS selected "
-                "(id TEXT PRIMARY KEY, hash TEXT); CREATE TABLE IF NOT EXISTS runtime "
-                "(id TEXT PRIMARY KEY, data TEXT); CREATE TABLE IF NOT EXISTS active "
-                "(id TEXT PRIMARY KEY, hash TEXT, revision TEXT); CREATE TABLE IF NOT EXISTS homes "
-                "(id TEXT PRIMARY KEY, placement TEXT, generation INTEGER, moved_at TEXT);"
-            )
+        with closing(sqlite3.connect(self.catalog, isolation_level=None)) as db:
+            open_sqlite(db, "apps", (APPS_SCHEMA,))
+            for statement in APPS_SCHEMA:
+                db.execute(statement)
 
     def attach_library(self, library: LibrarySink | None) -> None:
         """Give the supervisor the Library its landings go to, or take it away."""
