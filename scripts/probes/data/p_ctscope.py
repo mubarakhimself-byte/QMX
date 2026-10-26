@@ -17,7 +17,7 @@ credential that cannot trade.
 found trading allowed.
 
     uv run --no-sync --project qmx-agents python scripts/probes/data/p_ctscope.py --dry-run \
-        --home /srv/qmx/home --protocol /srv/qmx/proto/openapi.pb --tag 101
+        --protocol /srv/qmx/proto/openapi.pb --tag 101
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from qmf.venue.proto import CompiledProto, compile_descriptor_set
 from qmx_broker.credentials import credentials
 from qmx_broker.ctrader_transport import CTraderTransport
 from qmx_broker.oauth import AppCredential, Tokens
+from qmx_control.node import SERVER_HOME
 from qmx_host.venue_session import TOKEN_NAME, HomeKeyStore, vault_app
 
 DEMO: Final = "demo"
@@ -55,7 +56,9 @@ class Grant:
 
 
 def common_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--home", type=Path, required=True, help="the app's home folder")
+    parser.add_argument(
+        "--home", type=Path, default=Path(SERVER_HOME), help="the app's home, the host's own"
+    )
     parser.add_argument("--machine", default="contabo", help="the home's placement name")
     parser.add_argument("--protocol", type=Path, required=True, help="pinned FileDescriptorSet")
     parser.add_argument("--tag", type=int, required=True, help="the proto release tag")
@@ -146,7 +149,7 @@ class ProbeTransport(CTraderTransport):
             except VenueRefused as refused:
                 seen.append(f"error {refused.code}")
                 return seen
-            except (asyncio.IncompleteReadError, ConnectionError):
+            except asyncio.IncompleteReadError, ConnectionError:
                 seen.append("disconnected")
                 return seen
         return seen

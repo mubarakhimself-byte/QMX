@@ -11,25 +11,43 @@ When a run ends `passed`, the engine (`engine:<store>`) moves what the run put o
 
 A run that did not pass lands nothing. A non-fast-forward never picks a side: it becomes a
 `merge-conflict` object and the run's other objects still land.
+
+A store that is not primary refuses `main` with `not_primary` (the server before the flip,
+WU9). That record is not lost and nothing raises: it stays on `refs/runs/<run_id>` and its row
+says `deferred` with the refusal as its reason, so the run still ends and its links are
+still written.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal
 
-from qmx_library.port import MergeResult
+from qmx_library.port import LibraryRefused, MergeResult, ObjectId
 from qmx_library.principal import MAIN, drafts_ref, runs_ref
 from qmx_library.store import Store
 
 type Mode = Literal["live", "test"]
+
+NOT_PRIMARY: Final = "not_primary"
+"""The refusal of a store that may not move `main` because another store is primary."""
+
+
+@dataclass(frozen=True, slots=True)
+class Deferred:
+    """An item this store may not land because another store is primary: it stays on its run
+    ref, at `object_id`."""
+
+    object_id: ObjectId
+    reason: str
+    outcome: Literal["deferred"] = "deferred"
 
 
 @dataclass(frozen=True, slots=True)
 class Landed:
     item: str
     into: str
-    result: MergeResult
+    result: MergeResult | Deferred
 
 
 def land(
@@ -47,6 +65,12 @@ def land(
             into = MAIN
         else:
             into = drafts_ref(item)
-        result = store.merge(store.engine, item, from_ref=source, into=into, strategy="ff-only")
+        try:
+            result = store.merge(store.engine, item, from_ref=source, into=into, strategy="ff-only")
+        except LibraryRefused as refused:
+            if refused.code != NOT_PRIMARY:
+                raise
+            landed.append(Landed(item, into, Deferred(head, str(refused))))
+            continue
         landed.append(Landed(item, into, result))
     return landed

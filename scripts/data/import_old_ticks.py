@@ -25,7 +25,7 @@ manifest paths a month's files did not match.
     cd qmx-agents
     uv run --no-sync python ../scripts/data/import_old_ticks.py `
         --raw-backup-root /srv/qmx/data/raw-backup `
-        --store /srv/qmx/home/market `
+        --store /srv/qmx/home/.qmx/market `
         --library /srv/qmx/library `
         --seal-boundary-ns 1751328000000000000 `
         --report /srv/qmx/data/dr3c-import.json
@@ -62,6 +62,7 @@ from qmf.data.series import (
     SeriesStore,
 )
 from qmf.data.store.engines.typed import write_in_child
+from qmx_control.node import SERVER_HOME
 from qmx_engine.ledger import redact
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Correction, Partition, SeriesCard, write_card
@@ -276,7 +277,7 @@ def _peak_mb(scope: str) -> float | None:
         for line in Path("/proc/self/status").read_text("utf-8").splitlines():
             if line.startswith("VmHWM:"):
                 return round(int(line.split()[1]) / 1024, 1)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return None
 
@@ -775,7 +776,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--csv-root", type=Path, default=None, help="the risk-lab CSV copy")
     parser.add_argument("--csv-manifest", type=Path, default=None, help="its manifest")
     parser.add_argument(
-        "--store", type=Path, default=Path("/srv/qmx/home/market"), help="the door's store root"
+        "--store",
+        type=Path,
+        default=Path(SERVER_HOME) / "market",
+        help="the door's store root, inside the server host's home",
     )
     parser.add_argument("--library", type=Path, default=None, help="the Library store to card")
     parser.add_argument("--staging", type=Path, default=None, help="where staged files wait")

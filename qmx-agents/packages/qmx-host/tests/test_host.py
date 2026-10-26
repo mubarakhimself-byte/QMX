@@ -3,11 +3,14 @@ that every other caller gets back as a card."""
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import os
+import re
 import subprocess
 import sys
 import threading
+import tomllib
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -15,11 +18,12 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+from qmx_control.service import ControlService
 from qmx_engine.control_door import PRINCIPAL, EngineDoor, as_run
 from qmx_engine.ports.library import Bundle
 
 from qmx_host.door import PrincipalDoor
-from qmx_host.host import compose, record, single_instance
+from qmx_host.host import compose, hindsight_runs, record, single_instance
 
 KEY = "host-check"
 BEARER = {"Authorization": f"Bearer {KEY}"}
@@ -158,3 +162,48 @@ def test_an_agent_gets_a_card_for_publish_enable_and_a_live_run_and_the_ui_beare
         "body": {},
     }
     assert run_card["button"] == {"method": "POST", "path": "/api/workflows/chain/run", "body": {}}
+
+
+PACKAGE = Path(__file__).parents[1]
+
+
+def first_party(module: str) -> str | None:
+    """The distribution a first-party import comes from, or None for any other import."""
+    top, _, rest = module.partition(".")
+    if top == "qmf":
+        return f"qmf-{rest.partition('.')[0]}"
+    if top == "qma":
+        return "qma-harness"
+    return top.replace("_", "-") if top.startswith("qmx_") else None
+
+
+def test_the_host_declares_every_first_party_package_it_imports() -> None:
+    imported: set[str] = set()
+    for source in (PACKAGE / "src").rglob("*.py"):
+        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Import):
+                imported.update(filter(None, (first_party(alias.name) for alias in node.names)))
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                imported.update(filter(None, [first_party(node.module)]))
+    with (PACKAGE / "pyproject.toml").open("rb") as handle:
+        declared = {
+            re.split(r"[\[=<>!~ ]", row, maxsplit=1)[0]
+            for row in tomllib.load(handle)["project"]["dependencies"]
+        }
+
+    assert sorted(imported - declared - {"qmx-host"}) == []
+
+
+def test_hindsight_runs_on_the_pc_and_on_a_server_only_when_he_turns_it_on(
+    tmp_path: Path,
+) -> None:
+    unset = ControlService(tmp_path / "unset")
+    chosen = ControlService(tmp_path / "chosen")
+    (tmp_path / "chosen" / "settings.toml").write_text("[memory]\nhindsight = true\n", "utf-8")
+
+    assert [hindsight_runs(unset, role) for role in ("pc", "node", "server")] == [
+        True,
+        False,
+        False,
+    ]
+    assert hindsight_runs(chosen, "server") is True

@@ -19,6 +19,13 @@ case: the run finished, so its passes are refused at once even if the deadline i
 Revocation is a list the routers read, not a call they make: `RevocationList` is a small file that
 a router re-reads when its mtime moves, so a revoked pass stops working on a machine the PC
 cannot reach right now.
+
+The secret is the home's, not the process's (engine AD-28, Library AD-12; seam C of the wrap-up).
+`HomeSecret` derives it from `<home>/vault/pairing-key` as `HMAC-SHA256(pairing key, "qmx run
+pass v1")`, so every paired machine of one home verifies every pass of that home, after a restart
+as before it. A home that is not paired yet signs with `<home>/vault/run-pass-key`, 32 random
+bytes created once. Pairing or re-pairing rotates the secret; the outgoing one is still accepted
+for one pass lifetime after the new pairing key was written, so passes in flight finish.
 """
 
 from __future__ import annotations
@@ -61,6 +68,12 @@ PREFIX: Final = "qmx1"
 """The wire form's version tag. A pass names its own format, so an old router refuses it whole."""
 MAX_TOKEN: Final = 4096
 """A bearer longer than this is not one of ours; refusing early keeps parse cost bounded."""
+DERIVATION: Final = b"qmx run pass v1"
+PAIRING_KEY: Final = "pairing-key"
+PREVIOUS_PAIRING_KEY: Final = "pairing-key.previous"
+"""The key a re-pairing replaced, kept by `qmx node pair` so its passes finish (one lifetime)."""
+RUN_PASS_KEY: Final = "run-pass-key"  # noqa: S105 - a file name, not a key
+"""An unpaired home's own secret, inside `<home>/vault`."""
 
 
 @dataclass(frozen=True)
@@ -225,21 +238,110 @@ class RevocationList:
         return pass_id in self._passes
 
 
+def derived(pairing_key: bytes) -> bytes:
+    """The run-pass secret of a paired home."""
+    return hmac.new(pairing_key.strip(), DERIVATION, hashlib.sha256).digest()
+
+
+class HomeSecret:
+    """The run-pass secret of one home, read from its vault folder.
+
+    `accepted()` is the signing secret first, then the outgoing one while a rotation is younger
+    than one pass lifetime. The files are re-read when their stamps move, so a pairing reaches a
+    running host without a restart.
+    """
+
+    def __init__(
+        self,
+        vault: Path,
+        *,
+        clock: Callable[[], float] = time.time,
+        lifetime_s: float = DEFAULT_TTL_S,
+    ) -> None:
+        self.vault = vault
+        self.clock = clock
+        self.lifetime_s = lifetime_s
+        self._stamp: tuple[tuple[float, int] | None, ...] = ()
+        self._current = b""
+        self._previous = b""
+        self._rotated_at = 0.0
+
+    def accepted(self) -> tuple[bytes, ...]:
+        self._load()
+        if self._previous and self.clock() < self._rotated_at + self.lifetime_s:
+            return (self._current, self._previous)
+        return (self._current,)
+
+    def _load(self) -> None:
+        names = (PAIRING_KEY, PREVIOUS_PAIRING_KEY, RUN_PASS_KEY)
+        stamp = tuple(_stamp(self.vault / name) for name in names)
+        if stamp == self._stamp and self._current:
+            return
+        paired, previous, unpaired = stamp
+        if paired is None:
+            self._current = _create_once(self.vault / RUN_PASS_KEY)
+            self._previous = b""
+        else:
+            self._current = derived((self.vault / PAIRING_KEY).read_bytes())
+            self._rotated_at = paired[0]
+            if previous is not None:
+                self._previous = derived((self.vault / PREVIOUS_PAIRING_KEY).read_bytes())
+            elif unpaired is not None:
+                self._previous = (self.vault / RUN_PASS_KEY).read_bytes()
+            else:
+                self._previous = b""
+        self._stamp = tuple(_stamp(self.vault / name) for name in names)
+
+
+def _stamp(path: Path) -> tuple[float, int] | None:
+    try:
+        found = path.stat()
+    except OSError:
+        return None
+    return (found.st_mtime, found.st_size)
+
+
+def _create_once(path: Path) -> bytes:
+    """32 random bytes at `path`, owner-only, written by whichever process gets there first."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return path.read_bytes()
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(os.urandom(32))
+    return path.read_bytes()
+
+
 @dataclass
 class PassAuthority:
     """Mints and checks passes for one host. The secret never leaves this object and is printed
-    as a fingerprint only; a second site verifies by asking the minting site, or by holding the
-    same secret from the vault (AD-41)."""
+    as a fingerprint only. A host builds one with `for_home`, so every machine of the home holds
+    the same secret; the random default is for tests and lanes that need a private one."""
 
     secret: bytes = field(default_factory=lambda: os.urandom(32))
     revocations: RevocationList = field(default_factory=RevocationList)
     clock: Callable[[], float] = time.time
+    home_secret: HomeSecret | None = None
+
+    @classmethod
+    def for_home(cls, home: Path, *, clock: Callable[[], float] = time.time) -> PassAuthority:
+        """The one authority of a host process on `home`: its secret and its revocation list."""
+        return cls(
+            secret=b"",
+            revocations=RevocationList(home / "passes" / "revoked.json"),
+            clock=clock,
+            home_secret=HomeSecret(home / "vault", clock=clock),
+        )
+
+    def _secrets(self) -> tuple[bytes, ...]:
+        return (self.secret,) if self.home_secret is None else self.home_secret.accepted()
 
     def _now(self) -> float:
         return float(self.clock())
 
     def fingerprint(self) -> str:
-        return hashlib.sha256(self.secret).hexdigest()[:16]
+        return hashlib.sha256(self._secrets()[0]).hexdigest()[:16]
 
     def mint(
         self,
@@ -290,7 +392,7 @@ class PassAuthority:
             minted.handle,
             minted.data_scope,
         )
-        mac = hmac.new(self.secret, body, hashlib.sha256).digest()
+        mac = hmac.new(self._secrets()[0], body, hashlib.sha256).digest()
         return f"{PREFIX}.{_b64(body)}.{_b64(mac)}"
 
     def parse(self, token: str) -> tuple[Pass, Refusal | None]:
@@ -312,14 +414,16 @@ class PassAuthority:
         if not isinstance(document, dict):
             return _blank(), Refusal("malformed", "the bearer is not an object")
         data = cast("dict[str, Any]", document)
-        wanted = hmac.new(self.secret, body, hashlib.sha256).digest()
-        if not hmac.compare_digest(mac, wanted):
-            # A pass minted before `data_scope` existed signed the same fields without it. It
-            # still verifies, and it carries no data scope, so the door refuses it by name.
-            stripped = {key: value for key, value in data.items() if key != "data_scope"}
-            legacy = json.dumps(stripped, sort_keys=True, separators=(",", ":")).encode("utf-8")
-            if not hmac.compare_digest(mac, hmac.new(self.secret, legacy, hashlib.sha256).digest()):
-                return _blank(), Refusal("bad_mac", "the bearer was not signed by this router")
+        # A pass minted before `data_scope` existed signed the same fields without it. It still
+        # verifies, and it carries no data scope, so the door refuses it by name.
+        stripped = {key: value for key, value in data.items() if key != "data_scope"}
+        legacy = json.dumps(stripped, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        if not any(
+            hmac.compare_digest(mac, hmac.new(secret, signed, hashlib.sha256).digest())
+            for secret in self._secrets()
+            for signed in (body, legacy)
+        ):
+            return _blank(), Refusal("bad_mac", "the bearer was not signed by this router")
         try:
             minted = Pass(
                 id=str(data["id"]),

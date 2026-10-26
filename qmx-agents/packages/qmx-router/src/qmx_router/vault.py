@@ -491,6 +491,50 @@ class VaultStore:
         return tuple(sorted(name for name, entry in self._entries.items() if entry.deleted))
 
 
+@dataclass(frozen=True)
+class KeyringSource:
+    """Credential Manager, read by name for sealing only. It cannot list names, so it answers for
+    the names it was given; it writes and deletes nothing."""
+
+    asked: tuple[str, ...]
+
+    def names(self) -> Iterable[str]:
+        return self.asked
+
+    def read(self, name: str) -> str | None:
+        import keyring  # noqa: PLC0415 (only the PC's document reads it)
+
+        return keyring.get_password(name, name.removeprefix("qmx/"))
+
+    def write(self, name: str, value: str) -> None:
+        raise PermissionError(f"the vault document never writes Credential Manager ({name})")
+
+    def delete(self, name: str) -> None:
+        raise PermissionError(f"the vault document never deletes from Credential Manager ({name})")
+
+
+def publish(
+    source: Source,
+    key: VaultKey,
+    *,
+    machine: str = "pc",
+    peers: Mapping[str, VaultKey],
+    clock: Callable[[], float] = time.time,
+) -> dict[str, object]:
+    """The sync document of every replicable value `source` holds, sealed for this machine and for
+    each peer. The values are read once and held only in memory; `source` is never written, so
+    building the document cannot change the keys it reads."""
+    found = {
+        name: value
+        for name in source.names()
+        if is_replicable(name) and (value := source.read(name)) is not None
+    }
+    vault = Vault(key, MemorySource(dict(found)), machine=machine, peers=peers, clock=clock)
+    for name in sorted(found):
+        vault.install(name, found[name])
+    return vault.sync_document()
+
+
 def install_from_document(
     vault: Vault, document: object, *, value_of: Callable[[str], str | None] | None = None
 ) -> int:

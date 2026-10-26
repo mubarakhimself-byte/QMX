@@ -4037,6 +4037,7 @@ dependencies = [
     { name = "qma-harness" },
     { name = "qmx-control" },
     { name = "qmx-ledger" },
+    { name = "qmx-router" },
 ]
 
 [package.dev-dependencies]
@@ -4058,6 +4059,7 @@ requires-dist = [
     { name = "qma-harness", editable = "packages/qma-harness" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
+    { name = "qmx-router", editable = "packages/qmx-router" },
 ]
 
 [package.metadata.requires-dev]
@@ -4080,9 +4082,17 @@ dependencies = [
     { name = "httpx" },
     { name = "psutil" },
     { name = "qma-harness" },
+    { name = "qmf-core" },
+    { name = "qmf-data" },
+    { name = "qmx-broker" },
     { name = "qmx-control" },
     { name = "qmx-engine" },
+    { name = "qmx-hub" },
     { name = "qmx-library" },
+    { name = "qmx-memory" },
+    { name = "qmx-remote" },
+    { name = "qmx-router" },
+    { name = "qmx-tools" },
     { name = "uvicorn" },
 ]
 
@@ -4101,9 +4111,17 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "psutil", specifier = ">=7,<9" },
     { name = "qma-harness", editable = "packages/qma-harness" },
+    { name = "qmf-core", editable = "../packages/qmf-core" },
+    { name = "qmf-data", editable = "../packages/qmf-data" },
+    { name = "qmx-broker", editable = "packages/qmx-broker" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-engine", editable = "packages/qmx-engine" },
+    { name = "qmx-hub", editable = "packages/qmx-hub" },
     { name = "qmx-library", editable = "packages/qmx-library" },
+    { name = "qmx-memory", editable = "packages/qmx-memory" },
+    { name = "qmx-remote", editable = "packages/qmx-remote" },
+    { name = "qmx-router", editable = "packages/qmx-router" },
+    { name = "qmx-tools", editable = "packages/qmx-tools" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]
 

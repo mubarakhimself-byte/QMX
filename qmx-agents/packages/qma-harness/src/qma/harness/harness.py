@@ -48,6 +48,7 @@ from qmx_router.gpt.probe import (
     stored_result,
     translator_version,
 )
+from qmx_router.passes import PassAuthority
 from qmx_router.profiles import (
     GPT,
     PLAN,
@@ -338,10 +339,21 @@ class Harness:
         self._metered: float | None = None
         """When the last meter turn ran, on the loop clock."""
         self._reaper = asyncio.create_task(self._reap())
+        self._doctor_rows: list[Callable[[], DoctorLine]] = []
+        """Rows the hosting process adds to the doctor, such as its Library store's health."""
 
     @property
     def home(self) -> QmxHome:
         return self._deps.home
+
+    def adopt_passes(self, passes: PassAuthority) -> None:
+        """The host's one pass authority: every `cli` helper's pass is minted with it from now on,
+        so the host's own door verifies it (engine AD-28)."""
+        self._helpers.passes = passes
+
+    def doctor_from(self, row: Callable[[], DoctorLine]) -> None:
+        """One more doctor row, read fresh on every `/api/doctor`."""
+        self._doctor_rows.append(row)
 
     def register_sink(self, name: str, sink: HookSink) -> None:
         """A hook sink chats name in `NewChat.hook_sink`. The host registers its sinks right
@@ -1012,6 +1024,7 @@ class Harness:
                 f"{cap.limit_mb or 'none'} MB; using {cap.used_mb} MB; live chats "
                 f"{len(cap.chats)}; last killed {cap.last_killed or 'none'}",
             ),
+            *[await asyncio.to_thread(row) for row in self._doctor_rows],
         ]
 
     async def meter(self) -> ReadingView | None:

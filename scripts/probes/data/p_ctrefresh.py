@@ -16,7 +16,7 @@ pair is the new one.
 fallback parks DR5B and keeps today's short sessions.
 
     uv run --no-sync --project qmx-agents python scripts/probes/data/p_ctrefresh.py --dry-run \
-        --home /srv/qmx/home --protocol /srv/qmx/proto/openapi.pb --tag 101
+        --protocol /srv/qmx/proto/openapi.pb --tag 101
 """
 
 from __future__ import annotations

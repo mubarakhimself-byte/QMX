@@ -241,14 +241,17 @@ def host_port(home: Path) -> int | None:
     return port if isinstance(port, int) else None
 
 
-def through_host(port: int, names: list[str] | None) -> list[Line] | None:
+def through_host(home: Path, port: int, names: list[str] | None) -> list[Line] | None:
     """The install, run by the home's host on its loopback port with its bearer. None when no
     host answers there: the record of a host that died. No timeout, because an install's test
     runs take as long as their models do."""
     request = Request(
         f"http://127.0.0.1:{port}{INSTALL_ROUTE}",
         data=json.dumps({"templates": names}).encode("utf-8"),
-        headers={"Authorization": f"Bearer {local_token()}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {local_token(home)}",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
     try:
@@ -308,7 +311,7 @@ async def install_templates(home: Path, ids: Sequence[str] | None) -> int:
     lines: list[Line] | None = None
     if port is not None:
         try:
-            lines = through_host(port, None if ids is None else [t.id for t in templates])
+            lines = through_host(home, port, None if ids is None else [t.id for t in templates])
         except HTTPError as refused:
             print(f"refused: {refused.code} {refused.read().decode('utf-8', 'replace')}")
             return 1

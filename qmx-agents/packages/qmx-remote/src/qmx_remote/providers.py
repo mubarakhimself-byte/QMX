@@ -1,4 +1,9 @@
-"""Small provider adapters; all execution and shipping lives on the target."""
+"""Small provider adapters; all execution and shipping lives on the target.
+
+Every provider starts the same entry, the run sidecar (`qmx_remote.sidecar`), with the attempt's
+bundle written beside it: `provision` keeps the bundle's document in the handle and `start` puts
+it on the machine as `bundle.json`. The run pass travels only in the provider's secret channel.
+"""
 
 from __future__ import annotations
 
@@ -8,11 +13,40 @@ import shlex
 import shutil
 import subprocess
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 import keyring
 
 from qmx_remote.models import Document, RemoteError, RunBundle, Status, Target
+
+SIDECAR: Final = "qmx_remote.sidecar"
+BUNDLE: Final = "bundle.json"
+
+
+SANDBOX_DIR: Final = "/tmp/qmx-run"  # noqa: S108 - the sandbox's own private folder
+E2B_DIR: Final = "/home/user/qmx-run"
+
+
+def written(directory: str, bundle: str) -> str:
+    """A shell line for a sandbox, which has no file upload here: write the bundle, then exec the
+    sidecar on it. The bundle holds no secret; the pass is in the sandbox's secret env."""
+    path = f"{directory}/{BUNDLE}"
+    return (
+        f"mkdir -p {directory} && printf '%s' {shlex.quote(bundle)} > {path} && exec "
+        + shlex.join(sidecar_command(directory))
+    )
+
+
+def sidecar_command(directory: str) -> list[str]:
+    """The sidecar over the bundle in `directory`, writing its run folder there too."""
+    return ["python", "-m", SIDECAR, "--bundle", f"{directory}/{BUNDLE}", "--root", directory]
+
+
+def bundle_text(handle: Document) -> str:
+    found = handle.get("bundle")
+    if not isinstance(found, dict):
+        raise RemoteError("Provider handle has no bundle; provision it first.")
+    return json.dumps(found, sort_keys=True)
 
 
 class ComputeProvider(Protocol):
@@ -29,7 +63,9 @@ class SSHProvider:
         self.target = target
         self.bucket = bucket
 
-    def _call(self, args: list[str], *, secrets: dict[str, str] | None = None) -> str:
+    def _call(
+        self, args: list[str], *, secrets: dict[str, str] | None = None, stdin: str = ""
+    ) -> str:
         executable = shutil.which("ssh")
         if executable is None:
             raise RemoteError("Install OpenSSH and configure the target host.")
@@ -37,7 +73,8 @@ class SSHProvider:
         script = (
             "import json,os,subprocess,sys; d=json.load(sys.stdin); "
             "p=subprocess.run(d['args'],env={**os.environ,**d['env']},"
-            "capture_output=True); sys.stdout.buffer.write(p.stdout); sys.exit(p.returncode)"
+            "input=d.get('stdin','').encode(),capture_output=True); "
+            "sys.stdout.buffer.write(p.stdout); sys.exit(p.returncode)"
         )
         result = subprocess.run(
             [
@@ -49,7 +86,7 @@ class SSHProvider:
                 self.target.host,
                 "python3 -c " + shlex.quote(script),
             ],
-            input=json.dumps({"args": args, "env": secrets or {}}).encode(),
+            input=json.dumps({"args": args, "env": secrets or {}, "stdin": stdin}).encode(),
             capture_output=True,
             check=False,
             timeout=120,
@@ -66,6 +103,7 @@ class SSHProvider:
             "container": "qmx-run-" + run_id,
             "resources": bundle.resources.model_dump(mode="json"),
             "code": bundle.code is not None,
+            "bundle": bundle.definition,
         }
 
     def start(self, handle: Document, secrets: dict[str, str]) -> Document:
@@ -78,6 +116,9 @@ class SSHProvider:
         )
         workspace = self.target.root + "/work/" + run_id
         self._call(["mkdir", "-p", "--", workspace])
+        self._call(
+            ["sh", "-c", 'cat > "$1"', "sh", f"{workspace}/{BUNDLE}"], stdin=bundle_text(handle)
+        )
         args = [
             "docker",
             "run",
@@ -118,19 +159,8 @@ class SSHProvider:
             args.extend(["--gpus", str(resources["gpu"])])
         for name in secrets:
             args.extend(["--env", name])
-        args.extend(
-            [
-                "--entrypoint",
-                "python",
-                self.target.image,
-                "-m",
-                "qmx_remote.worker",
-                "--bucket",
-                "/bucket" if local_bucket else self.bucket,
-                "--run-id",
-                str(handle["run_id"]),
-            ]
-        )
+        entry, *rest = sidecar_command("/work")
+        args.extend(["--entrypoint", entry, self.target.image, *rest])
         self._call(args, secrets=secrets)
         return handle
 
@@ -195,7 +225,11 @@ class ModalProvider:
     def provision(self, run_id: str, bundle: RunBundle) -> Document:
         if not self.target.image:
             raise RemoteError("Set a prebuilt Modal worker image in Settings.")
-        return {"run_id": run_id, "resources": bundle.resources.model_dump(mode="json")}
+        return {
+            "run_id": run_id,
+            "resources": bundle.resources.model_dump(mode="json"),
+            "bundle": bundle.definition,
+        }
 
     def start(self, handle: Document, secrets: dict[str, str]) -> Document:
         sdk = self._sdk()
@@ -209,13 +243,9 @@ class ModalProvider:
                 raise RemoteError("Configure Modal gpu_type for GPU jobs.")
             options["gpu"] = f"{self.target.gpu_type}:{resources['gpu']}"
         sandbox = sdk.Sandbox.create(
-            "python",
-            "-m",
-            "qmx_remote.worker",
-            "--bucket",
-            self.bucket,
-            "--run-id",
-            str(handle["run_id"]),
+            "sh",
+            "-c",
+            written(SANDBOX_DIR, bundle_text(handle)),
             app=sdk.App.lookup("qmx-remote", create_if_missing=True, client=client),
             image=sdk.Image.from_registry(self.target.image),
             secrets=[sdk.Secret.from_dict(secrets)],
@@ -277,27 +307,14 @@ class E2BProvider:
             raise RemoteError("E2B is a CPU target; choose a configured GPU provider.")
         if not self.target.image:
             raise RemoteError("Set a prebuilt E2B worker template in Settings.")
-        return {"run_id": run_id, "timeout": bundle.resources.timeout}
+        return {"run_id": run_id, "timeout": bundle.resources.timeout, "bundle": bundle.definition}
 
     def start(self, handle: Document, secrets: dict[str, str]) -> Document:
         sandbox = self._sdk().Sandbox.create(
             template=self.target.image, timeout=handle["timeout"], envs=secrets, api_key=self._key()
         )
         try:
-            command = (
-                shlex.join(
-                    [
-                        "python",
-                        "-m",
-                        "qmx_remote.worker",
-                        "--bucket",
-                        self.bucket,
-                        "--run-id",
-                        str(handle["run_id"]),
-                    ]
-                )
-                + " > /home/user/qmx-worker.log 2>&1"
-            )
+            command = written(E2B_DIR, bundle_text(handle)) + f" > {E2B_DIR}/qmx-sidecar.log 2>&1"
             process = sandbox.commands.run(command, background=True, timeout=0)
         except BaseException:
             sandbox.kill()
@@ -312,7 +329,7 @@ class E2BProvider:
         return "running" if any(p.pid == handle["pid"] for p in processes) else "interrupted"
 
     def logs(self, handle: Document) -> str:
-        return str(self._sandbox(handle).files.read("/home/user/qmx-worker.log"))
+        return str(self._sandbox(handle).files.read(f"{E2B_DIR}/qmx-sidecar.log"))
 
     def stop(self, handle: Document) -> None:
         self._sandbox(handle).commands.kill(int(str(handle["pid"])))

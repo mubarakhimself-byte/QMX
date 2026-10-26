@@ -30,10 +30,15 @@ and the verified pass is left in the request's state under `RUN_PASS`, so the re
 `data_scope` from the pass and never from the body. Any other route, and any pass that fails a
 check, answers 401 here. The principal is `workflow:<run_id>`.
 
-A host pass (engine AD-67). Another host of this home calls the cTrader begin and code routes
-with a host pass and no bearer. The door restamps those two routes with the local bearer and
-nothing else; each route verifies the pass itself and refuses without one. The principal is
-`user`, as for every route no chat owns.
+A host pass (engine AD-65, AD-67). Another host of this home calls the cTrader begin and code
+routes, and the engine's two forwarding routes, with a host pass and no bearer. The door restamps
+those four routes with the local bearer and nothing else; each route verifies the pass itself and
+refuses without one. The principal is `user`, as for every route no chat owns.
+
+The Library service (Library AD-11, AD-19). On the server the host serves the Hub's routes in
+process, and the PC calls them with the pairing key as its bearer. The door restamps a call that
+reaches one of those routes with exactly that key to the local bearer, which the in-process Hub is
+built to check; the pairing key opens no other route.
 
 The template install door (`templates_router`) lives here too: the host mounts it behind the same
 bearer as its other routers, and the engine's CLI posts to it whenever the home has a host.
@@ -44,6 +49,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import re
+import secrets
 from collections.abc import Sequence
 from typing import Final
 from urllib.parse import urlencode
@@ -155,13 +161,20 @@ def _pass_restamped(scope: Scope, minted: Pass, bearer: str) -> Scope:
     return {**scope, "headers": headers, "state": state}
 
 
+FORWARD_ROUTES: Final = frozenset(
+    {("POST", "/api/engine/forward"), ("GET", "/api/engine/forward/stream")}
+)
+"""The engine's forwarding routes (AD-65), which another host of this home calls the same way."""
+
+
 def host_pass_call(scope: Scope) -> bool:
-    """Another host of this home calling a venue route with a host pass. The route verifies the
-    pass itself; the door lets it past the local bearer, which that host does not hold."""
+    """Another host of this home calling a venue or forwarding route with a host pass. The route
+    verifies the pass itself; the door lets it past the local bearer, which that host does not
+    hold."""
     route = (str(scope["method"]).upper(), str(scope["path"]))
-    return route in HOST_PASS_ROUTES and PASS_HEADER.lower().encode("latin-1") in dict(
-        scope["headers"]
-    )
+    return route in HOST_PASS_ROUTES | FORWARD_ROUTES and PASS_HEADER.lower().encode(
+        "latin-1"
+    ) in dict(scope["headers"])
 
 
 def _with_bearer(scope: Scope, bearer: str) -> Scope:
@@ -232,9 +245,14 @@ class PrincipalDoor:
         chat_routes: Sequence[BaseRoute],
         bearer: str | None = None,
         passes: PassAuthority | None = None,
+        library_key: str = "",
+        library_routes: Sequence[BaseRoute] = (),
     ) -> None:
         self.app = app
         self.chat_routes = chat_routes
+        self.library_key = library_key
+        """The pairing key the Library routes admit; empty mounts none."""
+        self.library_routes = library_routes
         self.passes = passes
         """The authority that minted this host's run passes; None admits no run pass."""
         self.bearer = bearer
@@ -262,7 +280,7 @@ class PrincipalDoor:
             finally:
                 PRINCIPAL.reset(token_set)
             return
-        if host_pass_call(scope):
+        if host_pass_call(scope) or self._library_call(scope, token):
             scope = _with_bearer(scope, self.bearer or _local_bearer())
         observer = presented_observer(scope)
         if observer is not None:
@@ -275,6 +293,13 @@ class PrincipalDoor:
             await self.app(scope, receive, send)
         finally:
             PRINCIPAL.reset(token)
+
+    def _library_call(self, scope: Scope, token: str) -> bool:
+        if not self.library_key or not token:
+            return False
+        if not secrets.compare_digest(token, self.library_key):
+            return False
+        return any(route.matches(scope)[0] is Match.FULL for route in self.library_routes)
 
 
 class InstallIn(BaseModel):
