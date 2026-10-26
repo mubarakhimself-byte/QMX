@@ -63,8 +63,8 @@ def test_a_library_too_new_for_this_release_opens_read_only_and_is_not_written(
 
     assert found == ["the first plan"]
     assert str(refused.value).startswith(
-        "storage_failure: the Library opened read-only: This QMX folder's Library was written "
-        "by QMX 0.6.0 as Library version 2."
+        "storage_failure: put refused: the Library opened read-only. This QMX folder's Library "
+        "was written by QMX 0.6.0 as Library version 2."
     )
     assert health[0] == "read_only"
     assert str(health[1]).endswith("The Library opens read-only until then.")

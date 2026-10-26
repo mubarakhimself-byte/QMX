@@ -877,7 +877,7 @@ class Store:
     def _refuse_too_new(self, act: str) -> None:
         if self.too_new is not None:
             raise LibraryRefused(
-                "storage_failure", f"the Library opened read-only: {self.too_new} {act} waits"
+                "storage_failure", f"{act} refused: the Library opened read-only. {self.too_new}"
             )
 
     def _check_writer(self, act: str) -> None:
