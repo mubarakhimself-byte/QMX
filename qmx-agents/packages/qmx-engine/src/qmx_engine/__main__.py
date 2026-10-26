@@ -6,31 +6,51 @@ import argparse
 import asyncio
 import json
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final, cast
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from qma.harness import Harness, QmxHome
+from qmx_control.server import local_token
 from qmx_control.service import ControlService
+from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.port import LibraryRefused as StoreRefused
+from qmx_library.store import Store
 
 from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.model import Workflow
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.definition.validate import checked, validate
+from qmx_engine.ledger import redact
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Ledger, Reader, ledger_path
 from qmx_engine.nodes.doctor import LlmDoctor
 from qmx_engine.ports.harness_adapter import HarnessAdapter
+from qmx_engine.ports.library import LibraryRefused as EngineRefused
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.runner import Engine, Outcome, Refused, new_run_id
 from qmx_engine.service.api import EngineService, explain_run
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.explain import text
 from qmx_engine.settings import DEFAULTS, Setting
+from qmx_engine.templates.catalog import CATALOG, Template, find
 from qmx_engine.templates.install import install, listing
 from qmx_engine.triggers import rows
 
 EXIT: dict[str, int] = {"passed": 0, "failed": 1, "waiting": 2, "interrupted": 3}
+HOST_STATE: Final = "control-process.json"
+"""The record a running `qmx_host` keeps in the home (`qmx_host.host.STATE`): its pid and port."""
+INSTALL_ROUTE: Final = "/api/templates/install"
+"""The host's install door (`qmx_host.door.templates_router`)."""
+INSTALLED: Final = frozenset({"published", "saved draft", "unchanged"})
+REFUSED: Final = (StoreRefused, EngineRefused)
+
+type Line = tuple[str, str, str, str]
+"""One installed template as the command prints it: id, folder, action, detail."""
 
 
 def parser() -> argparse.ArgumentParser:
@@ -86,6 +106,13 @@ def parser() -> argparse.ArgumentParser:
         "install", help="install the pack disabled: test and publish runnable ones, draft the rest"
     )
     put.add_argument("--home", type=Path, required=True)
+    put.add_argument(
+        "--template",
+        action="append",
+        dest="templates",
+        metavar="ID",
+        help="install only this template, by its id or an earlier id; repeat for more",
+    )
     return cli
 
 
@@ -205,9 +232,51 @@ def explain(args: argparse.Namespace) -> int:
     return 0
 
 
+def host_port(home: Path) -> int | None:
+    """The port the home's running host recorded, or None when no host has recorded one."""
+    try:
+        port = json.loads((home / HOST_STATE).read_text(encoding="utf-8"))["port"]
+    except OSError, ValueError, KeyError, TypeError:
+        return None
+    return port if isinstance(port, int) else None
+
+
+def through_host(port: int, names: list[str] | None) -> list[Line] | None:
+    """The install, run by the home's host on its loopback port with its bearer. None when no
+    host answers there: the record of a host that died. No timeout, because an install's test
+    runs take as long as their models do."""
+    request = Request(
+        f"http://127.0.0.1:{port}{INSTALL_ROUTE}",
+        data=json.dumps({"templates": names}).encode("utf-8"),
+        headers={"Authorization": f"Bearer {local_token()}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urlopen(request) as reply:  # noqa: S310 - the port the home's own host recorded
+            rows = cast(list[dict[str, str]], json.loads(reply.read()))
+    except HTTPError:
+        raise
+    except URLError:
+        return None
+    return [(row["id"], row["folder"], row["action"], row["detail"]) for row in rows]
+
+
+@contextmanager
+def home_library(home: Path) -> Generator[EngineLibraryAdapter]:
+    """The Library store the home's host serves, `<home>/library/`, for a command run while no
+    host runs. A running host holds its writer lock, so this refuses rather than opening a second
+    writer."""
+    with Store.open(home / "library", redactor=redact) as store:
+        yield EngineLibraryAdapter(store)
+
+
 def list_templates(home: Path) -> int:
-    with EngineService.open(home) as svc:
-        found = listing(svc)
+    try:
+        with home_library(home) as library, EngineService.open(home, library=library) as svc:
+            found = listing(svc)
+    except REFUSED as refused:
+        print(f"refused: {refused}")
+        return 1
     for row in found:
         version = f" {row.version}" if row.version else ""
         print(f"{row.template.id:<4} {row.template.name:<42} {row.status}{version}")
@@ -215,20 +284,57 @@ def list_templates(home: Path) -> int:
     return 0
 
 
-async def install_templates(home: Path) -> int:
-    """Test runs need models, so the harness opens on the home, as `run` does."""
-    control = ControlService(home)
-    harness = await Harness.open(QmxHome(home), control=control)
-    try:
-        with EngineService.open(
-            home, settings=ControlSettings(control), harness=HarnessAdapter(harness)
-        ) as svc:
-            done = await install(svc)
-    finally:
-        await harness.close()
-    for found in done:
-        print(f"{found.template.id:<4} {found.template.folder} {found.action}: {found.detail}")
-    return 0 if all(f.action in ("published", "saved draft", "unchanged") for f in done) else 1
+def chosen(ids: Sequence[str] | None) -> list[Template] | str:
+    """The templates `--template` names, the whole catalogue when none, or the first unknown id."""
+    if ids is None:
+        return list(CATALOG)
+    picked: list[Template] = []
+    for wanted in ids:
+        try:
+            picked.append(find(wanted))
+        except KeyError:
+            return wanted
+    return picked
+
+
+async def install_templates(home: Path, ids: Sequence[str] | None) -> int:
+    """Through the running host's door when the home has one, so its one writer does the work;
+    otherwise into `<home>/library/` here, with the harness open for the test runs' models."""
+    templates = chosen(ids)
+    if isinstance(templates, str):
+        print(f"refused: no template {templates!r} in the catalogue")
+        return 1
+    port = host_port(home)
+    lines: list[Line] | None = None
+    if port is not None:
+        try:
+            lines = through_host(port, None if ids is None else [t.id for t in templates])
+        except HTTPError as refused:
+            print(f"refused: {refused.code} {refused.read().decode('utf-8', 'replace')}")
+            return 1
+    if lines is None:
+        control = ControlService(home)
+        harness = await Harness.open(QmxHome(home), control=control)
+        try:
+            with (
+                home_library(home) as library,
+                EngineService.open(
+                    home,
+                    library=library,
+                    settings=ControlSettings(control),
+                    harness=HarnessAdapter(harness),
+                ) as svc,
+            ):
+                done = await install(svc, templates)
+        except REFUSED as refused:
+            print(f"refused: {refused}")
+            return 1
+        finally:
+            await harness.close()
+        lines = [(f.template.id, f.template.folder, f.action, f.detail) for f in done]
+    for template_id, folder, action, detail in lines:
+        print(f"{template_id:<4} {folder} {action}: {detail}")
+    return 0 if all(line[2] in INSTALLED for line in lines) else 1
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -236,7 +342,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "templates":
         if args.templates_command == "list":
             return list_templates(args.home)
-        return asyncio.run(install_templates(args.home))
+        return asyncio.run(install_templates(args.home, args.templates))
     if args.command == "explain":
         return explain(args)
     if args.command == "ledger":

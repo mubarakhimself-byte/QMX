@@ -29,15 +29,22 @@ not expired and neither it nor its run is revoked. The request is restamped with
 and the verified pass is left in the request's state under `RUN_PASS`, so the read takes its
 `data_scope` from the pass and never from the body. Any other route, and any pass that fails a
 check, answers 401 here. The principal is `workflow:<run_id>`.
+
+The template install door (`templates_router`) lives here too: the host mounts it behind the same
+bearer as its other routers, and the engine's CLI posts to it whenever the home has a host.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import re
 from collections.abc import Sequence
 from typing import Final
 from urllib.parse import urlencode
 
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict
 from qmx_control.catalog import (
     OBSERVER_PATHS,
     OBSERVER_TOOLSETS,
@@ -46,8 +53,11 @@ from qmx_control.catalog import (
     rows,
 )
 from qmx_control.service import Observer, observers
-from qmx_engine.control_door import PRINCIPAL
+from qmx_engine.__main__ import INSTALL_ROUTE
+from qmx_engine.control_door import FAILURES, PRINCIPAL, EngineDoor, control_error
 from qmx_engine.service.context import Caller
+from qmx_engine.templates.catalog import CATALOG, find
+from qmx_engine.templates.install import install
 from qmx_router.passes import PREFIX, Ask, Pass, PassAuthority
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Match
@@ -238,3 +248,46 @@ class PrincipalDoor:
             await self.app(scope, receive, send)
         finally:
             PRINCIPAL.reset(token)
+
+
+class InstallIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    templates: list[str] | None = None
+    """Template ids, or any id one had before; None installs the whole catalogue."""
+
+
+def templates_router(engine: EngineDoor) -> APIRouter:
+    """`POST /api/templates/install`: install templates disabled through this host's engine, so
+    `python -m qmx_engine templates install` on a home with a running host lands in the Library
+    store this host serves, and never opens a second writer beside it.
+
+    The install runs on the engine's loop in an empty context, as `EngineDoor` runs its doors, so
+    its test runs inherit no request principal. An unknown id refuses by name before anything
+    runs."""
+    router = APIRouter()
+
+    @router.post(INSTALL_ROUTE)
+    async def install_templates(body: InstallIn) -> list[dict[str, str]]:
+        try:
+            picked = list(CATALOG) if body.templates is None else [find(t) for t in body.templates]
+        except KeyError as unknown:
+            raise HTTPException(404, f"no template {unknown.args[0]!r} in the catalogue") from None
+        hop = contextvars.Context().run(
+            asyncio.run_coroutine_threadsafe, install(engine.svc, picked), engine.loop
+        )
+        try:
+            done = await asyncio.wrap_future(hop)
+        except FAILURES as error:
+            raise control_error(error) from error
+        return [
+            {
+                "id": found.template.id,
+                "folder": found.template.folder,
+                "action": found.action,
+                "detail": found.detail,
+            }
+            for found in done
+        ]
+
+    _ = install_templates
+    return router

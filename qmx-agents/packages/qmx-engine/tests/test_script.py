@@ -118,3 +118,23 @@ def test_only_an_irreversible_script_receives_its_idempotency_key(tmp_path: Path
         "post": {"main": f"{outcome.run_id}:post:0:1"},
         "local": {"main": None},
     }
+
+
+def test_a_script_exiting_1_with_the_marker_fails_with_the_markers_reason(tmp_path: Path) -> None:
+    declares = "import sys\nprint('[QMX_FAILURE] the source answered 503')\nsys.exit(1)\n"
+    root = folder(
+        tmp_path / "wf",
+        [START, node("fetch", "script", script="scripts/fetch.py")],
+        {"start": {"main": [edge("fetch")]}},
+        {"fetch": declares},
+    )
+
+    outcome, events = run_folder(root, tmp_path / "home")
+
+    failed = next(e.data for e in events if e.kind == "node_failed")
+    assert outcome.status == "failed"
+    assert (failed["code"], failed["message"], failed["retryable"]) == (
+        "qmx_failure",
+        "the source answered 503",
+        False,
+    )

@@ -2,7 +2,8 @@
 
 A trusted script runs as `python -I` in a subprocess, from the run's hash-checked `code/` copy.
 Its cwd is the attempt's overlay (AD-51), its inputs arrive as JSON on stdin, and its stdout,
-parsed as JSON, is its output on `main`; a first line starting `[QMX_FAILURE]` fails it instead.
+parsed as JSON, is its output on `main`; a first line starting `[QMX_FAILURE]` fails it instead,
+with that line's reason, whatever the exit code.
 Its environment is built from an allow-list with `qma.boot`'s banned fragments, so no provider
 key, no `CLAUDE_CONFIG_DIR`, no plan path and no home path reaches it, plus the run context
 (`QMX_RUN_ID`, `QMX_MODE`, `QMX_FAKE`, `QMX_NOW`, `QMX_WORK`, `QMX_WORK_SHARED`, `QMX_CODE` and the
@@ -275,13 +276,13 @@ class HostScript:
                 retryable=True,
                 effect_state="unknown",
             )
-        if done.code != 0:
-            tail = done.stderr.decode("utf-8", "replace").strip()
-            return failed("script_exit", f"exit {done.code}: {tail}", retryable=True)
         text = done.stdout.decode("utf-8", "replace").strip()
         if text.startswith(FAILURE):
             why = text.partition("\n")[0].removeprefix(FAILURE).strip()
             return failed("qmx_failure", why or "the script declared failure", retryable=False)
+        if done.code != 0:
+            tail = done.stderr.decode("utf-8", "replace").strip()
+            return failed("script_exit", f"exit {done.code}: {tail}", retryable=True)
         try:
             return json.loads(text) if text else None
         except json.JSONDecodeError:

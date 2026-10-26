@@ -19,9 +19,12 @@ from typing import Any, cast
 
 import pytest
 from fake_port import TOKENS, FakePort
+from qmx_library.store import Store
 
+from qmx_engine.__main__ import main
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.validate import checked, validate
+from qmx_engine.ledger import redact
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle, drafts_ref
@@ -31,6 +34,7 @@ from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import ALIASES, CATALOG, PACK, SHARED, find
 from qmx_engine.templates.install import install, listing
 from qmx_engine.triggers import rows
+from qmx_engine.workers.zones import RunZone
 
 FOLDERS = sorted(path.parent for path in PACK.rglob("definition.json"))
 RS1 = PACK / "rs1-paper-scout"
@@ -843,3 +847,37 @@ def test_crystallise_refuses_the_script_when_one_replay_disagrees(tmp_path: Path
         ("r-18", "other", None)
     ]
     assert card["figures"]["agreeing"] == 19
+
+
+def test_a_feed_run_lands_its_new_item_as_one_source_through_save_source(tmp_path: Path) -> None:
+    feed = find("feed")
+    report, _ = try_template(tmp_path, PACK / feed.folder, feed.test_inputs)
+    name = "library/sources/4bce335b378af3d330222548e5b5a379.json"
+    saved = json.loads((RunZone.of(tmp_path, report.run_id).work / name).read_text("utf-8"))
+
+    assert report.status == "passed"
+    assert produced_files(tmp_path, report.run_id) == [name, "library/sources/index.json"]
+    assert {key: saved[key] for key in ("kind", "origin", "intent_key", "part_of", "licence")} == {
+        "kind": "source",
+        "origin": "feed",
+        "intent_key": "feed://3e4d98d0cbe776cb",
+        "part_of": "example",
+        "licence": "",
+    }
+
+
+def test_the_cli_installs_one_template_into_the_homes_real_store(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = str(tmp_path)
+    unknown = main(["templates", "install", "--home", home, "--template", "no-such-template"])
+    refused = capsys.readouterr().out
+    installed = main(["templates", "install", "--home", home, "--template", "backup-weekly"])
+    with Store.open(tmp_path / "library", redactor=redact) as store:
+        on_main = sorted(item for item, _ in store.heads_on("main"))
+
+    assert (unknown, refused) == (1, "refused: no template 'no-such-template' in the catalogue\n")
+    assert installed == 0
+    assert "backup-weekly published: 0.1.0" in capsys.readouterr().out
+    assert on_main == ["backup-weekly"]
+    assert not (tmp_path / "engine" / "library-fake.sqlite").exists()
