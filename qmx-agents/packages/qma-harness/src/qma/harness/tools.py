@@ -17,6 +17,7 @@ import asyncio
 import contextlib
 import hashlib
 import json
+import logging
 import re
 import sys
 from collections.abc import Awaitable, Callable, Iterable, Mapping
@@ -28,8 +29,18 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
+from pydantic import JsonValue
 from qmx_broker.service import BrokerService
-from qmx_control.catalog import CORE_TOOLSETS, OperationSpec, name_problem, rows, spill
+from qmx_control.catalog import (
+    CORE_TOOLSETS,
+    TOOLSET_WIRE,
+    CatalogError,
+    OperationSpec,
+    app_rows,
+    name_problem,
+    rows,
+    spill,
+)
 
 from qma.harness.delegate import DelegateRefused
 from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
@@ -45,6 +56,7 @@ if TYPE_CHECKING:
     from qma.harness.home import QmxHome
 
 SERVER: Final = QMX_SERVER
+log = logging.getLogger(__name__)
 
 
 class Effect(Enum):
@@ -94,7 +106,9 @@ type ToolCall = Callable[[dict[str, Any]], Awaitable[dict[str, Any]]]
 
 
 def server_name(toolset: str) -> str:
-    return f"{SERVER}_{toolset}"
+    """`qmx_<toolset>` in the toolset's wire form: a pack's `app:<id>` serves as
+    `qmx_app_<id>`, because a server name takes no colon."""
+    return f"{SERVER}_{TOOLSET_WIRE.sub('_', toolset)}"
 
 
 def tool_name(toolset: str, op: str) -> str:
@@ -122,8 +136,8 @@ class ToolDef:
 
     @property
     def name(self) -> str:
-        """The wire name, `<toolset>_<op>`."""
-        return f"{self.toolset}_{self.op}"
+        """The wire name, `<toolset>_<op>`, with the toolset's wire form."""
+        return f"{TOOLSET_WIRE.sub('_', self.toolset)}_{self.op}"
 
     @property
     def full(self) -> str:
@@ -472,6 +486,104 @@ def _host_def(row: OperationSpec, read: HostRead) -> ToolDef:
     return _plain(row, HOST_SCHEMAS.get(row.target, NO_ARGUMENTS), call)
 
 
+MOVE_SCHEMA: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "type": "object",
+        "properties": {
+            "app_id": {"type": "string", "description": "The app instance to move"},
+            "to": {
+                "type": "string",
+                "description": "The placement name of the machine that takes the instance",
+            },
+        },
+        "required": ["app_id", "to"],
+    }
+)
+
+
+def served_apps(control: ControlService) -> list[tuple[OperationSpec, dict[str, object]]]:
+    """Each running app's `[operations]` rows, pinned to its selected version, each with the
+    input schema the app declares for it. A stopped app serves none, and so does one whose rows
+    the catalog refuses (an id too long for a tool name), so one app never stops every chat."""
+    found: list[tuple[OperationSpec, dict[str, object]]] = []
+    for app in control.app_runtime().list():
+        runtime, definition = app.get("runtime"), app.get("definition")
+        if not isinstance(runtime, dict) or runtime.get("status") != "running":
+            continue
+        if not isinstance(definition, dict):
+            continue
+        operations = cast("dict[str, dict[str, object]]", definition.get("operations") or {})
+        app_id, version = str(definition["id"]), str(definition["version"])
+        try:
+            declared = app_rows(app_id, version, operations)
+        except CatalogError as refused:
+            log.warning("the app %s serves no tools to a chat: %s", app_id, refused)
+            continue
+        for row in declared:
+            schema = operations[row.op].get("input_schema")
+            found.append((row, cast("dict[str, object]", schema) if schema else dict(NO_ARGUMENTS)))
+    return found
+
+
+def _app_failure(error: Exception) -> dict[str, Any]:
+    """An `AppError` by its code, read by shape: the harness does not import the apps package."""
+    code = getattr(error, "code", None)
+    return failure(code, str(error)) if isinstance(code, str) else _failure_of(error)
+
+
+def _app_def(row: OperationSpec, schema: Mapping[str, object], control: ControlService) -> ToolDef:
+    """One app operation as a tool: an ask to the running app, pinned to the row's version."""
+    pin: dict[str, JsonValue] = {"pack": row.pack, "version": row.version}
+
+    async def call(arguments: dict[str, Any]) -> dict[str, Any]:
+        runtime = control.app_runtime()
+        try:
+            found = await asyncio.to_thread(runtime.call, row.owner, row.op, arguments, pin=pin)
+        except Exception as error:
+            if getattr(error, "code", None) == "not_running":
+                return failure(
+                    "app_not_running",
+                    f"{row.owner} stopped after this chat's tools were listed; start it, then "
+                    "open a new chat",
+                )
+            return _app_failure(error)
+        text = json.dumps(found, default=str)
+        answer = await asyncio.to_thread(spill, text, row, control.library_save)
+        return {"content": [{"type": "text", "text": answer}]}
+
+    return _plain(row, schema, call)
+
+
+def _move_def(row: OperationSpec, control: ControlService) -> ToolDef:
+    """`apps_admin_move`: the supervisor snapshots the instance for `to`, hands it the volume
+    lease and records `to` as its home. The receiving machine restores the snapshot."""
+
+    async def call(arguments: dict[str, Any]) -> dict[str, Any]:
+        app_id, to = arguments.get("app_id"), arguments.get("to")
+        if not isinstance(app_id, str) or not isinstance(to, str):
+            return failure("invalid_arguments", "app_id and to are strings")
+        runtime = control.app_runtime()
+        try:
+            moved = await asyncio.to_thread(runtime.snapshot_instance, app_id, to=to)
+        except Exception as error:
+            return _app_failure(error)
+        return {"content": [{"type": "text", "text": json.dumps(moved.document())}]}
+
+    return _plain(row, MOVE_SCHEMA, call)
+
+
+def _app_server_def(
+    row: OperationSpec,
+    control: ControlService,
+    schemas: Mapping[str, Mapping[str, object]],
+) -> ToolDef:
+    if row.owner != "core":
+        return _app_def(row, schemas[row.name], control)
+    if row.target == "move":
+        return _move_def(row, control)
+    raise ToolSurfaceError(f"{row.name} binds the app server and no tool serves it")
+
+
 async def tool_defs(
     *,
     control: ControlService,
@@ -481,14 +593,16 @@ async def tool_defs(
     host: Mapping[str, HostRead] | None = None,
 ) -> list[ToolDef]:
     """Every agent row of the catalog as a tool for one chat: control operations, the broker's
-    reads and `propose_order`, the domain functions, the host reads in `host` by target, and
-    `delegate` when not None (a Child chat passes None). `domain` shares `control`, so no
-    second writer runs."""
+    reads and `propose_order`, the domain functions, every running app's operations and
+    `apps_admin_move`, the host reads in `host` by target, and `delegate` when not None (a Child
+    chat passes None). `domain` shares `control`, so no second writer runs."""
     from qmx_broker.server import create_server as broker_server  # noqa: PLC0415
     from qmx_control.server import create_mcp  # noqa: PLC0415
     from qmx_tools.servers import create_server as domain_server  # noqa: PLC0415
 
-    agent = [row for row in rows() if row.agent]
+    apps = await asyncio.to_thread(served_apps, control)
+    schemas = {row.name: schema for row, schema in apps}
+    agent = [row for row in rows(row for row, _ in apps) if row.agent]
     save = control.library_save
     domain_servers = [domain_server(group, domain) for group in DOMAIN_GROUPS]
     reads = host or {}
@@ -503,6 +617,7 @@ async def tool_defs(
             [row for row in agent if row.binds == "broker"], [broker_server(broker)], save
         ),
         *await _bound([row for row in agent if row.binds == "domain_fn"], domain_servers, save),
+        *(_app_server_def(row, control, schemas) for row in agent if row.binds == "app_server"),
         *(
             _host_def(row, reads[row.target])
             for row in agent
