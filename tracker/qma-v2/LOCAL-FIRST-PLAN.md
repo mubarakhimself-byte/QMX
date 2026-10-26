@@ -530,7 +530,7 @@ Phases 2 to 4 of design 62 (LF8 backup and restore, LF9 the sealed key copy, LF1
 | WU11, LF6, LF2 | `HO/host.py` (`market_door`, `--place`, logs) | WU11, LF6, then LF2 after the chains join |
 | LF6, LF3 | `E/ledger/migrations.py` | LF6 first |
 
-Parallel pairs and their intersections. LF5 and WU11 share none (the market-door and import lines moved into WU11). Order changed on 2026-10-26 to keep two builders busy without a shared file: LF2 (from LF1) runs beside LF7 (from WU11), which share none; LF6 follows LF2 after the chains join, because both edit `HO/host.py`; LF3 follows LF6 (`E/ledger/migrations.py`).
+Parallel pairs and their intersections. LF5 and WU11 share none (the market-door and import lines moved into WU11). Order changed on 2026-10-26 to keep two builders busy without a shared file. LF2 (from LF1) runs beside LF7 (from WU11), which share none; LF6 follows LF2 after the chains join, because both edit `HO/host.py`; LF3 follows LF6 (`E/ledger/migrations.py`).
 
 ## Appendix D. Defaults
 
