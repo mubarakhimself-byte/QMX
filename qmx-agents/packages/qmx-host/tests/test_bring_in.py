@@ -172,8 +172,8 @@ def test_the_old_folder_is_copied_switched_and_left_exactly_as_it_was(pc: Path) 
     assert report.lines[0] == f"Your old QMX data is in {new} now."
     assert "Your Library: 3 items in the new Library." in report.lines
     assert (
-        "  1 test result named remote-flow, made by test runs and not by you. They stay in your "
-        "old folder." in report.lines
+        "  1 test result named remote-flow, made by test runs and not by you, left in your old "
+        "folder." in report.lines
     )
     assert "  engine.lock: the old QMX's lock file; QMX makes a new one." in report.lines
     assert (new / "data" / "migration" / "bring-in-report.txt").read_text(

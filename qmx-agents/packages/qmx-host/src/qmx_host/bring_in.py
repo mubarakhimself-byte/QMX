@@ -599,7 +599,7 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
     if junk:
         left.append(
             f"  {_count(len(junk), 'test result')} named remote-flow, made by test runs and not "
-            "by you. They stay in your old folder."
+            "by you, left in your old folder."
         )
     left += [f"  {r['path']}: {r['why']}." for r in cast("list[dict[str, str]]", facts["left_out"])]
     left += [

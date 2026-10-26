@@ -143,14 +143,12 @@ def sync_roots(
             accounts: object = json.loads(info.read_text(encoding="utf-8"))
         except OSError, ValueError:
             continue
-        for account in (
-            cast("dict[str, object]", accounts).values() if isinstance(accounts, dict) else ()
-        ):
-            path = (
-                cast("dict[str, object]", account).get("path")
-                if isinstance(account, dict)
-                else None
-            )
+        if not isinstance(accounts, dict):
+            continue
+        for account in cast("dict[str, object]", accounts).values():
+            if not isinstance(account, dict):
+                continue
+            path = cast("dict[str, object]", account).get("path")
             if isinstance(path, str) and path:
                 found.append(("Dropbox", Path(path)))
     found += registered
@@ -158,9 +156,9 @@ def sync_roots(
 
 
 def registered_roots() -> list[tuple[str, Path]]:
-    """The sync roots Windows lists for this user (the Cloud Files registry, where OneDrive,
-    Google Drive, Dropbox, Box and iCloud register) and Google Drive's own mount setting. Only
-    read; empty off Windows."""
+    """The sync roots Windows lists for every user of this PC (the Cloud Files registry, where
+    OneDrive, Google Drive, Dropbox, Box and iCloud register) and Google Drive's own mount
+    setting. Only read; empty off Windows."""
     if sys.platform != "win32":
         return []
     import winreg  # noqa: PLC0415
