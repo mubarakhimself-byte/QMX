@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -298,3 +299,131 @@ def test_the_command_reports_each_move(tmp_path: Path, capsys: pytest.CaptureFix
         "moved control.log to logs/host.log",
         f"{root.resolve()} is in the folder tree",
     ]
+
+
+def everything(root: Path) -> dict[str, str]:
+    return {
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted(root.rglob("*"))
+        if path.is_file()
+    }
+
+
+@pytest.mark.parametrize("part", ["data", "cache/run", "backups/2026-10-26"])
+def test_a_part_of_a_qmx_folder_is_refused_and_named_as_inside_it(
+    tmp_path: Path, part: str
+) -> None:
+    layout = resolve(tmp_path / "QMX", create=True, drives=[])
+    for relative in ("data/control.db", "data/runs.db", "data/chats/chat-1.json"):
+        (layout.root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (layout.root / relative).write_text("kept", encoding="utf-8")
+    (layout.root / "cache/run/procs").mkdir(parents=True)
+    (layout.root / "cache/run/procs/chat-1.json").write_text("kept", encoding="utf-8")
+    (layout.root / "backups/2026-10-26").mkdir(parents=True)
+    (layout.root / "backups/2026-10-26/control.db").write_text("kept", encoding="utf-8")
+    before = everything(layout.root)
+    inside = (layout.root / part).resolve()
+    said = f"{inside} is inside the QMX folder {layout.root}; pass {layout.root}"
+
+    with pytest.raises(NoQmxFolder) as not_opened:
+        resolve(inside, create=True, drives=[])
+    with pytest.raises(LayoutRefused) as not_moved:
+        step_to_tree(inside)
+
+    assert str(not_opened.value) == said
+    assert str(not_moved.value) == f"{said}; nothing in it was moved"
+    assert everything(layout.root) == before
+
+
+def test_no_profile_folder_skips_only_the_profile_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def homeless() -> Path:
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "home", staticmethod(homeless))
+    documents = flat(tmp_path / "Documents", {"cv.docx": "cv"})
+    home = flat(tmp_path / "home", {"control.db": "sqlite"})
+
+    with pytest.raises(NoQmxFolder, match="is not a QMX folder"):
+        resolve(documents, drives=[])
+    moved = step_to_tree(home)
+
+    assert moved == [("control.db", "data/control.db")]
+    assert files(documents) == {"cv.docx": "cv"}
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["../outside.txt", "data/../../outside.txt", "{absolute}", "C:/outside.txt", "a\\\\..\\\\x"],
+    ids=["dotdot", "dotdot-inside", "absolute", "drive", "backslash"],
+)
+def test_a_plan_naming_a_path_outside_the_folder_is_refused_and_nothing_moves(
+    tmp_path: Path, source: str
+) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("his", encoding="utf-8")
+    named = source.replace("{absolute}", str(outside))
+    plan = json.dumps([["control.db", "data/control.db"], [named, "data/outside.txt"]])
+    root = flat(tmp_path / "home", {"control.db": "sqlite", "layout-step.json": plan})
+
+    with pytest.raises(LayoutRefused) as refused:
+        step_to_tree(root)
+
+    assert str(refused.value) == (
+        f"{root.resolve() / 'layout-step.json'} names {named!r} to 'data/outside.txt', which is "
+        f"not a move the layout step makes inside {root.resolve()}; nothing was moved"
+    )
+    assert files(root) == {"control.db": "sqlite", "layout-step.json": plan}
+    assert outside.read_text(encoding="utf-8") == "his"
+
+
+def test_a_layout_plan_alone_does_not_make_a_folder_a_qmx_home(tmp_path: Path) -> None:
+    plan = json.dumps([["Documents", "data/Documents"]])
+    root = flat(tmp_path / "someone", {"Documents/cv.docx": "cv", "layout-step.json": plan})
+
+    with pytest.raises(LayoutRefused, match="is not a QMX folder"):
+        step_to_tree(root)
+
+    assert files(root) == {"Documents/cv.docx": "cv", "layout-step.json": plan}
+
+
+def test_a_fresh_folder_whose_labelling_stopped_finishes_on_the_next_run(tmp_path: Path) -> None:
+    root = tmp_path / "QMX"
+    for part in ("data", "keys", "backups", "cache", "logs"):
+        (root / part).mkdir(parents=True)
+    (root / "layout-step.json").write_text("[]", encoding="utf-8")
+
+    assert step_to_tree(root) == []
+    assert folders(root) == ["backups", "cache", "data", "keys", "logs", LABEL]
+
+
+def test_a_plan_row_the_step_would_never_write_is_refused_and_nothing_moves(
+    tmp_path: Path,
+) -> None:
+    plan = json.dumps([["Documents", "keys/Documents"]])
+    before = {"data/control.db": "sqlite", "Documents/cv.docx": "cv", "layout-step.json": plan}
+    root = flat(tmp_path / "home", before)
+
+    with pytest.raises(LayoutRefused, match="which is not a move the layout step makes"):
+        step_to_tree(root)
+
+    assert files(root) == before
+
+
+def test_a_flat_home_holding_a_qmx_folder_is_refused_and_nothing_moves(tmp_path: Path) -> None:
+    root = flat(tmp_path / "home", {"control.db": "sqlite"})
+    inner = resolve(root / "QMX", create=True, drives=[])
+    before = files(root)
+
+    with pytest.raises(NoQmxFolder) as not_opened:
+        resolve(root, drives=[])
+    with pytest.raises(LayoutRefused):
+        step_to_tree(root)
+
+    assert str(not_opened.value) == (
+        f"{root.resolve()} holds the QMX folder {inner.root}, which the layout step would move; "
+        f"move it out of {root.resolve()} first"
+    )
+    assert files(root) == before
+    assert (inner.root / LABEL).is_file()
