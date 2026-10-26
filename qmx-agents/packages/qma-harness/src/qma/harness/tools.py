@@ -467,6 +467,29 @@ HOST_SCHEMAS: Final[Mapping[str, Mapping[str, object]]] = MappingProxyType(
                 }
             },
         },
+        "provider_test": {
+            "type": "object",
+            "properties": {
+                "qmx_id": {
+                    "type": "string",
+                    "description": "The model row to test, as ops_providers lists it, for "
+                    "example openrouter/z-ai/glm-5.3",
+                }
+            },
+            "required": ["qmx_id"],
+        },
+        "mark": {
+            "type": "object",
+            "properties": {
+                "item": {"type": "string", "description": "The Library item id to mark"},
+                "quarantined": {
+                    "type": "boolean",
+                    "description": "True to quarantine the item, false to clear its quarantine",
+                },
+                "reason": {"type": "string", "description": "Why, in one sentence"},
+            },
+            "required": ["item", "quarantined", "reason"],
+        },
     }
 )
 
