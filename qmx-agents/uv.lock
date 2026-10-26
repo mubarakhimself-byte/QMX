@@ -3874,6 +3874,7 @@ dependencies = [
     { name = "psutil" },
     { name = "pydantic" },
     { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "qmx-home" },
     { name = "qmx-ledger" },
 ]
 
@@ -3902,6 +3903,7 @@ requires-dist = [
     { name = "psutil", specifier = ">=7,<9" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "pywin32", marker = "sys_platform == 'win32'", specifier = "==312" },
+    { name = "qmx-home", editable = "packages/qmx-home" },
     { name = "qmx-ledger", editable = "packages/qmx-ledger" },
 ]
 
@@ -4284,6 +4286,7 @@ dependencies = [
     { name = "pg0-embedded" },
     { name = "pydantic" },
     { name = "qmx-engine" },
+    { name = "qmx-home" },
     { name = "qmx-library" },
 ]
 
@@ -4302,6 +4305,7 @@ requires-dist = [
     { name = "pg0-embedded", specifier = "==0.15.2" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "qmx-engine", editable = "packages/qmx-engine" },
+    { name = "qmx-home", editable = "packages/qmx-home" },
     { name = "qmx-library", editable = "packages/qmx-library" },
 ]
 
@@ -4377,6 +4381,7 @@ dependencies = [
     { name = "httpx" },
     { name = "keyring" },
     { name = "pyjwt", extra = ["crypto"] },
+    { name = "qmx-home" },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
@@ -4396,6 +4401,7 @@ requires-dist = [
     { name = "httpx", specifier = "==0.28.1" },
     { name = "keyring", specifier = "==25.7.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = "==2.15.1" },
+    { name = "qmx-home", editable = "packages/qmx-home" },
     { name = "starlette", specifier = "==1.7.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]

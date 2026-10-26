@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from qmx_home import resolve
 from qmx_router.vault import MemorySource, VaultKey, VaultStore, as_text
 
 from qmx_control.node import (
@@ -366,11 +367,12 @@ def test_pair_hands_the_new_code_to_the_servers_recovery_script_on_stdin(
         return "ssh"
 
     monkeypatch.setattr("qmx_control.node.shutil.which", which)
-    argv = ["qmx", "node", "pair", "--home", str(tmp_path), "--ssh-host", "qmx-server"]
+    layout = resolve(tmp_path / "QMX", create=True, drives=[])
+    argv = ["qmx", "node", "pair", "--home", str(layout.root), "--ssh-host", "qmx-server"]
     monkeypatch.setattr(sys, "argv", argv)
 
     assert main() == 0
-    code = (tmp_path / "vault" / "pairing-key").read_text(encoding="utf-8").strip()
+    code = (layout.home / "vault" / "pairing-key").read_text(encoding="utf-8").strip()
     assert sent == [(["ssh", "qmx-server", f"sudo {RECOVER} pair --from-stdin"], code)]
 
 

@@ -5,6 +5,7 @@ description = "QMX memory: memory rows are Library objects, Hindsight indexes th
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "qmx-engine",
+    "qmx-home",
     "qmx-library",
     "pydantic==2.13.4",
     # Hindsight's embedded engine, pinned to the version P-MEM measured on this PC (PRB-L).
@@ -18,6 +19,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 qmx-engine = { workspace = true }
+qmx-home = { workspace = true }
 qmx-library = { workspace = true }
 
 [dependency-groups]

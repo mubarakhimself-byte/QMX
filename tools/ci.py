@@ -27,6 +27,7 @@ def main() -> int:
     router = agents / "packages/qmx-router"
     memory = agents / "packages/qmx-memory"
     hub = agents / "packages/qmx-hub"
+    qmx_home = agents / "packages/qmx-home"
     commands: list[tuple[Path, list[str]]] = [
         (ROOT, ["sync", "--frozen"]),
         (agents, ["sync", "--frozen", "--all-packages", "--all-groups"]),
@@ -47,6 +48,7 @@ def main() -> int:
         router,
         memory,
         hub,
+        qmx_home,
     ):
         for task in ("fmt-check", "lint", "types"):
             commands.append((workspace, ["run", "--no-sync", "python", "-m", "poethepoet", task]))

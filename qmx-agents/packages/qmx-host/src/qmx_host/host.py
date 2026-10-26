@@ -48,6 +48,7 @@ from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_service
 from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
+from qma.telemetry import configured
 from qmf.core import is_refusal
 from qmx_control.models import Document
 from qmx_control.node import library_primary
@@ -85,6 +86,7 @@ from qmx_engine.service.forward import (
 )
 from qmx_engine.service.rest import engine_router
 from qmx_engine.workers.remote import PlacementWorker
+from qmx_home import Layout
 from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
@@ -464,7 +466,8 @@ def compose_memory(
 
 
 def _hindsight(harness: RecordedHarness, home: Path, control: ControlService) -> HindsightConfig:
-    """Hindsight's folders, the relay's address, and the grant minted for the extractor role."""
+    """Hindsight's folders in the QMX folder, the relay's address, the grant minted for the
+    extractor role, and the telemetry target `[telemetry] send_to` names."""
     profile, model = _extractor(control)
     grant, base = "", ""
     if model:
@@ -474,10 +477,11 @@ def _hindsight(harness: RecordedHarness, home: Path, control: ControlService) ->
         except Exception as error:  # no grant: retain stays local, reflect refuses
             print(f"memory: no extractor grant: {type(error).__name__}: {error}", file=sys.stderr)
     return HindsightConfig(
-        home=home / MEMORY_FOLDER / "hindsight",
+        layout=Layout.from_home(home),
         base_url=f"{base}/v1" if base else "",
         grant=grant,
         model=model,
+        telemetry=configured(home),
     )
 
 
@@ -1125,7 +1129,9 @@ def health(port: int, home: Path) -> int | None:
 def start(
     home: Path, port: int, role: Role, ui_origin: str, library_root: Path | None = None
 ) -> int:
-    """`serve` in a background process, once it answers `/api/health`."""
+    """`serve` in a background process, once it answers `/api/health`. The child is given the
+    QMX folder, which it resolves again, and writes to the folder's `logs/host.log`."""
+    layout = Layout.from_home(home)
     running = recorded_host(home)
     if running is not None:
         print(HostRunning(home, running), file=sys.stderr)
@@ -1136,11 +1142,14 @@ def start(
         except OSError:
             print(f"Port {port} is already occupied.", file=sys.stderr)
             return 1
-    command = [sys.executable, "-m", "qmx_host", "serve", "--home", str(home), "--port", str(port)]
+    command = [sys.executable, "-m", "qmx_host", "serve", "--home", str(layout.root)]
+    command += ["--port", str(port)]
     command += ["--role", role, "--ui-origin", ui_origin]
     if library_root is not None:
         command += ["--library-root", str(library_root)]
-    with (home / "control.log").open("ab") as log:
+    host_log = layout.logs / "host.log"
+    host_log.parent.mkdir(parents=True, exist_ok=True)
+    with host_log.open("ab") as log:
         process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
@@ -1151,7 +1160,7 @@ def start(
     deadline = time.monotonic() + START_S
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            print("The host failed to start; see control.log.", file=sys.stderr)
+            print(f"The host failed to start; see {host_log}.", file=sys.stderr)
             return 1
         pid = health(port, home)
         if pid is not None and pid == recorded_host(home):
@@ -1159,7 +1168,7 @@ def start(
             return 0
         time.sleep(0.1)
     terminate(process.pid)
-    print("The host did not become ready; see control.log.", file=sys.stderr)
+    print(f"The host did not become ready; see {host_log}.", file=sys.stderr)
     return 1
 
 

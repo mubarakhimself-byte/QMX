@@ -184,7 +184,7 @@ def test_deep_windows_home_loads_native_dependencies(tmp_path: Path, fixture_app
         install(owner, fixture_app)
         definition_hash = cast(str, owner.get("exchange-status")["definition_hash"])
         native = next(
-            (owner.home / "environments" / definition_hash).glob(
+            (owner.environments / definition_hash).glob(
                 "Lib/site-packages/_cffi_backend*.pyd"
             )
         )

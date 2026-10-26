@@ -1,6 +1,6 @@
 """QMX's own Claude homes, the Claude settings QMA passes in code, and on-disk chat state.
 
-Layout under the QMX home, never under the operator's `~/.claude`:
+Layout under the QMX home (the QMX folder's `data/`), never under the operator's `~/.claude`:
 
     claude/                  Plan home. CLAUDE_CONFIG_DIR for plan chats; the CLI keeps the
                              plan login and the transcripts here.
@@ -8,10 +8,14 @@ Layout under the QMX home, never under the operator's `~/.claude`:
                              `projects/` links to `claude/projects/`, so a provider switch
                              still resumes the same transcript.
     chats/<session>.json     One `ChatRecord` per chat. Each chat writes only its own.
-    procs/<session>.json     Pid file, written only by that chat's launcher.
-    state/                   Correctness records such as the GPT probe result.
     workspaces/              Default working folders, outside any dev repo.
     agent-memory/<ws>/       Auto memory per workspace (`autoMemoryDirectory`).
+
+and beside it, in the folder's `cache/` (design 62 A3), what QMX rebuilds:
+
+    cache/run/procs/<session>.json   Pid file, written only by that chat's launcher.
+    cache/run/state/                 Correctness records such as the GPT probe result.
+    cache/plugins/<pack>/            Each pack's materialised plugin view.
 
 Settings in code. QMA writes no settings file the CLI loads, and `setting_sources=[]` loads
 none from either home. Every Claude setting reaches the CLI as one inline JSON string
@@ -41,6 +45,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 from claude_agent_sdk import PermissionResultDeny
 from qmx_control.context import AttachedRef
+from qmx_home import Layout
 from qmx_router.ids import SessionId
 from qmx_router.profiles import PLAN, ProfileName, parse_profiles
 
@@ -112,11 +117,16 @@ def session_id(text: str) -> SessionId:
 @dataclass(frozen=True)
 class QmxHome:
     root: Path
+    """The home: the QMX folder's `data/`."""
     plugin_dir: Path = PLUGIN_DIR
     plugin_sha256: str | None = None
     """What `plugin_digest(plugin_dir)` must be at each launch. None checks the shipped
     `plugin.manifest.json` instead, which names the file that changed; a live lane testing a
     plugin of its own passes that folder's own digest here."""
+
+    @property
+    def layout(self) -> Layout:
+        return Layout.from_home(self.root)
 
     @property
     def plan_dir(self) -> Path:
@@ -125,7 +135,7 @@ class QmxHome:
     @property
     def packs_dir(self) -> Path:
         """Where each pack's materialised plugin view sits, one folder per pack."""
-        return self.root / "plugins"
+        return self.layout.cache / "plugins"
 
     @property
     def relayed_dir(self) -> Path:
@@ -136,12 +146,16 @@ class QmxHome:
         return self.root / "chats"
 
     @property
+    def run_dir(self) -> Path:
+        return self.layout.cache / "run"
+
+    @property
     def procs_dir(self) -> Path:
-        return self.root / "procs"
+        return self.run_dir / "procs"
 
     @property
     def state_dir(self) -> Path:
-        return self.root / "state"
+        return self.run_dir / "state"
 
     @property
     def workspaces_dir(self) -> Path:

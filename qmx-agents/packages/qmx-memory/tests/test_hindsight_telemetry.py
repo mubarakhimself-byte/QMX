@@ -8,7 +8,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from qmx_home import Layout
 
+import qmx_memory.hindsight
 from qmx_memory.hindsight import HindsightConfig, HindsightIndex
 
 NAMES = (
@@ -23,6 +25,7 @@ ISOLATED = (
     "HINDSIGHT_API_EMBEDDINGS_PROVIDER",
     "HINDSIGHT_API_RERANKER_PROVIDER",
     "HINDSIGHT_API_ENABLE_OBSERVATIONS",
+    "HINDSIGHT_API_DAEMON_LOG",
 )
 
 
@@ -44,6 +47,11 @@ def tracing_at_start(config: HindsightConfig, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setitem(
         sys.modules, "hindsight", SimpleNamespace(HindsightServer=server, HindsightClient=None)
     )
+
+    def database(_: HindsightConfig) -> str:
+        return "postgresql://db"
+
+    monkeypatch.setattr(qmx_memory.hindsight, "start_database", database)
     with pytest.raises(Stopped):
         HindsightIndex(config).start()
     return seen
@@ -52,9 +60,9 @@ def tracing_at_start(config: HindsightConfig, monkeypatch: pytest.MonkeyPatch) -
 def test_hindsight_traces_only_to_the_target_it_is_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    off = tracing_at_start(HindsightConfig(home=tmp_path / "off"), monkeypatch)
+    off = tracing_at_start(HindsightConfig(Layout(tmp_path / "off")), monkeypatch)
     on = tracing_at_start(
-        HindsightConfig(home=tmp_path / "on", telemetry="http://127.0.0.1:5080/api/default"),
+        HindsightConfig(Layout(tmp_path / "on"), telemetry="http://127.0.0.1:5080/api/default"),
         monkeypatch,
     )
 

@@ -931,12 +931,14 @@ def guard_rules(
     Python's environment. `workspace` is where a recursive delete runs without asking; `rules`
     is `settings.toml [rules]`, his two lists."""
     personal = Path.home() / ".claude"
+    layout = home.layout
     protected = [
         home.plan_dir,
         home.relayed_dir,
         home.chats_dir,
-        home.procs_dir,
-        home.state_dir,
+        home.run_dir,
+        home.packs_dir,
+        layout.keys,
         home.plugin_dir,
         home.root / "engine",
         *(
@@ -951,8 +953,8 @@ def guard_rules(
     return GuardRules(
         mandatory_asks=frozenset(tool.full for tool in defs if asks(tool.effect, domain_write)),
         protected_paths=_both(protected),
-        qmx_homes=_both([home.root]),
-        writable_paths=_both([home.workspaces_dir, home.agent_memory_dir]),
+        qmx_homes=_both([layout.root]),
+        writable_paths=_both([home.workspaces_dir, home.agent_memory_dir, layout.cache / "zones"]),
         install_paths=_both([Path(sys.prefix)]),
         secret_paths=_both(secret_files(home)),
         personal_homes=_both([personal]),

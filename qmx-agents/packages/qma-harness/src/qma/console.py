@@ -795,8 +795,9 @@ def host_up(port: int, token: str | None) -> bool:
     return answer.status_code == 200
 
 
-def serve(command: str, home: Path, port: int) -> int:
-    argv = [sys.executable, "-m", "qmx_host", command, "--home", str(home), "--port", str(port)]
+def serve(command: str, folder: Path, port: int) -> int:
+    """`python -m qmx_host <command>` on the QMX folder, which the host resolves again."""
+    argv = [sys.executable, "-m", "qmx_host", command, "--home", str(folder), "--port", str(port)]
     return subprocess.run(argv, check=False).returncode
 
 
@@ -830,9 +831,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timing", action="store_true", help="print the first-delta delay")
     args = parser.parse_args(argv)
     try:
-        home = resolve(args.home).home
+        layout = resolve(args.home)
     except NoQmxFolder as missing:
         parser.exit(2, f"{missing}\n")
+    home = layout.home
     scrub_process_env(os.environ, read_keep_names(home / "settings.toml"))
     stdout: Any = sys.stdout
     if isinstance(stdout, io.TextIOWrapper):
@@ -843,10 +845,10 @@ def main(argv: list[str] | None = None) -> int:
     started_host = False
     if not host_up(args.port, control_token()):
         term.out(f"Starting the QMA host for {home} on port {args.port}...")
-        if serve("start", home, args.port) != 0:
-            serve("stop", home, args.port)
-            if serve("start", home, args.port) != 0:
-                term.out("The host did not start; see control.log in the home.")
+        if serve("start", layout.root, args.port) != 0:
+            serve("stop", layout.root, args.port)
+            if serve("start", layout.root, args.port) != 0:
+                term.out(f"The host did not start; see {layout.logs / 'host.log'}.")
                 return 1
         started_host = True
     token = control_token()
@@ -880,7 +882,7 @@ def main(argv: list[str] | None = None) -> int:
             run(console, args.resume)
     finally:
         if started_host:
-            serve("stop", home, args.port)
+            serve("stop", layout.root, args.port)
     return 0
 
 

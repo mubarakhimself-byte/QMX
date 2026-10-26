@@ -19,7 +19,8 @@ from qmx_engine.ledger.redact import redact
 from qmx_engine.nodes.base import Failed, NodeJob, Ok
 from qmx_engine.nodes.script import HostScript, Script
 from qmx_engine.workers import zones
-from qmx_engine.workers.zones import RunZone, ZoneError, zones_root
+from qmx_engine.workers.zones import RunZone, ZoneError, home_of, zones_root
+from qmx_home import resolve
 
 START = node("start", "trigger")
 CHUNK = """
@@ -212,8 +213,38 @@ def test_a_junction_in_the_overlay_fails_zone_link_and_follows_nothing(tmp_path:
     assert refused.value.code == "zone_link"
 
 
-def test_the_zones_root_sits_beside_the_home_never_inside_it(tmp_path: Path) -> None:
-    assert zones_root(tmp_path / "home") == (tmp_path / "home.zones").resolve()
+def test_the_zones_sit_in_the_folders_cache_and_lead_back_to_its_data(tmp_path: Path) -> None:
+    folder = (tmp_path / "QMX").resolve()
+
+    root = zones_root(folder / "data")
+
+    assert root == folder / "cache" / "zones"
+    assert home_of(root / "run-1" / "work") == folder / "data"
+
+
+PRINT_CACHES = """
+import json, os
+print(json.dumps({name: os.environ.get(name) for name in ("HF_HOME", "TORCH_HOME", "XDG_CACHE_HOME")}))
+"""
+
+
+def test_a_script_in_a_qmx_folder_downloads_into_its_cache(tmp_path: Path) -> None:
+    layout = resolve(tmp_path / "QMX", create=True, drives=[])
+    code = tmp_path / "code"
+    (code / "scripts").mkdir(parents=True)
+    (code / "scripts" / "env.py").write_text(PRINT_CACHES)
+    zone = RunZone.of(layout.home, "run-cache")
+    attempt = replace(job(zone, "env"), node_definition=script_node({}))
+
+    result = asyncio.run(Script(HostScript(code, None, (), fake=True)).run(attempt))
+
+    assert isinstance(result, Ok)
+    models = layout.root / "cache" / "models"
+    assert result.outputs["main"] == {
+        "HF_HOME": str(models / "huggingface"),
+        "TORCH_HOME": str(models / "torch"),
+        "XDG_CACHE_HOME": str(models / "xdg"),
+    }
 
 
 FAKE_TOOL_KEY = "fake-sec2a-tool-value-not-a-key"

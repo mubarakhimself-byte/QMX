@@ -27,6 +27,7 @@ import psutil
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
 from pydantic import JsonValue
+from qmx_home import Layout
 
 from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
 from qmx_apps.backup import checksum, snapshot
@@ -261,7 +262,8 @@ class Supervisor:
         self.call_depth = call_depth
         self.placement = placement
         self._proof_images: dict[str, Definition] = {}
-        self.environments = self.home / "environments"
+        self.environments = Layout.from_home(self.home).cache / "envs"
+        """Each definition's uv environment, rebuilt from its lock on demand (design 62 A3)."""
         self.road = Road(self)
         self._lock = threading.RLock()
         self._instances: dict[str, Instance] = {}
