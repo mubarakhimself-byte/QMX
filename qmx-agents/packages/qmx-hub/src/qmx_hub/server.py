@@ -63,6 +63,7 @@ from qmx_library.store import Store, Upload
 if TYPE_CHECKING:  # the router's annotations resolve from module globals when the host mounts it
     from fastapi import Request
 
+from qmx_hub.bucket import Bucket, holds
 from qmx_hub.purge import Purged, purge_everywhere
 
 VERSION: Final = "qmx-hub/1"
@@ -92,11 +93,19 @@ class Hub:
     """The verbs, as functions over the one store. Every refusal is a `LibraryRefused`."""
 
     def __init__(
-        self, store: Store, *, buckets: Sequence[Path] = (), home: Path | None = None
+        self,
+        store: Store,
+        *,
+        buckets: Sequence[Path] = (),
+        home: Path | None = None,
+        bucket: Bucket | None = None,
     ) -> None:
         self.store = store
         self.buckets = tuple(buckets)
+        """Bucket copies reached as folders: a purge tombstones them, a copy count reads them."""
         self.home = home
+        self.bucket = bucket
+        """The rclone push when this server runs one; a blob in its `pushed` set is bucketed."""
 
     def health(self) -> dict[str, Any]:
         refs = self.store.refs()
@@ -113,13 +122,19 @@ class Hub:
             "seq": self.store.catalog.last_seq(),
         }
 
-    def copies(self) -> int:
-        """How many durable copies an upload lands in: this store, plus the bucket when configured.
+    def copies(self, blob_id: str) -> int:
+        """How many durable copies of `blob_id` exist: this store, plus one only when a real read
+        finds it in a bucket. A bucket that is configured but behind, or whose read fails or runs
+        past `READ_S`, adds nothing.
 
-        The PC keeps its staging copy until this count is two (AD-10, AD-27); a server with no
-        bucket honest answers one.
+        The PC keeps its staging copy until this count is two (AD-10, AD-27), so an upload whose
+        bucket push is still pending answers one and the PC holds on.
         """
-        return 1 + (1 if self.buckets else 0)
+        pushed = self.bucket is not None and blob_id in self.bucket.pushed
+        found = pushed or any(
+            holds(root, blob_id, self.store.blob_size(blob_id)) for root in self.buckets
+        )
+        return 2 if found else 1
 
     def upload_status(self, upload_id: str) -> dict[str, Any]:
         """What a broken client asks before it resumes: the bytes held and their hash (AD-27)."""
@@ -597,7 +612,7 @@ def _landed(hub: Hub, upload: Upload) -> dict[str, Any]:
         "blob_id": blob_id,
         "bytes": hub.store.blob_size(blob_id),
         "sha256": blob_id.removeprefix("sha256:"),
-        "copies": hub.copies(),
+        "copies": hub.copies(blob_id),
         "upload_id": upload.upload_id,
     }
 

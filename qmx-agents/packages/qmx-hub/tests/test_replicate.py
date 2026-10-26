@@ -236,3 +236,24 @@ def test_a_sync_learns_the_peers_higher_epoch_and_parks_the_pcs_own_move(
         )
 
         assert (pc.epoch, again.pushed_refs) == (learned, [])
+
+
+def test_a_second_flip_learned_through_sync_parks_the_pcs_move_once(tmp_path: Path) -> None:
+    with (
+        Store.open(tmp_path / "pc", redactor=redact, name="pc") as pc,
+        Store.open(tmp_path / "server", redactor=redact, name="server") as server,
+    ):
+        pc.record_primary(OPERATOR, "pc")
+        pc.put(OPERATOR, note("offline", "n1"), on="main", expected_head=None)
+        server.record_primary(OPERATOR, "server", epoch=2)
+        first = sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=0)
+        server.record_primary(OPERATOR, "server", epoch=3)
+
+        sync_since(StorePeer(pc), StorePeer(server), OwnerTable("server"), cursor=first.cursor)
+
+        learned = pc.epoch
+        conflicts = [ref for _, ref, *_ in pc.refs() if ref.startswith("refs/conflicts/")]
+
+    assert learned is not None
+    assert (learned.epoch, learned.stale, learned.parked) == (3, True, ("refs/conflicts/n1/1",))
+    assert conflicts == ["refs/conflicts/n1/1"]

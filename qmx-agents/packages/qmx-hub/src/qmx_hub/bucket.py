@@ -26,6 +26,7 @@ costs the bucket nothing.
 from __future__ import annotations
 
 import subprocess
+import threading
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -39,6 +40,8 @@ REMOTE_KEY: Final = "remote"
 PREFIX: Final = "library"
 """The folder on the remote: `<remote>:library/...`."""
 NO_BUCKET: Final = "no bucket, one copy on the server"
+READ_S: Final = 2.0
+"""How long a copy count waits on one bucket folder before it counts no copy there."""
 FRAMES: Final = ("objects", "edges", "annotations")
 REF_FILES: Final = ("refs/log.jsonl", "refs/epoch.json")
 CACHE_DIRS: Final = ("fetched/**", "transient/**", "tombstones/**")
@@ -89,6 +92,9 @@ class Bucket:
     last: Pushed | None = field(default=None)
     series: dict[str, Path] = field(default_factory=dict[str, Path])
     """The open month of each non-redownloadable series, under the fixed name it is pushed as."""
+    pushed: set[str] = field(default_factory=set[str])
+    """The durable blobs a push that succeeded carried: the store held them before it ran. A blob
+    that landed after the last good push is not here, so it counts one copy until the next."""
 
     @classmethod
     def from_home(
@@ -125,6 +131,7 @@ class Bucket:
         if not self.remote:
             self.last = Pushed(None, said=NO_BUCKET, at=at)
             return self.last
+        carried = {b for b in self.store.blob_ids() if self.store.blob_class(b) == "born"}
         calls = [self._call(item) for item in (*FRAMES, "blobs", *REF_FILES)]
         calls.extend(self._series_calls())
         try:
@@ -135,6 +142,7 @@ class Bucket:
                 self.remote, tuple(calls), f"the bucket push failed: {error}", at, failed=True
             )
             return self.last
+        self.pushed |= carried
         self.last = Pushed(self.remote, tuple(calls), f"pushed to {self.target()}", at)
         return self.last
 
@@ -142,13 +150,23 @@ class Bucket:
         return f"{self.remote}:{self.prefix}"
 
     def view(self) -> dict[str, object]:
-        """The storage view's row: where the second copy is, or the words saying there is none."""
+        """The storage view's row: two copies only once a push succeeded and no commit has landed
+        since; a configured bucket that never pushed, failed its last push or is behind is one."""
+        current = self.remote is not None and self.last is not None and self.last.ok
+        copies = 2 if current and self.pending == 0 else 1
+        if self.remote is None:
+            said = NO_BUCKET
+        elif copies == 2:
+            said = f"second copy on {self.target()}"
+        else:
+            said = f"one copy on the server until a push to {self.target()} succeeds"
         return {
             "bucket": self.remote,
-            "copies": 1 if self.remote is None else 2,
-            "said": NO_BUCKET if self.remote is None else f"second copy on {self.target()}",
+            "copies": copies,
+            "said": said,
             "last": None if self.last is None else self.last.said,
             "pending": self.pending,
+            "pushed_blobs": len(self.pushed),
         }
 
     def _series_calls(self) -> list[tuple[str, ...]]:
@@ -204,3 +222,29 @@ def remote_of(home: Path) -> str | None:
         return None
     remote = cast("dict[str, object]", found).get(REMOTE_KEY)
     return None if remote is None else str(remote) or None
+
+
+def holds(root: Path, blob_id: str, size: int, *, within: float = READ_S) -> bool:
+    """Whether the bucket copy at `root` really holds this blob, at its full size.
+
+    A real read on the folder, in either layout `purge.bucket_tombstone` knows. A read that fails,
+    or that runs past `within` on a slow or hung mount, answers False: one copy, never an error.
+    """
+    hexdigest = blob_id.removeprefix("sha256:")
+    blobs = root / "blobs"
+    places = (blobs / hexdigest[:2] / hexdigest[2:4] / hexdigest, blobs / hexdigest)
+    found: list[bool] = []
+
+    def read() -> None:
+        for place in places:
+            try:
+                if place.is_file() and place.stat().st_size == size:
+                    found.append(True)
+                    return
+            except OSError:
+                continue
+
+    reader = threading.Thread(target=read, name="qmx-bucket-read", daemon=True)
+    reader.start()
+    reader.join(within)
+    return bool(found)

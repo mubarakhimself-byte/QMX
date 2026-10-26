@@ -2418,14 +2418,19 @@ class Store:
 
         A higher epoch makes this store stop acting as primary, and the moves it made as primary
         since the ref-log position both sides shared are parked as `merge-conflict` items for him
-        (N13, N19). A peer that is behind changes nothing here.
+        (N13, N19). A peer that is behind changes nothing here. A store that is already stale made
+        no primary move since it learned, so a second higher epoch keeps the parks it has and
+        parks nothing twice.
         """
         known = self._epoch
         if known is not None and known.epoch >= other.epoch:
             return known
         shared = other.seq if shared_seq is None else int(shared_seq)
         stale = self.role == "writer" and other.primary != self.name
-        parked = self.park_primary_moves(shared) if stale else ()
+        if known is not None and known.stale:
+            parked = known.parked
+        else:
+            parked = self.park_primary_moves(shared) if stale else ()
         return self._remember(Epoch(other.primary, other.epoch, shared, stale=stale, parked=parked))
 
     def park_primary_moves(self, since_seq: int = 0) -> tuple[str, ...]:
