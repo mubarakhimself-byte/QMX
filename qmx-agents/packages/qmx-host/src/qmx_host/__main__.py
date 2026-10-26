@@ -9,6 +9,10 @@ a server in his place list, which `qmx node setup` writes into the server's unit
 on the server the one host process opens the store as its one writer and answers the Library routes
 in process (AD-19, AD-26).
 
+Before `serve` or `start`, every store of the folder is read against this release (design 62 B2):
+a store opened read-only is named on stderr, and a refused one stops the start with its name and
+the version it needs.
+
 Order is the invariant: parse the arguments, read the keep list with the standard library, scrub
 this process's environment, and only then import the harness, because the SDK reads `os.environ`
 at every `connect()`.
@@ -18,10 +22,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from qma.boot import read_keep_names, scrub_process_env
 from qmx_home import NoQmxFolder, resolve
+from qmx_home.versions import check_open
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -43,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
         layout = resolve(args.home, create=args.create)
     except NoQmxFolder as missing:
         parser.exit(2, f"{missing}\n")
+    if args.command in ("serve", "start"):
+        held = check_open(layout).held_back
+        for verdict in held:
+            print(verdict.line, file=sys.stderr)
+        if any(verdict.action == "refused" for verdict in held):
+            parser.exit(2, "QMX did not start: a store above is refused.\n")
     home = layout.home
     library_root: Path | None = args.library_root.resolve() if args.library_root else None
     keep = read_keep_names(home / "settings.toml")

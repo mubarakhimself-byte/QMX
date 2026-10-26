@@ -388,6 +388,15 @@ rollback() {
     say "No earlier version is kept here. Nothing changed."
     return 1
   fi
+  # A release from before the folder tree (design 62 B4) would open the folder's top as a flat
+  # home and start empty beside data/, so it is never the one to go back to here.
+  if [[ -f "$QMX_FOLDER/qmx-home.toml" ]] &&
+    ! grep -qs '^TREE' "$previous/qmx-agents/packages/qmx-home/src/qmx_home/__init__.py"; then
+    say "The version before this one (${previous##*/}) cannot read the folder tree this server's"
+    say "home moved into: it would start QMX empty beside your data. Nothing changed."
+    say "Your data is safe in $QMX_FOLDER. Repair this version instead: sudo qmx-recover repair"
+    return 1
+  fi
   say "Going back to ${previous##*/}."
   ln -sfnT "$previous" "$CURRENT"
   reinstall || return 1

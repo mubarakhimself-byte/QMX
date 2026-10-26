@@ -56,6 +56,7 @@ from qmf.data.store.refusals import (
     storage_failure,
 )
 from qmx_engine.control_door import PRINCIPAL
+from qmx_home.versions import too_new
 from qmx_router.passes import Pass
 
 from qmx_host.door import RUN_PASS
@@ -209,6 +210,10 @@ class MarketDoor:
     handles: Path | None = None
     primary_forward: Callable[[Mapping[str, object]], Result[ReadAnswer]] | None = None
     settings: Callable[[], Mapping[str, object]] | None = None
+    too_new: str | None = None
+    """Why the door is read-only: a newer QMX marked the price data too new for this one (design
+    62 B2 rule 4). Reads are served; a commit, a verify, a seal move, a final look and a run's
+    holdout record are not written."""
 
     @property
     def primary(self) -> bool:
@@ -261,6 +266,7 @@ class MarketDoor:
             return seal
         return Ok(
             cls(
+                too_new=too_new(root, "market"),
                 root=root,
                 seal=seal.value,
                 split=split,
@@ -553,6 +559,8 @@ class MarketDoor:
         own place. A file born on the PC stays pinned until the server's commit reports the
         same fingerprint (`verify`).
         """
+        if self.too_new is not None:
+            return self._read_only("a commit")
         born_on = self.placement if born_on is None else born_on
         receipts: list[CommitReceipt] = []
         store = self.series_store()
@@ -594,6 +602,8 @@ class MarketDoor:
 
     def verify(self, fingerprints: Sequence[str]) -> Result[tuple[str, ...]]:
         """Unpin the PC-born partitions the server's commit reported with these fingerprints."""
+        if self.too_new is not None:
+            return self._read_only("a verify")
         cleared: list[str] = []
         for marker in sorted(self.store_root.glob(f"*/*/*/*/*/{PIN_NAME}")):
             try:
@@ -628,6 +638,8 @@ class MarketDoor:
             return task
         if task.value is None:
             return Ok(None)
+        if self.too_new is not None:
+            return Ok(dict(task.value))
         return Ok(self._file_task(task.value))
 
     def inbox(self) -> tuple[dict[str, object], ...]:
@@ -647,6 +659,8 @@ class MarketDoor:
         self, boundary: object, *, at: object, click: object
     ) -> Result[dict[str, object]]:
         """Move the seal to a new boundary on his click, journaled (55 D-5; F8)."""
+        if self.too_new is not None:
+            return self._read_only("a seal move")
         seal = self.default_seal()
         if is_refusal(seal):
             return seal
@@ -718,7 +732,7 @@ class MarketDoor:
         An agent may read with no holdout at all: that is his choice per study (edge case 10).
         """
         asked = self.default_seal() if holdout is None else self._parse_holdout(holdout)
-        if is_refusal(asked) or not run:
+        if is_refusal(asked) or not run or self.too_new is not None:
             return asked
         record = _record_of(asked.value)
         try:
@@ -858,6 +872,8 @@ class MarketDoor:
                 "shared cache",
                 given=None,
             )
+        if self.too_new is not None:
+            return self._read_only("a final look")
         journal = self._journal(seal)
         if is_refusal(journal):
             return journal
@@ -994,6 +1010,11 @@ class MarketDoor:
         if is_refusal(bundle):
             return bundle
         return Ok(bundle.value.journal)
+
+    def _read_only(self, act: str) -> TypedRefusal:
+        return policy_rejection(
+            "market_store", f"the price data is read-only: {self.too_new}", act=act
+        )
 
     def _writer(self) -> Result[WriterId]:
         return WriterId.try_create("qmx-host", "market-data-door", SEAL_CONTROL_STREAM, "door")

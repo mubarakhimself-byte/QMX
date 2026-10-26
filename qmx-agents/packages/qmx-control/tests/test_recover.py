@@ -296,6 +296,25 @@ def test_rollback_with_one_version_says_so_and_changes_nothing(tmp_path: Path) -
     assert server.calls("systemctl restart", "uv") == []
 
 
+def test_rollback_to_a_version_from_before_the_folder_tree_is_refused(tmp_path: Path) -> None:
+    versions = tmp_path / "versions"
+    before_tree, current = versions / ("a" * 40), versions / ("b" * 40)
+    for version in (before_tree, current):
+        (version / "qmx-agents").mkdir(parents=True)
+    os.utime(before_tree, (1_700_000_000, 1_700_000_000))
+    server = Server(tmp_path, VERSIONS=posix(versions), CURRENT=posix(current))
+    (server.folder / "qmx-home.toml").write_text('format = "qmx-home"\n', encoding="utf-8")
+
+    done = server.run("rollback")
+
+    assert done.returncode == 1
+    assert done.stdout.startswith(
+        f"The version before this one ({'a' * 40}) cannot read the folder tree this server's\n"
+        "home moved into: it would start QMX empty beside your data. Nothing changed.\n"
+    )
+    assert server.calls("systemctl restart", "uv") == []
+
+
 def test_reinstall_tries_offline_then_online_and_says_plainly_when_both_fail(
     tmp_path: Path,
 ) -> None:
