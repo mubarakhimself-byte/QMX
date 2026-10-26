@@ -427,3 +427,60 @@ def test_a_flat_home_holding_a_qmx_folder_is_refused_and_nothing_moves(tmp_path:
     )
     assert files(root) == before
     assert (inner.root / LABEL).is_file()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses to move an open file")
+def test_the_data_part_of_a_stopped_step_is_refused_and_the_step_still_finishes(
+    tmp_path: Path,
+) -> None:
+    root = flat(tmp_path / "home", PC_HOME)
+    with (root / "library" / "catalog.db").open("rb"), pytest.raises(LayoutRefused):
+        step_to_tree(root)
+    stopped = everything(root)
+    assert stopped["data/chats/chat-1.json"] == PC_HOME["chats/chat-1.json"], "stopped part-way"
+    data = (root / "data").resolve()
+    said = (
+        f"{data} is inside the QMX folder {root.resolve()}, whose layout step stopped; run "
+        f"python -m qmx_home layout {root.resolve()} again"
+    )
+
+    with pytest.raises(NoQmxFolder) as not_opened:
+        resolve(data, drives=[])
+    with pytest.raises(LayoutRefused) as not_moved:
+        step_to_tree(data)
+    unchanged = everything(root)
+    step_to_tree(root)
+
+    assert str(not_opened.value) == said
+    assert str(not_moved.value) == f"{said}; nothing in it was moved"
+    assert unchanged == stopped
+    assert files(root) == PC_TREE
+
+
+def test_a_folder_with_a_label_that_cannot_be_read_still_holds_its_parts(tmp_path: Path) -> None:
+    root = flat(tmp_path / "QMX", {LABEL: "not toml [", "data/control.db": "sqlite"})
+    before = everything(root)
+    data = (root / "data").resolve()
+    said = f"{data} is inside the QMX folder {root.resolve()}; pass {root.resolve()}"
+
+    with pytest.raises(NoQmxFolder) as not_opened:
+        resolve(data, drives=[])
+    with pytest.raises(LayoutRefused) as not_moved:
+        step_to_tree(data)
+
+    assert str(not_opened.value) == said
+    assert str(not_moved.value) == f"{said}; nothing in it was moved"
+    assert everything(root) == before
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="only Windows folds case and trailing dots")
+@pytest.mark.parametrize("forged", ["Keys", "keys.", "keys ", "KEYS. "])
+def test_a_plan_row_naming_keys_in_another_spelling_is_refused(tmp_path: Path, forged: str) -> None:
+    plan = json.dumps([[forged, f"data/{forged}"]])
+    before = {"data/control.db": "sqlite", "keys/vault.key": "private", "layout-step.json": plan}
+    root = flat(tmp_path / "home", before)
+
+    with pytest.raises(LayoutRefused, match="which is not a move the layout step makes"):
+        step_to_tree(root)
+
+    assert files(root) == before

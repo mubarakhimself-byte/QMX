@@ -368,7 +368,7 @@ def _refusal(root: Path, label: Label | None) -> str | None:
         return kept_out
     if label is None and not _nothing_to_move(root) and not _flat_home(root):
         return _not_qmx(root)
-    held = next((entry for entry in root.iterdir() if entry.is_dir() and _label(entry)), None)
+    held = next((entry for entry in root.iterdir() if entry.is_dir() and _qmx_folder(entry)), None)
     if held is not None:
         return (
             f"{root} holds the QMX folder {held}, which the layout step would move; move it "
@@ -377,13 +377,24 @@ def _refusal(root: Path, label: Label | None) -> str | None:
     return None
 
 
+def _qmx_folder(folder: Path) -> bool:
+    """Whether `folder` is a QMX folder for the nesting checks: it holds a label file, whatever
+    its content, or the plan of a layout step that stopped before writing the label."""
+    return (folder / LABEL).is_file() or (folder / JOURNAL).is_file()
+
+
 def _labelled_ancestor(root: Path) -> Path | None:
-    """The nearest folder above `root` holding a QMX label: `root` is then a part of that QMX
-    folder (its `data/`, `cache/run`, a backup), never a home of its own."""
-    return next((above for above in root.parents if _label(above) is not None), None)
+    """The nearest QMX folder above `root`: `root` is then a part of it (its `data/`,
+    `cache/run`, a backup), never a home of its own."""
+    return next((above for above in root.parents if _qmx_folder(above)), None)
 
 
 def _nested(root: Path, ancestor: Path) -> str:
+    if not (ancestor / LABEL).is_file():
+        return (
+            f"{root} is inside the QMX folder {ancestor}, whose layout step stopped; run "
+            f"python -m qmx_home layout {ancestor} again"
+        )
     return f"{root} is inside the QMX folder {ancestor}; pass {ancestor}"
 
 
@@ -498,7 +509,14 @@ def _plannable(source: str, target: str) -> bool:
 
 
 def _top_name(name: str) -> bool:
-    if not name or name in {".", "..", *TAKEN, LABEL, JOURNAL}:
+    """Whether `name` is one entry at the folder's top that is none of the tree's parts, the
+    label or the plan, compared the way the OS compares names: on Windows case does not count
+    and a trailing dot or space is dropped, so `Keys` and `keys.` would name `keys/`."""
+    windows = os.name == "nt"
+    fold = str.casefold if windows else str
+    if windows and name != name.rstrip(". "):
+        return False
+    if not name or fold(name) in {fold(n) for n in (".", "..", *TAKEN, LABEL, JOURNAL)}:
         return False
     return not any(mark in name for mark in ("/", "\\", ":")) and not PureWindowsPath(name).anchor
 
