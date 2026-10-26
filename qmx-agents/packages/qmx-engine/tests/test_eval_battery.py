@@ -30,7 +30,6 @@ HAIKU = "claude/haiku"
 KIMI = "openrouter/moonshotai/kimi-k2.5"
 
 
-
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
     """A QMX folder made the way `--create` makes one, and its home `data/`."""

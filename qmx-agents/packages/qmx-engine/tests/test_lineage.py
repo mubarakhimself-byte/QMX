@@ -31,7 +31,6 @@ D4 = TEMPLATES / "d4-variant-comparison"
 P1 = TEMPLATES / "p1-portfolio-combination"
 
 
-
 @pytest.fixture
 def home(tmp_path: Path) -> Path:
     """A QMX folder made the way `--create` makes one, and its home `data/`."""

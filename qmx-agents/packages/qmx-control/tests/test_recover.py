@@ -93,26 +93,30 @@ def posix(path: Path) -> str:
 
 
 class Server:
-    """A scratch server: a home with a planted key and token, a Library, stubs and a conf."""
+    """A scratch server: a QMX folder still in the flat layout an earlier setup built, with a
+    planted key and token, a Library, stubs and a conf. `home` is the folder's `data/`."""
 
     def __init__(self, root: Path, **conf: str) -> None:
         assert BASH is not None
         self.root = root
-        self.home = root / "home"
-        for folder in (self.home / "vault", root / "library", root / "bin", root / "state"):
+        self.folder = root / "QMX"
+        self.home = self.folder / "data"
+        for folder in (self.folder / "vault", root / "library", root / "bin", root / "state"):
             folder.mkdir(parents=True)
         for name, value in PLANTED.items():
-            (self.home / "vault" / name).write_text(value + "\n", encoding="utf-8")
-        (self.home / "vault-store.json").write_text(
+            (self.folder / "vault" / name).write_text(value + "\n", encoding="utf-8")
+        (self.folder / "vault-store.json").write_text(
             f'{{"entries": [{{"name": "qmx/openrouter", "value": "{VAULT_VALUE}"}}]}}',
             encoding="utf-8",
         )
         (root / "defaults-ufw").write_text("IPV6=yes\n", encoding="utf-8")
         (root / "venv" / "bin").mkdir(parents=True)
+        python = posix(Path(sys.executable))
         stubs = {
             **STUBS,
-            "python3": f'exec "{posix(Path(sys.executable))}" "$@"',
-            "../venv/bin/python": "exit 0",
+            "python3": f'exec "{python}" "$@"',
+            "runuser": 'while [[ "$1" != -- ]]; do shift; done; shift; exec "$@"',
+            "../venv/bin/python": f'[[ "$1" == -m ]] && exec "{python}" "$@"; exit 0',
         }
         for name, body in stubs.items():
             path = root / "bin" / name
@@ -121,7 +125,9 @@ class Server:
             )
             path.chmod(0o755)
         settings = {
+            "QMX_FOLDER": posix(self.folder),
             "QMX_HOME": posix(self.home),
+            "QMX_KEYS": posix(self.folder / "keys"),
             "LIBRARY": posix(root / "library"),
             "VENV": posix(root / "venv"),
             "UFW_DEFAULTS": posix(root / "defaults-ufw"),
@@ -239,10 +245,20 @@ def test_stop_repair_and_status_bring_the_host_back_and_no_key_is_ever_printed(
     checked = server.run("vault")
 
     door = [line for line in after.stdout.splitlines() if line.startswith("door")]
+    folder = posix(server.folder)
     assert stopped.stdout == "Stop qmx-host: done.\n"
     assert "door        does not answer on 127.0.0.1:8766  FAIL" in before.stdout
+    assert (
+        f"folder      {folder} is not in the folder tree; run: sudo qmx-recover repair  FAIL"
+        in before.stdout
+    )
     assert repaired.stdout.splitlines()[-1] == "QMX answers again."
     assert door == ["door        answers on 127.0.0.1:8766 and asks for its key  PASS"]
+    assert f"folder      {folder} is in the folder tree  PASS" in after.stdout
+    assert (server.folder / "keys" / "control-token").read_text(encoding="utf-8") == (
+        PLANTED["control-token"] + "\n"
+    )
+    assert sorted(entry.name for entry in server.home.iterdir()) == ["vault", "vault-store.json"]
     assert paired.returncode == 0
     vault = server.home / "vault"
     assert (vault / "pairing-key.previous").read_text(encoding="utf-8") == (
@@ -263,7 +279,7 @@ def test_repair_refuses_to_change_owners_outside_the_home_and_library_it_names(
     done = server.run("repair")
 
     assert done.returncode == 1
-    assert "Not touching /srv/qmx: it is not QMX's home or Library" in done.stdout
+    assert "Not touching /srv/qmx: it is not QMX's folder or Library" in done.stdout
     assert not any("/srv/qmx" in call for call in server.calls("chown"))
 
 

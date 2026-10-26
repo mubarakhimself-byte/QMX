@@ -234,7 +234,8 @@ def test_a_work_folder_outside_a_qmx_folder_leads_to_no_home(tmp_path: Path) -> 
 
 PRINT_CACHES = """
 import json, os
-print(json.dumps({name: os.environ.get(name) for name in ("HF_HOME", "TORCH_HOME", "XDG_CACHE_HOME")}))
+names = ("HF_HOME", "TORCH_HOME", "XDG_CACHE_HOME")
+print(json.dumps({name: os.environ.get(name) for name in names}))
 """
 
 
