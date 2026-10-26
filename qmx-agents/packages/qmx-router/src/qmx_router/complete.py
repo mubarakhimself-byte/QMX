@@ -149,18 +149,33 @@ def anthropic_answer(payload: Mapping[str, Any]) -> Answer:
     return Answer(_text_of(payload.get("content")), str(payload.get("model", "")), _usage(payload))
 
 
+def sse_blocks(lines: Sequence[str]) -> list[list[str]]:
+    """A stream's lines as its events, split on the blank line that ends each one, because
+    `parse_sse` reads one event: given the whole stream it joins every `data:` line into one
+    document that does not parse."""
+    blocks: list[list[str]] = [[]]
+    for line in lines:
+        if line:
+            blocks[-1].append(line)
+        elif blocks[-1]:
+            blocks.append([])
+    return [block for block in blocks if block]
+
+
 def streamed_answer(lines: Sequence[str], row: ModelRow, model: str) -> Answer:
     """A finished lane stream, read through the lane's own state machine, so a chat and a
     completion read one answer the same way."""
     if row.wire == "responses":
         state = translate.StreamState(translate.Translation({}, {}), model)
-        for event in translate.parse_sse(list(lines)):
-            state.feed(event)
+        for block in sse_blocks(lines):
+            for event in translate.parse_sse(block):
+                state.feed(event)
         return Answer(_text_of(state.message().get("content")), state.served or model, state.usage)
     translation = chat_lane.Translation({}, {})
     chat = chat_lane.StreamState(translation, model)
-    for chunk in chat_lane.parse_sse(list(lines)):
-        chat.feed(chunk)
+    for block in sse_blocks(lines):
+        for chunk in chat_lane.parse_sse(block):
+            chat.feed(chunk)
     if not chat.ended:
         chat.finish()
     return Answer(_text_of(chat.message().get("content")), chat.served or model, chat.usage)

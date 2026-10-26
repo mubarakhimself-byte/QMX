@@ -71,12 +71,23 @@ def test_two_pins_of_one_provider_for_one_role_are_named_after_their_models() ->
     assert len(found) == len(ROLES) + 2
 
 
-def test_a_provider_proof_row_reaches_only_its_own_main() -> None:
+def test_a_provider_proof_row_reaches_only_its_own_main(tmp_path: Path) -> None:
+    (tmp_path / "openrouter.toml").write_text('use = "test_only"\n', encoding="utf-8")
+    proof = load(tmp_path)
     pinned = {"reviewer": ["openrouter/deepseek/deepseek-v4.1-flash"]}
-    assert "openrouter-reviewer" not in definitions(bundled(), KIMI, pins=pinned)
-    assert "openrouter-reviewer" in definitions(bundled(), OPENROUTER, pins=pinned)
-    roles = [qmx_id for wanted in generated(bundled()).values() for qmx_id in wanted]
+    assert "openrouter-reviewer" not in definitions(proof, KIMI, pins=pinned)
+    assert "openrouter-reviewer" in definitions(proof, OPENROUTER, pins=pinned)
+    roles = [qmx_id for wanted in generated(proof).values() for qmx_id in wanted]
     assert not any(qmx_id.startswith("openrouter/") for qmx_id in roles)
+
+
+def test_the_bundled_openrouter_rows_join_the_generated_role_lists() -> None:
+    roles = generated(bundled())
+    assert "openrouter/moonshotai/kimi-k2.5" in roles["reviewer"]
+    assert "openrouter/deepseek/deepseek-v4.1-flash" in roles["triage"]
+    assert "openrouter-reviewer" in definitions(
+        bundled(), KIMI, pins={"reviewer": ["openrouter/deepseek/deepseek-v4.1-flash"]}
+    )
 
 
 def test_a_gpt_main_lists_key_rows_only_when_p1k_passed() -> None:

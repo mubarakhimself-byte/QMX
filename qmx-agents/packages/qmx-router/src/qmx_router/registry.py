@@ -37,6 +37,7 @@ from qmx_router.profiles import (
     TIERS,
     AuthHeader,
     CacheMarkers,
+    KeyProvider,
     ModelId,
     ProfileName,
     Quirks,
@@ -45,6 +46,7 @@ from qmx_router.profiles import (
     family_refusal,
     gpt_refusal,
     normalize,
+    parse_profiles,
 )
 
 QmxId = NewType("QmxId", str)
@@ -308,6 +310,51 @@ def bundled() -> Registry:
     return load(None)
 
 
+type KeyCheck = Callable[[SecretRef], bool]
+
+
+def key_stored(reference: SecretRef) -> bool:
+    """Whether the keyring holds `reference`. The value is only tested against None and dropped
+    here; it is never returned, logged or kept."""
+    import keyring  # noqa: PLC0415  (a registry read never needs the keyring)
+
+    try:
+        return keyring.get_password(reference, reference.removeprefix("qmx/")) is not None
+    except Exception:  # keyring backends raise their own types
+        return False
+
+
+def usable(rows: Mapping[str, object], *, stored: KeyCheck | None = None) -> frozenset[ProfileName]:
+    """The providers a role or a sub-agent may use, from `settings.toml [providers]`: the plan,
+    and every row that parses, less a key row whose keyring entry is missing. A row he removed
+    or left invalid is not one. `stored` is the keyring check, `key_stored` when None."""
+    check = stored or key_stored
+    found = parse_profiles(rows).by_name
+    return frozenset(
+        name
+        for name, profile in found.items()
+        if not isinstance(profile, KeyProvider) or check(profile.credential)
+    )
+
+
+def home_registry(
+    profiles: Path, rows: Mapping[str, object], *, stored: KeyCheck | None = None
+) -> Registry:
+    """The registry one home's chats and helpers see: `load(profiles)`, cut to the providers
+    `usable(rows)` keeps."""
+    return configured(load(profiles), usable(rows, stored=stored))
+
+
+def configured(registry: Registry, names: Iterable[str]) -> Registry:
+    """`registry` cut to the providers in `names` (from `usable`), so a provider that is not
+    configured, not valid or has no key offers no row and no sub-agent."""
+    keep = frozenset(names)
+    return replace(
+        registry,
+        providers={name: found for name, found in registry.providers.items() if name in keep},
+    )
+
+
 def parse_provider(name: str, document: Mapping[str, Any]) -> Provider:
     if not ROW_NAME.fullmatch(name) or document.get("name", name) != name:
         raise RegistryError("needs a lowercase name equal to its file name")
@@ -543,9 +590,11 @@ def _served(row: ModelRow, answer: httpx.Response) -> tuple[str, object]:
     """The served model and the output tokens: a chat-wire row's stream read through the chat
     lane's own state machine, an Anthropic-wire row's one JSON document."""
     if row.wire == "openai_chat":
+        from qmx_router.complete import sse_blocks  # noqa: PLC0415  (complete imports this)
+
         state = chat_lane.StreamState(chat_lane.Translation({}, {}), row.native)
-        for block in answer.text.replace("\r\n", "\n").split("\n\n"):
-            for chunk in chat_lane.parse_sse(block.splitlines()):
+        for block in sse_blocks(answer.text.splitlines()):
+            for chunk in chat_lane.parse_sse(block):
                 state.feed(chunk)
         state.finish()
         if state.error is not None:

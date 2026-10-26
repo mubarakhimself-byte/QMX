@@ -12,8 +12,10 @@ from qmx_router.registry import (
     UnknownModel,
     bundled,
     describe,
+    home_registry,
     load,
     one_token_test,
+    usable,
 )
 
 BUNDLED = {
@@ -35,8 +37,8 @@ def test_every_bundled_provider_loads() -> None:
     registry = bundled()
     assert registry.errors == {}
     assert set(registry.providers) == BUNDLED
-    assert {provider.use for provider in registry.providers.values()} == {"any", "test_only"}
-    assert registry.provider("openrouter").use == "test_only"
+    assert {provider.use for provider in registry.providers.values()} == {"any"}
+    assert registry.provider("openrouter").use == "any"
 
 
 def test_a_user_file_overrides_a_bundled_one_key_by_key(tmp_path: Path) -> None:
@@ -229,3 +231,31 @@ def test_a_chat_wire_row_test_sends_one_token_through_the_chat_lane() -> None:
         "failed",
         'HTTP 401: {"error":{"message":"bad key"}}',
     )
+
+
+ROUTER_TIERS = dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "deepseek/deepseek-v4.1-flash")
+ROWS: dict[str, object] = {
+    "kimi": {
+        "base_url": "https://api.moonshot.ai/anthropic",
+        "credential_ref": "qmx/kimi",
+        "tiers": dict.fromkeys(("opus", "sonnet", "haiku", "fable"), "kimi-k3"),
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api",
+        "credential_ref": "qmx/openrouter",
+        "tiers": ROUTER_TIERS,
+    },
+}
+
+
+def test_only_configured_rows_with_a_stored_key_reach_the_home_registry(tmp_path: Path) -> None:
+    def stored(reference: str) -> bool:
+        return reference == "qmx/openrouter"
+
+    found = home_registry(tmp_path, ROWS, stored=stored)
+    every = home_registry(tmp_path, ROWS, stored=lambda _ref: True)
+    removed = home_registry(tmp_path, {"kimi": ROWS["kimi"]}, stored=lambda _ref: True)
+    assert usable(ROWS, stored=stored) == {"claude", "openrouter"}
+    assert sorted(found.providers) == ["claude", "openrouter"]
+    assert sorted(every.providers) == ["claude", "kimi", "openrouter"]
+    assert sorted(removed.providers) == ["claude", "kimi"]
