@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from pydantic import JsonValue
-from qmx_home.versions import IndexState, index_state, mark_index
+from qmx_home.versions import IndexState, index_file_state, mark_index
 
 from qmx_library.port import Hit, JsonObject, LibraryRefused, Producer, Role
 
@@ -97,14 +97,17 @@ class Catalog:
     """The index over one store. `found` is what the file was when it opened (design 62 B2 rule
     5): only a `current` file is used, and the store rebuilds any other. With no `path` the
     index lives in memory: a Library opened read-only builds it there, so not even its index
-    file is written."""
+    file is written. The file is judged read-only first, and opened for writing only when it is
+    `current`, so a file that is not QMX's is moved aside exactly as it was."""
 
     def __init__(self, path: Path | None) -> None:
         self.path = path
+        self.found: IndexState = "current" if path is None else index_file_state(path, "catalog")
         self.db = sqlite3.connect(
-            ":memory:" if path is None else path, check_same_thread=False, isolation_level=None
+            path if path is not None and self.found == "current" else ":memory:",
+            check_same_thread=False,
+            isolation_level=None,
         )
-        self.found: IndexState = "current" if path is None else index_state(self.db, "catalog")
         if self.found != "current":
             return
         if path is not None:

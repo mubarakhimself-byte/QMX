@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
+import sys
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import closing
@@ -308,3 +310,52 @@ def test_the_label_check_reads_a_folder_with_no_label_as_this_releases(tmp_path:
     home.mkdir()
 
     assert too_new(home / "library", "library") is None
+
+
+CRASHED_WRITER = """
+import os, sqlite3, sys
+db = sqlite3.connect(sys.argv[1], isolation_level=None)
+db.execute("PRAGMA wal_autocheckpoint = 0")
+db.execute("INSERT INTO rows (body) VALUES ('written by a newer QMX')")
+os._exit(0)
+"""
+
+
+def test_a_store_too_new_with_a_pending_wal_keeps_its_file_and_its_wal_exactly(
+    folder: Layout,
+) -> None:
+    path = made(folder.data / "demo.sqlite", version=7, min_reader=5)
+    subprocess.run([sys.executable, "-c", CRASHED_WRITER, str(path)], check=True)
+    wal = path.with_name("demo.sqlite-wal")
+    before = (path.read_bytes(), wal.read_bytes())
+
+    with pytest.raises(StoreRefused):
+        opened(path)
+
+    assert len(before[1]) > 0
+    assert (path.read_bytes(), wal.read_bytes()) == before
+
+
+def test_check_open_keeps_a_label_entry_it_cannot_read_and_every_field_it_does_not_know(
+    folder: Layout,
+) -> None:
+    made(folder.data / "demo.sqlite", version=3)
+    label = read_label(folder)
+    stores = {
+        **label.stores,
+        "library": {"version": "3", "min_reader": "2"},
+        "demo": {"version": 2, "min_reader": 2, "wal2": True},
+    }
+    write_label(folder, Label(label.home_id, 2, "0.1.0", "0.8.0", stores=stores))
+
+    opening = check_open(folder)
+
+    written = read_label(folder)
+    held = {verdict.store: verdict.action for verdict in opening.held_back}
+    assert written.stores["library"] == {"version": "3", "min_reader": "2"}
+    assert written.stores["demo"] == {"version": 3, "min_reader": 3, "wal2": True}
+    assert written.last_written_by == "0.8.0"
+    assert held == {"library": "read-only"}
+    assert str(too_new(folder.data / "library", "library")).endswith(
+        "The Library opens read-only until then."
+    )
