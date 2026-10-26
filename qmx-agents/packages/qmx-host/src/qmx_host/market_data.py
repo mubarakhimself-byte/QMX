@@ -752,7 +752,8 @@ class MarketDoor:
         named = cast("Mapping[str, object]", holdout)
         boundary = named.get("boundary", named.get("boundary_ns"))
         months = named.get("months", DEFAULT_HOLDOUT_MONTHS)
-        return _seal_at(boundary, months, self._calendar(), self.world)
+        seal = _seal_at(boundary, months, self._calendar(), self.world)
+        return seal if is_refusal(seal) else Ok(seal.value)
 
     def _keys_of_series(self, series: str) -> Result[tuple[SeriesKey, ...]]:
         parts = series.split("/")
@@ -1228,7 +1229,8 @@ def _settings_seal(
             '"YYYY-MM", or turn holdout off',
             given=None,
         )
-    return _seal_at(boundary, data.get("holdout_months", DEFAULT_HOLDOUT_MONTHS), calendar, world)
+    seal = _seal_at(boundary, data.get("holdout_months", DEFAULT_HOLDOUT_MONTHS), calendar, world)
+    return seal if is_refusal(seal) else Ok(seal.value)
 
 
 def _seal_at(

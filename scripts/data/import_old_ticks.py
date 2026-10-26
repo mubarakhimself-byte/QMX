@@ -483,7 +483,17 @@ def import_ticks(plan: Plan, door: MarketDoor, report: Report) -> None:
             named.update(wanted.get((subject, year, month), ()))
             read.update(
                 _import_tick_month(
-                    plan, door, store, report, ticks, subject, directory, year, month, wanted, checked
+                    plan,
+                    door,
+                    store,
+                    report,
+                    ticks,
+                    subject,
+                    directory,
+                    year,
+                    month,
+                    wanted,
+                    checked,
                 )
             )
     report.manifest["ticks"] |= {
