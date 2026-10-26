@@ -1297,8 +1297,8 @@ def test_data_generate_usage_example_runs_clean() -> None:
     completed = subprocess.run(
         [sys.executable, str(_QMB_ROOT / "examples" / "data_generate_usage.py")],
         capture_output=True,
-        text=True,
-        env={**os.environ, "PYTHONPATH": pythonpath()},
+        encoding="utf-8",
+        env={**os.environ, "PYTHONPATH": pythonpath(), "PYTHONIOENCODING": "utf-8"},
         check=False,
     )
     assert completed.returncode == 0, completed.stderr

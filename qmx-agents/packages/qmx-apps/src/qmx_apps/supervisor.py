@@ -399,9 +399,15 @@ class Supervisor:
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
         if result.returncode:
+            said = [
+                line.strip()
+                for line in result.stderr.splitlines()
+                if line.strip().startswith(("error:", "Caused by:"))
+            ]
+            why = f" uv said: {' '.join(said[:3])[:400]}" if said else ""
             raise AppError(
                 "install_failed",
-                "uv could not install the app's lock; check its lock and sources.",
+                f"uv could not install the app's lock; check its lock and sources.{why}",
                 422,
             )
 
