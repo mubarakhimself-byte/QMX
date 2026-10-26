@@ -32,14 +32,21 @@ import shutil
 import sqlite3
 import time
 from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import closing, contextmanager
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Final, cast
 
+from qmx_apps.supervisor import APPS_SCHEMA
+from qmx_broker.service import PORTFOLIO_SCHEMA
 from qmx_control.library import OLD_LIBRARY, UNFINISHED, old_library
+from qmx_control.runs import RUNS_SCHEMA
+from qmx_control.service import CONTROL_SCHEMA
 from qmx_engine.ledger import redact
+from qmx_engine.ledger.inbox_table import APP_INCIDENTS, INCIDENTS
+from qmx_engine.ledger.inbox_table import SCHEMA as INBOX
+from qmx_engine.ledger.migrations import migrate
 from qmx_home import (
     FLAT,
     FLAT_TO_TREE,
@@ -55,9 +62,9 @@ from qmx_home import (
     opens,
     resolve,
 )
-from qmx_home.versions import FLOOR_BYTES, check_open
+from qmx_home.stores import STORES
+from qmx_home.versions import FLOOR_BYTES, StoreRefused, check_open, folder_of, open_sqlite
 from qmx_library.migrate.from_library_b import JUNK, switch_over
-from qmx_library.port import LibraryRefused
 
 LIST: Final = "migration/old-layout-list.json"
 REPORT: Final = "migration/bring-in-report.json"
@@ -69,9 +76,27 @@ HOST_LOCK: Final = "engine.lock"
 LEFT_OUT: Final = {
     HOST_LOCK: "the old QMX's lock file; QMX makes a new one",
     "control-process.json": "the old QMX's record of its running process; QMX makes a new one",
+    LABEL: "the old folder's own label; the new folder has its own",
+    f"{LABEL}.new": "a label the old QMX was still writing; the new folder has its own",
 }
 """Files at the old folder's top that are not copied, and why. The new folder's lock is held by the
-bring-in itself, so the old one cannot be copied over it."""
+bring-in itself, so the old one cannot be copied over it. A label inside `data/` would make every
+store's own folder lookup (`folder_of`) stop there and find no QMX folder, so no upgrade could
+take its copy first."""
+OPENERS: Final[Mapping[str, Callable[[sqlite3.Connection], object]]] = {
+    "engine": migrate,
+    "inbox": lambda db: open_sqlite(db, "inbox", ((INBOX, INCIDENTS, APP_INCIDENTS),)),
+    "control": lambda db: open_sqlite(db, "control", (CONTROL_SCHEMA,)),
+    "runs_index": lambda db: open_sqlite(db, "runs_index", (RUNS_SCHEMA,)),
+    "apps": lambda db: open_sqlite(db, "apps", (APPS_SCHEMA,)),
+    "portfolio": lambda db: open_sqlite(db, "portfolio", (PORTFOLIO_SCHEMA,)),
+}
+"""Each SQLite store's own versions gate, with the steps its opener passes, so the bring-in's last
+check opens a store exactly as the host will: an older store is copied into `backups/` and moved
+forward, and one that would refuse fails the bring-in by name."""
+PRE: Final = "migration/pre"
+"""The switch's frozen copy. One copied from the old folder is an earlier switch's that did not
+finish, older than its `library.db`, so it is set aside before the switch freezes a fresh one."""
 SWITCHED: Final = frozenset({"library.db", "artifacts.db", "artifacts"})
 """What the switch copies again into `migration/pre/` and imports into `library/`, so the room it
 needs is counted twice."""
@@ -237,7 +262,7 @@ def bring_in(
     folder whose bring-in finished returns that report and copies nothing. `lock` is the per-user
     file that keeps two first starts from running at once.
     """
-    with _held(lock, "another first start is running on this PC; wait for it to end"):
+    with _held(lock, "another first start is running on this PC; wait for it to end", removed=True):
         return _bring_in(old, folder, place_refusal, copy)
 
 
@@ -248,6 +273,12 @@ def _bring_in(
     real_old = old.resolve()
     done = _finished(folder)
     if done is not None:
+        brought = Path(str(done.facts.get("old_is") or done.facts.get("old")))
+        if brought.resolve() != real_old:
+            raise Refused(
+                f"{folder} already holds the old data brought in from {done.facts.get('old')}, "
+                f"not {old}; bring {old} into another new folder"
+            )
         return done
     refusal = old_refusal(real_old) or _running(real_old) or place_refusal(folder)
     real_folder = folder.resolve()
@@ -292,7 +323,7 @@ def _bring_in(
         _write(unfinished, "it stopped while copying")
         try:
             why = _carry(real_old, layout, facts, copy, unfinished)
-        except (OSError, sqlite3.Error, LibraryRefused, ValueError, KeyError) as failed:
+        except Exception as failed:  # every failure ends as an unfinished report, never a traceback
             why = f"it stopped with an error: {_reason(failed)}"
         facts["seconds"] = round(time.monotonic() - started, 3)
         facts["finished"] = why is None
@@ -345,22 +376,51 @@ def _carry(
             return f"the copy of {entry.path} does not match your old folder"
     _write(unfinished, "it stopped while moving your old Library into the new one")
     facts["library"] = None
+    facts["set_aside"] = None
     if (layout.data / OLD_LIBRARY).is_file():
+        stale = layout.data / PRE
+        if stale.exists():
+            kept = stale.with_name(f"pre-from-the-old-folder-{datetime.now(UTC):%Y%m%dT%H%M%SZ}")
+            stale.rename(kept)
+            facts["set_aside"] = kept.relative_to(layout.data).as_posix()
         why = _switch(layout, facts)
         if why is not None:
             return why
+    _write(unfinished, "it stopped while opening the new folder's stores")
+    why = _opens(layout)
+    if why is not None:
+        return why
     facts["stores"] = [verdict.line for verdict in check_open(layout).verdicts]
     return None
 
 
+def _opens(layout: Layout) -> str | None:
+    """Open every SQLite store of the new folder the way its opener does when a host starts:
+    found from its own file through `folder_of`, then through its versions gate. Returns why one
+    would not open, by name, or None."""
+    for store in STORES.values():
+        path = layout.data / store.path
+        if store.kind != "sqlite" or not path.is_file():
+            continue
+        found = folder_of(path)
+        if found is None or found.root != layout.root:
+            return (
+                f"the {store.words} at {path} does not sit in the QMX folder {layout.root} as "
+                "QMX finds it, so it could not be upgraded"
+            )
+        opener = OPENERS.get(store.name)
+        if opener is None:
+            continue
+        try:
+            with closing(sqlite3.connect(path, isolation_level=None, timeout=30)) as db:
+                opener(db)
+        except StoreRefused as refused:
+            return f"the {store.words} would not open in the new folder: {refused}"
+    return None
+
+
 def _switch(layout: Layout, facts: dict[str, object]) -> str | None:
-    """The built switch on the copy only, with each copied Library file's own log folded in
-    first, so the read-only file it retires holds every row."""
-    for name in ("library.db", "artifacts.db"):
-        copied = layout.data / name
-        if copied.is_file():
-            with closing(sqlite3.connect(copied)) as db:
-                db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    """The built switch on the copy only."""
     switched = switch_over(layout.data, redactor=redact)
     facts["library"] = {
         "report": switched.report(),
@@ -497,21 +557,46 @@ def _finished(folder: Path) -> Report | None:
 
 
 @contextmanager
-def _held(path: Path | None, busy: str) -> Generator[None]:
+def _held(path: Path | None, busy: str, *, removed: bool = False) -> Generator[None]:
     """Hold an OS lock on `path` for the block; refused with `busy` while another process holds
-    it. The OS lets go when the process ends, so a stopped first start never leaves it held."""
+    it. The OS lets go when the process ends, so a stopped first start never leaves it held.
+    `removed` takes the file (and its folder, when that is left empty) away afterwards, so
+    nothing but the pointer stays beside the pointer (ruling 143). A holder checks that its file
+    is still the one at `path`, because a file removed under a waiting process is not a lock."""
     if path is None:
         yield
         return
+    made = not path.parent.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
-    handle = path.open("a+b")
+    handle = _locked(path, busy)
     try:
+        yield
+    finally:
+        if removed and os.name != "nt":
+            path.unlink(missing_ok=True)
+        handle.close()
+        if removed and os.name == "nt":
+            with suppress(OSError):
+                path.unlink(missing_ok=True)
+        if removed and made:
+            with suppress(OSError):
+                path.parent.rmdir()
+
+
+def _locked(path: Path, busy: str) -> IO[bytes]:
+    while True:
+        handle = path.open("a+b")
         try:
             _lock(handle)
         except OSError:
+            handle.close()
             raise Refused(busy) from None
-        yield
-    finally:
+        try:
+            same = os.path.samestat(os.fstat(handle.fileno()), os.stat(path))
+        except OSError:
+            same = False
+        if same:
+            return handle
         handle.close()
 
 
@@ -594,6 +679,12 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
             lines.append(
                 f"  The old Library files ({', '.join(retired)}) now sit read-only in "
                 f"{Path(folder) / 'data' / 'migration' / 'retired'}."
+            )
+        if facts.get("set_aside"):
+            lines.append(
+                "  Your old folder held the frozen copy of an earlier move of the Library that "
+                f"did not finish. It is kept as {Path(folder) / 'data' / str(facts['set_aside'])}, "
+                "and the Library was frozen afresh from library.db, so no item is left out."
             )
     left: list[str] = []
     if junk:

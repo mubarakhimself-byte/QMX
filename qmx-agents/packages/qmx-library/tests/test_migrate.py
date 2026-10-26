@@ -4,6 +4,7 @@ collision stop, a rerun that writes nothing, and the switch-over that retires th
 from __future__ import annotations
 
 import json
+import shutil
 import sqlite3
 import uuid
 from collections.abc import Sequence
@@ -364,3 +365,34 @@ def test_the_step_0_copy_is_read_not_the_live_library(tmp_path: Path) -> None:
 
     assert done.objects == 7
     assert (pre(tmp_path) / "library.db").exists()
+
+
+def test_the_retired_library_db_keeps_rows_that_were_only_in_its_wal(tmp_path: Path) -> None:
+    live = tmp_path / "live"
+    saved = library_b(live)
+    home = tmp_path / "home"
+    home.mkdir()
+    shutil.copytree(live / "artifacts", home / "artifacts")
+    extra = dict(saved["article"])
+    extra["id"] = extra["root_id"] = str(uuid.uuid4())
+    with closing(sqlite3.connect(live / "library.db")) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA wal_autocheckpoint=0")
+        with db:
+            db.execute(
+                "INSERT INTO items VALUES(?,?,?,?,?,?)",
+                (extra["id"], json.dumps(extra), extra["id"], 1, "", None),
+            )
+        for name in ("library.db", "library.db-wal"):
+            shutil.copyfile(live / name, home / name)
+
+    switched = switch_over(home, redactor=redact)
+
+    retired = home / "migration" / "retired" / "library.db"
+    uri = f"{retired.resolve().as_uri()}?mode=ro&immutable=1"
+    with closing(sqlite3.connect(uri, uri=True)) as db:
+        (rows,) = db.execute("SELECT count(*) FROM items").fetchone()
+    assert switched.ok, switched.verification.render()
+    assert rows == 8, "the seven rows of the file and the one only its -wal held"
+    assert not (home / "library.db-wal").exists()
+    assert not (home / "migration" / "retired" / "library.db-wal").exists()

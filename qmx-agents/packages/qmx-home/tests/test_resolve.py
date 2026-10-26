@@ -136,7 +136,7 @@ def test_create_makes_exactly_the_label_and_the_five_parts(profile: Path, tmp_pa
     assert Label.parse(made.label.read_text(encoding="utf-8")) == label
 
 
-def test_a_flat_home_is_refused_with_the_layout_command_and_left_alone(
+def test_a_flat_home_is_refused_with_the_first_start_and_left_alone(
     profile: Path, tmp_path: Path
 ) -> None:
     home = folder(tmp_path / "flat-home", labelled=False)
@@ -146,8 +146,10 @@ def test_a_flat_home_is_refused_with_the_layout_command_and_left_alone(
         resolve(home, create=True, drives=[])
 
     assert str(refused.value) == (
-        f"{home} is a QMX home in the old flat layout: move it into the folder tree with "
-        f"python -m qmx_home layout {home}"
+        f"{home} holds QMX data in the old flat layout. QMX does not open it and never changes "
+        "it. On This PC, bring it into a new QMX folder with the first start: python -m qmx_host "
+        f"bring-in --home <new QMX folder> --old {home}. A server's folder is moved into the "
+        "tree by qmx-recover repair"
     )
     assert tree(home) == ["control.db"]
 

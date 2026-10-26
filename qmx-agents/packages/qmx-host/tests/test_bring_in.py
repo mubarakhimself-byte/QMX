@@ -21,8 +21,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from qmx_control.library import UNFINISHED, old_library
-from qmx_home import pointer_file
+from qmx_control.service import ControlService
+from qmx_engine.ledger.migrations import STEPS
+from qmx_engine.ledger.store import Ledger
+from qmx_home import FLAT, LABEL, Label, pointer_file
 from qmx_library.migrate.from_library_b import JUNK
+from qmx_library.migrate.snapshot import snapshot as freeze
 
 from qmx_host.__main__ import main
 from qmx_host.bring_in import Refused, bring_in, copy_file
@@ -59,14 +63,24 @@ def items(db: sqlite3.Connection, home: Path, rows: list[tuple[str, str, str]]) 
 
 
 def old_home(at: Path, scratch: Path) -> Path:
-    """A flat home in the old layout: the stores a PC host wrote, `library.db` with rows still in
+    """A flat home in the old layout, labelled format 1 the way LF1's `--create` labelled one: the
+    control store and run index from the control service's own openers, a run ledger at schema
+    version 3 (the parent's own steps 1 to 3) with one event, `library.db` with rows still in
     its `-wal` (taken while a connection held them), the test junk, a vault key, the host log,
     the old lock, and the relayed home's junction to the chats."""
     (at / "artifacts").mkdir(parents=True)
+    (at / LABEL).write_text(Label.mint(FLAT).dump(), encoding="utf-8")
     (at / ".qmx").mkdir()
     (at / ".qmx" / "vault.key").write_bytes(VAULT_KEY)
-    (at / "control.db").write_bytes(b"control store bytes")
-    (at / "runs.db").write_bytes(b"run index bytes")
+    ControlService(at, secret_getter=lambda _s, _u: None).close()
+    (at / "engine").mkdir()
+    with closing(sqlite3.connect(at / "engine" / "engine.sqlite", isolation_level=None)) as db:
+        for statement in (*STEPS[0], *STEPS[1], *STEPS[2]):
+            db.execute(statement)
+        db.execute("INSERT INTO meta VALUES ('schema_version', '3')")
+        db.execute(
+            "INSERT INTO events VALUES ('run-1', 1, '2026-10-01T00:00:00Z', 'run_created', '{}')"
+        )
     (at / "control.log").write_text("host started\n", encoding="utf-8")
     (at / "engine.lock").write_bytes(b"")
     (at / "claude" / "projects" / "p").mkdir(parents=True)
@@ -157,7 +171,8 @@ def test_the_old_folder_is_copied_switched_and_left_exactly_as_it_was(pc: Path) 
     assert snapshot(old) == before, "not one byte, time or name of the old folder changed"
     assert (new / "keys" / "vault.key").read_bytes() == VAULT_KEY
     assert (new / "logs" / "host.log").read_text(encoding="utf-8") == "host started\n"
-    assert (new / "data" / "control.db").read_bytes() == b"control store bytes"
+    assert not (new / "data" / LABEL).exists(), "the old label never lands inside data/"
+    assert Label.parse((new / LABEL).read_text(encoding="utf-8")).format_version == 2
     assert (new / "data" / "claude" / "projects" / "p" / "chat.jsonl").is_file()
     assert (new / "data" / "empty-folder").is_dir()
     assert not (new / "data" / "claude-relayed" / "projects").exists(), "a link is never copied"
@@ -179,9 +194,37 @@ def test_the_old_folder_is_copied_switched_and_left_exactly_as_it_was(pc: Path) 
     assert (new / "data" / "migration" / "bring-in-report.txt").read_text(
         encoding="utf-8"
     ) == report.text
+    assert "  qmx-home.toml: the old folder's own label; the new folder has its own." in (
+        report.lines
+    )
     pointer = pointer_file()
     assert pointer is not None
     assert f"home = {json.dumps(str(new))}" in pointer.read_text(encoding="utf-8")
+    assert sorted(p.name for p in pointer.parent.iterdir()) == ["home.toml"]
+    (copy,) = (new / "backups").glob("pre-engine-3-4-*")
+    assert (copy / "data" / "engine" / "engine.sqlite").is_file()
+    with Ledger.open(new / "data") as ledger:
+        assert ledger.applied == []
+    uri = f"{(new / 'data' / 'engine' / 'engine.sqlite').as_uri()}?mode=ro"
+    with closing(sqlite3.connect(uri, uri=True)) as db:
+        marks = db.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+        events = db.execute("SELECT run_id FROM events").fetchall()
+    assert (marks, events) == (("4",), [("run-1",)])
+
+
+def test_a_store_the_new_folder_would_refuse_fails_the_bring_in_by_name(pc: Path) -> None:
+    old = old_home(pc / ".qmx", pc)
+    with closing(sqlite3.connect(old / "control.db", isolation_level=None)) as db:
+        db.execute("PRAGMA user_version = 9")
+        db.execute("UPDATE qmx_meta SET value = '9' WHERE key = 'min_reader'")
+
+    report = bring_in(old, pc / "QMX", place_refusal=places(pc).refusal)
+
+    assert not report.finished
+    assert str(report.facts["why"]).startswith(
+        "the control store would not open in the new folder: "
+    )
+    assert (pc / "QMX" / "data" / UNFINISHED).is_file()
 
 
 def test_a_rerun_after_a_finished_bring_in_returns_its_report_and_copies_nothing(pc: Path) -> None:
@@ -392,3 +435,60 @@ def test_an_old_folder_that_is_a_link_is_read_through_it_and_said_so(pc: Path) -
     assert report.finished, report.text
     assert report.lines[1] == f"Your old folder {old} is a link; its files were read from {real}."
     assert old.is_junction() or old.is_symlink()
+
+
+def test_a_rerun_naming_another_old_folder_is_refused_not_answered_with_the_first_report(
+    pc: Path,
+) -> None:
+    first = old_home(pc / "first" / ".qmx", pc / "first")
+    other = old_home(pc / "other" / ".qmx", pc / "other")
+    assert bring_in(first, pc / "QMX", place_refusal=places(pc).refusal).finished
+
+    with pytest.raises(Refused) as refused:
+        bring_in(other, pc / "QMX", place_refusal=places(pc).refusal)
+
+    assert str(refused.value) == (
+        f"{pc / 'QMX'} already holds the old data brought in from {first}, not {other}; bring "
+        f"{other} into another new folder"
+    )
+
+
+def test_a_stale_frozen_copy_in_the_old_folder_hides_no_row(pc: Path) -> None:
+    old = old_home(pc / ".qmx", pc)
+    earlier = pc / "earlier"
+    (earlier / "artifacts").mkdir(parents=True)
+    with (
+        closing(sqlite3.connect(old / "library.db")) as source,
+        closing(sqlite3.connect(earlier / "library.db")) as kept,
+    ):
+        source.backup(kept)
+        with kept:
+            kept.execute("DELETE FROM items WHERE json_extract(data, '$.kind') = 'backtest'")
+    freeze(earlier)
+    shutil.copytree(earlier / "migration", old / "migration")
+
+    report = bring_in(old, pc / "QMX", place_refusal=places(pc).refusal)
+
+    assert report.finished, report.text
+    library = report.facts["library"]
+    assert isinstance(library, dict)
+    assert library["kinds"] == {"article": 1, "backtest": 2}
+    assert str(report.facts["set_aside"]).startswith("migration/pre-from-the-old-folder-")
+    assert any(line.startswith("  Your old folder held the frozen copy") for line in report.lines)
+
+
+def test_any_error_ends_with_an_unfinished_report_naming_it(pc: Path) -> None:
+    old = old_home(pc / ".qmx", pc)
+
+    def failing(source: Path, target: Path) -> str:
+        raise RuntimeError("the copier broke")
+
+    report = bring_in_old(old, pc / "QMX", places(pc), copy=failing)
+
+    assert not report.finished
+    assert report.facts["why"] == "it stopped with an error: the copier broke"
+    assert report.lines[0] == (
+        "Bringing your old QMX data in did not finish: it stopped with an error: the copier broke."
+    )
+    assert (pc / "QMX" / "data" / UNFINISHED).read_text(encoding="utf-8") == report.facts["why"]
+    assert not (pc / "profile" / "Roaming" / "QMX").exists(), "no lock is left in AppData"

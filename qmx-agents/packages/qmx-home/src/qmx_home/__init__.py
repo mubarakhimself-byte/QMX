@@ -331,12 +331,22 @@ def _opened(root: Path) -> Layout:
     if refused is not None:
         raise NoQmxFolder(refused)
     if label is None or label.format_version == FLAT:
-        raise NoQmxFolder(
-            f"{root} is a QMX home in the old flat layout: move it into the folder tree with "
-            f"python -m qmx_home layout {root}"
-        )
+        raise NoQmxFolder(old_flat(root))
     raise NoQmxFolder(
         f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read"
+    )
+
+
+def old_flat(root: Path) -> str:
+    """What every command says of an old flat home. On This PC that is his old data, which only
+    the first start's bring-in reads, never changing it; the layout step would rearrange it in
+    place, so it is not offered. A server's own setup, update and repair run the layout step by
+    path."""
+    return (
+        f"{root} holds QMX data in the old flat layout. QMX does not open it and never changes "
+        "it. On This PC, bring it into a new QMX folder with the first start: python -m qmx_host "
+        f"bring-in --home <new QMX folder> --old {root}. A server's folder is moved into the "
+        "tree by qmx-recover repair"
     )
 
 

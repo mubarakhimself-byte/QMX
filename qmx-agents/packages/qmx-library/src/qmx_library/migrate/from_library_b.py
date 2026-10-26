@@ -228,7 +228,8 @@ class Switched:
 
 
 def retire(home: Path) -> tuple[str, ...]:
-    """Step 6: `library.db`, `artifacts.db` and `artifacts/` to `migration/retired/`, read-only."""
+    """Step 6: `library.db`, `artifacts.db` and `artifacts/` to `migration/retired/`, read-only.
+    Each file's `-wal` is folded into it first, so the retired file alone holds every row."""
     folder = home / RETIRED
     folder.mkdir(parents=True, exist_ok=True)
     moved: list[str] = []
@@ -239,6 +240,10 @@ def retire(home: Path) -> tuple[str, ...]:
         target = folder / name
         if target.exists():
             raise LibraryRefused("collision", f"{target} already holds the retired {name}")
+        with closing(sqlite3.connect(source)) as db:
+            (busy, _, _) = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+        if busy:
+            raise LibraryRefused("storage_failure", f"{source}'s log could not be folded in")
         for suffix in ("-wal", "-shm"):
             (home / f"{name}{suffix}").unlink(missing_ok=True)
         shutil.move(str(source), str(target))
