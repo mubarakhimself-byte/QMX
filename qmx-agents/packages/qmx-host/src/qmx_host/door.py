@@ -30,6 +30,11 @@ and the verified pass is left in the request's state under `RUN_PASS`, so the re
 `data_scope` from the pass and never from the body. Any other route, and any pass that fails a
 check, answers 401 here. The principal is `workflow:<run_id>`.
 
+A host pass (engine AD-67). Another host of this home calls the cTrader begin and code routes
+with a host pass and no bearer. The door restamps those two routes with the local bearer and
+nothing else; each route verifies the pass itself and refuses without one. The principal is
+`user`, as for every route no chat owns.
+
 The template install door (`templates_router`) lives here too: the host mounts it behind the same
 bearer as its other routers, and the engine's CLI posts to it whenever the home has a host.
 """
@@ -56,12 +61,15 @@ from qmx_control.service import Observer, observers
 from qmx_engine.__main__ import INSTALL_ROUTE
 from qmx_engine.control_door import FAILURES, PRINCIPAL, EngineDoor, control_error
 from qmx_engine.service.context import Caller
+from qmx_engine.service.forward import PASS_HEADER
 from qmx_engine.templates.catalog import CATALOG, find
 from qmx_engine.templates.install import install
 from qmx_router.passes import PREFIX, Ask, Pass, PassAuthority
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Match
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from qmx_host.venue_session import HOST_PASS_ROUTES
 
 USER: Final = Caller("user")
 MCP_CLIENT: Final = Caller("agent", "mcp")
@@ -145,6 +153,23 @@ def _pass_restamped(scope: Scope, minted: Pass, bearer: str) -> Scope:
     headers.append((b"authorization", f"Bearer {bearer}".encode("latin-1")))
     state = {**scope.get("state", {}), RUN_PASS: minted}
     return {**scope, "headers": headers, "state": state}
+
+
+def host_pass_call(scope: Scope) -> bool:
+    """Another host of this home calling a venue route with a host pass. The route verifies the
+    pass itself; the door lets it past the local bearer, which that host does not hold."""
+    route = (str(scope["method"]).upper(), str(scope["path"]))
+    return route in HOST_PASS_ROUTES and PASS_HEADER.lower().encode("latin-1") in dict(
+        scope["headers"]
+    )
+
+
+def _with_bearer(scope: Scope, bearer: str) -> Scope:
+    headers = [
+        (name, value) for name, value in scope["headers"] if name.lower() != b"authorization"
+    ]
+    headers.append((b"authorization", f"Bearer {bearer}".encode("latin-1")))
+    return {**scope, "headers": headers}
 
 
 async def _pass_refused(scope: Scope, receive: Receive, send: Send, reason: str) -> None:
@@ -237,6 +262,8 @@ class PrincipalDoor:
             finally:
                 PRINCIPAL.reset(token_set)
             return
+        if host_pass_call(scope):
+            scope = _with_bearer(scope, self.bearer or _local_bearer())
         observer = presented_observer(scope)
         if observer is not None:
             if not observer_allows(scope):
