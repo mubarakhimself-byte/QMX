@@ -64,6 +64,7 @@ type SettingsSection = Literal[
     "roles",
     "rules",
     "observers",
+    "data",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -208,6 +209,37 @@ def _rule_lists(values: Document) -> Document:
             kept.append({**table, "pattern": pattern.strip(), "source": source})
         stored[name] = kept
     return stored
+
+
+HOLDOUT_MONTH: Final = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
+
+
+def _data_settings(values: Document) -> Document:
+    """`[data]`: the market-data door's settings. The holdout is his choice per study and off
+    by default (ruling 137); when on, `holdout_boundary` is the month it starts and
+    `holdout_months` the window a new study takes. The door's other keys pass through."""
+    holdout = values.get("holdout", False)
+    if not isinstance(holdout, bool):
+        raise ControlError("invalid_settings", "data.holdout is true or false.")
+    boundary = values.get("holdout_boundary")
+    if boundary is not None and not (
+        isinstance(boundary, str) and HOLDOUT_MONTH.fullmatch(boundary)
+    ):
+        raise ControlError(
+            "invalid_settings",
+            f"data.holdout_boundary is a month written YYYY-MM, such as 2025-01; got {boundary!r}.",
+        )
+    months = values.get("holdout_months", 12)
+    if isinstance(months, bool) or not isinstance(months, int) or months < 1:
+        raise ControlError(
+            "invalid_settings", f"data.holdout_months is a whole number, 1 or more; got {months!r}."
+        )
+    if holdout and boundary is None and "seal_boundary_ns" not in values:
+        raise ControlError(
+            "invalid_settings",
+            "data.holdout is on, so it needs holdout_boundary, the month it starts.",
+        )
+    return values
 
 
 def _no_secrets(value: JsonValue) -> None:
@@ -636,6 +668,8 @@ class ControlService:
             values = parser(values, self.settings_get(section))
         if section == "rules":
             values = _rule_lists(values)
+        if section == "data":
+            values = _data_settings(values)
         if section == "remote":
             try:
                 RemoteSettings.model_validate(values)
