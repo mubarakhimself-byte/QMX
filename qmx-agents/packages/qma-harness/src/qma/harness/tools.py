@@ -898,14 +898,19 @@ def _both(paths: list[Path]) -> tuple[str, ...]:
 
 def secret_files(home: QmxHome) -> list[Path]:
     """Files that hold or may hold a login or a key: the plan login in both forms under each
-    QMX Claude home and his `~/.claude`, his `~/.claude.json`, and the QMX home's
-    `settings.toml` and `rclone.conf`."""
+    QMX Claude home and his `~/.claude`, his `~/.claude.json`, the QMX home's `settings.toml`
+    and `rclone.conf`, and the QMX folder's `keys/` with everything in it."""
     personal = Path.home() / ".claude"
     return [
         folder / name
         for folder in (home.plan_dir, home.relayed_dir, personal)
         for name in (".credentials.json", ".claude.json")
-    ] + [Path.home() / ".claude.json", home.root / "settings.toml", home.root / "rclone.conf"]
+    ] + [
+        Path.home() / ".claude.json",
+        home.root / "settings.toml",
+        home.root / "rclone.conf",
+        home.layout.keys,
+    ]
 
 
 STORE_FILES: Final = ("control.db", "portfolio.db", "library.db", "memory.db", "runs.db")

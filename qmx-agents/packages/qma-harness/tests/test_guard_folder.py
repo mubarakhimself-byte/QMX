@@ -39,7 +39,7 @@ def shell(rules: GuardRules, cwd: Path, command: str) -> Pass | Deny:
 
 @pytest.mark.parametrize(
     "inside",
-    ["keys/vault.key", "cache/run/procs/chat-1.json", "cache/plugins/research/skill.md"],
+    ["qmx-home.toml", "cache/run/procs/chat-1.json", "cache/plugins/research/skill.md"],
 )
 def test_a_shell_write_beside_the_home_is_refused(
     folder: tuple[Layout, GuardRules], inside: str
@@ -55,7 +55,7 @@ def test_a_shell_write_beside_the_home_is_refused(
 
 
 @pytest.mark.parametrize(
-    "inside", ["keys/control-token", "cache/run/state/gpt-probe.json", "logs/host.log"]
+    "inside", ["qmx-home.toml", "cache/run/state/gpt-probe.json", "logs/host.log"]
 )
 def test_a_file_tool_write_beside_the_home_is_refused(
     folder: tuple[Layout, GuardRules], inside: str
@@ -93,3 +93,39 @@ def test_the_workspaces_and_the_run_zones_stay_writable(
     )
 
     assert isinstance(verdict, Pass)
+
+
+KEY_FILE = "agents cannot read or write a login file or a key file ("
+
+
+@pytest.mark.parametrize(
+    ("tool", "given"),
+    [
+        ("Read", {"file_path": "keys/vault.key"}),
+        ("Write", {"file_path": "keys/control-token", "content": "x"}),
+        ("Bash", {"command": "cat '{root}/keys/vault.key'"}),
+    ],
+    ids=["read", "write", "shell"],
+)
+def test_anything_in_keys_is_a_key_file_to_every_tool(
+    folder: tuple[Layout, GuardRules], tool: str, given: dict[str, str]
+) -> None:
+    layout, rules = folder
+    absolute = {
+        name: str(layout.root / value)
+        if name == "file_path"
+        else value.replace("{root}", layout.root.as_posix())
+        for name, value in given.items()
+    }
+
+    verdict = guard(
+        tool,
+        absolute,
+        rules,
+        cwd=str(layout.home / "workspaces"),
+        agent_id=None,
+        permission_mode="default",
+    )
+
+    assert isinstance(verdict, Deny)
+    assert verdict.reason.startswith(f"guard: {KEY_FILE}")

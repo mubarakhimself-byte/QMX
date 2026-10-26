@@ -363,7 +363,7 @@ LAID_OUT = {
 SERVER_TOOLS = {
     "systemctl": """
 echo "systemctl $*" >> "$PWD/calls.log"
-[[ "$1" == is-active ]] && echo active
+[[ "$1" == is-active ]] && { cat "$PWD/host-state" 2>/dev/null || echo active; }
 exit 0
 """,
     "runuser": 'while [[ "$1" != -- ]]; do shift; done; shift; exec "$@"',
@@ -415,6 +415,32 @@ def test_the_layout_step_makes_the_servers_folder_the_tree_and_starts_a_running_
         "systemctl is-active qmx-host",
         "systemctl stop qmx-host",
         "systemctl start qmx-host",
+    ]
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("state", "started"), [("failed", True), ("activating", True), ("inactive", False)]
+)
+def test_after_an_update_a_host_that_refused_the_flat_folder_runs_on_the_laid_out_one(
+    tmp_path: Path, state: str, started: bool
+) -> None:
+    folder = tmp_path / "srv" / ".qmx"
+    for name, text in FLAT_SERVER_HOME.items():
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_text(text, encoding="utf-8")
+    (tmp_path / "host-state").write_text(f"{state}\n", encoding="utf-8")
+    python = f'exec "{posix(Path(sys.executable))}" "$@"'
+    stubs = {**SERVER_TOOLS, "../venv/bin/python": python}
+
+    done = run_as_root(tmp_path, layout_script(posix(folder), posix(tmp_path / "venv")), stubs)
+
+    assert done.returncode == 0, done.stderr
+    assert resolve(folder).home == folder.resolve() / "data"
+    assert (tmp_path / "calls.log").read_text(encoding="utf-8").splitlines() == [
+        "systemctl is-active qmx-host",
+        "systemctl stop qmx-host",
+        *(["systemctl start qmx-host"] if started else []),
     ]
 
 

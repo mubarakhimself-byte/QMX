@@ -436,7 +436,11 @@ def _forms(raw: str, *, cwd: str, rules: GuardRules, folded: _Folded) -> tuple[s
 
 
 def _secret(path: str, folded: _Folded) -> bool:
-    return path in folded.secrets or posixpath.basename(path).casefold() == LOGIN_NAME
+    """A secret file, a file inside a secret folder such as `keys/`, or a login file anywhere."""
+    return (
+        any(within(path, secret) for secret in folded.secrets)
+        or posixpath.basename(path).casefold() == LOGIN_NAME
+    )
 
 
 def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:

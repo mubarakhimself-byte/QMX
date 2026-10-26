@@ -229,12 +229,21 @@ def test_a_work_folder_outside_a_qmx_folder_leads_to_no_home(tmp_path: Path) -> 
     with pytest.raises(NoQmxFolder) as refused:
         home_of(zones_root(stray) / "run-1" / "work")
 
-    assert str(refused.value).startswith(f"{tmp_path.resolve()} is a QMX home in the old flat")
+    assert str(refused.value).startswith(f"{tmp_path.resolve()} is not a QMX folder: ")
+
+
+def test_a_work_folder_too_shallow_to_sit_in_a_zone_is_refused_by_name() -> None:
+    shallow = Path("/work")
+
+    with pytest.raises(NoQmxFolder) as refused:
+        home_of(shallow)
+
+    assert str(refused.value) == f"{shallow} is not a run's work folder inside a QMX folder"
 
 
 PRINT_CACHES = """
 import json, os
-names = ("HF_HOME", "TORCH_HOME", "XDG_CACHE_HOME")
+names = ("HF_HOME", "TORCH_HOME", "XDG_CACHE_HOME", "PIP_CACHE_DIR")
 print(json.dumps({name: os.environ.get(name) for name in names}))
 """
 
@@ -255,6 +264,7 @@ def test_a_script_in_a_qmx_folder_downloads_into_its_cache(tmp_path: Path) -> No
         "HF_HOME": str(models / "huggingface"),
         "TORCH_HOME": str(models / "torch"),
         "XDG_CACHE_HOME": str(models / "xdg"),
+        "PIP_CACHE_DIR": str(models / "pip"),
     }
 
 

@@ -528,9 +528,11 @@ def host_unit_script(role: str = "server") -> str:
 
 def layout_script(folder: str = SERVER_FOLDER, venv: str = SERVER_VENV) -> str:
     """Lay out the server's QMX folder as the tree (design 62 A3, guard 4), with the host
-    stopped, and start the host again only if it was running. qmx-home's layout step labels a
-    fresh folder and makes its five parts, moves a flat home from an earlier setup into the tree,
-    and leaves a tree as it is; the key folders are then made owner-only, whichever it was."""
+    stopped, and start the host again when it was running, or was failing or restarting: a new
+    host refuses a flat folder, so after an update it is down until the folder is laid out. One
+    stopped on purpose stays stopped. qmx-home's layout step labels a fresh folder and makes its
+    five parts, moves a flat home from an earlier setup into the tree, and leaves a tree as it
+    is; the key folders are then made owner-only, whichever it was."""
     unit = HOST_UNIT.removesuffix(".service")
     return (
         "set -eu\n"
@@ -539,7 +541,7 @@ def layout_script(folder: str = SERVER_FOLDER, venv: str = SERVER_VENV) -> str:
         f"install -d -o qmx -g qmx -m 750 {PurePosixPath(folder).parent} {folder}\n"
         f"runuser -u qmx -- {venv}/bin/python -m qmx_home layout {folder}\n"
         f"install -d -o qmx -g qmx -m 700 {folder}/keys {folder}/data/vault\n"
-        f'if [ "$was" = active ]; then systemctl start {unit}; fi\n'
+        f'case "$was" in active | activating | failed) systemctl start {unit} ;; esac\n'
     )
 
 

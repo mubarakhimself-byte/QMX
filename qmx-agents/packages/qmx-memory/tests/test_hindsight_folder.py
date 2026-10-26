@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import BinaryIO
 
 import pytest
 from qmx_home import Layout
@@ -73,3 +74,37 @@ def test_the_index_runs_on_the_folders_database_and_stops_it(
         "server stopped",
         "stopped",
     ]
+
+
+def test_pg0_starts_on_the_folders_database_under_its_own_name_and_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layout = Layout(tmp_path / "QMX")
+    config = HindsightConfig(layout)
+    package = tmp_path / "site" / "pg0"
+    monkeypatch.setitem(sys.modules, "pg0", SimpleNamespace(__file__=str(package / "__init__.py")))
+    calls: list[tuple[list[str], str]] = []
+
+    def call(argv: list[str], *, stdout: BinaryIO, env: dict[str, str], **_: object) -> int:
+        calls.append((argv[1:], env["HOME"]))
+        if argv[1] == "info":
+            stdout.write(b'{"uri": "postgresql://hindsight@127.0.0.1:5433/hindsight"}')
+        return 0
+
+    monkeypatch.setattr(qmx_memory.hindsight.subprocess, "call", call)
+
+    uri = qmx_memory.hindsight.start_database(config)
+
+    database = str(layout.root / "data" / "memory" / "hindsight" / "pg")
+    home = str(layout.root / "cache" / "pg0")
+    name = config.instance
+    assert uri == "postgresql://hindsight@127.0.0.1:5433/hindsight"
+    assert name.startswith("qmx-") and len(name) == len("qmx-") + 12
+    assert calls == [
+        (
+            ["start", "--name", name, "--username", "hindsight", "--password", "hindsight",
+             "--database", "hindsight", "--data-dir", database],
+            home,
+        ),
+        (["info", "--name", name, "-o", "json"], home),
+    ]  # fmt: skip

@@ -111,6 +111,7 @@ def model_caches(zone: RunZone) -> dict[str, str]:
         "HF_HOME": str(models / "huggingface"),
         "TORCH_HOME": str(models / "torch"),
         "XDG_CACHE_HOME": str(models / "xdg"),
+        "PIP_CACHE_DIR": str(models / "pip"),
     }
 
 
