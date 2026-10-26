@@ -286,7 +286,7 @@ Design 62 sections D2, D3 and LF6 (engine AD-72, AD-30). Ruling 140. Real step n
 
 ## The QMX folder's layout (LF2)
 
-Design 62 sections A3 and A5 and LF2, with section L guard 4. Rulings 141 and 143. Real step none. Done when a fresh folder holds exactly the label and the five parts (`data`, `keys`, `backups`, `cache`, `logs`), every file A5 names lands where it says, the work zones and memory's database sit inside the folder, script children's caches go to `cache/models`, and the agent guard protects the whole folder plus `keys/`, `cache/run/` and `cache/plugins/`.
+Design 62 sections A3 and A5 and LF2, with section L guard 4. Rulings 141 and 143. Real step none. Done when a fresh folder holds exactly the label and the five parts (`data`, `keys`, `backups`, `cache`, `logs`), every file A5 names whose readers are in this Files block lands where it says (the rest stay in `data/` under their own names and are listed in `BACKLOG.md` as LF2b, changed 2026-10-26), the work zones and memory's database sit inside the folder, script children's caches go to `cache/models`, and the agent guard protects the whole folder plus `keys/`, `cache/run/` and `cache/plugins/`.
 
 **Depends on.** LF1.
 
