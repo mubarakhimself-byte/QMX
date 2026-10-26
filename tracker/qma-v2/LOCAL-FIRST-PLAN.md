@@ -16,7 +16,7 @@ Path shorthands are those of `DATA-PLAN.md` "How to read this". `QA/` is `qmx-ag
 
 The store is `D:/QMX-worktrees/qma-ship/wrapup/` (the same one the wrap-up used), with `decisions.md`, `BRIEF-BUILDER.md`, `RESUME.md`, `BACKLOG.md`, `lows.md`, `ledger.tsv`, `dispatch/`, `review/` and `evidence/`.
 
-The program follows `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/autopilot-stack.md` with the same overrides as `WRAPUP-PLAN.md`. Builders are Claude Opus 5.5 (`poteto-agent`, `model: opus`), at most two at once, never two on shared files, never two agents on one job. The coordinator reviews every diff itself, runs the full suites and `just ci` in the background, runs `bmad-review-edge-case-hunter` itself on any PR that touches data, sync, the vault or connections, and allows one fix round. Low findings go to `lows.md`; anything new goes to `BACKLOG.md`. See `playbooks/` in the poteto-mode skill for the rest.
+The program follows `C:/Users/Mubarak/.claude/skills/poteto-mode/playbooks/autopilot-stack.md` with the same overrides as `WRAPUP-PLAN.md`. Builders are Claude Opus 5.5 (`poteto-agent`, `model: opus`), at most two at once, never two on shared files, never two agents on one job. A fresh Opus reviewer agent reviews every diff and runs `bmad-review-edge-case-hunter` on any PR that touches data, sync, the vault or connections; the coordinator runs the full suites, `just ci` and the lanes in the background and allows one fix round. Low findings go to `lows.md`; anything new goes to `BACKLOG.md`. See `playbooks/` in the poteto-mode skill for the rest.
 
 Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -56,7 +56,7 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 ### Verdict and merge, for every PR (append to the stack, merge on his go)
 
-- [ ] At the code-ready head the coordinator reads the full diff, runs the touched suites with `-n 2` and lanes 1 to 4 in the background, and writes `review/<id>-check-<head8>.md`, first line CLEAN or NOT CLEAN.
+- [ ] At the code-ready head the coordinator runs the touched suites with `-n 2` and lanes 1 to 4 in the background and saves their logs. A fresh Opus reviewer agent (one per PR, `model: opus`, told not to spawn sub-agents) reads the PR section, the full diff, the edge-case lens where the PR touches data, sync, the vault or connections, and those logs, and writes `review/<id>-check-<head8>.md`, first line CLEAN or NOT CLEAN. The coordinator does not review diffs (his word, 2026-10-26).
 - [ ] Blockers go back to the same builder for one fix round. Low findings go to `lows.md`.
 - [ ] `ledger.tsv` gets head, parent and patch-id.
 - [ ] `just ci` runs at the stack tip once both chains meet and once at the end, with `D:/Tools/rclone` on `PATH`, under `D:/QMX-worktrees/.ci-lock`.
