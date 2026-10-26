@@ -49,9 +49,13 @@ BY: Final[dict[str, str]] = {
 
 
 def ran_on(events: list[Event]) -> JsonObject:
-    """Where the run ran (AD-72): the place record of its first attempt, or This PC by default
-    when no attempt started, and the run card's line for it."""
-    first = next((e.data for e in events if e.kind == "node_started" and "place" in e.data), None)
+    """Where the run ran (AD-72), and the run card's line for it: the record of its first attempt
+    placed on a place it named, so a trigger node or any other node on This PC by default never
+    hides work that ran on a named place; else its first attempt's; else This PC by default when no
+    attempt started."""
+    started = [e.data for e in events if e.kind == "node_started" and "place" in e.data]
+    named = (data for data in started if data.get("placed_by") != "default")
+    first = next(named, started[0] if started else None)
     record: JsonObject = (
         {key: first.get(key) for key in PLACE_FIELDS}
         if first is not None

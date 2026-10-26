@@ -27,11 +27,15 @@ SERIES = "dukascopy/EURUSD/tick/-"
 
 
 class Placements(LocalWorker):
-    """The local table, recording the placement each `land` attempt arrived with."""
+    """The local table standing in for a worker that routes every place, recording the placement
+    each `land` attempt arrived with."""
 
     def __init__(self) -> None:
         super().__init__()
         self.seen: list[str] = []
+
+    def reaches(self, place: str) -> bool:
+        return True
 
     async def run(self, job: NodeJob, emit: Emit) -> NodeResult:
         if job.node_id == "land":

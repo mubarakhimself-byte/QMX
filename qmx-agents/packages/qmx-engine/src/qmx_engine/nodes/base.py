@@ -23,15 +23,11 @@ type PlacedBy = Literal["default", "chosen", "spilled", "stand_in"]
 places before this one were not ready, or this place stood in for This PC (the stand-in round)."""
 
 
-def where_ran(job: NodeJob, machine: str) -> JsonObject:
-    """What every attempt records of where it ran (AD-72): the place's name then, its stable id,
-    the device it ran on, and why it ran there."""
-    return {
-        "place": job.placement,
-        "place_id": job.place_id or job.placement,
-        "machine": machine,
-        "placed_by": job.placed_by,
-    }
+def where_ran(job: NodeJob, place: str, machine: str) -> JsonObject:
+    """What every attempt records of where it ran (AD-72): `place`, the place that ran it, by its
+    name then; its stable id; the device it ran on; and why it ran there."""
+    stable = job.place_id if place == job.placement and job.place_id else place
+    return {"place": place, "place_id": stable, "machine": machine, "placed_by": job.placed_by}
 
 
 @dataclass(frozen=True, slots=True)

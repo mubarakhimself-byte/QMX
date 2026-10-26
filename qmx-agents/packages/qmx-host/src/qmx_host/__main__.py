@@ -2,8 +2,8 @@
 server] [--place <name>] [--library-root <path>] [--ui-origin <origin>]`, and `start`, `status`
 and `stop` for a host in the background. Without `--home` the QMX folder is found by
 `qmx_home.resolve`, and a missing folder is made only with `--create`. `--place` is the name he gave
-this machine in his place list. A `node` or `server` host with neither it nor `[engine] host_name`
-refuses to start, and This PC is `pc` when it names none.
+a server in his place list, which `qmx node setup` writes into the server's unit. A `node` or
+`server` host with neither it nor `[engine] host_name` refuses to start; This PC is always `pc`.
 
 `server` is the role the server's unit runs: the same node work plus the Library service, because
 on the server the one host process opens the store as its one writer and answers the Library routes

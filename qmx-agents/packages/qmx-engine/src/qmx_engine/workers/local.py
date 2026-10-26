@@ -53,7 +53,7 @@ from qmx_engine.nodes.base import (
     Ok,
     where_ran,
 )
-from qmx_engine.settings import DEFAULTS
+from qmx_engine.settings import DEFAULTS, PC
 from qmx_engine.watchdog import STALLED, STALLED_MESSAGE
 from qmx_engine.workers import effects
 from qmx_engine.workers.zones import Overlay, RunZone, ZoneError, slot_name
@@ -233,6 +233,14 @@ class LocalWorker:
         """Key to the failure a cancelled attempt ends with."""
         self.tables: dict[str, Mapping[str, AnyExecutor]] = {}
         """Run id to the executor of each kind its attempts run on."""
+        self.place = PC
+        """The place this machine is, which every attempt run here records; a host started for
+        a server sets its place name here."""
+
+    def reaches(self, place: str) -> bool:
+        """Whether an attempt placed on `place` can run through this worker: only on this
+        machine's own place."""
+        return place == self.place
 
     def serve(self, run_id: str, executors: Mapping[str, AnyExecutor]) -> None:
         self.tables[run_id] = executors
@@ -295,10 +303,10 @@ class LocalWorker:
             | {
                 "idempotency_key": job.idempotency_key,
                 "effect": effect,
-                "placement": "pc",
+                "placement": self.place,
                 "process": "child" if name in CHILD_PROCESS else "host",
             }
-            | where_ran(job, platform.node()),
+            | where_ran(job, self.place, platform.node()),
         )
         zone = None
         if job.workspace is not None and kind is not None and kind.name in WRITERS:

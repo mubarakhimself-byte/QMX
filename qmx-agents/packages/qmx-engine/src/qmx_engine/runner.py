@@ -213,16 +213,26 @@ class Placed:
     placed_by: PlacedBy
 
 
-def placed(node: Node, home: Path, now: datetime, listed: Mapping[str, str]) -> Placed | str:
+def placed(
+    node: Node,
+    home: Path,
+    now: datetime,
+    listed: Mapping[str, str],
+    reaches: Callable[[str], bool],
+) -> Placed | str:
     """Where the node runs, or the line why it waits `placement` (AD-72). The places it names that
-    are in the place list `listed` (`name -> id`) are read in order against the series its
-    `data_scope` parameter names and each host's partition summary (AD-70). A node that names only
-    This PC runs there by default; on the first place it named it was chosen; on a later one it
-    spilled."""
+    are in the place list `listed` (`name -> id`) and that this engine's worker `reaches` are read
+    in order against the series its `data_scope` parameter names and each host's partition
+    summary (AD-70), so a record never names a place the attempt did not run on. A node that
+    names only This PC runs there by default; on the first place it named it was chosen; on a
+    later one, such as This PC after an unreachable place, it spilled."""
     named = runs_on(node)
-    ready = [name for name in named if name in listed]
+    ready = [name for name in named if name in listed and reaches(name)]
     if not ready:
-        return f"the place '{named[0]}' is not in the place list"
+        first = named[0]
+        if first in listed:
+            return f"the place '{first}' cannot be reached from this machine"
+        return f"the place '{first}' is not in the place list"
     found = node.parameters.get("data_scope")
     wants = [str(item) for item in found] if isinstance(found, list) else []
     where = placement(ready, wants, latest(home) if wants else {}, now)
@@ -1080,7 +1090,8 @@ class Run:
         if gate is not None:
             await gate.wait()
         node, now = self.node(job.node_id), self.engine.wall()
-        where = placed(node, self.engine.home, now, places(self.engine.settings))
+        listed = places(self.engine.settings)
+        where = placed(node, self.engine.home, now, listed, self.engine.worker.reaches)
         intent, claims = intent_key(node), self.engine.claims
         held = bool(
             isinstance(where, Placed)

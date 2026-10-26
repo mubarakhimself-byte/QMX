@@ -325,6 +325,9 @@ class PlacementWorker(LocalWorker):
     def routes(self, placement: str) -> bool:
         return placement in self.remote
 
+    def reaches(self, place: str) -> bool:
+        return self.routes(place) or super().reaches(place)
+
     async def run(self, job: NodeJob, emit: Emit) -> NodeResult:
         if not self.routes(job.placement):
             return await super().run(job, emit)
@@ -349,7 +352,7 @@ class PlacementWorker(LocalWorker):
             "node_started",
             attempt_keys(job)
             | {"placement": job.placement, "idempotency_key": job.idempotency_key}
-            | where_ran(job, machine if isinstance(machine, str) else ""),
+            | where_ran(job, job.placement, machine if isinstance(machine, str) else ""),
         )
         try:
             handle = provider.provision(job.run_id, _as_bundle(bundle, job.placement))

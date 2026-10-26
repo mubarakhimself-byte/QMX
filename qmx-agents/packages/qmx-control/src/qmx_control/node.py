@@ -484,23 +484,29 @@ UNIT_PYTHON: Final = "/srv/qmx/home/.venv/bin/python"
 """The interpreter DR2A's unit names; the setup points it at the environment it syncs."""
 
 
-def host_unit(role: str = "server") -> str:
-    """The unit DR2A ships, with the role the server runs (AD-19, AD-26; DATA-PLAN DR2B).
+def host_unit(role: str = "server", place: str = "") -> str:
+    """The unit DR2A ships, with the role the server runs (AD-19, AD-26; DATA-PLAN DR2B) and,
+    when given, the place name its host runs under (`--place`, engine AD-72).
 
     On the server the one host process opens the store as its writer and answers the Library
     routes, so its role is `server` and its store is the one root `/srv/qmx/library`. The file
     DR2A wrote names `--role node` and a virtual environment nothing installs, so this rewrites
     those two and leaves everything else as it stands, `OOMScoreAdjust` included (P-OOM reads it).
+    A server host with no place name refuses to start, so the unit setup installs always names
+    one; the unit read only for its port need not.
     """
+    if place and not PLACE.fullmatch(place):
+        raise ValueError("a place name is lowercase letters, digits and dashes")
     path = Path(__file__).parents[3] / "qmx-host" / "deploy" / HOST_UNIT
     if not path.is_file():
         raise RuntimeError(f"the host's unit is missing at {path}; install the source tree first")
     text = path.read_text(encoding="utf-8")
     if "--role node" not in text or UNIT_PYTHON not in text:
         raise RuntimeError(f"the host's unit at {path} no longer names --role node or its python")
-    return text.replace("--role node", f"--role {role} --library-root {SERVER_LIBRARY}").replace(
-        UNIT_PYTHON, f"{SERVER_VENV}/bin/python"
-    )
+    named = f" --place {place}" if place else ""
+    return text.replace(
+        "--role node", f"--role {role}{named} --library-root {SERVER_LIBRARY}"
+    ).replace(UNIT_PYTHON, f"{SERVER_VENV}/bin/python")
 
 
 def host_port(unit: str) -> int:
@@ -511,15 +517,19 @@ def host_port(unit: str) -> int:
     return int(found.group(1))
 
 
-def host_unit_script(role: str = "server") -> str:
+def host_unit_script(place: str, role: str = "server") -> str:
     """Install the host: the store root owned by `qmx`, its package in the environment, and its
-    unit, not yet started (the import comes first). Its QMX folder is the layout step's."""
+    unit under the server's place name, not yet started (the import comes first). Its QMX folder
+    is the layout step's. The recovery script's unit copy is this unit, so a repair keeps the
+    name, and an update never rewrites the unit."""
+    if not place:
+        raise ValueError("the host's unit needs the server's place name")
     return (
         "set -eu\n"
         f"install -d -o qmx -g qmx -m 750 {SERVER_LIBRARY}\n"
         "uv sync --project /opt/qmx/qmx-agents --package qmx-host --frozen --no-default-groups\n"
         f"cat > /etc/systemd/system/{HOST_UNIT} <<'QMXUNIT'\n"
-        f"{host_unit(role)}"
+        f"{host_unit(role, place)}"
         "QMXUNIT\n"
         f"install -D -o root -g root -m 644 /etc/systemd/system/{HOST_UNIT} {UNIT_COPY}\n"
         "systemctl daemon-reload\n"
@@ -604,9 +614,15 @@ type Call = Callable[[list[str], str | None], str]
 
 
 def setup_steps(
-    revision: str, *, hindsight: bool = False, hub_port: int = 0, pc_name: str = ""
+    revision: str,
+    *,
+    machine: str,
+    hindsight: bool = False,
+    hub_port: int = 0,
+    pc_name: str = "",
 ) -> list[tuple[str, str]]:
     """The server's half of `qmx node setup`, in order, as `(step, script for sudo bash)`.
+    `machine` is the server's place name, which its host's unit runs under.
 
     The recovery script comes straight after the bootstrap, because it owns the firewall's rules
     and is his way in if a later step fails. The standalone Hub stops before the import because it
@@ -618,7 +634,7 @@ def setup_steps(
         ("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
         ("install the recovery script", recover_script(pc_name)),
         (FIREWALL_STEP, f"set -eu\n{RECOVER} firewall close\n"),
-        ("install the host", host_unit_script()),
+        ("install the host", host_unit_script(machine)),
         (
             "stop and disable the standalone Hub",
             "set -eu\nsystemctl stop qmx-host || true\n"
@@ -639,6 +655,7 @@ def setup(
     host: str,
     home: Path,
     *,
+    machine: str,
     revision: str,
     call: Call,
     hindsight: bool = False,
@@ -648,7 +665,8 @@ def setup(
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     """`qmx node setup` after the source archive is on `host`: the server steps, then the PC's
-    pairing key and `hub_url`, then the server's own doctor. `primary` is not written.
+    pairing key and `hub_url`, then the server's own doctor. `primary` is not written. `machine`
+    is the server's place name (`PLACE`), the one its host runs under and its vault is sealed for.
 
     `dry_run` prints every step's script and the PC's three writes, and runs and writes nothing.
     A fresh SSH login that fails once the firewall closes stops setup there, before the host.
@@ -656,7 +674,11 @@ def setup(
     ssh = ["ssh", host]
     port = host_port(host_unit())
     steps = setup_steps(
-        revision, hindsight=hindsight, hub_port=hub_port, pc_name=socket.gethostname().lower()
+        revision,
+        machine=machine,
+        hindsight=hindsight,
+        hub_port=hub_port,
+        pc_name=socket.gethostname().lower(),
     )
     for number, (step, script) in enumerate(steps, start=1):
         say(f"step {number}: {step}")
@@ -897,6 +919,7 @@ def main() -> int:
     setting_up.add_argument("--hub-port", type=int, default=0)
     setting_up.add_argument("--hindsight", action="store_true")
     setting_up.add_argument("--dry-run", action="store_true", help="print the steps, run nothing")
+    setting_up.add_argument("--machine", default="", help="the server's place name")
     importer = commands.add_parser("import")
     importer.add_argument("--home", type=Path, default=Path(NODE_STATE))
     importer.add_argument("--bucket", type=Path, default=None)
@@ -986,6 +1009,9 @@ def main() -> int:
         host = cast(str, args.ssh_host)
         if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
             parser.error("Use an SSH hostname or user@hostname.")
+        machine = cast(str, args.machine)
+        if not PLACE.fullmatch(machine):
+            parser.error("Name the server's place with --machine, the name its host runs under.")
         home = pc_home(parser, args.home)
         revision = run(["git", "rev-parse", "HEAD"])
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
@@ -996,6 +1022,7 @@ def main() -> int:
         return setup(
             host,
             home,
+            machine=machine,
             revision=revision,
             call=lambda command, text: run(command, input_text=text),
             hindsight=bool(args.hindsight) or hindsight_enabled(home),

@@ -220,7 +220,7 @@ class TriggerIn(BaseModel):
     continuity: bool = False
     catch_up: CatchUp = "merged"
     max_concurrent: int = Field(default=1, ge=1)
-    home_engine: str | None = None
+    place: str | None = None
     """The place whose engine fires it, by its name in the place list; This PC when left out,
     or `triggers.webhook_home` for a webhook."""
 
@@ -649,7 +649,7 @@ class EngineDoor:
             now = self.svc.ctx.clock.now()
             ledger = self.svc.ctx.engine.ledger
             settings = self.svc.ctx.engine.settings
-            home = wanted.home_engine or (
+            home = wanted.place or (
                 webhook_home(settings) if wanted.kind == "webhook" else rows.HERE
             )
             made = rows.create(
@@ -667,7 +667,7 @@ class EngineDoor:
                 max_concurrent=wanted.max_concurrent,
                 priority=wanted.rank,
                 ready_by=wanted.ready_by,
-                home_engine=home,
+                place=home,
                 places=places(settings),
             )
             ledger.write(set_enabled(made.id, False))

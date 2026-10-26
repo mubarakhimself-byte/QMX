@@ -51,7 +51,7 @@ from qma.harness.tools import HostRead
 from qma.telemetry import configured
 from qmf.core import is_refusal
 from qmx_control.models import Document
-from qmx_control.node import library_primary
+from qmx_control.node import PLACE, library_primary
 from qmx_control.primary import CARD_REF, HOLD, Flip
 from qmx_control.service import ControlService
 from qmx_engine.admission import setting
@@ -152,12 +152,8 @@ class HostRunning(Exception):
         super().__init__(f"refused: {home} already has a host, {who}; stop it first.")
 
 
-class PlaceUnnamed(Exception):
-    def __init__(self, role: Role) -> None:
-        super().__init__(
-            f"refused: a host started as {role} needs its place name; pass --place <name>, the"
-            " name he gave this machine in his place list, or set [engine] host_name."
-        )
+class PlaceRefused(Exception):
+    """This host's place name is missing or not a place name; the message is the one line."""
 
 
 def _lock(handle: IO[bytes]) -> None:
@@ -228,7 +224,7 @@ def serve_forever(
         with single_instance(home):
             record(home, port)
             asyncio.run(serve(home, port, role, ui_origin, scrubbed, keep, library_root, place))
-    except (HostRunning, PlaceUnnamed) as refused:
+    except (HostRunning, PlaceRefused) as refused:
         print(refused, file=sys.stderr)
         return 1
     return 0
@@ -694,6 +690,7 @@ async def serve(
                         )
                         if placed is not None:
                             core.worker = placed
+                        core.worker.place = name
                         link = hub_link(home, control)
                         asking = Streams.of(forwarders_for(home, core, name, role))
                         engine.svc.watching(name=name, forwarders=asking.forwarders)
@@ -892,16 +889,27 @@ def hear(link: HubLink, row: Heartbeat, control: ControlService) -> None:
 
 
 def placement_name(control: ControlService, role: Role, place: str = "") -> str:
-    """This host's place name (AD-30, AD-72): `--place`, else `[engine] host_name`, else `pc` on
-    This PC. A host started for a server is given its name by setup and never guesses one."""
-    if place:
-        return place
-    found = section(control, "engine").get("host_name")
-    if isinstance(found, str) and found:
-        return found
+    """This host's place name (AD-30, AD-72). This PC is always `pc`. A host started for a server
+    takes `--place`, which setup passes, else `[engine] host_name`, and never guesses one; the
+    name is a place name (`PLACE`) other than `pc`. A refusal is one line that echoes nothing he
+    typed."""
     if role == "pc":
+        if place not in ("", PC):
+            raise PlaceRefused("refused: a host started as pc is This PC; --place names a server")
         return PC
-    raise PlaceUnnamed(role)
+    found = section(control, "engine").get("host_name")
+    name = place or (found if isinstance(found, str) else "")
+    if not name:
+        raise PlaceRefused(
+            f"refused: a host started as {role} needs its place name; pass --place <name>, the"
+            " name he gave this machine in his place list, or set [engine] host_name."
+        )
+    if name == PC or not PLACE.fullmatch(name):
+        raise PlaceRefused(
+            "refused: a server's place name is lowercase letters, digits and dashes, up to 63,"
+            " and is not pc."
+        )
+    return name
 
 
 def hub_link(home: Path, control: ControlService) -> HubLink | None:
