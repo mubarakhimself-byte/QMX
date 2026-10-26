@@ -6,7 +6,8 @@ The journal is `<home>/engine/runs/<run_id>/trace-<last seq>.jsonl`, written thr
 `qmx_ledger.RunJournal` with the run's recorded clock, so exporting the same ledger twice writes
 nothing new. It stays out of `<home>/runs/`, whose journals `qmx_control` lists as its own runs.
 Each drive adds one `workflow-run` object (SOLUTION-DESIGN 3.1); all of a run's writes carry the
-principal `run:<run_id>`.
+principal `run:<run_id>`. Its `placement` is where the run ran (`ran_on`), with the line its run
+card shows.
 
 Every file a finished node listed as an artifact is read from the run's write zone and stored as a
 `run-file` artifact linked `produced-by` to the summary, once per run: a later drive stores only
@@ -19,9 +20,10 @@ appended; the Library adapter redacts the artifact and the summary again as it w
 from __future__ import annotations
 
 import logging
+import platform
 from dataclasses import asdict
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
 from pydantic import JsonValue
 from qmx_ledger.journal import RunJournal
@@ -31,11 +33,32 @@ from qmx_engine.ledger.redact import redact_json
 from qmx_engine.ledger.spans import Span
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.library import JsonObject, LibraryPort, Mode, RunStatus, RunSummary, Stored
+from qmx_engine.settings import PC
 from qmx_engine.workers.zones import RunZone
 
 LOG = logging.getLogger(__name__)
 
-PLACEMENT: JsonObject = {"name": "pc", "kind": "local"}
+PLACE_FIELDS: Final = ("place", "place_id", "machine", "placed_by")
+BY: Final[dict[str, str]] = {
+    "default": "by default",
+    "chosen": "as chosen",
+    "spilled": "spilled over",
+    "stand_in": "standing in",
+}
+"""How the run card says why a run ran where it did."""
+
+
+def ran_on(events: list[Event]) -> JsonObject:
+    """Where the run ran (AD-72): the place record of its first attempt, or This PC by default
+    when no attempt started, and the run card's line for it."""
+    first = next((e.data for e in events if e.kind == "node_started" and "place" in e.data), None)
+    record: JsonObject = (
+        {key: first.get(key) for key in PLACE_FIELDS}
+        if first is not None
+        else {"place": PC, "place_id": PC, "machine": platform.node(), "placed_by": "default"}
+    )
+    record["line"] = f"ran on {record['place']}, {BY.get(str(record['placed_by']), 'by default')}"
+    return record
 
 
 def totals(events: list[Event], spans: list[Span]) -> JsonObject:
@@ -97,7 +120,7 @@ def export(
             status=status,
             reason=reason,
             totals=summed,
-            placement=PLACEMENT,
+            placement=ran_on(events),
             trace_artifact_hash=trace.blob,
             started_by=started_by,
         ),

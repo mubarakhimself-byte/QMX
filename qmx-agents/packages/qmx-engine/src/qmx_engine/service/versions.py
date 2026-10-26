@@ -19,6 +19,7 @@ from qmx_engine.ports.library import MAIN, JsonObject, Stored, drafts_ref
 from qmx_engine.service.context import Act, Caller, Context, Refused, State, require
 from qmx_engine.service.drafts import Drafts
 from qmx_engine.service.runs import Runs
+from qmx_engine.settings import places
 
 
 def operator_only(caller: Caller, act: Act) -> None:
@@ -50,7 +51,10 @@ class Versions:
         require(self.drafts.state(item), "publish", f"draft {item}")
         draft = self.drafts.get(item)
         bundle, variant_of = self.drafts.resolved(draft.bundle)
-        problems = validate(bundle.folder(), roles=self.ctx.roles(), publish=True)
+        listed = places(self.ctx.settings.values())
+        problems = validate(
+            bundle.folder(), roles=self.ctx.roles(), placements=listed, publish=True
+        )
         if problems:
             codes = " ".join(sorted({p.code for p in problems}))
             raise Refused("invalid", f"draft {item} cannot publish: {codes}")

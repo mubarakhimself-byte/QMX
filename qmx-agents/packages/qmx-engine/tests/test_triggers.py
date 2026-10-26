@@ -36,7 +36,9 @@ MONDAY = datetime(2026, 10, 19, 9, 0, tzinfo=UTC)
 
 def test_a_placement_is_configured_by_the_rows_an_attempt_needs_not_by_a_memory_budget() -> None:
     contabo = {
-        key: value for key, value in DEFAULTS.items() if key.startswith("placement.contabo.")
+        "placement.contabo.kind": "owned",
+        "placement.contabo.attempt_cpus": 2,
+        "placement.contabo.attempt_timeout": 3_600,
     }
     bare = {"placement.contabo.kind": "owned"}
 
@@ -146,7 +148,7 @@ def test_old_trigger_rows_survive_the_kind_migration_and_new_kinds_store(tmp_pat
     with Reader.open(tmp_path) as reader:
         found = rows.triggers(reader.connection)
 
-    assert applied == [3]
+    assert applied == [3, 4]
     old_row = found[0]
     assert (old_row.id, old_row.kind, old_row.priority, old_row.last_status) == (
         "trigger-old",

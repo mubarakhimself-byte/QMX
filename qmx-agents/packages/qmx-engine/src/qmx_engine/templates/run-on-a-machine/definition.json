@@ -21,7 +21,7 @@
   "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
-    {"id": "run", "name": "Run the job on its placement", "type": "script", "typeVersion": 1, "position": [220, 0], "runs_on": "contabo", "parameters": {"script": "scripts/run.py"}, "effect": "none"}
+    {"id": "run", "name": "Run the job on its placement", "type": "script", "typeVersion": 1, "position": [220, 0], "runs_on": "", "parameters": {"script": "scripts/run.py"}, "effect": "none"}
   ],
   "connections": {
     "On request": {"main": [[{"node": "Run the job on its placement", "port": "in", "map": "one"}]]}

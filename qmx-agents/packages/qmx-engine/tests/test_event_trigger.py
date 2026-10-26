@@ -221,6 +221,7 @@ def test_a_trigger_on_another_engine_keeps_no_cursor_here(tmp_path: Path) -> Non
             caller=OPERATOR,
             now=T0,
             home_engine="contabo",
+            places=("pc", "contabo"),
         )
         drained = event.drain(ledger, library, home=tmp_path, engine="pc", now=T0)
         with Reader.open(tmp_path) as reader:

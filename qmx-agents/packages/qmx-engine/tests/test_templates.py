@@ -258,6 +258,7 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
 ) -> None:
     template = next((t for t in CATALOG if t.folder == folder.name), None)
     found = checked(folder)
+    slot = [("place_unset", "name the place this node runs on")]
 
     assert validate(load(folder), publish=True) == []
     if template is None or not template.needs:
@@ -265,7 +266,8 @@ def test_every_folder_in_the_pack_validates_for_publish_and_only_its_needs_hold_
     else:
         assert isinstance(found, list)
         assert [(p.code, p.message) for p in found] == [
-            ("needs_unmet", f"needs: {', '.join(template.needs)}")
+            *(slot if folder.name == "run-on-a-machine" else []),
+            ("needs_unmet", f"needs: {', '.join(template.needs)}"),
         ]
 
 

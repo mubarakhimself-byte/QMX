@@ -92,7 +92,7 @@ from qmx_engine.core.state import Slot, State
 from qmx_engine.definition.folder import content_hash, load
 from qmx_engine.definition.model import Node, Workflow, dropped, edges
 from qmx_engine.definition.registry import REGISTRY
-from qmx_engine.definition.validate import checked
+from qmx_engine.definition.validate import checked, runs_on
 from qmx_engine.heartbeat import latest, placement
 from qmx_engine.ledger import mirror
 from qmx_engine.ledger.events import Event, EventKind, JsonObject
@@ -102,7 +102,7 @@ from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, LedgerWriteError, Reader, ledger_path
 from qmx_engine.nodes.agent import Agent
 from qmx_engine.nodes.app_op import PLACEMENT_RETRY_SECONDS
-from qmx_engine.nodes.base import Failed, Look, NodeJob, Waiting, ending
+from qmx_engine.nodes.base import Failed, Look, NodeJob, PlacedBy, Waiting, ending
 from qmx_engine.nodes.fake_provider import PROFILE as FAKE_PROFILE
 from qmx_engine.nodes.fake_provider import FakeProvider
 from qmx_engine.nodes.grader import Grader
@@ -123,7 +123,7 @@ from qmx_engine.ports.library import Bundle
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import EFFORTS, order, resolve
-from qmx_engine.settings import DEFAULTS
+from qmx_engine.settings import DEFAULTS, PC, places
 from qmx_engine.triggers.rows import put_wake
 from qmx_engine.watchdog import MAX_TICKS, Action, Kind, Meter, Watchdog, Watched, ledger_fault
 from qmx_engine.workers.effects import AfterUnknown, after_unknown, effect_of, model_bearing
@@ -206,13 +206,30 @@ def intent_key(node: Node) -> str | None:
     return found if isinstance(found, str) and found else None
 
 
-def placed(node: Node, home: Path, now: datetime) -> str | None:
-    """The node's placement from its `runs_on` list and the series its `data_scope` parameter
-    names, read against each host's partition summary (AD-70); None waits `placement`."""
-    runs_on = [node.runs_on] if isinstance(node.runs_on, str) else node.runs_on or ["pc"]
+@dataclass(frozen=True, slots=True)
+class Placed:
+    place: str
+    place_id: str
+    placed_by: PlacedBy
+
+
+def placed(node: Node, home: Path, now: datetime, listed: Mapping[str, str]) -> Placed | str:
+    """Where the node runs, or the line why it waits `placement` (AD-72). The places it names that
+    are in the place list `listed` (`name -> id`) are read in order against the series its
+    `data_scope` parameter names and each host's partition summary (AD-70). A node that names only
+    This PC runs there by default; on the first place it named it was chosen; on a later one it
+    spilled."""
+    named = runs_on(node)
+    ready = [name for name in named if name in listed]
+    if not ready:
+        return f"the place '{named[0]}' is not in the place list"
     found = node.parameters.get("data_scope")
     wants = [str(item) for item in found] if isinstance(found, list) else []
-    return placement(runs_on, wants, latest(home) if wants else {}, now)
+    where = placement(ready, wants, latest(home) if wants else {}, now)
+    if where is None:
+        return "no listed place can read this node's data yet"
+    by: PlacedBy = "default" if named == [PC] else "chosen" if where == named[0] else "spilled"
+    return Placed(where, listed[where], by)
 
 
 def recorded_settings(
@@ -1063,17 +1080,24 @@ class Run:
         if gate is not None:
             await gate.wait()
         node, now = self.node(job.node_id), self.engine.wall()
-        where = placed(node, self.engine.home, now)
+        where = placed(node, self.engine.home, now, places(self.engine.settings))
         intent, claims = intent_key(node), self.engine.claims
         held = bool(
-            where and intent and claims and claims.claim(intent, job.run_id, INTENT_TTL_S).granted
+            isinstance(where, Placed)
+            and intent
+            and claims
+            and claims.claim(intent, job.run_id, INTENT_TTL_S).granted
         )
         try:
-            if where is None:
+            if isinstance(where, str):
                 retry = now + timedelta(seconds=PLACEMENT_RETRY_SECONDS)
-                result = Waiting("placement", utc_text(retry), span={"reason": "placement"})
+                span: JsonObject = {"reason": "placement", "detail": where}
+                result = Waiting("placement", utc_text(retry), span=span)
             else:
-                result = await self.engine.worker.run(replace(job, placement=where), self.append)
+                job = replace(
+                    job, placement=where.place, place_id=where.place_id, placed_by=where.placed_by
+                )
+                result = await self.engine.worker.run(job, self.append)
             if isinstance(result, Waiting) and result.resume_at is not None:
                 result = replace(
                     result, resume_at=utc_text(datetime.fromisoformat(result.resume_at))

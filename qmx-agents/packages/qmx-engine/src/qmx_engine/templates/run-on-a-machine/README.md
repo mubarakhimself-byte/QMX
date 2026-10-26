@@ -1,8 +1,9 @@
 # Run one job on his server
 
-A one-node workflow for a job whose node is placed away from the PC. The `script` node names
-`runs_on: contabo`, so the engine's remote `WorkerPort` adapter ships the attempt to that machine,
-the run sidecar executes it there, and its outputs come back by hash.
+A one-node workflow for a job whose node is placed away from the PC. The `script` node's
+`runs_on` is a slot: he names the place it runs on, by the name he gave it in his place list, and
+the engine's remote `WorkerPort` adapter ships the attempt to that machine, the run sidecar
+executes it there, and its outputs come back by hash.
 
 It is the shape AD-57 gives a placed CPU or GPU job: a `script` or `agent` node with `runs_on` and
 `resources`, started as a test or live run, landing as a `workflow-run` beside every other run.
@@ -18,5 +19,5 @@ It is the shape AD-57 gives a placed CPU or GPU job: a `script` or `agent` node 
 - A GPU placement: no paid GPU machine exists (E57 records `not run, no paid GPU placement`).
 - The job's own definition, data and credentials: they travel in the same bundle as the attempt,
   so the template carries none of them.
-- A provider row for a machine he has not added: the template names `contabo`, the one placement
-  the server phase has.
+- A place name: no place ships as a default (AD-72), so `runs_on` stays empty until he names one,
+  and a run refuses with `place_unset` ("name the place this node runs on") until then.

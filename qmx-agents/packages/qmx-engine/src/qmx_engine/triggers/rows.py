@@ -1,7 +1,10 @@
 """Trigger and fire rows (SOLUTION-DESIGN 4.1), in `engine.sqlite` under the one writer (AD-23).
 
 A trigger lives outside the definition and pins one published object (AD-10). It names one
-`home_engine`, and an engine instance claims only its own home's rows (AD-3); this one is `pc`.
+`home_engine`: the place whose engine fires it, any name in his place list (AD-72), This PC
+unless he names another. An engine instance claims only its own home's rows (AD-3); this one is
+`pc`. A trigger is written only onto a listed place (`create`), and one whose place has since left
+the list reads `blocked_config` with a line naming it (`standing`).
 The kinds are `cron` in an IANA zone, `interval`, `manual`, `after`, `webhook`, `event` and
 `session`. A `webhook` fires once per delivery id the host's door hands in (`deliver`). An `event`
 row stores its filter; its matcher comes with TRG2b. A `session` row waits for copilot loops. A
@@ -21,7 +24,8 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
-from dataclasses import dataclass, field
+from collections.abc import Collection
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
 from typing import Final, Literal, cast
 from zoneinfo import ZoneInfo
@@ -30,11 +34,13 @@ from pydantic import JsonValue
 
 from qmx_engine.ledger.store import Ledger, Operation, Transaction
 from qmx_engine.service.context import Caller, Refused
+from qmx_engine.settings import PC
 from qmx_engine.triggers.catchup import CatchUp
 from qmx_engine.triggers.cron import Clocked, Cron, Interval, after, instant, stamp
 
 type JsonObject = dict[str, JsonValue]
-type HomeEngine = Literal["pc", "contabo"]
+type HomeEngine = str
+"""A place name from the place list (`settings.places`), whatever he typed."""
 type Delivery = Literal["inbox", "digest", "silent"]
 type Delivered = Literal["delivered", "unverified", "failed", "none"]
 """What became of a fire's delivery, beside its status. An empty payload fails closed."""
@@ -55,7 +61,7 @@ type FireStatus = Literal[
     "cancelled",
 ]
 
-HERE: Final[HomeEngine] = "pc"
+HERE: Final[HomeEngine] = PC
 """The home this engine instance claims for."""
 LIVE: Final = ("claimed", "running")
 """Fire statuses that hold a lease."""
@@ -124,6 +130,8 @@ class Trigger:
     priority: int = 0
     ready_by: str | None = None
     """A local `HH:MM` in `zone`."""
+    blocked: str | None = None
+    """Why it cannot fire, read against the place list by `standing`; never stored."""
 
     @property
     def kind(self) -> str:
@@ -256,7 +264,7 @@ def trigger_of(row: tuple[object, ...]) -> Trigger:
         spec=spec_of(str(kind), str(spec), str(created)),
         created_by=str(by),
         created_at=str(created),
-        home_engine=cast(HomeEngine, home),
+        home_engine=str(home),
         follow_champion=bool(follow),
         enabled=bool(enabled),
         precheck_ref=cast(str | None, precheck),
@@ -342,11 +350,14 @@ def create(
     max_concurrent: int = 1,
     priority: int = 0,
     ready_by: str | None = None,
+    places: Collection[str] = (HERE,),
 ) -> Trigger:
     """A new trigger, created by a user or an agent. A run never creates one (SOLUTION-DESIGN
-    4.2 step 7)."""
+    4.2 step 7). `places` is the place list its home must be in."""
     if caller.kind == "workflow":
         raise Refused("trigger_refused", "a workflow run cannot create, edit or enable triggers")
+    if home_engine not in places:
+        raise Refused("place_unknown", f"the place '{home_engine}' is not in the place list")
     if isinstance(spec, Interval):
         spec = Interval(spec.seconds, now)
     trigger = Trigger(
@@ -433,6 +444,15 @@ def triggers(connection: sqlite3.Connection, where: str = "", *args: object) -> 
         args,
     ).fetchall()
     return [trigger_of(row) for row in rows]
+
+
+def standing(trigger: Trigger, places: Collection[str]) -> Trigger:
+    """The trigger as he should see it: one homed on a place no longer in the list reads
+    `blocked_config` with a line naming the place, until the place is listed again."""
+    if trigger.home_engine in places:
+        return trigger
+    line = f"the place '{trigger.home_engine}' was removed"
+    return replace(trigger, last_status="blocked_config", blocked=line)
 
 
 def fires(connection: sqlite3.Connection, trigger_id: str) -> list[Fire]:

@@ -18,6 +18,20 @@ from qmx_ledger.journal import fingerprint
 type JsonObject = dict[str, JsonValue]
 type Mode = Literal["live", "test"]
 type EffectState = Literal["before", "after", "unknown"]
+type PlacedBy = Literal["default", "chosen", "spilled", "stand_in"]
+"""Why an attempt ran where it did (AD-72): the node named no place, it named this one first, the
+places before this one were not ready, or this place stood in for This PC (the stand-in round)."""
+
+
+def where_ran(job: NodeJob, machine: str) -> JsonObject:
+    """What every attempt records of where it ran (AD-72): the place's name then, its stable id,
+    the device it ran on, and why it ran there."""
+    return {
+        "place": job.placement,
+        "place_id": job.place_id or job.placement,
+        "machine": machine,
+        "placed_by": job.placed_by,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +51,9 @@ class NodeJob:
     credentials: Mapping[str, str] = field(default_factory=dict[str, str])
     workspace: str | None = None
     placement: str = "pc"
+    place_id: str = ""
+    """The stable id of `placement` in the place list, which a rename keeps; its name when empty."""
+    placed_by: PlacedBy = "default"
     timeouts: JsonObject | None = None
     pinned_outputs: JsonObject | None = None
     session: str | None = None

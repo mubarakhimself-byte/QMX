@@ -28,6 +28,7 @@ import contextlib
 import inspect
 import json
 import os
+import platform
 import signal
 import subprocess
 import sys
@@ -43,7 +44,15 @@ from qmx_engine.definition.model import Outputs
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.events import EventKind, JsonObject
 from qmx_engine.ledger.signature import signature
-from qmx_engine.nodes.base import AsyncExecutor, Executor, Failed, NodeJob, NodeResult, Ok
+from qmx_engine.nodes.base import (
+    AsyncExecutor,
+    Executor,
+    Failed,
+    NodeJob,
+    NodeResult,
+    Ok,
+    where_ran,
+)
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.watchdog import STALLED, STALLED_MESSAGE
 from qmx_engine.workers import effects
@@ -288,7 +297,8 @@ class LocalWorker:
                 "effect": effect,
                 "placement": "pc",
                 "process": "child" if name in CHILD_PROCESS else "host",
-            },
+            }
+            | where_ran(job, platform.node()),
         )
         zone = None
         if job.workspace is not None and kind is not None and kind.name in WRITERS:

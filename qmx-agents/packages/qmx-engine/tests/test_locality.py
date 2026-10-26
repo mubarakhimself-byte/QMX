@@ -72,7 +72,7 @@ def run(tmp_path: Path, rows: list[Heartbeat]) -> tuple[Outcome, list[str], list
             engine = Engine(
                 home,
                 ledger,
-                settings=ONE_TRY,
+                settings={**ONE_TRY, "placement.contabo.kind": "owned"},
                 worker=worker,
                 wall=lambda: NOW,
                 executors={"script": Script()},

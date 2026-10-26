@@ -24,9 +24,8 @@ from qmx_engine.definition.folder import DEFINITION, Problem, WorkflowFolder, lo
 from qmx_engine.definition.lint import lint, redact
 from qmx_engine.definition.model import Edge, Node, OutputFile, Workflow, edges
 from qmx_engine.definition.registry import LOOP_BACK_PORT, NOTE, REGISTRY, Kind, Registry, RoleRule
-from qmx_engine.settings import DEFAULTS
+from qmx_engine.settings import DEFAULTS, PC
 
-PLACEMENTS: Final = frozenset({"pc", "contabo", "qmb"})
 STAGING: Final = ".staging"
 """The folder under a run's `work/` where commits are staged; no declared output may touch it."""
 NOT_ROLES: Final = frozenset({"test_only", "test_order", "live_order"})
@@ -47,13 +46,15 @@ def validate(
     folder: WorkflowFolder,
     *,
     roles: Collection[str] = DEFAULT_ROLES,
-    placements: Collection[str] = PLACEMENTS,
+    placements: Collection[str] | None = None,
     registry: Registry = REGISTRY,
     publish: bool = False,
 ) -> list[Problem]:
-    """`roles` are the names in the Settings `[roles]` document; `publish` adds step 5's
-    refusals of note and unconnected nodes. No message quotes a document value, and a path
-    (which can hold a node name or a key) has any token shape redacted."""
+    """`roles` are the names in the Settings `[roles]` document; `placements` is his place list
+    (`settings.places`), and None leaves the name check to the run, where a node on a place not
+    listed waits `placement`. `publish` adds step 5's refusals of note and unconnected nodes. No
+    message quotes a document value, and a path (which can hold a node name or a key) has any
+    token shape redacted."""
     return [
         Problem(code, redact(path), redact(message))
         for code, path, message in problems(folder, roles, placements, registry, publish=publish)
@@ -63,7 +64,7 @@ def validate(
 def problems(
     folder: WorkflowFolder,
     roles: Collection[str],
-    placements: Collection[str],
+    placements: Collection[str] | None,
     registry: Registry,
     *,
     publish: bool,
@@ -92,13 +93,19 @@ def problems(
 
 
 def runnable(workflow: Workflow, registry: Registry = REGISTRY) -> list[Problem]:
-    """What a run refuses that a draft may hold: a kind whose executor is not built yet, and a
-    need (`meta.needs`) that nothing meets yet."""
+    """What a run refuses that a draft may hold: a kind whose executor is not built yet, a
+    `runs_on` slot left empty for him to name a place in, and a need (`meta.needs`) that nothing
+    meets yet."""
     found = [
         Problem("kind_not_available", f"nodes[{i}].type", "this node kind cannot run yet")
         for i, node in enumerate(workflow.nodes)
         if (kind := registry.kind(node.type)) is not None and not node.disabled
         if kind is not NOTE and not kind.available
+    ]
+    found += [
+        Problem("place_unset", f"nodes[{i}].runs_on", "name the place this node runs on")
+        for i, node in enumerate(workflow.nodes)
+        if not node.disabled and "" in runs_on(node)
     ]
     if workflow.meta.needs:
         found.append(Problem("needs_unmet", "meta.needs", needs_line(workflow.meta.needs)))
@@ -419,8 +426,16 @@ def blocks(folder: WorkflowFolder, workflow: Workflow) -> Iterator[Problem]:
             )
 
 
+def runs_on(node: Node) -> list[str]:
+    """The places a node names, in preference order: This PC when it names none."""
+    return [node.runs_on] if isinstance(node.runs_on, str) else node.runs_on or [PC]
+
+
 def names(
-    workflow: Workflow, registry: Registry, roles: Collection[str], placements: Collection[str]
+    workflow: Workflow,
+    registry: Registry,
+    roles: Collection[str],
+    placements: Collection[str] | None,
 ) -> Iterator[Problem]:
     """Step 3: roles, placements and credentials resolve by name. Reachability is preflight's."""
     for i, node in enumerate(workflow.nodes):
@@ -436,10 +451,10 @@ def names(
             yield Problem("role_forbidden", f"nodes[{i}].role", f"a {kind.name} node takes no role")
         elif node.role is not None and node.role not in roles:
             yield Problem("role_unknown", f"nodes[{i}].role", "the role is not in [roles]")
-        for placement in [node.runs_on] if isinstance(node.runs_on, str) else node.runs_on:
-            if placement not in placements:
+        for place in runs_on(node):
+            if placements is not None and place and place not in placements:
                 yield Problem(
-                    "placement_unknown", f"nodes[{i}].runs_on", "the placement is not registered"
+                    "placement_unknown", f"nodes[{i}].runs_on", "the place is not in the place list"
                 )
         for name, ref in node.credentials.items():
             if not ref.startswith("qmx/"):

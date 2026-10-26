@@ -27,9 +27,14 @@ SCHEMA_FILE = (
 
 
 def codes(
-    folder: Path, *, publish: bool = False, roles: frozenset[str] = DEFAULT_ROLES
+    folder: Path,
+    *,
+    publish: bool = False,
+    roles: frozenset[str] = DEFAULT_ROLES,
+    placements: frozenset[str] | None = frozenset({"pc"}),
 ) -> list[str]:
-    return [problem.code for problem in validate(load(folder), publish=publish, roles=roles)]
+    found = validate(load(folder), publish=publish, roles=roles, placements=placements)
+    return [problem.code for problem in found]
 
 
 def copy(name: str, into: Path) -> Path:
@@ -156,6 +161,10 @@ def test_roles_placements_and_credentials_resolve_by_name(tmp_path: Path) -> Non
         "credential_not_ref",
         "credential_not_tool_key",
     ]
+    assert codes(folder, roles=frozenset({"poet"}), placements=frozenset({"pc", "server-1"})) == [
+        "credential_not_ref",
+        "credential_not_tool_key",
+    ]
 
 
 def test_an_old_runaway_block_and_run_timeout_fold_to_nothing(tmp_path: Path) -> None:
@@ -213,7 +222,6 @@ def test_no_output_echoes_a_key_pasted_into_a_ref_a_role_or_a_name(
         "ref_missing",
         "edge_unknown_node",
         "role_unknown",
-        "placement_unknown",
         "secret_literal",
         "secret_literal",
         "secret_literal",
