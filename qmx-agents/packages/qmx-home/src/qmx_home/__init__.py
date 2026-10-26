@@ -66,6 +66,18 @@ FLAT_TO_TREE: Final = (
 Everything else at a flat home's top moves into `data/` under its own name, and the host's
 `control.log` moves last, to `logs/host.log`, once the flat `logs/` has gone to `data/logs`."""
 HOST_LOG: Final = ("control.log", "logs/host.log")
+FLAT_MARKERS: Final = (
+    ".qmx",
+    "vault",
+    "chats",
+    "claude",
+    "claude-relayed",
+    "control.db",
+    "runs.db",
+)
+"""Names only a flat QMX home holds at its top: a PC host writes its chats, Claude homes and
+stores there, a server setup its `vault/` and `.qmx/`. An unlabelled folder holding none of them
+is not a QMX folder, and nothing in it is ever moved."""
 
 
 class NoQmxFolder(Exception):
@@ -216,6 +228,8 @@ def _opened(root: Path) -> Layout:
         return Layout(root)
     if label is None and not any(root.iterdir()):
         raise NoQmxFolder(f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)")
+    if label is None and not _flat_home(root):
+        raise NoQmxFolder(_not_qmx(root))
     if label is None or label.format_version == FLAT:
         raise NoQmxFolder(
             f"{root} is a QMX home in the old flat layout: move it into the folder tree with "
@@ -292,6 +306,8 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     """Move a flat format 1 home into the tree (design 62 A3 and A5, guard 4) and label it format
     2. Every move is a rename inside the folder, so nothing is copied and nothing is taken away.
     Returns the moves made, as paths relative to `root`; a folder already in the tree returns none.
+    An empty folder is labelled with its five parts. An unlabelled folder holding none of
+    `FLAT_MARKERS` is not a QMX home: it is refused and nothing in it moves.
 
     Run it with QMX closed. A move the OS refuses (a file still open) stops the step; running it
     again finishes the same plan from where it stopped, because the plan is written to
@@ -301,11 +317,14 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     if not root.is_dir():
         raise LayoutRefused(f"no folder at {root}")
     label = _label(root)
+    journal = root / JOURNAL
     if label is not None and label.format_version == TREE:
+        journal.unlink(missing_ok=True)
         return []
     if label is not None and label.format_version != FLAT:
         raise LayoutRefused(f"{root} is a QMX folder of format {label.format_version}")
-    journal = root / JOURNAL
+    if label is None and any(root.iterdir()) and not _flat_home(root):
+        raise LayoutRefused(f"{_not_qmx(root)}; nothing in it was moved")
     plan = _read_plan(journal) if journal.is_file() else _plan(root)
     if not journal.is_file():
         journal.write_text(json.dumps(plan, indent=1), encoding="utf-8")
@@ -318,6 +337,18 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     _write_label(root, Label(stepped.home_id, TREE, stepped.created_by, release))
     journal.unlink()
     return moved
+
+
+def _flat_home(root: Path) -> bool:
+    """Whether `root` holds a flat home's own files, or a layout step this module started."""
+    return any((root / name).exists() for name in (*FLAT_MARKERS, JOURNAL))
+
+
+def _not_qmx(root: Path) -> str:
+    return (
+        f"{root} is not a QMX folder: it has no {LABEL} and none of a QMX home's own files; "
+        "pass the folder QMX made, or --create with an empty one"
+    )
 
 
 def _remove_if_empty(folder: Path) -> None:
@@ -336,7 +367,8 @@ def _plan(root: Path) -> list[tuple[str, str]]:
     plan = [(src, dst) for src, dst in FLAT_TO_TREE if (root / src).exists()]
     special = {src for src, _ in plan if "/" not in src} | {HOST_LOG[0]}
     rest = sorted(top - special)
-    if ".qmx" in rest and {entry.name for entry in (root / ".qmx").iterdir()} <= {"vault.key"}:
+    nested = root / ".qmx"
+    if ".qmx" in rest and nested.is_dir() and {e.name for e in nested.iterdir()} <= {"vault.key"}:
         rest.remove(".qmx")
     plan += [(name, f"data/{name}") for name in rest]
     if (root / HOST_LOG[0]).exists():
@@ -345,7 +377,10 @@ def _plan(root: Path) -> list[tuple[str, str]]:
 
 
 def _read_plan(journal: Path) -> list[tuple[str, str]]:
-    found: object = json.loads(journal.read_text(encoding="utf-8"))
+    try:
+        found: object = json.loads(journal.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as broken:
+        raise LayoutRefused(f"{journal} cannot be read as a layout plan ({broken})") from None
     rows = cast("list[object]", found) if isinstance(found, list) else []
     plan: list[tuple[str, str]] = []
     for row in rows:

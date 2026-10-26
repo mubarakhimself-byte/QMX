@@ -122,7 +122,7 @@ def test_the_step_keeps_a_format_1_labels_home_id_and_runs_once(tmp_path: Path) 
 
 
 def test_a_flat_home_holding_a_tree_name_is_refused_untouched(tmp_path: Path) -> None:
-    root = flat(tmp_path / "home", {"settings.toml": "", "cache/x": "mine"})
+    root = flat(tmp_path / "home", {"control.db": "", "cache/x": "mine"})
 
     with pytest.raises(LayoutRefused) as refused:
         step_to_tree(root)
@@ -130,7 +130,51 @@ def test_a_flat_home_holding_a_tree_name_is_refused_untouched(tmp_path: Path) ->
     assert str(refused.value) == (
         f"{root.resolve()} already holds cache, which the tree uses; move it aside first"
     )
-    assert files(root) == {"settings.toml": "", "cache/x": "mine"}
+    assert files(root) == {"control.db": "", "cache/x": "mine"}
+
+
+def test_a_folder_that_is_not_a_qmx_home_is_refused_and_nothing_moves(tmp_path: Path) -> None:
+    documents = flat(tmp_path / "Documents", {"cv.docx": "cv", "taxes/2025.pdf": "pdf"})
+
+    with pytest.raises(LayoutRefused) as refused:
+        step_to_tree(documents)
+
+    assert str(refused.value) == (
+        f"{documents.resolve()} is not a QMX folder: it has no qmx-home.toml and none of a QMX "
+        "home's own files; pass the folder QMX made, or --create with an empty one; nothing in "
+        "it was moved"
+    )
+    assert files(documents) == {"cv.docx": "cv", "taxes/2025.pdf": "pdf"}
+    assert folders(documents) == ["cv.docx", "taxes"]
+
+
+def test_a_layout_plan_cut_short_is_refused_by_name_and_moves_nothing(tmp_path: Path) -> None:
+    root = flat(tmp_path / "home", {"control.db": "", "layout-step.json": '[["control.db", "da'})
+
+    with pytest.raises(LayoutRefused) as refused:
+        step_to_tree(root)
+
+    assert str(refused.value).startswith(
+        f"{root.resolve() / 'layout-step.json'} cannot be read as a layout plan ("
+    )
+    assert files(root) == {"control.db": "", "layout-step.json": '[["control.db", "da'}
+
+
+def test_a_qmx_entry_that_is_a_file_moves_into_data_like_any_other(tmp_path: Path) -> None:
+    root = flat(tmp_path / "home", {"control.db": "", ".qmx": "not a folder"})
+
+    step_to_tree(root)
+
+    assert files(root) == {"data/control.db": "", "data/.qmx": "not a folder"}
+
+
+def test_a_layout_plan_left_after_the_label_is_removed_by_the_next_run(tmp_path: Path) -> None:
+    root = flat(tmp_path / "home", {"control.db": ""})
+    step_to_tree(root)
+    (root / "layout-step.json").write_text('[["control.db", "data/control.db"]]', "utf-8")
+
+    assert step_to_tree(root) == []
+    assert folders(root) == ["backups", "cache", "data", "keys", "logs", LABEL]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="only Windows refuses to move an open file")
@@ -145,11 +189,12 @@ def test_a_step_stopped_by_an_open_file_finishes_on_the_next_run(tmp_path: Path)
 
 
 def test_the_command_reports_each_move(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    root = flat(tmp_path / "home", {"settings.toml": "", "control.log": ""})
+    root = flat(tmp_path / "home", {"chats/c.json": "", "settings.toml": "", "control.log": ""})
 
     assert main(["layout", str(root)]) == 0
 
     assert capsys.readouterr().out.splitlines() == [
+        "moved chats to data/chats",
         "moved settings.toml to data/settings.toml",
         "moved control.log to logs/host.log",
         f"{root.resolve()} is in the folder tree",

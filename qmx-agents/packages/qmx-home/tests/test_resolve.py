@@ -140,7 +140,7 @@ def test_a_flat_home_is_refused_with_the_layout_command_and_left_alone(
     profile: Path, tmp_path: Path
 ) -> None:
     home = folder(tmp_path / "flat-home", labelled=False)
-    (home / "settings.toml").write_text("", encoding="utf-8")
+    (home / "control.db").write_text("", encoding="utf-8")
 
     with pytest.raises(NoQmxFolder) as refused:
         resolve(home, create=True, drives=[])
@@ -149,7 +149,25 @@ def test_a_flat_home_is_refused_with_the_layout_command_and_left_alone(
         f"{home} is a QMX home in the old flat layout: move it into the folder tree with "
         f"python -m qmx_home layout {home}"
     )
-    assert tree(home) == ["settings.toml"]
+    assert tree(home) == ["control.db"]
+
+
+def test_a_folder_that_is_not_a_qmx_home_is_refused_without_the_layout_command(
+    profile: Path, tmp_path: Path
+) -> None:
+    documents = folder(tmp_path / "Documents", labelled=False)
+    (documents / "cv.docx").write_text("cv", encoding="utf-8")
+    (documents / "taxes").mkdir()
+    (documents / "taxes" / "2025.pdf").write_text("pdf", encoding="utf-8")
+
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(documents, create=True, drives=[])
+
+    assert str(refused.value) == (
+        f"{documents} is not a QMX folder: it has no qmx-home.toml and none of a QMX home's own "
+        "files; pass the folder QMX made, or --create with an empty one"
+    )
+    assert tree(documents) == ["cv.docx", "taxes", "taxes/2025.pdf"]
 
 
 def test_an_empty_folder_needs_create(profile: Path, tmp_path: Path) -> None:
