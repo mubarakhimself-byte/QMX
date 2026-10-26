@@ -1,7 +1,9 @@
 """`python -m qmx_host serve [--home <folder> [--create]] --port <port> [--role pc | node |
-server] [--library-root <path>] [--ui-origin <origin>]`, and `start`, `status` and `stop` for a
-host in the background. Without `--home` the QMX folder is found by `qmx_home.resolve`, and a
-missing folder is made only with `--create`.
+server] [--place <name>] [--library-root <path>] [--ui-origin <origin>]`, and `start`, `status`
+and `stop` for a host in the background. Without `--home` the QMX folder is found by
+`qmx_home.resolve`, and a missing folder is made only with `--create`. `--place` is the name he gave
+this machine in his place list. A `node` or `server` host with neither it nor `[engine] host_name`
+refuses to start, and This PC is `pc` when it names none.
 
 `server` is the role the server's unit runs: the same node work plus the Library service, because
 on the server the one host process opens the store as its one writer and answers the Library routes
@@ -32,6 +34,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=8766)
     parser.add_argument("--role", choices=["pc", "node", "server"], default="pc")
     parser.add_argument("--library-root", type=Path, default=None)
+    parser.add_argument(
+        "--place", default="", help="this machine's place name; setup passes it for a server"
+    )
     parser.add_argument("--ui-origin", default="http://127.0.0.1:5173")
     args = parser.parse_args(argv)
     try:
@@ -57,9 +62,10 @@ def main(argv: list[str] | None = None) -> int:
                 scrubbed=scrubbed,
                 keep=sorted(keep),
                 library_root=library_root,
+                place=args.place,
             )
         case "start":
-            return host.start(home, args.port, args.role, args.ui_origin, library_root)
+            return host.start(home, args.port, args.role, args.ui_origin, library_root, args.place)
         case "status":
             return host.status(home)
         case _:
