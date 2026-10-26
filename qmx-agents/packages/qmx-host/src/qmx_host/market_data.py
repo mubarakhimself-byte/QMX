@@ -736,8 +736,8 @@ class MarketDoor:
             "this run's holdout was fixed on its first read, and this read asks for a "
             "different one; one run never mixes sealed and unsealed months",
             run=run,
-            fixed=fixed,
-            asked=record,
+            fixed=json.dumps(fixed, sort_keys=True),
+            asked=json.dumps(record, sort_keys=True),
         )
 
     def _parse_holdout(self, holdout: object) -> Result[HoldoutSeal | None]:
@@ -989,8 +989,8 @@ class MarketDoor:
             encoding="utf-8",
         )
 
-    def _journal(self, seal: HoldoutSeal) -> Result[JournalStore]:
-        bundle = EvidenceStore(self.root, seal=seal).for_world(self.world)
+    def _journal(self, seal: HoldoutSeal | None = None) -> Result[JournalStore]:
+        bundle = EvidenceStore(self.root, seal=seal or self.seal).for_world(self.world)
         if is_refusal(bundle):
             return bundle
         return Ok(bundle.value.journal)

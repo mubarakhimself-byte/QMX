@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from qmf.core import CalendarIdentity, World, is_ok, is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.splits import SplitBoundary, SplitManifest
@@ -19,6 +21,7 @@ from qmx_host.market_data import (
     MarketDoor,
     Placement,
     Purpose,
+    market_router,
 )
 
 DAY = 86_400 * 1_000_000_000
@@ -224,6 +227,25 @@ def test_a_run_keeps_the_holdout_of_its_first_read(tmp_path: Path) -> None:
     unnamed = door.read(SERIES, start_ns=FEB, end_ns=MAR, run="a")
     assert is_refusal(unnamed)
     assert SEAL_READ_REASON in str(unnamed.context)
+
+
+def test_a_run_asking_for_a_second_holdout_over_http_is_refused_by_name(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    app = FastAPI()
+    app.include_router(market_router(door))
+    body: dict[str, object] = {
+        "series": SERIES,
+        "start_ns": JAN,
+        "end_ns": FEB,
+        "run": "r1",
+        "holdout": "off",
+    }
+    with TestClient(app) as rest:
+        first = rest.post("/api/data/read", json=body)
+        second = rest.post("/api/data/read", json=body | {"holdout": {"boundary": "2026-02"}})
+    assert (first.status_code, second.status_code) == (200, 400)
+    assert second.json()["detail"]["context"]["field"] == "holdout"
 
 
 def test_a_final_look_with_no_holdout_is_answered_by_name(tmp_path: Path) -> None:
