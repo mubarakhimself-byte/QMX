@@ -16,6 +16,7 @@ from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 
+import psutil
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -358,3 +359,36 @@ def test_the_card_offers_the_bring_in_first_and_answers_each_choice(pc: Path) ->
     assert brought.status_code == 200
     assert brought.json()["finished"] is True
     assert client.get("/api/first-start").json()["found"] == str(pc / "QMX")
+
+
+def test_an_old_folder_a_host_still_serves_is_refused_by_its_process_record(pc: Path) -> None:
+    old = old_home(pc / ".qmx", pc)
+    me = psutil.Process()
+    (old / "control-process.json").write_text(
+        json.dumps({"pid": me.pid, "port": 1, "created": me.create_time()}), encoding="utf-8"
+    )
+
+    with pytest.raises(Refused, match=rf"a QMX host is still running on .* \(PID {me.pid}\)"):
+        bring_in(old, pc / "QMX", place_refusal=places(pc).refusal)
+    assert not (pc / "QMX").exists()
+
+
+def test_the_same_old_folder_is_never_brought_into_a_second_folder(pc: Path) -> None:
+    old = old_home(pc / ".qmx", pc)
+    assert bring_in_old(old, pc / "QMX", places(pc)).finished
+
+    with pytest.raises(Refused, match="was already brought into"):
+        bring_in_old(old, pc / "Second", places(pc))
+    assert not (pc / "Second").exists()
+
+
+def test_an_old_folder_that_is_a_link_is_read_through_it_and_said_so(pc: Path) -> None:
+    real = old_home(pc / "elsewhere" / ".qmx", pc)
+    old = pc / "profile-link"
+    link(old, real)
+
+    report = bring_in(old, pc / "QMX", place_refusal=places(pc).refusal)
+
+    assert report.finished, report.text
+    assert report.lines[1] == f"Your old folder {old} is a link; its files were read from {real}."
+    assert old.is_junction() or old.is_symlink()

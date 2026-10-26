@@ -40,7 +40,7 @@ from qmx_home import (
     resolve,
 )
 
-from qmx_host.bring_in import Refused, Report, bring_in, old_refusal
+from qmx_host.bring_in import Refused, Report, bring_in, brought_from, old_refusal
 
 OLD_FOLDER: Final = ".qmx"
 """The old folder's name in his user profile. It is looked at to offer the bring-in and only ever
@@ -295,7 +295,20 @@ def open_existing(folder: Path, places: Places) -> Layout:
 
 
 def bring_in_old(old: Path, folder: Path, places: Places) -> Report:
-    """His old data brought into a new QMX folder at `folder`; the pointer once it finished."""
+    """His old data brought into a new QMX folder at `folder`; the pointer once it finished. A
+    second copy of the same old folder into another folder is refused, so his data is never
+    doubled."""
+    try:
+        current: Path | None = resolve(drives=[]).root
+    except NoQmxFolder:
+        current = None
+    if current is not None and current != folder.absolute().resolve():
+        facts = brought_from(current)
+        if facts is not None and Path(str(facts.get("old"))).resolve() == old.resolve():
+            raise Refused(
+                f"your old data from {old} was already brought into {current}; open that folder "
+                "instead of copying it again"
+            )
     pointer = pointer_file()
     lock = pointer.with_name(LOCK) if pointer is not None else None
     report = bring_in(old, folder, place_refusal=places.refusal, lock=lock)

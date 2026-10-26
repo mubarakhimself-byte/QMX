@@ -204,6 +204,17 @@ def old_refusal(old: Path) -> str | None:
     return None
 
 
+def _running(old: Path) -> str | None:
+    """A QMX host still serving the old folder, read from its process record alone (F step 4.1):
+    the old folder's lock is never taken, because taking it would write there."""
+    from qmx_host.host import recorded_host  # noqa: PLC0415 (the host module is heavy)
+
+    pid = recorded_host(old)
+    if pid is None:
+        return None
+    return f"a QMX host is still running on {old} (PID {pid}); stop it, then run the first start"
+
+
 def _label_at(folder: Path) -> Label | None:
     try:
         return Label.parse((folder / LABEL).read_text(encoding="utf-8"))
@@ -238,7 +249,7 @@ def _bring_in(
     done = _finished(folder)
     if done is not None:
         return done
-    refusal = old_refusal(real_old) or place_refusal(folder)
+    refusal = old_refusal(real_old) or _running(real_old) or place_refusal(folder)
     real_folder = folder.resolve()
     if refusal is None and (
         real_folder.is_relative_to(real_old) or real_old.is_relative_to(real_folder)
@@ -464,6 +475,12 @@ def _room(folder: Path, survey: tuple[tuple[str, int, int], ...]) -> None:
 def _switched(path: str) -> bool:
     top = path.split("/", 1)[0]
     return top in SWITCHED or top.removesuffix("-wal") in SWITCHED
+
+
+def brought_from(folder: Path) -> Mapping[str, object] | None:
+    """The facts of the bring-in that finished into the QMX folder `folder`, or None."""
+    done = _finished(folder)
+    return None if done is None else done.facts
 
 
 def _finished(folder: Path) -> Report | None:
