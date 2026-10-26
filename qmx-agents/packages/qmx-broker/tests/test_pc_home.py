@@ -21,8 +21,10 @@ from qmf.venue.proto import CompiledProto
 from test_broker import CTraderFixture
 
 from qmx_broker.adapters import Document, can_trade_live
+from qmx_broker.credentials import CredentialManager
 from qmx_broker.models import Account, Broker, BrokerSettings, Connection
-from qmx_broker.service import BrokerService, open_adapter
+from qmx_broker.oauth import AppCredential
+from qmx_broker.service import BrokerService, grant_accounts, open_adapter
 
 FIXTURES = Path(__file__).parent / "fixtures"
 PAIR = json.dumps({"accessToken": "acc-1", "refreshToken": "ref-1", "expiresAt": 2_000.0})
@@ -174,3 +176,65 @@ def test_a_connection_signed_in_on_a_place_opens_no_session_here(
 
     assert recorded.calls == []
     assert vault.get_password("qmx/token/ctrader-app", "token/ctrader-app") == PAIR
+
+
+def test_a_fresh_grants_account_list_is_read_over_one_session_that_closes() -> None:
+    recorded = CTraderFixture()
+    sessions: list[Session] = []
+
+    async def connect(_proto: CompiledProto, environment: str) -> Session:
+        assert environment == "demo"
+        sessions.append(Session(recorded))
+        return sessions[-1]
+
+    connection = settings().providers[0].connections[0]
+    listing = asyncio.run(
+        grant_accounts(connection, AppCredential("4242_demo", "app-pass"), "acc-1", connect=connect)
+    )
+
+    assert listing["permissionScope"] == "SCOPE_VIEW"
+    assert listing["ctidTraderAccount"] == [
+        {"ctidTraderAccountId": "101", "isLive": False},
+        {"ctidTraderAccountId": "202", "isLive": True},
+    ]
+    assert recorded.calls == [
+        ("ProtoOAApplicationAuthReq", {"clientId": "4242_demo", "clientSecret": "app-pass"}),
+        ("ProtoOAGetAccountListByAccessTokenReq", {"accessToken": "acc-1"}),
+    ]
+    assert [session.closed for session in sessions] == [True]
+
+
+class WinVault:
+    """keyring's Windows backend: an overwrite first re-saves the old value under the compound
+    target `<old user>@<service>`, and a delete removes both targets held by that user."""
+
+    def __init__(self) -> None:
+        self.held: dict[tuple[str, str], str] = {}
+
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.held.get((service, username))
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        for (held_service, user), old in list(self.held.items()):
+            if held_service == service:
+                self.held[f"{user}@{service}", user] = old
+        self.held[service, username] = password
+
+    def delete_password(self, service: str, username: str) -> None:
+        targets = [(service, username), (f"{username}@{service}", username)]
+        if not [self.held.pop(target) for target in targets if target in self.held]:
+            raise PasswordDeleteError(service)
+
+
+def test_a_second_sign_in_on_windows_leaves_one_pair_and_a_delete_leaves_none() -> None:
+    windows = WinVault()
+    keys = CredentialManager(windows)
+
+    keys.replace("qmx/token/ctrader-app", "first pair")
+    keys.replace("qmx/token/ctrader-app", "second pair")
+    kept = dict(windows.held)
+    windows.held["token/ctrader-app@qmx/token/ctrader-app", "token/ctrader-app"] = "stale pair"
+    keys.delete("qmx/token/ctrader-app")
+
+    assert kept == {("qmx/token/ctrader-app", "token/ctrader-app"): "second pair"}
+    assert windows.held == {}

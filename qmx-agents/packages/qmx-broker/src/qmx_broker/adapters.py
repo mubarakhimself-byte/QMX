@@ -99,12 +99,13 @@ class LiveGrant(ValueError):
     every QMX host refuses it by name (ruling 135)."""
 
     code = "live_trading_grant"
+    message = (
+        "this sign-in can trade live money; it belongs on a trading server. "
+        "Sign in again with view-only access, or tick demo accounts only"
+    )
 
     def __init__(self) -> None:
-        super().__init__(
-            f"{self.code}: this sign-in can trade live money; it belongs on a trading server. "
-            "Sign in again with view-only access, or tick demo accounts only"
-        )
+        super().__init__(f"{self.code}: {self.message}")
 
 
 def can_trade_live(listing: Document) -> bool:

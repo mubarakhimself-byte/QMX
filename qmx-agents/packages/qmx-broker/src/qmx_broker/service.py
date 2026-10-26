@@ -26,7 +26,7 @@ from qmx_broker.credentials import (
 )
 from qmx_broker.ctrader_transport import CTraderTransport
 from qmx_broker.models import Account, Broker, BrokerSettings, Connection, OrderProposal
-from qmx_broker.oauth import Tokens
+from qmx_broker.oauth import AppCredential, Tokens
 
 type AdapterFactory = Callable[
     [Broker, Connection, Account], AbstractAsyncContextManager[ReadAdapter]
@@ -40,6 +40,44 @@ class Session(Protocol):
 
 
 type Connect = Callable[[CompiledProto, str], Awaitable[Session]]
+
+
+def compiled(connection: Connection) -> CompiledProto:
+    """The cTrader messages from the connection's pinned FileDescriptorSet."""
+    if not connection.protocol_path or connection.protocol_tag is None:
+        raise ValueError(
+            "Set protocol_path and protocol_tag to the node's pinned FileDescriptorSet"
+        )
+    proto = compile_descriptor_set(
+        Path(connection.protocol_path).read_bytes(),
+        package_name="openapi-proto-messages",
+        release_tag=connection.protocol_tag,
+    )
+    if is_refusal(proto):
+        raise ValueError("Invalid cTrader protocol definitions")
+    return proto.value
+
+
+async def grant_accounts(
+    connection: Connection,
+    app: AppCredential,
+    access_token: str,
+    *,
+    connect: Connect = CTraderTransport.connect,
+) -> Document:
+    """A fresh grant's account list, read once over one session, so its home can refuse a grant
+    that can trade live money before it keeps the pair (ruling 135)."""
+    session = await connect(compiled(connection), connection.environment)
+    try:
+        await session.request(
+            "ProtoOAApplicationAuthReq",
+            {"clientId": app.client_id, "clientSecret": app.client_secret},
+        )
+        return await session.request(
+            "ProtoOAGetAccountListByAccessTokenReq", {"accessToken": access_token}
+        )
+    finally:
+        await session.close()
 
 
 @asynccontextmanager
@@ -95,22 +133,12 @@ async def open_adapter(
         )
     if not {"clientId", "clientSecret"} <= secret.keys():
         raise ValueError(f"{CTRADER_APP} needs clientId and clientSecret")
-    if not connection.protocol_path or connection.protocol_tag is None:
-        raise ValueError(
-            "Set protocol_path and protocol_tag to the node's pinned FileDescriptorSet"
-        )
+    proto = compiled(connection)
     store = CredentialManager() if keys is None else keys
     held = store.read(CTRADER_TOKENS)
     if held is None:
         raise ValueError("Sign in to cTrader on This PC first")
-    compiled = compile_descriptor_set(
-        Path(connection.protocol_path).read_bytes(),
-        package_name="openapi-proto-messages",
-        release_tag=connection.protocol_tag,
-    )
-    if is_refusal(compiled):
-        raise ValueError("Invalid cTrader protocol definitions")
-    transport = await connect(compiled.value, connection.environment)
+    transport = await connect(proto, connection.environment)
     try:
         adapter = CTraderAdapter(account, transport.request, transport.spot)
         try:

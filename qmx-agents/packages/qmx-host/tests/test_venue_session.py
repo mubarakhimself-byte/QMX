@@ -61,12 +61,21 @@ def token_endpoint(method: str, url: str) -> tuple[int, bytes]:
     return 200, json.dumps(pair).encode()
 
 
+def view_only_demo(_app: AppCredential, _tokens: Tokens) -> dict[str, Any]:
+    """The account list of a grant that cannot trade: view scope over one demo account."""
+    return {
+        "permissionScope": "SCOPE_VIEW",
+        "ctidTraderAccount": [{"ctidTraderAccountId": "101", "isLive": False}],
+    }
+
+
 def the_home(keys: KeyStore) -> HomeSignIn:
     return HomeSignIn(
         name=lambda: "contabo",
         key=lambda: PAIRING,
         app=lambda: AppCredential("4242_demo", "app-pass"),
         keys=keys,
+        accounts=view_only_demo,
         fetch=token_endpoint,
         clock=lambda: NOW,
     )

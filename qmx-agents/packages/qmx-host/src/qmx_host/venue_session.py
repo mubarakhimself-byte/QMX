@@ -4,9 +4,10 @@ The home is This PC unless he names a place. (1) He clicks sign in; the home beg
 pending sign-in per app for 10 minutes. (2) This PC binds its loopback receiver on the registered
 redirect and opens cTrader's consent URL. (3) The receiver hands the one code to the home and
 keeps nothing. (4) The home takes its pending sign-in, good for one use, exchanges the code with
-the app's client id and secret, and writes the pair as `qmx/token/ctrader-app` in its own key
-store: Credential Manager on This PC, an owner-only file under `<home>/vault/` on a server. The
-vault refuses any name holding `token`, so the pair never replicates.
+the app's client id and secret, reads the grant's account list once, refuses by name a grant that
+can trade live money (ruling 135), and only then writes the pair as `qmx/token/ctrader-app` in
+its own key store: Credential Manager on This PC, an owner-only file under `<home>/vault/` on a
+server. The vault refuses any name holding `token`, so the pair never replicates.
 
 On This PC as home every step runs in this host, with no pairing key and no server. A home on a
 place is asked with a host pass, and its begin and code routes take a host pass only, so a chat,
@@ -16,6 +17,7 @@ the new home, after which This PC deletes its own pair.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -30,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
+from qmx_broker.adapters import Document, LiveGrant, can_trade_live
 from qmx_broker.credentials import (
     CTRADER_APP,
     CTRADER_TOKENS,
@@ -37,6 +40,7 @@ from qmx_broker.credentials import (
     CredentialManager,
     Joined,
     KeyStore,
+    TargetStore,
     join_ctrader_app,
 )
 from qmx_broker.models import BrokerSettings
@@ -50,10 +54,12 @@ from qmx_broker.oauth import (
     OAuthRefused,
     Receiver,
     Redirect,
+    Tokens,
     consent_url,
     exchange_code,
     urllib_fetch,
 )
+from qmx_broker.service import grant_accounts
 from qmx_engine.service.forward import (
     PASS_HEADER,
     ForwardRefused,
@@ -195,7 +201,7 @@ class Pending:
 class HomeSignIn:
     """The home's half: `open` a sign-in, then `exchange` its code. Another host reaches them
     through `begin` and `code`, each behind a host pass; this host's own button calls them in
-    process."""
+    process. `accounts` reads a fresh grant's account list once, before the pair is kept."""
 
     def __init__(
         self,
@@ -204,6 +210,7 @@ class HomeSignIn:
         key: Callable[[], str | None],
         app: Callable[[], AppCredential],
         keys: KeyStore,
+        accounts: Callable[[AppCredential, Tokens], Document],
         token_url: Callable[[], str] = lambda: TOKEN_URL,
         consent_base: Callable[[], str] = lambda: CONSENT_URL,
         fetch: Fetch = urllib_fetch,
@@ -213,6 +220,7 @@ class HomeSignIn:
         self._key = key
         self._app = app
         self.keys = keys
+        self._accounts = accounts
         self._token_url = token_url
         self._consent_base = consent_base
         self._fetch = fetch
@@ -260,9 +268,10 @@ class HomeSignIn:
             )
         if pending.expires_at <= self._clock():
             raise Refused("sign_in_expired", "the 10 minutes passed; click sign in again")
+        app = self._app()
         try:
             tokens = exchange_code(
-                self._app(),
+                app,
                 code,
                 pending.redirect,
                 token_url=self._token_url(),
@@ -271,6 +280,8 @@ class HomeSignIn:
             )
         except OAuthRefused as refused:
             raise Refused("exchange_refused", f"cTrader answered {refused.code}") from None
+        if can_trade_live(self._accounts(app, tokens)):
+            raise Refused(LiveGrant.code, LiveGrant.message)
         self.keys.replace(TOKEN_NAME, tokens.document())
         return {"word": "ok", "connection": APP}
 
@@ -362,7 +373,7 @@ class PcSignIn:
         here: HomeSignIn,
         join: Callable[[], Joined] = join_ctrader_app,
         post: Post = http_post,
-        open_browser: Callable[[str], object] = webbrowser.open,
+        open_browser: Callable[[str], object] | None = None,
         clock: Callable[[], float] = time.time,
         ticks: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -427,7 +438,7 @@ class PcSignIn:
                 daemon=True,
             )
             self._waiting.start()
-            self._open(str(begun["url"]))
+            (self._open or webbrowser.open)(str(begun["url"]))
             return waiting
 
     def _forward(self, aim: Target, code: str) -> Forwarded:
@@ -489,11 +500,20 @@ def venue_router(pc: PcSignIn, home: HomeSignIn) -> APIRouter:
     return router
 
 
-def for_host(home: Path, engine: EngineDoor) -> APIRouter:
+def for_host(
+    home: Path,
+    engine: EngineDoor,
+    *,
+    open_browser: Callable[[str], object] | None = None,
+    keys: TargetStore | None = None,
+    accounts: Callable[[AppCredential, Tokens], Document] | None = None,
+) -> APIRouter:
     """The venue routes as a host mounts them: its name, pairing key, Settings and placements.
 
     This PC keeps the app copy and the pair in Credential Manager; any other host keeps the pair
-    in its owner-only file and opens the app from its own vault copy.
+    in its owner-only file and opens the app from its own vault copy. A lane or test passes a
+    fake browser, an in-memory keyring as `keys` and a recorded account list; left out, they
+    are his browser, Credential Manager and one cTrader session.
     """
     key_file = home / "vault" / "pairing-key"
 
@@ -506,24 +526,55 @@ def for_host(home: Path, engine: EngineDoor) -> APIRouter:
     def settings() -> Mapping[str, Any]:
         return cast("Mapping[str, Any]", engine.control.settings_get(cast("Any", "ctrader")))
 
+    def rows() -> Sequence[Mapping[str, Any]]:
+        saved = engine.control.settings_get("connections").get("connections")
+        return cast("Sequence[Mapping[str, Any]]", saved if isinstance(saved, list) else [])
+
     def resolve() -> Target:
-        rows = engine.control.settings_get("connections").get("connections")
         instances = {f.instance.name: f.instance.url for f in engine.svc.forwarders}
-        return target(
-            settings(),
-            cast("Sequence[Mapping[str, Any]]", rows if isinstance(rows, list) else []),
-            instances,
-            this=name(),
-        )
+        return target(settings(), rows(), instances, this=name())
+
+    def one_session(app: AppCredential, tokens: Tokens) -> Document:
+        saved = BrokerSettings(connections=cast("Any", list(rows())))
+        ready = [
+            connection
+            for provider in saved.providers
+            if provider.adapter == "ctrader"
+            for connection in provider.connections
+            if connection.protocol_path and connection.protocol_tag is not None
+        ]
+        if not ready:
+            raise Refused(
+                "grant_unchecked",
+                "set protocol_path and protocol_tag on a cTrader connection so QMX can read "
+                "this sign-in's accounts, then sign in again",
+            )
+        try:
+            return asyncio.run(grant_accounts(ready[0], app, tokens.access_token))
+        except Exception as error:  # the read crosses the network; its failure keeps nothing
+            raise Refused(
+                "grant_unchecked",
+                f"QMX could not read this sign-in's accounts ({type(error).__name__}); "
+                "sign in again",
+            ) from None
 
     on_pc = name() == THIS_PC
-    keys: KeyStore = CredentialManager() if on_pc else HomeKeyStore(home)
+    store: KeyStore = CredentialManager(keys) if on_pc else HomeKeyStore(home)
     signing = HomeSignIn(
         name=name,
         key=key,
-        app=lambda: pc_app(keys) if on_pc else vault_app(home, name()),
-        keys=keys,
+        app=lambda: pc_app(store) if on_pc else vault_app(home, name()),
+        keys=store,
+        accounts=accounts or one_session,
         token_url=lambda: str(settings().get("token_url") or TOKEN_URL),
         consent_base=lambda: str(settings().get("consent_url") or CONSENT_URL),
     )
-    return venue_router(PcSignIn(name=name, key=key, resolve=resolve, here=signing), signing)
+    pc = PcSignIn(
+        name=name,
+        key=key,
+        resolve=resolve,
+        here=signing,
+        join=lambda: join_ctrader_app(keys),
+        open_browser=open_browser,
+    )
+    return venue_router(pc, signing)

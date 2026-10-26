@@ -46,7 +46,10 @@ class KeyStore(Protocol):
 
 class CredentialManager:
     """This PC's key store: Windows Credential Manager through keyring, each entry under its
-    `qmx/*` name with the name minus `qmx/` as its user name. No value is printed or logged."""
+    `qmx/*` name with the name minus `qmx/` as its user name. No value is printed or logged.
+
+    keyring's Windows backend re-saves an overwritten value under `<user>@<name>` before writing
+    the new one, so every write and delete also removes that companion: no stale copy stays."""
 
     def __init__(self, store: SecretStore | None = None) -> None:
         self._store = store
@@ -55,11 +58,18 @@ class CredentialManager:
         return _store(self._store).get_password(name, name.removeprefix("qmx/"))
 
     def replace(self, name: str, value: str) -> None:
-        _store(self._store).set_password(name, name.removeprefix("qmx/"), value)
+        user = name.removeprefix("qmx/")
+        _store(self._store).set_password(name, user, value)
+        self._forget(f"{user}@{name}", user)
 
     def delete(self, name: str) -> None:
+        user = name.removeprefix("qmx/")
+        self._forget(name, user)
+        self._forget(f"{user}@{name}", user)
+
+    def _forget(self, target: str, user: str) -> None:
         with suppress(PasswordDeleteError):
-            _store(self._store).delete_password(name, name.removeprefix("qmx/"))
+            _store(self._store).delete_password(target, user)
 
 
 class Held(Protocol):
