@@ -18,6 +18,7 @@ from qma.harness import Harness, QmxHome
 from qmx_control.server import local_token
 from qmx_control.service import ControlService
 from qmx_home import NoQmxFolder, resolve
+from qmx_home.versions import StoreRefused as VersionRefused
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.port import LibraryRefused as StoreRefused
 from qmx_library.store import Store
@@ -356,6 +357,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         except NoQmxFolder as missing:
             print(missing, file=sys.stderr)
             return 1
+    try:
+        return command(args)
+    except VersionRefused as refused:
+        print(refused, file=sys.stderr)
+        return 1
+
+
+def command(args: argparse.Namespace) -> int:
+    """Run the parsed command. A store this release must not open or upgrade surfaces as
+    `VersionRefused`, which `main` prints as its one line."""
     if args.command == "templates":
         if args.templates_command == "list":
             return list_templates(args.home)

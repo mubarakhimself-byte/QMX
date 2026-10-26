@@ -31,7 +31,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 from qmx_home import LABEL, TREE, Label, Layout
 from qmx_home.stores import APPLICATION_ID, STORES, Store, Version
@@ -126,8 +126,10 @@ def open_sqlite(
     in autocommit mode (`isolation_level=None`). `steps[n]` moves the store from version n to
     n + 1, and there are exactly as many steps as this release's version of the store.
 
-    The file is judged before anything is written to it, and only then switched to WAL (every
-    QMX store runs in WAL; switching after a step that drops a table leaves SQLite unable to
+    The file is judged through a `mode=ro` connection of its own before `connection` reads it, so
+    a store refused as too new or not QMX's is never checkpointed by the opener's connection when
+    it closes (its pending `-wal` stays as it is). Only then is it switched to WAL (every QMX
+    store runs in WAL; switching after a step that drops a table leaves SQLite unable to
     checkpoint on that connection). A store whose file held none of this store's tables is made
     at this release in one go; it has nothing to copy. An unmarked file of today's version is
     marked in place. Raises StoreRefused for a store too new, a file that is not QMX's, an upgrade
@@ -137,7 +139,11 @@ def open_sqlite(
     if len(steps) != store.release.version:
         raise ValueError(f"{name} has {len(steps)} steps for version {store.release.version}")
     path = _file_of(connection)
-    found = _judge(store, _found(connection, store, path), path)
+    if path is not None and path.is_file() and path.stat().st_size > 0:
+        with closing(_reader(path)) as reading:
+            found = _judge(store, _found(reading, store, path), path)
+    else:
+        found = _judge(store, _found(connection, store, path), path)
     connection.execute("PRAGMA journal_mode = WAL").fetchall()
     if found is not None and found.version.version > store.release.version:
         return Opened(found.version, (), None, newer=True)
@@ -166,10 +172,12 @@ def too_new(path: Path, name: str) -> str | None:
     if layout is None:
         return None
     label = _label_of(layout)
-    if label is None:
+    if label is None or name not in label.stores:
         return None
-    found = _entry(label.stores.get(name))
-    if found is None or not _closed(store, found):
+    found = _entry(label.stores[name])
+    if found is None:
+        return _unreadable_entry(store, layout)
+    if not _closed(store, found):
         return None
     return _too_new(store, found, layout)
 
@@ -203,6 +211,16 @@ def index_state(connection: sqlite3.Connection, name: str) -> IndexState:
     if app != 0 or (tables and (user != 0 or not tables & set(store.tables))):
         return "foreign"
     return "current" if not tables or store.release.version == 1 else "rebuild"
+
+
+def index_file_state(path: Path, name: str) -> IndexState:
+    """`index_state` of the index file at `path`, read through a `mode=ro` connection, so a file
+    that is not QMX's is never checkpointed before it is moved aside. A missing or empty file is
+    `current`: it is made new."""
+    if not path.is_file() or path.stat().st_size == 0:
+        return "current"
+    with closing(_reader(path)) as reading:
+        return index_state(reading, name)
 
 
 def mark_index(connection: sqlite3.Connection, name: str) -> None:
@@ -239,19 +257,20 @@ def snapshot(
         raise SnapshotFailed(f"{outside[0]} is outside the QMX folder {layout.root}")
     needed = sum(_bytes(file) for file in present)
     try:
-        layout.backups.mkdir(exist_ok=True)
-        free = shutil.disk_usage(layout.backups).free
+        free = shutil.disk_usage(layout.root).free
     except OSError as refused:
-        raise SnapshotFailed(f"cannot use {layout.backups}: {refused.strerror}") from None
+        raise SnapshotFailed(f"cannot use {layout.root}: {refused.strerror}") from None
     if free - needed < FLOOR_BYTES:
         raise SnapshotFailed(
             f"the copy needs {_mb(needed)} and the drive holding {layout.root} has {_mb(free)} "
             f"free; QMX keeps at least {_mb(FLOOR_BYTES)} free there. Free some space and start "
             "QMX again"
         )
+    made_backups = not layout.backups.exists()
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     target = layout.backups / f"pre-{what}-{before}-{after}-{stamp}"
     try:
+        layout.backups.mkdir(exist_ok=True)
         target.mkdir()
         for file in present:
             copy = target / file.resolve().relative_to(layout.root)
@@ -263,6 +282,9 @@ def snapshot(
                 shutil.copy2(file, copy)
     except (OSError, sqlite3.Error) as failed:
         shutil.rmtree(target, ignore_errors=True)
+        if made_backups:
+            with suppress(OSError):
+                layout.backups.rmdir()
         raise SnapshotFailed(f"the copy into {target} failed ({_why(failed)})") from None
     _log(
         layout,
@@ -280,6 +302,34 @@ def snapshot(
     return target
 
 
+def completed_copies(layout: Layout, what: str) -> list[Path]:
+    """The pre-change copies of `what` the backup log records as complete. The log line is
+    written after the last file is copied, so a copy cut short by a kill or a power cut is not
+    among them."""
+    try:
+        lines = (layout.backups / LOG).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    found: list[Path] = []
+    for line in lines:
+        try:
+            record: object = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(record, dict):
+            continue
+        entry = cast("dict[str, object]", record)
+        path = layout.root / str(entry.get("path", ""))
+        if (
+            entry.get("kind") == "pre-change"
+            and entry.get("what") == what
+            and path.parent == layout.backups
+            and path.is_dir()
+        ):
+            found.append(path)
+    return found
+
+
 def check_open(layout: Layout) -> Opening:
     """Read every store of the folder against this release by B2, changing none of them: no copy
     is taken and no step runs, because each store's opener does that when it opens. The label's
@@ -293,7 +343,9 @@ def check_open(layout: Layout) -> Opening:
         verdict, entry = _verdict(layout, label, store)
         verdicts.append(verdict)
         if entry is not None:
-            stores[store.name] = {"version": entry.version, "min_reader": entry.min_reader}
+            merged = _merged(stores.get(store.name), entry)
+            if merged is not None:
+                stores[store.name] = merged
     written = label is not None and _rewrite_label(layout, label, stores, verdicts)
     return Opening(tuple(verdicts), written, time.monotonic() - started)
 
@@ -302,9 +354,12 @@ def _verdict(layout: Layout, label: Label | None, store: Store) -> tuple[Verdict
     """One store's verdict, and the label entry it should have (None: leave the entry alone)."""
     match store.kind:
         case "files":
-            entry = _entry(None if label is None else label.stores.get(store.name))
-            if entry is None:
+            if label is None or store.name not in label.stores:
                 return _compare(layout, store, store.release), store.release
+            entry = _entry(label.stores[store.name])
+            if entry is None:
+                action: Action = "read-only" if store.read_only else "refused"
+                return Verdict(store.name, action, None, _unreadable_entry(store, layout)), None
             return _compare(layout, store, entry), None
         case "index":
             path = layout.data / store.path
@@ -360,6 +415,30 @@ def _compare(layout: Layout, store: Store, found: Version) -> Verdict:
     return Verdict(store.name, action, found, _too_new(store, found, layout))
 
 
+def _merged(existing: object, found: Version) -> dict[str, object] | None:
+    """The label entry with the file's version and `min_reader` written in, every other field it
+    holds kept; None leaves an entry this release cannot read as it is."""
+    if existing is None:
+        return {"version": found.version, "min_reader": found.min_reader}
+    if not isinstance(existing, dict):
+        return None
+    return {
+        **cast("dict[str, object]", existing),
+        "version": found.version,
+        "min_reader": found.min_reader,
+    }
+
+
+def _unreadable_entry(store: Store, layout: Layout) -> str:
+    after = f" The {store.words} opens read-only until then." if store.read_only else ""
+    return (
+        f"This QMX folder's label {layout.label} says what version the {store.words} is in a "
+        "way this QMX cannot read, so it may be newer than this QMX. Install the QMX that last "
+        f"wrote this folder, or restore the copy taken before the upgrade from {layout.backups}."
+        f"{after}"
+    )
+
+
 def _closed(store: Store, found: Version) -> bool:
     return found.version > store.release.version and found.min_reader > store.release.version
 
@@ -370,7 +449,9 @@ def _rewrite_label(
     if label.format_version != TREE:
         return False
     newer = any(
-        v.found is not None and v.found.version > STORES[v.store].release.version for v in verdicts
+        (v.found is not None and v.found.version > STORES[v.store].release.version)
+        or (v.found is None and v.action in ("refused", "read-only"))
+        for v in verdicts
     )
     by = label.last_written_by if newer else version("qmx-home")
     if stores == dict(label.stores) and by == label.last_written_by:

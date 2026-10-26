@@ -11,6 +11,7 @@ import pytest
 from qmx_home import resolve
 from qmx_home.versions import StoreRefused
 
+from qmx_engine.__main__ import main
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.migrations import STEPS
 from qmx_engine.ledger.store import Ledger, Reader
@@ -111,3 +112,21 @@ def test_an_inbox_that_is_not_qmxs_is_refused_and_left_as_it_was(tmp_path: Path)
 
     assert str(refused.value).startswith(f"{path} is not a QMX inbox: it holds none of")
     assert path.read_bytes() == before
+
+
+def test_the_engine_command_line_shows_a_refused_ledger_as_its_one_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = home_of(tmp_path)
+    written_by_a_newer_release(home, version=7, min_reader=5)
+
+    code = main(["ledger", "stats", "--home", str(home.parent)])
+
+    printed = capsys.readouterr()
+    assert (code, printed.out) == (1, "")
+    assert printed.err == (
+        "This QMX folder's run ledger was written by QMX 0.1.0 as run ledger version 7. This "
+        "QMX reads run ledger version 4, and this one needs a QMX that reads version 5 or "
+        f"newer. Install that QMX, or restore the copy taken before the upgrade from "
+        f"{home.parent / 'backups'}.\n"
+    )

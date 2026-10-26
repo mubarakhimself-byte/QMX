@@ -456,14 +456,16 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
 
 def _copy_before_layout(root: Path) -> None:
     """The pre-change copy of the layout step (B3, guard 4): the flat home's SQLite stores, its
-    settings and the step's plan, into `backups/` before the first move. A stopped step that
-    already made its copy is not copied again; a home with no store has nothing to copy."""
+    settings and the step's plan, into `backups/` before the first move. A stopped step whose
+    copy the backup log records as complete is not copied again; a copy cut short is made again
+    beside it. A home with no store has nothing to copy."""
     from qmx_home.versions import (  # noqa: PLC0415 (versions imports this module)
         SnapshotFailed,
+        completed_copies,
         snapshot,
     )
 
-    if any((root / "backups").glob("pre-layout-*")):
+    if completed_copies(Layout(root), "layout"):
         return
     stores = [root / store.path for store in STORES.values() if store.kind == "sqlite"]
     if not any(store.is_file() for store in stores):
@@ -573,8 +575,20 @@ def _remove_if_empty(folder: Path) -> None:
         folder.rmdir()
 
 
+def _own_backups(folder: Path) -> bool:
+    """Whether `folder` holds nothing but the layout step's own copies and their log: what a
+    step that stopped, or whose copy was refused, leaves in a flat home's `backups/`."""
+    return folder.is_dir() and all(
+        (entry.name == "backups.jsonl" and entry.is_file())
+        or (entry.name.startswith("pre-layout-") and entry.is_dir())
+        for entry in folder.iterdir()
+    )
+
+
 def _plan(root: Path) -> list[tuple[str, str]]:
     top = {entry.name for entry in root.iterdir()} - {LABEL, JOURNAL}
+    if _own_backups(root / "backups"):
+        top.discard("backups")
     taken = sorted(top & TAKEN)
     if taken:
         raise LayoutRefused(
