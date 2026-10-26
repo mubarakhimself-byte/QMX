@@ -6,23 +6,78 @@ import asyncio
 import hashlib
 import json
 import sqlite3
-from collections.abc import AsyncGenerator, Callable, Mapping
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, closing
 from functools import partial
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 from qmf.core import is_refusal
-from qmf.venue.proto import compile_descriptor_set
+from qmf.venue.proto import CompiledProto, compile_descriptor_set
 
-from qmx_broker.adapters import CCXTAdapter, CTraderAdapter, Document, ReadAdapter
-from qmx_broker.credentials import credentials
+from qmx_broker.adapters import CCXTAdapter, CTraderAdapter, Document, LiveGrant, ReadAdapter
+from qmx_broker.credentials import (
+    CTRADER_APP,
+    CTRADER_TOKENS,
+    THIS_PC,
+    CredentialManager,
+    KeyStore,
+    credentials,
+)
 from qmx_broker.ctrader_transport import CTraderTransport
 from qmx_broker.models import Account, Broker, BrokerSettings, Connection, OrderProposal
+from qmx_broker.oauth import AppCredential, Tokens
 
 type AdapterFactory = Callable[
     [Broker, Connection, Account], AbstractAsyncContextManager[ReadAdapter]
 ]
+
+
+class Session(Protocol):
+    async def request(self, name: str, values: Document) -> Document: ...
+    async def spot(self, name: str, values: Document) -> Document: ...
+    async def close(self) -> None: ...
+
+
+type Connect = Callable[[CompiledProto, str], Awaitable[Session]]
+
+
+def compiled(connection: Connection) -> CompiledProto:
+    """The cTrader messages from the connection's pinned FileDescriptorSet."""
+    if not connection.protocol_path or connection.protocol_tag is None:
+        raise ValueError(
+            "Set protocol_path and protocol_tag to the node's pinned FileDescriptorSet"
+        )
+    proto = compile_descriptor_set(
+        Path(connection.protocol_path).read_bytes(),
+        package_name="openapi-proto-messages",
+        release_tag=connection.protocol_tag,
+    )
+    if is_refusal(proto):
+        raise ValueError("Invalid cTrader protocol definitions")
+    return proto.value
+
+
+async def grant_accounts(
+    connection: Connection,
+    app: AppCredential,
+    access_token: str,
+    *,
+    connect: Connect = CTraderTransport.connect,
+) -> Document:
+    """A fresh grant's account list, read once over one session, so its home can refuse a grant
+    that can trade live money before it keeps the pair (ruling 135)."""
+    session = await connect(compiled(connection), connection.environment)
+    try:
+        await session.request(
+            "ProtoOAApplicationAuthReq",
+            {"clientId": app.client_id, "clientSecret": app.client_secret},
+        )
+        return await session.request(
+            "ProtoOAGetAccountListByAccessTokenReq", {"accessToken": access_token}
+        )
+    finally:
+        await session.close()
 
 
 @asynccontextmanager
@@ -32,7 +87,12 @@ async def open_adapter(
     account: Account,
     *,
     exchanges: dict[tuple[str, str, str], CCXTAdapter] | None = None,
+    keys: KeyStore | None = None,
+    connect: Connect = CTraderTransport.connect,
 ) -> AsyncGenerator[ReadAdapter]:
+    """One read session. A cTrader session opens only on This PC as the connection's home: the
+    app half comes from the row's `qmx/read/*` entry and the access token from This PC's key
+    store. A grant that can trade live money is refused by name and its pair deleted."""
     secret = credentials(account.credential_ref or connection.credential_ref)
     if broker.adapter == "ccxt":
         import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
@@ -67,23 +127,27 @@ async def open_adapter(
             exchanges[identity] = adapter
         yield adapter
         return
-    if not {"clientId", "clientSecret", "accessToken"} <= secret.keys():
-        raise ValueError("cTrader credentials require clientId, clientSecret and accessToken")
-    if not connection.protocol_path or connection.protocol_tag is None:
+    if connection.home != THIS_PC:
         raise ValueError(
-            "Set protocol_path and protocol_tag to the node's pinned FileDescriptorSet"
+            f"{connection.id} is signed in on {connection.home}; This PC opens no session for it"
         )
-    compiled = compile_descriptor_set(
-        Path(connection.protocol_path).read_bytes(),
-        package_name="openapi-proto-messages",
-        release_tag=connection.protocol_tag,
-    )
-    if is_refusal(compiled):
-        raise ValueError("Invalid cTrader protocol definitions")
-    transport = await CTraderTransport.connect(compiled.value, connection.environment)
+    if not {"clientId", "clientSecret"} <= secret.keys():
+        raise ValueError(f"{CTRADER_APP} needs clientId and clientSecret")
+    proto = compiled(connection)
+    store = CredentialManager() if keys is None else keys
+    held = store.read(CTRADER_TOKENS)
+    if held is None:
+        raise ValueError("Sign in to cTrader on This PC first")
+    transport = await connect(proto, connection.environment)
     try:
         adapter = CTraderAdapter(account, transport.request, transport.spot)
-        await adapter.authenticate(connection, secret)
+        try:
+            await adapter.authenticate(
+                connection, {**secret, "accessToken": Tokens.from_document(held).access_token}
+            )
+        except LiveGrant:
+            store.delete(CTRADER_TOKENS)
+            raise
         yield adapter
     finally:
         await transport.close()
@@ -199,6 +263,8 @@ class BrokerService:
                 if operation == "bars":
                     return await read_bars(adapter, **kwargs)
                 return await getattr(adapter, operation)(**kwargs)
+        except LiveGrant:
+            raise
         except Exception:
             raise ValueError(
                 "Broker read failed; check credentials, network and node protocol settings"

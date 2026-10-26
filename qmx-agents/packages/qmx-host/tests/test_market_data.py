@@ -1,4 +1,5 @@
-"""The market-data door: one writer, the seal on every read, the final look on the primary."""
+"""The market-data door: one writer, open with no holdout, a study's holdout on its own reads,
+and the final look on the primary."""
 
 from __future__ import annotations
 
@@ -6,14 +7,28 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from qmf.core import CalendarIdentity, World, is_ok, is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.splits import SplitBoundary, SplitManifest
 from qmf.data.store.engines.typed import TypedWriter
+from qmx_control.service import ControlService
 
-from qmx_host.market_data import HANDLE_ROWS, SEAL_READ_REASON, MarketDoor, Placement, Purpose
+from qmx_host.host import market_door
+from qmx_host.market_data import (
+    HANDLE_ROWS,
+    NO_HOLDOUT,
+    SEAL_READ_REASON,
+    MarketDoor,
+    Placement,
+    Purpose,
+    market_router,
+)
 
 DAY = 86_400 * 1_000_000_000
+SERIES = "dukascopy/EURUSD/bar-m1/-"
 
 
 def _at(year: int, month: int, day: int = 1) -> int:
@@ -125,7 +140,7 @@ def test_a_train_read_stops_at_the_gap(tmp_path: Path) -> None:
     ]
 
 
-def test_a_read_without_data_scope_is_refused_on_the_primary(tmp_path: Path) -> None:
+def test_a_read_without_data_scope_is_refused_on_the_server(tmp_path: Path) -> None:
     door = _door(tmp_path, placement=Placement.SERVER)
     _committed(tmp_path, door)
     refused = door.read("dukascopy/EURUSD/bar-m1/-", start_ns=JAN, end_ns=FEB)
@@ -166,3 +181,150 @@ def test_a_big_read_returns_a_handle(tmp_path: Path) -> None:
     assert handle["rows"] == HANDLE_ROWS + 1
     assert Path(str(handle["path"])).is_file()
     assert answered.value.rows == ()
+
+
+def _open(tmp_path: Path, data: dict[str, object], **kwargs: Any) -> MarketDoor:
+    built = MarketDoor.open(tmp_path / "market", data, **kwargs)
+    assert is_ok(built), built
+    return built.value
+
+
+def _land(tmp_path: Path, door: MarketDoor, year: int, month: int) -> int:
+    start = _at(year, month)
+    staging = tmp_path / "staging"
+    staged = _stage(staging, _key(year, month), _bars(start + DAY, start + 2 * DAY))
+    assert is_ok(door.commit([staged], staging=staging))
+    return start
+
+
+def _times(answer: Any) -> list[object]:
+    assert is_ok(answer), answer
+    return [row["t"] for row in answer.value.rows]
+
+
+def test_door_opens_without_a_holdout_and_serves_1996(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    start = _land(tmp_path, door, 1996, 1)
+    served = door.read(SERIES, start_ns=start, end_ns=_at(1996, 2), purpose="exploration")
+    assert _times(served) == [820_540_800_000, 820_627_200_000]
+
+
+def test_a_study_holdout_seals_only_its_own_reads(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    sealed = door.read(SERIES, start_ns=FEB, end_ns=MAR, holdout={"boundary": "2026-02"}, run="a")
+    assert is_refusal(sealed)
+    assert SEAL_READ_REASON in str(sealed.context)
+    other = door.read(SERIES, start_ns=FEB, end_ns=MAR, run="b")
+    assert _times(other) == [(FEB + DAY) // 1_000_000]
+
+
+def test_a_run_keeps_the_holdout_of_its_first_read(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    first = door.read(SERIES, start_ns=JAN, end_ns=FEB, holdout={"boundary": "2026-02"}, run="a")
+    assert is_ok(first)
+    mixed = door.read(SERIES, start_ns=FEB, end_ns=MAR, holdout="off", run="a")
+    assert is_refusal(mixed)
+    assert "fixed on its first read" in str(mixed.context)
+    unnamed = door.read(SERIES, start_ns=FEB, end_ns=MAR, run="a")
+    assert is_refusal(unnamed)
+    assert SEAL_READ_REASON in str(unnamed.context)
+
+
+def test_a_run_asking_for_a_second_holdout_over_http_is_refused_by_name(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    app = FastAPI()
+    app.include_router(market_router(door))
+    body: dict[str, object] = {
+        "series": SERIES,
+        "start_ns": JAN,
+        "end_ns": FEB,
+        "run": "r1",
+        "holdout": "off",
+    }
+    with TestClient(app) as rest:
+        first = rest.post("/api/data/read", json=body)
+        second = rest.post("/api/data/read", json=body | {"holdout": {"boundary": "2026-02"}})
+    assert (first.status_code, second.status_code) == (200, 400)
+    assert second.json()["detail"]["context"]["field"] == "holdout"
+
+
+def test_a_final_look_with_no_holdout_is_answered_by_name(tmp_path: Path) -> None:
+    door = _open(tmp_path, {}, split=_split())
+    _committed(tmp_path, door)
+    looked = door.read(
+        SERIES, start_ns=FEB, end_ns=MAR, purpose=Purpose.FINAL_LOOK, into=tmp_path / "attempt"
+    )
+    assert is_refusal(looked)
+    assert NO_HOLDOUT in str(looked.context)
+
+
+def test_a_holdout_turned_on_in_settings_reaches_the_next_read(tmp_path: Path) -> None:
+    data: dict[str, object] = {}
+    door = _open(tmp_path, data, settings=lambda: data)
+    old = _land(tmp_path, door, 1996, 1)
+    recent = _land(tmp_path, door, 2025, 3)
+    data.update(holdout=True, holdout_boundary="2025-01")
+    refused = door.read(SERIES, start_ns=recent, end_ns=_at(2025, 4))
+    assert is_refusal(refused)
+    assert SEAL_READ_REASON in str(refused.context)
+    assert _times(door.read(SERIES, start_ns=old, end_ns=_at(1996, 2))) == [
+        820_540_800_000,
+        820_627_200_000,
+    ]
+    study_off = door.read(SERIES, start_ns=recent, end_ns=_at(2025, 4), holdout="off")
+    assert _times(study_off) == [(recent + DAY) // 1_000_000, (recent + 2 * DAY) // 1_000_000]
+
+
+def test_a_month_saved_without_the_switch_leaves_reads_open(tmp_path: Path) -> None:
+    door = _open(tmp_path, {"holdout_boundary": "2025-01"})
+    recent = _land(tmp_path, door, 2025, 3)
+    served = door.read(SERIES, start_ns=recent, end_ns=_at(2025, 4))
+    assert _times(served) == [1_740_873_600_000, 1_740_960_000_000]
+
+
+def test_a_stored_month_before_1970_is_named_and_the_host_still_starts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "settings.toml").write_text(
+        '[data]\nholdout = true\nholdout_boundary = "0000-01"\n', encoding="utf-8"
+    )
+    door = market_door(tmp_path, ControlService(tmp_path), "pc")
+    assert door is None
+    said = capsys.readouterr().err
+    assert "holdout_boundary" in said
+    assert "0000-01" in said
+
+
+def test_a_read_naming_a_month_before_1970_is_refused_by_name(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    app = FastAPI()
+    app.include_router(market_router(door))
+    body = {"series": SERIES, "start_ns": JAN, "end_ns": FEB, "holdout": {"boundary": "0000-01"}}
+    with TestClient(app) as rest:
+        refused = rest.post("/api/data/read", json=body)
+    assert refused.status_code == 400
+    detail = refused.json()["detail"]
+    assert (detail["refused"], detail["context"]["field"]) == ("invalid input", "holdout_boundary")
+
+
+def test_a_commit_is_born_on_the_doors_own_place(tmp_path: Path) -> None:
+    pc = _open(tmp_path / "pc", {})
+    _land(tmp_path / "pc", pc, 1996, 1)
+    server = _open(tmp_path / "server", {}, placement=Placement.SERVER)
+    _land(tmp_path / "server", server, 1996, 1)
+    assert (pc.pinned(), server.pinned()) == (("-/1996-01",), ())
+    marker = next((tmp_path / "pc" / "market" / "series").rglob(".pinned"))
+    assert '"from": "pc"' in marker.read_text(encoding="utf-8")
+
+
+def test_the_pc_serves_the_final_look_when_library_primary_is_pc(tmp_path: Path) -> None:
+    door = _door(tmp_path)
+    _committed(tmp_path, door)
+    looked = door.read(
+        SERIES, start_ns=FEB, end_ns=MAR, purpose=Purpose.FINAL_LOOK, into=tmp_path / "attempt"
+    )
+    assert _times(looked) == [(FEB + DAY) // 1_000_000]

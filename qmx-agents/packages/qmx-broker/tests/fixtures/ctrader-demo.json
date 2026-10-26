@@ -1,7 +1,7 @@
 {
   "provenance": "Protocol-shaped offline fixture from the official OpenApiMessages.proto and OpenApiModelMessages.proto; not a live capture.",
   "ProtoOAApplicationAuthReq": {},
-  "ProtoOAGetAccountListByAccessTokenReq": {"accessToken": "offline", "ctidTraderAccount": [{"ctidTraderAccountId": "101", "isLive": false}, {"ctidTraderAccountId": "202", "isLive": true}]},
+  "ProtoOAGetAccountListByAccessTokenReq": {"accessToken": "offline", "permissionScope": "SCOPE_VIEW", "ctidTraderAccount": [{"ctidTraderAccountId": "101", "isLive": false}, {"ctidTraderAccountId": "202", "isLive": true}]},
   "ProtoOAAccountAuthReq": {"ctidTraderAccountId": "101"},
   "ProtoOASymbolsListReq": {"ctidTraderAccountId": "101", "symbol": [{"symbolId": "1", "symbolName": "EURUSD"}]},
   "ProtoOASymbolByIdReq": {"ctidTraderAccountId": "101", "symbol": [{"symbolId": "1", "digits": 5, "pipPosition": 4, "minVolume": "100", "stepVolume": "100"}]},

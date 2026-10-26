@@ -15,6 +15,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from qmx_engine.ledger import redact
 from qmx_library.principal import Principal
 from qmx_library.store import Store
@@ -111,3 +112,31 @@ def test_two_months_land_as_two_partitions_with_one_card_and_a_resume(tmp_path: 
     ]
     assert sorted((tmp_path / "store" / "series").rglob("*.parquet")) == files
     assert [path for path in (tmp_path / "store" / "staging").rglob("*") if path.is_file()] == []
+
+
+def test_ticks_read_in_place_land_in_the_folders_market_with_no_seal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_tree(tmp_path)
+    original = tmp_path / "backup" / import_old_ticks.TICKS_FOLDER
+    before = sorted(path.relative_to(original) for path in original.rglob("*"))
+    monkeypatch.setenv("QMX_HOME", str(tmp_path / "qmx"))
+
+    code = import_old_ticks.main(
+        [
+            "--ticks-root",
+            str(original),
+            "--ticks-manifest",
+            str(tmp_path / "backup" / import_old_ticks.MANIFEST_NAME),
+            "--report",
+            str(tmp_path / "report.json"),
+            "--only",
+            "ticks",
+        ]
+    )
+
+    assert code == 0
+    landed = (tmp_path / "qmx" / "market" / "series").rglob("*.parquet")
+    assert sorted(path.parent.name for path in landed) == ["2024-01", "2024-02"]
+    assert sorted(path.relative_to(original) for path in original.rglob("*")) == before
+    assert sorted(item.name for item in tmp_path.iterdir()) == ["backup", "qmx", "report.json"]
