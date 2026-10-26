@@ -158,7 +158,7 @@ async def e65(log: Log) -> None:
     harness = await RecordedHarness.open(home, control=control)
     try:
         with Store.open(SHIP_HOME / LIBRARY, redactor=redact) as store:
-            index = HindsightIndex(HindsightConfig(home=SHIP_HOME / "memory" / "hindsight"))
+            index = HindsightIndex(HindsightConfig(layout=home.layout))
             engine = RecallEngine(store, index=index, home=SHIP_HOME / "memory")
             try:
                 harness.record_into(SessionRecorder(store))

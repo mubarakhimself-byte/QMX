@@ -7,9 +7,9 @@ in its own key file, so it never asks the PC for a value. The lane never prints 
 names, fingerprints, and answer codes, because a value in a log is the leak this lane exists to
 prevent.
 
-Two ends, one file. `--serve` is the node end: it makes or reads `/srv/qmx/bld/rtrp/home/.qmx/`
-`vault.key`, publishes its public half for the PC, and after the sync opens its own entry. The
-default mode is the PC end, which drives the sync over the tailnet.
+Two ends, one file. `--serve` is the node end: it makes or reads `/srv/qmx/bld/rtrp/keys/`
+`vault.key` beside its home `home/`, publishes its public half for the PC, and after the sync opens
+its own entry. The default mode is the PC end, which drives the sync over the tailnet.
 
 Usage, from the worktree:
 
@@ -87,31 +87,30 @@ def serve(port: int, secret: str, path: Path) -> int:
     from qmx_router.passes import PassAuthority, RevocationList
     from qmx_router.server import NodeState, node_app
     from qmx_router.vault import (
-        KEY_FILE,
-        KEY_FOLDER,
         VaultKey,
         VaultStore,
         VaultUnavailable,
+        key_file,
         read_machine_key,
         write_machine_key,
     )
 
     key_home = Path(os.environ.get("QMX_VAULT_HOME", NODE_HOME))
-    written = key_home / KEY_FOLDER / KEY_FILE
+    written = key_file(key_home)
     if not written.exists():
         write_machine_key(key_home, VaultKey.generate())
-        log(path, f"PASS e26 the node made its own key pair at {KEY_FOLDER}/{KEY_FILE}")
+        log(path, f"PASS e26 the node made its own key pair at {written}")
     try:
         key = read_machine_key(key_home, MACHINE)
     except VaultUnavailable as missing:
         log(path, f"FAIL e26 {missing}")
         return 1
-    log(path, f"PASS e26 the node read its own key file at {KEY_FOLDER}/{KEY_FILE}")
+    log(path, f"PASS e26 the node read its own key file at {written}")
     Path(os.environ["QMX_KEY_PUB"]).write_text(
         base64.b64encode(key.public_bytes()).decode("ascii"), encoding="utf-8"
     )
     try:
-        read_machine_key(key_home / "empty", MACHINE)
+        read_machine_key(key_home / "empty" / "data", MACHINE)
     except VaultUnavailable as missing:
         log(path, f"PASS e26 a machine with no key file says {missing}")
     else:
