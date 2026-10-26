@@ -38,6 +38,41 @@ KINDS: Final = {"article": "source", "backtest": "backtest-result"}
 SLOTS: Final = {"source": "content", "artifact": "content", "backtest-result": "report"}
 """The blob slot each store kind's schema names for the old `content`."""
 ERRORS: Final = {"not_found": 404, "storage_failure": 409, "read_only_replica": 409}
+OLD_LIBRARY: Final = "library.db"
+"""The old Library's file, which only the switch reads (62a gap L4)."""
+UNFINISHED: Final = "migration/bring-in-unfinished.txt"
+"""Present while the first start's bring-in of old data into this home has not finished; it holds
+the reason in plain words. The bring-in writes it before its first copy and removes it last."""
+BRING_IN_COMMAND: Final = "python -m qmx_host bring-in --home <new QMX folder> --old <old folder>"
+
+
+def old_library(home: Path) -> str | None:
+    """Why this home's Library must not open, or None (62a gap L4).
+
+    A home holding the old `library.db` and an empty `library/` would open a new, empty Library
+    beside his items without a word, so his items would look gone. A home whose bring-in did not
+    finish holds a partial copy. Both are refused by name, with the first start that fixes them.
+    """
+    unfinished = home / UNFINISHED
+    if unfinished.is_file():
+        try:
+            why = unfinished.read_text(encoding="utf-8").strip()
+        except OSError, ValueError:
+            why = "its record cannot be read"
+        return (
+            f"bringing your old QMX data into {home} did not finish: {why}. Your old folder was "
+            f"never changed. Remove this QMX folder and run the first start again: "
+            f"{BRING_IN_COMMAND}"
+        )
+    objects = home / LIBRARY / "objects"
+    if (home / OLD_LIBRARY).is_file() and not (objects.is_dir() and any(objects.iterdir())):
+        return (
+            f"{home} holds your old Library ({OLD_LIBRARY}) and the new Library there is empty, "
+            "so QMX will not open it and leave your items out of sight. Bring your old data into "
+            f"a new QMX folder with the first start, which never changes this one: "
+            f"{BRING_IN_COMMAND}"
+        )
+    return None
 
 
 def encoded(value: JsonValue) -> bytes:
@@ -63,7 +98,11 @@ _STORES_LOCK: Final = threading.Lock()
 
 
 def open_store(home: Path) -> Store:
-    """The one writer of `<home>/library/` this process uses, opened on first use."""
+    """The one writer of `<home>/library/` this process uses, opened on first use. Refused with
+    `old_library`'s reason before any folder is made."""
+    refusal = old_library(home)
+    if refusal is not None:
+        raise ControlError("old_library", refusal, 409)
     root = (home / LIBRARY).resolve()
     with _STORES_LOCK:
         found = _STORES.get(root)

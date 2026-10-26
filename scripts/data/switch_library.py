@@ -1,8 +1,10 @@
 """Switch a home from Library B to the one Library store (MIGRATION steps 0, 2, 4 and 6).
 
-The real step: after the stack is landed (gate G-LAND) and P-TORN and P-REHEARSE passed, the
-coordinator runs this on `~/.qmx` while no host answers there. It refuses when a host still holds
-the home, because a save during the import would land in the store and never reach `library.db`.
+The first start's bring-in (`python -m qmx_host bring-in`, design 62 F step 4) runs the same
+`switch_over` on its copy of the old folder; this script is the same switch by hand, on the `data/`
+of a QMX folder only, so an old folder is never switched in place. It refuses when a host still
+holds the home, because a save during the import would land in the store and never reach
+`library.db`.
 
 What it does, all of it in `qmx_library.migrate.from_library_b.switch_over`:
 
@@ -18,7 +20,7 @@ What it does, all of it in `qmx_library.migrate.from_library_b.switch_over`:
 The report, every count and the filtered ids, is printed as JSON and written to
 `<home>/migration/switch-report.json`.
 
-    uv run --no-sync --project qmx-agents python scripts/data/switch_library.py --home ~/.qmx
+    uv run --no-sync --project qmx-agents python scripts/data/switch_library.py --home D:/QMX/data
 """
 
 from __future__ import annotations
@@ -28,33 +30,42 @@ import json
 import sys
 from pathlib import Path
 
-from qmx_control.library import Library
+from qmx_control.library import LIBRARY, WRITING
 from qmx_engine.ledger import redact
+from qmx_home.versions import folder_of
 from qmx_library.migrate.from_library_b import switch_over
 from qmx_library.port import LibraryRefused
+from qmx_library.store import Store
 
-HOME = Path.home() / ".qmx"
 REFUSED = 2
-"""Exit code when a host still answers on the home: nothing was read, imported or moved."""
+"""Exit code when a host still answers on the home, or the home is not a copy inside a QMX folder:
+nothing was read, imported or moved."""
 
 
 def host_answers(home: Path) -> str | None:
-    """The store's writer lock, held by whoever serves the home; None when the home is quiet."""
-    library = Library(home)
+    """The store's writer lock, held by whoever serves the home; None when the home is quiet. The
+    store is opened directly, because the Library refuses to open beside an unswitched
+    `library.db`, which is exactly what this script switches."""
     try:
-        opened = library.store
+        Store.open(home / LIBRARY, redactor=WRITING, name="pc").close()
     except LibraryRefused as refused:
         return str(refused)
-    finally:
-        library.close()
-    return None if opened is not None else "unreachable"
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--home", type=Path, default=HOME, help="the QMX home to switch")
+    parser.add_argument(
+        "--home", type=Path, required=True, help="the data/ of the QMX folder holding the copy"
+    )
     arguments = parser.parse_args(argv)
     home = arguments.home.expanduser().resolve()
+    if folder_of(home) is None:
+        print(
+            f"refused: {home} is not the data/ of a QMX folder. The switch runs only on a copy, "
+            "so an old folder is never changed: python -m qmx_host bring-in copies it first"
+        )
+        return REFUSED
     if not (home / "library.db").is_file():
         print(f"nothing to switch: {home} holds no library.db")
         return 0
