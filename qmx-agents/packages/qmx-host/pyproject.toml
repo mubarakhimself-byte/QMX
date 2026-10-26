@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "QMX host: the one process that serves the copilot, the workflows and the control doors"
 requires-python = ">=3.14,<3.15"
 dependencies = [
+    "qmx-home",
     "qma-harness",
     "qmx-control",
     "qmx-engine",
@@ -27,6 +28,7 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
+qmx-home = { workspace = true }
 qma-harness = { workspace = true }
 qmx-control = { workspace = true }
 qmx-engine = { workspace = true }
