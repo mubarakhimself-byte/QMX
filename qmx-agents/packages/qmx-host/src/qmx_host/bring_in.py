@@ -412,7 +412,7 @@ def listing(old: Path) -> Listing:
     others: list[str] = []
     for relative, entry in _walk(old):
         if _is_link(entry):
-            links.append((relative, os.readlink(entry.path)))
+            links.append((relative, os.readlink(entry.path).removeprefix("\\\\?\\")))
         elif entry.is_dir(follow_symlinks=False):
             folders.append(relative)
         elif entry.is_file(follow_symlinks=False):
@@ -541,6 +541,10 @@ def _reason(error: BaseException) -> str:
     return str(error) or type(error).__name__
 
 
+def _count(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
 def _size(count: int) -> str:
     for unit, scale in (("GB", 1 << 30), ("MB", 1 << 20), ("KB", 1 << 10)):
         if count >= scale:
@@ -566,8 +570,9 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
             f"Your old folder {old} is a link; its files were read from {facts['old_is']}."
         )
     lines += [
-        f"Your old folder {old} was only read, never changed: its {listed['files']} files "
-        f"({_size(listed['bytes'])}) were checked file by file before and after.",
+        f"Your old folder {old} was only read, never changed: its "
+        f"{_count(listed['files'], 'file')} ({_size(listed['bytes'])}) were checked file by file "
+        "before and after.",
         "",
         "What moved, and where:",
     ]
@@ -575,14 +580,14 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
     for part, meaning in TREE_PARTS:
         if part in copied:
             files, size = copied[part]
-            lines.append(f"  {files} files ({_size(size)}) into {part}, {meaning}")
+            lines.append(f"  {_count(files, 'file')} ({_size(size)}) into {part}, {meaning}")
     library = cast("dict[str, object] | None", facts.get("library"))
     junk: list[str] = []
     if library is not None:
         kinds = cast("dict[str, int]", library["kinds"])
         switched = cast("dict[str, object]", library["report"])
         junk = cast("list[str]", switched.get("junk", []))
-        lines += ["", f"Your Library: {sum(kinds.values())} items are in the new Library."]
+        lines += ["", f"Your Library: {_count(sum(kinds.values()), 'item')} in the new Library."]
         lines += [f"  {kind}: {count}" for kind, count in kinds.items()]
         retired = cast("list[str]", switched.get("retired", []))
         if retired:
@@ -593,8 +598,8 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
     left: list[str] = []
     if junk:
         left.append(
-            f"  {len(junk)} test results named remote-flow, made by test runs and not by you. "
-            "They stay in your old folder."
+            f"  {_count(len(junk), 'test result')} named remote-flow, made by test runs and not "
+            "by you. They stay in your old folder."
         )
     left += [f"  {r['path']}: {r['why']}." for r in cast("list[dict[str, str]]", facts["left_out"])]
     left += [
