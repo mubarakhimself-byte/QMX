@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from qmx_home import resolve
+
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.templates.catalog import PACK
 from qmx_engine.workers.zones import zones_root
@@ -38,8 +40,7 @@ def test_the_step_snapshots_the_home_to_the_repository(tmp_path: Path) -> None:
     assert git is not None
     repository = tmp_path / "backup.git"
     subprocess.run([git, "init", "--bare", str(repository)], check=True, capture_output=True)
-    home = tmp_path / "QMX" / "data"
-    home.mkdir(parents=True)
+    home = resolve(tmp_path / "QMX", create=True, drives=[]).home
     (home / "settings.toml").write_text(
         f'[backup]\nrepository = "{repository.as_posix()}"\n', encoding="utf-8"
     )
@@ -56,8 +57,7 @@ def test_the_step_snapshots_the_home_to_the_repository(tmp_path: Path) -> None:
 
 
 def test_a_home_without_a_repository_backs_up_nothing(tmp_path: Path) -> None:
-    home = tmp_path / "QMX" / "data"
-    home.mkdir(parents=True)
+    home = resolve(tmp_path / "QMX", create=True, drives=[]).home
 
     result = run(home)
 
@@ -65,8 +65,7 @@ def test_a_home_without_a_repository_backs_up_nothing(tmp_path: Path) -> None:
 
 
 def test_a_failed_snapshot_files_one_maintenance_incident(tmp_path: Path) -> None:
-    home = tmp_path / "QMX" / "data"
-    home.mkdir(parents=True)
+    home = resolve(tmp_path / "QMX", create=True, drives=[]).home
     (home / "settings.toml").write_text(
         '[backup]\nrepository = "not/a/bare/repository"\n', encoding="utf-8"
     )

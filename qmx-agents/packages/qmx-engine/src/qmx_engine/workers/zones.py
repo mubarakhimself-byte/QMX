@@ -34,7 +34,7 @@ from pathlib import Path, PurePosixPath
 from typing import Final, cast
 
 from pydantic import JsonValue
-from qmx_home import Layout
+from qmx_home import Layout, resolve
 
 from qmx_engine.definition.model import OutputFile
 from qmx_engine.definition.validate import STAGING, leaves_work
@@ -95,8 +95,9 @@ def zones_root(home: Path) -> Path:
 def home_of(shared: Path) -> Path:
     """The home whose run owns this `work/` folder (`QMX_WORK_SHARED`): the `data/` of the QMX
     folder whose `cache/zones/<run>/work` it is. The templates that read the engine's own ledger
-    use it until a `library` node serves them `engine_view`."""
-    return Layout(shared.resolve().parents[3]).home
+    use it until a `library` node serves them `engine_view`. Raises NoQmxFolder when that folder
+    holds no tree label, so a template never reads a ledger beside some other folder."""
+    return resolve(shared.resolve().parents[3]).home
 
 
 def slot_name(job: NodeJob) -> str:

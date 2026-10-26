@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from flows import edge, folder, node, run_folder
 from pydantic import JsonValue
+from qmx_home import NoQmxFolder, resolve
 
 from qmx_engine.definition.model import OutputFile
 from qmx_engine.ledger.redact import redact
@@ -20,7 +21,6 @@ from qmx_engine.nodes.base import Failed, NodeJob, Ok
 from qmx_engine.nodes.script import HostScript, Script
 from qmx_engine.workers import zones
 from qmx_engine.workers.zones import RunZone, ZoneError, home_of, zones_root
-from qmx_home import resolve
 
 START = node("start", "trigger")
 CHUNK = """
@@ -214,12 +214,22 @@ def test_a_junction_in_the_overlay_fails_zone_link_and_follows_nothing(tmp_path:
 
 
 def test_the_zones_sit_in_the_folders_cache_and_lead_back_to_its_data(tmp_path: Path) -> None:
-    folder = (tmp_path / "QMX").resolve()
+    folder = resolve(tmp_path / "QMX", create=True, drives=[]).root
 
     root = zones_root(folder / "data")
 
     assert root == folder / "cache" / "zones"
     assert home_of(root / "run-1" / "work") == folder / "data"
+
+
+def test_a_work_folder_outside_a_qmx_folder_leads_to_no_home(tmp_path: Path) -> None:
+    stray = tmp_path / "home"
+    stray.mkdir()
+
+    with pytest.raises(NoQmxFolder) as refused:
+        home_of(zones_root(stray) / "run-1" / "work")
+
+    assert str(refused.value).startswith(f"{tmp_path.resolve()} is a QMX home in the old flat")
 
 
 PRINT_CACHES = """

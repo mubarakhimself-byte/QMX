@@ -16,7 +16,9 @@ import asyncio
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from pydantic import JsonValue
+from qmx_home import resolve
 
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.library import Bundle
@@ -27,6 +29,13 @@ from qmx_engine.service.context import OPERATOR
 TEMPLATES = Path(__file__).parents[1] / "src" / "qmx_engine" / "templates"
 D4 = TEMPLATES / "d4-variant-comparison"
 P1 = TEMPLATES / "p1-portfolio-combination"
+
+
+
+@pytest.fixture
+def home(tmp_path: Path) -> Path:
+    """A QMX folder made the way `--create` makes one, and its home `data/`."""
+    return resolve(tmp_path / "QMX", create=True, drives=[]).home
 
 
 def opened(folder: Path) -> Bundle:
@@ -61,11 +70,11 @@ def parent_of(svc: EngineService) -> str:
     return stored.object_id
 
 
-def test_a_variant_step_writes_variant_of_with_what_changed(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+def test_a_variant_step_writes_variant_of_with_what_changed(home: Path) -> None:
+    with EngineService.open(home) as svc:
         parent = parent_of(svc)
     report, printed = ran(
-        tmp_path,
+        home,
         D4,
         {
             "strategy": {
@@ -79,7 +88,7 @@ def test_a_variant_step_writes_variant_of_with_what_changed(tmp_path: Path) -> N
 
     assert report.status == "passed"
     assert printed["what_changed"] == "instrument"
-    with LibraryFake.open(tmp_path) as library:
+    with LibraryFake.open(home) as library:
         edges = [(edge.edge, edge.to_id) for edge in library.edges(printed["record"], "variant-of")]
         record = library.get(printed["record"])
 
@@ -92,12 +101,12 @@ def test_a_variant_step_writes_variant_of_with_what_changed(tmp_path: Path) -> N
 
 
 def test_a_composite_names_every_parent_it_merges_even_where_the_port_lacks_the_edge(
-    tmp_path: Path,
+    home: Path,
 ) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with EngineService.open(home) as svc:
         first = parent_of(svc)
     report, printed = ran(
-        tmp_path,
+        home,
         P1,
         {
             "lineage": [

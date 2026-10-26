@@ -12,6 +12,7 @@ from typing import Any
 
 import pytest
 from qmx_control.service import ControlError, ControlService
+from qmx_home import resolve
 
 from qma.harness import QmxHome
 from qma.harness import guard as guard_module
@@ -667,7 +668,7 @@ def test_the_hook_returns_allow_for_an_always_row() -> None:
 
 
 def test_his_lists_are_settings_data_the_guard_reads_at_launch(tmp_path: Path) -> None:
-    home = QmxHome(tmp_path / "home")
+    home = QmxHome(resolve(tmp_path / "QMX", create=True, drives=[]).home)
     control = ControlService(home.root)
     stored = control.settings_put(
         "rules",

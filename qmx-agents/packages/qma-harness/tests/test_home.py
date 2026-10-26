@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from qmx_control.models import ControlError, Document
 from qmx_control.server import create_app
+from qmx_home import resolve
 from qmx_router.profiles import PLAN
 
 from qma.harness import packs
@@ -43,7 +44,7 @@ CHAT = SessionId("0b9c2f4e-1d3a-4c5b-8e7f-6a5b4c3d2e1f")
 
 @pytest.fixture
 def home(tmp_path: Path) -> QmxHome:
-    return QmxHome(tmp_path / "qmx")
+    return QmxHome(resolve(tmp_path / "QMX", create=True, drives=[]).home)
 
 
 @pytest.mark.parametrize(
@@ -126,9 +127,11 @@ def test_ensure_homes_is_idempotent_and_links_the_transcript_folder(home: QmxHom
         "chats",
         "claude",
         "claude-relayed",
+        "workspaces",
+    ]
+    assert sorted(path.name for path in (home.root.parent / "cache" / "run").iterdir()) == [
         "procs",
         "state",
-        "workspaces",
     ]
 
 
