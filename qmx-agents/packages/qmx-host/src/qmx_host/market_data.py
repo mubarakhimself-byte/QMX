@@ -1214,10 +1214,11 @@ def _settings_seal(
     """The Settings default holdout: none unless `[data] holdout` is on (ruling 137).
 
     `holdout_boundary` is the month it starts, as `YYYY-MM`. A `[data]` written before the
-    switch existed names only `seal_boundary_ns`; that is read as on, because he set it.
+    switch existed names only `seal_boundary_ns`; that is read as on, because he set it. A
+    month saved without the switch is not.
     """
     boundary = data.get("holdout_boundary", data.get("seal_boundary_ns"))
-    on = data.get("holdout", boundary is not None)
+    on = data.get("holdout", "seal_boundary_ns" in data)
     if on is False:
         return Ok(None)
     if on is not True:
@@ -1239,9 +1240,11 @@ def _seal_at(
     """A seal from a boundary given as a `YYYY-MM` month or as nanoseconds since the epoch."""
     if isinstance(boundary, str):
         match = MONTH_NAME.fullmatch(boundary)
-        if match is None or not 1 <= int(match.group(2)) <= 12:
+        if match is None or int(match.group(1)) < 1970 or not 1 <= int(match.group(2)) <= 12:
             return invalid_input(
-                "holdout_boundary", "a holdout starts at a month written YYYY-MM", given=boundary
+                "holdout_boundary",
+                "a holdout starts at a month written YYYY-MM, 1970-01 or later",
+                given=boundary,
             )
         start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=UTC)
         boundary = int(start.timestamp()) * 1_000_000_000

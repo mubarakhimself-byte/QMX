@@ -7,13 +7,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from qmf.core import CalendarIdentity, World, is_ok, is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.splits import SplitBoundary, SplitManifest
 from qmf.data.store.engines.typed import TypedWriter
+from qmx_control.service import ControlService
 
+from qmx_host.host import market_door
 from qmx_host.market_data import (
     HANDLE_ROWS,
     NO_HOLDOUT,
@@ -273,6 +276,39 @@ def test_a_holdout_turned_on_in_settings_reaches_the_next_read(tmp_path: Path) -
     ]
     study_off = door.read(SERIES, start_ns=recent, end_ns=_at(2025, 4), holdout="off")
     assert _times(study_off) == [(recent + DAY) // 1_000_000, (recent + 2 * DAY) // 1_000_000]
+
+
+def test_a_month_saved_without_the_switch_leaves_reads_open(tmp_path: Path) -> None:
+    door = _open(tmp_path, {"holdout_boundary": "2025-01"})
+    recent = _land(tmp_path, door, 2025, 3)
+    served = door.read(SERIES, start_ns=recent, end_ns=_at(2025, 4))
+    assert _times(served) == [1_740_873_600_000, 1_740_960_000_000]
+
+
+def test_a_stored_month_before_1970_is_named_and_the_host_still_starts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "settings.toml").write_text(
+        '[data]\nholdout = true\nholdout_boundary = "0000-01"\n', encoding="utf-8"
+    )
+    door = market_door(tmp_path, ControlService(tmp_path), "pc")
+    assert door is None
+    said = capsys.readouterr().err
+    assert "holdout_boundary" in said
+    assert "0000-01" in said
+
+
+def test_a_read_naming_a_month_before_1970_is_refused_by_name(tmp_path: Path) -> None:
+    door = _open(tmp_path, {})
+    _committed(tmp_path, door)
+    app = FastAPI()
+    app.include_router(market_router(door))
+    body = {"series": SERIES, "start_ns": JAN, "end_ns": FEB, "holdout": {"boundary": "0000-01"}}
+    with TestClient(app) as rest:
+        refused = rest.post("/api/data/read", json=body)
+    assert refused.status_code == 400
+    detail = refused.json()["detail"]
+    assert (detail["refused"], detail["context"]["field"]) == ("invalid input", "holdout_boundary")
 
 
 def test_a_commit_is_born_on_the_doors_own_place(tmp_path: Path) -> None:
