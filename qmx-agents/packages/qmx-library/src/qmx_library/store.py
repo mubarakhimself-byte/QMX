@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import IO, Any, Final, Literal, Protocol, Self, cast
 
 from pydantic import JsonValue
+from qmx_home.versions import too_new
 
 from qmx_library.blame import lines, origins
 from qmx_library.fts import Catalog, norm
@@ -361,6 +362,18 @@ def _quarantine(root: Path, torn: TornTail) -> None:
         os.fsync(handle.fileno())
 
 
+def _drop_index(path: Path, *, keep: bool, at: datetime) -> None:
+    """Take the catalog file away before a rebuild. One that is not QMX's (not SQLite, or another
+    program's) is moved aside under its own name with a stamp, never deleted."""
+    stamp = at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    for suffix in ("", "-wal", "-shm"):
+        found = path.with_name(f"{path.name}{suffix}")
+        if keep and found.exists():
+            found.rename(path.with_name(f"{path.name}.not-qmx-{stamp}{suffix}"))
+        else:
+            found.unlink(missing_ok=True)
+
+
 def _repair_logs(root: Path, damage: Sequence[Damage]) -> StoreState:
     """Quarantine every torn tail and say how the store opened."""
     alarms: list[str] = []
@@ -574,6 +587,7 @@ class Store:
         upstream: BlobSource | None = None,
         state: StoreState,
         floor_bytes: int = 0,
+        too_new: str | None = None,
     ) -> None:
         self.root = root
         self.name = name
@@ -588,8 +602,11 @@ class Store:
         caller measured no floor, so every write that fits is taken."""
         self._handle = handle
         self._mutex = threading.RLock()
-        self.catalog = Catalog(root / "catalog.db")
-        if self.catalog.stamp() != self._stamp():
+        self.too_new = too_new
+        """Why this Library opened read-only: a newer QMX wrote it and raised its `min_reader`
+        (design 62 B2 rule 4). Nothing under `root` is written then, its index included."""
+        self.catalog = Catalog(None if too_new else root / "catalog.db")
+        if self.catalog.found != "current" or self.catalog.stamp() != self._stamp():
             self.rebuild_indexes()
         self._seq = self.catalog.last_seq()
         (edges,) = self.catalog.db.execute(
@@ -619,19 +636,23 @@ class Store:
             raise LibraryRefused(
                 "storage_failure", f"another process writes the Library at {root}"
             ) from None
-        kinds = root / "kinds"
-        kinds.mkdir(exist_ok=True)
-        for schema in schema_files():
-            target = kinds / schema.name
-            if not target.exists() or target.read_bytes() != schema.read_bytes():
-                shutil.copyfile(schema, target)
-        try:
-            found = _repair_logs(root, inspect_logs(root))
-        except OSError as refused:
-            handle.close()
-            raise LibraryRefused(
-                "storage_failure", f"cannot repair the logs at {root}: {refused}"
-            ) from refused
+        newer = too_new(root, "library")
+        if newer is not None:
+            found = StoreState("read_only", (), newer)
+        else:
+            kinds = root / "kinds"
+            kinds.mkdir(exist_ok=True)
+            for schema in schema_files():
+                target = kinds / schema.name
+                if not target.exists() or target.read_bytes() != schema.read_bytes():
+                    shutil.copyfile(schema, target)
+            try:
+                found = _repair_logs(root, inspect_logs(root))
+            except OSError as refused:
+                handle.close()
+                raise LibraryRefused(
+                    "storage_failure", f"cannot repair the logs at {root}: {refused}"
+                ) from refused
         try:
             return cls(
                 root,
@@ -643,6 +664,7 @@ class Store:
                 upstream=upstream,
                 state=found,
                 floor_bytes=floor_bytes,
+                too_new=newer,
             )
         except BaseException:
             handle.close()
@@ -705,10 +727,11 @@ class Store:
     def rebuild_indexes(self) -> None:
         """Drop `catalog.db` and replay the evidence into a new one (AD-5, FM-9)."""
         with self._mutex:
+            foreign = self.catalog.found == "foreign"
             self.catalog.close()
-            for suffix in ("", "-wal", "-shm"):
-                (self.root / f"catalog.db{suffix}").unlink(missing_ok=True)
-            self.catalog = Catalog(self.root / "catalog.db")
+            if self.too_new is None:
+                _drop_index(self.root / "catalog.db", keep=foreign, at=self.wall())
+            self.catalog = Catalog(None if self.too_new else self.root / "catalog.db")
             with self.catalog.batch():
                 for path in sorted((self.root / "objects").rglob("*.json")):
                     manifest = cast(dict[str, Any], json.loads(path.read_bytes()))
@@ -842,11 +865,19 @@ class Store:
             raise LibraryRefused("ref_not_owned", f"{who} may not {act} onto {ref}")
 
     def _refuse_read_only(self, act: str) -> None:
-        """A store whose logs hold a line that cannot be repaired takes no write (AD-16)."""
+        """A store whose logs hold a line that cannot be repaired takes no write (AD-16), and nor
+        does one a newer QMX marked too new for this one (design 62 B2 rule 4)."""
+        self._refuse_too_new(act)
         if self.state.health == "read_only":
             raise LibraryRefused(
                 "storage_failure",
                 f"this store opened read-only: {self.state.incident}; {act} waits for a restore",
+            )
+
+    def _refuse_too_new(self, act: str) -> None:
+        if self.too_new is not None:
+            raise LibraryRefused(
+                "storage_failure", f"the Library opened read-only: {self.too_new} {act} waits"
             )
 
     def _check_writer(self, act: str) -> None:
@@ -1621,8 +1652,9 @@ class Store:
                 raise LibraryRefused("blob_unavailable", f"no blob {blob_id}")
             if f"sha256:{sha256(fetched).hexdigest()}" != blob_id:
                 raise LibraryRefused("corrupt_blob", f"{blob_id} does not hash to its name")
-            _write_once(self._blob_path(blob_id, transient=False, fetched=True), fetched)
-            self._reindex_blob(blob_id)
+            if self.too_new is None:
+                _write_once(self._blob_path(blob_id, transient=False, fetched=True), fetched)
+                self._reindex_blob(blob_id)
             return fetched
         data = path.read_bytes()
         if f"sha256:{sha256(data).hexdigest()}" != blob_id:
@@ -1929,6 +1961,7 @@ class Store:
         ).fetchone()
         if seen is not None:
             return False
+        self._refuse_too_new("an edge copy")
         with self._writing():
             self._edge_seq += 1
             entry = {
@@ -2110,6 +2143,7 @@ class Store:
 
     def _save_claims(self, claims: Mapping[str, Mapping[str, object]]) -> None:
         """One file, replaced whole: claims are transient, so they are not in the ref log."""
+        self._refuse_too_new("a claim")
         path = self.claims_path
         path.parent.mkdir(parents=True, exist_ok=True)
         temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}")
@@ -2208,6 +2242,7 @@ class Store:
         are ownerless, so any role takes one; a collision is a name that does not hash to its
         bytes."""
         object_id = fp1(manifest)
+        self._refuse_too_new("an ingest")
         _write_once(self._object_path(object_id), canonical(manifest))
         with self._writing():
             self._index_object(object_id, manifest)
@@ -2220,6 +2255,7 @@ class Store:
         copy it may give up, because the peer that sent them holds the born one.
         """
         blob_id = f"sha256:{sha256(data).hexdigest()}"
+        self._refuse_too_new("a blob copy")
         _write_once(self._blob_path(blob_id, transient=False, fetched=self.role != "writer"), data)
         self._reindex_blob(blob_id)
         return blob_id
@@ -2246,6 +2282,7 @@ class Store:
         self, upload_id: str, *, offset: int = 0, partial_sha256: str | None = None
     ) -> Upload:
         """Open one resumable upload: from zero, or continuing the bytes at `offset` (AD-27)."""
+        self._refuse_too_new("an upload")
         return Upload(self, upload_id, offset=offset, partial_sha256=partial_sha256)
 
     def append_upload(

@@ -11,7 +11,7 @@ Library AD-35).
 3. A newer store whose `min_reader` this release meets opens as it is, never marked down.
 4. A newer store whose `min_reader` this release does not meet is refused by name and never
    written. The Library and the price data open read-only instead (`too_new`).
-5. An index never refuses; its opener rebuilds it (`index_current`).
+5. An index never refuses; its opener rebuilds it (`index_state`).
 
 A file that is not QMX's (not SQLite, another program's `application_id`, or none of the store's
 own tables) is refused by name and never written. `check_open` reads a whole folder the same way,
@@ -174,22 +174,44 @@ def too_new(path: Path, name: str) -> str | None:
     return _too_new(store, found, layout)
 
 
-def index_current(connection: sqlite3.Connection, name: str) -> bool:
-    """Whether an index file is this release's (rule 5): False means rebuild it. Reads only."""
+type IndexState = Literal["current", "rebuild", "foreign"]
+
+
+def index_state(connection: sqlite3.Connection, name: str) -> IndexState:
+    """What an index file is (rule 5), read only: `current` (this release's, or new and empty, or
+    written before indexes carried versions), `rebuild` (QMX's, of another version: drop it and
+    build it again from the store's own files), or `foreign` (not SQLite, or another program's:
+    move it aside, never delete it, then build a new one)."""
     store = STORES[name]
     try:
         app = _pragma(connection, "application_id")
         user = _pragma(connection, "user_version")
-    except sqlite3.DatabaseError:
-        return False
-    return app == APPLICATION_ID and user == store.release.version
+        tables = {
+            str(row[0])
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+    except sqlite3.DatabaseError as broken:
+        match getattr(broken, "sqlite_errorname", ""):
+            case "SQLITE_NOTADB":
+                return "foreign"
+            case "SQLITE_CORRUPT":
+                return "rebuild"
+            case _:
+                raise
+    if app == APPLICATION_ID:
+        return "current" if user == store.release.version else "rebuild"
+    if app != 0 or (tables and (user != 0 or not tables & set(store.tables))):
+        return "foreign"
+    return "current" if not tables or store.release.version == 1 else "rebuild"
 
 
 def mark_index(connection: sqlite3.Connection, name: str) -> None:
-    """Mark a freshly built index as this release's."""
+    """Mark an index as this release's, writing only when it is not marked yet."""
     store = STORES[name]
-    connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
-    connection.execute(f"PRAGMA user_version = {store.release.version}")
+    if _pragma(connection, "application_id") != APPLICATION_ID:
+        connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
+    if _pragma(connection, "user_version") != store.release.version:
+        connection.execute(f"PRAGMA user_version = {store.release.version}")
 
 
 def snapshot(
@@ -292,12 +314,13 @@ def _verdict(layout: Layout, label: Label | None, store: Store) -> tuple[Verdict
                 ), None
             try:
                 with closing(_reader(path)) as reading:
-                    current = index_current(reading, store.name)
+                    state = index_state(reading, store.name)
             except sqlite3.Error:
-                current = False
-            if current:
+                state = "rebuild"
+            if state == "current":
                 return Verdict(store.name, "opens", store.release, f"{store.words}: opens"), None
-            line = f"{store.words}: rebuilt from the Library's own files when it next opens"
+            aside = "moved aside, then " if state == "foreign" else ""
+            line = f"{store.words}: {aside}rebuilt from the Library's own files when it next opens"
             return Verdict(store.name, "rebuilds", None, line), None
         case "sqlite":
             path = layout.data / store.path

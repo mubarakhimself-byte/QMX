@@ -2,7 +2,8 @@
 
 Nothing here is evidence. Every row is derived from the store's files (objects, the ref log, the
 edge log and the annotation log) by the same `index_*` calls the writer makes after each commit,
-so `rebuild` is a replay of the evidence through them. The file may be deleted at any time.
+so `rebuild` is a replay of the evidence through them. The file may be deleted at any time, and
+an index of another version is rebuilt rather than refused.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 from pydantic import JsonValue
+from qmx_home.versions import IndexState, index_state, mark_index
 
 from qmx_library.port import Hit, JsonObject, LibraryRefused, Producer, Role
 
@@ -92,12 +94,24 @@ def strings(value: JsonValue) -> Iterable[str]:
 
 
 class Catalog:
-    def __init__(self, path: Path) -> None:
+    """The index over one store. `found` is what the file was when it opened (design 62 B2 rule
+    5): only a `current` file is used, and the store rebuilds any other. With no `path` the
+    index lives in memory: a Library opened read-only builds it there, so not even its index
+    file is written."""
+
+    def __init__(self, path: Path | None) -> None:
         self.path = path
-        self.db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
-        self.db.execute("PRAGMA journal_mode = WAL")
+        self.db = sqlite3.connect(
+            ":memory:" if path is None else path, check_same_thread=False, isolation_level=None
+        )
+        self.found: IndexState = "current" if path is None else index_state(self.db, "catalog")
+        if self.found != "current":
+            return
+        if path is not None:
+            self.db.execute("PRAGMA journal_mode = WAL").fetchall()
         self.db.execute("PRAGMA synchronous = NORMAL")
         self.db.executescript(SCHEMA)
+        mark_index(self.db, "catalog")
 
     def close(self) -> None:
         self.db.close()

@@ -5,6 +5,7 @@ description = "QMX Library: one content-addressed store of objects, blobs, refs 
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "qmx-engine",
+    "qmx-home",
     "pydantic==2.13.4",
     "jsonschema==4.26.0",
 ]
@@ -15,6 +16,7 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 qmx-engine = { workspace = true }
+qmx-home = { workspace = true }
 
 [dependency-groups]
 dev = [
