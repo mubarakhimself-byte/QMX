@@ -186,13 +186,18 @@ class Label:
 _BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
 
 
+def _toml_string(text: str) -> str:
+    """A TOML basic string: JSON's escapes are TOML's, and TOML also escapes DEL."""
+    return json.dumps(text).replace("\x7f", "\\u007f")
+
+
 def _toml_key(key: str) -> str:
-    return key if _BARE_KEY.fullmatch(key) else json.dumps(key)
+    return key if _BARE_KEY.fullmatch(key) else _toml_string(key)
 
 
 def _toml_value(value: object) -> str:
     """One TOML value on one line: tables become inline tables, so any value a label read can be
-    written back. A JSON string is a valid TOML basic string."""
+    written back."""
     match value:
         case bool():
             return "true" if value else "false"
@@ -201,7 +206,7 @@ def _toml_value(value: object) -> str:
         case float():
             return {"inf": "inf", "-inf": "-inf", "nan": "nan"}.get(repr(value), repr(value))
         case str():
-            return json.dumps(value)
+            return _toml_string(value)
         case dict():
             pairs = cast("dict[str, object]", value).items()
             return "{ " + ", ".join(f"{_toml_key(k)} = {_toml_value(v)}" for k, v in pairs) + " }"
@@ -209,7 +214,7 @@ def _toml_value(value: object) -> str:
             return "[" + ", ".join(_toml_value(item) for item in cast("list[object]", value)) + "]"
         case _:
             isoformat = getattr(value, "isoformat", None)
-            return str(isoformat()) if callable(isoformat) else json.dumps(str(value))
+            return str(isoformat()) if callable(isoformat) else _toml_string(str(value))
 
 
 @dataclass(frozen=True, slots=True)

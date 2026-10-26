@@ -484,20 +484,26 @@ def kept_word_for_word(text: str, stored: Document, settings: Document) -> str:
     kept: list[str] = []
     at: int | None = None
     owner: str | None = None
+    above: list[str] = []
+    """Comment and blank lines at the end of a changed section: they sit above the next header
+    and belong to it, so they are kept."""
     for line in text.splitlines(keepends=True):
         header = _TABLE_HEADER.match(line)
         if header is not None:
             owner = _top_key(header)
         if owner is not None and owner in changed:
             at = len(kept) if at is None else at
+            bare = line.strip()
+            above = [*above, line] if not bare or bare.startswith("#") else []
             continue
-        kept.append(line)
+        kept += [*above, line]
+        above = []
     if kept and not kept[-1].endswith("\n"):
         kept[-1] += "\n"
     if fresh and at is None:
         kept.append(f"\n{fresh}" if kept else fresh)
     elif fresh and at is not None:
-        kept.insert(at, f"{fresh}\n" if at < len(kept) else fresh)
+        kept.insert(at, fresh)
     result = "".join(kept)
     try:
         if tomllib.loads(result) == settings:

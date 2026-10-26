@@ -20,6 +20,7 @@ NEWER_SECTIONS = """\
 [budgets]
 daily_usd = 5
 
+# pods came with a newer QMX
 [lab_pods]  # a section a newer QMX added
 window = "24h"   # his choice
 regions = [ "eu",
