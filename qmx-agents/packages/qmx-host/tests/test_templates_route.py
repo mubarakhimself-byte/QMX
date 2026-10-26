@@ -20,6 +20,7 @@ from qmx_engine.ports.library import LibraryRefused as EngineRefused
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.templates.catalog import PACK
+from qmx_home import resolve
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.store import Store
 
@@ -60,7 +61,7 @@ def hosted(home: Path) -> Generator[tuple[TestClient, Store]]:
 
 
 def test_an_install_through_the_route_lands_in_the_hosts_store(tmp_path: Path) -> None:
-    with hosted(tmp_path) as (rest, store):
+    with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, store):
         answered = rest.post(
             "/api/templates/install", json={"templates": ["backup-weekly"]}, headers=BEARER
         )

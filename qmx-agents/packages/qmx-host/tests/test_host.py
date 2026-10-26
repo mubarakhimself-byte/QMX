@@ -25,7 +25,6 @@ from qmx_engine.ports.library import Bundle
 from qmx_home import resolve
 
 import qmx_host.host
-
 from qmx_host.door import PrincipalDoor
 from qmx_host.host import compose, hindsight_runs, record, single_instance
 
