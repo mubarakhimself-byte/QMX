@@ -1,16 +1,17 @@
-"""The cTrader sign-in between the PC and the app's home (engine AD-67, seam B of file 60).
+"""The cTrader sign-in on the app's one home (engine AD-67, seam B of file 60, design 62 E1).
 
-Four steps. (1) He clicks sign in on the PC; the PC asks the app's home to begin, with a host
-pass. The home answers with cTrader's consent URL and keeps one pending sign-in per app for 10
-minutes. (2) The PC binds its loopback receiver on the registered redirect and opens the URL. (3)
-The receiver forwards the one code to the home with a host pass, keeps nothing and stops. (4) The
-home takes its pending sign-in, which is good for one use, exchanges the code with the app's
-client id and secret, and writes the pair as `qmx/token/ctrader-app` in its own key store under
-`<home>/vault/`. The vault refuses any name holding `token`, so the pair never replicates.
+The home is This PC unless he names a place. (1) He clicks sign in; the home begins and keeps one
+pending sign-in per app for 10 minutes. (2) This PC binds its loopback receiver on the registered
+redirect and opens cTrader's consent URL. (3) The receiver hands the one code to the home and
+keeps nothing. (4) The home takes its pending sign-in, good for one use, exchanges the code with
+the app's client id and secret, and writes the pair as `qmx/token/ctrader-app` in its own key
+store: Credential Manager on This PC, an owner-only file under `<home>/vault/` on a server. The
+vault refuses any name holding `token`, so the pair never replicates.
 
-The PC is never the home: a second home refreshing the same grant logs the first out. Until the
-home answers, begin is refused by name and no browser opens. The begin and code routes take a
-host pass only, so a chat, a run pass or an observer reaches neither.
+On This PC as home every step runs in this host, with no pairing key and no server. A home on a
+place is asked with a host pass, and its begin and code routes take a host pass only, so a chat,
+a run pass or an observer reaches neither. One app has one home: moving it is a fresh sign-in on
+the new home, after which This PC deletes its own pair.
 """
 
 from __future__ import annotations
@@ -29,7 +30,15 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from qmx_broker.credentials import CTRADER_APP, Joined, join_ctrader_app
+from qmx_broker.credentials import (
+    CTRADER_APP,
+    CTRADER_TOKENS,
+    THIS_PC,
+    CredentialManager,
+    Joined,
+    KeyStore,
+    join_ctrader_app,
+)
 from qmx_broker.models import BrokerSettings
 from qmx_broker.oauth import (
     CONSENT_URL,
@@ -62,11 +71,11 @@ if TYPE_CHECKING:
     from qmx_engine.control_door import EngineDoor
 
 APP: Final = "ctrader-app"
-TOKEN_NAME: Final = "qmx/token/ctrader-app"  # noqa: S105 - a key store name, not a token
+TOKEN_NAME: Final = CTRADER_TOKENS
 PENDING_S: Final = 600.0
 """How long a begun sign-in waits for its code, and how long the PC's receiver listens."""
-DEFAULT_HOME: Final = "contabo"
-"""The server's placement name when no Settings row names the app's home."""
+DEFAULT_HOME: Final = THIS_PC
+"""The app's home when no Settings row names one (design 62 E1)."""
 BEGIN_ROUTE: Final = "/api/venue/ctrader/begin"
 CODE_ROUTE: Final = "/api/venue/ctrader/code"
 SIGN_IN_ROUTE: Final = "/api/venue/ctrader/sign-in"
@@ -169,6 +178,14 @@ def vault_app(home: Path, machine: str) -> AppCredential:
     return AppCredential.parse(raw)
 
 
+def pc_app(keys: KeyStore) -> AppCredential:
+    """The read app's id and secret on This PC: the copy the sign-in button just joined."""
+    raw = keys.read(CTRADER_APP)
+    if raw is None:
+        raise Refused("app_credential_missing", f"{CTRADER_APP} is not in Credential Manager")
+    return AppCredential.parse(raw)
+
+
 @dataclass(frozen=True, slots=True)
 class Pending:
     redirect: Redirect
@@ -176,7 +193,9 @@ class Pending:
 
 
 class HomeSignIn:
-    """The home's half: begin, then the code exchange, each behind a host pass."""
+    """The home's half: `open` a sign-in, then `exchange` its code. Another host reaches them
+    through `begin` and `code`, each behind a host pass; this host's own button calls them in
+    process."""
 
     def __init__(
         self,
@@ -184,7 +203,7 @@ class HomeSignIn:
         name: Callable[[], str],
         key: Callable[[], str | None],
         app: Callable[[], AppCredential],
-        keys: HomeKeyStore,
+        keys: KeyStore,
         token_url: Callable[[], str] = lambda: TOKEN_URL,
         consent_base: Callable[[], str] = lambda: CONSENT_URL,
         fetch: Fetch = urllib_fetch,
@@ -213,17 +232,24 @@ class HomeSignIn:
 
     def begin(self, token: str, redirect: str) -> dict[str, Any]:
         self._check(token)
-        app = self._app()
         try:
             parsed = Redirect.parse(redirect)
         except OAuthRefused as refused:
             raise Refused(refused.code, refused.message, 400) from None
+        return self.open(parsed)
+
+    def open(self, redirect: Redirect) -> dict[str, Any]:
+        app = self._app()
         with self._lock:
-            self._pending[APP] = Pending(parsed, self._clock() + PENDING_S)
-        return {"url": consent_url(app, parsed, base=self._consent_base()), "expires_in": PENDING_S}
+            self._pending[APP] = Pending(redirect, self._clock() + PENDING_S)
+        base = self._consent_base()
+        return {"url": consent_url(app, redirect, base=base), "expires_in": PENDING_S}
 
     def code(self, token: str, code: str) -> dict[str, Any]:
         self._check(token)
+        return self.exchange(code)
+
+    def exchange(self, code: str) -> dict[str, Any]:
         with self._lock:
             pending = self._pending.pop(APP, None)
         if pending is None:
@@ -268,11 +294,12 @@ def http_post(
 
 @dataclass(frozen=True, slots=True)
 class Target:
-    """Where the PC's sign-in goes: the app's home, its engine URL and the registered redirect."""
+    """Where the sign-in goes: the app's home, the registered redirect, and the home's engine
+    URL, which is empty when this host is the home."""
 
     home: str
-    url: str
     redirect: Redirect
+    url: str = ""
 
 
 def target(
@@ -285,7 +312,8 @@ def target(
     """The app's one home from `[ctrader]` and the cTrader connection rows, or a named refusal.
 
     Every cTrader row shares the app's home, because one grant spans demo and live and the
-    connection limit is per app. Rows naming two homes are refused, and so is the PC.
+    connection limit is per app. Rows naming two homes are refused. With none named the home is
+    This PC, and a home that is this host signs in here with no server.
     """
     saved = BrokerSettings(connections=cast("Any", list(rows)))
     homes = {
@@ -302,20 +330,28 @@ def target(
             "two_homes", f"cTrader rows name {', '.join(sorted(homes))}; one app has one home"
         )
     home = next(iter(homes), DEFAULT_HOME)
-    if home in ("pc", this):
-        raise Refused("pc_not_home", "the PC never holds the sign-in; name the server as home")
-    url = instances.get(home)
-    if not url:
-        raise Refused("waiting_for_server", f"{home} has no engine URL yet; set up the server")
     try:
         redirect = Redirect.parse(str(settings.get("redirect") or DEFAULT_REDIRECT))
     except OAuthRefused as refused:
         raise Refused(refused.code, refused.message, 400) from None
-    return Target(home, url, redirect)
+    if home == this:
+        return Target(home, redirect)
+    if home == THIS_PC:
+        raise Refused("pc_is_home", "This PC holds this sign-in; sign in from This PC")
+    url = instances.get(home)
+    if not url:
+        raise Refused("waiting_for_server", f"{home} has no engine URL yet; set up the server")
+    return Target(home, redirect, url)
 
 
 class PcSignIn:
-    """The PC's half: begin on the home, bind the receiver, open the browser, forward the code."""
+    """The sign-in button: begin on the home, bind the receiver, open the browser, hand over the
+    code.
+
+    With this host as the home each step calls `here` in process, so This PC needs no pairing
+    key and no server. With a place as the home it asks that host with a host pass, and once the
+    place holds the pair `here` deletes its own: one app's tokens live in one key store.
+    """
 
     def __init__(
         self,
@@ -323,6 +359,7 @@ class PcSignIn:
         name: Callable[[], str],
         key: Callable[[], str | None],
         resolve: Callable[[], Target],
+        here: HomeSignIn,
         join: Callable[[], Joined] = join_ctrader_app,
         post: Post = http_post,
         open_browser: Callable[[str], object] = webbrowser.open,
@@ -332,6 +369,7 @@ class PcSignIn:
         self._name = name
         self._key = key
         self._resolve = resolve
+        self._here = here
         self._join = join
         self._post = post
         self._open = open_browser
@@ -368,13 +406,17 @@ class PcSignIn:
             joined = self._join()
             if joined.word != "ok":
                 raise Refused("app_credential_missing", joined.reason)
-            if joined.changed:
+            if aim.url and joined.changed:
                 raise Refused(
                     "vault_copy_changed",
                     f"{CTRADER_APP} was just written; run `qmx node vault install` so "
                     f"{aim.home} has it, then sign in again",
                 )
-            begun = self._call(aim, BEGIN_ROUTE, {"redirect": aim.redirect.url})
+            begun = (
+                self._call(aim, BEGIN_ROUTE, {"redirect": aim.redirect.url})
+                if aim.url
+                else self._here.open(aim.redirect)
+            )
             receiver = Receiver.open(aim.redirect, lambda code: self._forward(aim, code))
             waiting = {"state": "waiting", "home": aim.home}
             self.last = dict(waiting)
@@ -391,7 +433,11 @@ class PcSignIn:
     def _forward(self, aim: Target, code: str) -> Forwarded:
         started = self._ticks()
         try:
-            self._call(aim, CODE_ROUTE, {"code": code})
+            if aim.url:
+                self._call(aim, CODE_ROUTE, {"code": code})
+                self._here.keys.delete(TOKEN_NAME)
+            else:
+                self._here.exchange(code)
         except Refused as refused:
             return Forwarded("refused", refused.code, refused.message)
         self.last = {"state": "ok", "home": aim.home, "seconds": self._ticks() - started}
@@ -444,7 +490,11 @@ def venue_router(pc: PcSignIn, home: HomeSignIn) -> APIRouter:
 
 
 def for_host(home: Path, engine: EngineDoor) -> APIRouter:
-    """The venue routes as a host mounts them: its name, pairing key, Settings and placements."""
+    """The venue routes as a host mounts them: its name, pairing key, Settings and placements.
+
+    This PC keeps the app copy and the pair in Credential Manager; any other host keeps the pair
+    in its owner-only file and opens the app from its own vault copy.
+    """
     key_file = home / "vault" / "pairing-key"
 
     def key() -> str | None:
@@ -466,12 +516,14 @@ def for_host(home: Path, engine: EngineDoor) -> APIRouter:
             this=name(),
         )
 
+    on_pc = name() == THIS_PC
+    keys: KeyStore = CredentialManager() if on_pc else HomeKeyStore(home)
     signing = HomeSignIn(
         name=name,
         key=key,
-        app=lambda: vault_app(home, name()),
-        keys=HomeKeyStore(home),
+        app=lambda: pc_app(keys) if on_pc else vault_app(home, name()),
+        keys=keys,
         token_url=lambda: str(settings().get("token_url") or TOKEN_URL),
         consent_base=lambda: str(settings().get("consent_url") or CONSENT_URL),
     )
-    return venue_router(PcSignIn(name=name, key=key, resolve=resolve), signing)
+    return venue_router(PcSignIn(name=name, key=key, resolve=resolve, here=signing), signing)

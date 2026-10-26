@@ -1,0 +1,176 @@
+"""cTrader reads on This PC as the connection's home (design 62 E1, engine AD-67, ruling 135).
+
+The app half and the pair live in an in-memory keyring backend, and the session is a recorded
+cTrader fixture. Nothing here reaches cTrader or the real Credential Manager.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Iterator
+from pathlib import Path
+from typing import override
+
+import keyring
+import pytest
+from keyring.backend import KeyringBackend
+from keyring.credentials import Credential, SimpleCredential
+from keyring.errors import PasswordDeleteError
+from qmf.venue.proto import CompiledProto
+from test_broker import CTraderFixture
+
+from qmx_broker.adapters import Document, can_trade_live
+from qmx_broker.models import Account, Broker, BrokerSettings, Connection
+from qmx_broker.service import BrokerService, open_adapter
+
+FIXTURES = Path(__file__).parent / "fixtures"
+PAIR = json.dumps({"accessToken": "acc-1", "refreshToken": "ref-1", "expiresAt": 2_000.0})
+
+
+class Memory(KeyringBackend):
+    priority = 1  # pyright: ignore[reportAssignmentType, reportIncompatibleMethodOverride]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.held: dict[tuple[str, str], str] = {}
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.held.get((service, username))
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.held[service, username] = password
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        if self.held.pop((service, username), None) is None:
+            raise PasswordDeleteError(service)
+
+    @override
+    def get_credential(self, service: str, username: str | None) -> Credential | None:
+        for (held_service, user), password in self.held.items():
+            if held_service == service and username in (None, user):
+                return SimpleCredential(user, password)
+        return None
+
+
+@pytest.fixture
+def vault() -> Iterator[Memory]:
+    before = keyring.get_keyring()
+    memory = Memory()
+    keyring.set_keyring(memory)
+    try:
+        yield memory
+    finally:
+        keyring.set_keyring(before)
+
+
+def signed_in(vault: Memory) -> None:
+    app = json.dumps({"clientId": "4242_demo", "clientSecret": "app-pass"})
+    vault.held["qmx/read/ctrader-app", "read/ctrader-app"] = app
+    vault.held["qmx/token/ctrader-app", "token/ctrader-app"] = PAIR
+
+
+def settings(home: str = "pc") -> BrokerSettings:
+    connection = Connection(
+        id="demo",
+        credential_ref="qmx/read/ctrader-app",
+        home=home,
+        protocol_path=str(FIXTURES / "tag91.pb"),
+        protocol_tag=91,
+        accounts=[Account(id="101", currency="USD")],
+    )
+    return BrokerSettings(
+        connections=[
+            Broker(id="ctrader", name="cTrader", adapter="ctrader", connections=[connection])
+        ]
+    )
+
+
+class Session:
+    def __init__(self, recorded: CTraderFixture) -> None:
+        self.request = recorded.request
+        self.spot = recorded.request
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+def service(tmp_path: Path, recorded: CTraderFixture, home: str = "pc") -> BrokerService:
+    async def connect(_proto: CompiledProto, environment: str) -> Session:
+        assert environment == "demo"
+        return Session(recorded)
+
+    def factory(broker: Broker, connection: Connection, account: Account):
+        return open_adapter(broker, connection, account, connect=connect)
+
+    return BrokerService(tmp_path, settings(home), factory)
+
+
+def read(broker: BrokerService) -> Document:
+    return asyncio.run(broker.read("account_state", "ctrader", "demo", "101"))
+
+
+def test_a_pc_homed_read_opens_its_session_with_this_pcs_pair(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+    recorded = CTraderFixture()
+
+    assert read(service(tmp_path, recorded)) == {
+        "account_id": "101",
+        "currency": "USD",
+        "balance": "1234.56",
+        "leverage": "50.00",
+    }
+    assert recorded.calls[:3] == [
+        ("ProtoOAApplicationAuthReq", {"clientId": "4242_demo", "clientSecret": "app-pass"}),
+        ("ProtoOAGetAccountListByAccessTokenReq", {"accessToken": "acc-1"}),
+        ("ProtoOAAccountAuthReq", {"ctidTraderAccountId": 101, "accessToken": "acc-1"}),
+    ]
+
+
+def test_a_grant_that_can_trade_live_money_is_refused_by_name_and_its_pair_deleted(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+    recorded = CTraderFixture()
+    recorded.payload["ProtoOAGetAccountListByAccessTokenReq"]["permissionScope"] = "SCOPE_TRADE"
+
+    with pytest.raises(ValueError, match="live") as refused:
+        read(service(tmp_path, recorded))
+
+    assert str(refused.value) == (
+        "live_trading_grant: this sign-in can trade live money; it belongs on a trading server. "
+        "Sign in again with view-only access, or tick demo accounts only"
+    )
+    assert vault.get_password("qmx/token/ctrader-app", "token/ctrader-app") is None
+    assert "ProtoOAAccountAuthReq" not in [name for name, _ in recorded.calls]
+
+
+def test_only_a_trading_scope_over_a_live_account_counts_as_able_to_trade_live() -> None:
+    demo = {"ctidTraderAccountId": "101", "isLive": False}
+    live = {"ctidTraderAccountId": "202", "isLive": True}
+
+    assert can_trade_live({"permissionScope": "SCOPE_VIEW", "ctidTraderAccount": [demo, live]}) is (
+        False
+    )
+    assert can_trade_live({"permissionScope": "SCOPE_TRADE", "ctidTraderAccount": [demo]}) is False
+    assert can_trade_live({"permissionScope": "SCOPE_TRADE", "ctidTraderAccount": [live]}) is True
+    assert can_trade_live({"ctidTraderAccount": [live]}) is True
+
+
+def test_a_connection_signed_in_on_a_place_opens_no_session_here(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+    recorded = CTraderFixture()
+
+    with pytest.raises(ValueError, match="Broker read failed"):
+        read(service(tmp_path, recorded, home="contabo"))
+
+    assert recorded.calls == []
+    assert vault.get_password("qmx/token/ctrader-app", "token/ctrader-app") == PAIR

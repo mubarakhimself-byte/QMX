@@ -94,6 +94,31 @@ class ReadAdapter(Protocol):
     async def symbol_info(self, symbol: str) -> Document: ...
 
 
+class LiveGrant(ValueError):
+    """A cTrader sign-in that can trade a live account. It belongs only on a trading server, so
+    every QMX host refuses it by name (ruling 135)."""
+
+    code = "live_trading_grant"
+
+    def __init__(self) -> None:
+        super().__init__(
+            f"{self.code}: this sign-in can trade live money; it belongs on a trading server. "
+            "Sign in again with view-only access, or tick demo accounts only"
+        )
+
+
+def can_trade_live(listing: Document) -> bool:
+    """A grant can trade live money when its scope is not view-only and it lists a live account.
+
+    An unreported scope counts as able to trade, the way P-CTSCOPE reads it: only cTrader's own
+    `SCOPE_VIEW` proves a grant cannot place an order.
+    """
+    trades = listing.get("permissionScope") != "SCOPE_VIEW"
+    return trades and any(
+        item.get("isLive") is True for item in listing.get("ctidTraderAccount", [])
+    )
+
+
 def scaled(value: object, digits: int) -> str:
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise ValueError("Expected an integer wire value")
@@ -116,6 +141,8 @@ class CTraderAdapter:
         accounts = await self.request(
             "ProtoOAGetAccountListByAccessTokenReq", {"accessToken": secret["accessToken"]}
         )
+        if can_trade_live(accounts):
+            raise LiveGrant
         allowed = [
             item
             for item in accounts.get("ctidTraderAccount", [])

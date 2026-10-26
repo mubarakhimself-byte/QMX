@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from qmx_broker.credentials import Joined
+from qmx_broker.credentials import Joined, KeyStore
 from qmx_broker.oauth import AppCredential, Redirect, Tokens
 from qmx_control.server import BearerGate
 from qmx_engine.service.forward import PASS_HEADER, mint_host_pass
@@ -61,12 +61,12 @@ def token_endpoint(method: str, url: str) -> tuple[int, bytes]:
     return 200, json.dumps(pair).encode()
 
 
-def the_home(tmp_path: Path) -> HomeSignIn:
+def the_home(keys: KeyStore) -> HomeSignIn:
     return HomeSignIn(
         name=lambda: "contabo",
         key=lambda: PAIRING,
         app=lambda: AppCredential("4242_demo", "app-pass"),
-        keys=HomeKeyStore(tmp_path / "server"),
+        keys=keys,
         fetch=token_endpoint,
         clock=lambda: NOW,
     )
@@ -79,7 +79,8 @@ def home_app(signing: HomeSignIn) -> FastAPI:
     app = FastAPI()
     app.include_router(
         venue_router(
-            PcSignIn(name=lambda: "contabo", key=lambda: PAIRING, resolve=nowhere), signing
+            PcSignIn(name=lambda: "contabo", key=lambda: PAIRING, resolve=nowhere, here=signing),
+            signing,
         )
     )
     app.add_middleware(BearerGate, token=LOCAL)
@@ -108,7 +109,8 @@ def code_call(rest: TestClient, code: str) -> tuple[int, Any]:
 def test_a_sign_in_lands_the_pair_on_the_home_and_a_replayed_code_is_refused(
     tmp_path: Path,
 ) -> None:
-    signing = the_home(tmp_path)
+    server = HomeKeyStore(tmp_path / "server")
+    signing = the_home(server)
     aim = free_redirect()
     opened: list[str] = []
 
@@ -121,7 +123,8 @@ def test_a_sign_in_lands_the_pair_on_the_home_and_a_replayed_code_is_refused(
         pc = PcSignIn(
             name=lambda: "pc",
             key=lambda: PAIRING,
-            resolve=lambda: Target("contabo", "http://contabo.tail", aim),
+            resolve=lambda: Target("contabo", aim, "http://contabo.tail"),
+            here=the_home(HomeKeyStore(tmp_path / "pc")),
             join=lambda: Joined("ok", False),
             post=to(rest),
             open_browser=browser,
@@ -139,18 +142,18 @@ def test_a_sign_in_lands_the_pair_on_the_home_and_a_replayed_code_is_refused(
         "scope": ["accounts"],
         "product": ["web"],
     }
-    held = signing.keys.read(TOKEN_NAME)
+    held = server.read(TOKEN_NAME)
     assert held is not None
     assert Tokens.from_document(held) == Tokens("acc-1", "ref-1", NOW + 2628000)
-    assert signing.keys.names() == ("qmx/token/ctrader-app",)
+    assert server.names() == ("qmx/token/ctrader-app",)
     assert replayed[0] == 409
     assert replayed[1]["detail"]["code"] == "no_pending_sign_in"
     if os.name == "posix":
-        assert signing.keys.path.stat().st_mode & 0o077 == 0
+        assert server.path.stat().st_mode & 0o077 == 0
 
 
 def test_a_code_after_a_home_restart_is_refused_with_retry_advice(tmp_path: Path) -> None:
-    with TestClient(home_app(the_home(tmp_path))) as rest:
+    with TestClient(home_app(the_home(HomeKeyStore(tmp_path)))) as rest:
         status, answer = code_call(rest, "one-minute-code")
     assert status == 409
     assert answer["detail"] == {
@@ -161,7 +164,7 @@ def test_a_code_after_a_home_restart_is_refused_with_retry_advice(tmp_path: Path
 
 
 def test_the_begin_route_takes_a_host_pass_only(tmp_path: Path) -> None:
-    with TestClient(home_app(the_home(tmp_path))) as rest:
+    with TestClient(home_app(the_home(HomeKeyStore(tmp_path)))) as rest:
         bearer_only = rest.post(
             "/api/venue/ctrader/begin",
             json={"redirect": "http://127.0.0.1:47613/ctrader/callback"},
@@ -185,7 +188,8 @@ def test_with_no_home_reachable_begin_is_refused_and_no_browser_opens(tmp_path: 
     pc = PcSignIn(
         name=lambda: "pc",
         key=lambda: PAIRING,
-        resolve=lambda: Target("contabo", "http://contabo.tail", aim),
+        resolve=lambda: Target("contabo", aim, "http://contabo.tail"),
+        here=the_home(HomeKeyStore(tmp_path / "pc")),
         join=lambda: Joined("ok", False),
         post=unreachable,
         open_browser=opened.append,
@@ -211,8 +215,6 @@ def test_a_second_home_for_the_same_app_is_refused() -> None:
 
     with pytest.raises(Refused) as two:
         target({}, [CTRADER_ROW, other], urls, this="pc")
-    with pytest.raises(Refused) as pc:
-        target({"home": "pc"}, [], urls, this="pc")
     with pytest.raises(Refused) as unset:
         target({}, [CTRADER_ROW], {}, this="pc")
 
@@ -220,10 +222,9 @@ def test_a_second_home_for_the_same_app_is_refused() -> None:
         "two_homes",
         "cTrader rows name contabo, pc; one app has one home",
     )
-    assert pc.value.code == "pc_not_home"
     assert unset.value.code == "waiting_for_server"
     assert target({}, [CTRADER_ROW], urls, this="pc") == Target(
         "contabo",
-        "http://contabo.tail",
         Redirect.parse("http://127.0.0.1:47613/ctrader/callback"),
+        "http://contabo.tail",
     )
