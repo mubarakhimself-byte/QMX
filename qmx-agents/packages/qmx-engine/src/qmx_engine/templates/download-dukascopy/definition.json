@@ -9,9 +9,11 @@
       "source": {
         "type": "object",
         "description": "{symbol, month, side (bid | ask | both), price_scale, licence}"
-      }
+      },
+      "dry_run": {"type": "boolean", "description": "check the step and download nothing"}
     },
-    "required": ["source"]
+    "if": {"required": ["dry_run"], "properties": {"dry_run": {"const": true}}},
+    "else": {"required": ["source"]}
   },
   "outputs": {
     "type": "object",

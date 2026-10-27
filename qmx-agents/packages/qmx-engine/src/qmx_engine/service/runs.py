@@ -39,6 +39,7 @@ from qmx_control.context import (
     pins_of,
     references,
 )
+from referencing.exceptions import Unresolvable
 
 from qmx_engine.core.replay import idempotency_key
 from qmx_engine.core.state import Slot
@@ -78,6 +79,11 @@ ENGINE_KEYS: Final = frozenset({"trigger", "continuity", "webhook", "upstream", 
 """The keys the engine adds to a run's inputs. They are its own, so no inputs schema checks them."""
 
 
+def broken_schema(why: str) -> tuple[str, str]:
+    line = f"the workflow's inputs are not a valid JSON Schema ({why})"
+    return "inputs_schema_invalid", f"{line}. Fix its inputs and publish it again."
+
+
 def input_refusal(
     schema: JsonValue, inputs: JsonValue, *, required: bool
 ) -> tuple[str, str] | None:
@@ -90,14 +96,16 @@ def input_refusal(
         validator = validator_for(schema)
         validator.check_schema(schema)
     except SchemaError as broken:
-        line = f"the workflow's inputs are not a valid JSON Schema ({broken.message})"
-        return "inputs_schema_invalid", f"{line}. Fix its inputs and publish it again."
+        return broken_schema(broken.message)
     if not required:
         schema = {key: value for key, value in schema.items() if key != "required"}
     given = inputs if inputs is not None else {}
     if isinstance(given, dict):
         given = {key: value for key, value in given.items() if key not in ENGINE_KEYS}
-    error = next(iter(validator(schema).iter_errors(given)), None)
+    try:
+        error = next(iter(validator(schema).iter_errors(given)), None)
+    except Unresolvable as dangling:
+        return broken_schema(f"its reference {dangling.ref} points at nothing")
     if error is None:
         return None
     where = [str(part) for part in error.absolute_path]

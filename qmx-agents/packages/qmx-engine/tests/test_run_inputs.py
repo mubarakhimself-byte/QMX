@@ -6,6 +6,7 @@ name and starts no run. Only the declared inputs are checked, never a test run's
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
@@ -30,6 +31,7 @@ from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Caller
 from qmx_engine.service.rest import engine_router
 from qmx_engine.service.runs import input_refusal
+from qmx_engine.templates.catalog import CATALOG, PACK
 
 KEY = "inputs-check"
 BEARER = {"Authorization": f"Bearer {KEY}"}
@@ -233,3 +235,47 @@ def test_only_the_declared_inputs_are_checked_and_required_only_when_asked(
     found = input_refusal(SOURCE_SCHEMA, inputs, required=required)
 
     assert found == (None if refused is None else ("inputs_invalid", refused))
+
+
+def test_a_schema_whose_reference_points_at_nothing_is_refused_by_name() -> None:
+    dangling: JsonObject = {"type": "object", "properties": {"folder": {"$ref": "#/defs/x"}}}
+
+    assert input_refusal(dangling, {"folder": "D:/clips"}, required=True) == (
+        "inputs_schema_invalid",
+        "the workflow's inputs are not a valid JSON Schema (its reference /defs/x points at"
+        " nothing). Fix its inputs and publish it again.",
+    )
+
+
+def schema_of(template_folder: str) -> JsonObject:
+    definition = json.loads((PACK / template_folder / "definition.json").read_text("utf-8"))
+    return definition.get("inputs", {})
+
+
+def test_every_templates_own_test_inputs_meet_its_schema_as_a_live_run_checks_them() -> None:
+    """A template with no test inputs is tested on none, and a live run of it must give what its
+    schema requires; every other one's test inputs must pass the live check unchanged."""
+    built = [t for t in CATALOG if t.folder]
+    refused = {
+        t.id: found
+        for t in built
+        if t.test_inputs is not None
+        and (found := input_refusal(schema_of(t.folder), t.test_inputs, required=True))
+    }
+    broken = {
+        t.id: found
+        for t in built
+        if (found := input_refusal(schema_of(t.folder), {}, required=False))
+        and found[0] == "inputs_schema_invalid"
+    }
+
+    assert (refused, broken) == ({}, {})
+    assert input_refusal(schema_of("morning-digest"), {"fixture": "replay"}, required=True) == (
+        "inputs_invalid",
+        "the input 'fixture' is not valid: 'replay' is not of type 'boolean'. Give it a value the"
+        " workflow's inputs accept.",
+    )
+    assert input_refusal(schema_of("download-binance"), {}, required=True) == (
+        "inputs_invalid",
+        "the input 'source' is missing, and the workflow needs it. Set it, then try again.",
+    )
