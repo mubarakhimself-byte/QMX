@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import uuid
 from collections.abc import Mapping, Sequence
@@ -34,6 +35,9 @@ from qmx_home.files import PARTIAL, copy_file, long_path, plain
 FORMAT: Final = "qmx-backup/1"
 MANIFEST: Final = "manifest.jsonl"
 ABOUT: Final = "backup.toml"
+STAMP: Final = re.compile(r"\d{8}T\d{12}Z")
+"""A copy's folder name; nothing else in `snapshots/` is QMX's, so nothing else is listed or
+removed."""
 
 type Kind = Literal["store", "log", "file", "once"]
 """A SQLite store copied by `VACUUM INTO`, a log copied up to its last full line, any other file
@@ -308,6 +312,7 @@ class FolderRepository:
                 entry.name
                 for entry in os.scandir(long_path(self.snapshots))
                 if entry.is_dir(follow_symlinks=False)
+                and STAMP.fullmatch(entry.name)
                 and long_path(self.snapshots / entry.name / MANIFEST).is_file()
             )
         )
@@ -359,8 +364,10 @@ class FolderRepository:
                     removed += 1
         if long_path(self.snapshots).is_dir():
             for entry in os.scandir(long_path(self.snapshots)):
-                if entry.is_dir(follow_symlinks=False) and not os.path.isfile(
-                    os.path.join(entry.path, MANIFEST)
+                if (
+                    entry.is_dir(follow_symlinks=False)
+                    and STAMP.fullmatch(entry.name)
+                    and not os.path.isfile(os.path.join(entry.path, MANIFEST))
                 ):
                     shutil.rmtree(entry.path)
                     removed += 1

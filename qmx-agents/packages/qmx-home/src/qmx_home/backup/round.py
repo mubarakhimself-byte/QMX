@@ -151,7 +151,8 @@ def quick(
     now: datetime | None = None,
 ) -> RoundReport:
     """One copy into the quick undo at once, tagged `why`, written even when nothing changed
-    (a copy taken before an upgrade). Raises Busy while a round holds the lock."""
+    (a copy taken before an upgrade). It thins nothing: the next round thins by his own keep
+    rule. Raises Busy while a round holds the lock."""
     return _round(
         layout,
         Plan(leave_out=tuple(leave_out)),
@@ -244,8 +245,8 @@ def _round(
         for target in chosen:
             told(f"sending the copy to {plain(target.path)}")
             placed.append(_send(layout, target, copy, quick_repo, sealed, log, home_id))
-        if any(place.result == "copied" for place in placed):
-            placed[0] = _thin_quick(layout, quick_repo, plan, log, placed, now)
+        if not force and any(place.result == "copied" for place in placed):
+            placed[0] = _thin_quick(quick_repo, plan, log, placed, now)
             _thin_pre_change(layout, log, placed, now)
         return _logged(layout, RoundReport(stamp, why, tuple(placed), clock.monotonic() - started))
 
@@ -444,7 +445,6 @@ def _thin(
 
 
 def _thin_quick(
-    layout: Layout,
     repo: FolderRepository,
     plan: Plan,
     log: Sequence[Mapping[str, object]],

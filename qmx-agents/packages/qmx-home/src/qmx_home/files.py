@@ -44,8 +44,10 @@ def plain(name: object) -> str:
 
 def open_shared(path: Path) -> IO[bytes]:
     """`path` opened for reading the way a live folder must be read: on Windows with delete
-    sharing, so a writer that replaces the file while it is read (the Library, the price store,
-    the settings) is never refused because of the reader. Elsewhere a plain open."""
+    sharing, so a writer that deletes the file while it is read (the price store freezing a
+    month, the host making room) is not refused because of the reader. Windows still refuses a
+    rename onto a file held open this way, so a writer replacing it waits out the read (the
+    Library retries). Elsewhere a plain open."""
     path = long_path(path)
     if os.name != "nt":
         return path.open("rb")
