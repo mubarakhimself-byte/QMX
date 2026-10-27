@@ -758,9 +758,7 @@ async def serve(
                             passes,
                             library_service(home, store, serving, bearer),
                         )
-                        # Uvicorn's started line reads its host and port from the config.
-                        app_host = TAILNET if serving else LOOPBACK
-                        server = uvicorn.Server(uvicorn.Config(app, host=app_host, port=port))
+                        server = uvicorn.Server(uvicorn.Config(app))
                         beating = asyncio.create_task(
                             heartbeats(home, name, control, harness, engine, link)
                         )
@@ -772,6 +770,9 @@ async def serve(
                             if replicator is not None
                             else None
                         )
+                        # Uvicorn logs no started line for a socket it was handed.
+                        address, _ = sock.getsockname()
+                        print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
                         try:
                             await server.serve(sockets=[sock])
                         finally:
