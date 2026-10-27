@@ -2,7 +2,7 @@
 
 **Read this first.** It is the single entry point for the unit work: every finding, operator correction and open decision in one place, with links to the detail. Updated after every agent result and every operator message.
 
-Last updated: 2026-10-25 (after 07 funnel).
+Last updated: 2026-10-27 (after 07 funnel).
 
 ## Where everything is
 
@@ -27,6 +27,73 @@ Last updated: 2026-10-25 (after 07 funnel).
 9. **The MQL5 DeepSeek run is dropped** (no credits). Use the articles later inside QMX through mini apps and workflows.
 10. **Positioning:** when generating strategies is nearly free, judging them is the product. QMX is his own platform, not for sale.
 11. **Bring him only real ambiguity.** Settle simple architecture issues and report them in one line.
+
+## Operator round 2026-10-27 (his review of the explainer site; binding)
+
+**Answers to the 8 questions**
+- Q1 sibling unit: **yes**, the recommendation stands, rethought for agents and for everything below.
+- Q2 what counts as "new": **hold**. The answer may come from the Hermes/Stats sessions and the journal and QMB design.
+- Q3 promotion: **only he promotes. Nothing enters live without him**, no variant, no unit; the minimum-lot auto-promotion is rejected. The only automatic transition is the risk rules stopping a unit (kill switch and similar), which is logged and monitored.
+- Q4 size growing back and Q5 house money: **not decided.** Risk and sizing needs its own deeper session (see below).
+- Q6: **keep "unit".**
+- Q7 router split: **split is right** (fast part on the trading node, planning elsewhere), with the corrections under "Router" below.
+- Q8 scalper types: **nothing set in stone.** Types are defaults, never a cage; a custom ML model that is no scalper type must fit. The same goes for the dictionary.
+
+**Unbounded by default**
+- No limit on how far back a unit or backtest can look. If a test wants 1990, allow it. Post-COVID is a sensible default, never a cap. (Find and remove the lookback limit he heard of in another session.)
+- Plain Python is always possible: rewrite a unit's logic outside QML, an ML ensembler, a mini app, a workflow. QML, the unit and the schemas are a standard **for agents**, so cheaper models don't make big mistakes. They never stop a human or a mini app.
+- Design for agents, not humans: agents run this through workflows, skills and hooks; a copilot may remake parts of it.
+
+**Lineage and history (the data layer)**
+- Everything about a unit is saved and traceable to its origin: chat session, YouTube video, blog post, copilot chat, article. No vibe trading.
+- Analyst lens: knowing where high performers come from narrows the search over time.
+- UI needs a **preview** (small summary) and a **detailed view** (journals, lineage, pairs, history, backtest results) of the family tree.
+
+**Journal = the unit's DevOps layer**
+- Monitoring, logging and observability for the unit; also a place where agents can write (analysis, proposals that render in the UI).
+- Record a lot: trades taken, signals detected but not taken, missed trades. Learn from human trading journals and from bot observability.
+- **Separate a router journal for market-level facts** (spread, fees, slippage, sessions per instrument and broker) instead of duplicating them in every unit journal. It shows which instruments had which conditions over time.
+- Mind the data volume: no duplication.
+- WF3-style performance-over-time studies (unit, family, pair) come from the journals; portfolio optimisation can come from them too.
+
+**Router (correction: it does NOT switch units on or off)**
+- Routing = directing traffic like a load balancer: market = traffic, units = servers, with balancing algorithms (round robin, least connections and so on, plus hybrids). It gives units direction and depth of information ("this market fits your conditions") to improve performance.
+- **The unit must stay independent.** If the router is slow, down or offline, the unit keeps trading if its own conditions, the pair and the broker allow. The router is a point of failure; nothing critical may depend on it.
+- The guards (SQS, news kill switch, account guards) must work independently of the router.
+- Units need their own market feed: a **market-feed pool** for 200+ units across instruments (cTrader Open API limits, futures data, crypto/perps, spot). Confirm per platform.
+- If units read both live data and MIS output, part of that design lives inside the unit and the MIS changes. A "5 trading days" plan cadence is shaky for scalpers: re-architect.
+- The router needs its own **correlation ledger**.
+- Several trading nodes and instruments mean several routers or one central one: think it through. MIS models need training per instrument.
+- Everything must fit the **Library** (the store built recently): router logs, journals, caches.
+
+**Local first (rulings 136-139)**
+- Everything first works on his PC alone. Servers only extend or stand in (faster internet, always on), never replace. This applies to the backtester, the router and all of the unit work.
+
+**Account guard and pod**
+- Standardise them; possibly combine them. His lean: the pod is effectively the BMS (not the whole Book; the Book is overkill), and the BMS already covered the account guard's jobs. Open question back to Claude: combine account guard + pod?
+- Two things are being mixed: the overall portfolio vs portfolio configuration, and live trading vs strategy development, research, analysis and curation. Handle one at a time.
+- "Self-configuring" has never been shown concretely (how a unit actually configures itself). This is what he needs most.
+
+**QMB (testing)**
+- Aim: what agents use to backtest at a professional quant level, so agents never hand-roll backtest code. Base: QuantConnect LEAN CLI logic (current docs); also consider Jesse.
+- Recover what the old system proposed and was dropped (see 08); find out why it was refused.
+- All instrument types supported by default.
+- Data: he used Dukascopy (via the open-source dukascopy-node). Check data quality and cleanliness, and other sources.
+
+**Judging**
+- "When strategies are nearly free to make, judging them is the product" is right. Look at how professional quants judge; don't be too strict.
+- Judge from historical AND paper trading (both lowers overfitting); define when to paper-trade and the sequence.
+- Account for the old risk system's special ("radioactive") sizing when judging.
+- Make judging a **skill** (hooks plus deterministic scripts that call QMB). Agents judge from results and may propose; they don't decide by eye. Proposals render in the UI.
+
+**Risk and sizing**
+- Special to him; one small mistake costs a lot. Goal: combine the best of the two systems. He needs a mathematical explanation, not diagrams. **Handled in its own session from a handoff prompt** (`HANDOFF-RISK-SIZING.md`), taking the sizing and decay pages along. CUSUM and loss points need explaining there.
+
+**Ideas, not decisions, to mine next**
+- Hermes sessions (`Downloads\hermes-*.json`, Desktop `Stats` and `strats` folders, `.hermes/orchestration`): map the journey and find the "gold mine". This is how QML was first built; compare old vs new. **The right folder is `Stats`.**
+- Papers on disk (Downloads): 8 LLM-quant papers (alpha mining, MCTS factor mining, evolutionary alpha, agent stock analysis, multi-agent portfolio simulation, cross-asset risk, FinLlama sentiment). Pick ideas for finding and for filtering (filtering = workflows).
+- "Markets and gaps" page: he will reply in writing himself.
+- Build order: he has seen it; hold.
 
 ## Research findings (short; detail in each file)
 
