@@ -15,7 +15,7 @@ from qmx_control.service import ControlError, ControlService
 
 
 def _service(tmp_path: Path) -> ControlService:
-    return ControlService(tmp_path / "QMX" / "data")
+    return ControlService(tmp_path / "QMX" / "data", secret_getter=lambda _service, _name: None)
 
 
 def test_a_quick_undo_table_and_a_folder_target_save_through_the_route(tmp_path: Path) -> None:
@@ -30,16 +30,17 @@ def test_a_quick_undo_table_and_a_folder_target_save_through_the_route(tmp_path:
             "/api/settings/backup", headers={"Authorization": f"Bearer {token}"}, json=values
         )
         assert saved.status_code == 200, saved.text
-        assert rest.get(
-            "/api/settings/backup", headers={"Authorization": f"Bearer {token}"}
-        ).json() == values
+        assert (
+            rest.get("/api/settings/backup", headers={"Authorization": f"Bearer {token}"}).json()
+            == values
+        )
 
 
 def test_a_target_of_an_unknown_kind_is_refused_by_name_and_nothing_is_saved(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
-    row = {"id": "usb", "kind": "tape", "path": str(tmp_path / "usb")}
+    row: Document = {"id": "usb", "kind": "tape", "path": str(tmp_path / "usb")}
     with pytest.raises(ControlError) as refused:
         service.settings_put("backup", {"targets": [row]})
     assert (refused.value.code, refused.value.status, str(refused.value)) == (

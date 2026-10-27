@@ -9,6 +9,11 @@ a server in his place list, which `qmx node setup` writes into the server's unit
 on the server the one host process opens the store as its one writer and answers the Library routes
 in process (AD-19, AD-26).
 
+`backup [--home <folder>] [--target <id>]` runs one backup round in the foreground: the quick
+undo and every place that is due, or only the place `--target` names, due or not. It prints each
+place's line and exits 0 when it copied or had nothing to copy, and 1 when a place refused or
+another round runs. It never imports the host, so it runs beside a host that serves the folder.
+
 `first-start [--serve]`, `new`, `open`, `bring-in [--old <folder>]` and `restore` are the first
 start's card (design 62 F): they run with no QMX folder yet and take the chosen one as `--home`.
 A command pointed at his old folder, or given no folder while one sits at `~/.qmx`, names the
@@ -37,10 +42,13 @@ import json
 import os
 import socket
 import sys
+import tomllib
+from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 from qma.boot import read_keep_names, scrub_process_env
-from qmx_home import NoQmxFolder, resolve
+from qmx_home import Layout, NoQmxFolder, resolve
 from qmx_home.versions import check_open
 
 FIRST_START = ("first-start", "new", "open", "bring-in", "restore")
@@ -52,7 +60,9 @@ HANDOVER_GRACE_S = 3
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m qmx_host")
-    parser.add_argument("command", choices=["serve", "start", "status", "stop", *FIRST_START])
+    parser.add_argument(
+        "command", choices=["serve", "start", "status", "stop", "backup", *FIRST_START]
+    )
     parser.add_argument(
         "--home", type=Path, default=None, help="the QMX folder; found when left out"
     )
@@ -75,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         "--place", default="", help="this machine's place name; setup passes it for a server"
     )
     parser.add_argument("--ui-origin", default="http://127.0.0.1:5173")
+    parser.add_argument("--target", default=None, help="backup: only this backup place")
     args = parser.parse_args(argv)
     if args.command in FIRST_START:
         return first_start(parser, args)
@@ -84,6 +95,8 @@ def main(argv: list[str] | None = None) -> int:
         if missing.kind == "refused":
             parser.exit(2, f"{missing}\n")
         parser.exit(FIRST_START_DUE, f"{_old_hint(args.home) or missing}\n")
+    if args.command == "backup":
+        return backup(layout, args.target)
     if args.command in ("serve", "start"):
         from qmx_control.library import UNFINISHED, old_library  # noqa: PLC0415
 
@@ -123,6 +136,33 @@ def main(argv: list[str] | None = None) -> int:
             return host.status(home)
         case _:
             return host.stop(home)
+
+
+def backup(layout: Layout, only: str | None) -> int:
+    """One round in the foreground, with the floor the host keeps on the folder's drive."""
+    from qmx_home.backup.plan import PlanRefused, parse  # noqa: PLC0415
+    from qmx_home.backup.round import run_round  # noqa: PLC0415
+    from qmx_home.files import Busy  # noqa: PLC0415
+
+    from qmx_host.disk import floor_bytes, free_bytes  # noqa: PLC0415
+
+    path = layout.home / "settings.toml"
+    settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    engine = cast("dict[str, object]", settings.get("engine", {}))
+    try:
+        report = run_round(
+            layout,
+            parse(settings.get("backup", {}), layout),
+            now=datetime.now().astimezone(),
+            floor=floor_bytes(engine, free_bytes(layout.home)),
+            only=only,
+            progress=lambda step: print(step, file=sys.stderr, flush=True),
+        )
+    except (Busy, PlanRefused) as refused:
+        print(f"refused: {refused}", file=sys.stderr)
+        return 1
+    print("\n".join(report.lines))
+    return 1 if report.result == "refused" else 0
 
 
 def _old_hint(flag: Path | None) -> str | None:
