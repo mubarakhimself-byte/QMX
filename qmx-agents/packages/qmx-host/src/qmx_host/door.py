@@ -337,13 +337,13 @@ def templates_router(engine: EngineDoor) -> APIRouter:
     the job `stopped` with its code and the rows finished before it."""
     router = APIRouter()
     jobs = Jobs()
-    finished: dict[str, list[dict[str, str]]] = {}
+    rows_by_job: dict[str, list[dict[str, str]]] = {}
     """Each job's rows, appended by its own thread only."""
 
     def view(job: Job) -> dict[str, object]:
         shown = job.document()
         if job.state == "running":
-            shown["result"] = {"rows": finished.get(job.id, [])[: job.done]}
+            shown["result"] = {"rows": rows_by_job.get(job.id, [])[: job.done]}
         return shown
 
     def hop(template: Template) -> Installed:
@@ -385,7 +385,7 @@ def templates_router(engine: EngineDoor) -> APIRouter:
                 f"a template install is already running (job {started.job.id}); "
                 "wait for it to end, then run the install again",
             )
-        finished[started.job.id] = rows
+        rows_by_job[started.job.id] = rows
         return view(started.job)
 
     @router.get(f"{INSTALL_ROUTE}/{{job_id}}")
