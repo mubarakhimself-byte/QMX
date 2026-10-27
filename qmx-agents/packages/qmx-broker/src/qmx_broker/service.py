@@ -221,13 +221,13 @@ async def open_adapter(
         raise ReadRefused("credential_unusable", f"{CTRADER_APP} needs clientId and clientSecret")
     proto = compiled(connection)
     store = CredentialManager() if keys is None else keys
-    held = _held_pair(store)
+    raw, held = _held_pair(store)
     if held.due(clock()):
         if folder is None:
             raise ReadRefused("sign_in_ended", f"The cTrader sign-in has expired; {SIGN_IN_AGAIN}")
         async with _one_refresher(folder):
             app = AppCredential(secret["clientId"], secret["clientSecret"])
-            held = await _renewed(
+            raw, held = await _renewed(
                 store,
                 app,
                 connection,
@@ -247,6 +247,11 @@ async def open_adapter(
         except EnvironmentMismatch:
             raise
         except ValueError:
+            if store.read(CTRADER_TOKENS) != raw:
+                raise ReadRefused(
+                    "sign_in_renewed",
+                    "Another QMX process renewed the cTrader sign-in during this read; try again",
+                ) from None
             raise ReadRefused(
                 "key_refused",
                 f"cTrader refused the app key or the sign-in for account {account.id}; check the "
@@ -257,13 +262,23 @@ async def open_adapter(
         await transport.close()
 
 
-def _held_pair(store: KeyStore) -> Tokens:
-    held = store.read(CTRADER_TOKENS)
-    if held is None:
+def _held_pair(store: KeyStore) -> tuple[str, Tokens]:
+    """The stored pair as written, so a later read can tell whether another writer replaced it,
+    and as tokens."""
+    raw = store.read(CTRADER_TOKENS)
+    if raw is None:
         raise ReadRefused(
             "not_signed_in", "Sign in to cTrader on This PC first; This PC holds no cTrader sign-in"
         )
-    return Tokens.from_document(held)
+    return raw, Tokens.from_document(raw)
+
+
+def _written_meanwhile(store: KeyStore, raw: str) -> tuple[str, Tokens] | None:
+    """The pair a sign-in wrote while a refresh ran, which wins over the refresh; the PC sign-in
+    writes without the refresh lock, and Credential Manager has no compare-and-set."""
+    if store.read(CTRADER_TOKENS) == raw:
+        return None
+    return _held_pair(store)
 
 
 async def _renewed(
@@ -275,33 +290,44 @@ async def _renewed(
     fetch: Fetch,
     clock: Callable[[], float],
     connect: Connect,
-) -> Tokens:
+) -> tuple[str, Tokens]:
     """The pair this read uses, renewed in the sign-in's own order: list the new grant's
     accounts, refuse a grant that can trade live money (ruling 135), and only then keep it. A
-    pair another reader renewed while this one waited for the lock is used as it is."""
-    held = _held_pair(store)
+    pair another reader renewed while this one waited for the lock, or a sign-in wrote while
+    this refresh ran, is used as it is. No line holds the token endpoint's own text."""
+    raw, held = _held_pair(store)
     if not held.due(clock()):
-        return held
+        return raw, held
     try:
         fresh = await asyncio.to_thread(
             refresh_tokens, app, held.refresh_token, token_url=token_url, fetch=fetch, now=clock()
         )
     except OAuthRefused as refused:
+        newer = _written_meanwhile(store, raw)
+        if newer is not None:
+            return newer
         if refused.code in {"token_endpoint_unreachable", "bad_token_answer"}:
             raise ConnectionError(refused.code) from None
+        if refused.code == "unreadable_token_answer":
+            raise ReadRefused(
+                "token_answer_unreadable",
+                "cTrader's token endpoint gave an answer QMX could not read, so the sign-in is "
+                "kept; try again, and check [ctrader] token_url in Settings if it repeats",
+            ) from None
         if refused.code == "token_url_invalid":
             raise ReadRefused(
                 "token_url_invalid",
                 "The [ctrader] token_url in Settings is not a web address; fix it, or clear it "
                 "to use cTrader's own",
             ) from None
-        if store.read(CTRADER_TOKENS) == held.document():
-            store.delete(CTRADER_TOKENS)
+        store.delete(CTRADER_TOKENS)
         raise ReadRefused(
             "sign_in_ended",
-            f"The cTrader sign-in has ended: cTrader would not renew it ({refused.code}); "
-            f"{SIGN_IN_AGAIN}",
+            f"The cTrader sign-in has ended: cTrader would not renew it; {SIGN_IN_AGAIN}",
         ) from None
+    newer = _written_meanwhile(store, raw)
+    if newer is not None:
+        return newer
     try:
         listing = await grant_accounts(connection, app, fresh.access_token, connect=connect)
     except Exception as error:  # the check crosses the network; an unchecked pair is never kept
@@ -311,8 +337,12 @@ async def _renewed(
             f"({type(error).__name__}), so it kept nothing; {SIGN_IN_AGAIN}",
         ) from None
     if can_trade_live(listing):
-        store.delete(CTRADER_TOKENS)
+        if store.read(CTRADER_TOKENS) == raw:
+            store.delete(CTRADER_TOKENS)
         raise LiveGrant
+    newer = _written_meanwhile(store, raw)
+    if newer is not None:
+        return newer
     kept = fresh.document()
     try:
         store.replace(CTRADER_TOKENS, kept)
@@ -325,7 +355,7 @@ async def _renewed(
             "QMX renewed the cTrader sign-in but could not keep the new pair in Credential "
             f"Manager; {SIGN_IN_AGAIN}",
         )
-    return fresh
+    return kept, fresh
 
 
 @asynccontextmanager

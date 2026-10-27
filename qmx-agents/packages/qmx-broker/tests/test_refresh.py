@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import threading
 import time
 from pathlib import Path
@@ -191,27 +192,119 @@ def test_a_revoked_refresh_says_the_sign_in_ended_and_deletes_the_refused_pair(
 
     assert (refused.value.code, str(refused.value)) == (
         "sign_in_ended",
-        "The cTrader sign-in has ended: cTrader would not renew it (ACCESS_DENIED); sign in to "
-        "cTrader on This PC again",
+        "The cTrader sign-in has ended: cTrader would not renew it; sign in to cTrader on This "
+        "PC again",
     )
     assert (store.writes, store.held) == ([("delete", None)], {})
 
 
-def test_a_revoked_refresh_keeps_a_pair_written_meanwhile(tmp_path: Path, vault: Memory) -> None:
+@pytest.mark.parametrize("revoked", [True, False], ids=["refresh refused", "refresh answered"])
+def test_a_sign_in_written_during_a_refresh_is_the_pair_the_read_uses(
+    tmp_path: Path, vault: Memory, revoked: bool
+) -> None:
     signed_in(vault)
-    store, endpoint = Store(), Endpoint()
-    endpoint.valid.clear()
+    store, endpoint, recorded = Store(), Endpoint(), CTraderFixture()
+    if revoked:
+        endpoint.valid.clear()
     newer = Tokens("acc-9", "ref-9", NOW + 60).document()
 
     def signed_in_again_meanwhile(method: str, url: str) -> tuple[int, bytes]:
         store.held[CTRADER_TOKENS] = newer
         return endpoint(method, url)
 
-    with pytest.raises(ReadRefused) as refused:
-        read(broker(tmp_path, store, signed_in_again_meanwhile))
+    answer = read(broker(tmp_path, store, signed_in_again_meanwhile, recorded))
 
-    assert refused.value.code == "sign_in_ended"
+    assert balance(answer) == "1234.56"
     assert (store.writes, store.held) == ([], {CTRADER_TOKENS: newer})
+    assert listed_with(recorded) == ["acc-9"]
+
+
+def test_a_token_endpoint_error_keeps_the_pair_and_says_to_try_again(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+    store = Store()
+
+    def unavailable(_method: str, _url: str) -> tuple[int, bytes]:
+        return 503, b'{"errorCode": "SERVICE_UNAVAILABLE", "description": "try later"}'
+
+    with pytest.raises(ReadRefused) as refused:
+        read(broker(tmp_path, store, unavailable))
+
+    assert (refused.value.code, store.writes) == ("network", [])
+    assert store.held == {CTRADER_TOKENS: DUE.document()}
+
+
+def test_a_token_answer_qmx_cannot_read_keeps_the_pair_and_names_the_endpoint(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+    store = Store()
+
+    def not_json(_method: str, _url: str) -> tuple[int, bytes]:
+        return 404, b"<html>not here</html>"
+
+    with pytest.raises(ReadRefused) as refused:
+        read(broker(tmp_path, store, not_json))
+
+    assert (refused.value.code, str(refused.value)) == (
+        "token_answer_unreadable",
+        "cTrader's token endpoint gave an answer QMX could not read, so the sign-in is kept; try "
+        "again, and check [ctrader] token_url in Settings if it repeats",
+    )
+    assert store.writes == []
+
+
+def test_an_endpoint_that_echoes_the_request_puts_no_secret_in_any_line(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+
+    def echo(_method: str, url: str) -> tuple[int, bytes]:
+        query = urlsplit(url).query
+        return 400, json.dumps({"errorCode": query, "description": url}).encode()
+
+    aim = Redirect.parse("http://127.0.0.1:47613/ctrader/callback")
+    with pytest.raises(OAuthRefused) as exchanged:
+        exchange_code(AppCredential("4242_demo", "app-pass"), "c0de", aim, fetch=echo)
+    with pytest.raises(OAuthRefused) as refreshed:
+        refresh(AppCredential("4242_demo", "app-pass"), "ref-1", fetch=echo)
+    with pytest.raises(ReadRefused) as refused:
+        read(broker(tmp_path, Store(), echo))
+
+    shown = [
+        text
+        for error in (exchanged.value, refreshed.value)
+        for text in (str(error), repr(error), error.code, error.message)
+    ] + [str(refused.value), repr(refused.value), refused.value.line]
+    assert not [
+        text for text in shown for secret in ("app-pass", "ref-1", "c0de") if secret in text
+    ]
+    assert (exchanged.value.code, refreshed.value.code, refused.value.code) == (
+        "token_refused",
+        "token_refused",
+        "sign_in_ended",
+    )
+
+
+def test_a_token_endpoint_that_breaks_the_http_answer_reads_as_unreachable() -> None:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+
+        def garble() -> None:
+            peer, _ = listener.accept()
+            with peer:
+                peer.recv(4096)
+                peer.sendall(b"not http at all\r\n\r\n")
+
+        threading.Thread(target=garble, daemon=True).start()
+        url = f"http://127.0.0.1:{listener.getsockname()[1]}/apps/token"
+
+        with pytest.raises(OAuthRefused) as refused:
+            refresh(AppCredential("4242_demo", "app-pass"), "ref-1", token_url=url)
+
+    assert refused.value.code == "token_endpoint_unreachable"
 
 
 def test_a_refreshed_pair_that_cannot_be_kept_stops_the_read_with_its_line(

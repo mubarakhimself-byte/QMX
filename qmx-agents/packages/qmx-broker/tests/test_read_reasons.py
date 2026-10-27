@@ -17,6 +17,7 @@ from test_pc_home import PAIR, Memory, Session, settings, signed_in, vault
 from test_refresh import Endpoint, Store, broker
 
 from qmx_broker.adapters import Document, ReadAdapter
+from qmx_broker.credentials import CTRADER_TOKENS
 from qmx_broker.models import Account, Broker, BrokerSettings, Connection
 from qmx_broker.oauth import Tokens
 from qmx_broker.service import BrokerService, ReadRefused, open_adapter
@@ -31,11 +32,13 @@ def refused(service: BrokerService, account: str = "101") -> tuple[str, str]:
     return caught.value.code, str(caught.value)
 
 
-def ctrader(tmp_path: Path, connect: Any, row: BrokerSettings | None = None) -> BrokerService:
+def ctrader(
+    tmp_path: Path, connect: Any, row: BrokerSettings | None = None, store: Store | None = None
+) -> BrokerService:
+    keys = store or Store(Tokens("a", "r", 0))
+
     def factory(provider: Broker, connection: Connection, account: Account):
-        return open_adapter(
-            provider, connection, account, keys=Store(Tokens("a", "r", 0)), connect=connect
-        )
+        return open_adapter(provider, connection, account, keys=keys, connect=connect)
 
     return BrokerService(tmp_path / "qmx" / "data", row or settings(), factory)
 
@@ -137,6 +140,23 @@ def test_a_key_or_sign_in_cTrader_refuses_says_which_to_check(
         "key_refused",
         "cTrader refused the app key or the sign-in for account 101; check the app id and "
         "secret in Settings, or sign in to cTrader on This PC again",
+    )
+
+
+def test_a_sign_in_another_process_renewed_mid_read_says_to_try_again(
+    tmp_path: Path, vault: Memory
+) -> None:
+    signed_in(vault)
+    store = Store(Tokens("a", "r", 0))
+    answer = ValueError("cTrader refused the request; verify permissions and token expiry")
+
+    async def renewed_elsewhere(_proto: CompiledProto, _environment: str) -> Session:
+        store.held[CTRADER_TOKENS] = Tokens("b", "s", 0).document()
+        return Failing(CTraderFixture(), "ProtoOAGetAccountListByAccessTokenReq", answer)
+
+    assert refused(ctrader(tmp_path, renewed_elsewhere, store=store)) == (
+        "sign_in_renewed",
+        "Another QMX process renewed the cTrader sign-in during this read; try again",
     )
 
 

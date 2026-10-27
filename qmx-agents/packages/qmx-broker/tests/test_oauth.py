@@ -124,10 +124,7 @@ def test_a_refused_exchange_names_cTraders_code_and_never_the_request() -> None:
     aim = Redirect.parse("http://127.0.0.1:47613/ctrader/callback")
     with pytest.raises(OAuthRefused) as refused:
         exchange_code(APP, "c0de", aim, token_url="http://fake/apps/token", fetch=endpoint)
-    assert (refused.value.code, str(refused.value)) == (
-        "ACCESS_DENIED",
-        "ACCESS_DENIED: code expired",
-    )
+    assert (refused.value.code, str(refused.value)) == ("ACCESS_DENIED", "ACCESS_DENIED")
 
 
 @dataclass
