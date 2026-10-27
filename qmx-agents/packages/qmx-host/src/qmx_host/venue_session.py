@@ -543,13 +543,13 @@ def for_host(
 
     def one_session(app: AppCredential, tokens: Tokens) -> Document:
         saved = BrokerSettings(connections=cast("Any", list(rows())))
-        rows_here = [
+        ctrader_rows = [
             connection
             for provider in saved.providers
             if provider.adapter == "ctrader"
             for connection in provider.connections
         ]
-        listing = rows_here[0] if rows_here else NO_ROW
+        listing = ctrader_rows[0] if ctrader_rows else NO_ROW
         try:
             return asyncio.run(grant_accounts(listing, app, tokens.access_token, connect=connect))
         except Exception as error:  # the read crosses the network; its failure keeps nothing
