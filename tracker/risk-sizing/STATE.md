@@ -12,6 +12,7 @@ Last updated: 2026-10-27 (after 07 funnel).
 | The map and decision tickets | `wayfinder/MAP.md`, `wayfinder/tickets/`, run `python wayfinder/frontier.py` |
 | Research, one file per question | `research/01` … `research/09` (table below) |
 | Visual explainer (14-page site, phone-friendly) | https://claude.ai/artifact/CXKb3w5rsfm1zcUeNP7BXN ; source `explainers/` (rebuild: `node explainers/src/build.mjs`) |
+| Round 2 explainer (11 pages) | https://claude.ai/artifact/3RngTAe2hcnqWUHSApdzjN ; source `explainers/round2/` (rebuild: `node src/build.mjs` there) |
 | Older context | `C:\Users\Mubarak\Desktop\QMX\workroom\risk-lab-2026-10-05\` (HANDOFF, decisions.md, grounding 01-09) |
 
 ## Operator corrections (binding; outrank every research file)
