@@ -289,3 +289,20 @@ def test_a_round_is_refused_while_another_holds_the_lock_and_quick_copies_at_onc
     manifest = FolderRepository(filled.layout.backups / "quick").manifest(newest)
     assert manifest.header["why"] == "before-upgrade"
     assert json.loads(json.dumps(manifest.header["format"])) == "qmx-backup/1"
+
+
+def test_a_blob_whose_bytes_do_not_match_its_name_is_refused_by_the_target_by_name(
+    tmp_path: Path,
+) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=5)
+    blob = filled.layout.data / filled.written_once[0]
+    blob.write_bytes(b"damaged on his disk")
+
+    report = run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=0)
+
+    assert [p.result for p in report.places] == ["copied", "refused"]
+    assert report.places[1].line == (
+        f"the copy to {report.places[1].where} stopped: {blob} does not hold the bytes its copy "
+        "names: it changed while it was copied, or it is damaged; the next round tries again"
+    )
+    assert not (place(filled.layout, tmp_path).root / "snapshots").exists()

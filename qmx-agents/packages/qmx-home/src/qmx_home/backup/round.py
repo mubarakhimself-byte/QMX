@@ -343,7 +343,7 @@ def _send(
                 if entry.at == "pool"
                 else layout.data / entry.path
             )
-            written += repo.put_pool(entry.sha256, source)
+            written += repo.put_pool(entry.sha256, source, verify=entry.at == "live")
         repo.set_about(_about(home_id, layout, held))
         repo.put_copy(held, {SEALED: sealed[0]} if sealed else None)
         thinned = _thin(repo, target, log, key)

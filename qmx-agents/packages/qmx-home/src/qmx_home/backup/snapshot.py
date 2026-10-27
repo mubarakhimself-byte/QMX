@@ -15,16 +15,18 @@ copied.
 
 from __future__ import annotations
 
+import functools
+import glob
 import json
 import os
 import platform
 import re
 import sqlite3
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from importlib.metadata import version
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Final, cast
 
 from qmx_home import Label, Layout
@@ -61,6 +63,11 @@ LEFT_OUT: Final[tuple[tuple[str, str], ...]] = (
 """Paths in `data/` never in a copy, and why. Under `library/` a writer's temporary name
 `.<name>.<32 hex>` is left out too (`TEMPORARY`), while `checkout/.../.checkout.json` is copied."""
 TEMPORARY: Final = re.compile(r"\..+\.[0-9a-f]{32}")
+BORN_BLOB: Final = re.compile(
+    r"library/blobs/([0-9a-f]{2})/([0-9a-f]{2})/((?:\1)(?:\2)[0-9a-f]{60})"
+)
+"""A blob born on this store, named by the sha256 of its bytes, so its hash is read from its name
+and checked when a target copies it."""
 SECRET: Final[tuple[str, ...]] = (
     "vault/**",
     "rclone.conf",
@@ -110,26 +117,35 @@ class _Found:
     size: int
 
 
+@functools.cache
+def _matcher(globs: tuple[str, ...]) -> re.Pattern[str]:
+    """One pattern matching a path (relative, `/` between names) any of `globs` matches, as
+    `PurePosixPath.full_match` would; case does not count on Windows."""
+    if not globs:
+        return re.compile(r"(?!)")
+    parts = (glob.translate(g, recursive=True, include_hidden=True, seps="/") for g in globs)
+    return re.compile("|".join(f"(?:{part})" for part in parts), 0 if _CASE else re.IGNORECASE)
+
+
 def left_out(path: str, extra: Sequence[str] = ()) -> str | None:
     """Why `path` (relative to `data/`) is never in a copy, or None when it is copied."""
-    pure = PurePosixPath(path)
-    if any(pure.full_match(glob, case_sensitive=_CASE) for glob in SECRET):
+    if _matcher(SECRET).match(path):
         return "a key, token or login"
-    for glob, why in LEFT_OUT:
-        if pure.full_match(glob, case_sensitive=_CASE):
-            return why
-    if pure.parts[0] == "library" and TEMPORARY.fullmatch(pure.name):
+    if _matcher(tuple(g for g, _ in LEFT_OUT)).match(path):
+        return next(why for g, why in LEFT_OUT if _matcher((g,)).match(path))
+    name = path.rpartition("/")[2]
+    if path.startswith("library/") and TEMPORARY.fullmatch(name):
         return "a file the Library is still writing"
-    if any(pure.full_match(glob, case_sensitive=_CASE) for glob in extra):
+    if _matcher(tuple(extra)).match(path):
         return "left out in Settings"
     return None
 
 
 def written_once(path: str) -> bool:
-    pure = PurePosixPath(path)
-    if pure.parts[0] == "market" and (pure.name == OPEN_MONTH or pure.name.startswith(".")):
+    name = path.rpartition("/")[2]
+    if path.startswith("market/") and (name == OPEN_MONTH or name.startswith(".")):
         return False
-    return any(pure.full_match(glob, case_sensitive=_CASE) for glob in WRITE_ONCE)
+    return _matcher(WRITE_ONCE).match(path) is not None
 
 
 def header(layout: Layout, stamp: str, why: str) -> dict[str, object]:
@@ -191,7 +207,7 @@ def make(
         for one in files:
             copying.copy(one)
     told(STEPS[3])
-    for month in months:
+    for month in sorted(months):
         copying.month(month, leave_out)
     told(STEPS[4])
     for one in _walk(layout.data, leave_out):
@@ -261,6 +277,10 @@ class _Copying:
         if self.reusable(found):
             self.keep(self.known[path])
             return
+        named = BORN_BLOB.fullmatch(path)
+        if named is not None:
+            self.keep(Entry(path, named.group(3), stat.st_size, "once", found.seen, at="live"))
+            return
         try:
             digest = sha256_of(source)
         except FileNotFoundError:
@@ -326,7 +346,7 @@ class _Copying:
         )
 
     def _file(self, found: _Found, source: Path, writing: Path, length: int | None) -> Entry:
-        digest = copy_file(source, writing, length=length)
+        digest = copy_file(source, writing, length=length, durable=False)
         size = long_path(writing).stat().st_size
         self.quick.adopt(writing, digest)
         return Entry(found.path, digest, size, found.kind, found.seen)
@@ -334,10 +354,10 @@ class _Copying:
 
 def _survey(
     data: Path, leave_out: Sequence[str], known: Mapping[str, Entry]
-) -> tuple[list[_Found], list[str]]:
+) -> tuple[list[_Found], set[str]]:
     """Every file that changes, with its kind and live stats, and every price month folder."""
     found: list[_Found] = []
-    months: list[str] = []
+    months: set[str] = set()
     for path in _walk(data, leave_out, months):
         if written_once(path) or _in_month(path, months):
             continue
@@ -364,7 +384,7 @@ def _survey(
     return found, months
 
 
-def _walk(data: Path, leave_out: Sequence[str], months: list[str] | None = None) -> Iterator[str]:
+def _walk(data: Path, leave_out: Sequence[str], months: set[str] | None = None) -> Iterator[str]:
     """Every file under `data` that is not left out, as a path relative to it, never through a
     link or a junction. A price month folder (under `market/`, holding `state.json`) is added
     to `months` when given."""
@@ -377,7 +397,7 @@ def _walk(data: Path, leave_out: Sequence[str], months: list[str] | None = None)
             continue
         names = {entry.name for entry in entries}
         if months is not None and folder.startswith("market/") and STATE in names:
-            months.append(folder)
+            months.add(folder)
         for entry in entries:
             path = f"{folder}/{entry.name}" if folder else entry.name
             if entry.is_symlink() or entry.is_junction():
@@ -390,14 +410,12 @@ def _walk(data: Path, leave_out: Sequence[str], months: list[str] | None = None)
 
 
 def _pruned(folder: str, leave_out: Sequence[str]) -> bool:
-    pure = PurePosixPath(folder)
-    globs = (*SECRET, *(glob for glob, _ in LEFT_OUT), *leave_out)
-    return any(
-        glob.endswith("/**") and pure.full_match(glob[:-3], case_sensitive=_CASE) for glob in globs
-    )
+    """Whether everything under `folder` is left out, so it is not walked at all."""
+    every = (*SECRET, *(g for g, _ in LEFT_OUT), *leave_out)
+    return _matcher(tuple(g[:-3] for g in every if g.endswith("/**"))).match(folder) is not None
 
 
-def _in_month(path: str, months: Sequence[str]) -> bool:
+def _in_month(path: str, months: Collection[str]) -> bool:
     return path.rpartition("/")[0] in months
 
 

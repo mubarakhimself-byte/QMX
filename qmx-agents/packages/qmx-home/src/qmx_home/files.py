@@ -7,8 +7,11 @@ and a busy lock behave the same everywhere. Standard library only.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
+import struct
+from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
 from typing import IO, Final, cast
@@ -51,8 +54,31 @@ def open_shared(path: Path) -> IO[bytes]:
     path = long_path(path)
     if os.name != "nt":
         return path.open("rb")
-    import ctypes  # noqa: PLC0415
     import msvcrt  # noqa: PLC0415
+
+    handle = _create_file()(str(path), 0x80000000, 0x7, None, 3, 0x80, None)
+    if handle is None or handle == _INVALID:
+        import ctypes  # noqa: PLC0415
+
+        error = ctypes.get_last_error()
+        raise OSError(None, ctypes.FormatError(error).strip(), str(path), error)
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+    except BaseException:
+        _close_handle()(handle)
+        raise
+    return os.fdopen(descriptor, "rb")
+
+
+_INVALID: Final = (1 << (8 * struct.calcsize("P"))) - 1
+"""`INVALID_HANDLE_VALUE`, as an unsigned handle."""
+
+
+@functools.cache
+def _create_file() -> Callable[..., int | None]:
+    """kernel32's `CreateFileW`, typed once: GENERIC_READ, all three sharing modes,
+    OPEN_EXISTING and FILE_ATTRIBUTE_NORMAL are what `open_shared` passes."""
+    import ctypes  # noqa: PLC0415
     from ctypes import wintypes  # noqa: PLC0415
 
     create = ctypes.WinDLL("kernel32", use_last_error=True).CreateFileW
@@ -66,19 +92,24 @@ def open_shared(path: Path) -> IO[bytes]:
         wintypes.HANDLE,
     ]
     create.restype = wintypes.HANDLE
-    generic_read, share_all, open_existing, normal = 0x80000000, 0x7, 3, 0x80
-    handle = create(str(path), generic_read, share_all, None, open_existing, normal, None)
-    if handle in (None, wintypes.HANDLE(-1).value):
-        error = ctypes.get_last_error()
-        raise OSError(None, ctypes.FormatError(error).strip(), str(path), error)
-    descriptor = msvcrt.open_osfhandle(cast("int", handle), os.O_RDONLY | os.O_BINARY)
-    return os.fdopen(descriptor, "rb")
+    return cast("Callable[..., int | None]", create)
 
 
-def copy_file(source: Path, target: Path, *, length: int | None = None) -> str:
+@functools.cache
+def _close_handle() -> Callable[[int], int]:
+    import ctypes  # noqa: PLC0415
+
+    return cast("Callable[[int], int]", ctypes.WinDLL("kernel32").CloseHandle)
+
+
+def copy_file(
+    source: Path, target: Path, *, length: int | None = None, durable: bool = True
+) -> str:
     """Copy `source` to the new file `target` byte for byte, keeping its times, and return the
     sha256 of what was written. `target` must not exist, so a copy never lands on a file already
-    there. `length` copies only the first that many bytes (a log up to its last full line)."""
+    there. `length` copies only the first that many bytes (a log up to its last full line).
+    `durable` flushes the copy to the disk before returning; a caller that makes many copies and
+    writes one record of them last may leave it to that record."""
     target = long_path(target)
     digest = hashlib.sha256()
     left = length
@@ -92,7 +123,8 @@ def copy_file(source: Path, target: Path, *, length: int | None = None) -> str:
             if left is not None:
                 left -= len(chunk)
         writing.flush()
-        os.fsync(writing.fileno())
+        if durable:
+            os.fsync(writing.fileno())
         found = os.fstat(reading.fileno())
     os.utime(target, ns=(found.st_atime_ns, found.st_mtime_ns))
     return digest.hexdigest()

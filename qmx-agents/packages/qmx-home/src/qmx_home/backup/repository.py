@@ -15,6 +15,11 @@ this one layout. A manifest is whole only with its trailer, `{"end": true, "line
 ...}`, which names the lines before it and their hash; one without it is unreadable, is never
 thinned and stops the pool sweep. A copy folder with no manifest at all is what a killed round
 leaves, and `clean` removes it. Nothing here needs a hard link, so an exFAT USB disk works.
+
+Pool files are not flushed to the disk one by one, as a plain file copy does not flush them;
+the manifest, `backup.toml` and the sealed key copy are. A power cut mid round can leave a
+pooled file that is named but not whole; the monthly drill (B2) hashes pooled files, removes a
+damaged one, and the next round that holds it pools it again.
 """
 
 from __future__ import annotations
@@ -186,9 +191,10 @@ class Repository(Protocol):
 
     def pool_has(self, sha256: str) -> bool: ...
 
-    def put_pool(self, sha256: str, source: Path) -> int:
+    def put_pool(self, sha256: str, source: Path, *, verify: bool = True) -> int:
         """Copy `source` into the pool under `sha256` unless it is there; the bytes written.
-        Raises Mismatch when the bytes copied hash to something else."""
+        Raises Mismatch when the bytes copied hash to something else. `verify` False copies a
+        file another pool holds under that hash without hashing it again."""
         ...
 
     def put_copy(self, manifest: Manifest, extra: Mapping[str, bytes] | None = None) -> None:
@@ -244,6 +250,7 @@ class FolderRepository:
         self.root = root
         self.pool = root / "pool"
         self.snapshots = root / "snapshots"
+        self._made: set[Path] = set()
 
     @property
     def where(self) -> str:
@@ -257,8 +264,13 @@ class FolderRepository:
 
     def temporary(self) -> Path:
         """A fresh name in the pool for a file being written; `clean` removes it if left."""
-        long_path(self.pool).mkdir(parents=True, exist_ok=True)
+        self._folder(self.pool)
         return self.pool / f"{uuid.uuid4().hex}{PARTIAL}"
+
+    def _folder(self, folder: Path) -> None:
+        if folder not in self._made:
+            long_path(folder).mkdir(parents=True, exist_ok=True)
+            self._made.add(folder)
 
     def adopt(self, written: Path, sha256: str) -> None:
         """Move a file this place's `temporary` name holds into the pool as `sha256`; when the
@@ -267,21 +279,28 @@ class FolderRepository:
         if final.is_file():
             long_path(written).unlink()
             return
-        final.parent.mkdir(parents=True, exist_ok=True)
+        self._folder(self.pool_path(sha256).parent)
         os.replace(long_path(written), final)
 
-    def put_pool(self, sha256: str, source: Path) -> int:
+    def put_pool(self, sha256: str, source: Path, *, verify: bool = True) -> int:
         if self.pool_has(sha256):
             return 0
         writing = self.temporary()
         try:
-            got = copy_file(source, writing)
+            if verify:
+                got = copy_file(source, writing, durable=False)
+            else:
+                shutil.copyfile(long_path(source), long_path(writing))
+                got = sha256
         except BaseException:
             long_path(writing).unlink(missing_ok=True)
             raise
         if got != sha256:
             long_path(writing).unlink(missing_ok=True)
-            raise Mismatch(f"{plain(source)} changed while it was copied")
+            raise Mismatch(
+                f"{plain(source)} does not hold the bytes its copy names: it changed while it was "
+                "copied, or it is damaged"
+            )
         size = long_path(writing).stat().st_size
         self.adopt(writing, sha256)
         return size
@@ -291,7 +310,7 @@ class FolderRepository:
         digest = hashlib.sha256(data).hexdigest()
         if not self.pool_has(digest):
             writing = self.temporary()
-            _write_durable(writing, data)
+            _write(writing, data, durable=False)
             self.adopt(writing, digest)
         return digest
 
@@ -299,9 +318,9 @@ class FolderRepository:
         folder = self.snapshots / manifest.stamp
         long_path(folder).mkdir(parents=True, exist_ok=True)
         for name, data in (extra or {}).items():
-            _write_durable(folder / name, data)
+            _write(folder / name, data)
         staged = folder / f"{MANIFEST}.new"
-        _write_durable(staged, manifest.dump())
+        _write(staged, manifest.dump())
         os.replace(long_path(staged), long_path(folder / MANIFEST))
 
     def copies(self) -> tuple[str, ...]:
@@ -387,7 +406,7 @@ class FolderRepository:
         text = "".join(f"{key} = {json.dumps(value)}\n" for key, value in fields.items())
         long_path(self.root).mkdir(parents=True, exist_ok=True)
         staged = self.root / f"{ABOUT}.new"
-        _write_durable(staged, text.encode())
+        _write(staged, text.encode())
         os.replace(long_path(staged), long_path(self.root / ABOUT))
 
     def _pooled(self) -> Sequence[Path]:
@@ -407,8 +426,9 @@ class FolderRepository:
         return found
 
 
-def _write_durable(path: Path, data: bytes) -> None:
+def _write(path: Path, data: bytes, *, durable: bool = True) -> None:
     with long_path(path).open("wb") as writing:
         writing.write(data)
         writing.flush()
-        os.fsync(writing.fileno())
+        if durable:
+            os.fsync(writing.fileno())
