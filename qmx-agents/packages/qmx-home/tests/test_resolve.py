@@ -277,6 +277,23 @@ def test_each_refusal_says_whether_nothing_was_found_old_data_was_or_a_folder_wa
     }
 
 
+def test_a_pointer_to_a_folder_that_is_gone_is_refused_when_the_scan_finds_none(
+    profile: Path, tmp_path: Path
+) -> None:
+    gone = folder(tmp_path / "usb" / "QMX")
+    point_at(gone)
+    (tmp_path / "usb").rename(tmp_path / "unplugged")
+
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(drives=[])
+
+    assert (refused.value.kind, refused.value.folder) == ("refused", gone)
+    assert str(refused.value) == (
+        f"the QMX folder {gone} is not there. If it is on a drive that is unplugged, plug the "
+        "drive in and start QMX again; if you moved the folder, open it where it is now"
+    )
+
+
 def test_an_unreadable_pointer_is_refused_not_missing(profile: Path) -> None:
     pointer = pointer_file()
     assert pointer is not None

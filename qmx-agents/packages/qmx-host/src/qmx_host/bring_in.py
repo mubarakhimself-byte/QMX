@@ -82,6 +82,9 @@ from qmx_host.process_record import recorded_host
 LIST: Final = "migration/old-layout-list.json"
 REPORT: Final = "migration/bring-in-report.json"
 REPORT_TEXT: Final = "migration/bring-in-report.txt"
+MARKED: Final = frozenset({UNFINISHED, REPORT})
+"""What `again` keeps in `data/` while it clears: the marker and the start facts, so a folder it
+leaves part way is still refused by name and still offered the bring-in again."""
 OURS: Final = frozenset(f"data/{name}" for name in (LIST, REPORT, REPORT_TEXT, UNFINISHED))
 """The bring-in's own files; an old folder holding one at the same place is refused, so a copy
 never lands on them."""
@@ -320,13 +323,15 @@ def again(
 ) -> Report:
     """`bring_in` into a folder whose bring-in from `old` did not finish, after clearing QMX's own
     unfinished copy there. Refused, with nothing cleared, unless the folder is marked unfinished,
-    its saved facts name `old`, and `old` is still an old folder with the files its saved list
-    names. His own files are never in that copy: the copy is cleared only of what the bring-in
-    wrote, and a file outside `data/` only when its bytes match the old folder's."""
+    its saved facts name `old` (or, with no facts, its saved list matches `old`, or nothing was
+    copied yet), and `old` is still an old folder with the files its saved list names. His own
+    files are never in that copy: the copy is cleared only of what the bring-in wrote, and a file
+    outside `data/` only when its bytes match the old folder's. The marker and the facts stay
+    through the clear, so an `again` that is refused or killed leaves the folder unfinished."""
     with _taken(lock):
         heard = progress or _unheard
         _clear_unfinished(old.absolute(), folder.absolute(), heard)
-        return _bring_in(old, folder, place_refusal, copy, heard)
+        return _bring_in(old, folder, place_refusal, copy, heard, resumed=True)
 
 
 def refusal_before_copy(
@@ -375,7 +380,10 @@ def _bring_in(
     place_refusal: Callable[[Path], str | None],
     copy: Copier,
     progress: Progress,
+    *,
+    resumed: bool = False,
 ) -> Report:
+    """`resumed` is `again`'s: the folder still holds its marker and facts, which this rewrites."""
     old, folder = old.absolute(), folder.absolute()
     real_old = old.resolve()
     refusal = refusal_before_copy(old, folder, place_refusal)
@@ -393,9 +401,9 @@ def _bring_in(
         ) from None
     started = time.monotonic()
     with hold(layout.data / HOST_LOCK, f"a QMX host is running on {layout.root}; stop it first"):
-        if (layout.data / UNFINISHED).is_file():
+        if (layout.data / UNFINISHED).is_file() and not resumed:
             raise Refused(str(old_library(layout.data)))
-        if {e.name for e in layout.data.iterdir()} - {HOST_LOCK}:
+        if not _holds_only(layout.data, MARKED if resumed else frozenset()):
             raise Refused(
                 f"{layout.root} already holds QMX data; bring your old data into a new, empty "
                 "folder"
@@ -838,13 +846,7 @@ def _clear_unfinished(old: Path, folder: Path, progress: Progress) -> None:
     if facts is None:
         raise Refused(f"{folder} holds no unfinished bring-in; nothing was cleared")
     named = facts.get("old_is") or facts.get("old")
-    if not named:
-        raise Refused(
-            f"{folder} is marked unfinished, but its record of the old folder cannot be read, so "
-            "QMX cannot tell its own copy there; nothing was cleared. Remove the folder yourself "
-            "and bring your old data in again"
-        )
-    if Path(str(named)).resolve() != old.resolve():
+    if named and Path(str(named)).resolve() != old.resolve():
         raise Refused(
             f"{folder} holds an unfinished copy of {facts.get('old')}, not of {old}; nothing was "
             "cleared"
@@ -862,25 +864,55 @@ def _clear_unfinished(old: Path, folder: Path, progress: Progress) -> None:
             f"the list of your old folder in {folder} cannot be read ({unreadable}); nothing "
             "was cleared"
         ) from None
+    if saved is None and not named and not _holds_only(data, MARKED):
+        raise Refused(
+            f"{folder} is marked unfinished, but it names no old folder, so QMX cannot tell its "
+            "own copy there; nothing was cleared. Remove the folder yourself and bring your old "
+            "data in again"
+        )
     if saved is not None:
         progress(LISTING)
         now = listing(old.resolve())
         if json.loads(json.dumps(now.document())) != saved:
+            changed = f"your old folder {old} changed since the bring-in stopped"
+            other = f"the unfinished copy in {folder} is not of {old}"
             raise Refused(
-                f"your old folder {old} changed since the bring-in stopped, so QMX cannot tell "
-                f"its own copy in {folder}; nothing was cleared. Remove {folder} yourself and "
-                "bring your old data in again"
+                f"{changed if named else other}, so QMX cannot tell its own copy in {folder}; "
+                f"nothing was cleared. Remove {folder} yourself and bring your old data in again"
             )
     with hold(data / HOST_LOCK, f"a QMX host is running on {folder}; stop it first"):
+        if isinstance(saved, dict):
+            _clear_outside_data(folder, cast("dict[str, object]", saved))
         for entry in long_path(data).iterdir():
             if entry.name == HOST_LOCK:
                 continue
-            if entry.is_dir() and not entry.is_symlink():
-                shutil.rmtree(entry, onexc=_writable_then_again)
+            if entry.name == "migration" and entry.is_dir():
+                for kept in entry.iterdir():
+                    if f"migration/{kept.name}" not in {*MARKED, LIST}:
+                        _remove(kept)
             else:
-                _writable_then_again(os.unlink, str(entry), None)
-    if isinstance(saved, dict):
-        _clear_outside_data(folder, cast("dict[str, object]", saved))
+                _remove(entry)
+        long_path(data / LIST).unlink(missing_ok=True)
+
+
+def _remove(entry: Path) -> None:
+    if entry.is_dir() and not entry.is_symlink():
+        shutil.rmtree(entry, onexc=_writable_then_again)
+    else:
+        _writable_then_again(os.unlink, str(entry), None)
+
+
+def _holds_only(data: Path, kept: frozenset[str]) -> bool:
+    """Whether `data` holds nothing but the host's lock and the files `kept` (paths relative to
+    `data`, all in `migration/`)."""
+    for entry in data.iterdir():
+        if entry.name == HOST_LOCK:
+            continue
+        if entry.name != "migration" or not kept or not entry.is_dir():
+            return False
+        if any(f"migration/{inside.name}" not in kept for inside in entry.iterdir()):
+            return False
+    return True
 
 
 def _clear_outside_data(folder: Path, saved: Mapping[str, object]) -> None:

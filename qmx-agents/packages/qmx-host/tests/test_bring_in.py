@@ -31,7 +31,7 @@ from qmx_control.service import ControlService
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.migrations import STEPS
 from qmx_engine.ledger.store import Ledger
-from qmx_home import FLAT, LABEL, Label, pointer_file
+from qmx_home import FLAT, LABEL, Label, pointer_file, resolve
 from qmx_library.migrate import OPERATOR, from_library_b, place
 from qmx_library.migrate.from_library_b import JUNK, resolve_alias
 from qmx_library.migrate.snapshot import snapshot as freeze
@@ -302,6 +302,11 @@ def test_a_corrupted_copy_leaves_the_new_folder_unfinished_and_the_old_one_untou
     assert refusal is not None and refusal.startswith(
         f"bringing your old QMX data into {pc / 'QMX' / 'data'} did not finish: the copy of runs.db"
     )
+    assert refusal.endswith(
+        "Bring it in again into the same folder from the first start, which clears only QMX's "
+        f"own unfinished copy there: python -m qmx_host bring-in --again --home {pc / 'QMX'} "
+        "--old <old folder>"
+    ), "never a second folder beside the unfinished one"
     with pytest.raises(Refused, match="did not finish"):
         bring_in(old, pc / "QMX", place_refusal=places(pc).refusal)
 
@@ -929,3 +934,179 @@ def test_the_card_warns_of_a_removable_drive_on_the_default_folder_and_the_chose
     warning = f"{drive} is a removable drive: QMX stops working whenever it is unplugged"
     assert (card["warning"], made["warning"]) == (warning, warning)
     assert made["folder"] == str(pc / "QMX")
+
+
+def stopped_mid_copy(pc: Path, old: Path, target: Path) -> None:
+    """A bring-in of `old` into `target` killed at its fifth copy."""
+    calls: list[Path] = []
+
+    def killed(source: Path, written: Path) -> str:
+        calls.append(source)
+        if len(calls) == 5:
+            raise KeyboardInterrupt
+        return copy_file(source, written)
+
+    with pytest.raises(KeyboardInterrupt):
+        bring_in(old, target, place_refusal=places(pc).refusal, copy=killed)
+
+
+def still_unfinished(pc: Path, target: Path) -> bool:
+    """Whether QMX still refuses `target` and the card still offers its bring-in again."""
+    offered = offer(pc / "profile" / ".qmx", places(pc), drives=[])
+    return (
+        old_library(target / "data") is not None
+        and offered.unfinished is not None
+        and offered.unfinished["folder"] == str(target)
+        and offered.found is None
+    )
+
+
+def test_an_again_refused_or_killed_after_its_clear_leaves_the_folder_unfinished(
+    pc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = old_home(pc / "old" / ".qmx", pc)
+    target = pc / "profile" / "QMX"
+    stopped_mid_copy(pc, old, target)
+
+    def killed_while_clearing(*_args: object, **_kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as killing:
+        killing.setattr("qmx_host.bring_in.shutil.rmtree", killed_while_clearing)
+        with pytest.raises(KeyboardInterrupt):
+            again(old, target, place_refusal=places(pc).refusal)
+    after_the_kill = still_unfinished(pc, target)
+
+    def ten_megabytes_free(_path: object) -> SimpleNamespace:
+        return SimpleNamespace(free=10 << 20)
+
+    with monkeypatch.context() as full:
+        full.setattr("qmx_host.bring_in.shutil.disk_usage", ten_megabytes_free)
+        with pytest.raises(Refused, match="needs"):
+            again(old, target, place_refusal=places(pc).refusal)
+    after_the_refusal = still_unfinished(pc, target)
+    report = again(old, target, place_refusal=places(pc).refusal)
+
+    assert after_the_refusal, "a refused again leaves the folder unfinished, never empty and his"
+    assert after_the_kill, "a kill during the clear leaves the folder unfinished"
+    assert report.finished, report.text
+
+
+def test_a_marker_with_no_facts_is_brought_in_again_not_a_dead_end(pc: Path) -> None:
+    old = old_home(pc / "old" / ".qmx", pc)
+    copied = pc / "profile" / "QMX"
+    stopped_mid_copy(pc, old, copied)
+    (copied / "data" / REPORT).unlink()
+    marker = resolve(pc / "Marked", create=True, drives=[]).data / UNFINISHED
+    marker.parent.mkdir(parents=True)
+    marker.write_text("it stopped while copying", encoding="utf-8")
+    marked = pc / "Marked"
+    other = old_home(pc / "other" / ".qmx", pc / "other")
+
+    with pytest.raises(Refused, match="nothing was cleared"):
+        again(other, copied, place_refusal=places(pc).refusal)
+    from_the_list = again(old, copied, place_refusal=places(pc).refusal)
+    from_nothing_copied = again(old, marked, place_refusal=places(pc).refusal)
+
+    assert from_the_list.finished, "the saved list names the old folder the copy came from"
+    assert from_nothing_copied.finished, "a marker alone means nothing was copied yet"
+
+
+def test_the_card_shows_a_running_bring_in_as_running_not_unfinished(
+    pc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmx_host import bring_in as module
+
+    old = old_home(pc / "old" / ".qmx", pc)
+    target = pc / "profile" / "QMX"
+    client = card_client(places(pc), old)
+    copying = threading.Event()
+    gate = threading.Event()
+    real = module._carry  # pyright: ignore[reportPrivateUsage]
+
+    def held(*args: Any, **kwargs: Any) -> str | None:
+        copying.set()
+        gate.wait(30)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(module, "_carry", held)
+    job = client.post("/api/first-start/bring-in", json={"folder": str(target)}).json()
+    copying.wait(30)
+    card = client.get("/api/first-start").json()
+    gate.set()
+    ended(client, job["id"])
+
+    assert (card["unfinished"], card["running"], card["job"]["state"]) == (
+        None,
+        str(target),
+        "running",
+    )
+
+
+def test_a_handover_waits_for_a_bring_in_that_is_starting(
+    pc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    old = old_home(pc / "old" / ".qmx", pc)
+    client = card_client(places(pc), old, handed=[])
+    assert client.post("/api/first-start/new", json={"folder": str(pc / "Made")}).status_code == 200
+    checking = threading.Event()
+    gate = threading.Event()
+    refusal = first_start._bring_in_refusal  # pyright: ignore[reportPrivateUsage]
+    real = first_start.bring_in_old
+
+    def slow_refusal(*args: Any, **kwargs: Any) -> str | None:
+        checking.set()
+        gate.wait(30)
+        return refusal(*args, **kwargs)
+
+    def held_back(*args: Any, **kwargs: Any) -> Report:
+        gate.wait(30)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(first_start, "_bring_in_refusal", slow_refusal)
+    monkeypatch.setattr(first_start, "bring_in_old", held_back)
+    answers: dict[str, Any] = {}
+    posting = threading.Thread(
+        target=lambda: answers.setdefault(
+            "bring-in", client.post("/api/first-start/bring-in", json={"folder": str(pc / "QMX")})
+        )
+    )
+    posting.start()
+    checking.wait(30)
+    handing = threading.Thread(
+        target=lambda: answers.setdefault("handover", client.post("/api/first-start/handover"))
+    )
+    handing.start()
+    handing.join(0.5)
+    waited = handing.is_alive()
+    gate.set()
+    posting.join(30)
+    handing.join(30)
+    ended(client, answers["bring-in"].json()["id"])
+
+    assert waited, "the handover waits while a bring-in is starting"
+    assert answers["handover"].status_code == 409
+    assert answers["handover"].json()["detail"].startswith("the bring-in (job ")
+
+
+def test_a_pointer_to_a_folder_that_is_gone_is_refused_not_offered_a_new_one(
+    pc: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("qmx_home._fixed_drives", list)
+    old = old_home(pc / "old" / ".qmx", pc)
+    usb = pc / "usb" / "QMX"
+    assert bring_in_old(old, usb, places(pc)).finished
+    (pc / "usb").rename(pc / "unplugged")
+    capsys.readouterr()
+
+    with pytest.raises(SystemExit) as serve:
+        main(["serve"])
+    line = capsys.readouterr().err.strip()
+    offered = offer(old, places(pc), drives=[])
+
+    assert serve.value.code == 2
+    assert line.startswith(f"the QMX folder {usb.resolve()} is not there")
+    assert (offered.choices, offered.refused) == (
+        ("open",),
+        {"folder": str(usb.resolve()), "line": line},
+    )

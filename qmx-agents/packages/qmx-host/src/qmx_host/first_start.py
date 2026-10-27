@@ -532,16 +532,21 @@ def first_start_router(
     starting = threading.Lock()
     chosen: list[Path] = []
     """The folder of the last finished choice in this card, once there is one."""
+    targets: dict[str, Path] = {}
+    """Each bring-in job's folder, by job id."""
 
     def finished(root: Path) -> None:
         chosen[:] = [root]
 
     def card() -> dict[str, object]:
         job = jobs.latest(BRING_IN)
-        return {
-            **offer(old, places, drives).document(),
-            "job": None if job is None else job.document(),
-        }
+        shown = offer(old, places, drives).document()
+        target = None if job is None or job.state != "running" else targets.get(job.id)
+        running = None if target is None else str(target)
+        unfinished = cast("dict[str, str] | None", shown["unfinished"])
+        if running is not None and unfinished is not None and unfinished["folder"] == running:
+            shown["unfinished"] = None
+        return {**shown, "running": running, "job": None if job is None else job.document()}
 
     def new(choice: Chosen) -> dict[str, object]:
         root = _answer(lambda: make_new(Path(choice.folder), places)).root
@@ -593,6 +598,7 @@ def first_start_router(
                 return _document(report)
 
             job = jobs.start(BRING_IN, work).job
+            targets[job.id] = folder.absolute().resolve()
         return JSONResponse(
             {**job.document(), "warning": places.warning(folder.absolute())}, status_code=202
         )
@@ -608,20 +614,21 @@ def first_start_router(
         return job.document()
 
     def handover() -> dict[str, object]:
-        running = jobs.latest(BRING_IN)
-        if running is not None and running.state == "running":
-            raise HTTPException(409, detail=f"the bring-in (job {running.id}) is still running")
-        if not chosen:
-            raise HTTPException(409, detail=NOTHING_CHOSEN)
-        try:
-            layout = resolve(chosen[0])
-        except NoQmxFolder as refused:
-            raise HTTPException(409, detail=str(refused)) from None
-        unfit = old_library(layout.home)
-        if unfit is not None:
-            raise HTTPException(409, detail=unfit)
-        if on_handover is not None:
-            on_handover(layout.root)
+        with starting:
+            running = jobs.latest(BRING_IN)
+            if running is not None and running.state == "running":
+                raise HTTPException(409, detail=f"the bring-in (job {running.id}) is still running")
+            if not chosen:
+                raise HTTPException(409, detail=NOTHING_CHOSEN)
+            try:
+                layout = resolve(chosen[0])
+            except NoQmxFolder as refused:
+                raise HTTPException(409, detail=str(refused)) from None
+            unfit = old_library(layout.home)
+            if unfit is not None:
+                raise HTTPException(409, detail=unfit)
+            if on_handover is not None:
+                on_handover(layout.root)
         return {"folder": str(layout.root), "port": port}
 
     router = APIRouter(prefix="/api/first-start")
