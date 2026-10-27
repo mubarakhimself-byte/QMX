@@ -42,13 +42,12 @@ from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
 from qmx_engine.ports.library import Bundle, Draft, JsonObject, LibraryPort, LibraryRefused
 from qmx_engine.ports.settings import ControlSettings, SettingsPort
+from qmx_engine.runner import Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
-from qmx_engine.runner import new_run_id
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import Caller, Refused
-from qmx_engine.service.runs import RunView, fire_after, status_of, summarize_again
+from qmx_engine.service.runs import RunView, fire_after, status_of, summarize_resumed
 from qmx_engine.settings import places
-from qmx_engine.trace_export import export
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.catchup import CatchUp
 from qmx_engine.triggers.claims import settle_run
@@ -581,24 +580,11 @@ class EngineDoor:
         return cast(Document, plain(self._call(cancel)))
 
     def _summarize(self, run_id: str) -> None:
-        ctx = self.svc.ctx
-        summaries = ctx.library.objects(run_id, "workflow-run")
-        if not summaries:
-            return
-        last = summaries[-1].fields
-        with Reader.open(ctx.home) as reader:
-            state = status_of(reader.events(run_id))
-        export(
-            ctx.home,
-            run_id,
-            ctx.library,
-            workflow_item=str(last.get("workflow_item")),
-            object_id=str(last.get("object_id")),
-            mode="live" if last.get("mode") == "live" else "test",
-            status=state.status,
-            reason=state.reason,
-            started_by=str(last.get("started_by")),
-        )
+        """The ledger's status, since a run can end on its own while the cancel reaches it."""
+        with Reader.open(self.svc.ctx.home) as reader:
+            status = status_of(reader.events(run_id)).status
+        ended = status if status in ("passed", "failed") else "stopped"
+        summarize_resumed(self.svc.ctx, Outcome(run_id, ended))
 
     def workflow_runs_resume(self, run_id: str) -> Document:
         async def resume() -> object:
@@ -619,7 +605,7 @@ class EngineDoor:
     async def _resumed(self, run_id: str) -> None:
         ctx = self.svc.ctx
         outcome = await ctx.engine.resume(run_id)
-        summarize_again(ctx, outcome)
+        summarize_resumed(ctx, outcome)
         outputs = outcome.outputs if outcome.status == "passed" else None
         ctx.engine.ledger.write(settle_run(run_id, ENDING[outcome.status], ctx.at(), outputs))
         fire_after(ctx, outcome)

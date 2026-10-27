@@ -22,6 +22,7 @@ journal is seeded into this home's ledger, and the run resumes.
 from __future__ import annotations
 
 import copy
+import logging
 from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import cast
@@ -68,6 +69,7 @@ from qmx_engine.trace_export import export
 from qmx_engine.triggers.rows import After, fire_now, triggers
 from qmx_engine.workers.local import AnyExecutor
 
+LOG = logging.getLogger(__name__)
 SUBGRAPH_ENTRY = "subgraph-input"
 
 
@@ -325,6 +327,8 @@ async def run_bundle(
             pins=pins,
             priority=priority,
             workflow_item=item,
+            object_id=object_id,
+            started_by=caller.principal,
         )
     except EngineRefused as refused:
         raise Refused("engine_refused", str(refused)) from refused
@@ -422,20 +426,64 @@ def summarize(
     )
 
 
-def summarize_again(ctx: Context, outcome: Outcome) -> Stored | None:
-    """A new summary for a run that was resumed, from its last one; None when it has none."""
-    found = ctx.library.objects(outcome.run_id, "workflow-run")
-    if not found:
+@dataclass(frozen=True, slots=True)
+class RunStart:
+    """What a run's summary names, as `run_created` recorded it when the run began."""
+
+    item: str
+    object_id: str
+    mode: Mode
+    started_by: str
+
+
+def run_start(events: list[Event]) -> RunStart | None:
+    """The run's start facts, or None when its `run_created` predates them or names no version,
+    as a folder run's and a child run's do."""
+    if not events or events[0].kind != "run_created":
         return None
-    last = found[-1].fields
-    mode: Mode = "live" if last.get("mode") == "live" else "test"
-    item = str(last.get("workflow_item"))
-    stored = summarize(
-        ctx, outcome, item, str(last.get("object_id")), mode, str(last.get("started_by"))
-    )
+    created = events[0].data
+    item = created.get("workflow_item")
+    object_id = created.get("object_id")
+    started_by = created.get("started_by")
+    if not (isinstance(item, str) and isinstance(object_id, str) and isinstance(started_by, str)):
+        return None
+    mode: Mode = "live" if created.get("mode") == "live" else "test"
+    return RunStart(item, object_id, mode, started_by)
+
+
+def summarize_resumed(ctx: Context, outcome: Outcome) -> Stored | None:
+    """A new summary for a run that was resumed or cancelled, built from its `run_created`, so a
+    run that died before its first summary lands too. A run started before `run_created` held
+    those facts takes them from its last summary; with none it cannot land, which is logged. A
+    child run is summarized only through its parent, and a folder run, whose `run_created` names
+    no version, has nothing to land. A test run keeps a test report only when an earlier one names
+    it, because `run_created` holds neither the test's subgraph nor its caller."""
+    with Reader.open(ctx.home) as reader:
+        events = reader.events(outcome.run_id)
+    created = events[0].data if events else {}
+    if created.get("parent_run_id") is not None or created.get("object_id", "") is None:
+        return None
+    start = run_start(events)
+    if start is None:
+        found = ctx.library.objects(outcome.run_id, "workflow-run")
+        if not found:
+            LOG.warning(
+                "run %s cannot land: it started before QMX recorded which version it runs and"
+                " who started it, and it has no earlier summary to take them from",
+                outcome.run_id,
+            )
+            return None
+        last = found[-1].fields
+        start = RunStart(
+            str(last.get("workflow_item")),
+            str(last.get("object_id")),
+            "live" if last.get("mode") == "live" else "test",
+            str(last.get("started_by")),
+        )
+    stored = summarize(ctx, outcome, start.item, start.object_id, start.mode, start.started_by)
     reports = [
         r
-        for r in ctx.library.objects(item, "test-report")
+        for r in ctx.library.objects(start.item, "test-report")
         if r.fields.get("run_id") == outcome.run_id
     ]
     if reports:
@@ -601,7 +649,7 @@ class Runs:
             at=self.ctx.at(),
         )
         outcome = await self.ctx.engine.resume(run_id, reason="adopted")
-        summarize_again(self.ctx, outcome)
+        summarize_resumed(self.ctx, outcome)
         return self.get(run_id)
 
     def views(self, run_ids: list[str]) -> list[RunView]:

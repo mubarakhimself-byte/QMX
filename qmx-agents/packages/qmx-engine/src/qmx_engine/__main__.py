@@ -38,6 +38,7 @@ from qmx_engine.runner import Engine, Outcome, Refused, new_run_id
 from qmx_engine.service.api import EngineService, explain_run
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.explain import text
+from qmx_engine.service.runs import summarize_resumed
 from qmx_engine.settings import DEFAULTS, Setting
 from qmx_engine.templates.catalog import CATALOG, Template, find
 from qmx_engine.templates.install import install, listing
@@ -192,10 +193,13 @@ def spans(home: Path, run_id: str) -> list[Span]:
 async def resume(args: argparse.Namespace) -> int:
     print(f"run {args.run_id} resumed", flush=True)
     try:
-        with Ledger.open(args.home) as ledger, home_library(args.home) as library:
-            engine = Engine(args.home, ledger, library=library)
-            outcome = await engine.resume(args.run_id)
-            await engine.settle()
+        with (
+            home_library(args.home) as library,
+            EngineService.open(args.home, library=library) as svc,
+        ):
+            outcome = await svc.ctx.engine.resume(args.run_id)
+            await svc.ctx.engine.settle()
+            summarize_resumed(svc.ctx, outcome)
     except (Refused, *REFUSED) as refused:
         print(f"refused: {refused}")
         return 1
