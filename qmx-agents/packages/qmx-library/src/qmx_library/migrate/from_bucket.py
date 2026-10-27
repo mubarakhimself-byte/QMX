@@ -30,6 +30,7 @@ from qmx_library.store import Store
 STATUSES: Final = frozenset(
     {"queued", "running", "waiting", "passed", "failed", "stopped", "interrupted"}
 )
+MODES: Final = ("live", "test")
 MANIFEST: Final = "manifest.json"
 
 
@@ -60,11 +61,14 @@ def run_folders(bucket: Path) -> list[Path]:
 
 
 def draft_for(manifest: dict[str, Any], run_id: str) -> Draft:
-    """One `workflow-run` object: the manifest's own words, never an invented status."""
+    """One `workflow-run` object: the manifest's own words, never an invented status or mode. A
+    manifest that does not say `live` or `test` imports as `unknown`, because the old remote runs
+    included test runs and nothing else can tell them apart."""
     status = str(manifest.get("status", "interrupted"))
+    mode = manifest.get("mode")
     fields: JsonObject = {
         "run_id": run_id,
-        "mode": str(manifest.get("mode", "live")),
+        "mode": mode if mode in MODES else "unknown",
         "status": status if status in STATUSES else "interrupted",
         "workflow_item": manifest.get("workflow_item") or manifest.get("target"),
         "legacy_bucket_run": True,

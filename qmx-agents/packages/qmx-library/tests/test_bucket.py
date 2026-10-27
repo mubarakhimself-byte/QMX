@@ -73,3 +73,21 @@ def test_a_rerun_imports_nothing_twice(store: Store, tmp_path: Path) -> None:
     again = import_bucket(store, bucket)
 
     assert again == Imported(runs=0, artifacts=0, blobs=0, skipped=1)
+
+
+def test_a_run_whose_manifest_does_not_say_live_or_test_imports_as_unknown(
+    store: Store, tmp_path: Path
+) -> None:
+    for run_id, mode in (("run-a", None), ("run-b", "remote"), ("run-c", "test")):
+        folder = tmp_path / "bucket" / "runs" / run_id
+        folder.mkdir(parents=True)
+        manifest = {"run_id": run_id, "status": "passed", "workflow_item": "paper"}
+        if mode is not None:
+            manifest["mode"] = mode
+        (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    done = import_bucket(store, tmp_path / "bucket")
+
+    modes = {item: store.get(OPERATOR, head).fields["mode"] for item, _, head, _, _ in store.refs()}
+    assert done == Imported(runs=3, artifacts=0, blobs=0, skipped=0)
+    assert modes == {"run-a": "unknown", "run-b": "unknown", "run-c": "test"}

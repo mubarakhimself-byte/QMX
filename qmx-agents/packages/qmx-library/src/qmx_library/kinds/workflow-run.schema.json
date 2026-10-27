@@ -19,7 +19,8 @@
       "mode": {
         "enum": [
           "live",
-          "test"
+          "test",
+          "unknown"
         ]
       },
       "status": {
