@@ -177,6 +177,11 @@ The operator ruled that the unit work owns QMB. Source: `../qma-v2/QMB-BACKTEST-
 
 ## Next steps, in order
 
+**As of 2026-10-27, done:** research 10-14 and funnel round 2. **Waiting for him:**
+1. Talk through 13 and 14, explained first, then the 8 questions in "Questions from funnel round 2", one at a time.
+2. Start the risk-and-sizing session from `HANDOFF-RISK-SIZING.md` (his launch).
+3. Only after both: fold into architecture.
+
 **PAUSED (operator, 2026-10-25):** no architecture step yet. A deeper conversation with him comes first. Then planning, architecture and PRs, then coding in another session.
 
 
