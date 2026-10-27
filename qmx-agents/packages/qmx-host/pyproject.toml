@@ -6,6 +6,7 @@ requires-python = ">=3.14,<3.15"
 dependencies = [
     "qmx-home",
     "qma-harness",
+    "qmx-apps",
     "qmx-control",
     "qmx-engine",
     "qmx-broker",
@@ -30,6 +31,7 @@ build-backend = "uv_build"
 [tool.uv.sources]
 qmx-home = { workspace = true }
 qma-harness = { workspace = true }
+qmx-apps = { workspace = true }
 qmx-control = { workspace = true }
 qmx-engine = { workspace = true }
 qmx-broker = { workspace = true }
