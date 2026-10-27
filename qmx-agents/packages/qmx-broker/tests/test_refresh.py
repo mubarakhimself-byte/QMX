@@ -268,11 +268,15 @@ def test_a_token_answer_without_expires_in_stores_no_expiry_and_is_never_due() -
     assert (DUE.due(8_999.0), DUE.due(9_000.0)) == (False, True)
 
 
-def test_a_token_url_with_no_scheme_is_refused_by_name_and_shows_no_secret(
+@pytest.mark.parametrize(
+    "bare", ["token.fake.test/apps/token", "127.0.0.1:9/apps/token", "file:///C:/apps/token"]
+)
+def test_a_token_url_with_no_web_scheme_is_refused_by_name_and_shows_no_secret(
     tmp_path: Path,
     vault: Memory,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    bare: str,
 ) -> None:
     async def no_cTrader(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("this read must not reach cTrader")
@@ -280,7 +284,6 @@ def test_a_token_url_with_no_scheme_is_refused_by_name_and_shows_no_secret(
     monkeypatch.setattr(asyncio, "open_connection", no_cTrader)
     signed_in(vault)
     vault.held["qmx/token/ctrader-app", "token/ctrader-app"] = DUE.document()
-    bare = "token.fake.test/apps/token"
     service = BrokerService(
         tmp_path / "qmx" / "data", settings(), ctrader=lambda: {"token_url": bare}
     )

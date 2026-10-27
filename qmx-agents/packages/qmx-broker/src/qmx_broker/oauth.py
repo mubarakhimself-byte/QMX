@@ -127,7 +127,16 @@ type Fetch = Callable[[str, str], tuple[int, bytes]]
 
 
 def urllib_fetch(method: str, url: str) -> tuple[int, bytes]:
+    """One call to the token endpoint. A URL that is not http or https with a host is refused as
+    `token_url_invalid` before anything is sent; urllib's own errors would quote the URL, whose
+    query holds the client secret and the refresh token."""
+    invalid = OAuthRefused(
+        "token_url_invalid", "the [ctrader] token_url in Settings is not a web address"
+    )
     try:
+        parts = urlsplit(url)
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            raise invalid
         request = urllib.request.Request(  # noqa: S310 - the token endpoint Settings names
             url, method=method, headers={"Accept": "application/json"}
         )
@@ -138,10 +147,7 @@ def urllib_fetch(method: str, url: str) -> tuple[int, bytes]:
     except OSError as error:
         raise OAuthRefused("token_endpoint_unreachable", type(error).__name__) from None
     except ValueError:
-        # urllib's own text holds the URL, whose query holds the secret and the refresh token.
-        raise OAuthRefused(
-            "token_url_invalid", "the [ctrader] token_url in Settings is not a web address"
-        ) from None
+        raise invalid from None
 
 
 def consent_url(app: AppCredential, redirect: Redirect, *, base: str = CONSENT_URL) -> str:
