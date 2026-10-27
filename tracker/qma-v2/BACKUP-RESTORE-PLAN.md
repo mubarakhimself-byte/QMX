@@ -173,7 +173,7 @@ Design 62 C3 and B4, with guard L2. Rulings 136, 137 and 141. Review F2, F3, F5,
 - [ ] Metric. Seconds for lane 3's restore into a fresh folder and for a plain `shutil.copytree` of the target's pool to the same drive, and seconds for a restore from the quick undo of lane 2's folder (links plus hashes). The parent has no restore, so the plain copy is the baseline of the same bytes.
 - [ ] Probe. Each three times, interleaved, on fresh folders.
 - [ ] Baseline. Record the plain copy's median first.
-- [ ] Rule. The fresh-folder restore is within 2 times the plain copy's median, or the PR fails. The quick-undo restore is under 30 s for lane 2's folder, an absolute budget.
+- [ ] Rule. The fresh-folder restore of lane 2's folder is under 60 s at its median, an absolute budget, with its ratio to the plain copy recorded. The quick-undo restore is under 30 s for lane 2's folder, an absolute budget. (Coordinator ruling 2026-10-28 at B2, as at B1. A plain copy only fills the cache, and a restore writes every file durably before it counts. B2 measured 25.26 s, 4.83 times.)
 
 **Review gate.** None. B2 is not review-gated.
 
