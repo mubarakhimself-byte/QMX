@@ -34,8 +34,8 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 | # | Id | PR | Runs beside | Proving check |
 |---|---|---|---|---|
 | 1 | MD1 | Templates use the real Library and real runs | MD2 | a clipping stored by a template run is found by Library search |
-| 2 | MD2 | Every broker read says demo or live | MD1 | an account read from a demo connection carries `environment: demo` |
-| 3 | MD3 | The old-data import labels what it cannot prove | none | a bucket run with no mode imports as `unknown` |
+| 2 | MD2 | Every broker read says demo or live | MD1 | an `account_state` read from a demo connection carries `environment: demo` |
+| 3 | MD3 | The old-data import labels what it cannot prove | none | a test-lane item is archived, and search leaves it out |
 
 - [ ] Spawn one fresh Opus builder per PR in the background with `subagent_type: poteto-agent` and `model: opus`, from a dispatch file saved in `dispatch/`. Its first words are exactly "Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents."
 - [ ] Record the empty Files intersection of MD1 and MD2 in `ledger.tsv` before the second dispatch (Appendix C).
@@ -66,40 +66,48 @@ Tests alone are not sufficient verification. A PR is verified only when its unit
 
 ## Templates use the real Library and real runs (MD1)
 
-Audit H2, H3, H4, M6, L6 and L8. Rulings 141 and 142 (his data lives in one place, and nothing he relies on is a stand-in). Today eight template scripts open `E/ports/library_fake.py`'s hidden `engine/library-fake.sqlite`, because a script child has no way into the host's Library. `crystallise-a-workflow` reads its shipped fixtures on every run, and the runner falls back to the fake Library when it has no memory. Real step none. Done when no production path opens `LibraryFake`. Template scripts then read the real Library read-only and hand their writes to the runner, which stores them through the host's `LibraryPort` as `run:<run_id>`. A clipping, a lineage edge and a digest come from or land in the Library he sees. `crystallise-a-workflow` reads the target workflow's real runs or refuses with "no replays yet", and reads fixtures only when its input asks for one.
+Audit H2, H3, H4, M6, L6 and L8, with the plan review `review/plan-mock-data-edge-cases.md` (MD1 items 1 to 19). Rulings 141 and 142 (his data lives in one place, and nothing he relies on is a stand-in). Today ten template scripts in nine templates open `E/ports/library_fake.py`'s hidden `engine/library-fake.sqlite`, because the host holds the Library's single writer lock (`LB/store.py` `writer.lock`), so a script child that finds the folder through `home_of(QMX_WORK_SHARED)` can only open the fake file. `E/service/api.py`, `E/control_door.py` and `E/__main__.py` (`run`, `resume`) still fall back to the fake when no Library is given, and the runner does too when it has no memory. `crystallise-a-workflow` reads its shipped fixtures on every run. Real step none. Done when no production path opens `LibraryFake`; the runner serves every template Library read and write through the host's `LibraryPort`, stamped `run:<run_id>` on `refs/runs/<run_id>`; a test, fake or failed run's writes never reach `main`, the digest or another run's duplicate check; the digest lists what moved onto `main` since his cursor; and `crystallise-a-workflow` reads real live replays of a named workflow step or refuses with "no replays yet".
 
 **Depends on.** The root `4dd2c5c6`.
 
 **Files.**
 
-- [ ] Edit `E/nodes/script.py` and `E/runner.py` (a script's JSON output may carry a `library` list of writes, `put_artifact` with type, metadata and an intent key, which the runner stores through the port, idempotent per run and node; the fake-Library fallback near the memory port goes), and `E/ports/memory.py` (a missing provider is named, not silent).
-- [ ] Edit the scripts of `T/morning-digest/`, `T/clippings-into-research/`, `T/revolution-loop/` (`lineage.py` and `revolution/scripts/brief.py`), the six `lineage.py` copies (`b-build-and-prove`, `bc-build-a-component`, `d3-iterate-against-qmb`, `d4-variant-comparison`, `l1-idea-to-first-result`, `p1-portfolio-combination`) and `T/crystallise-a-workflow/` (`scripts/replays.py`, `scripts/batch.py`, `definition.json`).
-- [ ] Reads open the Library's own store read-only through `qmx_library` on the folder's `data/library` (LF3's read-only opener), never the writer.
-- [ ] Keep `E/ports/library_fake.py` for tests only, with a test that no module under `E/` outside `tests/` imports it.
-- [ ] Add tests in the engine package.
+- [ ] Edit `E/nodes/script.py` and `E/runner.py` (the served reads and writes below; the runner's fake-Library fallback goes), `E/ports/memory.py` (a missing provider is named, not silent), `E/ports/library.py` (`RunSummary` carries `fake`), `E/service/api.py`, `E/control_door.py` and `E/__main__.py` (no fake default; `run` and `resume` open `home_library(home)` or refuse by name), `E/service/runs.py` (a fake run's summary lands nothing), and `E/trace_export.py` (each write receipt is linked `produced-by` to the run summary at run end, as `run_files` does).
+- [ ] Edit `qmx-control/src/qmx_control/service.py` (the digest cursor records the store it counts in; a cursor with no store tag, or above the real `last_seq`, resets once to 0 with a log line).
+- [ ] Edit the scripts of `T/morning-digest/` (`collect.py`, `assemble.py`, `advance.py`), `T/clippings-into-research/` (`write.py`, `dedupe.py`), the seven `lineage.py` copies (`revolution-loop`, `b-build-and-prove`, `bc-build-a-component`, `d3-iterate-against-qmb`, `d4-variant-comparison`, `l1-idea-to-first-result`, `p1-portfolio-combination`), `T/revolution-loop/revolution/scripts/brief.py`, and `T/crystallise-a-workflow/` (`definition.json`, `scripts/replays.py`, `scripts/batch.py`).
+- [ ] Keep `E/ports/library_fake.py` for tests and dev lanes only. Engine tests that relied on the default pass it explicitly. `scripts/live/*` users of it are dev lanes (Appendix B).
+- [ ] Add tests in the engine and control packages, run against `EngineLibraryAdapter(Store.open(tmp))` (a real store), not a recording port.
 
 **Build.**
 
-- [ ] Add the runner's Library write from script output.
-- [ ] Move every template read to the real Library and the run ledger, and every write to the runner.
-- [ ] Make `crystallise-a-workflow` read real replays or refuse by name.
+- [ ] Served reads. A script node declares what it reads (`parameters.library_reads`, for example `moved_to_main_after: <cursor>` or `find_by_intent: [keys]`), and the runner answers through the host's `LibraryPort` into the script's stdin before the child starts. No script opens `<folder>/data/library`. This works the same on a stand-in place.
+- [ ] Served writes. A script's JSON output may carry `library`, a list of `put_artifact` and `link` writes. A write's body is a file under the attempt's overlay (`body: "library/<name>"`), never inline bytes. At node finish the runner:
+  - [ ] ignores any `principal`, `run_id` or `ref` in a write and stamps `run:<run_id>` on `refs/runs/<run_id>`;
+  - [ ] keys idempotence by slot (`run:node:iteration:partition`, never the attempt) and write index, writing `metadata.write_key = <slot>:<index>` in the same put, and before each write looks the key up on the run ref, skipping and returning the object it finds;
+  - [ ] prefixes each intent key with the workflow item (`<workflow_item>|<key>`) and never uses it for its own idempotence;
+  - [ ] accepts a `link` only from a write of the same slot (by local handle, `"as": "intake"` then `"$intake"`), never with edge `produced-by`, `run-of` or `tested-by`, and only to an object that exists;
+  - [ ] removes `library` from the outputs before `node_finished`, records only receipts, and returns `library_written: [{handle, object_id, refused}]` in the node's outputs;
+  - [ ] fails the node with the store's own refusal named (`disk_full`, `read_only_replica`), with `retryable=False`, and adds no QMX cap.
+- [ ] Test, fake and failed runs. In a `test`-mode or fake run the writes stay on its run ref, the digest never reads them, and `advance.py` does not move the cursor (`QMX_MODE == "test"`). `put_run_summary` lands nothing for a fake run. The digest reads moves onto `main` after the cursor, not first placements. Duplicate checks go through `find_by_intent`, which counts only passed runs.
+- [ ] `crystallise-a-workflow` takes inputs `workflow` (item), `node` (the agent step) and a `batch` source. Its replays are that node's `node_finished` outputs in that workflow's runs, read from the ledger, where `run_created.fake` is not true, `mode` is `live` and `status` is `passed`, for the published version's content hash. With none it refuses with "no replays yet (N fake or test runs left out)". A step whose outputs are not `{item_id, title, label}` is refused by name. Any truthy `fixture` selects the fixture path, so the install test still passes.
+- [ ] `brief.py` lists `fixture:revolution-loop` as a source only when `fixture` is set, and fails with `[QMX_FAILURE] no idea given` when `idea` is empty.
 
 **You see.**
 
-- [ ] On a throwaway folder, "Clippings into research" stores a clipping that the Library screen's search route finds, and the morning digest lists it the next morning.
+- [ ] On a throwaway folder, "Clippings into research" stores a clipping that the Library search route finds, and the morning digest lists it after the run lands.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] A script's `library` writes land once through a recording port, even on a retried attempt; no production module imports `LibraryFake`; `crystallise-a-workflow` with no replays refuses with "no replays yet". Run the engine, host and Library suites with `-n 2`.
+- [ ] Against a real store, a retried attempt (attempt 2 of the same slot) writes nothing twice; a run that fails after write 2 of 3 and is retried writes only write 3, and nothing from the failed run reaches the digest; a test-mode run leaves the cursor and the digest alone; a fake live run lands nothing; a forged principal, ref or `produced-by` link is ignored or refused; a template read runs while the host's `Store` is open; `EngineService.open(home)` with no Library refuses; no production module imports `LibraryFake`; a fake-seq cursor resets once; `crystallise-a-workflow` with no replays refuses with "no replays yet". Run the engine, control, host and Library suites with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
-- [ ] Lane 1. The three suites at parent and head. Save `md1-regression.log`. Pass when head fails nothing the parent passes.
-- [ ] Lane 2. A head host on a throwaway folder runs "Clippings into research" on two clippings. Save `md1-clippings.log`. Pass when `/api/library` search finds both and no `library-fake.sqlite` exists.
-- [ ] Lane 3. The morning digest after lane 2. Save `md1-digest.log`. Pass when it lists the two clippings.
-- [ ] Lane 4. `crystallise-a-workflow` on a workflow with no runs, then on one with three. Save `md1-crystallise.log`. Pass when the first refuses by name and the second reads those three runs.
-- [ ] Lane 5. "Revolution loop" one round. Save `md1-lineage.log`. Pass when its lineage edges are in the real Library.
-- [ ] Lane 6. A rerun of lane 2's run id. Save `md1-idempotent.log`. Pass when no clipping is stored twice.
+- [ ] Lane 1. The four suites at parent and head. Save `md1-regression.log`. Pass when head fails nothing the parent passes.
+- [ ] Lane 2. A head host on a throwaway folder runs "Clippings into research" on two clippings. Save `md1-clippings.log`. Pass when Library search finds both after the run lands and no `library-fake.sqlite` exists.
+- [ ] Lane 3. The morning digest after lane 2, with a cursor left holding a fake-file seq. Save `md1-digest.log`. Pass when the cursor resets once and the digest lists the two clippings.
+- [ ] Lane 4. `crystallise-a-workflow` on a workflow step with no runs, then on one with three runs, one of them fake. Save `md1-crystallise.log`. Pass when the first refuses by name and the second reads only the two real runs.
+- [ ] Lane 5. "Revolution loop" one round. Save `md1-lineage.log`. Pass when its lineage edges are in the real Library and its links carry the returned ids.
+- [ ] Lane 6. Kill the engine after the write node's attempt and before `node_finished`, then resume the run. Save `md1-idempotent.log`. Pass when no clipping is stored twice.
 - [ ] Lane 7. Grep lane logs for key values. Save `md1-leak.log`. Pass when none appears.
 - [ ] Lane 8. `tools/secret_scan.py`. Save `md1-secrets.log`. Pass when it is clean.
 - [ ] Lane 9. Gates in the touched packages. Save `md1-gates.log`. Pass when every exit code is 0.
@@ -122,37 +130,37 @@ Audit H2, H3, H4, M6, L6 and L8. Rulings 141 and 142 (his data lives in one plac
 
 ## Every broker read says demo or live (MD2)
 
-Audit M5. Ruling 135 (live-trading keys only on a trading server) and his standing rule that he never reads a demo number as his own. Today `BR/service.py`'s `read` returns what the adapter gives, and only `list_accounts` and `list_connections` carry `environment`; a demo balance reaches an agent with no label. Real step none. Done when every broker read result, account state, positions, orders and history, carries `environment` (`demo` or `live`) and, for cTrader, the account's `isLive`, and the agent-facing tool text says "demo" beside every money figure from a demo account.
+Audit M5, with the plan review (MD2 items 1 to 5). Ruling 135 (live-trading keys only on a trading server) and his standing rule that he never reads a demo number as his own. Today `BR/service.py` `read` serves `account_state`, `positions`, `quotes`, `bars` and `symbol_info` as plain dicts and lists; only `list_accounts` and `list_connections` carry `environment`, so a demo balance reaches an agent through `BR/server.py` and the harness with no label. `Connection.environment` is `demo` or `live` (default `demo`), and cTrader's sign-in already keeps only accounts whose `isLive` matches. Real step none. Done when every one of the five reads returns one envelope, `{environment, is_live, connection_id, account_id, result}`, stamped from the connection the read resolved and the adapter's proven `isLive` (a disagreement fails the read by name); the kind survives the harness's paging and spill; and the tool descriptions the model reads say a figure from a demo account is demo.
 
 **Depends on.** The root `4dd2c5c6`.
 
 **Files.**
 
-- [ ] Edit `BR/service.py` (`read` and every read that returns money), `BR/adapters.py` (cTrader near lines 180 to 197, CCXT near 327 to 333, carrying the account kind through), `BR/models.py` (the result types).
-- [ ] Edit the agent-facing tool text in `TL/` that renders a broker read, if any renders one.
-- [ ] Add tests in the broker and tools packages.
+- [ ] Edit `BR/service.py` (`read` returns the envelope, stamped from the same resolved connection; a cached CCXT adapter for `demo` is never reused for `live`), `BR/adapters.py` (the cTrader adapter keeps the `isLive` its `authenticate` saw), `BR/models.py` (the read envelope type) and `BR/server.py` (the tools' return types become the envelope).
+- [ ] Edit `qmx-control/src/qmx_control/catalog.py` (the broker rows' descriptions near lines 226 to 231) and `qma-harness/src/qma/harness/tools.py` (`_paged` and `spill` keep `environment` on every page and on the spill pointer).
+- [ ] Add tests in the broker, harness and control packages.
 
 **Build.**
 
-- [ ] Stamp the account kind on every read result.
-- [ ] Say "demo" in the tool text beside every figure from a demo account.
+- [ ] Add the envelope and stamp all five reads.
+- [ ] Keep the kind through paging and spill, and in the catalog descriptions.
 
 **You see.**
 
-- [ ] A chat that reads the demo account's balance answers with "demo" in the same line as the number.
+- [ ] The broker `account_state` tool's text for a demo account carries `environment: demo` beside the balance. Whether a model repeats "demo" in its own words is its choice; a chat that drops it is logged to `BACKLOG.md`, not a blocker.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] A cTrader demo read and a CCXT sandbox read each carry `environment: demo`; a live read carries `live`; a read whose kind is unknown says `unknown`, never `live`. Run the broker, tools and host suites with `-n 2`.
+- [ ] A cTrader demo read and a CCXT sandbox read carry `environment: demo`; a live read carries `live`; flipping a connection's environment between two reads stamps each read with its own kind; a cTrader `isLive` that disagrees with the connection fails the read by name; a re-proposed order after a switch gets a new `proposal_id`. Run the broker, harness and control suites with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
 - [ ] Lane 1. The three suites at parent and head. Save `md2-regression.log`. Pass when head fails nothing the parent passes.
-- [ ] Lane 2. A head host with a fake cTrader endpoint (demo account) answers the account read route. Save `md2-read.log`. Pass when the result carries `environment: demo` and `isLive: false`.
-- [ ] Lane 3. The tool text for that read. Save `md2-tool.log`. Pass when "demo" sits beside the balance.
-- [ ] Lane 4. A CCXT sandbox read through the fake exchange. Save `md2-ccxt.log`. Pass when it carries `environment: demo`.
-- [ ] Lane 5. A read with no account kind. Save `md2-unknown.log`. Pass when it says `unknown`.
-- [ ] Lane 6. Positions and history reads. Save `md2-reads.log`. Pass when each carries the kind.
+- [ ] Lane 2. The broker `account_state` tool through `create_server(BrokerService(home, settings, factory=<fake cTrader>))` on a demo connection. Save `md2-read.log`. Pass when the envelope carries `environment: demo` and `is_live: false`.
+- [ ] Lane 3. The same read and a long `bars` read through the harness's tool wrapping. Save `md2-tool.log`. Pass when the kind is on the text, on every page and on the spill pointer.
+- [ ] Lane 4. A CCXT sandbox read through a fake exchange. Save `md2-ccxt.log`. Pass when it carries `environment: demo`.
+- [ ] Lane 5. A connection switched from demo to live between two reads. Save `md2-switch.log`. Pass when each read carries its own kind and the CCXT cache is not reused.
+- [ ] Lane 6. `positions`, `quotes` and `bars` reads. Save `md2-reads.log`. Pass when each carries the kind.
 - [ ] Lane 7. Grep lane logs for key values. Save `md2-leak.log`. Pass when none appears.
 - [ ] Lane 8. `tools/secret_scan.py`. Save `md2-secrets.log`. Pass when it is clean.
 - [ ] Lane 9. Gates in the touched packages. Save `md2-gates.log`. Pass when every exit code is 0.
@@ -160,7 +168,7 @@ Audit M5. Ruling 135 (live-trading keys only on a trading server) and his standi
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Milliseconds for one account read through the fake endpoint.
+- [ ] Metric. Milliseconds for one `account_state` read through the fake endpoint.
 - [ ] Probe. Lane 2.
 - [ ] Baseline. The same read at the parent.
 - [ ] Rule. No fail rule. Recorded for the trail.
@@ -175,38 +183,39 @@ Audit M5. Ruling 135 (live-trading keys only on a trading server) and his standi
 
 ## The old-data import labels what it cannot prove (MD3)
 
-Audit M8. Rulings 141 and 142. Today `LB/migrate/from_bucket.py` imports a bucket run with no recorded mode as `mode: "live"`, and `LB/migrate/from_library_b.py` filters old test rows by 16 fixed ids only, so other test rows import as his. LF4's bring-in calls this switch on his real first start. Real step none (his first start, after landing). Done when a run with no recorded mode imports as `unknown`, rows written by a `run:` principal or titled like a test lane are counted and named in the bring-in report under "made by test runs", imported off `main` (onto a `refs/imported/test-runs` ref he can open), and nothing is deleted.
+Audit M8, with the plan review (MD3 items 1 to 5 and fact e). Rulings 141 and 142. Today `LB/migrate/from_bucket.py` imports a bucket run with no mode as `live`, and the `workflow-run` schema allows only `live` and `test`; the bucket import runs through the server's `qmx-control node import`, not the bring-in. `LB/migrate/from_library_b.py` filters 16 fixed junk ids and imports every other old row onto `main`; old rows carry no principal. LF4's bring-in calls `from_library_b` on his first start. Real step none (his first start, after landing). Done when a bucket run whose mode is not `live` or `test` imports as `unknown`; Library B items whose `title`, `source` or `tags` match a named test-lane pattern list (kept beside `JUNK`, judged per `root_id`) import and are archived at once with `Store.archive(OPERATOR, item, reason="made by test runs")`, so search and recall leave them out and nothing is deleted; the bring-in report counts them on their own line and leaves them out of "Your Library"; and a folder brought in before MD3 gets the same archive once at host start.
 
-**Depends on.** MD2 (stack order only; no shared file).
+**Depends on.** MD2 (stack order). It shares `E/ports/library.py` with MD1 (Appendix C).
 
 **Files.**
 
-- [ ] Edit `LB/migrate/from_bucket.py` (a missing mode is `unknown`) and `LB/migrate/from_library_b.py` (the test-row rule beside the 16 ids, and the ref they land on).
-- [ ] Edit `HO/bring_in.py` (the report's "made by test runs" line counts these rows and names the ref).
-- [ ] Add tests in the Library and host packages.
+- [ ] Edit `LB/kinds/workflow-run.schema.json` (`unknown` in `mode`), `LB/landing.py` and `E/ports/library.py` (the `Mode` values), and `LB/migrate/from_bucket.py` (any mode outside `live` and `test` is `unknown`).
+- [ ] Edit `LB/migrate/from_library_b.py` (the test-lane pattern list beside `JUNK`, judged per `root_id`, then archived; fix-check 58 and N18 named, and why this rule archives rather than skips).
+- [ ] Edit `HO/bring_in.py` (the report's "made by test runs" line, counted apart from `JUNK` and subtracted from "Your Library") and `HO/host.py` (a one-shot pass at host start archives matching items when the saved bring-in report has no `test_rule` stamp, appends the counts to the report, deletes nothing, and runs once per rule version).
+- [ ] Add tests in the Library, control and host packages.
 
 **Build.**
 
-- [ ] Change the missing-mode default.
-- [ ] Add the test-row rule and its ref.
-- [ ] Count and name them in the report.
+- [ ] Add `unknown` to the mode and map the bucket import to it.
+- [ ] Add the pattern list and archive matching items per root.
+- [ ] Count them in the report, and add the one-shot pass for folders brought in earlier.
 
 **You see.**
 
-- [ ] On a synthetic old folder, the bring-in report says how many test-run items it found and where they are.
+- [ ] On a synthetic old folder, the bring-in report says how many items were made by test runs and that they are archived, not deleted.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] A bucket run with no mode imports as `unknown`; a row by `run:lane-x` lands on the test-runs ref and not on `main`; the report counts it. Run the Library and host suites with `-n 2`.
+- [ ] `import_bucket` with no mode imports `unknown`; a test-lane item is archived with its whole version chain; search leaves it out and `include_archived=True` finds it; the 16 junk ids still show only the "remote-flow" line; a folder brought in at `4dd2c5c6` gets the one-shot archive once. Run the Library, control and host suites with `-n 2`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `haiku` at the PR head, per the boot recipe. Lanes 1 to 4 are the proving set. Lanes 5 to 10 are a menu.
 
-- [ ] Lane 1. The two suites at parent and head. Save `md3-regression.log`. Pass when head fails nothing the parent passes.
-- [ ] Lane 2. LF4's lane 2 on a synthetic old folder holding two test-lane rows and one bucket run with no mode. Save `md3-bringin.log`. Pass when the report counts the two, the run reads `unknown`, and the old folder is unchanged.
-- [ ] Lane 3. Library search on the new folder for a test-lane title. Save `md3-search.log`. Pass when `main` does not return it and the test-runs ref does.
-- [ ] Lane 4. LF4's real-folder lane (an LF1-era host's flat home) through the head. Save `md3-real.log`. Pass when it still brings in and a head host lists the old chat.
-- [ ] Lane 5. A rerun of lane 2. Save `md3-rerun.log`. Pass when it returns the same report.
-- [ ] Lane 6. An old folder with no test rows. Save `md3-clean.log`. Pass when the report has no test-run line.
+- [ ] Lane 1. The three suites at parent and head. Save `md3-regression.log`. Pass when head fails nothing the parent passes.
+- [ ] Lane 2. LF4's lane 2 on a synthetic old folder holding two test-lane items. Save `md3-bringin.log`. Pass when the report counts the two apart and the old folder is unchanged.
+- [ ] Lane 3. Library search on the new folder for a test-lane title. Save `md3-search.log`. Pass when search does not return it and `include_archived=True` does.
+- [ ] Lane 4. `qmx-control node import` on a throwaway store with a bucket run that has no mode. Save `md3-bucket.log`. Pass when the run reads `unknown`.
+- [ ] Lane 5. A folder brought in at `4dd2c5c6`, then a head host started on it. Save `md3-oneshot.log`. Pass when the test-lane items are archived once and the report gains the count.
+- [ ] Lane 6. The same old folder brought into a new empty folder. Save `md3-rerun.log`. Pass when the counts match lane 2.
 - [ ] Lane 7. Grep lane logs for key values. Save `md3-leak.log`. Pass when none appears.
 - [ ] Lane 8. `tools/secret_scan.py`. Save `md3-secrets.log`. Pass when it is clean.
 - [ ] Lane 9. Gates in the touched packages. Save `md3-gates.log`. Pass when every exit code is 0.
@@ -237,24 +246,26 @@ Audit M8. Rulings 141 and 142. Today `LB/migrate/from_bucket.py` imports a bucke
 ## Appendix A. Prototype evidence
 
 - The audit file named above, read at `44943f2b` (backend) and `eea09941` (UI).
-- On the tip `4dd2c5c6`, `LibraryFake` is imported by `E/runner.py`, `E/service/api.py` and the eight template scripts; no other path from a script child into the Library exists (`E/nodes/script.py` passes only `QMX_*` variables).
+- On the tip `4dd2c5c6`, `LibraryFake` is imported by `E/runner.py`, `E/service/api.py` and ten template scripts in nine templates, and reached through `library=None` from `E/control_door.py` and `E/__main__.py`. A script child finds the folder through `home_of(QMX_WORK_SHARED)`, but `Store.open` refuses while the host holds `writer.lock` (plan review, fact a).
+- The plan review `D:/QMX-worktrees/qma-ship/wrapup/review/plan-mock-data-edge-cases.md` checked every fact against `4dd2c5c6` and set the MUST changes folded in here.
 
 ## Appendix B. Not in this program
 
-The UI findings (UI session). L3 and L4 (run cards showing "fake" and "test (sample data)") need the UI. L5, L7, L9, L10 and M7 are developer paths or examples he must install by hand; they stay in `BACKLOG.md`.
+The UI findings (UI session). L3 and L4 (run cards showing "fake" and "test (sample data)") need the UI. L5, L7, L9, L10 and M7 are developer paths or examples he must install by hand; they stay in `BACKLOG.md`. The `scripts/live/*` lanes that open `LibraryFake` (`e07_lifecycle.py`, `e10_library.py`, `e21_real_tests.py`, `e37_redaction.py`, `tpl3_templates.py`, `lib1_lanes.py`) are dev lanes and keep it.
 
 ## Appendix C. Files two PRs share
 
 | Pair | Shared file | Order |
 |---|---|---|
-| MD1, MD2 | none | in parallel |
+| MD1, MD2 | none (MD1 adds `qmx_control/service.py`, MD2 adds `qmx_control/catalog.py`) | in parallel |
 | MD2, MD3 | none | MD2 first (stack order) |
-| MD1, MD3 | none | MD1 first (stack order) |
+| MD1, MD3 | `E/ports/library.py` (`RunSummary.fake`, the `Mode` values) | MD1 first |
 
 ## Appendix D. Defaults
 
 - No hourly tick. Claude's default.
-- A read with no account kind says `unknown`, never `live`. Claude's default, from his rule that he never reads a demo number as his own.
+- A broker read whose stamp and proven `isLive` disagree fails by name. Claude's default, from his rule that he never reads a demo number as his own.
+- Test-lane items are archived, never deleted or skipped. Claude's default, from ruling 141.
 
 ## Appendix E. Gates and calls
 
