@@ -301,7 +301,7 @@ Backend decisions that change what the UI shows or wires. These are landings, no
 
 ## 18. Library attach, preview and detail (added 2026-10-27, his ask)
 
-The designs already show attaching a Library item to a chat (copilot or any agent chat), attaching one to a workflow, a preview of a selected item, and its detailed view. This section is the backend side only, checked against the backend tip `4dd2c5c6`; the screens follow the designs.
+Seen in the running design on 2026-10-27: the chat box's paperclip opens "Attach from the Library" (search and shelf filters; picked items join the message as chips); the Library's preview panel for a selected item (used in, journal and logs, code, settings; Full page, Add to copilot, New version); and the full item page (Performance, Trading, Setup, evidence runs; Add to copilot, Open in Lab). This section is the backend side only, checked against the backend tip `4dd2c5c6`; the screens follow the designs.
 
 1. **Attach to a chat.** The backend has the model's half: the copilot's own `context_add` and `context_list` tools attach `@library`, `@run`, `@app`, `@pod`, `@unit`, `@bot`, `@session` and `@memory` references to the chat record, pinned or following (AD-63). It has no route for the screen to attach on his click, and a typed `@` in a message is not read as a reference. That backend step is in the coordinator's queue; the design's attach wires to it when it lands.
 2. **Attach to a workflow.** The backend accepts `@library:<object id>` and `@run:<run id>[/<output>]` in a workflow's `inputs`. The design's run-start needs a Library pick for those inputs.
