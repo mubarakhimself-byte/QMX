@@ -46,18 +46,16 @@ from qmx_home import (
     pointer_file,
     resolve,
 )
+from qmx_home.files import Busy, Held, copy_file, hold
 
 from qmx_host.bring_in import (
     BUSY,
     Copier,
-    Held,
     Refused,
     Report,
     again,
     bring_in,
     brought_from,
-    copy_file,
-    hold,
     old_refusal,
     refusal_before_copy,
     unfinished_facts,
@@ -664,7 +662,7 @@ def _bring_in_refusal(
 def _answer[T](act: Callable[[], T]) -> T:
     try:
         return act()
-    except Refused as refused:
+    except Busy as refused:
         raise HTTPException(409, detail=str(refused)) from None
 
 
@@ -680,7 +678,7 @@ def first_start_app(
     lock a killed card left behind, which no process holds, is removed first."""
     lock = lock_file()
     if lock.exists():
-        with suppress(Refused, OSError):
+        with suppress(Busy, OSError):
             hold(lock, BUSY, removed=True).release()
     app = FastAPI(title="QMX first start")
     app.include_router(first_start_router(places, old, port=port, on_handover=on_handover))

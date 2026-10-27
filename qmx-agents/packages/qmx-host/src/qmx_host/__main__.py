@@ -136,7 +136,8 @@ def _old_hint(flag: Path | None) -> str | None:
 
 def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
     """The first-start card's choices on the command line, and its routes with `--serve`."""
-    from qmx_host.bring_in import Refused  # noqa: PLC0415
+    from qmx_home.files import Busy  # noqa: PLC0415
+
     from qmx_host.first_start import (  # noqa: PLC0415
         RESTORE_LATER,
         Places,
@@ -189,7 +190,7 @@ def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         if warning is not None:
             print(f"note: {warning}", file=sys.stderr)
         report = bring_in_old(old, folder, places, anew=args.again)
-    except Refused as refused:
+    except Busy as refused:
         parser.exit(2, f"refused: {refused}\n")
     print(report.text, end="")
     return 0 if report.finished else 1
