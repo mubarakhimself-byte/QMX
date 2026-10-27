@@ -66,15 +66,16 @@ from qmx_control.catalog import (
 from qmx_control.service import Observer, observers
 from qmx_engine.__main__ import INSTALL_ROUTE
 from qmx_engine.control_door import FAILURES, PRINCIPAL, EngineDoor, control_error
-from qmx_engine.service.context import Caller
+from qmx_engine.service.context import OPERATOR, Caller
 from qmx_engine.service.forward import PASS_HEADER
-from qmx_engine.templates.catalog import CATALOG, find
-from qmx_engine.templates.install import install
+from qmx_engine.templates.catalog import CATALOG, Template, find
+from qmx_engine.templates.install import Installed, install_one
 from qmx_router.passes import PREFIX, Ask, Pass, PassAuthority
 from starlette.responses import JSONResponse
 from starlette.routing import BaseRoute, Match
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from qmx_host.jobs import Job, Jobs, Progress, Stopped
 from qmx_host.venue_session import HOST_PASS_ROUTES
 
 USER: Final = Caller("user")
@@ -308,38 +309,95 @@ class InstallIn(BaseModel):
     """Template ids, or any id one had before; None installs the whole catalogue."""
 
 
+INSTALL: Final = "templates-install"
+"""The kind of the install's job."""
+
+
+def _row(found: Installed) -> dict[str, str]:
+    template = found.template
+    return {
+        "id": template.id,
+        "folder": template.folder,
+        "action": found.action,
+        "detail": found.detail,
+    }
+
+
 def templates_router(engine: EngineDoor) -> APIRouter:
     """`POST /api/templates/install`: install templates disabled through this host's engine, so
     `python -m qmx_engine templates install` on a home with a running host lands in the Library
     store this host serves, and never opens a second writer beside it.
 
-    The install runs on the engine's loop in an empty context, as `EngineDoor` runs its doors, so
-    its test runs inherit no request principal. An unknown id refuses by name before anything
-    runs."""
+    The install is a job (loose strings P5): the POST answers 202 with its view at once, and
+    `GET /api/templates/install/{job_id}` reads which template it is on, how many are done and
+    each finished row, under `result.rows`. Each template is one `install_one` hop on the
+    engine's loop in an empty context, as `EngineDoor` runs its doors, so its test runs inherit no
+    request principal. An unknown id refuses 404 by name before any job starts; a second install
+    while one runs answers 409, because both would write the same drafts. A hop that raises ends
+    the job `stopped` with its code and the rows finished before it."""
     router = APIRouter()
+    jobs = Jobs()
+    finished: dict[str, list[dict[str, str]]] = {}
+    """Each job's rows, appended by its own thread only."""
 
-    @router.post(INSTALL_ROUTE)
-    async def install_templates(body: InstallIn) -> list[dict[str, str]]:
+    def view(job: Job) -> dict[str, object]:
+        shown = job.document()
+        if job.state == "running":
+            shown["result"] = {"rows": finished.get(job.id, [])[: job.done]}
+        return shown
+
+    def hop(template: Template) -> Installed:
+        future = contextvars.Context().run(
+            asyncio.run_coroutine_threadsafe,
+            install_one(engine.svc, template, OPERATOR),
+            engine.loop,
+        )
+        return future.result()
+
+    @router.post(INSTALL_ROUTE, status_code=202)
+    def install_templates(body: InstallIn) -> dict[str, object]:
         try:
             picked = list(CATALOG) if body.templates is None else [find(t) for t in body.templates]
         except KeyError as unknown:
             raise HTTPException(404, f"no template {unknown.args[0]!r} in the catalogue") from None
-        hop = contextvars.Context().run(
-            asyncio.run_coroutine_threadsafe, install(engine.svc, picked), engine.loop
-        )
-        try:
-            done = await asyncio.wrap_future(hop)
-        except FAILURES as error:
-            raise control_error(error) from error
-        return [
-            {
-                "id": found.template.id,
-                "folder": found.template.folder,
-                "action": found.action,
-                "detail": found.detail,
-            }
-            for found in done
-        ]
+        rows: list[dict[str, str]] = []
 
-    _ = install_templates
+        def work(progress: Progress) -> dict[str, object]:
+            for done, template in enumerate(picked):
+                progress(f"installing {template.id}", done=done, total=len(picked))
+                try:
+                    rows.append(_row(hop(template)))
+                except FAILURES as error:
+                    refused = control_error(error)
+                    why = str(refused).removeprefix(f"{refused.code}: ")
+                    raise Stopped(
+                        f"the install stopped at {template.id}: {why}; the templates before it "
+                        "are installed, so fix that and run the install again",
+                        {"code": refused.code, "rows": list(rows)},
+                    ) from None
+            progress("all templates done", done=len(picked), total=len(picked))
+            return {"rows": list(rows)}
+
+        started = jobs.start(INSTALL, work)
+        if not started.new:
+            raise HTTPException(
+                409,
+                f"a template install is already running (job {started.job.id}); "
+                "wait for it to end, then run the install again",
+            )
+        finished[started.job.id] = rows
+        return view(started.job)
+
+    @router.get(f"{INSTALL_ROUTE}/{{job_id}}")
+    def read_install(job_id: str) -> dict[str, object]:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(
+                404,
+                f"no template install job {job_id} on this host; the host started again since it "
+                "began, so run the install again",
+            )
+        return view(job)
+
+    _ = install_templates, read_install
     return router
