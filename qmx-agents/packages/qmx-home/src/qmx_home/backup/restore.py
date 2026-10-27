@@ -728,7 +728,10 @@ def _move_in(layout: Layout, record: _Journal, aside: Path) -> None:
             os.replace(long_path(aside / "data"), long_path(data))
         except OSError:
             raise RestoreRefused(
-                f"{_held_open(staged, failed)}; QMX finishes the restore when it next starts"
+                f"QMX could not move {plain(staged)} into place "
+                f"({failed.strerror or type(failed).__name__}), and the folder's earlier data "
+                f"waits whole in {plain(aside / 'data')}. Close any program using either folder; "
+                "QMX finishes the restore when it next starts"
             ) from None
         shutil.rmtree(long_path(aside), ignore_errors=True)
         _journal(layout, _at(record, "staged"))
