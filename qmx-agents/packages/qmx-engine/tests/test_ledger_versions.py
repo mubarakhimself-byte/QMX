@@ -114,6 +114,23 @@ def test_an_inbox_that_is_not_qmxs_is_refused_and_left_as_it_was(tmp_path: Path)
     assert path.read_bytes() == before
 
 
+def test_a_ledger_file_that_is_not_sqlite_is_refused_by_name_and_left_as_it_was(
+    tmp_path: Path,
+) -> None:
+    home = home_of(tmp_path)
+    path = home / "engine" / "engine.sqlite"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"this is not a ledger\n" * 64)
+
+    with pytest.raises(StoreRefused) as refused:
+        Ledger.open(home)
+
+    assert str(refused.value).startswith(
+        f"{path} is not a QMX run ledger: it is not a SQLite database"
+    )
+    assert path.read_bytes() == b"this is not a ledger\n" * 64
+
+
 def test_the_engine_command_line_shows_a_refused_ledger_as_its_one_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -1,14 +1,21 @@
 """What did not open is one line and an exit code the desktop app branches on (loose strings P6,
-C15, Appendix E): a refused store, engine or Library exits 2, a taken port exits 4, a running host
-still exits 1, and `start` passes its child's code through."""
+C15, Appendix E): a refused store, engine, Library or app startup exits 2, a taken port exits 4, a
+running host still exits 1, and `start` passes its child's code through."""
 
 from __future__ import annotations
 
 import socket
+import threading
+import webbrowser
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import IO
+from typing import IO, override
 
+import keyring
 import pytest
+from fastapi import FastAPI
+from keyring.backend import KeyringBackend
 from qmx_engine.ports.library import LibraryRefused as EngineRefused
 from qmx_home import resolve
 from qmx_home.versions import StoreRefused
@@ -20,6 +27,10 @@ from qmx_host.host import serve_forever, single_instance, start
 NOT_A_LEDGER = (
     "D:/QMX/data/engine.db is not a QMX engine ledger: file is not a database. QMX leaves it as "
     "it is; move it aside and start QMX again to make a new one."
+)
+APP_FAILED = (
+    "QMX did not start: the host's app failed while it started up. Its error is in the lines "
+    "above; fix that and start QMX again."
 )
 
 
@@ -33,11 +44,61 @@ def opened(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """The port of each socket the host handed to `serve`, which opens nothing here."""
     ports: list[int] = []
 
-    async def serve(_home: Path, sock: socket.socket, *_args: object) -> None:
+    async def serve(_home: Path, sock: socket.socket, *_args: object, **_kw: object) -> None:
         ports.append(sock.getsockname()[1])
 
     monkeypatch.setattr(qmx_host.host, "serve", serve)
     return ports
+
+
+class Memory(KeyringBackend):
+    """A keyring in memory, so a real `serve` mints its bearer without Credential Manager."""
+
+    priority = 1  # pyright: ignore[reportAssignmentType]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.held: dict[tuple[str, str], str] = {}
+
+    @override
+    def get_password(self, service: str, username: str) -> str | None:
+        return self.held.get((service, username))
+
+    @override
+    def set_password(self, service: str, username: str, password: str) -> None:
+        self.held[service, username] = password
+
+    @override
+    def delete_password(self, service: str, username: str) -> None:
+        self.held.pop((service, username), None)
+
+
+@pytest.fixture
+def scratch_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """A real `serve` on a scratch profile with an in-memory keyring, no browser and no
+    Hindsight, so nothing reaches his profile, his Credential Manager or pg0."""
+    profile = tmp_path / "profile"
+    for name, path in {
+        "USERPROFILE": profile,
+        "HOME": profile,
+        "APPDATA": profile / "AppData" / "Roaming",
+        "LOCALAPPDATA": profile / "AppData" / "Local",
+    }.items():
+        path.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv(name, str(path))
+    monkeypatch.delenv("QMX_HOME", raising=False)
+
+    def real_browser(_url: str) -> bool:
+        raise AssertionError("his real browser opened")
+
+    monkeypatch.setattr(webbrowser, "open", real_browser)
+    monkeypatch.setattr(qmx_host.host, "hindsight_runs", lambda _control, _role: False)
+    before = keyring.get_keyring()
+    keyring.set_keyring(Memory())
+    try:
+        yield
+    finally:
+        keyring.set_keyring(before)
 
 
 def serving(home: Path, port: int) -> int:
@@ -66,7 +127,7 @@ def test_a_refusal_raised_while_the_host_opens_prints_one_line_and_exits_2(
     refusal: Exception,
     line: str,
 ) -> None:
-    async def refused(*_args: object) -> None:
+    async def refused(*_args: object, **_kw: object) -> None:
         raise refusal
 
     monkeypatch.setattr(qmx_host.host, "serve", refused)
@@ -75,11 +136,66 @@ def test_a_refusal_raised_while_the_host_opens_prints_one_line_and_exits_2(
     assert capsys.readouterr().err == f"QMX did not start: {line}\n"
 
 
+@pytest.mark.usefixtures("scratch_machine")
+def test_a_ledger_that_is_not_one_stops_the_real_open_with_one_line_and_2(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    ledger = home / "engine" / "engine.sqlite"
+    ledger.parent.mkdir(parents=True)
+    ledger.write_bytes(b"this is not a ledger\n" * 64)
+
+    code = serving(home, 0)
+
+    said = capsys.readouterr().err
+    assert code == 2
+    assert "Traceback" not in said
+    assert [line for line in said.splitlines() if line.startswith("QMX did not start")] == [
+        f"QMX did not start: {ledger} is not a QMX run ledger: it is not a SQLite database. QMX "
+        "leaves it as it is; move it aside and start QMX again to make a new one."
+    ]
+
+
+@pytest.mark.usefixtures("scratch_machine")
+def test_an_app_whose_startup_fails_exits_2_with_one_line_not_3(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def failing_app(*_args: object) -> FastAPI:
+        @asynccontextmanager
+        async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+            raise RuntimeError("the control store did not open")
+            yield
+
+        return FastAPI(lifespan=lifespan)
+
+    monkeypatch.setattr(qmx_host.host, "compose", failing_app)
+
+    code = serving(home, 0)
+
+    said = capsys.readouterr().err.splitlines()
+    assert (code, said[-1]) == (2, APP_FAILED)
+    assert [line for line in said if line.startswith("QMX did not start")] == [APP_FAILED]
+
+
+def test_a_refusal_after_the_host_served_is_not_named_did_not_start(
+    home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    async def served_then_refused(*_args: object, served: threading.Event, **_kw: object) -> None:
+        served.set()
+        raise StoreRefused("engine", NOT_A_LEDGER)
+
+    monkeypatch.setattr(qmx_host.host, "serve", served_then_refused)
+
+    with pytest.raises(StoreRefused, match="is not a QMX engine ledger"):
+        serving(home, 0)
+    assert "QMX did not start" not in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("held_on", ["127.0.0.1", "0.0.0.0"])  # noqa: S104 - a listener on every interface
 def test_a_taken_port_exits_4_before_anything_opens(
-    home: Path, opened: list[int], capsys: pytest.CaptureFixture[str]
+    home: Path, opened: list[int], capsys: pytest.CaptureFixture[str], held_on: str
 ) -> None:
     with socket.socket() as holder:
-        holder.bind(("127.0.0.1", 0))
+        holder.bind((held_on, 0))
         holder.listen()
         port = holder.getsockname()[1]
 
