@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -112,7 +113,8 @@ def test_runs_intent_keys_and_champions(library: LibraryPort) -> None:
     made = library.put_artifact(
         b"brief", "report", {"path": "out.md"}, run_id="r2", principal="run:r2", intent_key="k1"
     )
-    run = library.put_run_summary(summary("r2", draft.item, draft.object_id), principal="run:r2")
+    live = replace(summary("r2", draft.item, draft.object_id), mode="live")
+    run = library.put_run_summary(live, principal="run:r2")
     library.link(made.object_id, "produced-by", run.object_id, principal="run:r2")
     library.set_champion(draft.item, draft.object_id, principal="operator")
 
