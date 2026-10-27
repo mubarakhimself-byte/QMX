@@ -349,9 +349,9 @@ def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_it
     events: list[tuple[str, str]] = []
     real_new, real_replace = files.create_new, repository.os.replace
 
-    def created(path: Path) -> IO[bytes]:
+    def created(path: Path, *, through: bool = True) -> IO[bytes]:
         events.append(("durable", files.plain(path)))
-        return real_new(path)
+        return real_new(path, through=through)
 
     def renamed(source: object, target: object) -> None:
         events.append(("rename", f"{files.plain(source)} -> {files.plain(target)}"))

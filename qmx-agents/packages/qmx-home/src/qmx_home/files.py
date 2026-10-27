@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import IO, Final, cast
 
 CHUNK: Final = 1 << 20
+THROUGH_BELOW: Final = 8 << 20
+"""A new file smaller than this is written through the disk cache; a larger one is flushed once
+at the end. Measured on his D: drive: 2 KB files take 0.9 ms written through against 3.4 ms
+flushed, and 512 MB is written at 41 MB/s through against 82 MB/s flushed once."""
 PARTIAL: Final = ".qmx-copying"
 """Added to a copy's name while it is written; a copy cut short keeps it, so only names ending in
 it are ever cleared."""
@@ -57,21 +61,22 @@ def open_shared(path: Path) -> IO[bytes]:
     return _windows_file(path, _GENERIC_READ, _SHARE_ALL, _OPEN_EXISTING, _NORMAL, "rb")
 
 
-def create_new(path: Path) -> IO[bytes]:
+def create_new(path: Path, *, through: bool = True) -> IO[bytes]:
     """The new file `path` (refused when it exists), opened so its bytes are on the disk once
-    `settle` returns: on Windows written through the disk cache, which costs far less than a
-    flush per file; elsewhere `settle` flushes it."""
+    `settle` returns. With `through`, on Windows, every write goes through the disk cache, which
+    costs far less than a flush for a small file; otherwise `settle` flushes it once, which
+    writes a large file at the disk's full speed. Pass `settle` the same `through`."""
     path = long_path(path)
-    if os.name != "nt":
+    if os.name != "nt" or not through:
         return path.open("xb")
     flags = _NORMAL | _WRITE_THROUGH
     return _windows_file(path, _GENERIC_WRITE, 0, _CREATE_NEW, flags, "wb")
 
 
-def settle(writing: IO[bytes]) -> None:
+def settle(writing: IO[bytes], *, through: bool = True) -> None:
     """Make what was written to a `create_new` file durable before it is closed or renamed."""
     writing.flush()
-    if os.name != "nt":
+    if os.name != "nt" or not through:
         os.fsync(writing.fileno())
 
 
@@ -153,17 +158,19 @@ def copy_file(source: Path, target: Path, *, length: int | None = None) -> str:
     bytes (a log up to its last full line)."""
     digest = hashlib.sha256()
     left = length
-    with open_shared(source) as reading, create_new(target) as writing:
-        while left is None or left > 0:
-            chunk = reading.read(CHUNK if left is None else min(CHUNK, left))
-            if not chunk:
-                break
-            digest.update(chunk)
-            writing.write(chunk)
-            if left is not None:
-                left -= len(chunk)
-        settle(writing)
+    with open_shared(source) as reading:
         found = os.fstat(reading.fileno())
+        through = (found.st_size if length is None else length) < THROUGH_BELOW
+        with create_new(target, through=through) as writing:
+            while left is None or left > 0:
+                chunk = reading.read(CHUNK if left is None else min(CHUNK, left))
+                if not chunk:
+                    break
+                digest.update(chunk)
+                writing.write(chunk)
+                if left is not None:
+                    left -= len(chunk)
+            settle(writing, through=through)
     os.utime(long_path(target), ns=(found.st_atime_ns, found.st_mtime_ns))
     return digest.hexdigest()
 
