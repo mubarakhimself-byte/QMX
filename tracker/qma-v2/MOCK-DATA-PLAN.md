@@ -4,7 +4,7 @@ This program removes the fake, sample and canned data that the audit of 2026-10-
 He asked for it on 2026-10-26 ("mock data might become a problem, especially when we start using the live system") and ruled that it runs after the local-first program, through the usual plan, check and review.
 There are 3 PRs. MD1 makes the engine's templates read and write the real Library and real run history. MD2 makes every broker read say demo or live. MD3 makes the old-data import label what it cannot prove.
 The stack roots on `build/lf4` at `4dd2c5c6`, the CLEAN tip of the local-first stack, where `just ci` passed with 0 failures.
-The audit's UI findings (H1, M1 to M4, L1, L2, L11 to L13) belong to the UI session on `ui-review/repair` and go to its handoff, not to this stack.
+The audit's UI findings (H1, M1 to M4, L1, L2, L11 to L13) read the UI design's demo data, which is there on purpose (the UI is a design, not code, his word 2026-10-27); they are not part of this program.
 
 ## How to read this
 
@@ -241,7 +241,6 @@ Audit M8, with the plan review (MD3 items 1 to 5 and fact e). Rulings 141 and 14
 
 - [ ] Every PR is stacked with a CLEAN verdict, or skipped with its reason in `RESUME.md`.
 - [ ] `just ci` at the stack tip exits 0, or every failure is a named environmental gap.
-- [ ] The UI findings are written into the UI session's handoff.
 - [ ] `QUEUE.md` moves on to its next item.
 
 ## Appendix A. Prototype evidence
@@ -252,7 +251,7 @@ Audit M8, with the plan review (MD3 items 1 to 5 and fact e). Rulings 141 and 14
 
 ## Appendix B. Not in this program
 
-The UI findings (UI session). L3 and L4 (run cards showing "fake" and "test (sample data)") need the UI. L5, L7, L9, L10 and M7 are developer paths or examples he must install by hand; they stay in `BACKLOG.md`. The `scripts/live/*` lanes that open `LibraryFake` (`e07_lifecycle.py`, `e10_library.py`, `e21_real_tests.py`, `e37_redaction.py`, `tpl3_templates.py`, `lib1_lanes.py`) are dev lanes and keep it.
+The UI findings (design demo data, not bugs). L3 and L4 (run cards showing "fake" and "test (sample data)") need the UI. L5, L7, L9, L10 and M7 are developer paths or examples he must install by hand; they stay in `BACKLOG.md`. The `scripts/live/*` lanes that open `LibraryFake` (`e07_lifecycle.py`, `e10_library.py`, `e21_real_tests.py`, `e37_redaction.py`, `tpl3_templates.py`, `lib1_lanes.py`) are dev lanes and keep it.
 
 ## Appendix C. Files two PRs share
 
