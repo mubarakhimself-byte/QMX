@@ -30,6 +30,7 @@ import dataclasses
 import json
 import os
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
@@ -599,8 +600,12 @@ def recheck_test_runs(home: Path, store: Store) -> None:
     host starts anyway; the report stays unstamped, so the next start tries again."""
     try:
         archived = recheck_at_start(home, store)
-    except (LibraryRefused, OSError) as refused:
-        print(f"library: test runs from the old Library not checked: {refused}", file=sys.stderr)
+    except (LibraryRefused, OSError, sqlite3.Error, ValueError, KeyError) as refused:
+        frozen = home / "migration" / "pre" / "library.db"
+        print(
+            f"library: test runs from the old Library not checked in {frozen}: {refused}",
+            file=sys.stderr,
+        )
         return
     if archived:
         print(f"library: {archived} old items made by test runs archived", file=sys.stderr)

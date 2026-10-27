@@ -128,13 +128,20 @@ def made_by_tests(rows: Iterable[Document]) -> dict[str, tuple[str, ...]]:
 
 def archive_test_runs(store: Store, rows: Iterable[Document]) -> tuple[str, ...]:
     """Archive the item of each root `made_by_tests` names, unless it is archived already, and
-    return the old ids of those roots' versions. A root with no item here is left alone."""
+    return the old ids of those roots' versions. A root with no item here is left alone, and so
+    is an item holding any version that is not one of those old rows (one written since the
+    bring-in), because that version may be his."""
     archived: list[str] = []
     for root, ids in made_by_tests(rows).items():
         found = resolve_alias(store, root)
         if found is None:
             continue
         item = store.get(OPERATOR, found).item
+        versions = store.catalog.db.execute(
+            "SELECT json_extract(fields, '$.legacy_id') FROM objects WHERE item = ?", (item,)
+        ).fetchall()
+        if any(legacy not in ids for (legacy,) in versions):
+            continue
         if store.catalog.state(item) != "archived":
             store.archive(OPERATOR, item, TEST_REASON)
         archived += ids

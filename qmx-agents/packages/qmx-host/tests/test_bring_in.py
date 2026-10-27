@@ -27,9 +27,10 @@ from qmx_engine.ledger import redact
 from qmx_engine.ledger.migrations import STEPS
 from qmx_engine.ledger.store import Ledger
 from qmx_home import FLAT, LABEL, Label, pointer_file
-from qmx_library.migrate import OPERATOR, from_library_b
-from qmx_library.migrate.from_library_b import JUNK
+from qmx_library.migrate import OPERATOR, from_library_b, place
+from qmx_library.migrate.from_library_b import JUNK, resolve_alias
 from qmx_library.migrate.snapshot import snapshot as freeze
+from qmx_library.port import Draft
 from qmx_library.store import Store
 
 from qmx_host.__main__ import main
@@ -540,10 +541,12 @@ def test_test_runs_in_the_old_library_are_counted_apart_and_archived_not_deleted
     assert searched(pc / "QMX" / "data") == (0, 2)
 
 
-def test_a_folder_brought_in_before_the_rule_is_archived_once_at_host_start(
-    pc: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    old = old_home(pc / "old" / ".qmx", pc, made_by_tests=[str(uuid.uuid4()) for _ in range(2)])
+def brought_in_before_the_rule(pc: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, list[str]]:
+    """A folder brought in the way a release before the test rule did: the two test runs active
+    in the new Library and no `test_rule` stamp in the report. Returns its data folder and the
+    test runs' old ids."""
+    tests = sorted(str(uuid.uuid4()) for _ in range(2))
+    old = old_home(pc / "old" / ".qmx", pc, made_by_tests=tests)
     with monkeypatch.context() as earlier:
         earlier.setattr(from_library_b, "TEST_LANES", ())
         bring_in_old(old, pc / "QMX", places(pc))
@@ -552,6 +555,13 @@ def test_a_folder_brought_in_before_the_rule_is_archived_once_at_host_start(
     for stamp in ("test_rule", "test_runs"):
         del saved[stamp]
     (data / REPORT).write_text(json.dumps(saved), encoding="utf-8")
+    return data, tests
+
+
+def test_a_folder_brought_in_before_the_rule_is_archived_once_at_host_start(
+    pc: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data, _ = brought_in_before_the_rule(pc, monkeypatch)
     assert searched(data) == (2, 2)
 
     for _ in range(2):
@@ -567,3 +577,45 @@ def test_a_folder_brought_in_before_the_rule_is_archived_once_at_host_start(
     ]
     assert (facts["test_rule"], len(facts["test_runs"])) == (1, 2)
     assert capsys.readouterr().err == "library: 2 old items made by test runs archived\n"
+
+
+def test_an_item_he_added_a_version_to_since_the_bring_in_stays_his_at_host_start(
+    pc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data, tests = brought_in_before_the_rule(pc, monkeypatch)
+    with Store.open(data / "library", redactor=redact, name="pc") as store:
+        first = store.get(OPERATOR, str(resolve_alias(store, tests[0])))
+        place(
+            store,
+            Draft(
+                "artifact",
+                first.item,
+                title="remote-flow",
+                blobs={"content": b"my notes on the remote flow"},
+                parents=[first.object_id],
+            ),
+        )
+        recheck_test_runs(data, store)
+        found = {hit.item for hit in store.search(OPERATOR, "remote-flow")}
+
+    facts = json.loads((data / REPORT).read_text(encoding="utf-8"))
+    assert found == {first.item}, "the item with his version is still found"
+    assert facts["test_runs"] == [tests[1]]
+
+
+def test_an_unreadable_frozen_library_leaves_the_report_unstamped_and_the_host_starting(
+    pc: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data, _ = brought_in_before_the_rule(pc, monkeypatch)
+    frozen = data / "migration" / "pre" / "library.db"
+    frozen.write_bytes(b"not a database " * 100)
+
+    with Store.open(data / "library", redactor=redact, name="pc") as store:
+        recheck_test_runs(data, store)
+
+    facts = json.loads((data / REPORT).read_text(encoding="utf-8"))
+    assert "test_rule" not in facts
+    assert capsys.readouterr().err == (
+        f"library: test runs from the old Library not checked in {frozen}: file is not a database\n"
+    )
+    assert searched(data) == (2, 2)

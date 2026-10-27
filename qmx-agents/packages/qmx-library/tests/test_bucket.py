@@ -91,3 +91,19 @@ def test_a_run_whose_manifest_does_not_say_live_or_test_imports_as_unknown(
     modes = {item: store.get(OPERATOR, head).fields["mode"] for item, _, head, _, _ in store.refs()}
     assert done == Imported(runs=3, artifacts=0, blobs=0, skipped=0)
     assert modes == {"run-a": "unknown", "run-b": "unknown", "run-c": "test"}
+
+
+def test_an_unknown_runs_artifact_is_never_ranked_as_a_live_runs(
+    store: Store, tmp_path: Path
+) -> None:
+    bucket = bucket_with_one_run(tmp_path)
+    manifest = bucket / "runs" / "run-7" / "manifest.json"
+    unproven = json.loads(manifest.read_text(encoding="utf-8"))
+    del unproven["mode"]
+    manifest.write_text(json.dumps(unproven), encoding="utf-8")
+    import_bucket(store, bucket)
+
+    (_, _, artifact, _, _) = store.refs()[0]
+
+    assert store.get(OPERATOR, artifact).kind == "artifact"
+    assert store.catalog.producer(artifact) == "run"
