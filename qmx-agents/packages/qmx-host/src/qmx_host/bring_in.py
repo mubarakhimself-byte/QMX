@@ -198,8 +198,6 @@ type Copier = Callable[[Path, Path], str]
 """Copies one file and returns the sha256 of the bytes it wrote."""
 
 
-
-
 def _placed(copy: Copier, source: Path, target: Path, sha256: str) -> bool:
     """Copy `source` to a name of QMX's own beside `target` and rename it into place only once
     its sha256 is `sha256`, so a copy cut short never sits at `target`. False, with the copy
@@ -212,6 +210,7 @@ def _placed(copy: Copier, source: Path, target: Path, sha256: str) -> bool:
         raise FileExistsError(errno.EEXIST, "File exists", str(target))
     long_path(writing).rename(long_path(target))
     return True
+
 
 def place_in_tree(relative: str) -> str | None:
     """Where a file of an old flat home lands in the new folder, relative to it, by the layout

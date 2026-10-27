@@ -25,7 +25,7 @@ import os
 import shutil
 import sqlite3
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import closing, suppress
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -286,7 +286,7 @@ def snapshot(
             with suppress(OSError):
                 layout.backups.rmdir()
         raise SnapshotFailed(f"the copy into {target} failed ({_why(failed)})") from None
-    _log(
+    log_line(
         layout,
         {
             "kind": "pre-change",
@@ -306,19 +306,8 @@ def completed_copies(layout: Layout, what: str) -> list[Path]:
     """The pre-change copies of `what` the backup log records as complete. The log line is
     written after the last file is copied, so a copy cut short by a kill or a power cut is not
     among them."""
-    try:
-        lines = (layout.backups / LOG).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
     found: list[Path] = []
-    for line in lines:
-        try:
-            record: object = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(record, dict):
-            continue
-        entry = cast("dict[str, object]", record)
+    for entry in log_lines(layout):
         path = layout.root / str(entry.get("path", ""))
         if (
             entry.get("kind") == "pre-change"
@@ -544,7 +533,7 @@ def _step_failed(
     layout = None if path is None else folder_of(path)
     if layout is not None:
         with suppress(OSError):
-            _log(
+            log_line(
                 layout,
                 {
                     "kind": "upgrade-failed",
@@ -726,9 +715,28 @@ def _why(error: BaseException) -> str:
     return type(error).__name__
 
 
-def _log(layout: Layout, record: dict[str, object]) -> None:
+def log_line(layout: Layout, record: Mapping[str, object]) -> None:
+    """Add one line to the backup log, stamped with the time, durable before this returns."""
     line = json.dumps({"at": datetime.now(UTC).isoformat(), **record}, sort_keys=True)
     with (layout.backups / LOG).open("a", encoding="utf-8") as log:
         log.write(line + "\n")
         log.flush()
         os.fsync(log.fileno())
+
+
+def log_lines(layout: Layout) -> list[dict[str, object]]:
+    """Every whole line of the backup log, oldest first; none when there is no log. A line that
+    is not a JSON object, as a power cut leaves the last one, is skipped."""
+    try:
+        text = (layout.backups / LOG).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    records: list[dict[str, object]] = []
+    for line in text.splitlines():
+        try:
+            record: object = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            records.append(cast("dict[str, object]", record))
+    return records
