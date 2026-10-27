@@ -62,7 +62,7 @@ def test_a_server_host_started_with_no_place_name_refuses_with_one_line(tmp_path
             "-m",
             "qmx_host",
             "serve",
-            *("--home", str(layout.root), "--port", "1", "--role", "server"),
+            *("--home", str(layout.root), "--port", "0", "--role", "server"),
         ],
         capture_output=True,
         text=True,
