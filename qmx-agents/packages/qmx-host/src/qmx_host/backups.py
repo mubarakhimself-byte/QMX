@@ -82,6 +82,9 @@ SETTINGS: Final = "settings"
 PROPOSAL_S: Final = 3600.0
 """How long a measured proposal is shown before the drives are measured again."""
 DEFAULT_TARGET: Final = "second-drive"
+NOT_A_FOLDER: Final = (
+    "this home is not a QMX folder (it has no qmx-home.toml), so QMX makes no copies of it"
+)
 
 type Signature = Literal["refused", "partial", "away"]
 
@@ -258,7 +261,9 @@ class Backups:
         if look is None or self._running() is not None:
             return None
         now = self.clock()
-        quick_due = due(_last(look.log, QUICK), now, "hour", now.time())
+        quick_due = due(_last(look.log, QUICK), now, "hour", now.time()) and look.places[0].ready(
+            now
+        )
         ready = any(
             target.on
             and Path(target.path.anchor or "/").exists()
@@ -529,11 +534,6 @@ class Backups:
         if self._proposed is None or now - self._proposed[0] >= PROPOSAL_S:
             self._proposed = (now, proposal(self.layout))
         return self._proposed[1]
-
-
-NOT_A_FOLDER: Final = (
-    "this home is not a QMX folder (it has no qmx-home.toml), so QMX makes no copies of it"
-)
 
 
 class RunBody(BaseModel):

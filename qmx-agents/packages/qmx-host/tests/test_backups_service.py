@@ -312,6 +312,8 @@ def test_the_doctor_row_names_each_places_age_and_size_and_a_quick_undo_without_
 
     starved = service(layout, clock, floor=1 << 60)
     finished(starved, starved.sweep())
+    clock.advance(minutes=1)
+    assert starved.sweep() is None
     row = starved.doctor_line()
     assert not row.ok
     assert f"; the last round made no copy, so none went to {usb} either" in row.detail
