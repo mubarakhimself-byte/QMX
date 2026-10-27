@@ -10,7 +10,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import ccxt  # pyright: ignore[reportMissingTypeStubs] - untyped upstream
 import pytest
@@ -48,14 +48,14 @@ def ctrader_service(tmp_path: Path, recorded: CTraderFixture) -> BrokerService:
     return BrokerService(tmp_path, settings(), factory)
 
 
-def crypto(environment: str) -> dict[str, Any]:
+def crypto(environment: str, exchange: str = "binance") -> dict[str, Any]:
     return {
         "connections": [
             {
                 "id": "crypto",
                 "name": "Crypto",
                 "adapter": "ccxt",
-                "exchange": "binance",
+                "exchange": exchange,
                 "connections": [
                     {
                         "id": "main",
@@ -176,16 +176,17 @@ def test_a_ctrader_is_live_that_disagrees_with_the_connection_fails_the_read_by_
         )
 
     assert str(refused.value) == (
-        "environment_mismatch: connection demo is demo, but its broker session reads a live"
-        " account; fix the connection's environment before reading it"
+        "environment_mismatch: connection demo says demo, but its broker session proved a live"
+        " account, so nothing was read. Check this connection in Settings"
     )
+    assert "environment before" not in str(refused.value)
     assert "ProtoOAAccountAuthReq" not in [name for name, _ in recorded.calls]
     assert vault.get_password("qmx/token/ctrader-app", "token/ctrader-app") == PAIR
 
 
 @pytest.mark.parametrize(
     ("proven", "found"),
-    [(True, "reads a live account"), (None, "has not proved demo or live")],
+    [(True, "proved a live account"), (None, "proved neither demo nor live")],
 )
 def test_a_session_that_proves_another_kind_or_none_fails_before_it_reads(
     tmp_path: Path, proven: bool | None, found: str
@@ -208,10 +209,44 @@ def test_a_session_that_proves_another_kind_or_none_fails_before_it_reads(
 
     service = BrokerService(tmp_path, BrokerSettings.model_validate(crypto("demo")), factory)
     with pytest.raises(
-        EnvironmentMismatch, match=f"connection main is demo, but its broker session {found};"
+        EnvironmentMismatch,
+        match=f"connection main says demo, but its broker session {found}, so nothing was read",
     ):
         asyncio.run(service.read("account_state", "crypto", "main", "spot"))
     assert reads == []
+
+
+@pytest.mark.parametrize(("environment", "is_live"), [("demo", False), ("live", True)])
+def test_a_real_bitget_connection_reads_under_its_own_kind_without_the_network(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, environment: str, is_live: bool
+) -> None:
+    def fake_vault(reference: str) -> dict[str, str]:
+        return {"apiKey": "fixture", "secret": "fixture"}
+
+    def no_network(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("this test must not reach Bitget")
+
+    @asynccontextmanager
+    async def factory(
+        broker: Broker, connection: Connection, account: Account
+    ) -> AsyncGenerator[ReadAdapter]:
+        async with open_adapter(broker, connection, account) as adapter:
+            exchange: Any = cast(Any, adapter).exchange
+            exchange.fetch = no_network
+            exchange.fetch_balance = ExchangeFixture().fetch_balance
+            assert type(exchange) is ccxt.bitget
+            yield adapter
+
+    monkeypatch.setattr("qmx_broker.service.credentials", fake_vault)
+    settings = BrokerSettings.model_validate(crypto(environment, "bitget"))
+    read = asyncio.run(
+        BrokerService(tmp_path, settings, factory).read("account_state", "crypto", "main", "spot")
+    )
+    assert (read["environment"], read["is_live"], read["result"]) == (
+        environment,
+        is_live,
+        BALANCES,
+    )
 
 
 def test_an_order_re_proposed_after_a_switch_gets_a_new_proposal_id(tmp_path: Path) -> None:

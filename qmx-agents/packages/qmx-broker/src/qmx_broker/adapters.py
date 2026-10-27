@@ -116,19 +116,21 @@ class LiveGrant(ValueError):
 
 class EnvironmentMismatch(ValueError):
     """A read whose session proved another kind than its connection says, so its figure would
-    carry the wrong label. The read fails rather than say demo over live money or the reverse."""
+    carry the wrong label. The read fails rather than say demo over live money or the reverse.
+    The message names both kinds and points at the connection, never at a switch of its kind,
+    because a switch may be exactly what would read the live account."""
 
     code = "environment_mismatch"
 
     def __init__(self, connection_id: str, environment: str, is_live: bool | None) -> None:
-        found = (
-            "has not proved demo or live"
+        proved = (
+            "proved neither demo nor live"
             if is_live is None
-            else f"reads a {'live' if is_live else 'demo'} account"
+            else f"proved a {'live' if is_live else 'demo'} account"
         )
         super().__init__(
-            f"{self.code}: connection {connection_id} is {environment}, but its broker session"
-            f" {found}; fix the connection's environment before reading it"
+            f"{self.code}: connection {connection_id} says {environment}, but its broker session"
+            f" {proved}, so nothing was read. Check this connection in Settings"
         )
 
 
@@ -305,9 +307,15 @@ class CCXTAdapter:
 
     @property
     def is_live(self) -> bool:
-        """CCXT's own sandbox flag, which `set_sandbox_mode(True)` sets when it swaps in the
-        exchange's test endpoints."""
-        return getattr(self.exchange, "isSandboxModeEnabled", False) is not True
+        """False when `set_sandbox_mode(True)` took: CCXT's base sets `isSandboxModeEnabled` when it
+        swaps in the test endpoints, and Bitget's override sets only `options["sandboxMode"]`
+        (demo trading by header). In ccxt 4.5.85 no exchange proves demo a third way."""
+        options: object = getattr(self.exchange, "options", None)
+        sandboxed = getattr(self.exchange, "isSandboxModeEnabled", False) is True or (
+            isinstance(options, dict)
+            and cast("dict[str, object]", options).get("sandboxMode") is True
+        )
+        return not sandboxed
 
     @property
     def bar_page_limit(self) -> int | None:
