@@ -22,8 +22,13 @@ in `bring_in`:
 
 `data/migration/bring-in-unfinished.txt` is written before the first copy and removed last, so a
 bring-in that fails or stops part way leaves the new folder marked unfinished, and the Library and
-the host refuse it by name (`qmx_control.library.old_library`). A rerun into a finished folder
-returns the saved report and copies nothing.
+the host refuse it by name (`qmx_control.library.old_library`). The report's facts are written
+beside the marker at once (`finished: false`), so even a bring-in killed mid copy names its old
+folder, and `again` can clear QMX's own unfinished copy and bring the same old folder in again. A
+rerun into a finished folder returns the saved report and copies nothing.
+
+Every path the bring-in opens goes through `long_path`, so a file deeper than Windows' 260
+characters is copied and hashed like any other.
 """
 
 from __future__ import annotations
@@ -33,9 +38,10 @@ import json
 import os
 import shutil
 import sqlite3
+import stat
 import time
-from collections.abc import Callable, Generator, Iterator, Mapping
-from contextlib import closing, contextmanager, suppress
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import AbstractContextManager, closing, nullcontext, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -69,6 +75,9 @@ from qmx_home.stores import STORES
 from qmx_home.versions import FLOOR_BYTES, StoreRefused, check_open, folder_of, open_sqlite
 from qmx_library.migrate.from_library_b import JUNK, TEST_RULE, recheck_test_runs, switch_over
 from qmx_library.store import Store
+
+from qmx_host.jobs import Progress
+from qmx_host.process_record import recorded_host
 
 LIST: Final = "migration/old-layout-list.json"
 REPORT: Final = "migration/bring-in-report.json"
@@ -108,6 +117,12 @@ CLOUD_ONLY: Final = 0x0040_0000 | 0x0004_0000 | 0x0000_1000
 """FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, RECALL_ON_OPEN and OFFLINE: a file a sync client keeps
 only online. Reading it would download it into the old folder, so such a folder is refused."""
 CHUNK: Final = 1 << 20
+BUSY: Final = "another first start is running on this PC; wait for it to end"
+LISTING: Final = "listing your old folder"
+COPYING: Final = "copying"
+CHECKING: Final = "checking the copy"
+SWITCHING: Final = "moving your Library into the new one"
+OPENING: Final = "opening the new folder's stores"
 TREE_PARTS: Final = (
     ("data", "your work"),
     ("keys", "key files"),
@@ -171,9 +186,29 @@ type Copier = Callable[[Path, Path], str]
 """Copies one file and returns the sha256 of the bytes it wrote."""
 
 
+def long_path(path: Path) -> Path:
+    """`path` as Windows opens it past 260 characters: absolute, with `\\\\?\\` before it (and
+    `\\\\?\\UNC\\` before a network path). Unchanged on other systems."""
+    if os.name != "nt" or str(path).startswith("\\\\?\\"):
+        return path
+    full = os.path.abspath(path)
+    if full.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + full[2:])
+    return Path("\\\\?\\" + full)
+
+
+def _plain(name: object) -> str:
+    """A path as he reads it: without the prefix `long_path` adds."""
+    text = os.fsdecode(name) if isinstance(name, str | bytes) else str(name)
+    if text.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + text.removeprefix("\\\\?\\UNC\\")
+    return text.removeprefix("\\\\?\\")
+
+
 def copy_file(source: Path, target: Path) -> str:
     """Copy `source` to the new file `target` byte for byte, keeping its times. `target` must not
     exist, so a copy never lands on a file already there."""
+    source, target = long_path(source), long_path(target)
     digest = hashlib.sha256()
     with source.open("rb") as reading, target.open("xb") as writing:
         while chunk := reading.read(CHUNK):
@@ -188,7 +223,7 @@ def copy_file(source: Path, target: Path) -> str:
 
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as reading:
+    with long_path(path).open("rb") as reading:
         while chunk := reading.read(CHUNK):
             digest.update(chunk)
     return digest.hexdigest()
@@ -236,8 +271,6 @@ def old_refusal(old: Path) -> str | None:
 def _running(old: Path) -> str | None:
     """A QMX host still serving the old folder, read from its process record alone (F step 4.1):
     the old folder's lock is never taken, because taking it would write there."""
-    from qmx_host.host import recorded_host  # noqa: PLC0415 (the host module is heavy)
-
     pid = recorded_host(old)
     if pid is None:
         return None
@@ -251,65 +284,115 @@ def _label_at(folder: Path) -> Label | None:
         return None
 
 
+type Lock = Path | Held | None
+"""The per-user first-start lock: its file, taken here and removed afterwards; or a lock the
+caller already holds, released here when the bring-in ends; or None for no lock."""
+
+
 def bring_in(
     old: Path,
     folder: Path,
     *,
     place_refusal: Callable[[Path], str | None],
-    lock: Path | None = None,
+    lock: Lock = None,
     copy: Copier = copy_file,
+    progress: Progress | None = None,
 ) -> Report:
     """Bring the old folder `old` into the QMX folder `folder`, made here when it is new.
 
     Raises `Refused` before anything is written. Returns the report: finished, or unfinished with
     the reason, the new folder then marked unfinished and the old one untouched. A rerun into a
-    folder whose bring-in finished returns that report and copies nothing. `lock` is the per-user
-    file that keeps two first starts from running at once.
+    folder whose bring-in finished returns that report and copies nothing. `lock` keeps two first
+    starts from running at once; `progress` hears each step and its counts.
     """
-    with _held(lock, "another first start is running on this PC; wait for it to end", removed=True):
-        return _bring_in(old, folder, place_refusal, copy)
+    with _taken(lock):
+        return _bring_in(old, folder, place_refusal, copy, progress or _unheard)
 
 
-def _bring_in(
-    old: Path, folder: Path, place_refusal: Callable[[Path], str | None], copy: Copier
+def again(
+    old: Path,
+    folder: Path,
+    *,
+    place_refusal: Callable[[Path], str | None],
+    lock: Lock = None,
+    copy: Copier = copy_file,
+    progress: Progress | None = None,
 ) -> Report:
+    """`bring_in` into a folder whose bring-in from `old` did not finish, after clearing QMX's own
+    unfinished copy there. Refused, with nothing cleared, unless the folder is marked unfinished,
+    its saved facts name `old`, and `old` is still an old folder with the files its saved list
+    names. His own files are never in that copy: the copy is cleared only of what the bring-in
+    wrote, and a file outside `data/` only when its bytes match the old folder's."""
+    with _taken(lock):
+        heard = progress or _unheard
+        _clear_unfinished(old.absolute(), folder.absolute(), heard)
+        return _bring_in(old, folder, place_refusal, copy, heard)
+
+
+def refusal_before_copy(
+    old: Path, folder: Path, place_refusal: Callable[[Path], str | None]
+) -> str | None:
+    """Why bringing `old` into `folder` is refused before anything is read in bulk, or None: an
+    old folder LF2's gate refuses, a host still running on it, one of A1's "never" places, the
+    two folders overlapping, and a folder that already holds a bring-in from another old folder.
+    Fast, so the first-start card answers it at once."""
     old, folder = old.absolute(), folder.absolute()
     real_old = old.resolve()
     done = _finished(folder)
     if done is not None:
         brought = Path(str(done.facts.get("old_is") or done.facts.get("old")))
         if brought.resolve() != real_old:
-            raise Refused(
+            return (
                 f"{folder} already holds the old data brought in from {done.facts.get('old')}, "
                 f"not {old}; bring {old} into another new folder"
             )
-        return done
+        return None
     refusal = old_refusal(real_old) or _running(real_old) or place_refusal(folder)
     real_folder = folder.resolve()
     if refusal is None and (
         real_folder.is_relative_to(real_old) or real_old.is_relative_to(real_folder)
     ):
         refusal = f"{folder} and {old} overlap; the new QMX folder must be outside the old one"
+    return refusal
+
+
+def unfinished_facts(folder: Path) -> Mapping[str, object] | None:
+    """The saved facts of a bring-in into `folder` that did not finish, or None when the folder
+    is not marked unfinished. Empty when the marker is there but the facts cannot be read."""
+    data = folder / "data"
+    if not (data / UNFINISHED).is_file():
+        return None
+    try:
+        facts: object = json.loads((data / REPORT).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    return cast("dict[str, object]", facts) if isinstance(facts, dict) else {}
+
+
+def _bring_in(
+    old: Path,
+    folder: Path,
+    place_refusal: Callable[[Path], str | None],
+    copy: Copier,
+    progress: Progress,
+) -> Report:
+    old, folder = old.absolute(), folder.absolute()
+    real_old = old.resolve()
+    refusal = refusal_before_copy(old, folder, place_refusal)
     if refusal is not None:
         raise Refused(refusal)
-    survey = _survey(real_old)
-    cloud = [path for path, _, attributes in survey if attributes & CLOUD_ONLY]
-    if cloud:
-        raise Refused(
-            f"{len(cloud)} files of {old} are kept online only (the first is {cloud[0]}); "
-            "reading them would download them into it. Mark the folder to be kept on this "
-            "device in your sync program, then run the first start again"
-        )
-    clash = sorted(OURS & {place_in_tree(path) or "" for path, _, _ in survey})
-    if clash:
-        raise Refused(f"{old} already holds {clash[0]}, a file the bring-in writes")
-    _room(folder, survey)
+    done = _finished(folder)
+    if done is not None:
+        return done
     try:
-        layout = resolve(folder, create=True)
-    except NoQmxFolder as refused:
-        raise Refused(str(refused)) from None
+        survey, layout = _prepared(old, real_old, folder)
+    except OSError as failed:
+        raise Refused(
+            f"the bring-in did not start: {_reason(failed)}. Nothing was copied; fix that, then "
+            "bring your old data in again"
+        ) from None
     started = time.monotonic()
-    with _held(layout.data / HOST_LOCK, f"a QMX host is running on {layout.root}; stop it first"):
+    with hold(layout.data / HOST_LOCK, f"a QMX host is running on {layout.root}; stop it first"):
         if (layout.data / UNFINISHED).is_file():
             raise Refused(str(old_library(layout.data)))
         if {e.name for e in layout.data.iterdir()} - {HOST_LOCK}:
@@ -325,8 +408,10 @@ def _bring_in(
         }
         unfinished = layout.data / UNFINISHED
         _write(unfinished, "it stopped while copying")
+        _write(layout.data / REPORT, json.dumps({**facts, "finished": False}, indent=1))
+        meter = _Meter(progress, survey)
         try:
-            why = _carry(real_old, layout, facts, copy, unfinished)
+            why = _carry(real_old, layout, facts, copy, unfinished, meter)
         except Exception as failed:  # every failure ends as an unfinished report, never a traceback
             why = f"it stopped with an error: {_reason(failed)}"
         facts["seconds"] = round(time.monotonic() - started, 3)
@@ -342,11 +427,92 @@ def _bring_in(
         return report
 
 
+type Survey = tuple[tuple[str, int, int], ...]
+"""Each file of the old folder: its path, size and Windows attributes."""
+
+
+def _prepared(old: Path, real_old: Path, folder: Path) -> tuple[Survey, Layout]:
+    """The checks that read the old folder's records and the target's drive, then the new QMX
+    folder made or opened. Raises `Refused`, or the `OSError` that stopped a read, before the
+    unfinished marker exists."""
+    survey = _survey(real_old)
+    cloud = [path for path, _, attributes in survey if attributes & CLOUD_ONLY]
+    if cloud:
+        raise Refused(
+            f"{len(cloud)} files of {old} are kept online only (the first is {cloud[0]}); "
+            "reading them would download them into it. Mark the folder to be kept on this "
+            "device in your sync program, then run the first start again"
+        )
+    clash = sorted(OURS & {place_in_tree(path) or "" for path, _, _ in survey})
+    if clash:
+        raise Refused(f"{old} already holds {clash[0]}, a file the bring-in writes")
+    _room(folder, survey)
+    try:
+        return survey, resolve(folder, create=True)
+    except NoQmxFolder as refused:
+        raise Refused(str(refused)) from None
+
+
+class _Meter:
+    """The bring-in's counts, told to `progress` as they change. `done` of `total` is the current
+    step's own count."""
+
+    def __init__(self, progress: Progress, survey: Survey) -> None:
+        self._progress = progress
+        self._step = ""
+        self._done = 0
+        self._total = 0
+        self.counts = {
+            "files_hashed": 0,
+            "files_total": len(survey),
+            "files_copied": 0,
+            "bytes_copied": 0,
+            "bytes_total": sum(size for _, size, _ in survey),
+            "versions_switched": 0,
+            "versions_total": 0,
+        }
+
+    def at(self, step: str, total: int = 0) -> None:
+        self._step, self._done, self._total = step, 0, total
+        self._tell()
+
+    def hashed(self) -> None:
+        self.counts["files_hashed"] += 1
+        self.step_done()
+
+    def copied(self, size: int) -> None:
+        self.counts["files_copied"] += 1
+        self.counts["bytes_copied"] += size
+        self.step_done()
+
+    def switched(self, done: int, total: int) -> None:
+        self.counts["versions_switched"], self.counts["versions_total"] = done, total
+        self._done, self._total = done, total
+        self._tell()
+
+    def step_done(self) -> None:
+        self._done += 1
+        self._tell()
+
+    def _tell(self) -> None:
+        self._progress(self._step, done=self._done, total=self._total, **self.counts)
+
+
+def _unheard(step: str, *, done: int = 0, total: int = 0, **counts: int) -> None:
+    """The progress of a bring-in nobody watches."""
+
+
 def _carry(
-    old: Path, layout: Layout, facts: dict[str, object], copy: Copier, unfinished: Path
+    old: Path,
+    layout: Layout,
+    facts: dict[str, object],
+    copy: Copier,
+    unfinished: Path,
+    meter: _Meter,
 ) -> str | None:
     """Steps 2 to 4. Returns why the bring-in stopped, or None when every check held."""
-    before = listing(old)
+    meter.at(LISTING, meter.counts["files_total"])
+    before = listing(old, on_file=meter.hashed)
     _write(layout.data / LIST, json.dumps(before.document(), indent=1))
     facts["listed"] = {"files": len(before.files), "bytes": before.size}
     facts["links"] = [{"path": path, "target": target} for path, target in before.links]
@@ -357,42 +523,48 @@ def _carry(
     facts["copied"] = copied
     facts["left_out"] = left_out
     for folder in before.folders:
-        (layout.root / str(place_in_tree(folder))).mkdir(parents=True, exist_ok=True)
+        long_path(layout.root / str(place_in_tree(folder))).mkdir(parents=True, exist_ok=True)
+    meter.at(COPYING, sum(1 for entry in before.files if place_in_tree(entry.path) is not None))
     for entry in before.files:
         target = place_in_tree(entry.path)
         if target is None:
             left_out.append({"path": entry.path, "why": LEFT_OUT[entry.path]})
             continue
         written = layout.root / target
-        written.parent.mkdir(parents=True, exist_ok=True)
+        long_path(written.parent).mkdir(parents=True, exist_ok=True)
         if copy(old / entry.path, written) != entry.sha256:
             return f"{entry.path} in your old folder changed while it was copied"
         part = copied.setdefault(target.split("/", 1)[0], [0, 0])
         part[0] += 1
         part[1] += entry.size
         placed.append((entry, written))
+        meter.copied(entry.size)
     _write(unfinished, "it stopped while checking the copy")
-    after = listing(old)
+    meter.at(CHECKING, len(before.files) + len(placed))
+    after = listing(old, on_file=meter.step_done)
     if after != before:
         return f"your old folder changed while it was copied ({_first_change(before, after)})"
     for entry, written in placed:
         if sha256_of(written) != entry.sha256:
             return f"the copy of {entry.path} does not match your old folder"
+        meter.step_done()
     _write(unfinished, "it stopped while moving your old Library into the new one")
     facts["library"] = None
     facts["set_aside"] = None
     facts["test_rule"] = TEST_RULE
     facts["test_runs"] = []
     if (layout.data / OLD_LIBRARY).is_file():
+        meter.at(SWITCHING)
         stale = layout.data / PRE
         if stale.exists():
             kept = stale.with_name(f"pre-from-the-old-folder-{datetime.now(UTC):%Y%m%dT%H%M%SZ}")
             stale.rename(kept)
             facts["set_aside"] = kept.relative_to(layout.data).as_posix()
-        why = _switch(layout, facts)
+        why = _switch(layout, facts, meter.switched)
         if why is not None:
             return why
     _write(unfinished, "it stopped while opening the new folder's stores")
+    meter.at(OPENING)
     why = _opens(layout)
     if why is not None:
         return why
@@ -425,15 +597,16 @@ def _opens(layout: Layout) -> str | None:
     return None
 
 
-def _switch(layout: Layout, facts: dict[str, object]) -> str | None:
+def _switch(
+    layout: Layout, facts: dict[str, object], on_item: Callable[[int, int], None]
+) -> str | None:
     """The built switch on the copy only."""
-    switched = switch_over(layout.data, redactor=redact)
+    switched = switch_over(layout.data, redactor=redact, on_item=on_item)
     tests = switched.imported.tests
+    kinds, test_items = _kinds_brought_in(layout.data / PRE / OLD_LIBRARY, tests)
     facts["test_runs"] = list(tests)
-    facts["library"] = {
-        "report": switched.report(),
-        "kinds": _kinds_brought_in(layout.data / "migration" / "pre" / OLD_LIBRARY, tests),
-    }
+    facts["test_items"] = test_items
+    facts["library"] = {"report": switched.report(), "kinds": kinds}
     if switched.ok:
         return None
     checked = switched.verification
@@ -449,20 +622,25 @@ def _switch(layout: Layout, facts: dict[str, object]) -> str | None:
     return "the new Library does not match your old one: " + "; ".join(differences)
 
 
-def _kinds_brought_in(frozen: Path, tests: tuple[str, ...]) -> dict[str, int]:
+def _kinds_brought_in(
+    frozen: Path, tests: tuple[str, ...] | list[str]
+) -> tuple[dict[str, int], int]:
     """Items per old kind in the switch's frozen copy, the test junk and the archived test runs
-    left out: what the switch imported for him."""
-    kinds: dict[str, int] = {}
-    left_out = {*JUNK, *tests}
+    left out: what the switch imported for him. Then how many items the test runs' versions
+    `tests` make. An item is one old root, however many versions it has."""
+    kinds: dict[str, set[str]] = {}
+    made_by_tests: set[str] = set()
     with closing(sqlite3.connect(f"{frozen.resolve().as_uri()}?mode=ro", uri=True)) as db:
         for (raw,) in db.execute("SELECT data FROM items"):
             row = cast("dict[str, object]", json.loads(raw))
-            if str(row["id"]) not in left_out:
-                kinds[str(row["kind"])] = kinds.get(str(row["kind"]), 0) + 1
-    return dict(sorted(kinds.items()))
+            if str(row["id"]) in tests:
+                made_by_tests.add(str(row["root_id"]))
+            elif str(row["id"]) not in JUNK:
+                kinds.setdefault(str(row["kind"]), set()).add(str(row["root_id"]))
+    return {kind: len(roots) for kind, roots in sorted(kinds.items())}, len(made_by_tests)
 
 
-def _survey(old: Path) -> tuple[tuple[str, int, int], ...]:
+def _survey(old: Path) -> Survey:
     """Each file's path, size and Windows attributes (0 elsewhere), from the file system's records
     alone, before any file is read."""
     found: list[tuple[str, int, int]] = []
@@ -473,20 +651,23 @@ def _survey(old: Path) -> tuple[tuple[str, int, int], ...]:
     return tuple(found)
 
 
-def listing(old: Path) -> Listing:
-    """Every entry of `old`, each file hashed, in one fixed order so two listings compare."""
+def listing(old: Path, on_file: Callable[[], None] | None = None) -> Listing:
+    """Every entry of `old`, each file hashed, in one fixed order so two listings compare.
+    `on_file` is called once each file is hashed."""
     files: list[Listed] = []
     folders: list[str] = []
     links: list[tuple[str, str]] = []
     others: list[str] = []
     for relative, entry in _walk(old):
         if _is_link(entry):
-            links.append((relative, os.readlink(entry.path).removeprefix("\\\\?\\")))
+            links.append((relative, _plain(os.readlink(entry.path))))
         elif entry.is_dir(follow_symlinks=False):
             folders.append(relative)
         elif entry.is_file(follow_symlinks=False):
             path = Path(entry.path)
             files.append(Listed(relative, path.stat().st_size, sha256_of(path)))
+            if on_file is not None:
+                on_file()
         else:
             others.append(relative)
     return Listing(tuple(files), tuple(folders), tuple(links), tuple(others))
@@ -495,7 +676,7 @@ def listing(old: Path) -> Listing:
 def _walk(old: Path) -> Iterator[tuple[str, os.DirEntry[str]]]:
     """Each entry below `old`: a folder's entries sorted by name, then its folders' entries in
     turn, never through a link."""
-    pending: list[tuple[str, Path]] = [("", old)]
+    pending: list[tuple[str, Path]] = [("", long_path(old))]
     while pending:
         prefix, folder = pending.pop()
         with os.scandir(folder) as entries:
@@ -526,12 +707,12 @@ def _first_change(before: Listing, after: Listing) -> str:
     return "its folders or links changed"
 
 
-def _room(folder: Path, survey: tuple[tuple[str, int, int], ...]) -> None:
+def _room(folder: Path, survey: Survey) -> None:
     """Refuse a copy that would leave the target's drive below the floor a pre-change copy keeps,
     counting the switch's own second copy of the old Library."""
     library = sum(size for path, size, _ in survey if _switched(path))
     needed = sum(size for _, size, _ in survey) + 2 * library
-    existing = next(p for p in (folder, *folder.parents) if p.exists())
+    existing = next(p for p in (folder, *folder.parents) if long_path(p).exists())
     free = shutil.disk_usage(existing).free
     if free - needed < FLOOR_BYTES:
         raise Refused(
@@ -564,14 +745,15 @@ def recheck_at_start(home: Path, store: Store) -> int | None:
         if found is None:
             return None
         tests = found
-    facts = {**done.facts, "test_rule": TEST_RULE, "test_runs": list(tests)}
+    items = _kinds_brought_in(home / PRE / OLD_LIBRARY, tests)[1] if tests else 0
+    facts = {**done.facts, "test_rule": TEST_RULE, "test_runs": list(tests), "test_items": items}
     lines = list(done.lines)
     if tests:
         when = f"{datetime.now(UTC):%Y-%m-%d}"
-        lines += ["", f"Checked again when QMX started on {when}: {_made_by_tests(len(tests))}"]
+        lines += ["", f"Checked again when QMX started on {when}: {_made_by_tests(items)}"]
     _write(home / REPORT_TEXT, Report(True, home.parent, tuple(lines)).text)
     _write(home / REPORT, json.dumps(facts, indent=1, sort_keys=True))
-    return len(tests)
+    return items
 
 
 def _made_by_tests(count: int) -> str:
@@ -601,31 +783,129 @@ def _finished(folder: Path) -> Report | None:
     return Report(True, folder, tuple(lines), facts)
 
 
-@contextmanager
-def _held(path: Path | None, busy: str, *, removed: bool = False) -> Generator[None]:
-    """Hold an OS lock on `path` for the block; refused with `busy` while another process holds
-    it. The OS lets go when the process ends, so a stopped first start never leaves it held.
-    `removed` takes the file (and its folder, when that is left empty) away afterwards, so
-    nothing but the pointer stays beside the pointer (ruling 143). A holder checks that its file
-    is still the one at `path`, because a file removed under a waiting process is not a lock."""
-    if path is None:
-        yield
-        return
+class Held:
+    """An OS lock on a file, held until `release` or the end of a `with` block, from any thread.
+    The OS lets go when the process ends, so a stopped first start never leaves it held."""
+
+    def __init__(self, path: Path, handle: IO[bytes], *, removed: bool, made: bool) -> None:
+        self._path = path
+        self._handle: IO[bytes] | None = handle
+        self._removed = removed
+        self._made = made
+
+    def __enter__(self) -> Held:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.release()
+
+    def release(self) -> None:
+        """Let go, once; a second call does nothing."""
+        handle, self._handle = self._handle, None
+        if handle is None:
+            return
+        if self._removed and os.name != "nt":
+            self._path.unlink(missing_ok=True)
+        handle.close()
+        if self._removed and os.name == "nt":
+            with suppress(OSError):
+                self._path.unlink(missing_ok=True)
+        if self._removed and self._made:
+            with suppress(OSError):
+                self._path.parent.rmdir()
+
+
+def hold(path: Path, busy: str, *, removed: bool = False) -> Held:
+    """Take an OS lock on `path`; refused with `busy` while another process or handle holds it.
+    `removed` takes the file (and its folder, when this made it) away on release, so nothing but
+    the pointer stays beside the pointer (ruling 143). A holder checks that its file is still the
+    one at `path`, because a file removed under a waiting process is not a lock."""
     made = not path.parent.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
-    handle = _locked(path, busy)
+    return Held(path, _locked(path, busy), removed=removed, made=made)
+
+
+def _taken(lock: Lock) -> AbstractContextManager[object]:
+    if isinstance(lock, Held):
+        return lock
+    return nullcontext() if lock is None else hold(lock, BUSY, removed=True)
+
+
+def _clear_unfinished(old: Path, folder: Path, progress: Progress) -> None:
+    """Clear QMX's own unfinished copy of `old` from `folder` (`again`), or refuse with nothing
+    cleared."""
+    facts = unfinished_facts(folder)
+    if facts is None:
+        raise Refused(f"{folder} holds no unfinished bring-in; nothing was cleared")
+    named = facts.get("old_is") or facts.get("old")
+    if not named:
+        raise Refused(
+            f"{folder} is marked unfinished, but its record of the old folder cannot be read, so "
+            "QMX cannot tell its own copy there; nothing was cleared. Remove the folder yourself "
+            "and bring your old data in again"
+        )
+    if Path(str(named)).resolve() != old.resolve():
+        raise Refused(
+            f"{folder} holds an unfinished copy of {facts.get('old')}, not of {old}; nothing was "
+            "cleared"
+        )
+    refusal = old_refusal(old.resolve())
+    if refusal is not None:
+        raise Refused(f"{refusal}; nothing was cleared")
+    data = folder / "data"
     try:
-        yield
-    finally:
-        if removed and os.name != "nt":
-            path.unlink(missing_ok=True)
-        handle.close()
-        if removed and os.name == "nt":
-            with suppress(OSError):
-                path.unlink(missing_ok=True)
-        if removed and made:
-            with suppress(OSError):
-                path.parent.rmdir()
+        saved: object = json.loads((data / LIST).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        saved = None
+    except (OSError, ValueError) as unreadable:
+        raise Refused(
+            f"the list of your old folder in {folder} cannot be read ({unreadable}); nothing "
+            "was cleared"
+        ) from None
+    if saved is not None:
+        progress(LISTING)
+        now = listing(old.resolve())
+        if json.loads(json.dumps(now.document())) != saved:
+            raise Refused(
+                f"your old folder {old} changed since the bring-in stopped, so QMX cannot tell "
+                f"its own copy in {folder}; nothing was cleared. Remove {folder} yourself and "
+                "bring your old data in again"
+            )
+    with hold(data / HOST_LOCK, f"a QMX host is running on {folder}; stop it first"):
+        for entry in long_path(data).iterdir():
+            if entry.name == HOST_LOCK:
+                continue
+            if entry.is_dir() and not entry.is_symlink():
+                shutil.rmtree(entry, onexc=_writable_then_again)
+            else:
+                _writable_then_again(os.unlink, str(entry), None)
+    if isinstance(saved, dict):
+        _clear_outside_data(folder, cast("dict[str, object]", saved))
+
+
+def _clear_outside_data(folder: Path, saved: Mapping[str, object]) -> None:
+    """Remove the copies the bring-in placed outside `data/`: each listed file whose copy still
+    holds the old file's bytes, then each folder it made that is left empty."""
+    for row in cast("list[list[object]]", saved.get("files", [])):
+        target = place_in_tree(str(row[0]))
+        if target is None or target.startswith("data/"):
+            continue
+        copy = folder / target
+        if long_path(copy).is_file() and sha256_of(copy) == row[2]:
+            long_path(copy).unlink()
+    made = [place_in_tree(str(name)) for name in cast("list[object]", saved.get("folders", []))]
+    for target in sorted((t for t in made if t and not t.startswith("data/")), reverse=True):
+        with suppress(OSError):
+            long_path(folder / target).rmdir()
+
+
+def _writable_then_again(
+    remove: Callable[[str], object], path: str, _error: BaseException | None
+) -> None:
+    """Remove `path`, making it writable first when the switch left it read-only."""
+    with suppress(OSError):
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    remove(path)
 
 
 def _locked(path: Path, busy: str) -> IO[bytes]:
@@ -666,9 +946,9 @@ def _write(path: Path, text: str) -> None:
 
 def _reason(error: BaseException) -> str:
     if isinstance(error, OSError) and error.strerror:
-        where = f" ({error.filename})" if error.filename else ""
+        where = f" ({_plain(error.filename)})" if error.filename else ""
         return f"{error.strerror}{where}"
-    return str(error) or type(error).__name__
+    return _plain(str(error)) or type(error).__name__
 
 
 def _count(count: int, word: str) -> str:
@@ -690,8 +970,9 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
         return [
             f"Bringing your old QMX data in did not finish: {facts.get('why')}.",
             f"Your old folder {old} was not changed.",
-            f"{folder} is marked unfinished, and QMX will not start on it. Remove it and run "
-            "the first start again.",
+            f"{folder} is marked unfinished, and QMX will not start on it. Bring your old data "
+            "in again into the same folder from the first start; QMX first clears only its own "
+            "unfinished copy there.",
         ]
     listed = cast("dict[str, int]", facts["listed"])
     lines = [f"Your old QMX data is in {folder} now."]
@@ -720,8 +1001,9 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
         lines += ["", f"Your Library: {_count(sum(kinds.values()), 'item')} in the new Library."]
         lines += [f"  {kind}: {count}" for kind, count in kinds.items()]
         tests = cast("list[str]", facts.get("test_runs", []))
+        made = facts.get("test_items")
         if tests:
-            lines.append(f"  {_made_by_tests(len(tests))}")
+            lines.append(f"  {_made_by_tests(made if isinstance(made, int) else len(tests))}")
         retired = cast("list[str]", switched.get("retired", []))
         if retired:
             lines.append(
