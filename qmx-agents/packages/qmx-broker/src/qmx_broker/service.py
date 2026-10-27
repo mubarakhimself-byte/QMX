@@ -5,15 +5,17 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import sqlite3
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, closing
-from functools import partial
 from pathlib import Path
-from typing import Any, Final, Protocol, cast
+from typing import IO, Any, Final, Protocol, cast
 
 from qmf.core import is_refusal
 from qmf.venue.proto import CompiledProto, compile_descriptor_set
+from qmx_home import Layout
 from qmx_home.versions import open_sqlite
 
 from qmx_broker.adapters import (
@@ -23,6 +25,7 @@ from qmx_broker.adapters import (
     EnvironmentMismatch,
     LiveGrant,
     ReadAdapter,
+    can_trade_live,
 )
 from qmx_broker.credentials import (
     CTRADER_APP,
@@ -41,11 +44,36 @@ from qmx_broker.models import (
     OrderProposal,
     ReadEnvelope,
 )
-from qmx_broker.oauth import AppCredential, Tokens
+from qmx_broker.oauth import (
+    TOKEN_URL,
+    AppCredential,
+    Fetch,
+    OAuthRefused,
+    Tokens,
+    refresh_tokens,
+    urllib_fetch,
+)
 
 type AdapterFactory = Callable[
     [Broker, Connection, Account], AbstractAsyncContextManager[ReadAdapter]
 ]
+
+PROTOCOL_SET: Final = Path(__file__).parent / "protocol" / "openapi-91.pb"
+"""Spotware's Open API FileDescriptorSet at release tag 91, under the MIT licence beside it."""
+PROTOCOL_TAG: Final = 91
+REFRESH_LOCK: Final = "ctrader-refresh.lock"
+"""In the QMX folder's `keys/`: one process at a time refreshes the cTrader pair."""
+SIGN_IN_AGAIN: Final = "sign in to cTrader on This PC again"
+
+
+class ReadRefused(ValueError):
+    """A read QMX could not make: a closed `code` and one plain `line` that says what to do next.
+    The line never holds a token, a secret or a URL."""
+
+    def __init__(self, code: str, line: str) -> None:
+        super().__init__(line)
+        self.code = code
+        self.line = line
 
 
 class Session(Protocol):
@@ -58,18 +86,39 @@ type Connect = Callable[[CompiledProto, str], Awaitable[Session]]
 
 
 def compiled(connection: Connection) -> CompiledProto:
-    """The cTrader messages from the connection's pinned FileDescriptorSet."""
-    if not connection.protocol_path or connection.protocol_tag is None:
-        raise ValueError(
-            "Set protocol_path and protocol_tag to the node's pinned FileDescriptorSet"
+    """The cTrader messages from the connection's pinned FileDescriptorSet, or from the set QMX
+    ships when the row names no file."""
+    path, tag, row = connection.protocol_path, connection.protocol_tag, connection.id
+    if not path and tag in {None, PROTOCOL_TAG}:
+        path, tag = str(PROTOCOL_SET), PROTOCOL_TAG
+    elif not path:
+        raise ReadRefused(
+            "protocol_files",
+            f"{row} names protocol_tag {tag} but no protocol_path; set both, or clear both to use "
+            f"the set QMX ships (tag {PROTOCOL_TAG})",
         )
-    proto = compile_descriptor_set(
-        Path(connection.protocol_path).read_bytes(),
-        package_name="openapi-proto-messages",
-        release_tag=connection.protocol_tag,
-    )
+    elif tag is None:
+        raise ReadRefused(
+            "protocol_files",
+            f"{row} names protocol_path but no protocol_tag; set both, or clear both to use the "
+            "set QMX ships",
+        )
+    use_shipped = f"clear protocol_path and protocol_tag on {row} to use the set QMX ships"
+    try:
+        raw = Path(path).read_bytes()
+    except OSError as error:
+        why = "does not exist" if isinstance(error, FileNotFoundError) else "cannot be read"
+        raise ReadRefused(
+            "protocol_files",
+            f"The cTrader protocol file {path} that {row} names {why}; {use_shipped}",
+        ) from None
+    proto = compile_descriptor_set(raw, package_name="openapi-proto-messages", release_tag=tag)
     if is_refusal(proto):
-        raise ValueError("Invalid cTrader protocol definitions")
+        raise ReadRefused(
+            "protocol_files",
+            f"The cTrader protocol file {path} that {row} names is not a tag {tag} set; "
+            f"{use_shipped}",
+        )
     return proto.value
 
 
@@ -95,6 +144,13 @@ async def grant_accounts(
         await session.close()
 
 
+def _secret(reference: str) -> dict[str, str]:
+    try:
+        return credentials(reference)
+    except ValueError as error:
+        raise ReadRefused("credential_unusable", str(error)) from None
+
+
 @asynccontextmanager
 async def open_adapter(
     broker: Broker,
@@ -104,18 +160,29 @@ async def open_adapter(
     exchanges: dict[tuple[str, str, str], CCXTAdapter] | None = None,
     keys: KeyStore | None = None,
     connect: Connect = CTraderTransport.connect,
+    folder: Path | None = None,
+    token_url: str = TOKEN_URL,
+    fetch: Fetch = urllib_fetch,
+    clock: Callable[[], float] = time.time,
 ) -> AsyncGenerator[ReadAdapter]:
     """One read session. A cTrader session opens only on This PC as the connection's home: the
-    app half comes from the row's `qmx/read/*` entry and the access token from This PC's key
-    store. A grant that can trade live money is refused by name and its pair deleted."""
-    secret = credentials(account.credential_ref or connection.credential_ref)
+    app half comes from the row's `qmx/read/*` entry and the pair from This PC's key store. A
+    pair whose expiry has passed is first refreshed at `token_url`, under the lock in `folder`
+    (the QMX folder). A grant that can trade live money is refused by name and its pair deleted,
+    and a refreshed one is never kept. A refusal is a `ReadRefused`, a `LiveGrant` or an
+    `EnvironmentMismatch`."""
+    reference = account.credential_ref or connection.credential_ref
     if broker.adapter == "ccxt":
         import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
 
         if broker.exchange not in ccxt.exchanges:
-            raise ValueError("Unknown CCXT exchange id")
+            raise ReadRefused(
+                "unknown_exchange",
+                f"CCXT knows no exchange {broker.exchange}; check {broker.name} in Settings",
+            )
+        secret = _secret(reference)
         if not {"apiKey", "secret"} <= secret.keys():
-            raise ValueError("CCXT credentials require apiKey and secret")
+            raise ReadRefused("credential_unusable", f"{reference} needs apiKey and secret")
         # CCXT's limiter belongs to the instance. Reuse it for the same key pair
         # and environment; rotating vault credentials creates a fresh instance.
         identity = (
@@ -143,29 +210,165 @@ async def open_adapter(
         yield adapter
         return
     if connection.home != THIS_PC:
-        raise ValueError(
-            f"{connection.id} is signed in on {connection.home}; This PC opens no session for it"
+        raise ReadRefused(
+            "signed_in_elsewhere",
+            f"{connection.id} is signed in on {connection.home}, so This PC opens no session for "
+            f"it; read it from {connection.home}, or sign in to cTrader on This PC",
         )
+    secret = _secret(reference)
     if not {"clientId", "clientSecret"} <= secret.keys():
-        raise ValueError(f"{CTRADER_APP} needs clientId and clientSecret")
+        raise ReadRefused("credential_unusable", f"{CTRADER_APP} needs clientId and clientSecret")
     proto = compiled(connection)
     store = CredentialManager() if keys is None else keys
-    held = store.read(CTRADER_TOKENS)
-    if held is None:
-        raise ValueError("Sign in to cTrader on This PC first")
+    held = _held_pair(store)
+    if held.due(clock()):
+        if folder is None:
+            raise ReadRefused("sign_in_ended", f"The cTrader sign-in has expired; {SIGN_IN_AGAIN}")
+        async with _one_refresher(folder):
+            app = AppCredential(secret["clientId"], secret["clientSecret"])
+            held = await _renewed(
+                store,
+                app,
+                connection,
+                token_url=token_url,
+                fetch=fetch,
+                clock=clock,
+                connect=connect,
+            )
     transport = await connect(proto, connection.environment)
     try:
         adapter = CTraderAdapter(account, transport.request, transport.spot)
         try:
-            await adapter.authenticate(
-                connection, {**secret, "accessToken": Tokens.from_document(held).access_token}
-            )
+            await adapter.authenticate(connection, {**secret, "accessToken": held.access_token})
         except LiveGrant:
             store.delete(CTRADER_TOKENS)
             raise
+        except EnvironmentMismatch:
+            raise
+        except ValueError:
+            raise ReadRefused(
+                "key_refused",
+                f"cTrader refused the app key or the sign-in for account {account.id}; check the "
+                f"app id and secret in Settings, or {SIGN_IN_AGAIN}",
+            ) from None
         yield adapter
     finally:
         await transport.close()
+
+
+def _held_pair(store: KeyStore) -> Tokens:
+    held = store.read(CTRADER_TOKENS)
+    if held is None:
+        raise ReadRefused(
+            "not_signed_in", "Sign in to cTrader on This PC first; This PC holds no cTrader sign-in"
+        )
+    return Tokens.from_document(held)
+
+
+async def _renewed(
+    store: KeyStore,
+    app: AppCredential,
+    connection: Connection,
+    *,
+    token_url: str,
+    fetch: Fetch,
+    clock: Callable[[], float],
+    connect: Connect,
+) -> Tokens:
+    """The pair this read uses, renewed in the sign-in's own order: list the new grant's
+    accounts, refuse a grant that can trade live money (ruling 135), and only then keep it. A
+    pair another reader renewed while this one waited for the lock is used as it is."""
+    held = _held_pair(store)
+    if not held.due(clock()):
+        return held
+    try:
+        fresh = await asyncio.to_thread(
+            refresh_tokens, app, held.refresh_token, token_url=token_url, fetch=fetch, now=clock()
+        )
+    except OAuthRefused as refused:
+        if refused.code in {"token_endpoint_unreachable", "bad_token_answer"}:
+            raise ConnectionError(refused.code) from None
+        if refused.code == "token_url_invalid":
+            raise ReadRefused(
+                "token_url_invalid",
+                "The [ctrader] token_url in Settings is not a web address; fix it, or clear it "
+                "to use cTrader's own",
+            ) from None
+        if store.read(CTRADER_TOKENS) == held.document():
+            store.delete(CTRADER_TOKENS)
+        raise ReadRefused(
+            "sign_in_ended",
+            f"The cTrader sign-in has ended: cTrader would not renew it ({refused.code}); "
+            f"{SIGN_IN_AGAIN}",
+        ) from None
+    try:
+        listing = await grant_accounts(connection, app, fresh.access_token, connect=connect)
+    except Exception as error:  # the check crosses the network; an unchecked pair is never kept
+        raise ReadRefused(
+            "refresh_unchecked",
+            "QMX renewed the cTrader sign-in but could not check its accounts "
+            f"({type(error).__name__}), so it kept nothing; {SIGN_IN_AGAIN}",
+        ) from None
+    if can_trade_live(listing):
+        store.delete(CTRADER_TOKENS)
+        raise LiveGrant
+    kept = fresh.document()
+    try:
+        store.replace(CTRADER_TOKENS, kept)
+        stored = store.read(CTRADER_TOKENS)
+    except Exception:  # Credential Manager's own failure; the read never uses a pair it lacks
+        stored = None
+    if stored != kept:
+        raise ReadRefused(
+            "refresh_not_kept",
+            "QMX renewed the cTrader sign-in but could not keep the new pair in Credential "
+            f"Manager; {SIGN_IN_AGAIN}",
+        )
+    return fresh
+
+
+@asynccontextmanager
+async def _one_refresher(folder: Path) -> AsyncGenerator[None]:
+    """The QMX folder's one cTrader refresher across processes: an OS lock on
+    `keys/ctrader-refresh.lock` that readers take in turn."""
+    lock = Layout(folder).keys / REFRESH_LOCK
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("a+b") as handle:
+        await asyncio.to_thread(_take, handle)
+        try:
+            yield
+        finally:
+            _give(handle)
+
+
+def _take(handle: IO[bytes]) -> None:
+    if os.name == "nt":
+        import msvcrt  # noqa: PLC0415
+
+        while True:
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError:
+                time.sleep(0.05)
+            else:
+                return
+    else:
+        import fcntl  # noqa: PLC0415
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+
+def _give(handle: IO[bytes]) -> None:
+    if os.name == "nt":
+        import msvcrt  # noqa: PLC0415
+
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl  # noqa: PLC0415
+
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 PORTFOLIO_SCHEMA: Final = (
@@ -182,12 +385,15 @@ class BrokerService:
         factory: AdapterFactory | None = None,
         *,
         brokers: Callable[[], Mapping[str, object]] | None = None,
+        ctrader: Callable[[], Mapping[str, object]] | None = None,
     ) -> None:
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.settings = settings
         self.brokers = brokers
-        self.factory: AdapterFactory = factory or partial(open_adapter, exchanges={})
+        self.ctrader = ctrader
+        self._exchanges: dict[tuple[str, str, str], CCXTAdapter] = {}
+        self.factory: AdapterFactory = factory or self._open
         # cTrader permits a small number of sessions; concurrent MCP reads share
         # this gate instead of opening a socket for every simultaneous request.
         self._read_lock = asyncio.Lock()
@@ -195,6 +401,21 @@ class BrokerService:
             open_sqlite(db, "portfolio", (PORTFOLIO_SCHEMA,))
             for statement in PORTFOLIO_SCHEMA:
                 db.execute(statement)
+
+    def _open(
+        self, broker: Broker, connection: Connection, account: Account
+    ) -> AbstractAsyncContextManager[ReadAdapter]:
+        """A session that refreshes under this QMX folder's lock, at the `[ctrader] token_url`
+        the injected reader names, or cTrader's own when it names none."""
+        named = self.ctrader().get("token_url") if self.ctrader is not None else None
+        return open_adapter(
+            broker,
+            connection,
+            account,
+            exchanges=self._exchanges,
+            folder=Layout.from_home(self.home).root,
+            token_url=str(named or TOKEN_URL),
+        )
 
     def configured_settings(self) -> BrokerSettings:
         """`settings` when given, else the `connections` section from the reader the composition
@@ -288,12 +509,10 @@ class BrokerService:
                     result = await read_bars(adapter, **kwargs)
                 else:
                     result = await getattr(adapter, operation)(**kwargs)
-        except LiveGrant, EnvironmentMismatch:
+        except LiveGrant, EnvironmentMismatch, ReadRefused:
             raise
-        except Exception:
-            raise ValueError(
-                "Broker read failed; check credentials, network and node protocol settings"
-            ) from None
+        except Exception as error:
+            raise _unnamed(broker, account, error) from None
         return {
             "environment": connection.environment,
             "is_live": is_live,
@@ -348,6 +567,33 @@ async def read_bars(
         rows.extend(batch)
         cursor = max(int(row["timestamp_ms"]) for row in batch) + 1
     return rows[:limit]
+
+
+def _unnamed(broker: Broker, account: Account, error: Exception) -> ReadRefused:
+    """The plain line for a read that failed with no named refusal, chosen by the failure's
+    type; its class name is only a detail."""
+    network = (
+        f"QMX could not reach {broker.name} to read account {account.id}; check the network and "
+        "try again"
+    )
+    if isinstance(error, OSError | EOFError):
+        return ReadRefused("network", network)
+    if broker.adapter == "ccxt":
+        import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
+
+        if isinstance(error, ccxt.NetworkError):
+            return ReadRefused("network", network)
+        if isinstance(error, ccxt.AuthenticationError):
+            return ReadRefused(
+                "key_refused",
+                f"{broker.name} refused the key for account {account.id}; check its API key in "
+                "Settings",
+            )
+    return ReadRefused(
+        "read_failed",
+        f"QMX could not read account {account.id} at {broker.name}: an unexpected "
+        f"{type(error).__name__}; try again",
+    )
 
 
 def _page(offset: int, limit: int) -> None:

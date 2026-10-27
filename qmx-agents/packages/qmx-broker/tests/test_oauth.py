@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from keyring.errors import PasswordDeleteError
 from pydantic import ValidationError
 
 from qmx_broker.credentials import (
@@ -152,7 +153,8 @@ class Keyring:
         self.entries[service] = (username, password)
 
     def delete_password(self, service: str, username: str) -> None:
-        del self.entries[service]
+        if self.entries.pop(service, None) is None:
+            raise PasswordDeleteError(service)
 
 
 def test_the_app_copy_joins_his_two_entries_once_and_keeps_them() -> None:

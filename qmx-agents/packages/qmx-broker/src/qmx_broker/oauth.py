@@ -92,11 +92,15 @@ class AppCredential:
 
 @dataclass(frozen=True, slots=True)
 class Tokens:
-    """One grant's pair. A refresh rotates both and kills the old pair."""
+    """One grant's pair. A refresh rotates both and kills the old pair. `expires_at` is 0 when
+    cTrader named no lifetime, and such a pair is never due on time alone."""
 
     access_token: str = field(repr=False)
     refresh_token: str = field(repr=False)
     expires_at: float
+
+    def due(self, now: float) -> bool:
+        return 0 < self.expires_at <= now
 
     def document(self) -> str:
         return json.dumps(
@@ -123,16 +127,21 @@ type Fetch = Callable[[str, str], tuple[int, bytes]]
 
 
 def urllib_fetch(method: str, url: str) -> tuple[int, bytes]:
-    request = urllib.request.Request(  # noqa: S310 - the token endpoint Settings names
-        url, method=method, headers={"Accept": "application/json"}
-    )
     try:
+        request = urllib.request.Request(  # noqa: S310 - the token endpoint Settings names
+            url, method=method, headers={"Accept": "application/json"}
+        )
         with urllib.request.urlopen(request, timeout=CALL_TIMEOUT_S) as answer:  # noqa: S310
             return int(answer.status), answer.read()
     except urllib.error.HTTPError as error:
         return int(error.code), error.read()
     except OSError as error:
         raise OAuthRefused("token_endpoint_unreachable", type(error).__name__) from None
+    except ValueError:
+        # urllib's own text holds the URL, whose query holds the secret and the refresh token.
+        raise OAuthRefused(
+            "token_url_invalid", "the [ctrader] token_url in Settings is not a web address"
+        ) from None
 
 
 def consent_url(app: AppCredential, redirect: Redirect, *, base: str = CONSENT_URL) -> str:
@@ -158,7 +167,9 @@ def _token_call(
     if status != 200 or not isinstance(access, str) or not isinstance(refresh, str):
         raise OAuthRefused("bad_token_answer", f"HTTP {status} without a token pair")
     expires = answer.get("expiresIn")
-    return Tokens(access, refresh, now + float(expires if isinstance(expires, int) else 0))
+    if isinstance(expires, bool) or not isinstance(expires, int) or expires <= 0:
+        return Tokens(access, refresh, 0.0)
+    return Tokens(access, refresh, now + expires)
 
 
 def exchange_code(
