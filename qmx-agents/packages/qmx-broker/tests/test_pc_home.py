@@ -21,13 +21,13 @@ from qmf.venue.proto import CompiledProto
 from test_broker import CTraderFixture
 
 from qmx_broker.adapters import can_trade_live
-from qmx_broker.credentials import CredentialManager
+from qmx_broker.credentials import CredentialManager, Joined, join_ctrader_app
 from qmx_broker.models import Account, Broker, BrokerSettings, Connection, ReadEnvelope
 from qmx_broker.oauth import AppCredential
-from qmx_broker.service import BrokerService, grant_accounts, open_adapter
+from qmx_broker.service import BrokerService, ReadRefused, grant_accounts, open_adapter
 
-FIXTURES = Path(__file__).parent / "fixtures"
-PAIR = json.dumps({"accessToken": "acc-1", "refreshToken": "ref-1", "expiresAt": 2_000.0})
+PAIR = json.dumps({"accessToken": "acc-1", "refreshToken": "ref-1", "expiresAt": 4_000_000_000.0})
+"""A pair that is not due until 2096, so these reads never refresh it."""
 
 
 class Memory(KeyringBackend):
@@ -80,8 +80,6 @@ def settings(home: str = "pc") -> BrokerSettings:
         id="demo",
         credential_ref="qmx/read/ctrader-app",
         home=home,
-        protocol_path=str(FIXTURES / "tag91.pb"),
-        protocol_tag=91,
         accounts=[Account(id="101", currency="USD")],
     )
     return BrokerSettings(
@@ -177,9 +175,14 @@ def test_a_connection_signed_in_on_a_place_opens_no_session_here(
     signed_in(vault)
     recorded = CTraderFixture()
 
-    with pytest.raises(ValueError, match="Broker read failed"):
+    with pytest.raises(ReadRefused) as refused:
         read(service(tmp_path, recorded, home="contabo"))
 
+    assert (refused.value.code, str(refused.value)) == (
+        "signed_in_elsewhere",
+        "demo is signed in on contabo, so This PC opens no session for it; read it from "
+        "contabo, or sign in to cTrader on This PC",
+    )
     assert recorded.calls == []
     assert vault.get_password("qmx/token/ctrader-app", "token/ctrader-app") == PAIR
 
@@ -244,3 +247,41 @@ def test_a_second_sign_in_on_windows_leaves_one_pair_and_a_delete_leaves_none() 
 
     assert kept == {("qmx/token/ctrader-app", "token/ctrader-app"): "second pair"}
     assert windows.held == {}
+
+
+class TypedVault(WinVault):
+    """WinVault holding his two typed entries, which the join reads by target name."""
+
+    def get_credential(self, service: str, username: str | None) -> Credential | None:
+        for (held_service, user), password in self.held.items():
+            if held_service == service and username in (None, user):
+                return SimpleCredential(user, password)
+        return None
+
+
+def test_a_changed_app_secret_on_windows_leaves_one_app_copy_and_no_companion() -> None:
+    windows = TypedVault()
+    windows.held["qmx/ctrader-client-id", "anything"] = "4242_demo"
+    windows.held["qmx/ctrader-client-secret", "anything"] = "app-pass"
+    typed = dict(windows.held)
+    app = ("qmx/read/ctrader-app", "read/ctrader-app")
+    companion = ("read/ctrader-app@qmx/read/ctrader-app", "read/ctrader-app")
+
+    first = join_ctrader_app(windows)
+    windows.held["qmx/ctrader-client-secret", "anything"] = "new-pass"
+    changed = join_ctrader_app(windows)
+    after_change = dict(windows.held)
+    windows.held[companion] = "a stale pair from an older QMX"
+    matched = join_ctrader_app(windows)
+
+    assert (first, changed, matched) == (
+        Joined("ok", True),
+        Joined("ok", True),
+        Joined("ok", False),
+    )
+    assert after_change == {
+        **typed,
+        ("qmx/ctrader-client-secret", "anything"): "new-pass",
+        app: '{"clientId": "4242_demo", "clientSecret": "new-pass"}',
+    }
+    assert windows.held == after_change

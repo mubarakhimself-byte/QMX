@@ -49,7 +49,8 @@ class CredentialManager:
     `qmx/*` name with the name minus `qmx/` as its user name. No value is printed or logged.
 
     keyring's Windows backend re-saves an overwritten value under `<user>@<name>` before writing
-    the new one, so every write and delete also removes that companion: no stale copy stays."""
+    the new one, so every write and delete also removes that companion: no stale copy stays. A
+    replace with the value already held writes nothing and still removes the companion."""
 
     def __init__(self, store: SecretStore | None = None) -> None:
         self._store = store
@@ -59,7 +60,9 @@ class CredentialManager:
 
     def replace(self, name: str, value: str) -> None:
         user = name.removeprefix("qmx/")
-        _store(self._store).set_password(name, user, value)
+        store = _store(self._store)
+        if store.get_password(name, user) != value:
+            store.set_password(name, user, value)
         self._forget(f"{user}@{name}", user)
 
     def delete(self, name: str) -> None:
@@ -184,8 +187,9 @@ def join_ctrader_app(store: TargetStore | None = None) -> Joined:
     """Copy his two typed entries into `qmx/read/ctrader-app` as `{clientId, clientSecret}`.
 
     Each entry is read by its target name, whatever user name it was saved under, and both are
-    left where he typed them. A run whose copy already matches writes nothing, so it is safe to
-    run before every sign-in. No value is printed or returned.
+    left where he typed them. The copy is written through `CredentialManager.replace`, so a
+    changed secret leaves one copy and no companion. A run whose copy already matches writes
+    nothing, so it is safe to run before every sign-in. No value is printed or returned.
     """
     secrets = cast(TargetStore, keyring) if store is None else store
     found: dict[str, str] = {}
@@ -199,11 +203,10 @@ def join_ctrader_app(store: TargetStore | None = None) -> Joined:
         {"clientId": found[CTRADER_CLIENT_ID], "clientSecret": found[CTRADER_CLIENT_SECRET]},
         sort_keys=True,
     )
-    user = CTRADER_APP.removeprefix("qmx/")
-    if secrets.get_password(CTRADER_APP, user) == joined:
-        return Joined("ok", False)
-    secrets.set_password(CTRADER_APP, user, joined)
-    return Joined("ok", True)
+    keys = CredentialManager(secrets)
+    changed = keys.read(CTRADER_APP) != joined
+    keys.replace(CTRADER_APP, joined)
+    return Joined("ok", changed)
 
 
 if __name__ == "__main__":
