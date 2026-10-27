@@ -324,3 +324,43 @@ def test_a_finish_killed_while_putting_the_data_back_puts_it_back_at_the_next_fi
 
 
 REAL_JOURNAL = restore._journal  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.parametrize("after", [False, True], ids=["before-its-journal", "after-its-journal"])
+def test_a_new_data_folder_beside_the_set_aside_data_is_refused_and_nothing_is_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, after: bool
+) -> None:
+    filled, _, stamp, before = staged(tmp_path)
+    layout = filled.layout
+    kill_at(monkeypatch, "set-aside", after=after)
+    with pytest.raises(Killed):
+        restore.finish(layout)
+    monkeypatch.undo()
+    stray = layout.data / "chats" / "new.json"
+    stray.parent.mkdir(parents=True)
+    stray.write_bytes(b'{"title": "written after the kill"}')
+    asides = list(layout.backups.glob("before-restore-*"))
+
+    for _ in range(2):
+        with pytest.raises(RestoreRefused, match="changed nothing") as refused:
+            restore.finish(layout)
+        assert str(layout.data) in str(refused.value)
+        assert str(asides[0] / "data") in str(refused.value)
+
+    assert listing(asides[0] / "data") == before
+    assert listing(layout.data) == {"chats/new.json": sha256_of(stray)}
+    assert (layout.backups / f"restoring-{stamp}" / "data").is_dir()
+
+
+def test_a_folder_named_like_a_tombstone_is_skipped_with_a_line(tmp_path: Path) -> None:
+    filled, target, stamp, before = staged(tmp_path)
+    layout = filled.layout
+    name = f"{'ab' * 32}.json"
+    (layout.data / "library" / "blobs" / "tombstones" / name).mkdir()
+
+    finished = restore.finish(layout)
+
+    assert finished is not None
+    assert_restored(filled, target, stamp, before)
+    skipped = [line for line in log_lines(layout) if line["kind"] == "restore-skipped"]
+    assert [line["path"] for line in skipped] == [f"library/blobs/tombstones/{name}"]

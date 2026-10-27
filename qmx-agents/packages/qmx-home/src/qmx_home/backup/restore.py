@@ -779,11 +779,30 @@ def _purge_again(layout: Layout, record: _Journal, aside: Path) -> _Journal:
     that tombstone and name the blob for a new purge: a blob he purged after the copy was
     staged never comes back."""
     stones = aside / "data" / TOMBSTONES
-    found = sorted(
-        entry.name
+    named = [
+        entry
         for entry in (os.scandir(long_path(stones)) if long_path(stones).is_dir() else ())
         if TOMBSTONE.fullmatch(f"{TOMBSTONES}/{entry.name}")
-    )
+    ]
+    found = sorted(entry.name for entry in named if entry.is_file(follow_symlinks=False))
+    logged = {
+        line.get("path")
+        for line in log_lines(layout)
+        if line.get("kind") == "restore-skipped" and line.get("id") == record.id
+    }
+    for entry in named:
+        path = f"{TOMBSTONES}/{entry.name}"
+        if not entry.is_file(follow_symlinks=False) and path not in logged:
+            log_line(
+                layout,
+                {
+                    "kind": "restore-skipped",
+                    "id": record.id,
+                    "path": path,
+                    "line": f"{path} in the set-aside data is not a tombstone file, so the "
+                    "restore left it there and purged nothing for it",
+                },
+            )
     purge = list(record.purge)
     for name in found:
         hexdigest = name.removesuffix(".json")
@@ -798,7 +817,9 @@ def _purge_again(layout: Layout, record: _Journal, aside: Path) -> _Journal:
 
 def _set_aside(layout: Layout, aside: Path) -> None:
     data = layout.data
-    if long_path(aside / "data").is_dir() and not long_path(data).exists():
+    if long_path(aside / "data").is_dir():
+        if long_path(data).exists():
+            raise RestoreRefused(_both(data, aside / "data"))
         return
     made = not long_path(aside).exists()
     long_path(aside).mkdir(parents=True, exist_ok=True)
@@ -831,7 +852,9 @@ def _put_back(layout: Layout, record: _Journal, aside: Path) -> None:
     """Undo a set-aside whose move-in failed: the folder's data back in `data/`, the copy still
     staged. Safe to run again, so a finish stopped part way completes it."""
     data = layout.data
-    if long_path(aside / "data").exists() and not long_path(data).exists():
+    if long_path(aside / "data").exists():
+        if long_path(data).exists():
+            raise RestoreRefused(_both(data, aside / "data"))
         try:
             os.replace(long_path(aside / "data"), long_path(data))
         except OSError as failed:
@@ -840,8 +863,17 @@ def _put_back(layout: Layout, record: _Journal, aside: Path) -> None:
                 f"({failed.strerror or type(failed).__name__}); it waits whole there. Close any "
                 "program using it; QMX puts it back when it next starts"
             ) from None
-    shutil.rmtree(long_path(aside), ignore_errors=True)
+    if not long_path(aside / "data").exists():
+        shutil.rmtree(long_path(aside), ignore_errors=True)
     _journal(layout, _at(record, "staged"))
+
+
+def _both(data: Path, earlier: Path) -> str:
+    return (
+        f"both {plain(data)} and {plain(earlier)} exist, so QMX cannot tell which to keep and "
+        f"changed nothing. {plain(earlier)} holds the folder's data from before the restore; if "
+        f"{plain(data)} holds nothing you need, move it out of the QMX folder and start QMX again"
+    )
 
 
 def _carry(source: Path, target: Path) -> None:
