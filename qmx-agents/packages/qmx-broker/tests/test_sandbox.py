@@ -61,6 +61,21 @@ def test_the_check_names_kraken_and_passes_binance_and_an_unknown_id() -> None:
     assert demo_refusal("no-such-exchange") is None
 
 
+def test_an_exchange_that_cannot_be_built_with_no_keys_is_refused_by_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Unbuildable:
+        def __init__(self, config: dict[str, object]) -> None:
+            raise ccxt.AuthenticationError("requires apiKey")
+
+    monkeypatch.setattr(ccxt, "binance", Unbuildable)
+
+    assert demo_refusal("binance") == (
+        "binance has no demo mode in CCXT, so QMX cannot read a demo account there; use a live "
+        "read-only key or another exchange"
+    )
+
+
 def kraken(environment: str) -> BrokerSettings:
     return BrokerSettings.model_validate(
         {

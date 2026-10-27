@@ -127,3 +127,21 @@ def test_an_old_kraken_demo_row_loads_reads_with_the_line_and_never_blocks_other
     with pytest.raises(ReadRefused) as caught:
         asyncio.run(broker.read("account_state", "kraken", "main", "spot"))
     assert (caught.value.code, caught.value.line) == ("no_demo_mode", KRAKEN_LINE)
+
+
+def test_ccxt_is_asked_only_about_demo_rows_the_stored_file_does_not_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = ControlService(tmp_path)
+    put(service, provider("binance", "binance", "demo"))
+    asked: list[str] = []
+
+    def demo_refusal(exchange: str) -> None:
+        asked.append(exchange)
+
+    monkeypatch.setattr("qmx_control.service.demo_refusal", demo_refusal)
+
+    put(service, provider("binance", "binance", "demo"), provider("kraken", "kraken", "live"))
+    assert asked == []
+    put(service, provider("binance", "binance", "demo"), provider("okx", "okx", "demo"))
+    assert asked == ["okx"]

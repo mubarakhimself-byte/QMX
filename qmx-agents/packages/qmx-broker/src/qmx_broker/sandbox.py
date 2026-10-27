@@ -10,14 +10,15 @@ from typing import Any
 def demo_refusal(exchange: str) -> str | None:
     """The line that refuses a demo account on `exchange`, or None when CCXT gives it a demo mode
     or knows no such exchange (that keeps its own refusal). It runs what a demo read runs, on a
-    fresh exchange object with no keys, which opens no socket; a CCXT upgrade changes the answer
-    by itself. Cached per exchange id for the process's life."""
+    fresh exchange object with no keys, which opens no socket; an exchange that cannot even be
+    built with no keys is refused the same way. A CCXT upgrade changes the answer by itself.
+    Cached per exchange id for the process's life."""
     import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
 
     if exchange not in ccxt.exchanges:
         return None
-    probe: Any = getattr(ccxt, exchange)({})
     try:
+        probe: Any = getattr(ccxt, exchange)({})
         probe.set_sandbox_mode(True)
     except Exception:
         return (

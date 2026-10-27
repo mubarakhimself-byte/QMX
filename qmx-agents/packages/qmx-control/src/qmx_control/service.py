@@ -350,16 +350,15 @@ type DemoRow = tuple[str, str, str]
 """A CCXT demo row by provider id, connection id and exchange."""
 
 
-def _no_demo_rows(settings: BrokerSettings) -> dict[DemoRow, str]:
-    """Each CCXT demo row on an exchange with no demo mode, with the line that refuses it. Asked
-    before the settings lock, because the first ask in a process imports CCXT."""
-    return {
-        (provider.id, connection.id, provider.exchange): line
-        for provider in settings.providers
+def _demo_rows(providers: Sequence[Broker]) -> list[DemoRow]:
+    """The CCXT demo rows of `providers`, in their order."""
+    return [
+        (provider.id, connection.id, provider.exchange)
+        for provider in providers
         if provider.adapter == "ccxt"
         for connection in provider.connections
-        if connection.environment == "demo" and (line := demo_refusal(provider.exchange))
-    }
+        if connection.environment == "demo"
+    ]
 
 
 def _stored_demo_rows(stored: Document) -> set[DemoRow]:
@@ -368,19 +367,23 @@ def _stored_demo_rows(stored: Document) -> set[DemoRow]:
     connection."""
     legacy = stored.get("brokers")
     raw = stored.get("connections") or (legacy.get("brokers") if isinstance(legacy, dict) else [])
-    rows: set[DemoRow] = set()
+    providers: list[Broker] = []
     for item in raw if isinstance(raw, list) else []:
         try:
-            provider = Broker.model_validate(item)
+            providers.append(Broker.model_validate(item))
         except ValueError:
             continue
-        if provider.adapter == "ccxt":
-            rows.update(
-                (provider.id, connection.id, provider.exchange)
-                for connection in provider.connections
-                if connection.environment == "demo"
-            )
-    return rows
+    return set(_demo_rows(providers))
+
+
+def _new_demo_refusal(written: list[DemoRow], stored: Document) -> str | None:
+    """The line refusing the first written CCXT demo row the stored file does not hold, on an
+    exchange with no demo mode. CCXT is asked only about those rows, because the first ask in a
+    process imports it while the settings lock is held."""
+    saved = _stored_demo_rows(stored) if written else set[DemoRow]()
+    return next(
+        (line for row in written if row not in saved and (line := demo_refusal(row[2]))), None
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -795,7 +798,7 @@ class ControlService:
             return self._observers_put(values)
         _no_secrets(values)
         stored_rows: list[dict[str, Any]] | None = None
-        no_demo: dict[DemoRow, str] = {}
+        demo_rows: list[DemoRow] = []
         if section in HOST_SECTIONS:
             parser = self.settings_parsers.get(section)
             if parser is None:
@@ -866,7 +869,7 @@ class ControlService:
                 values = legacy_brokers(cast(Document, {"connections": rows}))
             else:
                 values = cast(Document, {"connections": rows})
-            stored_rows, no_demo = rows, _no_demo_rows(parsed)
+            stored_rows, demo_rows = rows, _demo_rows(parsed.providers)
         else:
             stored_rows = None
 
@@ -877,10 +880,8 @@ class ControlService:
                 raise ControlError("settings_too_new", refused, 409)
             text = path.read_text(encoding="utf-8") if path.exists() else ""
             stored = cast(Document, tomllib.loads(text))
-            saved = _stored_demo_rows(stored) if no_demo else set[DemoRow]()
-            for row, line in no_demo.items():
-                if row not in saved:
-                    raise ControlError("invalid_brokers", line)
+            if no_demo := _new_demo_refusal(demo_rows, stored):
+                raise ControlError("invalid_brokers", no_demo)
             settings = dict(stored)
             if stored_rows is not None:
                 settings["connections"] = cast(JsonValue, stored_rows)
