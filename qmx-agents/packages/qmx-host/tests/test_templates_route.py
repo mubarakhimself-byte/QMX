@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 from qma.harness import QmxHome, control_service
 from qmx_engine import __main__ as cli
-from qmx_engine.control_door import EngineDoor
+from qmx_engine.control_door import PRINCIPAL, EngineDoor
 from qmx_engine.ledger import redact
 from qmx_engine.ports.library import Bundle
 from qmx_engine.ports.library import LibraryRefused as EngineRefused
@@ -204,6 +204,23 @@ def test_a_hop_that_raises_stops_the_job_with_its_code_and_the_rows_so_far(
     )
     assert job["result"]["code"] == "not_found"
     assert actions(job) == [("stress-tests", "rk5-stress-tests", "saved draft")]
+
+
+def test_the_install_runs_on_the_engines_loop_with_no_request_principal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    async def run(item: str, *, caller: Caller, inputs: object = None) -> Report:
+        named = PRINCIPAL.get()
+        seen.append((named.kind, named.id))
+        return Report("", "seen", item, "", "failed", "recorded", None, False)
+
+    with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
+        monkeypatch.setattr(door.svc.tests, "run", run)
+        ended(rest, rest.post(ROUTE, json={"templates": ["backup-weekly"]}, headers=BEARER).json())
+
+    assert seen == [("agent", "unnamed")]
 
 
 def test_a_job_this_host_never_started_answers_404_with_its_line(tmp_path: Path) -> None:
