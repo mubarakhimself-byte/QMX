@@ -304,7 +304,7 @@ def test_the_doctor_row_names_each_places_age_and_size_and_a_quick_undo_without_
 
     row = backups.doctor_line()
 
-    assert row.ok
+    assert (row.name, row.ok) == ("backups", True)
     assert row.detail == (
         f"the quick undo: newest whole copy from 2 hours ago, {size / (1 << 20):,.1f} MB in "
         f"all; usb ({where}): newest whole copy from 2 hours ago"

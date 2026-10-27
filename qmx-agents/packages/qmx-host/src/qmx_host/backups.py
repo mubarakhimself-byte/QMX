@@ -65,6 +65,8 @@ from qmx_home.versions import log_lines
 from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped
 
 KIND: Final = "backup"
+ROW: Final = "backups"
+"""The doctor row's name."""
 SWEEP_S: Final = 60.0
 """How often the host looks whether a place is due. The first look is one sweep after it serves,
 so a start is never slowed by a copy."""
@@ -408,11 +410,11 @@ class Backups:
     def doctor_line(self) -> DoctorLine:
         """The doctor's `backups` row: each place's newest whole copy and what needs him."""
         if not self.layout.label.is_file():
-            return DoctorLine(KIND, False, NOT_A_FOLDER)
+            return DoctorLine(ROW, False, NOT_A_FOLDER)
         try:
             plan = self.plan()
         except PlanRefused as refused:
-            return DoctorLine(KIND, False, f"QMX makes no copies: [backup] in Settings: {refused}")
+            return DoctorLine(ROW, False, f"QMX makes no copies: [backup] in Settings: {refused}")
         now = self.clock()
         log = log_lines(self.layout)
         places = self._standings(plan, log, self._home_id())
@@ -422,7 +424,7 @@ class Backups:
             offered = self._proposal(plan)
             parts.append(NO_SECOND_DRIVE + (f"; {offered.line}" if offered else ""))
         ok = bool(plan.targets) and all(place.concern(now) is None for place in places)
-        return DoctorLine(KIND, ok, "; ".join(parts))
+        return DoctorLine(ROW, ok, "; ".join(parts))
 
     def copies(self, place_id: str) -> list[dict[str, object]]:
         """Each copy one place holds, oldest first, with what made it."""
