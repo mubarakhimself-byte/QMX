@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import random
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from backup_fixtures import filled_folder
 from qmx_home import Label, Layout
 from qmx_home.backup import restore
 from qmx_home.backup.plan import Plan, Target
-from qmx_home.backup.repository import FolderRepository
+from qmx_home.backup.repository import FolderRepository, Manifest, Unreadable
 from qmx_home.backup.round import run_round
 from qmx_home.files import long_path, sha256_of
 from qmx_home.versions import log_lines
@@ -120,3 +121,41 @@ def no_room(_path: Path) -> int:
 def seeded(seed: int) -> random.Random:
     """The drill's pick of a copy and a sample, the same on every run."""
     return random.Random(seed)  # noqa: S311
+
+
+@pytest.mark.parametrize(
+    "named",
+    [
+        "{canary}",
+        r"..\..\..\canary.txt",
+        "../../../canary.txt",
+        "AB" * 32,
+        "0" * 63,
+    ],
+)
+def test_a_manifest_hash_that_is_not_a_sha256_is_unreadable_and_names_no_file_outside_the_pool(
+    tmp_path: Path, named: str
+) -> None:
+    layout, _, place = copied(tmp_path)
+    canary = tmp_path / "canary.txt"
+    canary.write_bytes(b"his file")
+    bad = named.format(canary=canary)
+    held = place.manifest(place.copies()[-1])
+    forged = Manifest(
+        {**held.header, "stamp": "20261028T030000000000Z"},
+        (replace(held.entries[0], sha256=bad), *held.entries[1:]),
+    )
+    place.put_copy(forged)
+
+    with pytest.raises(Unreadable, match="20261028T030000000000Z"):
+        place.manifest(forged.stamp)
+    for number in range(4):
+        restore.drill(layout, place, sample=50, rng=seeded(number), keep_free=0)
+    with pytest.raises(restore.RestoreRefused):
+        restore.stage(layout, place, forged.stamp, keep_free=0)
+    with pytest.raises(ValueError, match="not a sha256"):
+        place.pool_path(bad)
+    with pytest.raises(ValueError, match="not a sha256"):
+        place.discard(bad)
+
+    assert canary.read_bytes() == b"his file"

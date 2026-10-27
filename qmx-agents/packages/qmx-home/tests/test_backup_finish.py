@@ -242,3 +242,85 @@ def test_a_folder_restored_on_a_new_pc_carries_on_sending_to_the_disk_it_came_fr
     report = run_round(fresh, Plan(targets=(usb,)), now=datetime.now(UTC), floor=0)
 
     assert [(p.id, p.result) for p in report.places] == [("quick", "copied"), ("usb", "copied")]
+
+
+def kill_at(monkeypatch: pytest.MonkeyPatch, step: str, *, after: bool) -> None:
+    """Stop the process when the journal records `step`: before the write, or right after."""
+    real = restore._journal  # pyright: ignore[reportPrivateUsage]
+
+    def journal(layout: Layout, record: restore._Journal) -> None:  # pyright: ignore[reportPrivateUsage]
+        if record.step == step and not after:
+            raise Killed
+        real(layout, record)
+        if record.step == step and after:
+            raise Killed
+
+    monkeypatch.setattr(restore, "_journal", journal)
+
+
+@pytest.mark.parametrize("kill", [None, "before-its-journal", "after-its-journal"])
+def test_a_blob_purged_between_stage_and_finish_never_comes_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kill: str | None
+) -> None:
+    filled, _, _, _ = staged(tmp_path)
+    data = filled.layout.data
+    blob = next(
+        p for p in filled.written_once if p.startswith("library/blobs/") and "/tomb" not in p
+    )
+    hexdigest = blob.rpartition("/")[2]
+    stone = f"library/blobs/tombstones/{hexdigest}.json"
+    (data / blob).unlink()
+    (data / stone).write_bytes(b'{"reason": "a secret"}')
+    if kill is not None:
+        kill_at(monkeypatch, "purges", after=kill == "after-its-journal")
+        with pytest.raises(Killed):
+            restore.finish(filled.layout)
+        monkeypatch.undo()
+
+    finished = restore.finish(filled.layout)
+    after = restore.after_restore(filled.layout)
+
+    assert finished is not None
+    assert not (data / blob).exists()
+    assert (data / stone).read_bytes() == b'{"reason": "a secret"}'
+    assert finished.purge == (f"sha256:{hexdigest}",)
+    assert after is not None
+    assert after.purge == (f"sha256:{hexdigest}",)
+
+
+@pytest.mark.parametrize(
+    ("step", "after"),
+    [("putting-back", True), ("staged", False)],
+    ids=["before-the-rename-back", "after-the-rename-back"],
+)
+def test_a_finish_killed_while_putting_the_data_back_puts_it_back_at_the_next_finish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, step: str, after: bool
+) -> None:
+    filled, target, stamp, before = staged(tmp_path)
+    layout = filled.layout
+    staging = layout.backups / f"restoring-{stamp}" / "data"
+    real = os.replace
+
+    def replace(source: object, destination: object) -> None:
+        if Path(str(source)) == long_path(staging):
+            raise PermissionError(13, "Access is denied", str(source))
+        real(source, destination)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(restore.os, "replace", replace)
+    kill_at(monkeypatch, step, after=after)
+    with pytest.raises(Killed):
+        restore.finish(layout)
+    monkeypatch.setattr(restore, "_journal", REAL_JOURNAL)
+
+    with pytest.raises(RestoreRefused, match="nothing changed and the copy stays staged"):
+        restore.finish(layout)
+    assert listing(layout.data) == before
+    assert '"step": "staged"' in (layout.backups / "restore.json").read_text(encoding="utf-8")
+    assert not list(layout.backups.glob("before-restore-*"))
+
+    monkeypatch.undo()
+    assert restore.finish(layout) is not None
+    assert_restored(filled, target, stamp, before)
+
+
+REAL_JOURNAL = restore._journal  # pyright: ignore[reportPrivateUsage]

@@ -46,6 +46,9 @@ ABOUT: Final = "backup.toml"
 STAMP: Final = re.compile(r"\d{8}T\d{12}Z")
 """A copy's folder name; nothing else in `snapshots/` is QMX's, so nothing else is listed or
 removed."""
+SHA256: Final = re.compile(r"[0-9a-f]{64}")
+"""A pooled file's name. A manifest naming anything else is unreadable, so no hash a plugged-in
+disk carries can name a file outside its pool."""
 
 type Kind = Literal["store", "log", "file", "once"]
 """A SQLite store copied by `VACUUM INTO`, a log copied up to its last full line, any other file
@@ -97,6 +100,8 @@ class Entry:
 
     @classmethod
     def parse(cls, line: Mapping[str, object]) -> Entry:
+        if not isinstance(line["sha256"], str) or not SHA256.fullmatch(line["sha256"]):
+            raise ValueError("not a sha256")
         tables = cast("dict[str, int]", line.get("tables") or {})
         version, floor = line.get("version"), line.get("min_reader")
         return cls(
@@ -264,6 +269,9 @@ class FolderRepository:
         return plain(self.root)
 
     def pool_path(self, sha256: str) -> Path:
+        """Where the pool holds `sha256`. Raises ValueError for anything that is not a sha256."""
+        if not SHA256.fullmatch(sha256):
+            raise ValueError(f"{sha256!r} is not a sha256")
         return self.pool / sha256[:2] / sha256[2:4] / sha256
 
     def pool_has(self, sha256: str) -> bool:

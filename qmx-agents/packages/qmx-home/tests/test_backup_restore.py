@@ -454,3 +454,54 @@ def test_a_second_stage_is_refused_while_one_waits_and_cancel_drops_it(tmp_path:
 
 def little_room(_path: Path) -> int:
     return 1000
+
+
+@pytest.mark.parametrize(
+    ("header", "refusal"),
+    [
+        ({"format_version": 3, "min_reader": 3}, r"folder format 3, which needs a QMX"),
+        ({"stores": {"library": {"version": 9, "min_reader": 9}}}, r"the Library at version 9"),
+        ({"stores": {"chats": "new"}}, r"what version of the chats it holds in a way"),
+        ({"format_version": "two"}, r"a label this QMX cannot read"),
+        ({"min_reader": True}, r"a label this QMX cannot read"),
+        ({"last_written_by": 7}, r"a label this QMX cannot read"),
+    ],
+)
+def test_a_copy_whose_label_needs_a_newer_qmx_is_refused_by_name_before_anything_is_written(
+    tmp_path: Path, header: dict[str, object], refusal: str
+) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
+    target, stamp = sent(filled.layout, tmp_path)
+    held = target.manifest(stamp)
+    edited = Manifest({**held.header, **header, "stamp": "20261028T030000000000Z"}, held.entries)
+    target.put_copy(edited)
+    before = listing(filled.layout.data)
+
+    with pytest.raises(RestoreRefused, match=refusal):
+        restore.stage(filled.layout, target, edited.stamp, keep_free=0)
+
+    assert listing(filled.layout.data) == before
+    assert not list(filled.layout.backups.glob("restoring-*"))
+    assert not (filled.layout.backups / "restore.json").exists()
+
+
+def test_a_blob_tombstoned_in_the_copy_itself_is_named_for_a_new_purge(tmp_path: Path) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
+    data = filled.layout.data
+    blob = next(
+        p for p in filled.written_once if p.startswith("library/blobs/") and "/tomb" not in p
+    )
+    hexdigest = blob.rpartition("/")[2]
+    (data / blob).unlink()
+    (data / f"library/blobs/tombstones/{hexdigest}.json").write_bytes(b'{"reason": "a secret"}')
+    target, stamp = sent(filled.layout, tmp_path)
+    fresh = resolve(tmp_path / "New", create=True)
+
+    staged = restore.stage(fresh, target, stamp, keep_free=0)
+    restore.finish(fresh)
+    after = restore.after_restore(fresh)
+
+    assert staged.purge == (f"sha256:{hexdigest}",)
+    assert after is not None
+    assert after.purge == (f"sha256:{hexdigest}",)
+    assert not (fresh.data / blob).exists()

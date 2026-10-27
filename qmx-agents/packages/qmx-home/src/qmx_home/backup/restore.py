@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import shutil
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
@@ -34,7 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, Literal, cast
 
-from qmx_home import LABEL, Label, Layout
+from qmx_home import LABEL, TREE, Label, Layout, opens
 from qmx_home.backup.keep import when
 from qmx_home.backup.repository import (
     FORMAT,
@@ -49,7 +50,7 @@ from qmx_home.backup.repository import (
 from qmx_home.backup.round import LOCK, QUICK, place_key
 from qmx_home.backup.snapshot import BORN_BLOB, SECRET, left_out
 from qmx_home.files import PARTIAL, Busy, copy_file, hold, long_path, plain, sha256_of, write_new
-from qmx_home.stores import STORES
+from qmx_home.stores import STORES, Version
 from qmx_home.versions import FLOOR_BYTES, log_line, log_lines
 
 JOURNAL: Final = "restore.json"
@@ -60,6 +61,7 @@ DRILL: Final = "restore-drill"
 ENGINE_LOCK: Final = "engine.lock"
 HOST_RECORD: Final = "control-process.json"
 TOMBSTONES: Final = "library/blobs/tombstones"
+TOMBSTONE: Final = re.compile(r"library/blobs/tombstones/([0-9a-f]{64})\.json")
 CARRIED: Final = (*(path.removesuffix("/**") for path in SECRET), "locks")
 """What a restore carries over from the data it set aside, in this order: the folder's keys and
 logins, never in a copy, and each mini app's lease generation in `locks/`."""
@@ -67,11 +69,14 @@ STEPS: Final = (
     "staged",
     "set-aside",
     "moved-in",
+    "purges",
     *(f"carried {name}" for name in CARRIED),
     "labelled",
     "logged",
 )
-"""`finish`'s steps in order; the journal names the last one done."""
+"""`finish`'s steps in order; the journal names the last one done. `putting-back` is the one step
+outside them: a move-in that failed, putting the folder's data back."""
+PUTTING_BACK: Final = "putting-back"
 
 type How = Literal["link", "fetch"]
 
@@ -358,9 +363,11 @@ def finish(
         if record is None or record.step == "staging":
             return None
         _no_host(layout, running or _recorded_host)
+        if record.step == PUTTING_BACK:
+            _put_back(layout, record, _aside(layout, record))
+            record = _at(record, "staged")
         for step in STEPS[STEPS.index(record.step) + 1 :]:
-            _step(layout, record, step)
-            record = _at(record, step)
+            record = _at(_step(layout, record, step), step)
             _journal(layout, record)
         shutil.rmtree(long_path(_staging(layout, record.copy)), ignore_errors=True)
         (layout.backups / JOURNAL).unlink(missing_ok=True)
@@ -497,6 +504,7 @@ def _check(
             f"({head.get('format')}) this QMX does not read; install that QMX to restore it, or "
             "pick another copy"
         )
+    _check_label(head, where, stamp)
     for entry in manifest.entries:
         store = next((s for s in STORES.values() if s.path == entry.path), None)
         if store is None or store.kind != "sqlite" or entry.version is None:
@@ -530,6 +538,69 @@ def _check(
             "this folder's data is set aside whole first"
         )
     return True
+
+
+def _check_label(head: Mapping[str, object], where: str, stamp: str) -> None:
+    """Refuse a copy whose label this release cannot read or must not open: its folder format,
+    and each plain-file store's version, which only the label holds."""
+    version, floor = head.get("format_version"), head.get("min_reader")
+    by, stores = head.get("last_written_by"), head.get("stores")
+    if not (
+        _whole(version)
+        and (floor is None or _whole(floor))
+        and isinstance(by, str)
+        and isinstance(stores, dict)
+    ):
+        raise RestoreRefused(
+            f"the copy {stamp} in {where} carries a label this QMX cannot read; install the QMX "
+            "that made it to restore it, or pick another copy"
+        )
+    copied = Label("", cast("int", version), by, by, cast("int | None", floor))
+    if not opens(copied):
+        reads = (
+            f"needs a QMX that reads folder format {copied.reader_floor} or newer"
+            if copied.format_version > TREE
+            else "this QMX does not read"
+        )
+        raise RestoreRefused(
+            f"the copy {stamp} in {where} was written by QMX {by} as folder format "
+            f"{copied.format_version}, which {reads}; this QMX reads folder format {TREE}. "
+            "Install that QMX to restore this copy, or pick another one"
+        )
+    for name, value in cast("dict[str, object]", stores).items():
+        store = STORES.get(name)
+        if store is None or store.kind != "files":
+            continue
+        found = _version_of(value)
+        if found is None:
+            raise RestoreRefused(
+                f"the copy {stamp} in {where} says what version of the {store.words} it holds "
+                "in a way this QMX cannot read; install the QMX that made it to restore it, or "
+                "pick another copy"
+            )
+        ours = store.release.version
+        if found.version > ours and found.min_reader > ours:
+            raise RestoreRefused(
+                f"the copy {stamp} in {where} holds the {store.words} at version "
+                f"{found.version}, which needs a QMX that reads version {found.min_reader} or "
+                f"newer; this QMX reads version {ours}. Install that QMX to restore this copy, or "
+                "pick an older one"
+            )
+
+
+def _whole(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _version_of(value: object) -> Version | None:
+    """A plain-file store's entry in a label's `[stores]`, as the label's own reader reads it."""
+    match value:
+        case {"version": int(at), "min_reader": int(floor)}:
+            return Version(at, floor)
+        case {"version": int(at)}:
+            return Version(at, at)
+        case _:
+            return None
 
 
 def _inside_data(path: str) -> bool:
@@ -581,7 +652,8 @@ def _placings(
             placing.append(_Placing(entry, "link", layout.data / entry.path))
         else:
             placing.append(_Placing(entry, "fetch", None))
-    return placing, stones, purge
+    copied = [f"sha256:{m.group(1)}" for p in paths if (m := TOMBSTONE.fullmatch(p))]
+    return placing, stones, list(dict.fromkeys([*sorted(copied), *purge]))
 
 
 def _holds(path: Path, entry: Entry) -> bool:
@@ -667,12 +739,15 @@ def _rows(path: Path) -> dict[str, int]:
         }
 
 
-def _step(layout: Layout, record: _Journal, step: str) -> None:
+def _step(layout: Layout, record: _Journal, step: str) -> _Journal:
+    """Do one step of a finish, safe to run again; the journal record it leaves."""
     data, aside = layout.data, _aside(layout, record)
     if step == "set-aside":
         _set_aside(layout, aside)
     elif step == "moved-in":
         _move_in(layout, record, aside)
+    elif step == "purges":
+        return _purge_again(layout, record, aside)
     elif step.startswith("carried "):
         _carry(aside / "data" / step.removeprefix("carried "), data / step.removeprefix("carried "))
     elif step == "labelled":
@@ -696,6 +771,29 @@ def _step(layout: Layout, record: _Journal, step: str) -> None:
                 "lacks": list(record.lacks),
             },
         )
+    return record
+
+
+def _purge_again(layout: Layout, record: _Journal, aside: Path) -> _Journal:
+    """Take out of the moved-in data every blob the set-aside data holds a tombstone for, place
+    that tombstone and name the blob for a new purge: a blob he purged after the copy was
+    staged never comes back."""
+    stones = aside / "data" / TOMBSTONES
+    found = sorted(
+        entry.name
+        for entry in (os.scandir(long_path(stones)) if long_path(stones).is_dir() else ())
+        if TOMBSTONE.fullmatch(f"{TOMBSTONES}/{entry.name}")
+    )
+    purge = list(record.purge)
+    for name in found:
+        hexdigest = name.removesuffix(".json")
+        blob = layout.data / "library" / "blobs" / hexdigest[:2] / hexdigest[2:4] / hexdigest
+        long_path(blob).unlink(missing_ok=True)
+        if not long_path(layout.data / TOMBSTONES / name).is_file():
+            _copy_over(stones / name, layout.data / TOMBSTONES / name)
+        if f"sha256:{hexdigest}" not in purge:
+            purge.append(f"sha256:{hexdigest}")
+    return replace(record, purge=tuple(purge))
 
 
 def _set_aside(layout: Layout, aside: Path) -> None:
@@ -724,18 +822,26 @@ def _move_in(layout: Layout, record: _Journal, aside: Path) -> None:
     try:
         os.replace(long_path(staged), long_path(data))
     except OSError as failed:
+        _journal(layout, _at(record, PUTTING_BACK))
+        _put_back(layout, record, aside)
+        raise RestoreRefused(_held_open(staged, failed)) from None
+
+
+def _put_back(layout: Layout, record: _Journal, aside: Path) -> None:
+    """Undo a set-aside whose move-in failed: the folder's data back in `data/`, the copy still
+    staged. Safe to run again, so a finish stopped part way completes it."""
+    data = layout.data
+    if long_path(aside / "data").exists() and not long_path(data).exists():
         try:
             os.replace(long_path(aside / "data"), long_path(data))
-        except OSError:
+        except OSError as failed:
             raise RestoreRefused(
-                f"QMX could not move {plain(staged)} into place "
-                f"({failed.strerror or type(failed).__name__}), and the folder's earlier data "
-                f"waits whole in {plain(aside / 'data')}. Close any program using either folder; "
-                "QMX finishes the restore when it next starts"
+                f"QMX could not move the folder's earlier data back from {plain(aside / 'data')} "
+                f"({failed.strerror or type(failed).__name__}); it waits whole there. Close any "
+                "program using it; QMX puts it back when it next starts"
             ) from None
-        shutil.rmtree(long_path(aside), ignore_errors=True)
-        _journal(layout, _at(record, "staged"))
-        raise RestoreRefused(_held_open(staged, failed)) from None
+    shutil.rmtree(long_path(aside), ignore_errors=True)
+    _journal(layout, _at(record, "staged"))
 
 
 def _carry(source: Path, target: Path) -> None:
@@ -1076,7 +1182,7 @@ def _read_journal(layout: Layout) -> _Journal | None:
             f"the restore journal {plain(path)} cannot be read ({broken}); nothing more is "
             "changed until it can"
         ) from None
-    if record.step not in ("staging", *STEPS) or not STAMP.fullmatch(record.copy):
+    if record.step not in ("staging", PUTTING_BACK, *STEPS) or not STAMP.fullmatch(record.copy):
         raise RestoreRefused(f"the restore journal {plain(path)} names a step QMX does not make")
     return record
 
