@@ -379,8 +379,9 @@ class EngineLibraryAdapter:
         )
 
     def _archive_samples(self, run_id: str, made_by: str) -> None:
-        """The run's artifacts but its trace, its memory rows, and every row derived only from
-        those rows, such as a consolidated or `built` row in another scope."""
+        """The run's artifacts but its trace, its memory rows, and every memory row derived only
+        from those rows, such as a consolidated or `built` row in another scope. Any other object
+        derived from them is his, so it stays."""
         rows: set[str] = set()
         samples: list[str] = []
         for item, head in self.store.heads_on(runs_ref(run_id)):
@@ -397,9 +398,12 @@ class EngineLibraryAdapter:
             if edge == DERIVED_FROM
         }
         for source in derived:
+            view = self.store.get(self.store.engine, source)
             edges = self.store.edges_of(source, reverse=False)
-            if all(to in rows for _, edge, to, *_ in edges if edge == DERIVED_FROM):
-                samples.append(self.store.get(self.store.engine, source).item)
+            if view.kind == "memory-row" and all(
+                to in rows for _, edge, to, *_ in edges if edge == DERIVED_FROM
+            ):
+                samples.append(view.item)
         for item in samples:
             archived = self.store.head(item, state_ref(item))
             if archived is None or archived[0] != "archived":

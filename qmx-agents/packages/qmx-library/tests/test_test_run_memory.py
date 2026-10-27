@@ -78,3 +78,20 @@ def test_a_test_runs_rows_and_rows_derived_only_from_them_are_archived_at_its_su
     assert (memory.check_built("key-test"), memory.check_built("key-live")) == ([], [live_built])
     assert [archived(store, oid) for oid in (tested, consolidated, test_built)] == [True] * 3
     assert [archived(store, oid) for oid in (lived, live_built, mixed)] == [False] * 3
+
+
+def test_his_note_derived_from_a_test_runs_row_stays_visible(
+    opened: tuple[Store, RecallEngine],
+) -> None:
+    store, memory = opened
+    tested = memory.note("test-run", {"tag": "lesson", "content": "a test run's lesson"})
+    library = EngineLibraryAdapter(store)
+    note = library.put_artifact(
+        b"what I took from that lesson", "note", {}, run_id="chat-1", principal="run:chat-1"
+    )
+    his = note.object_id
+    store.relate(store.engine, his, "derived-from", tested)
+
+    summarized(store, "test-run", "test")
+
+    assert (archived(store, tested), archived(store, his)) == (True, False)

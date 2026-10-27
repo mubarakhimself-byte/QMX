@@ -13,6 +13,7 @@ import shutil
 import sqlite3
 from collections.abc import Awaitable, Generator
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -34,6 +35,7 @@ from qmx_engine.nodes.base import NodeJob, NodeResult
 from qmx_engine.ports.library import Bundle, JsonObject, RunSummary
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
+from qmx_engine.service.runs import RunView
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.ticker import Scheduler
 
@@ -211,6 +213,45 @@ def test_a_run_killed_before_its_summary_lands_when_resumed_over_rest_and_a_canc
     assert summaries == [("passed", version, "operator")]
     assert set(written(home, resumed)) <= set(on_main)
     assert landed(home, cancelled)[0] == [("stopped", version, "operator")]
+
+
+def test_a_cancel_that_reaches_a_run_as_it_passes_summarizes_it_passed(
+    made: tuple[Path, str, str], home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    version = made[2]
+    clock = Clock(T0)
+    run_id = died(home, clock, version)
+    assert main(["resume", run_id, "--home", str(home.parent)]) == 0
+
+    async def cancelled_as_it_passed() -> None:
+        with Store.open(home / "library", redactor=redact) as store:
+            async with EngineDoor.open(
+                ControlService(home),
+                library=EngineLibraryAdapter(store),
+                harness=answers(),
+                clock=clock,
+                principal=lambda: OPERATOR,
+            ) as door:
+                runs = door.svc.runs
+                read = runs.get
+                stale = [replace(read(run_id), status="running")]
+
+                def first_read_predates_the_end(rid: str) -> RunView:
+                    return stale.pop() if stale else read(rid)
+
+                def reached_the_drive_as_it_ended(rid: str, reason: str = "operator") -> list[str]:
+                    return [rid]
+
+                monkeypatch.setattr(runs, "get", first_read_predates_the_end)
+                monkeypatch.setattr(runs, "cancel", reached_the_drive_as_it_ended)
+                await asyncio.to_thread(door.workflow_runs_cancel, run_id)
+
+    asyncio.run(cancelled_as_it_passed())
+
+    assert landed(home, run_id)[0] == [
+        ("passed", version, "operator"),
+        ("passed", version, "operator"),
+    ]
 
 
 def test_a_run_killed_twice_before_its_summary_lands_each_clipping_once(
