@@ -41,6 +41,7 @@ from qmx_library.store import Store
 from qmx_host import first_start
 from qmx_host.__main__ import main
 from qmx_host.bring_in import (
+    PARTIAL,
     REPORT,
     REPORT_TEXT,
     Refused,
@@ -288,7 +289,7 @@ def test_a_corrupted_copy_leaves_the_new_folder_unfinished_and_the_old_one_untou
 
     def corrupting(source: Path, target: Path) -> str:
         digest = copy_file(source, target)
-        if target.name == "runs.db":
+        if target.name == f"runs.db{PARTIAL}":
             target.write_bytes(b"not what was copied")
         return digest
 
@@ -990,6 +991,35 @@ def test_an_again_refused_or_killed_after_its_clear_leaves_the_folder_unfinished
     assert after_the_refusal, "a refused again leaves the folder unfinished, never empty and his"
     assert after_the_kill, "a kill during the clear leaves the folder unfinished"
     assert report.finished, report.text
+
+
+def test_a_copy_killed_halfway_leaves_no_partial_file_and_the_next_again_finishes(
+    pc: Path,
+) -> None:
+    old = old_home(pc / "old" / ".qmx", pc)
+    before = snapshot(old)
+    target = pc / "profile" / "QMX"
+
+    def killed_halfway(source: Path, written: Path) -> str:
+        if source.name == "vault.key":
+            written.write_bytes(source.read_bytes()[: len(VAULT_KEY) // 2])
+            raise KeyboardInterrupt
+        return copy_file(source, written)
+
+    with pytest.raises(KeyboardInterrupt):
+        bring_in(old, target, place_refusal=places(pc).refusal, copy=killed_halfway)
+    partial_at_the_key = (target / "keys" / "vault.key").exists()
+    mine = target / "keys" / "my-notes.txt"
+    mine.write_text("his own file", encoding="utf-8")
+
+    report = again(old, target, place_refusal=places(pc).refusal)
+
+    assert not partial_at_the_key, "a cut copy never sits at its destination"
+    assert report.finished, report.text
+    assert (target / "keys" / "vault.key").read_bytes() == VAULT_KEY
+    assert mine.read_text(encoding="utf-8") == "his own file", "nothing of his is removed"
+    assert not list(target.rglob("*.qmx-copying"))
+    assert snapshot(old) == before
 
 
 def test_a_marker_with_no_facts_is_brought_in_again_not_a_dead_end(pc: Path) -> None:

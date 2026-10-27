@@ -33,6 +33,7 @@ characters is copied and hashed like any other.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -120,6 +121,8 @@ CLOUD_ONLY: Final = 0x0040_0000 | 0x0004_0000 | 0x0000_1000
 """FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, RECALL_ON_OPEN and OFFLINE: a file a sync client keeps
 only online. Reading it would download it into the old folder, so such a folder is refused."""
 CHUNK: Final = 1 << 20
+PARTIAL: Final = ".qmx-copying"
+"""Added to a copy's name while it is written; `again` removes only names ending in it."""
 BUSY: Final = "another first start is running on this PC; wait for it to end"
 LISTING: Final = "listing your old folder"
 COPYING: Final = "copying"
@@ -222,6 +225,20 @@ def copy_file(source: Path, target: Path) -> str:
     found = source.stat()
     os.utime(target, ns=(found.st_atime_ns, found.st_mtime_ns))
     return digest.hexdigest()
+
+
+def _placed(copy: Copier, source: Path, target: Path, sha256: str) -> bool:
+    """Copy `source` to a name of QMX's own beside `target` and rename it into place only once
+    its sha256 is `sha256`, so a copy cut short never sits at `target`. False, with the copy
+    removed, when the bytes differ."""
+    writing = target.with_name(target.name + PARTIAL)
+    if copy(source, writing) != sha256:
+        long_path(writing).unlink(missing_ok=True)
+        return False
+    if long_path(target).exists():
+        raise FileExistsError(errno.EEXIST, "File exists", str(target))
+    long_path(writing).rename(long_path(target))
+    return True
 
 
 def sha256_of(path: Path) -> str:
@@ -454,6 +471,12 @@ def _prepared(old: Path, real_old: Path, folder: Path) -> tuple[Survey, Layout]:
     clash = sorted(OURS & {place_in_tree(path) or "" for path, _, _ in survey})
     if clash:
         raise Refused(f"{old} already holds {clash[0]}, a file the bring-in writes")
+    ours = next((path for path, _, _ in survey if path.endswith(PARTIAL)), None)
+    if ours is not None:
+        raise Refused(
+            f"{old} holds {ours}, a name the bring-in gives a copy it is still writing; rename "
+            "that file, then bring your old data in again"
+        )
     _room(folder, survey)
     try:
         return survey, resolve(folder, create=True)
@@ -540,7 +563,7 @@ def _carry(
             continue
         written = layout.root / target
         long_path(written.parent).mkdir(parents=True, exist_ok=True)
-        if copy(old / entry.path, written) != entry.sha256:
+        if not _placed(copy, old / entry.path, written, entry.sha256):
             return f"{entry.path} in your old folder changed while it was copied"
         part = copied.setdefault(target.split("/", 1)[0], [0, 0])
         part[0] += 1
@@ -916,13 +939,15 @@ def _holds_only(data: Path, kept: frozenset[str]) -> bool:
 
 
 def _clear_outside_data(folder: Path, saved: Mapping[str, object]) -> None:
-    """Remove the copies the bring-in placed outside `data/`: each listed file whose copy still
-    holds the old file's bytes, then each folder it made that is left empty."""
+    """Remove the copies the bring-in placed outside `data/`: each listed file's copy still being
+    written (its name ending in `PARTIAL`), each listed file whose copy holds the old file's
+    bytes, then each folder it made that is left empty."""
     for row in cast("list[list[object]]", saved.get("files", [])):
         target = place_in_tree(str(row[0]))
         if target is None or target.startswith("data/"):
             continue
         copy = folder / target
+        long_path(copy.with_name(copy.name + PARTIAL)).unlink(missing_ok=True)
         if long_path(copy).is_file() and sha256_of(copy) == row[2]:
             long_path(copy).unlink()
     made = [place_in_tree(str(name)) for name in cast("list[object]", saved.get("folders", []))]
