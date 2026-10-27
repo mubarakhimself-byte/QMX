@@ -678,8 +678,7 @@ def _step(layout: Layout, record: _Journal, step: str) -> None:
     elif step == "labelled":
         _relabel(layout, record)
     elif step == "logged" and not any(
-        line.get("kind") == "restored" and line.get("id") == record.id
-        for line in log_lines(layout)
+        line.get("kind") == "restored" and line.get("id") == record.id for line in log_lines(layout)
     ):
         log_line(
             layout,
@@ -987,9 +986,7 @@ def _changed_since(path: Path, since: datetime) -> bool:
 
 def _states(market: Path) -> list[Path]:
     return [
-        Path(folder, "state.json")
-        for folder, _, names in os.walk(market)
-        if "state.json" in names
+        Path(folder, "state.json") for folder, _, names in os.walk(market) if "state.json" in names
     ]
 
 

@@ -334,6 +334,7 @@ def _send(
             newest is not None
             and _intended(newest) == copy.files
             and newest.header.get("keys") == keys.get("keys")
+            and all(repo.pool_has(entry.sha256) for entry in newest.entries)
         ):
             if repo.about() is None:
                 repo.set_about(_about(home_id, layout, newest))

@@ -287,7 +287,7 @@ def test_a_copy_of_a_newer_format_or_with_stores_too_new_is_refused_before_anyth
 
     with pytest.raises(RestoreRefused, match=r"copy format \(qmx-backup/2\)"):
         restore.stage(filled.layout, target, newer.stamp, keep_free=0)
-    with pytest.raises(RestoreRefused, match="run ledger at version 9.*version 7 or newer"):
+    with pytest.raises(RestoreRefused, match=r"run ledger at version 9.*version 7 or newer"):
         restore.stage(filled.layout, target, closed.stamp, keep_free=0)
 
     assert not list(filled.layout.backups.glob("restoring-*"))
@@ -313,7 +313,11 @@ def test_a_folder_refused_for_a_newer_format_opens_after_a_copy_from_before_is_r
 
     reopened = resolve(filled.layout.root)
     written = Label.parse(reopened.label.read_text(encoding="utf-8"))
-    assert (written.format_version, written.min_reader, written.last_written_by) == (2, None, "0.1.0")
+    assert (written.format_version, written.min_reader, written.last_written_by) == (
+        2,
+        None,
+        "0.1.0",
+    )
 
 
 def quick_copy(layout: Layout) -> tuple[FolderRepository, str]:
@@ -328,7 +332,9 @@ def test_a_quick_copy_skips_a_purged_blob_places_its_tombstone_and_names_it_for_
     filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
     undo, stamp = quick_copy(filled.layout)
     data = filled.layout.data
-    blob = next(p for p in filled.written_once if p.startswith("library/blobs/") and "/tomb" not in p)
+    blob = next(
+        p for p in filled.written_once if p.startswith("library/blobs/") and "/tomb" not in p
+    )
     hexdigest = blob.rpartition("/")[2]
     (data / blob).unlink()
     stone = f"library/blobs/tombstones/{hexdigest}.json"
@@ -418,9 +424,9 @@ def test_too_little_room_refuses_before_writing(
 ) -> None:
     filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
     target, stamp = sent(filled.layout, tmp_path)
-    monkeypatch.setattr(restore, "free_bytes", lambda _path: 1000)
+    monkeypatch.setattr(restore, "free_bytes", little_room)
 
-    with pytest.raises(RestoreRefused, match="needs .* MB in .* and its drive has 0 MB free"):
+    with pytest.raises(RestoreRefused, match=r"needs .* MB in .* and its drive has 0 MB free"):
         restore.stage(filled.layout, target, stamp, keep_free=0)
 
     assert not list(filled.layout.backups.glob("restoring-*"))
@@ -444,3 +450,7 @@ def test_a_second_stage_is_refused_while_one_waits_and_cancel_drops_it(tmp_path:
     assert restore.finish(filled.layout) is None
     assert listing(filled.layout.data) == before
     assert not list(filled.layout.backups.glob("restoring-*"))
+
+
+def little_room(_path: Path) -> int:
+    return 1000
