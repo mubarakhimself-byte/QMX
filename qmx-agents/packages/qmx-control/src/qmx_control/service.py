@@ -34,6 +34,9 @@ from qmx_apps.volume import Volume
 from qmx_broker.models import Broker, BrokerSettings
 from qmx_broker.sandbox import demo_refusal
 from qmx_broker.service import read_proposals
+from qmx_home import Layout
+from qmx_home.backup.plan import APP_KEYS, PlanRefused
+from qmx_home.backup.plan import parse as parse_backup_plan
 from qmx_home.versions import open_sqlite, too_new
 from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
@@ -273,6 +276,30 @@ def _data_settings(values: Document) -> Document:
             "data.holdout is on, so it needs holdout_boundary, the month it starts.",
         )
     return values
+
+
+BACKUP_PLAN_KEYS: Final = frozenset({"quick_undo", "targets", "leave_out", "drill", "keys"})
+"""The keys of `[backup]` his copies read (`qmx_home.backup.plan`); `APP_KEYS` are the rest."""
+
+
+def _check_backup_plan(values: Document, layout: Layout) -> None:
+    """Refuse a `[backup]` section his copies cannot use, naming the row, before it is saved."""
+    unknown = sorted(set(values) - BACKUP_PLAN_KEYS - APP_KEYS)
+    if unknown:
+        raise ControlError(
+            "invalid_backup_settings",
+            f"[backup] has {', '.join(unknown)}, which QMX does not know; use "
+            f"{', '.join(sorted(BACKUP_PLAN_KEYS | APP_KEYS))}",
+        )
+    try:
+        parse_backup_plan(values, layout)
+    except PlanRefused as refused:
+        raise ControlError("invalid_backup_settings", str(refused)) from refused
+
+
+def _volume_keys(values: Document) -> Document:
+    """The keys of `[backup]` the mini apps' volume backup reads."""
+    return {key: value for key, value in values.items() if key in APP_KEYS - {"repository"}}
 
 
 def _no_secrets(value: JsonValue) -> None:
@@ -849,7 +876,8 @@ class ControlService:
                     raise ControlError(
                         "invalid_settings", "Backup repository must be nonempty text."
                     )
-            app_settings = {key: value for key, value in values.items() if key != "repository"}
+            _check_backup_plan(values, Layout.from_home(self.home))
+            app_settings = _volume_keys(values)
             if app_settings:
                 BackupSettings.model_validate(app_settings).destination("validation", "validation")
         elif section in ("brokers", "connections"):
@@ -1607,9 +1635,7 @@ class ControlService:
             return self._apps
 
     def _backup_settings(self) -> BackupSettings | None:
-        values = {
-            key: value for key, value in self.settings_get("backup").items() if key != "repository"
-        }
+        values = _volume_keys(self.settings_get("backup"))
         return BackupSettings.model_validate(values) if values else None
 
     def _backup_apps(self) -> list[str]:
