@@ -358,7 +358,11 @@ def token_server() -> Generator[str]:
 
 
 def signed_in_through_for_host(
-    home: Path, memory: Memory, browser: Callable[[Redirect], Any], **inject: Any
+    home: Path,
+    memory: Memory,
+    browser: Callable[[Redirect], Any],
+    rows: tuple[dict[str, Any], ...] = (ROW,),
+    **inject: Any,
 ) -> tuple[Any, Any]:
     memory.held["qmx/ctrader-client-id", "anything"] = "4242_demo"
     memory.held["qmx/ctrader-client-secret", "anything"] = "app-pass"
@@ -366,7 +370,7 @@ def signed_in_through_for_host(
     with token_server() as token_url:
         sections = {
             "ctrader": {"redirect": aim.url, "token_url": token_url},
-            "connections": {"connections": [ROW]},
+            "connections": {"connections": list(rows)},
         }
         engine = SimpleNamespace(
             svc=SimpleNamespace(name="pc", forwarders=[]),
@@ -403,20 +407,3 @@ def test_for_host_with_injected_fakes_opens_no_real_browser_and_writes_only_the_
     assert sorted(memory.held) == [*APP_HALF, TOKENS]
     assert Tokens.from_document(memory.held[TOKENS]).access_token == "acc-1"
     assert list(tmp_path.iterdir()) == []
-
-
-def test_for_host_keeps_no_pair_when_no_cTrader_row_can_read_the_grants_accounts(
-    tmp_path: Path, his_machine: None
-) -> None:
-    memory = Memory()
-
-    started, ended = signed_in_through_for_host(tmp_path, memory, refused_in_browser)
-
-    assert started == {"state": "waiting", "home": "pc"}
-    assert ended == {
-        "state": "refused",
-        "code": "grant_unchecked",
-        "message": "set protocol_path and protocol_tag on a cTrader connection so QMX can read "
-        "this sign-in's accounts, then sign in again",
-    }
-    assert sorted(memory.held) == APP_HALF

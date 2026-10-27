@@ -43,7 +43,8 @@ from qmx_broker.credentials import (
     TargetStore,
     join_ctrader_app,
 )
-from qmx_broker.models import BrokerSettings
+from qmx_broker.ctrader_transport import CTraderTransport
+from qmx_broker.models import BrokerSettings, Connection
 from qmx_broker.oauth import (
     CONSENT_URL,
     DEFAULT_REDIRECT,
@@ -59,7 +60,7 @@ from qmx_broker.oauth import (
     exchange_code,
     urllib_fetch,
 )
-from qmx_broker.service import grant_accounts
+from qmx_broker.service import Connect, ReadRefused, grant_accounts
 from qmx_engine.service.forward import (
     PASS_HEADER,
     ForwardRefused,
@@ -90,6 +91,9 @@ HOST_PASS_ROUTES: Final = frozenset({("POST", BEGIN_ROUTE), ("POST", CODE_ROUTE)
 TOKEN_FILE: Final = "tokens.json"  # noqa: S105 - a file name
 VAULT_STORE: Final = "vault-store.json"
 CALL_TIMEOUT_S: Final = 20.0
+NO_ROW: Final = Connection(id="ctrader-sign-in", credential_ref=CTRADER_APP)
+"""What a sign-in reads a grant's accounts over before he has made a cTrader row: the demo
+endpoint and the protocol set QMX ships."""
 
 
 class Refused(Exception):
@@ -507,13 +511,16 @@ def for_host(
     open_browser: Callable[[str], object] | None = None,
     keys: TargetStore | None = None,
     accounts: Callable[[AppCredential, Tokens], Document] | None = None,
+    connect: Connect = CTraderTransport.connect,
 ) -> APIRouter:
     """The venue routes as a host mounts them: its name, pairing key, Settings and placements.
 
     This PC keeps the app copy and the pair in Credential Manager; any other host keeps the pair
-    in its owner-only file and opens the app from its own vault copy. A lane or test passes a
-    fake browser, an in-memory keyring as `keys` and a recorded account list; left out, they
-    are his browser, Credential Manager and one cTrader session.
+    in its owner-only file and opens the app from its own vault copy. A fresh grant's accounts
+    are read over the first cTrader row, or on the demo endpoint when there is none, with the
+    protocol set QMX ships unless the row names its own. A lane or test passes a fake browser,
+    an in-memory keyring as `keys`, and a recorded account list or a fake `connect`; left out,
+    they are his browser, Credential Manager and one cTrader session.
     """
     key_file = home / "vault" / "pairing-key"
 
@@ -536,26 +543,20 @@ def for_host(
 
     def one_session(app: AppCredential, tokens: Tokens) -> Document:
         saved = BrokerSettings(connections=cast("Any", list(rows())))
-        ready = [
+        rows_here = [
             connection
             for provider in saved.providers
             if provider.adapter == "ctrader"
             for connection in provider.connections
-            if connection.protocol_path and connection.protocol_tag is not None
         ]
-        if not ready:
-            raise Refused(
-                "grant_unchecked",
-                "set protocol_path and protocol_tag on a cTrader connection so QMX can read "
-                "this sign-in's accounts, then sign in again",
-            )
+        listing = rows_here[0] if rows_here else NO_ROW
         try:
-            return asyncio.run(grant_accounts(ready[0], app, tokens.access_token))
+            return asyncio.run(grant_accounts(listing, app, tokens.access_token, connect=connect))
         except Exception as error:  # the read crosses the network; its failure keeps nothing
+            why = error.line if isinstance(error, ReadRefused) else type(error).__name__
             raise Refused(
                 "grant_unchecked",
-                f"QMX could not read this sign-in's accounts ({type(error).__name__}); "
-                "sign in again",
+                f"QMX could not read this sign-in's accounts ({why}); sign in again",
             ) from None
 
     on_pc = name() == THIS_PC

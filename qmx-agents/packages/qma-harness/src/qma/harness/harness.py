@@ -412,7 +412,9 @@ class Harness:
                 write_record(home, replace(record, turn="idle"))
         loopback = test is not None and test.loopback_http_provider
         broker = BrokerService(
-            home.root, brokers=functools.partial(control.settings_get, "brokers")
+            home.root,
+            brokers=functools.partial(control.settings_get, "brokers"),
+            ctrader=functools.partial(control.settings_get, cast("Any", "ctrader")),
         )
         domain = DomainContext(root=home.root)
         domain.control, domain.library = control, control.library
