@@ -238,10 +238,12 @@ def test_two_readers_that_find_one_pair_due_refresh_it_once(tmp_path: Path, vaul
     endpoint.pause = 0.5
     answers: list[ReadEnvelope] = []
 
-    def one_reader() -> None:
-        answers.append(read(broker(tmp_path, store, endpoint)))
+    services = [broker(tmp_path, store, endpoint) for _ in range(2)]
 
-    readers = [threading.Thread(target=one_reader) for _ in range(2)]
+    def one_reader(service: BrokerService) -> None:
+        answers.append(read(service))
+
+    readers = [threading.Thread(target=one_reader, args=(service,)) for service in services]
     for reader in readers:
         reader.start()
     for reader in readers:

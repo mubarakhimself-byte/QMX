@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import os
@@ -349,7 +350,9 @@ def _take(handle: IO[bytes]) -> None:
             handle.seek(0)
             try:
                 msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError:
+            except OSError as error:
+                if error.errno not in {errno.EACCES, errno.EDEADLK}:
+                    raise
                 time.sleep(0.05)
             else:
                 return
