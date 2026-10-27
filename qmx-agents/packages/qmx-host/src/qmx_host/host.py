@@ -50,7 +50,7 @@ from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_servic
 from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qma.telemetry import configured
-from qmf.core import is_refusal
+from qmf.core import TypedRefusal, is_refusal
 from qmx_control.models import Document
 from qmx_control.node import PLACE, library_primary
 from qmx_control.primary import CARD_REF, HOLD, Flip
@@ -74,6 +74,7 @@ from qmx_engine.ledger import redact
 from qmx_engine.memory import install
 from qmx_engine.ports.harness_adapter import HarnessAdapter
 from qmx_engine.ports.library import JsonObject
+from qmx_engine.ports.library import LibraryRefused as EngineLibraryRefused
 from qmx_engine.ports.router import Refused, Reply
 from qmx_engine.ports.router import Row as EngineRow
 from qmx_engine.ports.router import adopt as adopt_router
@@ -89,6 +90,7 @@ from qmx_engine.service.rest import engine_router
 from qmx_engine.settings import PC
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_home import Layout
+from qmx_home.versions import StoreRefused
 from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
@@ -145,6 +147,13 @@ SYNC_INTERVAL_S: Final = 30.0
 `[library] sync_interval` setting raises or lowers it."""
 PAIRING_KEY: Final = "vault/pairing-key"
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
+DID_NOT_OPEN: Final = 2
+"""`serve`'s exit when a store, the engine or the Library refused to open (loose strings Appendix
+E); `__main__` exits 2 for a folder it refuses before the host starts."""
+PORT_TAKEN: Final = 4
+OPEN_REFUSALS: Final = (StoreRefused, LibraryRefused, EngineLibraryRefused)
+"""What a store, the engine's ledger or either Library side raises when it must not open. Two
+classes share the name `LibraryRefused`, one per side of the engine's Library port."""
 
 
 class HostRunning(Exception):
@@ -206,14 +215,46 @@ def serve_forever(
     library_root: Path | None = None,
     place: str = "",
 ) -> int:
+    """`serve` under the folder's lock on a port bound before anything opens. Every refusal is one
+    line on stderr and an exit code the desktop app branches on (Appendix E)."""
     try:
-        with single_instance(home):
-            record(home, port)
-            asyncio.run(serve(home, port, role, ui_origin, scrubbed, keep, library_root, place))
+        with single_instance(home), bound(TAILNET if role == "server" else LOOPBACK, port) as sock:
+            record(home, sock.getsockname()[1])
+            asyncio.run(serve(home, sock, role, ui_origin, scrubbed, keep, library_root, place))
     except (HostRunning, PlaceRefused) as refused:
         print(refused, file=sys.stderr)
         return 1
+    except PortTaken as taken:
+        print(f"QMX did not start: {taken}", file=sys.stderr)
+        return PORT_TAKEN
+    except OPEN_REFUSALS as refused:
+        print(f"QMX did not start: {' '.join(str(refused).split())}", file=sys.stderr)
+        return DID_NOT_OPEN
     return 0
+
+
+class PortTaken(Exception):
+    def __init__(self, port: int) -> None:
+        super().__init__(
+            f"port {port} is in use. Stop what holds it, or start QMX on another port."
+        )
+
+
+@contextmanager
+def bound(address: str, port: int) -> Generator[socket.socket]:
+    """The host's one socket, bound once so a taken port is found before anything opens; uvicorn
+    listens on it later. Uvicorn sets `SO_REUSEADDR` on the sockets it binds itself; on Windows
+    that lets a second bind take a port in use, so here it is set only elsewhere, where it only
+    skips `TIME_WAIT`."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if os.name != "nt":
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    with sock:
+        try:
+            sock.bind((address, port))
+        except OSError:
+            raise PortTaken(port) from None
+        yield sock
 
 
 class RelayRouter:
@@ -628,7 +669,7 @@ def own_door(role: Role, port: int) -> str:
 
 async def serve(
     home: Path,
-    port: int,
+    sock: socket.socket,
     role: Role,
     ui_origin: str,
     scrubbed: Sequence[str],
@@ -636,8 +677,9 @@ async def serve(
     library_root: Path | None = None,
     place: str = "",
 ) -> None:
-    """Assumes the caller scrubbed the environment and holds the home's lock. `place` is the
-    `--place` name setup gives a server's host."""
+    """Assumes the caller scrubbed the environment, holds the home's lock and bound `sock`, the
+    port the app answers on. `place` is the `--place` name setup gives a server's host."""
+    port: int = sock.getsockname()[1]
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
     name = placement_name(control, role, place)
@@ -665,7 +707,7 @@ async def serve(
             qmx_home,
             control=control,
             host_reads=host_reads(qmx_home, control),
-            market=door,
+            market=door if isinstance(door, MarketDoor) else None,
         )
         harness.adopt_passes(passes)
         try:
@@ -701,8 +743,11 @@ async def serve(
                         origin = ui_origin if role == "pc" else ""
                         answering = [*answering_router(home, engine), drain_router(core)]
                         answering.append(templates_router(engine))
-                        if door is not None:
-                            answering.append(market_router(door))
+                        answering.append(
+                            market_router(door)
+                            if isinstance(door, MarketDoor)
+                            else closed_market_router(door)
+                        )
                         app = compose(
                             control,
                             engine,
@@ -713,7 +758,8 @@ async def serve(
                             passes,
                             library_service(home, store, serving, bearer),
                         )
-                        app_host = TAILNET if serving else "127.0.0.1"
+                        # Uvicorn's started line reads its host and port from the config.
+                        app_host = TAILNET if serving else LOOPBACK
                         server = uvicorn.Server(uvicorn.Config(app, host=app_host, port=port))
                         beating = asyncio.create_task(
                             heartbeats(home, name, control, harness, engine, link)
@@ -727,7 +773,7 @@ async def serve(
                             else None
                         )
                         try:
-                            await server.serve()
+                            await server.serve(sockets=[sock])
                         finally:
                             for task in (beating, exporting, holding, syncing):
                                 if task is None:
@@ -936,12 +982,13 @@ def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forw
     ]
 
 
-def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor | None:
+def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor | TypedRefusal:
     """This machine's market-data door, open with no holdout by default (AD-28, ruling 137).
 
-    It is None only for a store it cannot read or a `[data]` it cannot use, and the log line
-    says which. The door reads `[data]` live, so a holdout turned on in Settings reaches the
-    next read, and the door at `[library] primary` serves the final look.
+    It is refused only for a store it cannot read or a `[data]` it cannot use, and the log line
+    says which; the host then answers every data route with that refusal. The door reads `[data]`
+    live, so a holdout turned on in Settings reaches the next read, and the door at `[library]
+    primary` serves the final look.
     """
     root = home / MARKET
     built = MarketDoor.open(
@@ -953,12 +1000,40 @@ def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor |
         settings=lambda: section(control, "data"),
     )
     if is_refusal(built):
-        print(
-            f"market-data: the door did not open: {built.category} {dict(built.context)}",
-            file=sys.stderr,
-        )
-        return None
+        print(f"market-data: {shut_line(built)} {dict(built.context)}", file=sys.stderr)
+        return built
     return built.value
+
+
+def shut_line(refusal: TypedRefusal) -> str:
+    """What a shut price door says, in plain words: what is wrong and what to do."""
+    reason = refusal.context.get("reason") or refusal.category
+    field = refusal.context.get("field")
+    if field is None:
+        return f"QMX's market data did not open: {reason}. Fix that and restart QMX."
+    return (
+        f"QMX's market data did not open because [data] {field} in Settings cannot be used: "
+        f"{reason}. Fix it in Settings and restart QMX."
+    )
+
+
+def closed_market_router(refusal: TypedRefusal) -> APIRouter:
+    """Every `/api/data/*` route of a door that did not open: 503 with the door's own refusal
+    shape and its line, so the UI reads one shape for the whole route family."""
+    router = APIRouter()
+    detail = {
+        "refused": str(refusal.category),
+        "retryability": str(refusal.retryability),
+        "context": dict(refusal.context),
+        "line": shut_line(refusal),
+    }
+
+    @router.api_route("/api/data/{rest:path}", methods=["GET", "POST"])
+    def shut() -> None:
+        raise HTTPException(503, detail)
+
+    _ = shut
+    return router
 
 
 def answering_router(home: Path, engine: EngineDoor) -> list[APIRouter]:
@@ -1169,18 +1244,19 @@ def start(
     place: str = "",
 ) -> int:
     """`serve` in a background process, once it answers `/api/health`. The child is given the
-    QMX folder, which it resolves again, and writes to the folder's `logs/host.log`."""
+    QMX folder, which it resolves again, and writes to the folder's `logs/host.log`. A child that
+    exits first has its last line repeated and its exit code returned, the codes `serve` uses."""
     layout = Layout.from_home(home)
     running = recorded_host(home)
     if running is not None:
         print(HostRunning(home, running), file=sys.stderr)
         return 1
-    with socket.socket() as probe:
-        try:
-            probe.bind(("127.0.0.1", port))
-        except OSError:
-            print(f"Port {port} is already occupied.", file=sys.stderr)
-            return 1
+    try:
+        with bound(LOOPBACK, port):
+            pass
+    except PortTaken as taken:
+        print(f"QMX did not start: {taken}", file=sys.stderr)
+        return PORT_TAKEN
     command = [sys.executable, "-m", "qmx_host", "serve", "--home", str(layout.root)]
     command += ["--port", str(port)]
     command += ["--role", role, "--ui-origin", ui_origin]
@@ -1191,6 +1267,7 @@ def start(
     host_log = layout.logs / "host.log"
     host_log.parent.mkdir(parents=True, exist_ok=True)
     with host_log.open("ab") as log:
+        written = log.tell()
         process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
@@ -1200,9 +1277,15 @@ def start(
         )
     deadline = time.monotonic() + START_S
     while time.monotonic() < deadline:
-        if process.poll() is not None:
+        if (code := process.poll()) is not None:
+            with host_log.open("rb") as log:
+                log.seek(written)
+                said = log.read().decode("utf-8", "replace").splitlines()
+            last = next((line for line in reversed(said) if line.strip()), None)
+            if last is not None:
+                print(last, file=sys.stderr)
             print(f"The host failed to start; see {host_log}.", file=sys.stderr)
-            return 1
+            return code or 1
         pid = health(port, home)
         if pid is not None and pid == recorded_host(home):
             print(f"Started qmx_host as PID {pid} on port {port}.")

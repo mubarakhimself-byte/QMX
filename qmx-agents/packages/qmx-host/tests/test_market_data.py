@@ -10,7 +10,7 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from qmf.core import CalendarIdentity, World, is_ok, is_refusal
+from qmf.core import CalendarIdentity, TypedRefusal, World, is_ok, is_refusal
 from qmf.data.series import SeriesKey
 from qmf.data.splits import SplitBoundary, SplitManifest
 from qmf.data.store.engines.typed import TypedWriter
@@ -292,7 +292,7 @@ def test_a_stored_month_before_1970_is_named_and_the_host_still_starts(
         '[data]\nholdout = true\nholdout_boundary = "0000-01"\n', encoding="utf-8"
     )
     door = market_door(tmp_path, ControlService(tmp_path), "pc")
-    assert door is None
+    assert isinstance(door, TypedRefusal)
     said = capsys.readouterr().err
     assert "holdout_boundary" in said
     assert "0000-01" in said

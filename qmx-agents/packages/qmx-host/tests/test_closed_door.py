@@ -12,7 +12,6 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.testclient import TestClient
 from qma.harness import QmxHome, control_service
-from qmf.core import is_refusal
 from qmx_engine.control_door import EngineDoor
 from qmx_engine.ledger import redact
 from qmx_home import resolve
@@ -20,7 +19,7 @@ from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.store import Store
 
 from qmx_host.host import closed_market_router, compose, market_door
-from qmx_host.market_data import market_router
+from qmx_host.market_data import MarketDoor, market_router
 
 KEY = "closed-door-check"
 BEARER = {"Authorization": f"Bearer {KEY}"}
@@ -45,7 +44,9 @@ def hosted(folder: Path, data: str) -> Generator[TestClient]:
     (home / "settings.toml").write_text(f"[data]\n{data}", encoding="utf-8")
     control = control_service(QmxHome(home))
     door = market_door(home, control, "pc")
-    data_api: APIRouter = closed_market_router(door) if is_refusal(door) else market_router(door)
+    data_api: APIRouter = (
+        market_router(door) if isinstance(door, MarketDoor) else closed_market_router(door)
+    )
     opened: list[EngineDoor] = []
     ready, stop = threading.Event(), threading.Event()
 
