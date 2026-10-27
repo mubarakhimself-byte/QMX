@@ -375,3 +375,69 @@ def test_a_round_another_folder_sent_to_the_target_is_refused_until_he_carries_o
     backups.carry_on("usb")
     assert results(finished(backups, backups.sweep()))["usb"] == "copied"
     assert incident(layout, "usb") is None
+
+
+def test_a_round_that_stops_with_an_unexpected_error_is_logged_raised_and_tried_an_hour_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layout, clock = folder(tmp_path / "QMX"), Clock()
+    backups = service(layout, clock)
+    backups.control.settings_put("backup", {"targets": [target(tmp_path / "usb")]})
+
+    def denied(*_args: object, **_kwargs: object) -> object:
+        raise PermissionError(13, "Permission denied", "D:/QMX/data/notes")
+
+    monkeypatch.setattr("qmx_home.backup.round.make", denied)
+
+    stopped = finished(backups, backups.sweep())
+
+    line = (
+        "the round stopped with an error: PermissionError: [Errno 13] Permission denied: "
+        "'D:/QMX/data/notes'; QMX tries again in an hour"
+    )
+    assert (stopped.state, stopped.line) == ("stopped", line)
+    places = cast("list[dict[str, object]]", log_lines(layout)[-1]["places"])
+    assert [(p["id"], p["result"]) for p in places] == [("quick", "refused"), ("usb", "skipped")]
+    assert incident(layout, "quick") == ("refused", 1, line)
+    clock.advance(minutes=1)
+    assert backups.sweep() is None
+
+    monkeypatch.undo()
+    clock.advance(minutes=60)
+    assert results(finished(backups, backups.sweep())) == {"quick": "copied", "usb": "copied"}
+    assert incident(layout, "quick") is None
+
+
+def test_after_a_restart_the_incident_of_a_place_no_longer_in_settings_is_resolved_saying_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layout, clock = folder(tmp_path / "QMX"), Clock()
+    usb = tmp_path / "usb"
+    backups = service(layout, clock)
+    backups.control.settings_put("backup", {"targets": [target(usb)]})
+    room = FolderRepository.room
+
+    def full(repo: FolderRepository) -> int:
+        return 0 if usb in repo.root.parents else room(repo)
+
+    monkeypatch.setattr(FolderRepository, "room", full)
+    assert results(finished(backups, backups.sweep()))["usb"] == "refused"
+    assert incident(layout, "usb") is not None
+    backups.control.settings_put("backup", {})
+
+    restarted = service(layout, clock)
+    clock.advance(minutes=5)
+    restarted.sweep()
+
+    with InboxTable.open(layout.home) as inbox:
+        rows = inbox.connection.execute(
+            "SELECT trigger_id, cause, resolved_at IS NOT NULL FROM incidents"
+            " WHERE trigger_id = 'backup:usb'"
+        ).fetchall()
+    assert rows == [
+        (
+            "backup:usb",
+            "the backup place usb is no longer in Settings, so QMX no longer copies there",
+            1,
+        )
+    ]

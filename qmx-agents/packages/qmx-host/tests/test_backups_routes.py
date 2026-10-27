@@ -19,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from qmx_control.server import create_app
 from qmx_home.backup.plan import NO_SECOND_DRIVE
+from qmx_home.files import hold
 from test_backups_service import Clock, folder, proposing, service, target
 
 from qmx_host import backups as module
@@ -194,3 +195,21 @@ def test_health_answers_in_under_a_second_all_through_a_round(tmp_path: Path) ->
     assert max(waits) < 1.0, (
         f"slowest health {max(waits):.3f} s, median {statistics.median(waits):.3f} s"
     )
+
+
+def test_a_round_asked_for_while_the_command_line_round_holds_the_folder_is_409(
+    tmp_path: Path,
+) -> None:
+    layout = folder(tmp_path / "QMX")
+    backups = service(layout, Clock())
+    with TestClient(app_of(backups)) as rest, hold(layout.backups / "backups.lock", "busy"):
+        refused = rest.post("/api/backups/run", headers=BEARER)
+        swept = backups.sweep()
+    assert (refused.status_code, refused.json()) == (
+        409,
+        {
+            "detail": "a backup round from the command line (python -m qmx_host backup) is "
+            f"copying {layout.root}; it ends by itself, then ask again"
+        },
+    )
+    assert (swept, backups.jobs.latest("backup")) == (None, None)

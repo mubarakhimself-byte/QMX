@@ -51,7 +51,11 @@ from qmx_home.backup.plan import (
 )
 from qmx_home.backup.repository import FolderRepository, Repository, Unreadable
 from qmx_home.backup.round import (
+    LOCK,
     QUICK,
+    STAMP,
+    Placed,
+    RoundReport,
     SealedKeys,
     _last,  # pyright: ignore[reportPrivateUsage] - the round's own record of a place's last copy
     _target_key,  # pyright: ignore[reportPrivateUsage] - and the key it logs a place under
@@ -59,8 +63,8 @@ from qmx_home.backup.round import (
     due,
     run_round,
 )
-from qmx_home.files import Busy
-from qmx_home.versions import log_lines
+from qmx_home.files import Busy, hold, plain
+from qmx_home.versions import log_line, log_lines
 
 from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped
 
@@ -84,6 +88,7 @@ SETTINGS: Final = "settings"
 PROPOSAL_S: Final = 3600.0
 """How long a measured proposal is shown before the drives are measured again."""
 DEFAULT_TARGET: Final = "second-drive"
+CLI_BUSY: Final = "a backup round from the command line holds this folder"
 NOT_A_FOLDER: Final = (
     "this home is not a QMX folder (it has no qmx-home.toml), so QMX makes no copies of it"
 )
@@ -238,6 +243,8 @@ class Backups:
         self.jobs = Jobs()
         self._asked: dict[str, bool] = {}
         self._raised: dict[str, Signature | None] = {}
+        self._reconciled = False
+        """Whether this process resolved the incidents of places removed while it was down."""
         self._raising = threading.Lock()
         self._quick_bytes: int | None = None
         self._proposed: tuple[float, Proposal | None] | None = None
@@ -277,14 +284,22 @@ class Backups:
         )
         if not (quick_due or ready):
             return None
-        started = self.start(None, asked=False)
+        try:
+            started = self.start(None, asked=False)
+        except Refusal:
+            return None
         return started.job if started.new else None
 
     def start(self, only: str | None, *, asked: bool) -> Started:
         """A round as a `backup` job (to `only`, due or not, when named), or the round that
-        already runs. Raises Refusal when `only` is not a place in Settings."""
+        already runs. Raises Refusal when the home is not a QMX folder, when `only` is not a place
+        in Settings, and while a round from the command line holds the folder."""
+        if not self.layout.label.is_file():
+            raise Refusal(NOT_A_FOLDER)
         if only is not None:
             self._target(self.plan(), only)
+        if self._running() is None:
+            self._unheld()
         started = self.jobs.start(KIND, lambda progress: self._round(only, progress))
         if started.new:
             self._asked[started.job.id] = asked
@@ -296,6 +311,17 @@ class Backups:
             f"a backup round is already running (job {job.id}, {who}); it ends by itself, "
             "then ask again"
         )
+
+    def _unheld(self) -> None:
+        """Raise Refusal while a round from the command line holds the folder's backup lock."""
+        try:
+            with hold(self.layout.backups / LOCK, CLI_BUSY):
+                pass
+        except Busy:
+            raise Refusal(
+                "a backup round from the command line (python -m qmx_host backup) is copying "
+                f"{self.layout.root}; it ends by itself, then ask again"
+            ) from None
 
     def _round(self, only: str | None, progress: Progress) -> Mapping[str, object]:
         try:
@@ -310,9 +336,46 @@ class Backups:
             )
         except (Busy, PlanRefused) as refused:
             raise Stopped(str(refused)) from None
+        except Exception as error:  # a round that broke is logged like one that refused
+            line = (
+                f"the round stopped with an error: {type(error).__name__}: {error}; QMX tries "
+                "again in an hour"
+            )
+            self._log_failed(only, line)
+            raise Stopped(line) from None
         finally:
             self._settle()
         return report.document()
+
+    def _log_failed(self, only: str | None, line: str) -> None:
+        """A round line for a round that broke: the quick undo refused with `line`, and each place
+        the round was to send to skipped, so the hourly retry and the incidents read it as they
+        read a refusal."""
+        now = self.clock()
+        try:
+            plan = self.plan()
+        except PlanRefused:
+            plan = Plan()
+        log, home_id = log_lines(self.layout), self._home_id()
+        quick = FolderRepository(self.layout.backups / QUICK)
+        places = [Placed(QUICK, quick.where, "refused", line)]
+        for target in plan.targets:
+            key = _target_key(target, home_id)
+            if target.id == only or (
+                only is None and target.on and due(_last(log, key), now, target.every, target.at)
+            ):
+                where = plain(target.path)
+                places.append(
+                    Placed(
+                        target.id,
+                        where,
+                        "skipped",
+                        f"no copy was made, so none went to {where}",
+                        key,
+                    )
+                )
+        stamp = now.astimezone(UTC).strftime(STAMP)
+        log_line(self.layout, RoundReport(stamp, "round", tuple(places), 0.0).document())
 
     def _settle(self) -> None:
         """After a round: the quick undo's size, and the incidents the log now calls for."""
@@ -348,11 +411,9 @@ class Backups:
                 if place not in self._raised
                 or self._raised[place] != (concern.signature if concern else None)
             }
-            gone = (
-                [p for p, s in self._raised.items() if p not in wanted and s is not None]
-                if every_place
-                else []
-            )
+            gone: set[str] = set()
+            if every_place:
+                gone = {p for p, s in self._raised.items() if p not in wanted and s is not None}
             if not changed and not gone:
                 return
             at = self.clock().astimezone(UTC).isoformat()
@@ -368,8 +429,20 @@ class Backups:
                             trigger, concern.signature, _title(place), concern.line, at=at
                         )
                     self._raised[place] = concern.signature if concern else None
+                if every_place and not self._reconciled:
+                    gone |= {p for p in _open_places(inbox) if p not in wanted}
+                    self._reconciled = True
                 for place in gone:
-                    inbox.resolve_incident(f"backup:{place}", at=at)
+                    inbox.connection.execute(
+                        "UPDATE incidents SET cause = ?, resolved_at = ?"
+                        " WHERE trigger_id = ? AND resolved_at IS NULL",
+                        (
+                            f"the backup place {place} is no longer in Settings, so QMX no longer "
+                            "copies there",
+                            at,
+                            f"backup:{place}",
+                        ),
+                    )
                     self._raised[place] = None
 
     def _running(self) -> Job | None:
@@ -640,6 +713,15 @@ def _skipped_with_quick(log: Sequence[Mapping[str, object]]) -> str:
     if not skipped:
         return ""
     return f"; the last round made no copy, so none went to {', '.join(skipped)} either"
+
+
+def _open_places(inbox: InboxTable) -> set[str]:
+    """The places with an open `backup:<place>` incident. The inbox table has no reader of
+    incidents by prefix, so this reads its `incidents` rows."""
+    rows = inbox.connection.execute(
+        "SELECT trigger_id FROM incidents WHERE trigger_id LIKE 'backup:%' AND resolved_at IS NULL"
+    ).fetchall()
+    return {str(row[0]).removeprefix("backup:") for row in rows}
 
 
 def _title(place: str) -> str:
