@@ -13,7 +13,7 @@ from qmx_home import NoQmxFolder, pointer_file, resolve
 
 REFUSAL = "no QMX folder found: start QMX once, or pass --home"
 PROGRAMS = {
-    "host": (["-m", "qmx_host", "status"], 2),
+    "host": (["-m", "qmx_host", "status"], 3),
     "console": (["-m", "qma.console"], 2),
     "engine": (["-m", "qmx_engine", "templates", "list"], 1),
     "node pair": (["-c", "from qmx_control.node import main; main()", "node", "pair"], 2),

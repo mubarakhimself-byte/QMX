@@ -231,6 +231,62 @@ def test_qmx_home_naming_a_missing_folder_refuses(
     )
 
 
+def kind_of(flag: Path | None = None, *, create: bool = False) -> tuple[str, Path | None]:
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(flag, create=create, drives=[])
+    return refused.value.kind, refused.value.folder
+
+
+def test_each_refusal_says_whether_nothing_was_found_old_data_was_or_a_folder_was_refused(
+    profile: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flat = folder(tmp_path / "flat", labelled=False)
+    (flat / "control.db").write_text("", encoding="utf-8")
+    empty = folder(tmp_path / "empty", labelled=False)
+    newer = folder(tmp_path / "newer", labelled=False)
+    newer_label = Label("0193aaaa-0000-7000-8000-000000000000", 3, "9.0.0", "9.0.0", min_reader=3)
+    (newer / LABEL).write_text(newer_label.dump(), encoding="utf-8")
+    nested = folder(tmp_path / "home") / "data"
+    nested.mkdir()
+    documents = folder(tmp_path / "Documents", labelled=False)
+    (documents / "cv.docx").write_text("cv", encoding="utf-8")
+
+    found = {
+        "nothing": kind_of(),
+        "typo": kind_of(tmp_path / "typo"),
+        "empty": kind_of(empty),
+        "flat": kind_of(flat),
+        "newer": kind_of(newer),
+        "nested": kind_of(nested),
+        "documents": kind_of(documents),
+        "create without a flag": kind_of(create=True),
+    }
+    monkeypatch.setenv("QMX_HOME", str(tmp_path / "gone"))
+    found["QMX_HOME"] = kind_of()
+
+    assert found == {
+        "nothing": ("missing", None),
+        "typo": ("missing", (tmp_path / "typo").resolve()),
+        "empty": ("missing", empty),
+        "flat": ("old", flat),
+        "newer": ("refused", newer),
+        "nested": ("refused", nested.resolve()),
+        "documents": ("refused", documents),
+        "create without a flag": ("refused", None),
+        "QMX_HOME": ("refused", (tmp_path / "gone").resolve()),
+    }
+
+
+def test_an_unreadable_pointer_is_refused_not_missing(profile: Path) -> None:
+    pointer = pointer_file()
+    assert pointer is not None
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text("recent = []\n", encoding="utf-8")
+
+    assert kind_of() == ("refused", None)
+    assert NoQmxFolder("a line raised elsewhere").kind == "refused"
+
+
 def test_a_label_reads_back_what_it_wrote() -> None:
     label = Label("0193aaaa-0000-7000-8000-000000000000", 2, "0.1.0", "0.2.0")
 

@@ -120,6 +120,7 @@ from qmx_host.bring_in import recheck_at_start
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
+from qmx_host.process_record import STATE, recorded_host
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 
@@ -131,8 +132,6 @@ LOCK: Final = "engine.lock"
 LIBRARY: Final = "library"
 MARKET: Final = "market"
 """The home's market-data root: the price partitions the door writes, and its handles (AD-28)."""
-STATE: Final = "control-process.json"
-"""The running host's pid, port and start time, for `status`, `stop` and the refusal line."""
 START_S: Final = 30.0
 HOST_HISTORY: Final = 10
 """The host rows `ops_heartbeats` returns beside the newest row per subject: five minutes at the
@@ -194,21 +193,6 @@ def record(home: Path, port: int) -> None:
     me = psutil.Process()
     state = {"pid": me.pid, "port": port, "created": me.create_time()}
     (home / STATE).write_text(json.dumps(state), encoding="utf-8")
-
-
-def recorded_host(home: Path) -> int | None:
-    """The pid of the live host the home's record names, or None."""
-    try:
-        state = json.loads((home / STATE).read_text(encoding="utf-8"))
-        pid, created = state["pid"], state["created"]
-    except OSError, ValueError, KeyError, TypeError:
-        return None
-    if not isinstance(pid, int):
-        return None
-    try:
-        return pid if psutil.Process(pid).create_time() == created else None
-    except psutil.Error:
-        return None
 
 
 def serve_forever(

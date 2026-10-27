@@ -24,7 +24,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path, PureWindowsPath
-from typing import Final, cast
+from typing import Final, Literal, cast
 
 from qmx_home.stores import STORES
 
@@ -89,8 +89,20 @@ PROFILE_FILE: Final = "NTUSER.DAT"
 """The registry hive at the top of every Windows user profile."""
 
 
+type NotOpened = Literal["missing", "old", "refused"]
+"""Why no folder opened: none was found (`missing`), the folder holds his old flat data (`old`),
+or a folder was found and refused (`refused`), where his data may sit, so the first start must
+never offer to make a second folder beside it (ruling 141)."""
+
+
 class NoQmxFolder(Exception):
-    """No QMX folder could be found or made. The message is the one line a command prints."""
+    """No QMX folder could be found or made. The message is the one line a command prints;
+    `folder` is the folder the line is about, when there is one."""
+
+    def __init__(self, line: str, kind: NotOpened = "refused", folder: Path | None = None) -> None:
+        super().__init__(line)
+        self.kind: NotOpened = kind
+        self.folder = folder
 
 
 class LayoutRefused(Exception):
@@ -289,17 +301,17 @@ def resolve(
         root = flag.resolve()
         ancestor = _labelled_ancestor(root)
         if ancestor is not None:
-            raise NoQmxFolder(_nested(root, ancestor))
+            raise NoQmxFolder(_nested(root, ancestor), folder=root)
         if create:
             _make(root)
         if not root.is_dir():
-            raise NoQmxFolder(f"no QMX folder at {root}")
+            raise NoQmxFolder(f"no QMX folder at {root}", "missing", root)
         return _opened(root)
     named = os.environ.get("QMX_HOME")
     if named:
         root = Path(named).resolve()
         if not root.is_dir():
-            raise NoQmxFolder(f"QMX_HOME names {root}, which is not a folder")
+            raise NoQmxFolder(f"QMX_HOME names {root}, which is not a folder", folder=root)
         return _opened(root)
     pointed = _pointed()
     if pointed is not None:
@@ -308,14 +320,14 @@ def resolve(
     for candidate in dict.fromkeys([_default_root(fixed), *(d / "QMX" for d in fixed)]):
         if _label(candidate) is not None:
             return _opened(candidate.resolve())
-    raise NoQmxFolder(NOT_FOUND)
+    raise NoQmxFolder(NOT_FOUND, "missing")
 
 
 def _opened(root: Path) -> Layout:
     label = _label(root)
     ancestor = _labelled_ancestor(root)
     if ancestor is not None:
-        raise NoQmxFolder(_nested(root, ancestor))
+        raise NoQmxFolder(_nested(root, ancestor), folder=root)
     if label is not None and opens(label):
         return Layout(root)
     if label is not None and label.format_version > TREE:
@@ -323,17 +335,23 @@ def _opened(root: Path) -> Layout:
             f"{root} was written by QMX {label.last_written_by} (folder format "
             f"{label.format_version}). This QMX reads folder format {TREE}, and this folder "
             f"needs a QMX that reads format {label.reader_floor} or newer. Install that QMX, or "
-            f"restore the copy taken before the upgrade from {root / 'backups'}"
+            f"restore the copy taken before the upgrade from {root / 'backups'}",
+            folder=root,
         )
     if label is None and not any(root.iterdir()):
-        raise NoQmxFolder(f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)")
+        raise NoQmxFolder(
+            f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)",
+            "missing",
+            root,
+        )
     refused = _refusal(root, label) if label is None or label.format_version == FLAT else None
     if refused is not None:
-        raise NoQmxFolder(refused)
+        raise NoQmxFolder(refused, folder=root)
     if label is None or label.format_version == FLAT:
-        raise NoQmxFolder(old_flat(root))
+        raise NoQmxFolder(old_flat(root), "old", root)
     raise NoQmxFolder(
-        f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read"
+        f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read",
+        folder=root,
     )
 
 
@@ -366,7 +384,9 @@ def _make(root: Path) -> None:
             (root / part).mkdir(parents=True, exist_ok=True)
         _write_label(root, Label.mint())
     except OSError as refused:
-        raise NoQmxFolder(f"cannot make a QMX folder at {root}: {refused.strerror}") from None
+        raise NoQmxFolder(
+            f"cannot make a QMX folder at {root}: {refused.strerror}", folder=root
+        ) from None
 
 
 def _write_label(root: Path, label: Label) -> None:
