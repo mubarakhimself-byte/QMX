@@ -24,9 +24,11 @@ from test_templates import CLIPPINGS, CRYSTALLISE, DIGEST, PACK, answers
 
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.store import Reader
-from qmx_engine.ports.library import Bundle, JsonObject
+from qmx_engine.ports.library import MAIN, Bundle, JsonObject
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
+from qmx_engine.templates.catalog import find
+from qmx_engine.templates.install import install
 
 FIXTURE: JsonObject = {"fixture": True}
 
@@ -172,3 +174,29 @@ def test_the_revolution_brief_names_the_fixture_only_in_a_fixture_run_and_needs_
     )
 
     assert printed in done.stdout
+
+
+def test_an_install_test_runs_fixture_clipping_is_archived_and_a_live_runs_clipping_is_found(
+    real: tuple[EngineService, Store], tmp_path: Path
+) -> None:
+    svc, store = real
+    asyncio.run(install(svc, [find("clippings-into-research")]))
+    version = svc.ctx.library.objects("clippings-into-research", "workflow", MAIN)[-1].object_id
+    folder = tmp_path / "clippings"
+    folder.mkdir()
+    (folder / "carry.md").write_text("# Carry trade unwind notes\n\nFunding moved.\n", "utf-8")
+    view = asyncio.run(svc.runs.start(version, caller=OPERATOR, inputs={"folder": str(folder)}))
+    stored = stored_by(svc, view.run_id)
+
+    def found(text: str, *, archived: bool = False) -> set[str]:
+        hits = store.search(store.engine, text, kind="artifact", include_archived=archived)
+        return {hit.object_id for hit in hits if hit.object_id not in stored}
+
+    assert view.status == "passed"
+    assert found("London breakout") == set()
+    assert sorted(
+        str(svc.ctx.library.get(o).fields["type"]) for o in found("London breakout", archived=True)
+    ) == ["clipping", "run-file"]
+    assert {hit.object_id for hit in store.search(store.engine, "Carry trade unwind")} >= set(
+        stored
+    )

@@ -21,6 +21,7 @@ from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.nodes.base import Failed, NodeJob, NodeResult, Ok, Waiting
 from qmx_engine.ports.library import Bundle
+from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.runner import Engine, Outcome
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.workers.local import AnyExecutor
@@ -143,10 +144,15 @@ class Flow:
         """Run `scenario` on an engine over this flow's home, and wait for any child it left."""
 
         async def go() -> T:
-            with Ledger.open(self.home) as ledger, InboxTable.open(self.home) as inbox:
+            with (
+                Ledger.open(self.home) as ledger,
+                InboxTable.open(self.home) as inbox,
+                LibraryFake.open(self.home) as library,
+            ):
                 engine = Engine(
                     self.home,
                     ledger,
+                    library=library,
                     settings=self.settings,
                     wall=lambda: self.wall,
                     executors=self.executors,
@@ -240,8 +246,8 @@ def run_folder(
     assert not isinstance(found, list), found
 
     async def go() -> Outcome:
-        with Ledger.open(home) as ledger:
-            engine = Engine(home, ledger, settings={**DEFAULTS, **settings})
+        with Ledger.open(home) as ledger, LibraryFake.open(home) as library:
+            engine = Engine(home, ledger, settings={**DEFAULTS, **settings}, library=library)
             outcome = await engine.start(root, found[1], mode="test", inputs=inputs)
             await engine.settle()
             return outcome
