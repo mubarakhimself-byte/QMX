@@ -63,6 +63,8 @@ CODES: Final = {
 }
 """Library refusal codes as the engine names them; any other code passes through."""
 FILES: Final = "files/"
+DERIVED_FROM: Final = "derived-from"
+"""The edge a memory row written from other rows has to each of them, as `consolidate` writes."""
 MAIN_BLOB: Final = {"workflow": "definition", "artifact": "content"}
 
 
@@ -377,11 +379,29 @@ class EngineLibraryAdapter:
         )
 
     def _archive_samples(self, run_id: str, made_by: str) -> None:
+        """The run's artifacts but its trace, its memory rows, and every row derived only from
+        those rows, such as a consolidated or `built` row in another scope."""
+        rows: set[str] = set()
+        samples: list[str] = []
         for item, head in self.store.heads_on(runs_ref(run_id)):
             view = self.store.get(self.store.engine, head)
+            if view.kind == "memory-row":
+                rows.add(head)
+                samples.append(item)
+            elif view.kind == "artifact" and view.fields.get("type") != "trace":
+                samples.append(item)
+        derived = {
+            source
+            for row in rows
+            for source, edge, *_ in self.store.edges_of(row, reverse=True)
+            if edge == DERIVED_FROM
+        }
+        for source in derived:
+            edges = self.store.edges_of(source, reverse=False)
+            if all(to in rows for _, edge, to, *_ in edges if edge == DERIVED_FROM):
+                samples.append(self.store.get(self.store.engine, source).item)
+        for item in samples:
             archived = self.store.head(item, state_ref(item))
-            if view.kind != "artifact" or view.fields.get("type") == "trace":
-                continue
             if archived is None or archived[0] != "archived":
                 self.store.archive(self.store.engine, item, f"made by a {made_by} run")
 

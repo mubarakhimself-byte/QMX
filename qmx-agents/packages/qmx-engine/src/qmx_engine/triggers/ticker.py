@@ -61,7 +61,7 @@ from qmx_engine.runner import Engine, Outcome, new_run_id, workspace
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context, Refused
 from qmx_engine.service.explain import TriggerFacts, explain_trigger
-from qmx_engine.service.runs import Runs, fire_after, run_bundle, summarize_again
+from qmx_engine.service.runs import Runs, fire_after, run_bundle, summarize_resumed
 from qmx_engine.triggers.claims import (
     Claimed,
     Lease,
@@ -284,7 +284,7 @@ class Scheduler:
         ledger.write(end_wake(run_id, self.claimant))
         if outcome is None:
             return
-        summarize_again(self.ctx, outcome)
+        summarize_resumed(self.ctx, outcome)
         held = self._fire_of_run(run_id)
         if held is not None:
             self._ended(*held, outcome)
@@ -308,6 +308,7 @@ class Scheduler:
         try:
             if fire.status == "running" and fire.run_id is not None and self._exists(fire.run_id):
                 outcome = await self.engine.resume(fire.run_id)
+                summarize_resumed(self.ctx, outcome)
                 self._ended(fire, trigger, outcome)
                 fire_after(self.ctx, outcome, trigger.workflow_item)
                 return
