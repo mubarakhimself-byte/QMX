@@ -224,15 +224,57 @@ def _row(
 
 BROKER_ROWS: Final = (
     _row("broker_read", "accounts", "broker", "list_accounts", "read"),
-    _row("broker_read", "account_state", "broker", "account_state", "read"),
-    _row("broker_read", "positions", "broker", "positions", "read"),
-    _row("broker_read", "quotes", "broker", "quotes", "read"),
-    _row("broker_read", "symbol_info", "broker", "symbol_info", "read"),
-    _row("broker_read", "bars", "broker", "bars", "read"),
+    _row(
+        "broker_read",
+        "account_state",
+        "broker",
+        "account_state",
+        "read",
+        "Read one account's balances and leverage. The answer's `environment` says demo or live: a"
+        " demo balance is not real money, so say demo beside any demo figure you report.",
+    ),
+    _row(
+        "broker_read",
+        "positions",
+        "broker",
+        "positions",
+        "read",
+        "Read one account's open positions or spot holdings. The answer's `environment` says demo"
+        " or live: demo positions hold no real money, so say demo beside them.",
+    ),
+    _row(
+        "broker_read",
+        "quotes",
+        "broker",
+        "quotes",
+        "read",
+        "Read a timestamped bid/ask quote for an account symbol. The answer's `environment` says"
+        " demo or live: a demo server's prices can differ from live ones.",
+    ),
+    _row(
+        "broker_read",
+        "symbol_info",
+        "broker",
+        "symbol_info",
+        "read",
+        "Read an account symbol's precision and limits; they grant no order authority. The"
+        " answer's `environment` says demo or live.",
+    ),
+    _row(
+        "broker_read",
+        "bars",
+        "broker",
+        "bars",
+        "read",
+        "Read every bar of an account symbol within explicit UTC millisecond bounds; pass `limit`"
+        " to stop early. The answer's `environment` says demo or live: a demo server's bars can"
+        " differ from live ones.",
+    ),
     _row("node", "propose_order", "broker", "propose_order", "propose_money"),
 )
-"""`qmx_broker.server` tools by name. `propose_order` writes an unsigned proposal and always
-asks; nothing in the catalog places, amends or cancels an order."""
+"""`qmx_broker.server` tools by name. Every account read's answer is stamped demo or live, and its
+description says so, because a demo figure is never real money. `propose_order` writes an unsigned
+proposal and always asks; nothing in the catalog places, amends or cancels an order."""
 
 DOMAIN_ROWS: Final = (
     _row("data", "instruments", "domain_fn", "list_instruments", "read"),
@@ -824,7 +866,7 @@ def spill(
 ) -> str:
     """`text` when it fits `row.max_chars`; else the whole answer saved as a Library artifact
     (the control `library.db` until the Library store lands) and its head, tail and id, with
-    `keep` (a list's cursor) beside them."""
+    `keep` (a list's cursor, a broker read's demo-or-live stamp) beside them."""
     if len(text) <= row.max_chars:
         return text
     saved = save(
