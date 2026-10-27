@@ -15,7 +15,7 @@ import os
 import shutil
 import time as clock
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Final, Literal, cast
@@ -25,6 +25,7 @@ from qmx_home.backup.keep import kept, released, when
 from qmx_home.backup.plan import Every, Plan, PlanRefused, Target, same_drive, target_root
 from qmx_home.backup.repository import (
     ABOUT,
+    Entry,
     FolderRepository,
     Manifest,
     Mismatch,
@@ -59,6 +60,8 @@ class Placed:
     files: int = 0
     bytes: int = 0
     seconds: float = 0.0
+    partial: bool = False
+    """The copy lacks a file it should hold; its manifest says which."""
 
     def document(self) -> dict[str, object]:
         return {
@@ -71,6 +74,7 @@ class Placed:
             "files": self.files,
             "bytes": self.bytes,
             "seconds": round(self.seconds, 3),
+            "partial": self.partial,
         }
 
 
@@ -260,7 +264,9 @@ def _quick_place(
 ) -> Placed:
     if not force and previous is not None and previous.files == copy.files:
         line = f"nothing changed since the last copy; the quick undo in {repo.where} holds it"
-        return Placed(QUICK, repo.where, "unchanged", line, stamp=previous.stamp)
+        return Placed(
+            QUICK, repo.where, "unchanged", line, stamp=previous.stamp, partial=_partial(previous)
+        )
     repo.put_copy(copy)
     old: frozenset[tuple[str, str]] = frozenset() if previous is None else previous.files
     new = [e for e in copy.entries if e.at == "pool" and (e.path, e.sha256) not in old]
@@ -268,10 +274,7 @@ def _quick_place(
     line = (
         f"copied {_count(len(new), 'changed file')} ({_mb(size)}) into the quick undo in "
         f"{repo.where}"
-    )
-    unread = cast("list[str]", copy.header.get("unread", []))
-    if unread:
-        line += f"; {_count(len(unread), 'file')} could not be read: {', '.join(unread)}"
+    ) + _lacks(cast("list[str]", copy.header.get("unread", [])))
     return Placed(
         QUICK,
         repo.where,
@@ -281,6 +284,7 @@ def _quick_place(
         files=len(new),
         bytes=size,
         seconds=clock.monotonic() - started,
+        partial=_partial(copy),
     )
 
 
@@ -293,15 +297,25 @@ def _send(
     log: Sequence[Mapping[str, object]],
     home_id: str,
 ) -> Placed:
+    """Send one copy to one target. A file whose bytes do not match its hash is left out of
+    the target's copy by name, and the copy is marked partial; the rest is sent. The place's
+    result is logged as soon as its manifest is up, so a round killed later never makes this
+    folder's own copy look like another folder's."""
     started = clock.monotonic()
     repo = FolderRepository(target_root(target.path, home_id))
     key, where = _key(repo), repo.where
 
     def placed(
-        result: Result, line: str, *, stamp: str | None = None, files: int = 0, size: int = 0
+        result: Result,
+        line: str,
+        *,
+        stamp: str | None = None,
+        files: int = 0,
+        size: int = 0,
+        partial: bool = False,
     ) -> Placed:
         seconds = clock.monotonic() - started
-        return Placed(target.id, where, result, line, key, stamp, files, size, seconds)
+        return Placed(target.id, where, result, line, key, stamp, files, size, seconds, partial)
 
     anchor = Path(target.path.anchor or "/")
     if not anchor.exists():
@@ -315,20 +329,23 @@ def _send(
             return placed("refused", refusal)
         repo.clean()
         newest = _newest(repo)
-        held = copy.pooled(**({"keys": sealed[1]} if sealed else {}))
+        keys = {"keys": sealed[1]} if sealed else {}
         if (
             newest is not None
-            and newest.files == held.files
-            and newest.header.get("keys") == held.header.get("keys")
+            and _intended(newest) == copy.files
+            and newest.header.get("keys") == keys.get("keys")
         ):
             if repo.about() is None:
                 repo.set_about(_about(home_id, layout, newest))
             return placed(
-                "unchanged", f"nothing changed since the last copy to {where}", stamp=newest.stamp
+                "unchanged",
+                f"nothing changed since the last copy to {where}",
+                stamp=newest.stamp,
+                partial=_partial(newest),
             )
         unique = {entry.sha256: entry for entry in copy.entries}
         missing = [e for e in unique.values() if not repo.pool_has(e.sha256)]
-        need = sum(e.size for e in missing) + len(held.dump())
+        need = sum(e.size for e in missing) + len(copy.dump())
         room = repo.room()
         if room < need:
             return placed(
@@ -336,26 +353,80 @@ def _send(
                 f"{where} needs {_mb(need)} for this copy and has {_mb(room)} free; nothing was "
                 "written there. Free some space on it, or name another place in Settings",
             )
-        written = 0
+        written, damaged = 0, set[str]()
         for entry in missing:
             source = (
                 quick_repo.pool_path(entry.sha256)
                 if entry.at == "pool"
                 else layout.data / entry.path
             )
-            written += repo.put_pool(entry.sha256, source, verify=entry.at == "live")
+            try:
+                written += repo.put_pool(entry.sha256, source)
+            except Mismatch:
+                damaged.add(entry.sha256)
+        skipped = [e for e in copy.entries if e.sha256 in damaged]
+        held = _without(copy, skipped, keys)
         repo.set_about(_about(home_id, layout, held))
         repo.put_copy(held, {SEALED: sealed[0]} if sealed else None)
+        log_line(layout, {"kind": "sent", "id": target.id, "key": key, "stamp": held.stamp})
         thinned = _thin(repo, target, log, key)
-    except (Mismatch, OSError) as failed:
-        why = str(failed) if isinstance(failed, Mismatch) else _why(failed)
-        return placed("refused", f"the copy to {where} stopped: {why}; the next round tries again")
-    line = f"copied {_count(len(missing), 'file')} ({_mb(written)}) to {where}"
+    except OSError as failed:
+        return placed(
+            "refused", f"the copy to {where} stopped: {_why(failed)}; the next round tries again"
+        )
+    line = f"copied {_count(len(missing) - len(damaged), 'file')} ({_mb(written)}) to {where}"
     if same_drive(target, layout):
         line += "; it is on the same drive as the QMX folder, so it does not survive that disk"
     if thinned:
         line += f"; {thinned}"
-    return placed("copied", line, stamp=held.stamp, files=len(missing), size=written)
+    line += _lacks(
+        [
+            *cast("list[str]", copy.header.get("unread", [])),
+            *(f"{e.path} ({DAMAGED})" for e in skipped),
+        ]
+    )
+    return placed(
+        "copied",
+        line,
+        stamp=held.stamp,
+        files=len(missing) - len(damaged),
+        size=written,
+        partial=_partial(held),
+    )
+
+
+DAMAGED: Final = (
+    "it does not hold the bytes its name says: it changed while it was copied, or it is damaged"
+)
+
+
+def _without(copy: Manifest, skipped: Sequence[Entry], keys: Mapping[str, str]) -> Manifest:
+    """The copy a target holds: every file in its pool, less the files it could not take, which
+    its header names, so the copy reads as partial and a later round knows what it meant to
+    hold."""
+    if not skipped:
+        return copy.pooled(**keys)
+    gone = {entry.path for entry in skipped}
+    pooled = copy.pooled(
+        **keys, partial=True, skipped=[[entry.path, entry.sha256] for entry in skipped]
+    )
+    return Manifest(pooled.header, tuple(e for e in pooled.entries if e.path not in gone))
+
+
+def _intended(manifest: Manifest) -> frozenset[tuple[str, str]]:
+    """The files a copy meant to hold: those it holds and those its header says it lacks."""
+    skipped = cast("list[list[str]]", manifest.header.get("skipped", []))
+    return manifest.files | {(path, sha) for path, sha in skipped}
+
+
+def _partial(manifest: Manifest) -> bool:
+    return manifest.header.get("partial") is True
+
+
+def _lacks(missing: Sequence[str]) -> str:
+    if not missing:
+        return ""
+    return f"; this copy lacks {_count(len(missing), 'file')}: {', '.join(missing)}"
 
 
 def _about(home_id: str, layout: Layout, copy: Manifest) -> dict[str, str]:
@@ -398,8 +469,9 @@ def _guard(log: Sequence[Mapping[str, object]], key: str, repo: FolderRepository
 
 
 def _events(log: Sequence[Mapping[str, object]], key: str) -> list[tuple[str, str | None]]:
-    """What this folder did at one place, oldest first: copies it sent or found unchanged,
-    restores from it, and his carry-ons."""
+    """What this folder did at one place, oldest first: copies it sent (each logged as its
+    manifest went up, and again in its round's line) or found unchanged, restores from it, and
+    his carry-ons."""
     found: list[tuple[str, str | None]] = []
     for line in log:
         kind = line.get("kind")
@@ -407,7 +479,7 @@ def _events(log: Sequence[Mapping[str, object]], key: str) -> list[tuple[str, st
             for place in cast("list[dict[str, object]]", line.get("places", [])):
                 if place.get("key") == key and place.get("result") in ("copied", "unchanged"):
                     found.append(("sent", cast("str | None", place.get("stamp"))))
-        elif kind in ("carry-on", "restored") and line.get("key") == key:
+        elif kind in ("sent", "carry-on", "restored") and line.get("key") == key:
             found.append((str(kind), cast("str | None", line.get("stamp"))))
     return found
 
@@ -415,6 +487,8 @@ def _events(log: Sequence[Mapping[str, object]], key: str) -> list[tuple[str, st
 def _last(log: Sequence[Mapping[str, object]], key: str) -> datetime | None:
     """When the place last got a copy or was found unchanged."""
     for line in reversed(log):
+        if line.get("kind") == "sent" and line.get("key") == key:
+            return when(str(line["stamp"]))
         if line.get("kind") != "round":
             continue
         for place in cast("list[dict[str, object]]", line.get("places", [])):
@@ -434,14 +508,28 @@ def _drilled(log: Sequence[Mapping[str, object]], key: str) -> str | None:
 def _thin(
     repo: FolderRepository, target: Target, log: Sequence[Mapping[str, object]], key: str
 ) -> str:
-    """Drop the copies the keep rule lets go, then sweep the pool. A copy whose manifest is not
-    whole is never dropped. Returns a line when the sweep could not run."""
-    readable = [stamp for stamp in repo.copies() if _whole(repo, stamp)]
-    keep = kept(readable, target.keep, drilled=_drilled(log, key))
+    """Drop the copies the keep rule lets go, then sweep the pool. Returns a line when the sweep
+    could not run."""
+    readable, whole = _readable(repo)
+    keep = kept(list(readable), target.keep, drilled=_drilled(log, key), held=whole)
     for stamp in readable:
         if stamp not in keep:
             repo.drop(stamp)
     return repo.sweep().blocked or ""
+
+
+def _readable(repo: FolderRepository) -> tuple[dict[str, Manifest], set[str]]:
+    """The copies whose manifest is whole, oldest first, and the newest of them that is not
+    partial. A copy whose manifest is not whole is never dropped, and neither is the newest
+    complete copy, so copies that lack a file never thin away the last one that has them all."""
+    readable: dict[str, Manifest] = {}
+    for stamp in repo.copies():
+        try:
+            readable[stamp] = repo.manifest(stamp)
+        except Unreadable:
+            continue
+    complete = [stamp for stamp, manifest in readable.items() if not _partial(manifest)]
+    return readable, set(complete[-1:])
 
 
 def _thin_quick(
@@ -452,19 +540,13 @@ def _thin_quick(
     now: datetime,
 ) -> Placed:
     elsewhere = _target_copies(log, placed)
-    readable: list[str] = []
-    held: set[str] = set()
-    for stamp in repo.copies():
-        try:
-            manifest = repo.manifest(stamp)
-        except Unreadable:
-            continue
-        readable.append(stamp)
+    readable, held = _readable(repo)
+    for stamp, manifest in readable.items():
         if manifest.header.get("why") == "before-upgrade" and not released(
             when(stamp), elsewhere, now
         ):
             held.add(stamp)
-    keep = kept(readable, plan.quick_undo, drilled=_drilled(log, QUICK), held=held)
+    keep = kept(list(readable), plan.quick_undo, drilled=_drilled(log, QUICK), held=held)
     for stamp in readable:
         if stamp not in keep:
             repo.drop(stamp)
@@ -472,17 +554,7 @@ def _thin_quick(
     first = placed[0]
     if blocked is None:
         return first
-    return Placed(
-        first.id,
-        first.where,
-        first.result,
-        f"{first.line}; {blocked}",
-        first.key,
-        first.stamp,
-        first.files,
-        first.bytes,
-        first.seconds,
-    )
+    return replace(first, line=f"{first.line}; {blocked}")
 
 
 def _thin_pre_change(
@@ -516,14 +588,6 @@ def _target_copies(log: Sequence[Mapping[str, object]], placed: Sequence[Placed]
     ]
     moments += [when(p.stamp) for p in placed if p.id != QUICK and p.result == "copied" and p.stamp]
     return moments
-
-
-def _whole(repo: FolderRepository, stamp: str) -> bool:
-    try:
-        repo.manifest(stamp)
-    except Unreadable:
-        return False
-    return True
 
 
 def _newest(repo: FolderRepository) -> Manifest | None:

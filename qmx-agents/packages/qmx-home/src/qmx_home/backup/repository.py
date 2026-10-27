@@ -16,10 +16,13 @@ this one layout. A manifest is whole only with its trailer, `{"end": true, "line
 thinned and stops the pool sweep. A copy folder with no manifest at all is what a killed round
 leaves, and `clean` removes it. Nothing here needs a hard link, so an exFAT USB disk works.
 
-Pool files are not flushed to the disk one by one, as a plain file copy does not flush them;
-the manifest, `backup.toml` and the sealed key copy are. A power cut mid round can leave a
-pooled file that is named but not whole; the monthly drill (B2) hashes pooled files, removes a
-damaged one, and the next round that holds it pools it again.
+Every file is written durably under a temporary name, hashed as it is written, and only then
+renamed to its final name; the manifest is written the same way, after every file it names.
+So a power cut or a pulled disk leaves a pool file under its final name only when its bytes
+were on the disk first, and a later round that finds it by name may reuse it unread. On Windows
+the bytes go through the disk cache (`qmx_home.files.create_new`), and NTFS's journal keeps the
+renames in order; a USB disk Windows treats as removable writes its folder entries through as
+well, which is its default.
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final, Literal, Protocol, cast
 
-from qmx_home.files import PARTIAL, copy_file, long_path, plain
+from qmx_home.files import PARTIAL, copy_file, long_path, plain, write_new
 
 FORMAT: Final = "qmx-backup/1"
 MANIFEST: Final = "manifest.jsonl"
@@ -191,10 +194,9 @@ class Repository(Protocol):
 
     def pool_has(self, sha256: str) -> bool: ...
 
-    def put_pool(self, sha256: str, source: Path, *, verify: bool = True) -> int:
+    def put_pool(self, sha256: str, source: Path) -> int:
         """Copy `source` into the pool under `sha256` unless it is there; the bytes written.
-        Raises Mismatch when the bytes copied hash to something else. `verify` False copies a
-        file another pool holds under that hash without hashing it again."""
+        Raises Mismatch, with nothing placed, when the bytes copied hash to something else."""
         ...
 
     def put_copy(self, manifest: Manifest, extra: Mapping[str, bytes] | None = None) -> None:
@@ -282,16 +284,12 @@ class FolderRepository:
         self._folder(self.pool_path(sha256).parent)
         os.replace(long_path(written), final)
 
-    def put_pool(self, sha256: str, source: Path, *, verify: bool = True) -> int:
+    def put_pool(self, sha256: str, source: Path) -> int:
         if self.pool_has(sha256):
             return 0
         writing = self.temporary()
         try:
-            if verify:
-                got = copy_file(source, writing, durable=False)
-            else:
-                shutil.copyfile(long_path(source), long_path(writing))
-                got = sha256
+            got = copy_file(source, writing)
         except BaseException:
             long_path(writing).unlink(missing_ok=True)
             raise
@@ -310,7 +308,7 @@ class FolderRepository:
         digest = hashlib.sha256(data).hexdigest()
         if not self.pool_has(digest):
             writing = self.temporary()
-            _write(writing, data, durable=False)
+            write_new(writing, data)
             self.adopt(writing, digest)
         return digest
 
@@ -426,9 +424,8 @@ class FolderRepository:
         return found
 
 
-def _write(path: Path, data: bytes, *, durable: bool = True) -> None:
-    with long_path(path).open("wb") as writing:
-        writing.write(data)
-        writing.flush()
-        if durable:
-            os.fsync(writing.fileno())
+def _write(path: Path, data: bytes) -> None:
+    """`data` in a file of QMX's own at `path`, on the disk when this returns; what a killed
+    round left there is replaced."""
+    long_path(path).unlink(missing_ok=True)
+    write_new(path, data)

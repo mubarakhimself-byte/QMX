@@ -31,7 +31,7 @@ from typing import Final, cast
 
 from qmx_home import Label, Layout
 from qmx_home.backup.repository import FORMAT, Entry, FolderRepository, Kind, Manifest
-from qmx_home.files import copy_file, long_path, open_shared, plain, sha256_of
+from qmx_home.files import copy_file, flush_file, long_path, open_shared, plain, sha256_of
 from qmx_home.stores import STORES
 
 LEFT_OUT: Final[tuple[tuple[str, str], ...]] = (
@@ -216,7 +216,7 @@ def make(
         copying.once(one)
     head = header(layout, stamp, why)
     if copying.unread:
-        head["unread"] = copying.unread
+        head |= {"partial": True, "unread": copying.unread}
     return Manifest(head, tuple(copying.entries))
 
 
@@ -337,6 +337,7 @@ class _Copying:
         uri = f"{source.resolve().as_uri()}?mode=ro"
         with closing(sqlite3.connect(uri, uri=True, timeout=BUSY_TIMEOUT_S)) as reading:
             reading.execute("VACUUM INTO ?", (str(writing),))
+        flush_file(writing)
         tables, user_version, floor = _store_facts(writing, found.path)
         digest = sha256_of(writing)
         size = writing.stat().st_size
@@ -346,7 +347,7 @@ class _Copying:
         )
 
     def _file(self, found: _Found, source: Path, writing: Path, length: int | None) -> Entry:
-        digest = copy_file(source, writing, length=length, durable=False)
+        digest = copy_file(source, writing, length=length)
         size = long_path(writing).stat().st_size
         self.quick.adopt(writing, digest)
         return Entry(found.path, digest, size, found.kind, found.seen)

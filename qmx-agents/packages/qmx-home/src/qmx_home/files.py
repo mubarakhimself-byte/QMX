@@ -49,35 +49,79 @@ def open_shared(path: Path) -> IO[bytes]:
     """`path` opened for reading the way a live folder must be read: on Windows with delete
     sharing, so a writer that deletes the file while it is read (the price store freezing a
     month, the host making room) is not refused because of the reader. Windows still refuses a
-    rename onto a file held open this way, so a writer replacing it waits out the read (the
-    Library retries). Elsewhere a plain open."""
+    rename onto a file held open this way: the Library retries, other writers do not. Elsewhere
+    a plain open."""
     path = long_path(path)
     if os.name != "nt":
         return path.open("rb")
+    return _windows_file(path, _GENERIC_READ, _SHARE_ALL, _OPEN_EXISTING, _NORMAL, "rb")
+
+
+def create_new(path: Path) -> IO[bytes]:
+    """The new file `path` (refused when it exists), opened so its bytes are on the disk once
+    `settle` returns: on Windows written through the disk cache, which costs far less than a
+    flush per file; elsewhere `settle` flushes it."""
+    path = long_path(path)
+    if os.name != "nt":
+        return path.open("xb")
+    flags = _NORMAL | _WRITE_THROUGH
+    return _windows_file(path, _GENERIC_WRITE, 0, _CREATE_NEW, flags, "wb")
+
+
+def settle(writing: IO[bytes]) -> None:
+    """Make what was written to a `create_new` file durable before it is closed or renamed."""
+    writing.flush()
+    if os.name != "nt":
+        os.fsync(writing.fileno())
+
+
+def write_new(path: Path, data: bytes) -> None:
+    """`data` in the new file `path`, on the disk when this returns."""
+    with create_new(path) as writing:
+        writing.write(data)
+        settle(writing)
+
+
+def flush_file(path: Path) -> None:
+    """Flush a file another writer made (SQLite's `VACUUM INTO`) to the disk."""
+    with long_path(path).open("r+b") as writing:
+        os.fsync(writing.fileno())
+
+
+_GENERIC_READ: Final = 0x8000_0000
+_GENERIC_WRITE: Final = 0x4000_0000
+_SHARE_ALL: Final = 0x7
+_CREATE_NEW: Final = 1
+_OPEN_EXISTING: Final = 3
+_NORMAL: Final = 0x80
+_WRITE_THROUGH: Final = 0x8000_0000
+_INVALID: Final = (1 << (8 * struct.calcsize("P"))) - 1
+"""`INVALID_HANDLE_VALUE`, as an unsigned handle."""
+
+
+def _windows_file(
+    path: Path, access: int, share: int, disposition: int, flags: int, mode: str
+) -> IO[bytes]:
     import msvcrt  # noqa: PLC0415
 
-    handle = _create_file()(str(path), 0x80000000, 0x7, None, 3, 0x80, None)
+    handle = _create_file()(str(path), access, share, None, disposition, flags, None)
     if handle is None or handle == _INVALID:
         import ctypes  # noqa: PLC0415
 
         error = ctypes.get_last_error()
         raise OSError(None, ctypes.FormatError(error).strip(), str(path), error)
+    access_mode = os.O_RDONLY if mode == "rb" else os.O_WRONLY
     try:
-        descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY | os.O_BINARY)
+        descriptor = msvcrt.open_osfhandle(handle, access_mode | os.O_BINARY)
     except BaseException:
         _close_handle()(handle)
         raise
-    return os.fdopen(descriptor, "rb")
-
-
-_INVALID: Final = (1 << (8 * struct.calcsize("P"))) - 1
-"""`INVALID_HANDLE_VALUE`, as an unsigned handle."""
+    return cast("IO[bytes]", os.fdopen(descriptor, mode))
 
 
 @functools.cache
 def _create_file() -> Callable[..., int | None]:
-    """kernel32's `CreateFileW`, typed once: GENERIC_READ, all three sharing modes,
-    OPEN_EXISTING and FILE_ATTRIBUTE_NORMAL are what `open_shared` passes."""
+    """kernel32's `CreateFileW`, typed once."""
     import ctypes  # noqa: PLC0415
     from ctypes import wintypes  # noqa: PLC0415
 
@@ -102,18 +146,14 @@ def _close_handle() -> Callable[[int], int]:
     return cast("Callable[[int], int]", ctypes.WinDLL("kernel32").CloseHandle)
 
 
-def copy_file(
-    source: Path, target: Path, *, length: int | None = None, durable: bool = True
-) -> str:
+def copy_file(source: Path, target: Path, *, length: int | None = None) -> str:
     """Copy `source` to the new file `target` byte for byte, keeping its times, and return the
-    sha256 of what was written. `target` must not exist, so a copy never lands on a file already
-    there. `length` copies only the first that many bytes (a log up to its last full line).
-    `durable` flushes the copy to the disk before returning; a caller that makes many copies and
-    writes one record of them last may leave it to that record."""
-    target = long_path(target)
+    sha256 of what was written, which is on the disk when this returns. `target` must not exist,
+    so a copy never lands on a file already there. `length` copies only the first that many
+    bytes (a log up to its last full line)."""
     digest = hashlib.sha256()
     left = length
-    with open_shared(source) as reading, target.open("xb") as writing:
+    with open_shared(source) as reading, create_new(target) as writing:
         while left is None or left > 0:
             chunk = reading.read(CHUNK if left is None else min(CHUNK, left))
             if not chunk:
@@ -122,11 +162,9 @@ def copy_file(
             writing.write(chunk)
             if left is not None:
                 left -= len(chunk)
-        writing.flush()
-        if durable:
-            os.fsync(writing.fileno())
+        settle(writing)
         found = os.fstat(reading.fileno())
-    os.utime(target, ns=(found.st_atime_ns, found.st_mtime_ns))
+    os.utime(long_path(target), ns=(found.st_atime_ns, found.st_mtime_ns))
     return digest.hexdigest()
 
 

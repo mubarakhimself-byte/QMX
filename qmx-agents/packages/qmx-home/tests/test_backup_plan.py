@@ -114,3 +114,17 @@ def test_the_second_drive_is_proposed_only_when_the_first_copy_leaves_it_room(
         "accept it in Settings, Data and backups, or name a USB disk instead"
     )
     assert proposal(layout, [own], lambda d: roomy[d]) is None
+
+
+@pytest.mark.skipif(not Path("C:/").drive, reason="a junction is a Windows link")
+def test_a_target_reached_through_a_junction_into_the_folder_is_refused(tmp_path: Path) -> None:
+    import _winapi
+
+    layout = resolve(tmp_path / "QMX", create=True)
+    door = tmp_path / "looks-elsewhere"
+    _winapi.CreateJunction(str(layout.backups), str(door))  # pyright: ignore[reportAttributeAccessIssue]
+
+    with pytest.raises(PlanRefused) as refused:
+        parse({"targets": [{"id": "door", "path": str(door / "QMX-backup")}]}, layout)
+
+    assert str(refused.value).startswith(f"backup place 'door': {door / 'QMX-backup'} is inside")

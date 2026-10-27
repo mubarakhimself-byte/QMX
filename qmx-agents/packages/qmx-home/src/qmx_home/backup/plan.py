@@ -365,6 +365,7 @@ def _drive(path: Path) -> str:
 
 
 def _inside(path: Path, folder: Path) -> bool:
-    inner = os.path.normcase(os.path.abspath(path))
-    outer = os.path.normcase(os.path.abspath(folder))
+    """Whether `path` is `folder` or inside it, links and junctions followed on both sides."""
+    inner = os.path.normcase(os.path.realpath(path))
+    outer = os.path.normcase(os.path.realpath(folder))
     return inner == outer or inner.startswith(outer.rstrip("\\/") + os.sep)

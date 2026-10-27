@@ -9,6 +9,7 @@ import platform
 import shutil
 from datetime import UTC, datetime, time, timedelta, timezone
 from pathlib import Path
+from typing import IO
 
 import pytest
 from backup_fixtures import SECRETS, filled_folder
@@ -75,7 +76,11 @@ def test_a_round_copies_to_the_quick_undo_and_the_target_and_a_second_copies_not
         quick_files,
         usb_files,
     )
-    assert [line["result"] for line in log_lines(filled.layout)] == ["copied", "unchanged"]
+    assert [(line["kind"], line.get("result")) for line in log_lines(filled.layout)] == [
+        ("sent", None),
+        ("round", "copied"),
+        ("round", "unchanged"),
+    ]
 
 
 def test_a_changed_file_pools_only_itself_and_the_keep_rule_runs_after_the_new_copy(
@@ -291,7 +296,7 @@ def test_a_round_is_refused_while_another_holds_the_lock_and_quick_copies_at_onc
     assert json.loads(json.dumps(manifest.header["format"])) == "qmx-backup/1"
 
 
-def test_a_blob_whose_bytes_do_not_match_its_name_is_refused_by_the_target_by_name(
+def test_a_damaged_blob_is_left_out_of_a_target_copy_by_name_and_the_rest_is_sent(
     tmp_path: Path,
 ) -> None:
     filled = filled_folder(tmp_path / "QMX", files=5)
@@ -300,9 +305,117 @@ def test_a_blob_whose_bytes_do_not_match_its_name_is_refused_by_the_target_by_na
 
     report = run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=0)
 
-    assert [p.result for p in report.places] == ["copied", "refused"]
-    assert report.places[1].line == (
-        f"the copy to {report.places[1].where} stopped: {blob} does not hold the bytes its copy "
-        "names: it changed while it was copied, or it is damaged; the next round tries again"
+    usb = place(filled.layout, tmp_path)
+    assert [p.result for p in report.places] == ["copied", "copied"]
+    assert report.places[1].line.endswith(
+        f"; this copy lacks 1 file: {filled.written_once[0]} (it does not hold the bytes its name "
+        "says: it changed while it was copied, or it is damaged)"
     )
-    assert not (place(filled.layout, tmp_path).root / "snapshots").exists()
+    copied = usb.manifest(usb.copies()[-1])
+    assert copied.header["partial"] is True
+    assert filled.written_once[0] not in {e.path for e in copied.entries}
+    assert len(copied.entries) == 31
+    assert log_lines(filled.layout)[-1]["places"][1]["partial"] is True  # type: ignore[index]
+
+
+def test_a_round_killed_after_a_targets_copy_is_up_never_refuses_that_target_next_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmx_home.backup import round as module
+
+    filled = filled_folder(tmp_path / "QMX", files=5)
+    plan = Plan(targets=(target(tmp_path),))
+
+    def killed(*_args: object) -> str:
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as patched:
+        patched.setattr(module, "_thin", killed)
+        with pytest.raises(KeyboardInterrupt):
+            run_round(filled.layout, plan, now=NOW, floor=0)
+    (filled.layout.data / "chats" / "c1.json").write_bytes(b'{"title": "after the kill"}')
+
+    report = run_round(filled.layout, plan, now=NOW + timedelta(days=1), floor=0)
+
+    assert [p.result for p in report.places] == ["copied", "copied"]
+
+
+def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_its_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmx_home import files
+
+    filled = filled_folder(tmp_path / "QMX", files=5)
+    events: list[tuple[str, str]] = []
+    real_new, real_replace = files.create_new, repository.os.replace
+
+    def created(path: Path) -> IO[bytes]:
+        events.append(("durable", files.plain(path)))
+        return real_new(path)
+
+    def renamed(source: object, target: object) -> None:
+        events.append(("rename", f"{files.plain(source)} -> {files.plain(target)}"))
+        real_replace(source, target)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(files, "create_new", created)
+    monkeypatch.setattr(repository.os, "replace", renamed)
+
+    run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=0)
+
+    usb = place(filled.layout, tmp_path)
+    manifest_at = next(
+        i
+        for i, (kind, what) in enumerate(events)
+        if kind == "rename" and what.endswith("manifest.jsonl") and str(usb.root) in what
+    )
+    durable = {what for kind, what in events[:manifest_at] if kind == "durable"}
+    placed = [
+        what.partition(" -> ")[0]
+        for kind, what in events[:manifest_at]
+        if kind == "rename" and str(usb.pool) in what.partition(" -> ")[2]
+    ]
+    assert len(placed) == 32
+    assert set(placed) <= durable
+
+
+def test_a_copy_missing_a_file_is_partial_and_the_newest_whole_copy_is_never_thinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dataclasses import replace
+
+    from qmx_home.backup import snapshot
+    from qmx_home.backup.plan import Keep
+
+    filled = filled_folder(tmp_path / "QMX", files=5)
+    hourly = replace(target(tmp_path), every="hour", keep=Keep(hours=1))
+    plan = Plan(quick_undo=Keep(hours=1), targets=(hourly,))
+    run_round(filled.layout, plan, now=NOW, floor=0)
+    real = snapshot.copy_file
+
+    def held_open(source: Path, target: Path, **kwargs: object) -> str:
+        if source.name == "settings.toml":
+            raise PermissionError(13, "The process cannot access the file", str(source))
+        return real(source, target, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(snapshot, "copy_file", held_open)
+    for hours in (1, 2):
+        (filled.layout.data / "settings.toml").write_bytes(f"[engine]\nround = {hours}\n".encode())
+        (filled.layout.data / "chats" / "c1.json").write_bytes(f'{{"n": {hours}}}'.encode())
+        report = run_round(filled.layout, plan, now=NOW + timedelta(hours=hours), floor=0)
+
+    whole = "20261027T030000000000Z"
+    quick_repo = FolderRepository(filled.layout.backups / "quick")
+    usb = place(filled.layout, tmp_path)
+    assert quick_repo.copies() == (whole, "20261027T050000000000Z")
+    assert usb.copies() == (whole, "20261027T050000000000Z")
+    newest = quick_repo.manifest(quick_repo.copies()[-1])
+    settings = filled.layout.data / "settings.toml"
+    assert (newest.header["partial"], newest.header["unread"]) == (
+        True,
+        [f"settings.toml (The process cannot access the file: {settings})"],
+    )
+    assert report.places[0].line.endswith(
+        f"; this copy lacks 1 file: settings.toml (The process cannot access the file: "
+        f"{filled.layout.data / 'settings.toml'})"
+    )
+    assert usb.manifest(usb.copies()[-1]).header["partial"] is True
