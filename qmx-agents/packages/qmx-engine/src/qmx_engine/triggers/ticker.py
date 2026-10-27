@@ -61,7 +61,7 @@ from qmx_engine.runner import Engine, Outcome, new_run_id, workspace
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.context import Caller, Context, Refused
 from qmx_engine.service.explain import TriggerFacts, explain_trigger
-from qmx_engine.service.runs import Runs, fire_after, run_bundle, summarize_resumed
+from qmx_engine.service.runs import Runs, fire_after, input_refusal, run_bundle, summarize_resumed
 from qmx_engine.triggers.claims import (
     Claimed,
     Lease,
@@ -88,6 +88,7 @@ from qmx_engine.triggers.quota import closed_until
 from qmx_engine.triggers.rows import (
     FIRE_COLUMNS,
     HERE,
+    NO_PAYLOAD,
     Delivered,
     Fire,
     FireStatus,
@@ -322,6 +323,12 @@ class Scheduler:
                 why = f"{version.object_id} does not parse"
                 self._blocked(fire, trigger, Blocked("config", "not_runnable", why))
                 return
+            refused = input_refusal(
+                workflow.inputs, trigger.inputs, required=trigger.kind in NO_PAYLOAD
+            )
+            if refused is not None:
+                self._blocked(fire, trigger, Blocked("config", *refused))
+                return
             harness = self.engine.harness
             blocked = preflight(
                 workflow,
@@ -490,17 +497,15 @@ class Scheduler:
         return None if row is None or row[0] is None else instant(str(row[0]))
 
     def _inputs(self, fire: Fire, trigger: Trigger) -> JsonObject:
-        found: JsonObject = {
-            "trigger": {
-                "id": trigger.id,
-                "kind": trigger.kind,
-                "fire_id": fire.id,
-                "occurrence_at": fire.occurrence_at,
-                "merged": fire.merged,
-            }
+        """The trigger's stored inputs, then the fire's payload, then the engine's own keys."""
+        found: JsonObject = dict(trigger.inputs) | (fire.payload or {})
+        found["trigger"] = {
+            "id": trigger.id,
+            "kind": trigger.kind,
+            "fire_id": fire.id,
+            "occurrence_at": fire.occurrence_at,
+            "merged": fire.merged,
         }
-        if fire.payload:
-            found |= fire.payload
         if trigger.continuity and trigger.last_outputs is not None:
             found["continuity"] = trigger.last_outputs
         return found

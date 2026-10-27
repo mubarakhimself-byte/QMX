@@ -1671,9 +1671,12 @@ class ControlService:
         return self._engine("workflows.validate").workflows_validate(graph)
 
     @operation("workflows", "run", "manage", rest=("POST", "/api/workflows/{workflow_id}/run"))
-    def workflows_run(self, workflow_id: str) -> Document:
-        """Start a live run of a published workflow. A test run is workflows_tests_run."""
-        return self._engine("workflows.run").workflows_run(workflow_id)
+    def workflows_run(
+        self, workflow_id: str, inputs: dict[str, JsonValue] | None = None
+    ) -> Document:
+        """Start a live run of a published workflow on inputs its schema accepts. A test run is
+        workflows_tests_run."""
+        return self._engine("workflows.run").workflows_run(workflow_id, inputs)
 
     @operation(
         "workflows", "drafts_get", "read", rest=("GET", "/api/workflows/{workflow_id}/draft")
@@ -1840,6 +1843,13 @@ class ControlService:
     def workflow_triggers_enable(self, trigger_id: str) -> Document:
         """Enable a workflow trigger."""
         return self._engine("workflow_triggers.enable").workflow_triggers_enable(trigger_id)
+
+    @operation(
+        "workflows", "triggers_inputs", "manage", rest=("PUT", "/api/triggers/{trigger_id}/inputs")
+    )
+    def workflow_triggers_inputs(self, trigger_id: str, inputs: Document) -> Document:
+        """Replace the inputs a workflow trigger passes to each run it fires."""
+        return self._engine("workflow_triggers.inputs").workflow_triggers_inputs(trigger_id, inputs)
 
     @operation(
         "workflows",
@@ -2056,7 +2066,7 @@ class WorkflowEngine(Protocol):
     def workflows_get(self, workflow_id: str) -> Document: ...
     def workflows_put(self, workflow_id: str, graph: Document) -> Document: ...
     def workflows_validate(self, graph: Document) -> Document: ...
-    def workflows_run(self, workflow_id: str) -> Document: ...
+    def workflows_run(self, workflow_id: str, inputs: Document | None) -> Document: ...
     def workflow_drafts_get(self, workflow_id: str) -> Document: ...
     def workflow_drafts_put(self, workflow_id: str, graph: Document) -> Document: ...
     def workflow_tests_run(
@@ -2071,6 +2081,7 @@ class WorkflowEngine(Protocol):
     def workflow_runs_resume(self, run_id: str) -> Document: ...
     def workflow_triggers_list(self, workflow_id: str | None) -> list[Document]: ...
     def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document: ...
+    def workflow_triggers_inputs(self, trigger_id: str, inputs: Document) -> Document: ...
     def workflow_triggers_enable(self, trigger_id: str) -> Document: ...
     def workflow_triggers_disable(self, trigger_id: str) -> Document: ...
     def workflow_triggers_run_now(self, trigger_id: str) -> Document: ...

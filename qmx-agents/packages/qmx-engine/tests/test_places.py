@@ -24,7 +24,7 @@ from test_rest import BEARER, chain, served
 from qmx_engine.definition.model import Node
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
-from qmx_engine.ledger.migrations import STEPS
+from qmx_engine.ledger.migrations import STEPS, TRIGGER_COLUMNS
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.runner import Engine, Outcome, Placed, placed
@@ -57,7 +57,7 @@ def test_the_ledger_step_keeps_every_trigger_and_lets_a_named_place_home_one(
     old.execute("INSERT INTO meta VALUES ('schema_version', '3')")
     for trigger_id, place in (("trigger-pc", "pc"), ("trigger-server", "contabo")):
         old.execute(
-            f"INSERT INTO triggers ({rows.COLUMNS}) VALUES"  # noqa: S608
+            f"INSERT INTO triggers ({TRIGGER_COLUMNS}) VALUES"  # noqa: S608
             " (?, 'wf', 'obj', 0, ?, 'cron', '{\"expr\": \"0 * * * *\", \"zone\": \"UTC\"}', 1,"
             " NULL, '{}', NULL, 'digest', 0, 'merged', 1, 'ticker', 'operator',"
             " '2026-10-01T00:00:00.000000+00:00', NULL, 'ok', 2, NULL, NULL, NULL, 5, '07:30')",
@@ -83,7 +83,7 @@ def test_the_ledger_step_keeps_every_trigger_and_lets_a_named_place_home_one(
     with Reader.open(home) as reader:
         found = {t.id: t for t in rows.triggers(reader.connection)}
 
-    assert (applied, reapplied) == ([4], [])
+    assert (applied, reapplied) == ([4, 5], [])
     assert [
         (t.id, t.home_engine, t.last_status, t.failure_streak, t.priority, t.ready_by)
         for t in found.values()

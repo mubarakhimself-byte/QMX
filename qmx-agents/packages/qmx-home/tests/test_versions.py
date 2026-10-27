@@ -257,7 +257,7 @@ def test_check_open_names_each_held_back_store_and_rewrites_the_label_from_the_f
         f"Install that QMX, or restore the copy taken before the upgrade from {folder.backups}. "
         "The Library opens read-only until then.",
     )
-    assert lines["engine"] == ("new", "run ledger: made at version 4 when first opened")
+    assert lines["engine"] == ("new", "run ledger: made at version 5 when first opened")
     assert [verdict.store for verdict in opening.held_back] == ["library"]
     written = read_label(folder)
     assert opening.label_written

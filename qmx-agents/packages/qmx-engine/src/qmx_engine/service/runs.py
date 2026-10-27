@@ -22,11 +22,14 @@ journal is seeded into this home's ledger, and the run resumes.
 from __future__ import annotations
 
 import copy
+import json
 import logging
 from collections.abc import Container, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import cast
+from typing import Final, cast
 
+from jsonschema.exceptions import SchemaError
+from jsonschema.validators import validator_for
 from pydantic import JsonValue
 from qmx_control.context import (
     ContextRefused,
@@ -71,6 +74,48 @@ from qmx_engine.workers.local import AnyExecutor
 
 LOG = logging.getLogger(__name__)
 SUBGRAPH_ENTRY = "subgraph-input"
+ENGINE_KEYS: Final = frozenset({"trigger", "continuity", "webhook", "upstream", "precheck"})
+"""The keys the engine adds to a run's inputs. They are its own, so no inputs schema checks them."""
+
+
+def input_refusal(
+    schema: JsonValue, inputs: JsonValue, *, required: bool
+) -> tuple[str, str] | None:
+    """Why the declared `inputs` do not meet the workflow's inputs `schema`, as a code and a line,
+    or None when they do. The engine's own keys are left out. With `required` off, the inputs may
+    leave out what the schema requires at its top level, because the rest arrives with each fire."""
+    try:
+        if not isinstance(schema, dict):
+            raise SchemaError(f"{json.dumps(schema)} is not an object")
+        validator = validator_for(schema)
+        validator.check_schema(schema)
+    except SchemaError as broken:
+        line = f"the workflow's inputs are not a valid JSON Schema ({broken.message})"
+        return "inputs_schema_invalid", f"{line}. Fix its inputs and publish it again."
+    if not required:
+        schema = {key: value for key, value in schema.items() if key != "required"}
+    given = inputs if inputs is not None else {}
+    if isinstance(given, dict):
+        given = {key: value for key, value in given.items() if key not in ENGINE_KEYS}
+    error = next(iter(validator(schema).iter_errors(given)), None)
+    if error is None:
+        return None
+    where = [str(part) for part in error.absolute_path]
+    if error.validator == "required" and not where:
+        wanted = cast(list[str], error.validator_value)
+        missing = next(name for name in wanted if name not in cast(dict[str, object], given))
+        line = (
+            f"the input '{missing}' is missing, and the workflow needs it. Set it, then try again."
+        )
+    elif where:
+        field = ".".join(where)
+        line = (
+            f"the input '{field}' is not valid: {error.message}. Give it a value the workflow's"
+            " inputs accept."
+        )
+    else:
+        line = f"the inputs are not valid: {error.message}. Give the workflow inputs it accepts."
+    return "inputs_invalid", line
 
 
 @dataclass(frozen=True, slots=True)
@@ -590,14 +635,19 @@ class Runs:
         follow_champion: bool = False,
         run_id: str | None = None,
     ) -> RunView:
-        """A live run of a published version. A draft never runs live; `tests.run` tests it."""
+        """A live run of a published version. A draft never runs live; `tests.run` tests it.
+        `inputs` must meet the version's inputs schema, or nothing starts."""
         version = self.pinned(object_id, follow_champion)
         if version.kind != "workflow":
             raise Refused("not_a_version", f"{object_id} is a {version.kind}")
         require(self.version_state(version), "run", f"workflow object {version.object_id}")
+        bundle = self.ctx.library.get_object(version.object_id)
+        refused = input_refusal(bundle.definition.get("inputs", {}), inputs, required=True)
+        if refused is not None:
+            raise Refused(*refused)
         outcome, _ = await run_bundle(
             self.ctx,
-            self.ctx.library.get_object(version.object_id),
+            bundle,
             object_id=version.object_id,
             item=version.item,
             mode="live",

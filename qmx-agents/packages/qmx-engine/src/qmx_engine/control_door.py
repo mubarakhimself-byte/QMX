@@ -46,7 +46,13 @@ from qmx_engine.runner import Outcome, new_run_id
 from qmx_engine.runner import Refused as EngineRefused
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import Caller, Refused
-from qmx_engine.service.runs import RunView, fire_after, status_of, summarize_resumed
+from qmx_engine.service.runs import (
+    RunView,
+    fire_after,
+    input_refusal,
+    status_of,
+    summarize_resumed,
+)
 from qmx_engine.settings import places
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.catchup import CatchUp
@@ -63,6 +69,7 @@ ENDED: Final = frozenset({"passed", "stopped"})
 NOT_FOUND: Final = frozenset(
     {"unknown_run", "unknown_workflow", "unknown_trigger", "unknown_version", "no_draft"}
 )
+UNPROCESSABLE: Final = frozenset({"invalid", "bad_request", "inputs_invalid"})
 EVENT_POLL_S: Final = 0.25
 LOG = logging.getLogger(__name__)
 
@@ -77,7 +84,7 @@ def control_error(error: Failure) -> ControlError:
         code = "inbox_refused"
     else:
         code = "engine_refused" if isinstance(error, EngineRefused) else "bad_request"
-    status = 404 if code in NOT_FOUND else 422 if code in ("invalid", "bad_request") else 409
+    status = 404 if code in NOT_FOUND else 422 if code in UNPROCESSABLE else 409
     return ControlError(code, redact(str(error)), status)
 
 
@@ -222,6 +229,8 @@ class TriggerIn(BaseModel):
     place: str | None = None
     """The place whose engine fires it, by its name in the place list; This PC when left out,
     or `triggers.webhook_home` for a webhook."""
+    inputs: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
+    """What each run it fires starts from, under that fire's payload."""
 
     def spec(self, now: datetime) -> rows.Spec:
         match self.kind:
@@ -476,17 +485,18 @@ class EngineDoor:
 
         return self._serve(check)
 
-    def workflows_run(self, workflow_id: str) -> Document:
+    def workflows_run(self, workflow_id: str, inputs: Document | None = None) -> Document:
+        """A live run of the workflow's latest version on `inputs`, its run body."""
         caller = self.principal()
         if caller.kind != "user":
             path = f"/api/workflows/{workflow_id}/run"
-            return card("run", f"Run {workflow_id} live", "POST", path, {})
+            return card("run", f"Run {workflow_id} live", "POST", path, inputs or {})
 
         async def start() -> object:
             object_id = self._version_id(workflow_id)
             run_id = self._new_run_id()
-            runs = self.svc.runs
-            await self._launch(run_id, runs.start(object_id, caller=caller, run_id=run_id))
+            started = self.svc.runs.start(object_id, caller=caller, run_id=run_id, inputs=inputs)
+            await self._launch(run_id, started)
             return self._run(run_id)
 
         return cast(Document, plain(self._call(start)))
@@ -623,6 +633,15 @@ class EngineDoor:
 
         return self._serve_all(listed)
 
+    def _check_inputs(self, object_id: str, kind: str, inputs: JsonObject, why: str = "") -> None:
+        """Refuse stored inputs the version's inputs schema rejects, the line after `why`. Only a
+        trigger whose fire brings no data of its own must hold every required input."""
+        schema = self.svc.ctx.library.get_object(object_id).definition.get("inputs", {})
+        refused = input_refusal(schema, inputs, required=kind in rows.NO_PAYLOAD)
+        if refused is not None:
+            code, line = refused
+            raise Refused(code, f"{why}{line}")
+
     def workflow_triggers_create(self, workflow_id: str, trigger: Document) -> Document:
         """The trigger starts disabled; enabling it is its own `user` act."""
         caller = self.principal()
@@ -632,6 +651,7 @@ class EngineDoor:
             object_id = wanted.object_id or self._version_id(workflow_id)
             if self.svc.versions.get(object_id).item != workflow_id:
                 raise Refused("trigger_refused", f"{object_id} is not a version of {workflow_id}")
+            self._check_inputs(object_id, wanted.kind, wanted.inputs)
             now = self.svc.ctx.clock.now()
             ledger = self.svc.ctx.engine.ledger
             settings = self.svc.ctx.engine.settings
@@ -655,14 +675,31 @@ class EngineDoor:
                 ready_by=wanted.ready_by,
                 place=home,
                 places=places(settings),
+                inputs=wanted.inputs,
             )
             ledger.write(set_enabled(made.id, False))
             return self._trigger_view(self._trigger_row(made.id))
 
         return self._serve(create)
 
+    def workflow_triggers_inputs(self, trigger_id: str, inputs: Document) -> Document:
+        """Replace the inputs the trigger stores, checked against its pinned version's schema."""
+        caller = self.principal()
+        if caller.kind != "user":
+            path = f"/api/triggers/{trigger_id}/inputs"
+            return card("edit", f"Edit the inputs of trigger {trigger_id}", "PUT", path, inputs)
+
+        def edit() -> object:
+            found = self._trigger_row(trigger_id)
+            self._check_inputs(found.pinned_object, found.kind, inputs)
+            self.svc.ctx.engine.ledger.write(rows.set_inputs(trigger_id, inputs))
+            return self._trigger_view(self._trigger_row(trigger_id))
+
+        return self._serve(edit)
+
     def workflow_triggers_enable(self, trigger_id: str) -> Document:
-        """Enable the trigger and, when it is not yet, its pinned version, which must be tested."""
+        """Enable the trigger and, when it is not yet, its pinned version, which must be tested.
+        A trigger whose stored inputs miss what its fires need is refused until he sets them."""
         caller = self.principal()
         if caller.kind != "user":
             path = f"/api/triggers/{trigger_id}/enable"
@@ -670,6 +707,8 @@ class EngineDoor:
 
         def enable() -> object:
             found = self._trigger_row(trigger_id)
+            why = f"trigger {trigger_id} cannot be enabled: "
+            self._check_inputs(found.pinned_object, found.kind, found.inputs, why)
             versions = self.svc.versions
             if versions.get(found.pinned_object).state != "enabled":
                 versions.enable(found.pinned_object, caller=caller)

@@ -150,7 +150,7 @@ def test_old_trigger_rows_survive_the_kind_migration_and_new_kinds_store(tmp_pat
     with Reader.open(home) as reader:
         found = rows.triggers(reader.connection)
 
-    assert applied == [3, 4]
+    assert applied == [3, 4, 5]
     old_row = found[0]
     assert (old_row.id, old_row.kind, old_row.priority, old_row.last_status) == (
         "trigger-old",

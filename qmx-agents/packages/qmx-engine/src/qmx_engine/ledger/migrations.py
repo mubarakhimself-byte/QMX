@@ -4,17 +4,20 @@ Step N moves the schema from version N-1 to N. Step 3 rebuilds `triggers` for th
 check (SQLite cannot alter a CHECK) and adds a trigger's `priority` and `ready_by`, and a fire's
 webhook `delivery_id`, its `delivery` outcome and its re-run count. Step 4 rebuilds `triggers`
 without the `home_engine IN ('pc', 'contabo')` check, every row kept: a trigger's home is any
-place in his list, which the service checks when it writes (AD-72).
+place in his list, which the service checks when it writes (AD-72). Step 5 adds a trigger's stored
+`inputs`, `{}` for every row it finds.
 
 The version lives in `meta` as `schema_version` (the release before this one reads it) and in
 `PRAGMA user_version`, beside `min_reader` in `meta` (design 62 B1). Step 3 changes what a
-trigger's kind may mean, so it raises `min_reader` to 3; step 4 only widens a check and leaves it,
-so a version 3 engine may still open a version 4 ledger. `qmx_home.versions.open_sqlite` applies
-design 62 B2: a newer ledger whose `min_reader` this engine meets opens as it is, one it does not
-meet is refused by name and never written, and an older one is copied into the folder's
-`backups/` before its first step. The SQLite library version is recorded in `meta` at every
-writer open: below 3.51.3 (the B1 WAL-reset floor) concurrent checkpointers can corrupt a WAL
-database, which is why only the writer thread ever checkpoints, whatever the version.
+trigger's kind may mean, so it raises `min_reader` to 3; steps 4 and 5 only widen a check or add
+a column and leave it, so a version 3 engine may still open a version 5 ledger. Such an engine
+reads its own named columns, so it fires triggers without their stored inputs.
+`qmx_home.versions.open_sqlite` applies design 62 B2: a newer ledger whose `min_reader` this
+engine meets opens as it is, one it does not meet is refused by name and never written, and an
+older one is copied into the folder's `backups/` before its first step. The SQLite library
+version is recorded in `meta` at every writer open: below 3.51.3 (the B1 WAL-reset floor)
+concurrent checkpointers can corrupt a WAL database, which is why only the writer thread ever
+checkpoints, whatever the version.
 """
 
 from __future__ import annotations
@@ -114,6 +117,7 @@ STEPS: Final[tuple[tuple[str, ...], ...]] = (
         "ALTER TABLE triggers_next RENAME TO triggers",
         "CREATE INDEX triggers_due ON triggers (home_engine, enabled, next_fire_at)",
     ),
+    ("ALTER TABLE triggers ADD COLUMN inputs TEXT NOT NULL DEFAULT '{}'",),
 )
 
 
