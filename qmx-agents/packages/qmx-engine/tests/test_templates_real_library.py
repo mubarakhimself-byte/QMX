@@ -7,7 +7,10 @@ host holds it; model turns come from the templates' recorded answers."""
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
+import subprocess
+import sys
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any, cast
@@ -17,15 +20,15 @@ from qmx_control.service import ControlService
 from qmx_home import resolve
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.store import Store
-from test_templates import CLIPPINGS, CRYSTALLISE, DIGEST, answers
+from test_templates import CLIPPINGS, CRYSTALLISE, DIGEST, PACK, answers
 
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.store import Reader
-from qmx_engine.ports.library import Bundle
+from qmx_engine.ports.library import Bundle, JsonObject
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
 
-FIXTURE = {"fixture": True}
+FIXTURE: JsonObject = {"fixture": True}
 
 
 @pytest.fixture
@@ -118,8 +121,10 @@ def test_the_digest_lists_what_moved_onto_main_and_only_a_live_run_moves_his_cur
     assert card["read_from"] == 0
     assert set(stored_by(svc, landed)) <= set(listed)
     assert {store.placement(object_id)[0] for object_id in listed} == {"main"}  # type: ignore[index]
-    assert cursors(svc.ctx.home)["last_look:library"] == card["cursor_to"] == max(
-        line["seq"] for line in card["landed"]
+    assert (
+        cursors(svc.ctx.home)["last_look:library"]
+        == card["cursor_to"]
+        == max(line["seq"] for line in card["landed"])
     )
 
 
@@ -129,7 +134,7 @@ def test_crystallise_with_no_real_replays_refuses_and_counts_the_test_runs_it_le
     svc, _ = real
     published(svc, CLIPPINGS)
     item = svc.drafts.put(CRYSTALLISE.name, Bundle.read(CRYSTALLISE), 0, caller=OPERATOR).item
-    asked = {
+    asked: JsonObject = {
         "workflow": "clippings-into-research",
         "node": "summarise",
         "batch": [{"item_id": "b-1", "title": "breakout entry backtest"}],
@@ -144,3 +149,26 @@ def test_crystallise_with_no_real_replays_refuses_and_counts_the_test_runs_it_le
 
     assert report.status != "passed"
     assert refused[:1] == ["no replays yet (1 fake or test runs left out)"]
+
+
+@pytest.mark.parametrize(
+    ("given", "printed"),
+    [
+        ({}, "[QMX_FAILURE] no idea given"),
+        ({"fixture": "first-pass"}, '"sources": ["fixture:revolution-loop", "brief:idea"'),
+        ({"idea": "London breakout"}, '"sources": ["brief:idea", "input:idea"]'),
+    ],
+)
+def test_the_revolution_brief_names_the_fixture_only_in_a_fixture_run_and_needs_an_idea(
+    given: dict[str, str], printed: str
+) -> None:
+    script = PACK / "revolution-loop" / "revolution" / "scripts" / "brief.py"
+    done = subprocess.run(
+        [sys.executable, "-I", str(script)],
+        input=json.dumps({"in": given}),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert printed in done.stdout

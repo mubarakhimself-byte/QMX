@@ -137,6 +137,7 @@ def test_a_forged_principal_ref_or_engine_edge_is_ignored_or_refused(
             forged,
             {"op": "link", "from": "$a.json", "edge": "produced-by", "to": held.object_id},
             {"op": "link", "from": held.object_id, "edge": "consumed", "to": held.object_id},
+            {"op": "link", "from": "$a.json", "edge": "consumed", "to": "fp1:no-such-object"},
             {"op": "link", "from": "$a.json", "edge": "consumed", "to": held.object_id},
         ]
     }
@@ -148,11 +149,23 @@ def test_a_forged_principal_ref_or_engine_edge_is_ignored_or_refused(
     assert [r["refused"] for r in receipts[1:]] == [
         "produced-by is not an edge a script writes",
         "from is not a write of this step",
+        "unknown_object",
         None,
     ]
     assert [(e.edge, e.to_id) for e in adapter.edges(made.object_id)] == [
         ("consumed", held.object_id)
     ]
+
+
+def test_a_replica_store_fails_the_node_with_its_own_refusal(tmp_path: Path) -> None:
+    overlay = bodies(tmp_path / "o", "a.json")
+    with Store.open(tmp_path / "pc", redactor=redact, role="replica") as replica:
+        done = Served(EngineLibraryAdapter(replica), "r1", "clips").writes(
+            job("r1", 1), {"library": [put("a.json")]}, overlay
+        )
+
+    assert isinstance(done, Failed)
+    assert (done.code, done.retryable, done.effect_state) == ("read_only_replica", False, "before")
 
 
 def test_an_inline_body_or_a_body_outside_the_overlay_library_fails_by_name(
