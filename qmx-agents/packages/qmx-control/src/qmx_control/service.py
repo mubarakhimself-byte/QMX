@@ -346,39 +346,41 @@ def legacy_brokers(stored: Document) -> Document:
     }
 
 
-def _new_demo_refusal(written: BrokerSettings, stored: Document) -> str | None:
-    """The line refusing a CCXT demo row on an exchange with no demo mode, checked only for a row
-    that is not already stored as that same demo row. So a row saved before the check still
-    loads and never blocks an edit to another connection."""
+type DemoRow = tuple[str, str, str]
+"""A CCXT demo row by provider id, connection id and exchange."""
+
+
+def _no_demo_rows(settings: BrokerSettings) -> dict[DemoRow, str]:
+    """Each CCXT demo row on an exchange with no demo mode, with the line that refuses it. Asked
+    before the settings lock, because the first ask in a process imports CCXT."""
+    return {
+        (provider.id, connection.id, provider.exchange): line
+        for provider in settings.providers
+        if provider.adapter == "ccxt"
+        for connection in provider.connections
+        if connection.environment == "demo" and (line := demo_refusal(provider.exchange))
+    }
+
+
+def _stored_demo_rows(stored: Document) -> set[DemoRow]:
+    """The CCXT demo rows `settings.toml` already holds. Each provider is parsed on its own, so a
+    row saved before the demo check still counts as saved and never blocks an edit to another
+    connection."""
     legacy = stored.get("brokers")
     raw = stored.get("connections") or (legacy.get("brokers") if isinstance(legacy, dict) else [])
-    kept: set[tuple[str, str, str, str, str]] = set()
+    rows: set[DemoRow] = set()
     for item in raw if isinstance(raw, list) else []:
         try:
             provider = Broker.model_validate(item)
         except ValueError:
             continue
-        kept.update(
-            (
-                provider.id,
-                connection.id,
-                provider.adapter,
-                provider.exchange,
-                connection.environment,
+        if provider.adapter == "ccxt":
+            rows.update(
+                (provider.id, connection.id, provider.exchange)
+                for connection in provider.connections
+                if connection.environment == "demo"
             )
-            for connection in provider.connections
-        )
-    for provider in written.providers:
-        for connection in provider.connections:
-            row = (provider.id, connection.id, provider.adapter, provider.exchange, "demo")
-            if (
-                provider.adapter == "ccxt"
-                and connection.environment == "demo"
-                and row not in kept
-                and (line := demo_refusal(provider.exchange))
-            ):
-                return line
-    return None
+    return rows
 
 
 @dataclass(frozen=True, slots=True)
@@ -793,7 +795,7 @@ class ControlService:
             return self._observers_put(values)
         _no_secrets(values)
         stored_rows: list[dict[str, Any]] | None = None
-        brokers: BrokerSettings | None = None
+        no_demo: dict[DemoRow, str] = {}
         if section in HOST_SECTIONS:
             parser = self.settings_parsers.get(section)
             if parser is None:
@@ -864,7 +866,7 @@ class ControlService:
                 values = legacy_brokers(cast(Document, {"connections": rows}))
             else:
                 values = cast(Document, {"connections": rows})
-            stored_rows, brokers = rows, parsed
+            stored_rows, no_demo = rows, _no_demo_rows(parsed)
         else:
             stored_rows = None
 
@@ -875,8 +877,10 @@ class ControlService:
                 raise ControlError("settings_too_new", refused, 409)
             text = path.read_text(encoding="utf-8") if path.exists() else ""
             stored = cast(Document, tomllib.loads(text))
-            if brokers is not None and (no_demo := _new_demo_refusal(brokers, stored)):
-                raise ControlError("invalid_brokers", no_demo)
+            saved = _stored_demo_rows(stored) if no_demo else set[DemoRow]()
+            for row, line in no_demo.items():
+                if row not in saved:
+                    raise ControlError("invalid_brokers", line)
             settings = dict(stored)
             if stored_rows is not None:
                 settings["connections"] = cast(JsonValue, stored_rows)
