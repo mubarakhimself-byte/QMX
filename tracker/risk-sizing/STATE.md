@@ -30,6 +30,8 @@ Last updated: 2026-10-27 (after 07 funnel).
 
 ## Operator round 2026-10-27 (his review of the explainer site; binding)
 
+Verbatim dictation: `operator/2026-10-27-review-dictation.md`. **Method he asked for:** use the skill stack, not vibing. Funnel round 2 = `bmad-brainstorming` + `bmad-party-mode` over the verbatim dictation plus research 10-12, mapping permutations. Then architecture studies with `improve-codebase-architecture`, `codebase-design`, `domain-modeling` and poteto-mode principles for the router/MIS, the feed pool, unit independence, the journals, and the account guard with the pod.
+
 **Answers to the 8 questions**
 - Q1 sibling unit: **yes**, the recommendation stands, rethought for agents and for everything below.
 - Q2 what counts as "new": **hold**. The answer may come from the Hermes/Stats sessions and the journal and QMB design.
