@@ -110,6 +110,7 @@ class CTraderFixture:
 
 class ExchangeFixture:
     precisionMode = ccxt.TICK_SIZE
+    isSandboxModeEnabled = True
 
     def __init__(self) -> None:
         self.payload = fixture("ccxt-spot.json")
@@ -168,6 +169,9 @@ def test_ccxt_multi_account_requires_separate_key_pairs() -> None:
     for account in body["connections"][0]["accounts"]:
         account["credential_ref"] = "qmx/crypto-" + account["id"]
     assert len(Broker.model_validate(body).connections[0].accounts) == 2
+
+
+SIGNED_IN = {"clientId": "fixture", "clientSecret": "fixture", "accessToken": "fixture"}
 
 
 def test_ctrader_auth_and_reads() -> None:
@@ -331,7 +335,9 @@ def test_mcp_tools_list_and_every_call_in_process(tmp_path: Path) -> None:
         broker: Broker, connection: Connection, account: Account
     ) -> AsyncGenerator[ReadAdapter]:
         assert (broker.id, connection.id, account.id) == ("ic", "demo", "101")
-        yield recorded.adapter()
+        adapter = recorded.adapter()
+        await adapter.authenticate(connection, SIGNED_IN)
+        yield adapter
 
     service = BrokerService(tmp_path, settings(), factory)
 

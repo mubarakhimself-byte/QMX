@@ -16,7 +16,14 @@ from qmf.core import is_refusal
 from qmf.venue.proto import CompiledProto, compile_descriptor_set
 from qmx_home.versions import open_sqlite
 
-from qmx_broker.adapters import CCXTAdapter, CTraderAdapter, Document, LiveGrant, ReadAdapter
+from qmx_broker.adapters import (
+    CCXTAdapter,
+    CTraderAdapter,
+    Document,
+    EnvironmentMismatch,
+    LiveGrant,
+    ReadAdapter,
+)
 from qmx_broker.credentials import (
     CTRADER_APP,
     CTRADER_TOKENS,
@@ -26,7 +33,14 @@ from qmx_broker.credentials import (
     credentials,
 )
 from qmx_broker.ctrader_transport import CTraderTransport
-from qmx_broker.models import Account, Broker, BrokerSettings, Connection, OrderProposal
+from qmx_broker.models import (
+    Account,
+    Broker,
+    BrokerSettings,
+    Connection,
+    OrderProposal,
+    ReadEnvelope,
+)
 from qmx_broker.oauth import AppCredential, Tokens
 
 type AdapterFactory = Callable[
@@ -247,7 +261,9 @@ class BrokerService:
 
     async def read(
         self, operation: str, broker_id: str, connection_id: str, account_id: str, **kwargs: Any
-    ) -> Any:
+    ) -> ReadEnvelope:
+        """One read, stamped from the connection it resolved here and the `is_live` the session
+        proved; a stamp that would disagree with the proof fails the read by name."""
         broker, connection, account = self.configured_settings().resolve(
             broker_id, connection_id, account_id
         )
@@ -265,15 +281,26 @@ class BrokerService:
             )
         try:
             async with self._read_lock, self.factory(broker, connection, account) as adapter:
+                is_live = adapter.is_live
+                if is_live is None or is_live is not (connection.environment == "live"):
+                    raise EnvironmentMismatch(connection.id, connection.environment, is_live)
                 if operation == "bars":
-                    return await read_bars(adapter, **kwargs)
-                return await getattr(adapter, operation)(**kwargs)
-        except LiveGrant:
+                    result = await read_bars(adapter, **kwargs)
+                else:
+                    result = await getattr(adapter, operation)(**kwargs)
+        except LiveGrant, EnvironmentMismatch:
             raise
         except Exception:
             raise ValueError(
                 "Broker read failed; check credentials, network and node protocol settings"
             ) from None
+        return {
+            "environment": connection.environment,
+            "is_live": is_live,
+            "connection_id": connection.id,
+            "account_id": account.id,
+            "result": result,
+        }
 
     def propose_order(self, proposal: OrderProposal) -> Document:
         """Persist an unsigned proposal; this method never opens a broker connection."""

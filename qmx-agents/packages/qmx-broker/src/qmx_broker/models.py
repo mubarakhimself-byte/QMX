@@ -1,10 +1,26 @@
 """Node settings contain identities and vault references, never credentials."""
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from qmf.venue.spot import exact
+
+
+class ReadStamp(TypedDict):
+    """Whose figure a broker read is: the connection it resolved, that connection's kind, and the
+    `is_live` its session proved. A `demo` figure is never his own money."""
+
+    environment: Literal["demo", "live"]
+    is_live: bool
+    connection_id: str
+    account_id: str
+
+
+class ReadEnvelope(ReadStamp):
+    """Every broker read answer: the stamp, then the adapter's own result."""
+
+    result: dict[str, Any] | list[dict[str, Any]]
 
 
 class Account(BaseModel):

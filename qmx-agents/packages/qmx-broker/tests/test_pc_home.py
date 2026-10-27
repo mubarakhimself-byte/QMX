@@ -20,9 +20,9 @@ from keyring.errors import PasswordDeleteError
 from qmf.venue.proto import CompiledProto
 from test_broker import CTraderFixture
 
-from qmx_broker.adapters import Document, can_trade_live
+from qmx_broker.adapters import can_trade_live
 from qmx_broker.credentials import CredentialManager
-from qmx_broker.models import Account, Broker, BrokerSettings, Connection
+from qmx_broker.models import Account, Broker, BrokerSettings, Connection, ReadEnvelope
 from qmx_broker.oauth import AppCredential
 from qmx_broker.service import BrokerService, grant_accounts, open_adapter
 
@@ -112,7 +112,7 @@ def service(tmp_path: Path, recorded: CTraderFixture, home: str = "pc") -> Broke
     return BrokerService(tmp_path, settings(home), factory)
 
 
-def read(broker: BrokerService) -> Document:
+def read(broker: BrokerService) -> ReadEnvelope:
     return asyncio.run(broker.read("account_state", "ctrader", "demo", "101"))
 
 
@@ -123,10 +123,16 @@ def test_a_pc_homed_read_opens_its_session_with_this_pcs_pair(
     recorded = CTraderFixture()
 
     assert read(service(tmp_path, recorded)) == {
+        "environment": "demo",
+        "is_live": False,
+        "connection_id": "demo",
         "account_id": "101",
-        "currency": "USD",
-        "balance": "1234.56",
-        "leverage": "50.00",
+        "result": {
+            "account_id": "101",
+            "currency": "USD",
+            "balance": "1234.56",
+            "leverage": "50.00",
+        },
     }
     assert recorded.calls[:3] == [
         ("ProtoOAApplicationAuthReq", {"clientId": "4242_demo", "clientSecret": "app-pass"}),
