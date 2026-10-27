@@ -206,6 +206,26 @@ def test_a_hop_that_raises_stops_the_job_with_its_code_and_the_rows_so_far(
     assert actions(job) == [("stress-tests", "rk5-stress-tests", "saved draft")]
 
 
+def test_any_other_error_in_a_hop_stops_the_job_with_its_line_and_the_rows_so_far(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken(item: str, *, caller: Caller, inputs: object = None) -> Report:
+        raise OSError("the disk is full")
+
+    picked = {"templates": ["stress-tests", "backup-weekly"]}
+    with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
+        monkeypatch.setattr(door.svc.tests, "run", broken)
+        job = ended(rest, rest.post(ROUTE, json=picked, headers=BEARER).json())
+
+    assert (job["state"], job["done"], job["total"]) == ("stopped", 1, 2)
+    assert job["line"] == (
+        "the install stopped at backup-weekly with an unexpected OSError: the disk is full; "
+        "the templates before it are installed, so run the install again"
+    )
+    assert sorted(job["result"]) == ["rows"]
+    assert actions(job) == [("stress-tests", "rk5-stress-tests", "saved draft")]
+
+
 def test_the_install_runs_on_the_engines_loop_with_no_request_principal(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -187,6 +187,17 @@ def test_a_stopped_job_prints_its_rows_and_its_line_and_fails(
     assert (code, capsys.readouterr().out.splitlines()) == (1, [PRINTED[0], f"stopped: {line}"])
 
 
+def test_a_stopped_job_with_no_result_still_prints_its_line(
+    home: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    line = "it stopped with an error: the database is locked"
+    stopped = job("stopped", line=line) | {"result": None}
+    with hosted([(202, job("running")), (200, stopped)]) as host:
+        code = install(home, host.port)
+
+    assert (code, capsys.readouterr().out.splitlines()) == (1, [f"stopped: {line}"])
+
+
 @pytest.mark.parametrize("lost", ["no answer", "a restarted host", "nothing listening"])
 def test_a_host_lost_after_it_answered_ends_the_command_and_starts_no_second_install(
     home: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, lost: str

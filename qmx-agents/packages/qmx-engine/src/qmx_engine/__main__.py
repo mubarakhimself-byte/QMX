@@ -319,7 +319,8 @@ def through_host(home: Path, port: int, names: list[str] | None) -> Through | No
         except (OSError, BrokenAnswer) as lost:
             raise HostLost from lost
     stopped = str(job["line"]) if job["state"] == "stopped" else ""
-    return Through(_lines(job["result"]["rows"]), stopped)
+    result = cast(dict[str, list[dict[str, str]]], job["result"] or {})
+    return Through(_lines(result.get("rows", [])), stopped)
 
 
 @contextmanager

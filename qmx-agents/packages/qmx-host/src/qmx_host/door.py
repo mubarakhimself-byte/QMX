@@ -66,6 +66,7 @@ from qmx_control.catalog import (
 from qmx_control.service import Observer, observers
 from qmx_engine.__main__ import INSTALL_ROUTE
 from qmx_engine.control_door import FAILURES, PRINCIPAL, EngineDoor, control_error
+from qmx_engine.ledger.redact import redact
 from qmx_engine.service.context import OPERATOR, Caller
 from qmx_engine.service.forward import PASS_HEADER
 from qmx_engine.templates.catalog import CATALOG, Template, find
@@ -374,6 +375,14 @@ def templates_router(engine: EngineDoor) -> APIRouter:
                         f"the install stopped at {template.id}: {why}; the templates before it "
                         "are installed, so fix that and run the install again",
                         {"code": refused.code, "rows": list(rows)},
+                    ) from None
+                except Exception as error:  # a disk, database or loop error ends with its line
+                    why = redact(str(error)) or "no message"
+                    raise Stopped(
+                        f"the install stopped at {template.id} with an unexpected "
+                        f"{type(error).__name__}: {why}; the templates before it are installed, "
+                        "so run the install again",
+                        {"rows": list(rows)},
                     ) from None
             progress("all templates done", done=len(picked), total=len(picked))
             return {"rows": list(rows)}
