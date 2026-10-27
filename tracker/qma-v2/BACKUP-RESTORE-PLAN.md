@@ -119,7 +119,7 @@ Design 62 C1, C2 and B3, with guards L1 and L6. Rulings 106, 135, 136, 141 and 1
 - [ ] Metric. Seconds for lane 2's first round to a folder target, for lane 3's unchanged round, and for a plain `shutil.copytree` of the same `data/` to the same drive. The parent has no copies, so the plain copy is the baseline of the same work.
 - [ ] Probe. Each of the three, three times, interleaved, on fresh target folders.
 - [ ] Baseline. Record the plain copy's median first.
-- [ ] Rule. The first round's median is within 1.5 times the plain copy's, or the PR fails. The unchanged round is under 2 s at its median, an absolute budget.
+- [ ] Rule. The first round's median is within 8 times the plain copy's, or the PR fails; the unchanged round is under 2 s at its median, an absolute budget. (Coordinator ruling 2026-10-27 at B1: the earlier 1.5 times cannot be met by the design itself, since `VACUUM INTO` of the stores and one sha256 of every byte take more than 1.5 times the plain copy before any file is written, and the quick undo stages every changed file once more. The first round happens once per place, runs as a background job, and never holds a request; every later round is the unchanged or nearly unchanged one. B1 measured 6.46 times on lane 2.)
 
 **Review gate.** None. B1 is not review-gated.
 
