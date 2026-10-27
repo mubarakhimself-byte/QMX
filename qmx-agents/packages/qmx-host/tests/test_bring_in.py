@@ -11,8 +11,9 @@ import shutil
 import sqlite3
 import sys
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,15 +23,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from qmx_control.library import UNFINISHED, old_library
 from qmx_control.service import ControlService
+from qmx_engine.ledger import redact
 from qmx_engine.ledger.migrations import STEPS
 from qmx_engine.ledger.store import Ledger
 from qmx_home import FLAT, LABEL, Label, pointer_file
+from qmx_library.migrate import OPERATOR, from_library_b
 from qmx_library.migrate.from_library_b import JUNK
 from qmx_library.migrate.snapshot import snapshot as freeze
+from qmx_library.store import Store
 
 from qmx_host.__main__ import main
-from qmx_host.bring_in import Refused, bring_in, copy_file
+from qmx_host.bring_in import REPORT, REPORT_TEXT, Refused, bring_in, copy_file
 from qmx_host.first_start import Places, bring_in_old, first_start_router
+from qmx_host.host import recheck_test_runs
 
 VAULT_KEY = b"\x01\x02 test vault key"
 
@@ -62,12 +67,13 @@ def items(db: sqlite3.Connection, home: Path, rows: list[tuple[str, str, str]]) 
         )
 
 
-def old_home(at: Path, scratch: Path) -> Path:
+def old_home(at: Path, scratch: Path, made_by_tests: Sequence[str] = ()) -> Path:
     """A flat home in the old layout, labelled format 1 the way LF1's `--create` labelled one: the
     control store and run index from the control service's own openers, a run ledger at schema
     version 3 (the parent's own steps 1 to 3) with one event, `library.db` with rows still in
     its `-wal` (taken while a connection held them), the test junk, a vault key, the host log,
-    the old lock, and the relayed home's junction to the chats."""
+    the old lock, and the relayed home's junction to the chats. `made_by_tests` names more
+    `remote-flow` results, written after the junk list was taken."""
     (at / "artifacts").mkdir(parents=True)
     (at / LABEL).write_text(Label.mint(FLAT).dump(), encoding="utf-8")
     (at / ".qmx").mkdir()
@@ -110,6 +116,7 @@ def old_home(at: Path, scratch: Path) -> Path:
                     (str(uuid.uuid4()), "backtest", "Rates"),
                     (str(uuid.uuid4()), "backtest", "Momentum"),
                     (JUNK[0], "workflow-result", "remote-flow"),
+                    *((i, "workflow-result", "remote-flow") for i in made_by_tests),
                 ],
             )
         for name in ("library.db", "library.db-wal"):
@@ -492,3 +499,71 @@ def test_any_error_ends_with_an_unfinished_report_naming_it(pc: Path) -> None:
     )
     assert (pc / "QMX" / "data" / UNFINISHED).read_text(encoding="utf-8") == report.facts["why"]
     assert not (pc / "profile" / "Roaming" / "QMX").exists(), "no lock is left in AppData"
+
+
+MADE_BY_TESTS = (
+    "  2 items made by test runs, not by you, are in the new Library but archived: search and "
+    "recall leave them out, and nothing was deleted."
+)
+
+
+def searched(data: Path) -> tuple[int, int]:
+    """Items Library search finds for `remote-flow`, then with the archived ones."""
+    with Store.open(data / "library", redactor=redact, name="pc") as store:
+        return (
+            len(store.search(OPERATOR, "remote-flow")),
+            len(store.search(OPERATOR, "remote-flow", include_archived=True)),
+        )
+
+
+def test_test_runs_in_the_old_library_are_counted_apart_and_archived_not_deleted(
+    pc: Path,
+) -> None:
+    tests = sorted(str(uuid.uuid4()) for _ in range(2))
+    old = old_home(pc / "old" / ".qmx", pc, made_by_tests=tests)
+    before = snapshot(old)
+
+    report = bring_in_old(old, pc / "QMX", places(pc))
+
+    assert report.finished, report.text
+    assert snapshot(old) == before, "not one byte, time or name of the old folder changed"
+    library = report.facts["library"]
+    assert isinstance(library, dict)
+    assert library["kinds"] == {"article": 1, "backtest": 2}
+    assert (report.facts["test_runs"], report.facts["test_rule"]) == (tests, 1)
+    assert "Your Library: 3 items in the new Library." in report.lines
+    assert MADE_BY_TESTS in report.lines
+    assert (
+        "  1 test result named remote-flow, made by test runs and not by you, left in your old "
+        "folder." in report.lines
+    )
+    assert searched(pc / "QMX" / "data") == (0, 2)
+
+
+def test_a_folder_brought_in_before_the_rule_is_archived_once_at_host_start(
+    pc: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    old = old_home(pc / "old" / ".qmx", pc, made_by_tests=[str(uuid.uuid4()) for _ in range(2)])
+    with monkeypatch.context() as earlier:
+        earlier.setattr(from_library_b, "TEST_LANES", ())
+        bring_in_old(old, pc / "QMX", places(pc))
+    data = pc / "QMX" / "data"
+    saved = json.loads((data / REPORT).read_text(encoding="utf-8"))
+    for stamp in ("test_rule", "test_runs"):
+        del saved[stamp]
+    (data / REPORT).write_text(json.dumps(saved), encoding="utf-8")
+    assert searched(data) == (2, 2)
+
+    for _ in range(2):
+        with Store.open(data / "library", redactor=redact, name="pc") as store:
+            recheck_test_runs(data, store)
+
+    text = (data / REPORT_TEXT).read_text(encoding="utf-8").splitlines()
+    facts = json.loads((data / REPORT).read_text(encoding="utf-8"))
+    assert searched(data) == (0, 2)
+    assert [line for line in text if "made by test runs, not by you" in line] == [
+        f"Checked again when QMX started on {datetime.now(UTC):%Y-%m-%d}: "
+        + MADE_BY_TESTS.removeprefix("  ")
+    ]
+    assert (facts["test_rule"], len(facts["test_runs"])) == (1, 2)
+    assert capsys.readouterr().err == "library: 2 old items made by test runs archived\n"

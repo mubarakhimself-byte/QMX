@@ -12,6 +12,13 @@ by `migrator`; memo rows become `fields.memo_key` on the version they named.
 import skips exactly those ids and reports them, so P-REHEARSE can compare step 0's counts minus
 this list (fix-check 58, N18) instead of asking the importer to guess.
 
+`TEST_LANES` catches what that id list cannot: rows the same test runs wrote after the list was
+taken. A rule that matches titles cannot be checked the way an id list can, so a row it matches
+is still imported, counted and verified like any other, then its item is archived at once with
+the reason `made by test runs` (ruling 141). Archived items are kept, out of search and recall,
+and nothing is deleted. The rule judges each old root whole: an item is archived only when every
+version of it matches, so a version of his is never hidden with a test run's.
+
 `switch_over` is the whole cut-over (MIGRATION steps 0, 2 and 4, then step 6's retirement) as one
 call, so `scripts/data/switch_library.py` and probe P-REHEARSE run the same steps this module's
 tests run.
@@ -24,11 +31,11 @@ import shutil
 import sqlite3
 import stat
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final, Literal, cast
 
 from pydantic import JsonValue
 
@@ -74,11 +81,64 @@ type Document = Mapping[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
+class LaneMark:
+    """One mark a test run left on the `library.db` rows it wrote: its old kind, and a value of
+    the row's `title`, `source` or one of its `tags`."""
+
+    kind: str
+    field: Literal["title", "source", "tags"]
+    value: str
+
+    def marks(self, row: Document) -> bool:
+        found = row.get(self.field)
+        values = cast(list[object], found) if isinstance(found, list) else [found]
+        return str(row["kind"]) == self.kind and self.value in [str(v) for v in values]
+
+
+TEST_LANES: Final = (LaneMark("workflow-result", "title", "remote-flow"),)
+"""qmx-remote's resume test wrote one `remote-flow` result into the home it ran in each time it
+ran (2026-10-08 to 2026-10-23). His `library.db` of 2026-10-18 held only these, so no other mark is
+known."""
+TEST_RULE: Final = 1
+"""The version of `TEST_LANES`. Raise it with any change, so a folder brought in under an older
+list is checked once more at its next host start."""
+TEST_REASON: Final = "made by test runs"
+
+
+@dataclass(frozen=True, slots=True)
 class Imported:
     objects: int
     skipped: int
     edges: int
     junk: tuple[str, ...] = ()
+    tests: tuple[str, ...] = ()
+    """The old ids of the versions `TEST_LANES` matched, imported and then archived."""
+
+
+def made_by_tests(rows: Iterable[Document]) -> dict[str, tuple[str, ...]]:
+    """The old ids of each root's versions, for the roots every version of which a test run made."""
+    versions: dict[str, list[str]] = {}
+    whole: dict[str, bool] = {}
+    for row in rows:
+        root = str(row["root_id"])
+        versions.setdefault(root, []).append(str(row["id"]))
+        whole[root] = whole.get(root, True) and any(lane.marks(row) for lane in TEST_LANES)
+    return {root: tuple(versions[root]) for root, matched in sorted(whole.items()) if matched}
+
+
+def archive_test_runs(store: Store, rows: Iterable[Document]) -> tuple[str, ...]:
+    """Archive the item of each root `made_by_tests` names, unless it is archived already, and
+    return the old ids of those roots' versions. A root with no item here is left alone."""
+    archived: list[str] = []
+    for root, ids in made_by_tests(rows).items():
+        found = resolve_alias(store, root)
+        if found is None:
+            continue
+        item = store.get(OPERATOR, found).item
+        if store.catalog.state(item) != "archived":
+            store.archive(OPERATOR, item, TEST_REASON)
+        archived += ids
+    return tuple(sorted(archived))
 
 
 def encoded(value: JsonValue) -> bytes:
@@ -151,8 +211,22 @@ def relate(store: Store, source_id: str, target_id: str) -> bool:
     return True
 
 
+def recheck_test_runs(store: Store, home: Path) -> tuple[str, ...] | None:
+    """`archive_test_runs` over the frozen `library.db` of a switch that already ran, for a folder
+    switched before `TEST_LANES` (or this version of it). None when no frozen copy is there."""
+    db_path = pre(home) / "library.db"
+    if not db_path.is_file():
+        return None
+    with closing(sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+        rows = [
+            cast(dict[str, Any], json.loads(r)) for (r,) in db.execute("SELECT data FROM items")
+        ]
+    return archive_test_runs(store, [row for row in rows if str(row["id"]) not in JUNK])
+
+
 def import_library_b(store: Store, home: Path) -> Imported:
-    """Every row of the frozen `library.db` but the known test junk."""
+    """Every row of the frozen `library.db` but the known test junk, with the items `TEST_LANES`
+    matches archived."""
     db_path = pre(home) / "library.db"
     if not db_path.exists():
         return Imported(0, 0, 0)
@@ -173,7 +247,7 @@ def import_library_b(store: Store, home: Path) -> Imported:
         else:
             skipped += 1
     edges = sum(relate(store, str(s), str(t)) for s, t in links)
-    return Imported(put, skipped, edges, junk)
+    return Imported(put, skipped, edges, junk, archive_test_runs(store, rows))
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +285,8 @@ class Switched:
                     "edges": self.imported.edges,
                 },
                 "junk": list(self.imported.junk),
+                "tests": list(self.imported.tests),
+                "test_rule": TEST_RULE,
                 "apps": {
                     "artifacts": self.apps.artifacts,
                     "definitions": self.apps.definitions,

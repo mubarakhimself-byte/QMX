@@ -21,12 +21,19 @@ from qmx_engine.ledger import redact
 
 from qmx_library.migrate import MigrationAlarm, open_target, pre
 from qmx_library.migrate.from_apps import import_apps
-from qmx_library.migrate.from_library_b import JUNK, import_library_b, resolve_alias, switch_over
+from qmx_library.migrate.from_library_b import (
+    JUNK,
+    import_library_b,
+    recheck_test_runs,
+    resolve_alias,
+    switch_over,
+)
 from qmx_library.migrate.from_registry import import_registry
 from qmx_library.migrate.snapshot import Counts, snapshot
 from qmx_library.migrate.verify import verify
 from qmx_library.port import LibraryRefused
-from qmx_library.principal import MAIN, Principal
+from qmx_library.principal import MAIN, Principal, state_ref
+from qmx_library.store import Store
 
 OPERATOR = Principal("operator")
 
@@ -353,6 +360,80 @@ def test_the_switch_over_retires_the_old_files_with_the_junk_filtered(tmp_path: 
     retired = tmp_path / "migration" / "retired" / "library.db"
     assert retired.is_file()
     assert retired.stat().st_mode & 0o222 == 0, "the retired copy is read-only"
+
+
+def old_version(
+    db: sqlite3.Connection,
+    home: Path,
+    title: str,
+    content: Any,
+    *,
+    previous: dict[str, Any] | None = None,
+    item_id: str | None = None,
+) -> dict[str, Any]:
+    """One more `workflow-result` version in `library.db`, the way the old Library wrote it."""
+    body = encoded(content)
+    digest = sha256(body).hexdigest()
+    (home / "artifacts" / digest).write_bytes(body)
+    item_id = item_id or str(uuid.uuid4())
+    root = str(previous["root_id"]) if previous is not None else item_id
+    version = int(previous["version"]) + 1 if previous is not None else 1
+    data: dict[str, Any] = {
+        "id": item_id,
+        "kind": "workflow-result",
+        "title": title,
+        "tags": [],
+        "source": "",
+        "created": "2026-10-01T00:00:00+00:00",
+        "root_id": root,
+        "version": version,
+        "previous_id": None if previous is None else previous["id"],
+        "sha256": digest,
+        "size": len(body),
+        "ref": f"artifacts/{digest}",
+        "fetched_date": None,
+    }
+    db.execute(
+        "INSERT INTO items VALUES(?,?,?,?,?,?)",
+        (item_id, json.dumps(data), root, version, "", None),
+    )
+    return data
+
+
+def test_test_run_items_are_imported_then_archived_whole_and_search_leaves_them_out(
+    tmp_path: Path,
+) -> None:
+    library_b(tmp_path)
+    with closing(sqlite3.connect(tmp_path / "library.db")) as db, db:
+        first = old_version(db, tmp_path, "remote-flow", {"values": 1})
+        second = old_version(db, tmp_path, "remote-flow", {"values": 2}, previous=first)
+        his = old_version(db, tmp_path, "Carry notes", {"n": 1})
+        on_his = old_version(db, tmp_path, "remote-flow", {"n": 2}, previous=his)
+        old_version(db, tmp_path, "remote-flow", {"values": 0}, item_id=JUNK[0])
+
+    switched = switch_over(tmp_path, redactor=redact)
+
+    report = switched.report()
+    assert switched.ok, switched.verification.render()
+    assert report["junk"] == [JUNK[0]]
+    assert report["tests"] == sorted([first["id"], second["id"]])
+    assert switched.imported.objects == 11
+    with Store.open(tmp_path / "library", redactor=redact, name="pc") as store:
+        items = {
+            row["id"]: store.get(OPERATOR, str(resolve_alias(store, row["id"]))).item
+            for row in (first, second, his, on_his)
+        }
+        found = {hit.item for hit in store.search(OPERATOR, "remote-flow")}
+        archived = {h.item for h in store.search(OPERATOR, "remote-flow", include_archived=True)}
+        test_run = items[first["id"]]
+        before = store.head(test_run, state_ref(test_run))
+        again = recheck_test_runs(store, tmp_path)
+        after = store.head(test_run, state_ref(test_run))
+    assert items[second["id"]] == test_run, "both versions are one item, archived whole"
+    assert found == {items[his["id"]]}, "a test run's version on one of his items stays his"
+    assert archived == {test_run, items[his["id"]]}
+    assert before is not None and before[0] == "archived"
+    assert (again, after) == (tuple(sorted([first["id"], second["id"]])), before)
 
 
 def test_the_step_0_copy_is_read_not_the_live_library(tmp_path: Path) -> None:

@@ -115,6 +115,7 @@ from qmx_router.server import (
     node_app,
 )
 
+from qmx_host.bring_in import recheck_at_start
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
@@ -593,6 +594,18 @@ def open_store(home: Path, root: Path, *, serving: bool, floor: int) -> HostStor
     return store
 
 
+def recheck_test_runs(home: Path, store: Store) -> None:
+    """The bring-in's one pass for test runs at host start (MD3). A refusal is printed and the
+    host starts anyway; the report stays unstamped, so the next start tries again."""
+    try:
+        archived = recheck_at_start(home, store)
+    except (LibraryRefused, OSError) as refused:
+        print(f"library: test runs from the old Library not checked: {refused}", file=sys.stderr)
+        return
+    if archived:
+        print(f"library: {archived} old items made by test runs archived", file=sys.stderr)
+
+
 def library_line(store: Store) -> DoctorLine:
     """The doctor's Library row: the store's health, its alarms and the line that stopped it."""
     state = store.state
@@ -669,6 +682,7 @@ async def serve(
         try:
             floor = floor_bytes(section(control, "engine"), free_bytes(home))
             with open_store(home, root, serving=serving, floor=floor) as store:
+                recheck_test_runs(home, store)
                 control.attach_library(store)
                 harness.doctor_from(lambda: library_line(store))
                 harness.record_into(SessionRecorder(store))
