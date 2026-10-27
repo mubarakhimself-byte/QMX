@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import cast
 
 import qmx_engine.templates
+from qmx_engine.__main__ import home_library
 from qmx_engine.definition.folder import load
 from qmx_engine.definition.model import Workflow
 from qmx_engine.ledger.store import Reader
@@ -40,7 +41,7 @@ def main() -> int:
     if folder.document is None:
         parser.error(f"the run-on-a-machine template does not load: {folder.problems}")
     workflow = Workflow.model_validate(folder.document)
-    with EngineService.open(args.home) as svc:
+    with home_library(args.home) as library, EngineService.open(args.home, library=library) as svc:
         svc.ctx.engine.worker = PlacementWorker(
             gateway=cast(GatewayPort, SshGateway()),
             providers={"contabo": SshProvider()},
