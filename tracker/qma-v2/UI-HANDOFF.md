@@ -301,8 +301,8 @@ Backend decisions that change what the UI shows or wires. These are landings, no
 
 ## 18. Library attach, preview and detail (added 2026-10-27, his ask)
 
-Checked against the backend tip `4dd2c5c6` and the UI branch `ui-review/repair` at `eea09941`.
+The designs already show attaching a Library item to a chat (copilot or any agent chat), attaching one to a workflow, a preview of a selected item, and its detailed view. This section is the backend side only, checked against the backend tip `4dd2c5c6`; the screens follow the designs.
 
-1. **Attach from the Library to a chat.** The UI has it as a design: the composer's "From Library…" opens `lib/library/LibraryPicker.svelte`, and picking adds a chip. It reads the demo `LIBRARY` list and is not wired. The backend has the model's half: the copilot's own `context_add` and `context_list` tools (`qmx_host/sessions.py` `chat_reads`, AD-63) attach `@library`, `@run`, `@app`, `@pod`, `@unit`, `@bot`, `@session` and `@memory` references to the chat record, pinned or following. The backend has no route for the screen to attach on his click, and a typed `@` in a message is not read as a reference. The coordinator's queue holds that backend step; the composer wires to it when it lands.
-2. **Attach to a workflow.** The backend accepts `@library:<object id>` and `@run:<run id>[/<output>]` in a workflow's `inputs` (`qmx_control/context.py` `RUN_INPUT_KINDS`). The run-start form needs a Library pick for those inputs.
-3. **Preview and detail.** The UI has both: the side panel `lib/library/ItemInspector.svelte` (what it is, where it is used, journal, code, settings, actions) and the full page `routes/library/[id]`, plus the article reader `routes/library/article/[id]`. All read demo data today; they wire to the Library routes in section 4.
+1. **Attach to a chat.** The backend has the model's half: the copilot's own `context_add` and `context_list` tools attach `@library`, `@run`, `@app`, `@pod`, `@unit`, `@bot`, `@session` and `@memory` references to the chat record, pinned or following (AD-63). It has no route for the screen to attach on his click, and a typed `@` in a message is not read as a reference. That backend step is in the coordinator's queue; the design's attach wires to it when it lands.
+2. **Attach to a workflow.** The backend accepts `@library:<object id>` and `@run:<run id>[/<output>]` in a workflow's `inputs`. The design's run-start needs a Library pick for those inputs.
+3. **Preview and detail.** These read the Library routes in section 4.
