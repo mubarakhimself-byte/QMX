@@ -31,6 +31,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -103,6 +104,10 @@ NS_PER_DAY: Final[int] = 86_400 * 1_000_000_000
 GAP_MIN_MS: Final[int] = 3_600 * 1_000
 GAP_MAX_MS: Final[int] = 6 * 3_600 * 1_000
 _TOKEN: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9_.+-]{1,64}")
+RENAME_TRIES: Final[int] = 8
+RENAME_WAIT_S: Final[float] = 0.01
+HELD_OPEN: Final[frozenset[int]] = frozenset({5, 32})
+"""Windows refuses a rename onto a file another handle reads (WinError 5 or 32)."""
 
 
 class FreezeKind(StrEnum):
@@ -156,6 +161,21 @@ def _month_start_ns(year: int, month: int) -> int:
 
 def _plus_month(year: int, month: int) -> tuple[int, int]:
     return (year + 1, 1) if month == 12 else (year, month + 1)
+
+
+def _replace(source: Path, target: Path) -> None:
+    """`os.replace`, retried while Windows reports the target held open, as a backup round's
+    copy holds it for the length of its read. The wait doubles from `RENAME_WAIT_S`; past the
+    last try the refusal is raised, which the commit reports as a storage failure."""
+    for attempt in range(RENAME_TRIES):
+        try:
+            os.replace(source, target)
+        except PermissionError as held:
+            if getattr(held, "winerror", None) not in HELD_OPEN or attempt == RENAME_TRIES - 1:
+                raise
+            time.sleep(RENAME_WAIT_S * 2**attempt)
+        else:
+            return
 
 
 def _iso(ns: int) -> str:
@@ -496,7 +516,7 @@ class SeriesStore:
                 key=key.text,
                 frozen=previous.fingerprint,
             )
-        os.replace(written.path, final)
+        _replace(written.path, final)
         start, end = _range_of(written, key)
         record = Correction(
             previous.fingerprint, written.fingerprint, correction.strip(), self._at(), start, end
@@ -542,7 +562,7 @@ class SeriesStore:
         attempts = previous.attempts + 1 if same_as_last and previous is not None else 1
         if not self._should_freeze(key, rule, gaps, attempts, provider_checksum):
             open_path = folder / OPEN_NAME
-            os.replace(written.path, open_path)
+            _replace(written.path, open_path)
             state = SeriesState(
                 key=key.text,
                 fingerprint=written.fingerprint,
@@ -569,7 +589,7 @@ class SeriesStore:
                 )
             )
         final = folder / f"{written.fingerprint}.parquet"
-        os.replace(written.path, final)
+        _replace(written.path, final)
         (folder / OPEN_NAME).unlink(missing_ok=True)
         corrections = previous.corrections if previous is not None else ()
         if (
@@ -689,7 +709,7 @@ class SeriesStore:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        os.replace(temp, target)
+        _replace(temp, target)
 
     def _at(self) -> str:
         return self._wall().isoformat()
