@@ -375,7 +375,8 @@ def finish(
 
 
 def cancel(layout: Layout) -> str:
-    """Drop a staged restore that has not begun to finish. The line to show. Raises
+    """Drop a staged restore that has not begun to finish, first putting back the folder's data
+    when a finish stopped right after setting it aside. The line to show. Raises
     RestoreRefused once a finish has begun: the next start completes it."""
     with hold(layout.backups / LOCK, _round_busy(layout)):
         record = _read_journal(layout)
@@ -383,6 +384,7 @@ def cancel(layout: Layout) -> str:
             return f"no restore is staged for {layout.root}"
         if record.step not in ("staging", "staged"):
             raise RestoreRefused(_waits(layout, record))
+        _put_back(layout, record, _aside(layout, record))
         _clear(layout, record)
     return (
         f"the restore of the copy {record.copy} from {record.where} is cancelled; nothing in "

@@ -364,3 +364,24 @@ def test_a_folder_named_like_a_tombstone_is_skipped_with_a_line(tmp_path: Path) 
     assert_restored(filled, target, stamp, before)
     skipped = [line for line in log_lines(layout) if line["kind"] == "restore-skipped"]
     assert [line["path"] for line in skipped] == [f"library/blobs/tombstones/{name}"]
+
+
+def test_a_cancel_after_a_kill_between_the_set_aside_and_its_journal_puts_the_data_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    filled, _, stamp, before = staged(tmp_path)
+    layout = filled.layout
+    kill_at(monkeypatch, "set-aside", after=False)
+    with pytest.raises(Killed):
+        restore.finish(layout)
+    monkeypatch.undo()
+    assert not layout.data.exists()
+
+    line = restore.cancel(layout)
+
+    assert line.endswith(f"nothing in {layout.root} changed")
+    assert listing(layout.data) == before
+    assert not list(layout.backups.glob("before-restore-*"))
+    assert not (layout.backups / f"restoring-{stamp}").exists()
+    assert not (layout.backups / "restore.json").exists()
+    assert restore.finish(layout) is None
