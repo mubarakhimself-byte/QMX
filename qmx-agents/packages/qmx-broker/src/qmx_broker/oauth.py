@@ -165,11 +165,12 @@ def consent_url(app: AppCredential, redirect: Redirect, *, base: str = CONSENT_U
 def _token_call(
     params: dict[str, str], method: str, token_url: str, fetch: Fetch, now: float
 ) -> Tokens:
-    """A server error is `bad_token_answer` before its body is read, so a 5xx never reads as a
-    refused grant. A refusal keeps cTrader's errorCode only when it is a short closed word, and
-    never its description: an endpoint that echoes the request would put the secret in either."""
+    """A server error or a rate limit (429) is `bad_token_answer` before its body is read, so
+    neither reads as a refused grant. A refusal keeps cTrader's errorCode only when it is a short
+    closed word, and never its description: an endpoint that echoes the request would put the
+    secret in either."""
     status, body = fetch(method, f"{token_url}?{urlencode(params)}")
-    if status >= 500:
+    if status >= 500 or status == 429:
         raise OAuthRefused("bad_token_answer", f"HTTP {status}")
     try:
         parsed: object = json.loads(body or b"{}")

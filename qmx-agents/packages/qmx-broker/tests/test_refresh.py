@@ -219,14 +219,17 @@ def test_a_sign_in_written_during_a_refresh_is_the_pair_the_read_uses(
     assert listed_with(recorded) == ["acc-9"]
 
 
-def test_a_token_endpoint_error_keeps_the_pair_and_says_to_try_again(
-    tmp_path: Path, vault: Memory
+@pytest.mark.parametrize(
+    ("status", "word"), [(503, "SERVICE_UNAVAILABLE"), (429, "TOO_MANY_REQUESTS")]
+)
+def test_a_token_endpoint_error_or_rate_limit_keeps_the_pair_and_says_to_try_again(
+    tmp_path: Path, vault: Memory, status: int, word: str
 ) -> None:
     signed_in(vault)
     store = Store()
 
     def unavailable(_method: str, _url: str) -> tuple[int, bytes]:
-        return 503, b'{"errorCode": "SERVICE_UNAVAILABLE", "description": "try later"}'
+        return status, json.dumps({"errorCode": word, "description": "try later"}).encode()
 
     with pytest.raises(ReadRefused) as refused:
         read(broker(tmp_path, store, unavailable))
