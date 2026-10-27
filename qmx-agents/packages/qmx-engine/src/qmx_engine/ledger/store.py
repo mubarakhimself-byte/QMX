@@ -270,8 +270,10 @@ class Ledger:
             opened = sqlite3.connect(
                 self.path, isolation_level=None, timeout=BUSY_TIMEOUT_S, check_same_thread=True
             )
-            opened.execute("PRAGMA synchronous = FULL")
+            # `migrate` judges the file first: any statement before it would meet a file that is
+            # not SQLite as a raw DatabaseError instead of the refusal that names it.
             self.applied = migrate(opened)
+            opened.execute("PRAGMA synchronous = FULL")
         except BaseException as error:
             if opened is not None:
                 opened.close()

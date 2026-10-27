@@ -33,6 +33,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -117,6 +118,7 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
+from uvicorn.config import STARTUP_FAILURE
 
 from qmx_host.bring_in import recheck_at_start
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
@@ -215,19 +217,27 @@ def serve_forever(
     library_root: Path | None = None,
     place: str = "",
 ) -> int:
-    """`serve` under the folder's lock on a port bound before anything opens. Every refusal is one
-    line on stderr and an exit code the desktop app branches on (Appendix E)."""
+    """`serve` under the folder's lock on a port bound before anything opens. Every refusal before
+    the host serves is one line on stderr and an exit code the desktop app branches on (Appendix
+    E); one raised after it served stops the host like any other error."""
+    served = threading.Event()
     try:
         with single_instance(home), bound(TAILNET if role == "server" else LOOPBACK, port) as sock:
             record(home, sock.getsockname()[1])
-            asyncio.run(serve(home, sock, role, ui_origin, scrubbed, keep, library_root, place))
+            asyncio.run(
+                serve(
+                    home, sock, role, ui_origin, scrubbed, keep, library_root, place, served=served
+                )
+            )
     except (HostRunning, PlaceRefused) as refused:
         print(refused, file=sys.stderr)
         return 1
     except PortTaken as taken:
         print(f"QMX did not start: {taken}", file=sys.stderr)
         return PORT_TAKEN
-    except OPEN_REFUSALS as refused:
+    except (*OPEN_REFUSALS, AppDidNotStart) as refused:
+        if served.is_set():
+            raise
         print(f"QMX did not start: {' '.join(str(refused).split())}", file=sys.stderr)
         return DID_NOT_OPEN
     return 0
@@ -240,14 +250,38 @@ class PortTaken(Exception):
         )
 
 
+class AppDidNotStart(Exception):
+    """Uvicorn exits 3 when the app's startup fails, the code Appendix E keeps for a first start
+    that is due; the host names it as one line and exits 2 instead."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "the host's app failed while it started up. Its error is in the lines above; fix that "
+            "and start QMX again."
+        )
+
+
 @contextmanager
 def bound(address: str, port: int) -> Generator[socket.socket]:
     """The host's one socket, bound once so a taken port is found before anything opens; uvicorn
-    listens on it later. Uvicorn sets `SO_REUSEADDR` on the sockets it binds itself; on Windows
-    that lets a second bind take a port in use, so here it is set only elsewhere, where it only
-    skips `TIME_WAIT`."""
+    listens on it later.
+
+    Uvicorn sets `SO_REUSEADDR` on the sockets it binds itself; on Windows that lets a second bind
+    take a port in use, so here it is set only elsewhere, where it only skips `TIME_WAIT`. Windows
+    also lets a loopback bind share a port another program listens on at every interface, so there
+    the wildcard address is tried first, and the host's own socket is exclusive, so no later
+    program can share its port either.
+    """
+    if os.name == "nt" and port and address != TAILNET:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as wildcard:
+            try:
+                wildcard.bind((TAILNET, port))
+            except OSError:
+                raise PortTaken(port) from None
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    if os.name != "nt":
+    if os.name == "nt":
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     with sock:
         try:
@@ -676,9 +710,12 @@ async def serve(
     keep: Sequence[str],
     library_root: Path | None = None,
     place: str = "",
+    *,
+    served: threading.Event,
 ) -> None:
     """Assumes the caller scrubbed the environment, holds the home's lock and bound `sock`, the
-    port the app answers on. `place` is the `--place` name setup gives a server's host."""
+    port the app answers on. `place` is the `--place` name setup gives a server's host. `served`
+    is set once uvicorn has served, so a refusal after that is not named a start that failed."""
     port: int = sock.getsockname()[1]
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
@@ -775,7 +812,13 @@ async def serve(
                         print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
                         try:
                             await server.serve(sockets=[sock])
+                        except SystemExit as exited:
+                            if server.started or exited.code != STARTUP_FAILURE:
+                                raise
+                            raise AppDidNotStart from None
                         finally:
+                            if server.started:
+                                served.set()
                             for task in (beating, exporting, holding, syncing):
                                 if task is None:
                                     continue

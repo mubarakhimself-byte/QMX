@@ -7,8 +7,8 @@ from __future__ import annotations
 import socket
 import threading
 import webbrowser
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from collections.abc import Iterator
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import IO, override
 
@@ -92,7 +92,11 @@ def scratch_machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
         raise AssertionError("his real browser opened")
 
     monkeypatch.setattr(webbrowser, "open", real_browser)
-    monkeypatch.setattr(qmx_host.host, "hindsight_runs", lambda _control, _role: False)
+
+    def no_hindsight(_control: object, _role: object) -> bool:
+        return False
+
+    monkeypatch.setattr(qmx_host.host, "hindsight_runs", no_hindsight)
     before = keyring.get_keyring()
     keyring.set_keyring(Memory())
     try:
@@ -159,13 +163,15 @@ def test_a_ledger_that_is_not_one_stops_the_real_open_with_one_line_and_2(
 def test_an_app_whose_startup_fails_exits_2_with_one_line_not_3(
     home: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def failing_app(*_args: object) -> FastAPI:
-        @asynccontextmanager
-        async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    class Failing(AbstractAsyncContextManager[None]):
+        async def __aenter__(self) -> None:
             raise RuntimeError("the control store did not open")
-            yield
 
-        return FastAPI(lifespan=lifespan)
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    def failing_app(*_args: object) -> FastAPI:
+        return FastAPI(lifespan=lambda _app: Failing())
 
     monkeypatch.setattr(qmx_host.host, "compose", failing_app)
 
