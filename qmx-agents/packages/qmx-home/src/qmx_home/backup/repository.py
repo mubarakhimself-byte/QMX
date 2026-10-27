@@ -219,6 +219,11 @@ class Repository(Protocol):
 
     def drop(self, stamp: str) -> None: ...
 
+    def discard(self, sha256: str) -> None:
+        """Remove one pooled file whose bytes are damaged, so the next round that holds the file
+        pools it again."""
+        ...
+
     def sweep(self) -> Swept:
         """Remove pool files no copy names, only when every copy's manifest is whole."""
         ...
@@ -353,6 +358,9 @@ class FolderRepository:
 
     def drop(self, stamp: str) -> None:
         shutil.rmtree(long_path(self.snapshots / stamp))
+
+    def discard(self, sha256: str) -> None:
+        long_path(self.pool_path(sha256)).unlink(missing_ok=True)
 
     def sweep(self) -> Swept:
         named: set[str] = set()

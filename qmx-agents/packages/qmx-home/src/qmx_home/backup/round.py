@@ -177,7 +177,7 @@ def carry_on(layout: Layout, target: Target) -> str:
         {
             "kind": "carry-on",
             "id": target.id,
-            "key": _key(repo),
+            "key": place_key(repo),
             "stamp": stamps[-1] if stamps else None,
         },
     )
@@ -303,7 +303,7 @@ def _send(
     folder's own copy look like another folder's."""
     started = clock.monotonic()
     repo = FolderRepository(target_root(target.path, home_id))
-    key, where = _key(repo), repo.where
+    key, where = place_key(repo), repo.where
 
     def placed(
         result: Result,
@@ -609,12 +609,13 @@ def _stamp(now: datetime, repo: FolderRepository) -> str:
     return stamp
 
 
-def _key(repo: FolderRepository) -> str:
+def place_key(repo: FolderRepository) -> str:
+    """A place's key in the backup log: its folder, as the OS compares names."""
     return f"folder:{os.path.normcase(os.path.abspath(repo.root))}"
 
 
 def _target_key(target: Target, home_id: str) -> str:
-    return _key(FolderRepository(target_root(target.path, home_id)))
+    return place_key(FolderRepository(target_root(target.path, home_id)))
 
 
 def _label(layout: Layout) -> Label:
