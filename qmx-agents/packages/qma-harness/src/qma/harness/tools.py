@@ -238,8 +238,8 @@ def _paged(
     start = offset if isinstance(offset, int) else 0
     wanted = arguments.get("limit", limit)
     full = len(items) >= (wanted if isinstance(wanted, int) else limit)
-    keep: dict[str, object] = {**stamp, "next_offset": start + len(items) if full else None}
-    return json.dumps({**stamp, "items": items, "next_offset": keep["next_offset"]}), keep
+    cursor: dict[str, object] = {"next_offset": start + len(items) if full else None}
+    return json.dumps({**stamp, "items": items, **cursor}), {**stamp, **cursor}
 
 
 def wrap(row: OperationSpec, tool: Tool, save: Callable[..., Any]) -> ToolDef:

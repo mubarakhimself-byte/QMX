@@ -9,7 +9,7 @@ from qmf.venue.spot import exact
 
 class ReadStamp(TypedDict):
     """Whose figure a broker read is: the connection it resolved, that connection's kind, and the
-    `is_live` its session proved. A `demo` figure is never his own money."""
+    `is_live` its session proved. A `demo` figure is never real money."""
 
     environment: Literal["demo", "live"]
     is_live: bool
