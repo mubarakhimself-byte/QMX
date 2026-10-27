@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from fake_library import fake_service
 from flows import CHAIN
 
 from qmx_engine.ledger.store import Reader
@@ -53,7 +54,7 @@ def enabled(
     settings: SettingsPort | None = None,
 ) -> Generator[tuple[EngineService, str]]:
     found = bundle if isinstance(bundle, Bundle) else Bundle.read(bundle)
-    with EngineService.open(home, clock=clock, settings=settings) as svc:
+    with fake_service(home, clock=clock, settings=settings) as svc:
         item = svc.drafts.put(None, found, 0, caller=OPERATOR).item
         asyncio.run(svc.tests.run(item, caller=OPERATOR))
         version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)

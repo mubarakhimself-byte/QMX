@@ -1907,6 +1907,25 @@ class Store:
             keys = ("seq", "item", "ref", "new_head", "kind")
             return [dict(zip(keys, row, strict=True)) for row in rows]
 
+    def main_moves(self, after: int = 0) -> list[dict[str, Any]]:
+        """The moves after `after` that put an object on `main` for the first time. An object
+        put on a run's ref first is listed here only once a landing moves it onto `main`."""
+        with self._mutex:
+            rows = self.catalog.db.execute(
+                "SELECT m.seq, m.item, m.ref, m.new_head, o.kind FROM moves m "
+                "JOIN objects o ON o.object_id = m.new_head WHERE m.seq > ? AND m.ref = ? "
+                "AND m.seq = (SELECT min(seq) FROM moves WHERE new_head = m.new_head "
+                "AND ref = m.ref) ORDER BY m.seq",
+                (after, MAIN),
+            )
+            keys = ("seq", "item", "ref", "new_head", "kind")
+            return [dict(zip(keys, row, strict=True)) for row in rows]
+
+    def last_seq(self) -> int:
+        """The position of the newest ref move this store wrote or took in."""
+        with self._mutex:
+            return self.catalog.last_seq()
+
     def park_entry(
         self,
         item: str,

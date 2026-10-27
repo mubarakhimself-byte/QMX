@@ -133,9 +133,12 @@ def test_a_run_saves_a_workflow_onto_its_draft(library: LibraryPort) -> None:
 
 @pytest.mark.parametrize("adapter", ADAPTERS)
 def test_the_engine_runs_a_workflow_end_to_end(tmp_path: Path, adapter: str) -> None:
-    with Store.open(tmp_path / "library", redactor=redact) as store:
+    with (
+        Store.open(tmp_path / "library", redactor=redact) as store,
+        LibraryFake.open(tmp_path) as fake,
+    ):
         real = EngineLibraryAdapter(store) if adapter == "store" else None
-        with EngineService.open(tmp_path, library=real) as svc:
+        with EngineService.open(tmp_path, library=real or fake) as svc:
             item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR).item
             tested = asyncio.run(svc.tests.run(item, caller=OPERATOR))
             version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)

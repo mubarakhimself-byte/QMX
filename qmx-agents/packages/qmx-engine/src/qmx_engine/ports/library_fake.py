@@ -1,5 +1,6 @@
-"""The Library port backed by one SQLite file, `<qmx_home>/engine/library-fake.sqlite`, until the
-Library agent's store answers (ruling 91 holds real data work).
+"""The Library port backed by one SQLite file, `<qmx_home>/engine/library-fake.sqlite`, for tests
+and dev lanes only. No production path opens it: the host hands the engine the real store, and a
+service or engine opened without a Library refuses.
 
 Objects, blobs, edges and annotations are append-only and refs only move: SQL triggers refuse
 every DELETE, and every UPDATE outside `refs`, so nothing is ever deleted (AD-14) even through raw
@@ -401,6 +402,29 @@ class LibraryFake:
             (intent_key,),
         )
         return [str(row[0]) for row in rows]
+
+    def find_by_write_key(self, run_id: str, write_key: str) -> str | None:
+        row = self.db.execute(
+            "SELECT object_id FROM objects WHERE kind = 'artifact' AND ref = ? "
+            "AND json_extract(fields, '$.metadata.write_key') = ? ORDER BY seq LIMIT 1",
+            (runs_ref(run_id), write_key),
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    def moved_to_main(self, after: int = 0) -> list[LibraryEvent]:
+        """The fake lands no run's records, so only what it published is on `main`."""
+        rows = self.db.execute(
+            "SELECT seq, kind, object_id, ref FROM objects WHERE seq > ? AND ref = ? ORDER BY seq",
+            (after, MAIN),
+        )
+        return [
+            LibraryEvent(int(seq), f"library.{kind}.landed", str(object_id), str(ref))
+            for seq, kind, object_id, ref in rows
+        ]
+
+    def last_seq(self) -> int:
+        (seq,) = self.db.execute("SELECT coalesce(max(seq), 0) FROM objects").fetchone()
+        return int(seq)
 
     def list_runs(self, workflow_item: str, object_id: str | None = None) -> list[RunSummary]:
         latest: dict[str, RunSummary] = {}

@@ -11,12 +11,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fake_library import fake_service
 from fake_port import TOKENS, FakePort
 from qmx_home import resolve
 
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.settings import StaticSettings
-from qmx_engine.service.api import EngineService
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.templates import battery
 from qmx_engine.templates.battery import Judge, Side, family, judge_for
@@ -154,7 +154,7 @@ def answering(wrong: frozenset[str] = frozenset()) -> FakePort:
 
 def battery_run(home: Path, port: FakePort, tasks: list[dict[str, Any]]) -> dict[str, Any]:
     values = {**DEFAULTS, "roles.test_only": (DEEPSEEK, KIMI)}
-    with EngineService.open(home, settings=StaticSettings(values), harness=port) as svc:
+    with fake_service(home, settings=StaticSettings(values), harness=port) as svc:
         return asyncio.run(
             battery.run(
                 svc,
@@ -195,7 +195,7 @@ def test_a_model_change_reports_pass3_per_task_for_the_new_model_and_the_baselin
 def test_a_side_whose_tries_ran_on_another_model_reports_no_pass3(home: Path) -> None:
     values = {**DEFAULTS, "roles.test_only": ("kimi/k3", KIMI)}
     tasks = [t for t in SEEDS if t["id"] == "quant-basis-points"]
-    with EngineService.open(home, settings=StaticSettings(values), harness=answering()) as svc:
+    with fake_service(home, settings=StaticSettings(values), harness=answering()) as svc:
         result: Any = asyncio.run(
             battery.run(
                 svc,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 import secrets
 import sqlite3
@@ -109,6 +110,10 @@ CONTROL_SCHEMA: Final = (
 )
 """`control.db` at version 1 (design 62 B1). A later version adds a step; it never edits these."""
 LOGS: Final = "logs"
+LOG = logging.getLogger(__name__)
+LOOK: Final = "last_look"
+"""The operator's cursor row. Its stored name carries the store it counts in, `last_look:<store>`;
+a row named `last_look` alone was written before the tag and counted in another file."""
 """The home's log folder: heartbeat, connection, feed and telemetry reads live here as JSON."""
 
 
@@ -618,42 +623,61 @@ class ControlService:
                     return
             await asyncio.sleep(0.05)
 
-    def last_look(self) -> Document:
-        """The operator's "last look" cursor: the Library log position his last digest read to.
+    def last_look(self, store: str = "library", last_seq: int | None = None) -> Document:
+        """The operator's "last look" cursor: the position in `store`'s log his last digest read
+        to.
 
         It is a position (the `seq` of a landing), never a clock, so a digest run reads exactly
-        the items that landed after the last one he saw (46 K-32). Zero until he looks once.
+        the items that landed after the last one he saw (46 K-32). Zero until he looks once. A
+        cursor written before it named its store, or one above `last_seq` (the store's newest
+        position), was counted in another file: it resets to zero once, with a log line.
         """
-        with self._connect() as db:
+        name = f"{LOOK}:{store}"
+        now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        with self._lock, self._connect() as db:
             row = db.execute(
-                "SELECT position, at FROM operator_cursor WHERE name='last_look'"
+                "SELECT position, at FROM operator_cursor WHERE name=?", (name,)
             ).fetchone()
+            legacy = db.execute("SELECT 1 FROM operator_cursor WHERE name=?", (LOOK,)).fetchone()
+            untagged = row is None and legacy is not None
+            above = row is not None and last_seq is not None and int(row[0]) > last_seq
+            if untagged or above:
+                why = "it names no store" if untagged else f"it is above {store}'s {last_seq}"
+                LOG.warning("the last-look cursor reset to 0: %s", why)
+                db.execute(
+                    "INSERT INTO operator_cursor(name,position,at) VALUES(?,0,?) "
+                    "ON CONFLICT(name) DO UPDATE SET position=0, at=excluded.at",
+                    (name, now),
+                )
+                row = (0, now)
         return {
-            "name": "last_look",
+            "name": LOOK,
+            "store": store,
             "position": 0 if row is None else int(row[0]),
             "at": None if row is None else str(row[1]),
         }
 
-    def mark_looked(self, position: int) -> Document:
-        """Move the cursor to `position`, and never back, then return the row as it stands.
+    def mark_looked(self, position: int, store: str = "library") -> Document:
+        """Move `store`'s cursor to `position`, and never back, then return the row as it stands.
 
         The digest advances it only after the digest passed its own check, so a failed run shows
         the same items again rather than hiding them.
         """
         if position < 0:
             raise ControlError("invalid_cursor", "Use the Library log's seq, 0 or more.")
+        name = f"{LOOK}:{store}"
         now = datetime.now(UTC).isoformat().replace("+00:00", "Z")
-        with self._connect() as db:
+        with self._lock, self._connect() as db:
             db.execute(
-                "INSERT INTO operator_cursor(name,position,at) VALUES('last_look',?,?) "
+                "INSERT INTO operator_cursor(name,position,at) VALUES(?,?,?) "
                 "ON CONFLICT(name) DO UPDATE SET position=max(position, excluded.position), "
                 "at=CASE WHEN excluded.position>position THEN excluded.at ELSE at END",
-                (position, now),
+                (name, position, now),
             )
             row = db.execute(
-                "SELECT position, at FROM operator_cursor WHERE name='last_look'"
+                "SELECT position, at FROM operator_cursor WHERE name=?", (name,)
             ).fetchone()
-        return {"name": "last_look", "position": int(row[0]), "at": str(row[1])}
+        return {"name": LOOK, "store": store, "position": int(row[0]), "at": str(row[1])}
 
     @operation("settings_read", "get", "read", rest=("GET", "/api/settings/{section}"))
     def settings_get(self, section: SettingsSection) -> Document:

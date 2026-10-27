@@ -111,7 +111,7 @@ from qmx_engine.nodes.llm import Llm, Unavailable
 from qmx_engine.nodes.loop import Loop
 from qmx_engine.nodes.monitor import Monitor
 from qmx_engine.nodes.rule import Rule
-from qmx_engine.nodes.script import HostScript, Script
+from qmx_engine.nodes.script import HostScript, Script, Served
 from qmx_engine.nodes.subworkflow import Subworkflow
 from qmx_engine.nodes.trigger import Trigger
 from qmx_engine.nodes.wait import Wait as WaitNode
@@ -119,8 +119,7 @@ from qmx_engine.nodes.wait import resume_at, utc, utc_text
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action as Answer
 from qmx_engine.ports.inbox import InboxPort, Item, Raise, answered, raised_by
-from qmx_engine.ports.library import Bundle
-from qmx_engine.ports.library_fake import LibraryFake
+from qmx_engine.ports.library import Bundle, LibraryPort
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.roles import EFFORTS, order, resolve
 from qmx_engine.settings import DEFAULTS, PC, places
@@ -307,14 +306,17 @@ class Engine:
         inbox: InboxPort | None = None,
         watch_every: float | None = None,
         harness: HarnessPort | None = None,
+        library: LibraryPort | None = None,
         memory: MemoryPort | None = None,
         claims: Claims | None = None,
     ) -> None:
         """`settings` given as a port are read at use, so a run starts on the settings of that
         moment (B-42). `executors` replace the built-in executor of a kind. Without a `doctor`,
         the ladder's doctor step is recorded as skipped. Without a `harness`, model nodes fail
-        `unavailable`. Without `memory`, agent notes go to the memory stub over the home's
-        Library. Without `claims`, a node's intent key is read but nothing claims it."""
+        `unavailable`. `library` is the host's Library: a script node reads and writes it only
+        through the runner (`nodes.script.Served`), and without one a script that asks for it
+        fails by name. Without `memory`, agent notes go to the memory stub over `library`.
+        Without `claims`, a node's intent key is read but nothing claims it."""
         self.home = home
         self.ledger = ledger
         self._settings = settings
@@ -329,6 +331,7 @@ class Engine:
         self._inbox = inbox
         if isinstance(inbox, InboxTable):
             inbox.answers = self
+        self.library = library
         self._memory = memory
         tick = settings.get("scheduler.tick")
         self.watch_every = watch_every or (float(tick) if isinstance(tick, int | float) else 60.0)
@@ -377,7 +380,7 @@ class Engine:
     @property
     def memory(self) -> MemoryPort:
         if self._memory is None:
-            self._memory = MemoryStub(LibraryFake.open(self.home))
+            self._memory = MemoryStub(self.library)
         return self._memory
 
     def banned_values(self) -> tuple[str, ...]:
@@ -399,11 +402,14 @@ class Engine:
         fake: bool = False,
         priority: int = 0,
         pins: JsonObject | None = None,
+        workflow_item: str | None = None,
     ) -> Outcome:
         """`fake` is the per-run switch that answers model nodes with the fake provider.
         `priority` orders the run's waiting work against other runs', higher first (AD-58).
         `pins` are a trigger's `{"roles": {role: row}, "effort": ...}`, which override role
-        resolution for this run and are recorded on `run_created` (B-60)."""
+        resolution for this run and are recorded on `run_created` (B-60). `workflow_item` is the
+        Library item the run is of, recorded on `run_created`; a folder run has none and goes by
+        its definition id."""
         if not self.claiming:
             raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
@@ -420,6 +426,7 @@ class Engine:
             priority=priority,
             parent_run_id=parent_run_id,
             pins=pins or {},
+            workflow_item=workflow_item,
         )
         run.create(inputs)
         return await run.drive()
@@ -445,6 +452,7 @@ class Engine:
         priority = created.get("priority")
         parent = created.get("parent_run_id")
         pins = created.get("pins")
+        item = created.get("workflow_item")
         run = Run(
             self,
             root,
@@ -456,6 +464,7 @@ class Engine:
             priority=priority if isinstance(priority, int) else 0,
             parent_run_id=parent if isinstance(parent, str) else None,
             pins=pins if isinstance(pins, dict) else {},
+            workflow_item=item if isinstance(item, str) else None,
         )
         run.events = events
         run.woke = woke
@@ -602,6 +611,7 @@ class Run:
         priority: int = 0,
         parent_run_id: str | None = None,
         pins: JsonObject | None = None,
+        workflow_item: str | None = None,
     ) -> None:
         self.engine = engine
         self.fake = fake
@@ -613,6 +623,7 @@ class Run:
         self.root = root.resolve()
         self.definition = workflow
         self.run_id = run_id
+        self.workflow_item = workflow_item
         self.mode: Mode = mode
         self.call_depth = call_depth
         self.events: list[Event] = []
@@ -651,8 +662,19 @@ class Run:
     def build_executors(self) -> dict[str, AnyExecutor]:
         max_depth = self.settings.get("subworkflow.max_depth")
         manifest = self.zone.prepare_code(self.root)
+        library = self.engine.library
+        served = (
+            None
+            if library is None
+            else Served(library, self.run_id, self.workflow_item or self.definition.id)
+        )
         host = self.host = HostScript(
-            self.zone.code, None, self.engine.banned_values(), fake=self.fake, manifest=manifest
+            self.zone.code,
+            None,
+            self.engine.banned_values(),
+            fake=self.fake,
+            manifest=manifest,
+            served=served,
         )
 
         def launch(
@@ -802,6 +824,7 @@ class Run:
                 "settings": recorded_settings(self.settings, self.definition, self.mode),
                 "limits": recorded_limits(self.definition),
                 "workflow_id": self.definition.id,
+                "workflow_item": self.workflow_item,
                 "folder": str(self.root),
                 "content_hash": content_hash(load(self.root)),
                 "parent_run_id": self.parent_run_id,

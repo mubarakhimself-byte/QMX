@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from fake_library import fake_service
 from flows import CHAIN, edge, edited, folder, node, workflow
 from qmx_home import resolve
 from scheduled import Clock, Flags, enabled, fires_of
@@ -22,7 +23,6 @@ from qmx_engine.ledger.migrations import STEPS
 from qmx_engine.ledger.signature import signature
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.ports.library import Bundle
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Caller, Refused
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers import rows
@@ -299,7 +299,7 @@ def test_a_live_run_started_while_paused_holds_its_nodes_and_resumes_on_clear(
 ) -> None:
     flags = Flags(autonomy__paused=1)
     clock = Clock(MONDAY)
-    with EngineService.open(tmp_path, clock=clock, settings=flags) as svc:
+    with fake_service(tmp_path, clock=clock, settings=flags) as svc:
         engine = svc.ctx.engine
         bundle = Bundle.read(CHAIN)
         root = bundle.write(tmp_path / "folder")

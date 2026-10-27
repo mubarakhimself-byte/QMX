@@ -7,10 +7,8 @@ ids appear in its own chunk."""
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import shutil
-import sqlite3
 import subprocess
 import sys
 from collections.abc import Callable
@@ -18,6 +16,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from fake_library import fake_service
 from fake_port import TOKENS, FakePort
 from qmx_home import resolve
 from qmx_library.store import Store
@@ -29,8 +28,6 @@ from qmx_engine.ledger import redact
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle, drafts_ref
-from qmx_engine.ports.library_fake import LibraryFake
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import ALIASES, CATALOG, PACK, SHARED, find
 from qmx_engine.templates.install import install, listing
@@ -240,7 +237,7 @@ def home(tmp_path: Path) -> Path:
 
 def try_template(home: Path, folder: Path, inputs: Any, port: FakePort | None = None) -> Any:
     """`folder` saved as a draft and test-run with `inputs`: the report and what Deliver gave."""
-    with EngineService.open(home, harness=port or answers()) as svc:
+    with fake_service(home, harness=port or answers()) as svc:
         item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
     with Reader.open(home) as reader:
@@ -455,7 +452,7 @@ def test_an_output_with_a_number_its_sources_never_gave_fails_the_test_run(
 
 
 def produced_files(home: Path, run_id: str) -> list[str]:
-    with EngineService.open(home) as svc:
+    with fake_service(home) as svc:
         library = svc.ctx.library
         summary = library.objects(run_id, "workflow-run")[-1]
         made = [
@@ -575,7 +572,7 @@ def test_a_note_with_an_invented_number_or_quote_fails_the_test_run(
 ) -> None:
     note = json.loads(recorded(RS1, "note.json"))
     plant(note)
-    with EngineService.open(home, harness=answers(json.dumps(note))) as svc:
+    with fake_service(home, harness=answers(json.dumps(note))) as svc:
         item = svc.drafts.put("rs1-paper-scout", Bundle.read(RS1), 0, caller=OPERATOR).item
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={"fixture": True}))
         state = svc.drafts.state(item)
@@ -591,7 +588,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
     definition["meta"]["needs"] = ["a-crystal-ball"]
     unknown = Bundle(definition, Bundle.read(folder).files).folder()
 
-    with EngineService.open(tmp_path / "home") as svc:
+    with fake_service(tmp_path / "home") as svc:
         item = svc.drafts.put("rs1-needs", Bundle.read(folder), 0, caller=OPERATOR).item
         state = svc.drafts.state(item)
         with pytest.raises(Refused) as refused:
@@ -609,7 +606,7 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
 def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
     home: Path,
 ) -> None:
-    with EngineService.open(home, harness=answers()) as svc:
+    with fake_service(home, harness=answers()) as svc:
         first = asyncio.run(install(svc))
         seen = len(svc.ctx.library.events())
         second = asyncio.run(install(svc))
@@ -654,7 +651,7 @@ def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_chan
 
 
 def test_installing_by_an_old_id_installs_the_renamed_template(home: Path) -> None:
-    with EngineService.open(home, harness=answers()) as svc:
+    with fake_service(home, harness=answers()) as svc:
         done = asyncio.run(install(svc, [find("B")]))
         found = listing(svc, [find("b-build-and-prove")])
         drafted = svc.drafts.get("b-build-and-prove")
@@ -736,7 +733,7 @@ def test_a_draft_validates_and_its_test_and_its_enable_are_refused_with_its_need
     home: Path, folder: Path
 ) -> None:
     need = f"needs: {', '.join(next(t.needs for t in CATALOG if t.folder == folder.name))}"
-    with EngineService.open(home) as svc:
+    with fake_service(home) as svc:
         item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
         state = svc.drafts.state(item)
         with pytest.raises(Refused) as tested:
@@ -807,44 +804,6 @@ def test_the_panel_marks_an_absent_seat_and_labels_a_judge_of_the_same_family(
     ]
     assert [line["slot"] for line in card["disagreement"]] == ["positioning"]
     assert card["judge_same_family_as"] == ["macro", "positioning"]
-
-
-def test_a_clipping_already_held_runs_once_and_the_second_links_to_it(home: Path) -> None:
-    text = json.loads((CLIPPINGS / "fixtures" / "clippings.json").read_text("utf-8"))[0]["text"]
-    content = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    key = hashlib.sha256(f"clipping|{content}|fixture".encode()).hexdigest()
-    with LibraryFake.open(home) as library:
-        seeded = library.put_artifact(
-            b'{"seed": true}', "clipping", {"hash": content}, run_id="seed",
-            principal="run:seed", intent_key=key,
-        )  # fmt: skip
-    report, card = try_template(home, CLIPPINGS, {"fixture": True})
-
-    assert report.status == "passed"
-    assert (card["figures"]["new"], card["figures"]["seen"]) == (1, 1)
-    assert [item["name"] for item in card["new"]] == ["funding-basis.md"]
-    assert card["held"][0]["linked_to"] == [seeded.object_id]
-    assert card["held"][0]["intake_id"] != seeded.object_id
-
-
-def test_the_digest_reads_from_his_cursor_and_moves_it_after_the_digest_passes(
-    home: Path,
-) -> None:
-    with LibraryFake.open(home) as library:
-        seeded = library.put_artifact(
-            b'{"landed": true}', "clipping", {"title": "one"}, run_id="seed",
-            principal="run:seed", intent_key="landed-once",
-        )  # fmt: skip
-    report, card = try_template(home, DIGEST, {"fixture": True})
-    with sqlite3.connect(home / "control.db") as db:
-        (position,) = db.execute(
-            "SELECT position FROM operator_cursor WHERE name='last_look'"
-        ).fetchone()
-
-    assert report.status == "passed"
-    assert seeded.object_id in [item["object_id"] for item in card["landed"]]
-    assert card["read_from"] == 0
-    assert card["cursor_to"] == position > 0
 
 
 def test_crystallise_refuses_the_script_when_one_replay_disagrees(tmp_path: Path) -> None:

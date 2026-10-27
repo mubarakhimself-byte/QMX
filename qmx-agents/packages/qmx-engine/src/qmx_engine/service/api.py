@@ -27,7 +27,6 @@ from qmx_engine.ports.clock import Clock, WallClock
 from qmx_engine.ports.harness_adapter import HarnessPort
 from qmx_engine.ports.inbox import Action
 from qmx_engine.ports.library import JsonObject, LibraryPort
-from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.ports.memory import MemoryPort, MemoryStub
 from qmx_engine.ports.settings import SettingsPort, StaticSettings
 from qmx_engine.runner import Doctor, Engine
@@ -70,7 +69,7 @@ class EngineService:
         cls,
         home: Path,
         *,
-        library: LibraryPort | None = None,
+        library: LibraryPort,
         settings: SettingsPort | None = None,
         clock: Clock | None = None,
         executors: Mapping[str, AnyExecutor] | None = None,
@@ -80,17 +79,16 @@ class EngineService:
         forwarders: Sequence[Forwarder] = (),
         trigger_story: Callable[[str], JsonObject] | None = None,
     ) -> Generator[EngineService]:
-        """The service on one QMX home: it holds the ledger writer while it is open. The Library
-        is the fake (ruling 91) unless one is given. With a `harness`, model nodes run and the
-        ladder's doctor is an `llm` call unless another `doctor` is given. `name` is this home's
-        placement name, and `forwarders` are the owned instances it answers for (AD-65)."""
+        """The service on one QMX home: it holds the ledger writer while it is open, over the
+        Library it is given (the host's store; a test passes the fake). With a `harness`, model
+        nodes run and the ladder's doctor is an `llm` call unless another `doctor` is given.
+        `name` is this home's placement name, and `forwarders` are the owned instances it answers
+        for (AD-65)."""
         clock = clock or WallClock()
         settings = settings or StaticSettings()
         with ExitStack() as stack:
             ledger = stack.enter_context(Ledger.open(home))
             inbox = stack.enter_context(InboxTable.open(home))
-            if library is None:
-                library = stack.enter_context(LibraryFake.open(home, wall=clock.now))
             memory = MemoryStub(library)
             engine = Engine(
                 home,
@@ -101,6 +99,7 @@ class EngineService:
                 doctor=doctor,
                 inbox=inbox,
                 harness=harness,
+                library=library,
                 memory=memory,
             )
             engine.doctor = engine.doctor or LlmDoctor.of(engine)

@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from fake_library import fake_service
 from fake_port import CARD, OPEN, FakePort, agent, agent_files, events_of
 from flows import edge, folder, node
 
@@ -21,7 +22,6 @@ from qmx_engine.ports.harness_adapter import PlanUse
 from qmx_engine.ports.settings import StaticSettings
 from qmx_engine.roles import Candidate
 from qmx_engine.runner import Engine, Outcome
-from qmx_engine.service.api import EngineService
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers.ticker import Scheduler
 
@@ -91,7 +91,7 @@ async def ticked(root: Path, home: Path, port: FakePort) -> tuple[Outcome, int]:
     found = checked(root)
     assert not isinstance(found, list), found
     settings = StaticSettings({**DEFAULTS, "limits.slack": 0})
-    with EngineService.open(home, settings=settings, harness=port) as svc:
+    with fake_service(home, settings=settings, harness=port) as svc:
         outcome = await svc.ctx.engine.start(root, found[1], mode="live", inputs=None)
         ticker = Scheduler(svc.ctx)
         for ticks in range(1, 40):

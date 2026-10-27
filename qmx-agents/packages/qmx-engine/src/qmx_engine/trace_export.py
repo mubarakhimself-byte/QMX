@@ -11,7 +11,10 @@ card shows.
 
 Every file a finished node listed as an artifact is read from the run's write zone and stored as a
 `run-file` artifact linked `produced-by` to the summary, once per run: a later drive stores only
-the files no earlier summary of the run already holds.
+the files no earlier summary of the run already holds. Every artifact a script node wrote through
+the runner (its `library_written` receipts) is linked `produced-by` to the summary too, so a
+duplicate check finds it once the run passed. A run that ran on the fake provider says so on its
+summary, and the Library lands nothing of it.
 
 The journal on disk is a store too, so each record passes the one redaction (AD-37) before it is
 appended; the Library adapter redacts the artifact and the summary again as it writes them.
@@ -127,14 +130,32 @@ def export(
             placement=ran_on(events),
             trace_artifact_hash=trace.blob,
             started_by=started_by,
+            fake=events[0].kind == "run_created" and events[0].data.get("fake") is True,
         ),
         principal=principal,
     )
     library.link(trace.object_id, "produced-by", summary.object_id, principal=principal)
     for stored in files:
         library.link(stored.object_id, "produced-by", summary.object_id, principal=principal)
+    for made in written(events):
+        library.link(made, "produced-by", summary.object_id, principal=principal)
     library.link(summary.object_id, "run-of", object_id, principal=principal)
     return summary
+
+
+def written(events: list[Event]) -> list[str]:
+    """The artifacts the run's finished script nodes wrote, by their receipts."""
+    found: dict[str, None] = {}
+    for event in events:
+        outputs = event.data.get("outputs") if event.kind == "node_finished" else None
+        main = outputs.get("main") if isinstance(outputs, dict) else None
+        receipts = main.get("library_written") if isinstance(main, dict) else None
+        for receipt in receipts if isinstance(receipts, list) else []:
+            if isinstance(receipt, dict) and receipt.get("op") == "put_artifact":
+                object_id = receipt.get("object_id")
+                if isinstance(object_id, str):
+                    found[object_id] = None
+    return list(found)
 
 
 def run_files(home: Path, run_id: str, events: list[Event], library: LibraryPort) -> list[Stored]:

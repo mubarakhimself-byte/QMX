@@ -14,6 +14,12 @@ The process joins the engine's Job object, so it dies with the engine, and its t
 cancel. A node script has no run timeout (AD-40): the stuck detector reads its process through
 `look` and stops it only after `timeout.script.idle` with no CPU and no IO, so a long backtest
 runs on. A trigger's own check script keeps a timeout.
+
+A script never opens the Library: the host holds its single writer lock. `Served` is the one way
+in. Before the child starts, the reads its node declares (`parameters.library_reads`) are answered
+through the host's `LibraryPort` onto its stdin under `library`. When it finishes, the writes its
+output lists under `library` are made through the same port, on the run's own ref and as the run,
+whatever the write claims, and the output keeps only their receipts.
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ import sys
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import keyring
 from pydantic import JsonValue
@@ -37,6 +43,7 @@ from qmx_engine.definition.lint import TOOL_KEY
 from qmx_engine.ledger.redact import redact, register
 from qmx_engine.ledger.signature import signature
 from qmx_engine.nodes.base import EffectState, Failed, Look, NodeJob, NodeResult, Ok
+from qmx_engine.ports.library import MAIN, EdgeName, JsonObject, LibraryPort, LibraryRefused
 from qmx_engine.workers.effects import idempotency_key
 from qmx_engine.workers.local import contain, forget, kill_tree, record
 from qmx_engine.workers.zones import RunZone, digest
@@ -57,6 +64,16 @@ TOOL_ENV: Final = re.compile(r"[A-Z][A-Z0-9_]*")
 MESSAGE_LIMIT: Final = 300
 FAILURE: Final = "[QMX_FAILURE]"
 """A first stdout line starting with this declares the script failed, with the rest as why."""
+
+READS: Final = frozenset({"moved_to_main_after", "find_by_intent", "last_seq", "published"})
+"""What a script node may ask the runner to read for it, by `parameters.library_reads`."""
+ENGINE_EDGES: Final = frozenset({"produced-by", "run-of", "tested-by"})
+"""Edges only the engine writes: a script that wrote one could pass its own object off as a passed
+run's, and every other run's duplicate check would then serve it."""
+STORE_FAILURES: Final = frozenset({"disk_full", "read_only_replica", "storage_failure"})
+"""Refusals that mean the store took no write at all, so the node fails rather than reporting."""
+BODIES: Final = "library"
+"""The overlay folder a write's body file sits in."""
 
 type Resolve = Callable[[str], str | None]
 
@@ -173,6 +190,225 @@ def failed(
     return Failed(code, message, signature(code, message), retryable, effect_state)
 
 
+def slot_of(job: NodeJob) -> str:
+    """`run:node:iteration:partition`: the attempt's key without the attempt, so a retry of the
+    same slot finds what an earlier attempt wrote."""
+    partition = "" if job.partition is None else str(job.partition)
+    return f"{job.run_id}:{job.node_id}:{job.iteration}:{partition}"
+
+
+def pick(value: JsonValue, part: str) -> JsonValue:
+    if isinstance(value, dict):
+        return value.get(part)
+    if isinstance(value, list):
+        return [pick(entry, part) for entry in value]
+    return None
+
+
+def argument(inputs: JsonValue, path: str) -> JsonValue:
+    """The value at the dotted `path` in the node's `in` input, read from the first input row that
+    holds its first name. A list on the way is read row by row, so `clippings.intent_key` is every
+    clipping's key."""
+    given = inputs.get("in") if isinstance(inputs, dict) else None
+    rows = [given] if isinstance(given, dict) else given if isinstance(given, list) else []
+    parts = path.split(".")
+    value: JsonValue = next((r for r in rows if isinstance(r, dict) and parts[0] in r), None)
+    for part in parts:
+        value = pick(value, part)
+    return value
+
+
+def handle_of(value: JsonValue, handles: dict[str, str]) -> str | None:
+    """The object a `$handle` names, or None when `value` is no handle of this step."""
+    if isinstance(value, str) and value.startswith("$"):
+        return handles.get(value[1:])
+    return None
+
+
+def refused_write(index: int, message: str) -> Failed:
+    return failed("library_write_refused", f"write {index}: {message}", retryable=False)
+
+
+@dataclass(frozen=True, slots=True)
+class Served:
+    """The Library reads and writes of one run's script nodes, through the host's port.
+
+    Every write is an artifact or a link on `refs/runs/<run_id>` as `run:<run_id>`, so a script
+    cannot write as another principal, onto another ref or for another run. Each artifact carries
+    `metadata.write_key = <slot>:<index>`, and a write whose key is already on the run's ref is
+    skipped, so a retried attempt writes nothing twice. Intent keys are the workflow item's own
+    (`<workflow_item>|<key>`), so one workflow never shadows another's duplicate check.
+    """
+
+    library: LibraryPort
+    run_id: str
+    workflow_item: str
+
+    def intent(self, key: str) -> str:
+        return f"{self.workflow_item}|{key}"
+
+    def reads(self, job: NodeJob) -> JsonObject | Failed:
+        parameters = job.node_definition.get("parameters")
+        declared = parameters.get("library_reads") if isinstance(parameters, dict) else None
+        if declared is None:
+            return {}
+        if not isinstance(declared, dict):
+            return failed("library_read_refused", "library_reads is not an object", retryable=False)
+        answers: JsonObject = {}
+        for name, ask in declared.items():
+            if not isinstance(ask, dict) or len(ask) != 1:
+                return failed(
+                    "library_read_refused", f"read {name} names not one verb", retryable=False
+                )
+            [(verb, path)] = ask.items()
+            if verb not in READS or not isinstance(path, str):
+                return failed(
+                    "library_read_refused", f"read {name}: {verb} is not a read", retryable=False
+                )
+            try:
+                answers[name] = self.read(verb, argument(job.inputs, path) if path else None)
+            except LibraryRefused as refused:
+                return failed(refused.code, f"read {name}: {refused}", retryable=True)
+        return answers
+
+    def read(self, verb: str, given: JsonValue) -> JsonValue:
+        match verb:
+            case "moved_to_main_after":
+                after = given if isinstance(given, int) and not isinstance(given, bool) else 0
+                return [
+                    {"seq": e.seq, "name": e.name, "object_id": e.object_id, "ref": e.ref}
+                    for e in self.library.moved_to_main(after)
+                ]
+            case "last_seq":
+                return self.library.last_seq()
+            case "find_by_intent":
+                keys = given if isinstance(given, list) else [given]
+                return {key: self.held(key) for key in keys if isinstance(key, str)}
+            case _:
+                return self.published(given)
+
+    def held(self, key: str) -> list[JsonValue]:
+        """What holds `key` for this workflow, made by a passed live run on real models only: a
+        test, fake or failed run's objects never answer another run's duplicate check."""
+        return [
+            object_id
+            for object_id in self.library.find_by_intent(self.intent(key))
+            if any(
+                fields.get("status") == "passed"
+                and fields.get("mode") == "live"
+                and fields.get("fake") is not True
+                for fields in (
+                    self.library.get(edge.to_id).fields
+                    for edge in self.library.edges(object_id, "produced-by")
+                )
+            )
+        ]
+
+    def published(self, item: JsonValue) -> JsonValue:
+        if not isinstance(item, str) or not item:
+            return None
+        versions = self.library.objects(item, "workflow", MAIN)
+        if not versions:
+            return None
+        newest = versions[-1]
+        return {
+            "item": item,
+            "object_id": newest.object_id,
+            "content_hash": newest.fields.get("content_hash"),
+            "semver": self.library.annotation(newest.object_id, "semver"),
+        }
+
+    def writes(self, job: NodeJob, output: JsonValue, overlay: Path) -> JsonValue | Failed:
+        """`output` with its `library` writes made and replaced by `library_written` receipts."""
+        if not isinstance(output, dict) or "library" not in output:
+            return output
+        asked = output["library"]
+        if not isinstance(asked, list):
+            return refused_write(0, "library is not a list of writes")
+        slot, handles = slot_of(job), dict[str, str]()
+        receipts: list[JsonValue] = []
+        for index, write in enumerate(asked):
+            op = write.get("op") if isinstance(write, dict) else None
+            if not isinstance(write, dict) or op not in ("put_artifact", "link"):
+                return refused_write(index, "a write is put_artifact or link")
+            made = (
+                self.put(write, f"{slot}:{index}", index, overlay, handles)
+                if op == "put_artifact"
+                else self.link(write, index, handles)
+            )
+            if isinstance(made, Failed):
+                return made
+            receipts.append(made)
+        kept: JsonObject = {key: value for key, value in output.items() if key != "library"}
+        kept["library_written"] = receipts
+        return kept
+
+    def put(
+        self,
+        write: dict[str, JsonValue],
+        write_key: str,
+        index: int,
+        overlay: Path,
+        handles: dict[str, str],
+    ) -> JsonObject | Failed:
+        type_, body, metadata = write.get("type"), write.get("body"), write.get("metadata", {})
+        handle, intent = write.get("as"), write.get("intent_key")
+        if not isinstance(type_, str) or not type_ or not isinstance(metadata, dict):
+            return refused_write(index, "an artifact names its type and its metadata object")
+        if not isinstance(handle, str | None) or not isinstance(intent, str | None):
+            return refused_write(index, "as and intent_key are text")
+        root = (overlay / BODIES).resolve()
+        path = (overlay / body).resolve() if isinstance(body, str) else root
+        if not path.is_relative_to(root) or not path.is_file():
+            return failed(
+                "library_body_missing",
+                f"write {index}: the body is not a file under {BODIES}/ in the overlay",
+                retryable=False,
+            )
+        try:
+            object_id = self.library.find_by_write_key(self.run_id, write_key)
+            if object_id is None:
+                object_id = self.library.put_artifact(
+                    path.read_bytes(),
+                    type_,
+                    metadata | {"write_key": write_key},
+                    run_id=self.run_id,
+                    principal=f"run:{self.run_id}",
+                    intent_key=None if intent is None else self.intent(intent),
+                ).object_id
+        except LibraryRefused as refused:
+            state: EffectState = "after" if index else "before"
+            message = f"write {index}: {refused}"
+            return failed(refused.code, message, retryable=False, effect_state=state)
+        if handle is not None:
+            handles[handle] = object_id
+        return {"op": "put_artifact", "handle": handle, "object_id": object_id, "refused": None}
+
+    def link(
+        self, write: dict[str, JsonValue], index: int, handles: dict[str, str]
+    ) -> JsonObject | Failed:
+        edge, source, target = write.get("edge"), write.get("from"), write.get("to")
+        receipt: JsonObject = {"op": "link", "handle": None, "object_id": None, "edge": edge}
+        receipt["to"] = target
+        own = handle_of(source, handles)
+        if own is None:
+            return receipt | {"refused": "from is not a write of this step"}
+        if not isinstance(edge, str) or edge in ENGINE_EDGES:
+            return receipt | {"refused": f"{edge} is not an edge a script writes"}
+        to = handle_of(target, handles) or target
+        if not isinstance(to, str):
+            return receipt | {"refused": "to names no object"}
+        try:
+            self.library.get(to)
+            self.library.link(own, cast(EdgeName, edge), to, principal=f"run:{self.run_id}")
+        except LibraryRefused as refused:
+            if refused.code in STORE_FAILURES:
+                message = f"write {index}: {refused}"
+                return failed(refused.code, message, retryable=False, effect_state="after")
+            return receipt | {"object_id": own, "to": to, "refused": refused.code}
+        return receipt | {"object_id": own, "to": to, "refused": None}
+
+
 @dataclass(frozen=True, slots=True)
 class HostScript:
     """What every script-family executor of one run shares: the folder its scripts come from
@@ -188,6 +424,8 @@ class HostScript:
     resolve: Resolve = keyring_secret
     processes: dict[str, int] = field(default_factory=dict[str, int])
     """The running script's process id, by attempt idempotency key."""
+    served: Served | None = None
+    """The run's Library reads and writes; None when the engine has no Library."""
 
     def look(self, key: str) -> Look:
         pid = self.processes.get(key)
@@ -255,8 +493,11 @@ class HostScript:
             "QMX_CODE": str(self.folder),
         }
 
-    async def run(self, job: NodeJob, parameter: str) -> JsonValue | Failed:
-        """The script's stdout as JSON, or why it failed."""
+    async def run(
+        self, job: NodeJob, parameter: str, library: JsonObject | None = None
+    ) -> JsonValue | Failed:
+        """The script's stdout as JSON, or why it failed. `library` holds the served reads, given
+        on stdin beside the inputs."""
         path = self.path(job, parameter)
         if isinstance(path, Failed):
             return path
@@ -280,7 +521,7 @@ class HostScript:
                 [sys.executable, "-I", str(path)],
                 cwd=cwd,
                 env=env | self.context(job, zone) | keys,
-                stdin=json.dumps(job.inputs).encode(),
+                stdin=json.dumps(given(job.inputs, library)).encode(),
                 timeout=self.timeout_seconds,
                 started=started,
             )
@@ -307,6 +548,20 @@ class HostScript:
             return failed("script_output", "stdout is not JSON", retryable=False)
 
 
+def given(inputs: JsonValue, library: JsonObject | None) -> JsonValue:
+    if not library:
+        return inputs
+    return {**inputs, "library": library} if isinstance(inputs, dict) else {"library": library}
+
+
+def unserved() -> Failed:
+    return failed(
+        "library_unserved",
+        "the script reads or writes the Library and this engine has none",
+        retryable=False,
+    )
+
+
 class Script:
     """`parameters.artifacts` may list files the script leaves in its overlay; they are
     returned as the attempt's artifacts and committed to `work/` with its declared outputs, and a
@@ -317,9 +572,22 @@ class Script:
         self.host = host
 
     async def run(self, job: NodeJob) -> NodeResult:
-        found = await self.host.run(job, "script")
+        served = self.host.served
+        parameters = job.node_definition.get("parameters")
+        if served is None and isinstance(parameters, dict) and "library_reads" in parameters:
+            return unserved()
+        reads = {} if served is None else served.reads(job)
+        if isinstance(reads, Failed):
+            return reads
+        found = await self.host.run(job, "script", reads or None)
         if isinstance(found, Failed):
             return found
+        if isinstance(found, dict) and "library" in found:
+            if served is None:
+                return unserved()
+            found = served.writes(job, found, RunZone(Path(job.workspace or ".")).overlay(job))
+            if isinstance(found, Failed):
+                return found
         parameters = job.node_definition.get("parameters")
         listed = parameters.get("artifacts") if isinstance(parameters, dict) else None
         artifacts = (

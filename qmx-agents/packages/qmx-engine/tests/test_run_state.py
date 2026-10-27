@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from fake_library import fake_service
 from fake_port import CARD, FakePort, agent, agent_files
 from flows import edge, events_of, folder, node, workflow
 from planted import Planted, fails, flow, of_kind, steps
@@ -93,7 +94,7 @@ def held_alone(root: Path, home: Path, inputs: JsonValue = None) -> Held:
     assert not isinstance(found, list), found
 
     async def go() -> Held:
-        with EngineService.open(home) as svc:
+        with fake_service(home) as svc:
             outcome = await svc.ctx.engine.start(root, found[1], mode="test", inputs=inputs)
             held = wakes(home)
             return outcome, held, await tick_until_ended(svc, outcome.run_id)
@@ -251,7 +252,7 @@ def test_b66_cancelling_a_parent_stops_its_running_child(tmp_path: Path) -> None
     assert not isinstance(found, list), found
 
     async def go() -> tuple[Outcome, list[str]]:
-        with EngineService.open(home) as svc:
+        with fake_service(home) as svc:
             run = asyncio.create_task(
                 svc.ctx.engine.start(root, found[1], mode="test", inputs=str(marker))
             )
@@ -363,7 +364,7 @@ def test_b60_a_trigger_s_role_and_effort_pins_steer_its_run(tmp_path: Path) -> N
     pins: dict[str, JsonValue] = {"roles": {"reader": "claude/sonnet"}, "effort": "high"}
 
     async def go() -> Outcome:
-        with EngineService.open(home, harness=FakePort(CARD)) as svc:
+        with fake_service(home, harness=FakePort(CARD)) as svc:
             return await svc.ctx.engine.start(root, found[1], mode="live", inputs=None, pins=pins)
 
     outcome = asyncio.run(go())

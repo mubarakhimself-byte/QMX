@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fake_library import fake_service
 from flows import CHAIN, edge, events_of, folder, node, run_folder, workflow
 from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
@@ -281,7 +282,7 @@ def test_b27_a_waiting_child_makes_the_parent_wait_and_its_end_resumes_the_paren
     )
 
     async def go() -> tuple[str, JsonValue, list[Any]]:
-        with EngineService.open(home) as svc:
+        with fake_service(home) as svc:
             outcome = await svc.ctx.engine.start(root, parsed, mode="test", inputs=None)
             waiting = next(
                 e.data["reason"]
@@ -340,7 +341,7 @@ def needs_draft(svc: EngineService) -> str:
 
 
 def test_b92_the_draft_view_names_the_need_and_the_draft_stays_validated(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = needs_draft(svc)
         problems = svc.drafts.problems(svc.drafts.get(item).bundle)
         state = svc.drafts.state(item)
@@ -350,7 +351,7 @@ def test_b92_the_draft_view_names_the_need_and_the_draft_stays_validated(tmp_pat
 
 
 def test_l89_a_live_start_of_a_needs_version_names_the_need(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = needs_draft(svc)
         version = svc.ctx.library.publish(item, drafts_ref(item), "0.1.0", principal="operator")
         with pytest.raises(Refused) as refused:
@@ -361,7 +362,7 @@ def test_l89_a_live_start_of_a_needs_version_names_the_need(tmp_path: Path) -> N
 
 
 def test_l56_a_passed_live_run_marks_its_version_tested(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR).item
         version = svc.ctx.library.publish(item, drafts_ref(item), "0.1.0", principal="operator")
         before = svc.versions.get(version).tested
@@ -392,7 +393,7 @@ def variant_of_chain(svc: EngineService, *, script: str | None = None) -> tuple[
 
 
 def test_l55_a_variant_test_that_does_not_pass_leaves_the_overlay_draft(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item, _ = variant_of_chain(svc, script="import sys\nsys.exit(3)\n")
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR))
         head = svc.drafts.get(item)
@@ -404,7 +405,7 @@ def test_l55_a_variant_test_that_does_not_pass_leaves_the_overlay_draft(tmp_path
 def test_l54_b43_an_overlay_draft_that_reads_tested_publishes_and_keeps_its_parent(
     tmp_path: Path,
 ) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item, parent = variant_of_chain(svc)
         overlay = svc.drafts.get(item).bundle
         asyncio.run(svc.tests.run(item, caller=OPERATOR))
@@ -432,7 +433,7 @@ def test_b61_a_test_run_resumed_by_a_wake_gets_a_fresh_report(tmp_path: Path) ->
     document["connections"]["Total"] = {"main": [[edge("Pause")]]}
 
     async def go() -> tuple[str, str, str]:
-        with EngineService.open(tmp_path) as svc:
+        with fake_service(tmp_path) as svc:
             item = svc.drafts.put(None, Bundle(document, chain.files), 0, caller=OPERATOR).item
             first = await svc.tests.run(item, caller=OPERATOR)
             await tick_until_ended(svc, first.run_id)

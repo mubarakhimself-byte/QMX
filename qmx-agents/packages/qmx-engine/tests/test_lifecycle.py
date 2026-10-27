@@ -6,10 +6,10 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from fake_library import fake_service
 from flows import CHAIN, edited, events_of
 
 from qmx_engine.ports.library import Bundle, JsonObject, drafts_ref
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Caller, Refused
 
 DOUBLE_THEN_ADD_ONE = """
@@ -24,7 +24,7 @@ def refused(code: str) -> pytest.RaisesExc[Refused]:
 
 def test_a_workflow_walks_every_allowed_state(tmp_path: Path) -> None:
     chain = Bundle.read(CHAIN)
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         broken = Bundle(chain.definition, {})
         draft = svc.drafts.put(None, broken, 0, caller=OPERATOR)
         item = draft.item
@@ -58,7 +58,7 @@ def test_a_workflow_walks_every_allowed_state(tmp_path: Path) -> None:
 
 def test_each_disallowed_move_is_refused(tmp_path: Path) -> None:
     chain = Bundle.read(CHAIN)
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         draft = svc.drafts.put(None, chain, 0, caller=OPERATOR)
         with refused("run_refused"):
             asyncio.run(svc.runs.start(draft.object_id, caller=OPERATOR))
@@ -88,7 +88,7 @@ def test_each_disallowed_move_is_refused(tmp_path: Path) -> None:
 
 def test_an_edit_makes_the_report_stale_and_publish_waits_for_a_new_test(tmp_path: Path) -> None:
     chain = Bundle.read(CHAIN)
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = svc.drafts.put(None, chain, 0, caller=OPERATOR).item
         asyncio.run(svc.tests.run(item, caller=OPERATOR))
         svc.drafts.put(
@@ -111,7 +111,7 @@ def test_an_edit_makes_the_report_stale_and_publish_waits_for_a_new_test(tmp_pat
 def test_a_selected_subgraph_runs_only_those_nodes_and_marks_nothing_tested(
     tmp_path: Path,
 ) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR).item
         report = asyncio.run(
             svc.tests.run(item, caller=OPERATOR, inputs=[1, 2, 3], subgraph=["double", "total"])
@@ -129,7 +129,7 @@ def test_a_selected_subgraph_runs_only_those_nodes_and_marks_nothing_tested(
 
 def test_a_variant_resolves_before_its_test_and_publishes_variant_of(tmp_path: Path) -> None:
     chain = Bundle.read(CHAIN)
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = svc.drafts.put(None, chain, 0, caller=OPERATOR).item
         asyncio.run(svc.tests.run(item, caller=OPERATOR))
         parent = svc.versions.publish(item, "1.0.0", caller=OPERATOR)
@@ -160,7 +160,7 @@ def test_a_variant_resolves_before_its_test_and_publishes_variant_of(tmp_path: P
 
 def test_an_agent_can_neither_publish_nor_enable(tmp_path: Path) -> None:
     agent = Caller("agent", "session-1")
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=agent).item
         asyncio.run(svc.tests.run(item, caller=agent))
         with refused("operator_only"):

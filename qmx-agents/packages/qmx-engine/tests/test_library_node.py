@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from fake_library import fake_service
 
 from qmx_engine.definition.registry import REGISTRY
 from qmx_engine.ledger.store import Reader
@@ -64,7 +65,7 @@ def test_the_library_kind_is_available() -> None:
 
 
 def test_a_run_start_pins_its_references_on_run_created(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         version = published(svc)
         library = cast(LibraryFake, svc.ctx.library)
         earlier = library._put(  # pyright: ignore[reportPrivateUsage]
@@ -111,7 +112,7 @@ def test_a_run_start_pins_its_references_on_run_created(tmp_path: Path) -> None:
 
 
 def test_a_reference_that_names_nothing_refuses_the_start(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         version = published(svc)
         with pytest.raises(Refused) as refused:
             asyncio.run(

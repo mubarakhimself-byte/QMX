@@ -324,6 +324,7 @@ async def run_bundle(
             fake=fake,
             pins=pins,
             priority=priority,
+            workflow_item=item,
         )
     except EngineRefused as refused:
         raise Refused("engine_refused", str(refused)) from refused
