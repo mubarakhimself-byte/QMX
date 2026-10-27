@@ -72,11 +72,12 @@ Audit H2, H3, H4, M6, L6 and L8, with the plan review `review/plan-mock-data-edg
 
 **Files.**
 
-- [ ] Edit `E/nodes/script.py` and `E/runner.py` (the served reads and writes below; the runner's fake-Library fallback goes), `E/ports/memory.py` (a missing provider is named, not silent), `E/ports/library.py` (`RunSummary` carries `fake`), `E/service/api.py`, `E/control_door.py` and `E/__main__.py` (no fake default; `run` and `resume` open `home_library(home)` or refuse by name), `E/service/runs.py` (a fake run's summary lands nothing), and `E/trace_export.py` (each write receipt is linked `produced-by` to the run summary at run end, as `run_files` does).
+- [ ] Edit `E/nodes/script.py` and `E/runner.py` (the served reads and writes below; the runner's fake-Library fallback goes), `E/ports/memory.py` (a missing provider is named, not silent), `E/ports/library.py` (`RunSummary` carries `fake`), `E/service/api.py`, `E/control_door.py` and `E/__main__.py` (no fake default; `run` and `resume` open `home_library(home)` or refuse by name), `E/trace_export.py` (each write receipt is linked `produced-by` to the run summary at run end, as `run_files` does).
+- [ ] Edit `LB/adapter.py` (`_land` lands nothing for a fake run's summary, and a `find_by_write_key` read beside `find_by_intent`, over `Store.with_field`), `LB/store.py` (a query for objects moved onto `main` after a sequence, since `placements()` lists only first placements), and `E/ports/library.py` and `E/ports/library_fake.py` (the new port verbs, so the fake still satisfies the port in tests).
 - [ ] Edit `qmx-control/src/qmx_control/service.py` (the digest cursor records the store it counts in; a cursor with no store tag, or above the real `last_seq`, resets once to 0 with a log line).
 - [ ] Edit the scripts of `T/morning-digest/` (`collect.py`, `assemble.py`, `advance.py`), `T/clippings-into-research/` (`write.py`, `dedupe.py`), the seven `lineage.py` copies (`revolution-loop`, `b-build-and-prove`, `bc-build-a-component`, `d3-iterate-against-qmb`, `d4-variant-comparison`, `l1-idea-to-first-result`, `p1-portfolio-combination`), `T/revolution-loop/revolution/scripts/brief.py`, and `T/crystallise-a-workflow/` (`definition.json`, `scripts/replays.py`, `scripts/batch.py`).
 - [ ] Keep `E/ports/library_fake.py` for tests and dev lanes only. Engine tests that relied on the default pass it explicitly. `scripts/live/*` users of it are dev lanes (Appendix B).
-- [ ] Add tests in the engine and control packages, run against `EngineLibraryAdapter(Store.open(tmp))` (a real store), not a recording port.
+- [ ] Add tests in the engine, Library and control packages, run against `EngineLibraryAdapter(Store.open(tmp))` (a real store), not a recording port.
 
 **Build.**
 
@@ -88,7 +89,7 @@ Audit H2, H3, H4, M6, L6 and L8, with the plan review `review/plan-mock-data-edg
   - [ ] accepts a `link` only from a write of the same slot (by local handle, `"as": "intake"` then `"$intake"`), never with edge `produced-by`, `run-of` or `tested-by`, and only to an object that exists;
   - [ ] removes `library` from the outputs before `node_finished`, records only receipts, and returns `library_written: [{handle, object_id, refused}]` in the node's outputs;
   - [ ] fails the node with the store's own refusal named (`disk_full`, `read_only_replica`), with `retryable=False`, and adds no QMX cap.
-- [ ] Test, fake and failed runs. In a `test`-mode or fake run the writes stay on its run ref, the digest never reads them, and `advance.py` does not move the cursor (`QMX_MODE == "test"`). `put_run_summary` lands nothing for a fake run. The digest reads moves onto `main` after the cursor, not first placements. Duplicate checks go through `find_by_intent`, which counts only passed runs.
+- [ ] Test, fake and failed runs. In a `test`-mode or fake run the writes stay on its run ref, the digest never reads them, and `advance.py` does not move the cursor (`QMX_MODE == "test"` or `QMX_FAKE == "1"`). `put_run_summary` lands nothing for a fake run. The digest reads moves onto `main` after the cursor, not first placements. Duplicate checks go through `find_by_intent`, which counts only passed runs.
 - [ ] `crystallise-a-workflow` takes inputs `workflow` (item), `node` (the agent step) and a `batch` source. Its replays are that node's `node_finished` outputs in that workflow's runs, read from the ledger, where `run_created.fake` is not true, `mode` is `live` and `status` is `passed`, for the published version's content hash. With none it refuses with "no replays yet (N fake or test runs left out)". A step whose outputs are not `{item_id, title, label}` is refused by name. Any truthy `fixture` selects the fixture path, so the install test still passes.
 - [ ] `brief.py` lists `fixture:revolution-loop` as a source only when `fixture` is set, and fails with `[QMX_FAILURE] no idea given` when `idea` is empty.
 
@@ -259,7 +260,7 @@ The UI findings (UI session). L3 and L4 (run cards showing "fake" and "test (sam
 |---|---|---|
 | MD1, MD2 | none (MD1 adds `qmx_control/service.py`, MD2 adds `qmx_control/catalog.py`) | in parallel |
 | MD2, MD3 | none | MD2 first (stack order) |
-| MD1, MD3 | `E/ports/library.py` (`RunSummary.fake`, the `Mode` values) | MD1 first |
+| MD1, MD3 | `E/ports/library.py` (`RunSummary.fake`, the new verbs, the `Mode` values) | MD1 first |
 
 ## Appendix D. Defaults
 
