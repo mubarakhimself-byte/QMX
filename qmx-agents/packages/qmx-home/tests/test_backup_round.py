@@ -1,5 +1,5 @@
 """A backup round (design 62 C2): the quick undo and a folder target, a round with nothing new,
-room, a killed round, the fork guard and the sealed key copy. Every folder and every target is
+room, a killed round and the fork guard. Every folder and every target is
 in pytest's tmp folder."""
 
 from __future__ import annotations
@@ -230,28 +230,6 @@ def test_a_place_another_folder_wrote_to_or_a_missing_backup_toml_is_refused_unt
     )
     assert again.places[1].result in ("copied", "unchanged")
     assert (usb.root / "backup.toml").is_file()
-
-
-def test_the_sealed_key_copy_lands_beside_a_target_copy_only_and_a_new_digest_makes_a_copy(
-    tmp_path: Path,
-) -> None:
-    filled = filled_folder(tmp_path / "QMX", files=5)
-    plan = Plan(targets=(target(tmp_path),))
-    sealed = [(b'{"sealed": 1}', "digest-1")]
-
-    first = run_round(filled.layout, plan, now=NOW, floor=0, sealed_keys=lambda: sealed[0])
-    sealed[0] = (b'{"sealed": 2}', "digest-2")
-    second = run_round(
-        filled.layout, plan, now=NOW + timedelta(days=1), floor=0, sealed_keys=lambda: sealed[0]
-    )
-
-    usb = place(filled.layout, tmp_path)
-    assert [p.result for p in first.places] == ["copied", "copied"]
-    assert [p.result for p in second.places] == ["unchanged", "copied"]
-    newest = usb.copies()[-1]
-    assert usb.read_extra(newest, "keys.sealed.json") == b'{"sealed": 2}'
-    assert usb.manifest(newest).header["keys"] == "digest-2"
-    assert not list((filled.layout.backups / "quick").rglob("keys.sealed.json"))
 
 
 def test_a_torn_manifest_stops_the_sweep_and_is_never_thinned(tmp_path: Path) -> None:

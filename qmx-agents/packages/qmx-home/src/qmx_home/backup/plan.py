@@ -1,5 +1,5 @@
 """The `[backup]` section as one plan: the quick undo's keep rule, the places he named, what he
-leaves out, the drill and the key copy's public half (design 62 C2, Appendix D).
+leaves out and the drill (design 62 C2, Appendix D).
 
 ```toml
 [backup.quick_undo]
@@ -107,8 +107,6 @@ class Plan:
     leave_out: tuple[str, ...] = ()
     """Globs relative to `data/` he leaves out of every copy."""
     drill: Drill = field(default_factory=Drill)
-    keys: Mapping[str, object] = field(default_factory=dict[str, object])
-    """`[backup.keys]` as written, for the sealed key copy (B7)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +140,6 @@ def parse(section: Mapping[str, object], layout: Layout) -> Plan:
         targets=tuple(targets),
         leave_out=_leave_out(section.get("leave_out", [])),
         drill=_drill(section.get("drill", {})),
-        keys=cast("dict[str, object]", section.get("keys") or {}),
     )
 
 

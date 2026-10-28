@@ -35,7 +35,6 @@ def test_a_full_section_parses_and_the_volume_keys_are_left_alone(tmp_path: Path
         ],
         "leave_out": ["exports/**"],
         "drill": {"every": "week", "sample": 50},
-        "keys": {"public": "abc"},
     }
 
     plan = parse(section, layout)
@@ -45,11 +44,7 @@ def test_a_full_section_parses_and_the_volume_keys_are_left_alone(tmp_path: Path
         Target("usb", "folder", usb, "week", time(22, 30), Keep(days=7, weeks=8, months=6), False),
         Target("c-drive", "folder", tmp_path / "elsewhere"),
     )
-    assert (plan.leave_out, plan.drill.sample, dict(plan.keys)) == (
-        ("exports/**",),
-        50,
-        {"public": "abc"},
-    )
+    assert (plan.leave_out, plan.drill.sample) == (("exports/**",), 50)
     assert parse({"remote": "b2", "bucket": "apps"}, layout) == Plan()
 
 

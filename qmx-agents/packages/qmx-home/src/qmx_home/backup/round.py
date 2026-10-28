@@ -3,8 +3,8 @@
 
 A round runs under `backups/backups.lock`, one at a time per QMX folder. It first removes what a
 killed round left, makes one copy (`snapshot.make`), writes it to the quick undo unless nothing
-changed, then sends it to each due target: the files its pool lacks, the sealed key copy when
-there is one, `backup.toml`, and the manifest last. Only then does it thin each place by its keep
+changed, then sends it to each due target: the files its pool lacks, `backup.toml`, and the
+manifest last. Only then does it thin each place by its keep
 rule and sweep its pool. Every round is one line in `backups/backups.jsonl`, which is also the
 record the fork guard and `due` read: no other state file is kept.
 """
@@ -37,13 +37,9 @@ from qmx_home.versions import FLOOR_BYTES, log_line, log_lines
 
 LOCK: Final = "backups.lock"
 QUICK: Final = "quick"
-SEALED: Final = "keys.sealed.json"
 STAMP: Final = "%Y%m%dT%H%M%S%fZ"
 
 type Result = Literal["copied", "unchanged", "refused", "skipped"]
-type SealedKeys = Callable[[], tuple[bytes, str]]
-"""The sealed key copy's bytes and a digest of what it seals; a changed digest makes a new copy
-even when the data did not change (B7)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +130,6 @@ def run_round(
     now: datetime,
     floor: int,
     only: str | None = None,
-    sealed_keys: SealedKeys | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> RoundReport:
     """One round at `now`: the quick undo, and every target that is due (or only the target
@@ -142,7 +137,7 @@ def run_round(
     undo never takes the drive below it or below 1 GiB. Raises Busy while another round holds
     the lock, and PlanRefused when `only` names no target."""
     return _round(
-        layout, plan, now=now, floor=floor, only=only, sealed_keys=sealed_keys, progress=progress
+        layout, plan, now=now, floor=floor, only=only, progress=progress
     )
 
 
@@ -193,7 +188,6 @@ def _round(
     why: str = "round",
     force: bool = False,
     only: str | None = None,
-    sealed_keys: SealedKeys | None = None,
     progress: Callable[[str], None] | None = None,
 ) -> RoundReport:
     started = clock.monotonic()
@@ -245,10 +239,9 @@ def _round(
             )
             return _logged(layout, RoundReport(stamp, why, places, clock.monotonic() - started))
         placed = [_quick_place(quick_repo, copy, previous, force, started)]
-        sealed = sealed_keys() if sealed_keys is not None and chosen else None
         for target in chosen:
             told(f"sending the copy to {plain(target.path)}")
-            placed.append(_send(layout, target, copy, quick_repo, sealed, log, home_id))
+            placed.append(_send(layout, target, copy, quick_repo, log, home_id))
         if not force and any(place.result == "copied" for place in placed):
             placed[0] = _thin_quick(quick_repo, plan, log, placed, now)
             _thin_pre_change(layout, log, placed, now)
@@ -293,7 +286,6 @@ def _send(
     target: Target,
     copy: Manifest,
     quick_repo: FolderRepository,
-    sealed: tuple[bytes, str] | None,
     log: Sequence[Mapping[str, object]],
     home_id: str,
 ) -> Placed:
@@ -329,11 +321,9 @@ def _send(
             return placed("refused", refusal)
         repo.clean()
         newest = _newest(repo)
-        keys = {"keys": sealed[1]} if sealed else {}
         if (
             newest is not None
             and _intended(newest) == copy.files
-            and newest.header.get("keys") == keys.get("keys")
             and all(repo.pool_has(entry.sha256) for entry in newest.entries)
         ):
             if repo.about() is None:
@@ -366,9 +356,9 @@ def _send(
             except Mismatch:
                 damaged.add(entry.sha256)
         skipped = [e for e in copy.entries if e.sha256 in damaged]
-        held = _without(copy, skipped, keys)
+        held = _without(copy, skipped)
         repo.set_about(_about(home_id, layout, held))
-        repo.put_copy(held, {SEALED: sealed[0]} if sealed else None)
+        repo.put_copy(held)
         log_line(layout, {"kind": "sent", "id": target.id, "key": key, "stamp": held.stamp})
         thinned = _thin(repo, target, log, key)
     except OSError as failed:
@@ -401,16 +391,14 @@ DAMAGED: Final = (
 )
 
 
-def _without(copy: Manifest, skipped: Sequence[Entry], keys: Mapping[str, str]) -> Manifest:
+def _without(copy: Manifest, skipped: Sequence[Entry]) -> Manifest:
     """The copy a target holds: every file in its pool, less the files it could not take, which
     its header names, so the copy reads as partial and a later round knows what it meant to
     hold."""
     if not skipped:
-        return copy.pooled(**keys)
+        return copy.pooled()
     gone = {entry.path for entry in skipped}
-    pooled = copy.pooled(
-        **keys, partial=True, skipped=[[entry.path, entry.sha256] for entry in skipped]
-    )
+    pooled = copy.pooled(partial=True, skipped=[[entry.path, entry.sha256] for entry in skipped])
     return Manifest(pooled.header, tuple(e for e in pooled.entries if e.path not in gone))
 
 

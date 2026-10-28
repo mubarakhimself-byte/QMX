@@ -79,7 +79,6 @@ from qmx_home.backup.round import (
     STAMP,
     Placed,
     RoundReport,
-    SealedKeys,
     _last,  # pyright: ignore[reportPrivateUsage] - the round's own record of a place's last copy
     _target_key,  # pyright: ignore[reportPrivateUsage] - and the key it logs a place under
     carry_on,
@@ -263,8 +262,7 @@ class Look:
 class Backups:
     """The host's backup service: the sweep, the jobs, the incidents, the doctor row, the view,
     a restore from Settings and the start after one, and the drill. `clock` is local time with
-    its zone; `floor` the room the host keeps on the folder's drive. `sealed_keys` makes the
-    sealed key copy (B7)."""
+    its zone; `floor` the room the host keeps on the folder's drive."""
 
     def __init__(
         self,
@@ -273,13 +271,11 @@ class Backups:
         *,
         clock: Callable[[], datetime],
         floor: int,
-        sealed_keys: SealedKeys | None = None,
     ) -> None:
         self.layout = layout
         self.control = control
         self.clock = clock
         self.floor = floor
-        self.sealed_keys = sealed_keys
         self.jobs = Jobs()
         self.after: AfterRestore | None = None
         """The finished restore he has not carried on from: server sync and fires stay paused."""
@@ -405,7 +401,6 @@ class Backups:
                 now=self.clock(),
                 floor=self.floor,
                 only=only,
-                sealed_keys=self.sealed_keys,
                 progress=progress,
             )
         except (Busy, PlanRefused) as refused:
