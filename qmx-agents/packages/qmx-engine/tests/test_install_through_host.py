@@ -22,8 +22,8 @@ from qmx_engine import __main__ as cli
 
 KEY = "install-check"
 PUBLISHED = {
-    "id": "backup-weekly",
-    "folder": "backup-weekly",
+    "id": "connections-health",
+    "folder": "connections-health",
     "action": "published",
     "detail": "0.1.0 obj-1, disabled; test 1 s",
 }
@@ -34,7 +34,7 @@ DRAFTED = {
     "detail": "needs: trading-node",
 }
 PRINTED = [
-    "backup-weekly backup-weekly published: 0.1.0 obj-1, disabled; test 1 s",
+    "connections-health connections-health published: 0.1.0 obj-1, disabled; test 1 s",
     "stress-tests rk5-stress-tests saved draft: needs: trading-node",
 ]
 
@@ -135,7 +135,7 @@ def recorded(home: Path, port: int) -> list[str]:
 
 def install(home: Path, port: int) -> int:
     return cli.main(
-        [*recorded(home, port), "--template", "backup-weekly", "--template", "stress-tests"]
+        [*recorded(home, port), "--template", "connections-health", "--template", "stress-tests"]
     )
 
 
@@ -156,7 +156,7 @@ def test_the_command_reads_the_hosts_job_until_it_ends_and_prints_its_rows(
             "POST",
             "/api/templates/install",
             f"Bearer {KEY}",
-            {"templates": ["backup-weekly", "stress-tests"]},
+            {"templates": ["connections-health", "stress-tests"]},
         ),
         ("GET", "/api/templates/install/job-1", f"Bearer {KEY}", None),
         ("GET", "/api/templates/install/job-1", f"Bearer {KEY}", None),

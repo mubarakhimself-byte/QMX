@@ -106,7 +106,6 @@ def test_rest_only_rows_stay_off_the_agent_surface() -> None:
         "lab_workspace",
         "library_move",
         "library_server_lost",
-        "ops_backup_weekly",
         "ops_sessions_append",
         "ops_sessions_create",
         "ops_sessions_stream",

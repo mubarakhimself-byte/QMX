@@ -42,7 +42,6 @@ from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
 
-from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
 from qmx_control.catalog import operation
 from qmx_control.library import OPERATOR as LIBRARY_OPERATOR
@@ -1331,28 +1330,6 @@ class ControlService:
             }
             for line in blamed.lines
         ]
-
-    @operation(
-        "ops",
-        "backup_weekly",
-        "manage",
-        rest=("POST", "/api/backup/weekly"),
-        agent=False,
-        left_out="a host maintenance job, not an agent act",
-    )
-    def backup_weekly(self, dry_run: bool = False) -> Document:
-        """Snapshot small stores to the private backup repo in Settings, at most weekly."""
-        settings = self.settings_get("backup")
-        repository = settings.get("repository")
-        if not isinstance(repository, str) or not repository:
-            raise ControlError("backup_not_configured", "Set backup.repository in Settings.")
-        try:
-            result = weekly_backup(self.home, repository, dry_run=dry_run)
-        except (OSError, sqlite3.Error) as error:
-            raise ControlError(
-                "backup_failed", "Snapshot creation failed; backup was not published.", 409
-            ) from error
-        return result
 
     def _aggregate_read(self, revision: int) -> Document:
         return self._aggregate_counts(revision)

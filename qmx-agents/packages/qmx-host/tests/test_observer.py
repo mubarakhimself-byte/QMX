@@ -45,7 +45,7 @@ def observer_app() -> FastAPI:
     def library() -> Document:
         return {"items": []}
 
-    @app.post("/api/backup/weekly")
+    @app.post("/api/backups/run")
     def backup() -> Document:
         return {"ran": True}
 
@@ -66,7 +66,7 @@ def test_an_observer_reads_the_ops_rows_and_the_doctor_and_is_refused_the_rest(
             doctor = rest.get("/api/doctor", headers=observer)
             broker = rest.get("/api/portfolio/proposals", headers=observer)
             library = rest.get("/api/library", headers=observer)
-            backup = rest.post("/api/backup/weekly", headers=observer)
+            backup = rest.post("/api/backups/run", headers=observer)
             local = rest.get("/api/library", headers={"Authorization": f"Bearer {LOCAL}"})
     finally:
         adopt_observers(None)

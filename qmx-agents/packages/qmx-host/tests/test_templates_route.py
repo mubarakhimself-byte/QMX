@@ -94,7 +94,7 @@ def held_tests(door: EngineDoor, monkeypatch: pytest.MonkeyPatch, gate: threadin
 
 def test_an_install_through_the_route_lands_in_the_hosts_store(tmp_path: Path) -> None:
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, store, _):
-        answered = rest.post(ROUTE, json={"templates": ["backup-weekly"]}, headers=BEARER)
+        answered = rest.post(ROUTE, json={"templates": ["connections-health"]}, headers=BEARER)
         job = ended(rest, answered.json())
         unknown = rest.post(
             ROUTE, json={"templates": ["synthetic-data", "no-such-template"]}, headers=BEARER
@@ -103,8 +103,8 @@ def test_an_install_through_the_route_lands_in_the_hosts_store(tmp_path: Path) -
 
     assert answered.status_code == 202
     assert (job["state"], job["done"], job["total"], job["line"]) == ("finished", 1, 1, "")
-    assert actions(job) == [("backup-weekly", "backup-weekly", "published")]
-    assert "backup-weekly" in heads
+    assert actions(job) == [("connections-health", "connections-health", "published")]
+    assert "connections-health" in heads
     assert (unknown.status_code, unknown.json()["detail"]) == (
         404,
         "no template 'no-such-template' in the catalogue",
@@ -116,7 +116,7 @@ def test_the_post_answers_before_a_slow_install_ends_and_a_second_install_is_ref
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     gate = threading.Event()
-    picked = {"templates": ["backup-weekly", "connections-health"]}
+    picked = {"templates": ["connections-health", "connections-health"]}
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
         held_tests(door, monkeypatch, gate)
         began = time.monotonic()
@@ -135,7 +135,7 @@ def test_the_post_answers_before_a_slow_install_ends_and_a_second_install_is_ref
     )
     assert (job["state"], job["done"], job["total"]) == ("finished", 2, 2)
     assert [(row["id"], row["action"], row["detail"]) for row in job["result"]["rows"]] == [
-        ("backup-weekly", "test failed", "run held: the model was slow"),
+        ("connections-health", "test failed", "run held: the model was slow"),
         ("connections-health", "test failed", "run held: the model was slow"),
     ]
 
@@ -144,7 +144,7 @@ def test_a_running_job_shows_the_template_it_is_on_and_the_rows_finished_so_far(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     gate = threading.Event()
-    picked = {"templates": ["stress-tests", "backup-weekly"]}
+    picked = {"templates": ["stress-tests", "connections-health"]}
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
         held_tests(door, monkeypatch, gate)
         job = rest.post(ROUTE, json=picked, headers=BEARER).json()
@@ -158,7 +158,7 @@ def test_a_running_job_shows_the_template_it_is_on_and_the_rows_finished_so_far(
 
     assert (job["state"], job["step"], job["done"], job["total"]) == (
         "running",
-        "installing backup-weekly",
+        "installing connections-health",
         1,
         2,
     )
@@ -166,7 +166,7 @@ def test_a_running_job_shows_the_template_it_is_on_and_the_rows_finished_so_far(
 
 
 def test_the_jobs_rows_are_the_rows_install_gives_on_the_same_catalogue(tmp_path: Path) -> None:
-    picked = ["backup-weekly", "stress-tests", "daily-book-report"]
+    picked = ["connections-health", "stress-tests", "daily-book-report"]
     with hosted(resolve(tmp_path / "hosted", create=True, drives=[]).home) as (rest, _, _):
         job = ended(rest, rest.post(ROUTE, json={"templates": picked}, headers=BEARER).json())
         again = ended(rest, rest.post(ROUTE, json={"templates": picked}, headers=BEARER).json())
@@ -178,7 +178,7 @@ def test_the_jobs_rows_are_the_rows_install_gives_on_the_same_catalogue(tmp_path
         done = asyncio.run(install(svc, [find(t) for t in picked]))
 
     assert actions(job) == [
-        ("backup-weekly", "backup-weekly", "published"),
+        ("connections-health", "connections-health", "published"),
         ("stress-tests", "rk5-stress-tests", "saved draft"),
         ("daily-book-report", "p2-daily-book-report", "saved draft"),
     ]
@@ -192,14 +192,14 @@ def test_a_hop_that_raises_stops_the_job_with_its_code_and_the_rows_so_far(
     async def refused(item: str, *, caller: Caller, inputs: object = None) -> Report:
         raise EngineRefused("not_found", f"no draft {item} in the Library")
 
-    picked = {"templates": ["stress-tests", "backup-weekly", "connections-health"]}
+    picked = {"templates": ["stress-tests", "connections-health", "connections-health"]}
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
         monkeypatch.setattr(door.svc.tests, "run", refused)
         job = ended(rest, rest.post(ROUTE, json=picked, headers=BEARER).json())
 
     assert (job["state"], job["done"], job["total"]) == ("stopped", 1, 3)
     assert job["line"] == (
-        "the install stopped at backup-weekly: no draft backup-weekly in the Library; "
+        "the install stopped at connections-health: no draft connections-health in the Library; "
         "the templates before it are installed, so fix that and run the install again"
     )
     assert job["result"]["code"] == "not_found"
@@ -212,14 +212,14 @@ def test_any_other_error_in_a_hop_stops_the_job_with_its_line_and_the_rows_so_fa
     async def broken(item: str, *, caller: Caller, inputs: object = None) -> Report:
         raise OSError("the disk is full")
 
-    picked = {"templates": ["stress-tests", "backup-weekly"]}
+    picked = {"templates": ["stress-tests", "connections-health"]}
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
         monkeypatch.setattr(door.svc.tests, "run", broken)
         job = ended(rest, rest.post(ROUTE, json=picked, headers=BEARER).json())
 
     assert (job["state"], job["done"], job["total"]) == ("stopped", 1, 2)
     assert job["line"] == (
-        "the install stopped at backup-weekly with an unexpected OSError: the disk is full; "
+        "the install stopped at connections-health with an unexpected OSError: the disk is full; "
         "the templates before it are installed, so run the install again"
     )
     assert sorted(job["result"]) == ["rows"]
@@ -238,7 +238,7 @@ def test_the_install_runs_on_the_engines_loop_with_no_request_principal(
 
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
         monkeypatch.setattr(door.svc.tests, "run", run)
-        ended(rest, rest.post(ROUTE, json={"templates": ["backup-weekly"]}, headers=BEARER).json())
+        ended(rest, rest.post(ROUTE, json={"templates": ["connections-health"]}, headers=BEARER).json())
 
     assert seen == [("agent", "unnamed")]
 
@@ -267,8 +267,8 @@ def draft_on_a_pc(home: Path, primary: str) -> str:
         Store.open(home / "library", redactor=redact, role=role) as store,
         EngineService.open(home, library=EngineLibraryAdapter(store)) as svc,
     ):
-        bundle = Bundle.read(PACK / "backup-weekly")
-        return svc.drafts.put("backup-weekly", bundle, 0, caller=OPERATOR).item
+        bundle = Bundle.read(PACK / "connections-health")
+        return svc.drafts.put("connections-health", bundle, 0, caller=OPERATOR).item
 
 
 def test_a_pc_host_writes_while_the_pc_is_primary_and_refuses_after_the_flip(
@@ -278,5 +278,5 @@ def test_a_pc_host_writes_while_the_pc_is_primary_and_refuses_after_the_flip(
     with pytest.raises(EngineRefused) as refused:
         draft_on_a_pc(tmp_path / "after", "server")
 
-    assert landed == "backup-weekly"
+    assert landed == "connections-health"
     assert refused.value.code == "read_only_replica"
