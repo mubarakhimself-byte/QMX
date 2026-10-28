@@ -26,15 +26,6 @@ from typing import Final, Literal, cast
 type Class = Literal["recipe", "content", "result", "prices", "rebuildable", "secret", "scratch"]
 type Answer = Class | Literal["kind"]
 
-CLASSES: Final[tuple[Class, ...]] = (
-    "recipe",
-    "content",
-    "result",
-    "prices",
-    "rebuildable",
-    "secret",
-    "scratch",
-)
 SENT: Final[tuple[Class, ...]] = ("recipe", "content", "result", "prices")
 """The saved set: what a storage keeps, each with its own switch."""
 NEVER: Final[frozenset[Class]] = frozenset({"rebuildable", "secret", "scratch"})

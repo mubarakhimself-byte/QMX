@@ -174,8 +174,6 @@ class Upkeep:
     drill: bool = True
     drill_every: str = "1mo"
     drill_sample: int = 200
-    values: Mapping[str, object] = field(default_factory=lambda: dict(UPKEEP))
-    """Every upkeep key with its default filled in."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,12 +194,6 @@ class Plan:
     def folders(self) -> tuple[Storage, ...]:
         """The storages this release copies to: folders on a drive."""
         return tuple(s for s in self.storages if s.via == "folder" and s.path is not None)
-
-    @property
-    def save(self) -> tuple[Class, ...]:
-        """Every class some place keeps."""
-        wanted = {*self.pc.save, *(c for s in self.folders for c in s.policy.save)}
-        return tuple(c for c in SENT if c in wanted)
 
 
 @dataclass(frozen=True, slots=True)
@@ -392,7 +384,6 @@ def _upkeep(table: Mapping[str, object]) -> Upkeep:
         _bool("[backup.upkeep] drill", values["drill"]),
         cast("str", values["drill_every"]),
         sample,
-        values,
     )
 
 

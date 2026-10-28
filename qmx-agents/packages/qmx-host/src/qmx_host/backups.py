@@ -60,6 +60,7 @@ from qmx_home.backup.keep import when
 from qmx_home.backup.plan import (
     KEEP_KEYS,
     NO_SECOND_DRIVE,
+    STORAGE_POLICY,
     Plan,
     PlanRefused,
     Policy,
@@ -133,8 +134,6 @@ ROAD_WAIT_S: Final = 60.0
 """A probe bound, not a cap: how long a round waits for a road step to let a mini app's road
 lease go before it leaves that `road/` out of this copy, named; the next round tries again."""
 ROAD_POLL_S: Final = 0.2
-STORAGE_AT: Final = "03:00"
-"""A storage's daily time until he changes it (Appendix D)."""
 OFF_LINE: Final = (
     "Sync to my storage is off: QMX makes no copy anywhere, This PC included, and deletes none "
     "until you turn it on in Settings"
@@ -782,7 +781,7 @@ class Backups:
 
         self.control.settings_update(ENGINE, added)
         self._proposed = None
-        at = STORAGE_AT
+        at = STORAGE_POLICY.at.strftime("%H:%M")
         return {
             "target": row,
             "line": f"QMX copies your work to {offered.path} every day at {at}; the first copy "
