@@ -73,8 +73,9 @@ def test_a_ledger_whose_min_reader_is_raised_is_refused_by_name_and_left_as_it_w
     assert str(writer.value) == (
         "This QMX folder's run ledger was written by QMX 0.1.0 as run ledger version 7. This "
         "QMX reads run ledger version 5, and this one needs a QMX that reads version 6 or "
-        f"newer. Install that QMX, or restore the copy taken before the upgrade from "
-        f"{home.parent / 'backups'}."
+        "newer. Install that QMX, or restore a copy from before the upgrade, with Restore from a "
+        f"backup on the start screen or python -m qmx_host restore --home {home.parent} --from "
+        f"{home.parent / 'backups' / 'quick'}."
     )
     assert path.read_bytes() == before
 
@@ -144,6 +145,7 @@ def test_the_engine_command_line_shows_a_refused_ledger_as_its_one_line(
     assert printed.err == (
         "This QMX folder's run ledger was written by QMX 0.1.0 as run ledger version 7. This "
         "QMX reads run ledger version 5, and this one needs a QMX that reads version 6 or "
-        f"newer. Install that QMX, or restore the copy taken before the upgrade from "
-        f"{home.parent / 'backups'}.\n"
+        "newer. Install that QMX, or restore a copy from before the upgrade, with Restore from a "
+        f"backup on the start screen or python -m qmx_host restore --home {home.parent} --from "
+        f"{home.parent / 'backups' / 'quick'}.\n"
     )
