@@ -265,8 +265,8 @@ class Rclone:
 
     def check_conf(self) -> Path | None:
         """Set the conf aside when the key store no longer holds its password, without a call.
-        The conf set aside, or None."""
-        if self.keys.read(CONFIG_KEY) is None and _encrypted(self.conf):
+        The conf set aside, or None. With no conf the key store is not read."""
+        if _encrypted(self.conf) and self.keys.read(CONFIG_KEY) is None:
             self._set_aside()
         return self.set_aside
 

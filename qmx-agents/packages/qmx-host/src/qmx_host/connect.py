@@ -250,7 +250,17 @@ class Connect:
         return f"job {job_id}: stopping; nothing was connected"
 
     def doctor_line(self) -> DoctorLine:
-        aside = self.world.rclone.check_conf()
+        """The storages' row. It never raises, because one failing row would fail the whole
+        doctor read, and a headless server's keyring raises on every read."""
+        try:
+            aside = self.world.rclone.check_conf()
+        except Exception as error:  # any key store failure is this row's answer
+            return DoctorLine(
+                "storages",
+                False,
+                f"the key store on this machine did not answer ({type(error).__name__}), so the "
+                "storages' settings cannot be opened here",
+            )
         if aside is None:
             return DoctorLine("storages", True, "the storages' settings on this PC open")
         return DoctorLine(

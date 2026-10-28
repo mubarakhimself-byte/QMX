@@ -246,3 +246,24 @@ def test_the_card_connects_an_rclone_storage_into_the_chosen_folder_and_answers_
     assert source["remote"].startswith("qmx_")
     assert "RCLONE_ENCRYPT_V0:" in (chosen / "data" / "rclone.conf").read_text(encoding="utf-8")
     assert not (chosen / "data" / "settings.toml").exists()
+
+
+class Unanswering(Store):
+    """A key store that raises, as keyring's `fail` backend does on a headless server."""
+
+    def read(self, name: str) -> str | None:
+        raise RuntimeError(f"no keyring backend to read {name}")
+
+
+def test_the_storages_doctor_row_reads_no_key_without_a_conf_and_never_breaks_the_doctor(
+    tmp_path: Path,
+) -> None:
+    layout = qmx_folder(tmp_path / "QMX")
+    connect = Connect(world(layout, keys=Unanswering()), KINDS)
+    quiet = connect.doctor_line()
+    (layout.data / "rclone.conf").write_text("RCLONE_ENCRYPT_V0:\nlane\n", encoding="utf-8")
+    loud = connect.doctor_line()
+    assert (quiet.ok, quiet.detail) == (True, "the storages' settings on this PC open")
+    assert loud.ok is False
+    assert "the key store on this machine did not answer" in loud.detail
+    assert (layout.data / "rclone.conf").exists()
