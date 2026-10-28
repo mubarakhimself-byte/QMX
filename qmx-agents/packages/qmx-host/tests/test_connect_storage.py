@@ -8,15 +8,18 @@ from __future__ import annotations
 import json
 import shutil
 import time
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import psutil
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from qmx_home.rclone import UNREADABLE, Rclone
-from test_connect import BEARER, app_of, connected, ended, qmx_folder, rows, world
+from test_connect import BEARER, Store, app_of, connected, ended, qmx_folder, rows, world
 
+from qmx_host import first_start
 from qmx_host.connect import KINDS, Connect
 
 needs_rclone = pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone is not on PATH")
@@ -186,4 +189,60 @@ def test_a_question_card_never_shows_a_password_default(tmp_path: Path) -> None:
     assert card.name == "secret"
     assert card.key == "qmx/connect/lane/password"
     assert "do-not-show" not in json.dumps(card.document())
-    assert time.monotonic() > 0
+
+
+@pytest.fixture
+def card(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """The first-start card on a scratch profile, with an in-memory key store."""
+    profile = tmp_path / "profile"
+    for name, part in (("APPDATA", "Roaming"), ("LOCALAPPDATA", "Local")):
+        (profile / part).mkdir(parents=True)
+        monkeypatch.setenv(name, str(profile / part))
+    monkeypatch.setenv("USERPROFILE", str(profile))
+    monkeypatch.delenv("QMX_HOME", raising=False)
+    monkeypatch.setattr("qmx_home._fixed_drives", list)
+    monkeypatch.setattr(first_start, "_fixed_drives", list)
+    places = first_start.Places({"APPDATA": str(profile / "Roaming")})
+    app = FastAPI()
+    app.include_router(
+        first_start.first_start_router(
+            places, tmp_path / "old", drives=[], port=8799, key_store=Store()
+        )
+    )
+    with TestClient(app) as client:
+        yield client
+
+
+def card_job(card: TestClient, body: dict[str, object]) -> dict[str, Any]:
+    asked = card.post("/api/first-start/connect", json=body)
+    assert asked.status_code == 202, asked.text
+    for _ in range(1200):
+        job = cast("dict[str, Any]", card.get(f"/api/first-start/jobs/{asked.json()['id']}").json())
+        if job["state"] != "running":
+            return job
+        time.sleep(0.05)
+    raise AssertionError("the card's connect job did not end within 60 s")
+
+
+@needs_rclone
+def test_the_card_connects_an_rclone_storage_into_the_chosen_folder_and_answers_its_source(
+    card: TestClient, tmp_path: Path
+) -> None:
+    store = tmp_path / "store"
+    store.mkdir()
+    chosen = tmp_path / "QMX"
+    asked: dict[str, object] = {"fields": {"type": "local", "root": str(store)}}
+    job = card_job(
+        card, {"folder": str(chosen), "kind": "rclone", "place": "lane", "answer": asked}
+    )
+    while job["state"] == "finished" and job["needs"] is not None:
+        asked = {"state": job["needs"]["state"], "result": ""}
+        job = card_job(
+            card, {"folder": str(chosen), "kind": "rclone", "place": "lane", "answer": asked}
+        )
+    assert job["state"] == "finished", job["line"]
+    source = cast("dict[str, str]", job["result"]["source"])
+    assert {k: source[k] for k in ("kind", "path")} == {"kind": "rclone", "path": str(store)}
+    assert source["remote"].startswith("qmx_")
+    assert "RCLONE_ENCRYPT_V0:" in (chosen / "data" / "rclone.conf").read_text(encoding="utf-8")
+    assert not (chosen / "data" / "settings.toml").exists()
