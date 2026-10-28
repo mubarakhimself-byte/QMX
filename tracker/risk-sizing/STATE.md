@@ -98,6 +98,17 @@ Verbatim dictation: `operator/2026-10-27-review-dictation.md`. **Method he asked
 - "Markets and gaps" page: he will reply in writing himself.
 - Build order: he has seen it; hold.
 
+## Operator round 2026-10-28: the router, System 1 vs System 2 (under discussion)
+
+Verbatim: `operator/2026-10-28-router-system1-system2.md`.
+- **Envelope:** agent-driven, built on the workflow system. Leave a default for now and enhance it after QMX is live.
+- **Router as proposed (13, 14):** too complex, and took "load balancer" too literally.
+- **What he wants the MIS to do:** read each market's conditions (trending, mean-reverting and so on) so a unit trades where its logic has the best odds. The aim is compounding through breadth.
+- **System 1 (his preference for live):** a unit's logic works across a universe (e.g. 100 instruments). The MIS scans them and finds the ones in the unit's condition (e.g. 20% mean-reverting at the unit's timeframe). The unit picks the best of those by its own record and expected profit. Good for qualitative tracking (which session or hour suits which unit).
+- **System 2 (round 1's "sibling unit per instrument"):** one unit per instrument, so expansion makes new variants. The MIS becomes nearly useless live. He sees it as right before live, for building and varying logic per market.
+- **His two expansions:** bounded domain expansion (development: logic and variants) and live domain expansion (System 1).
+- **Claude's proposal (not agreed):** System 2 in research, System 1 live. Research proves each unit's universe and its condition fingerprint. Live, the MIS scans, matches and ranks inside that universe. A new variant only when the logic changes. Per-instrument calibrated settings stay inside one unit. **This revises the Q1 answer** ("new instrument = sibling unit"), which needs his confirmation.
+
 ## Research findings (short; detail in each file)
 
 | File | Most important findings |
