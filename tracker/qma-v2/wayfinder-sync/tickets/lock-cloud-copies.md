@@ -2,10 +2,12 @@
 title: Lock copies on cloud storage with a passphrase? (E4)
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [packs-and-compression, connect-storage]
 claimed_by: ""
 created: 2026-10-28
+closed: 2026-10-28
+resolved_by: operator (his answer of 2026-10-28, `../research/sync/05-his-answers-2026-10-28.md`)
 owner: operator
 ---
 
@@ -38,3 +40,21 @@ The default for each storage kind only. The lock is rclone's own `crypt` layer o
 - rclone `crypt` encrypts file contents and names. It does not hide length or modification time (`sources/rclone-crypt.md`).
 - `drive.file` means QMX sees only the files it made (`src:` 2.4). It does not stop someone who gets into your Google account from reading them.
 - R135: keys never leave their home, so they are never in a copy.
+
+## Resolution
+
+**No passphrase and no lock of any kind, on any storage. Secrets never travel. QMX adds no encryption layer of its own now. Any encryption added later must never need him to remember anything, and must never leave a copy unreadable once this PC is gone.** The recommended answer above (locked on Drive and R2) is rejected.
+
+His words, verbatim (`../research/sync/05-his-answers-2026-10-28.md`, E4):
+
+> "I don't think it makes sense for us to lock. I mean, we can have a unique character or synchronization with QMX, but I don't think it needs locking. Maybe encryption, but locking, not so much. I mean, I'm imagining myself 10 to 20 days when I've been just doing other side hustles, and you're asking me for a password that most likely I forgot. So I don't know. It doesn't make sense."
+
+What it decides:
+
+- **No rclone `crypt` layer and no passphrase prompt.** A copy on any storage opens on a new PC with nothing but his sign-in to that storage.
+- **A copy holds nothing secret.** The secret class never travels (`secrets-stay-home`), so a copy carries key names only, never a key.
+- **Encryption that needs no memory, and why none is built now.** A key that only this PC holds would make every copy unreadable once the PC is lost, which is the one case a copy exists for. So that encryption is ruled out. What stays is the storage's own protection: Drive's `drive.file` access (QMX sees only the files it made) and the provider's own encryption at rest. The second point is the coordinator's reading and was not checked against a saved source.
+- **"A unique character ... with QMX"** reads as each QMX folder's own identity. A copy lives under its own `QMX-backup/<home_id>/` folder, so QMX knows its own copies by that id (inferred from his words; he did not spell it out).
+- **The local `rclone.conf` encryption stays.** It is not a lock on his copies. Its password lives in Credential Manager, he never types it, and on a new PC he simply connects the storage again.
+
+Where it lands: `../research/sync/06-sync-and-connect-design.md` sections 2 and 3, and invariant I4.

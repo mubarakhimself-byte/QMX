@@ -66,12 +66,12 @@ It builds on backup PRs 225 to 229 and everything under them, and it subtracts f
 - [Which UI-HANDOFF section 26 gaps belong here](tickets/ui-gaps-that-belong.md): gaps 1, 3, 4, 5, 6, 7 and 8 are in; 2 (broker REST) and 9 (attach) are out.
 - [What goes before anything is added](tickets/subtract-first.md): the weekly GitHub snapshot, the volume backup (after the lease copy), `[remote]`, the second rclone runner, three floors, the fixed hourly rule, the PR 6 and 7 plan text and the old installer go first.
 
-### Waiting for him (open, each with a recommended answer)
-- [Which storage do you connect first? (E1)](tickets/first-storage.md): recommended: Drive's free space for his work, and the old ticks to his server once it is connected.
-- [What the screen calls it (E3)](tickets/screen-words.md): recommended: "Sync to my storage", "Storage", "Restore", "Maintenance", "Server link"; "backup" leaves the screen.
-- [Lock copies on cloud storage with a passphrase? (E4)](tickets/lock-cloud-copies.md): recommended: locked on Drive and R2, unlocked on his server and plugged-in drives, with the passphrase in Windows' password safe.
+### His answers (2026-10-28, `../research/sync/05-his-answers-2026-10-28.md`)
+- [Which storage do you connect first? (E1)](tickets/first-storage.md): This PC is the first and default storage, and everything works with no cloud; Drive and every other kind are a click in the connect dialog, during install or later; builders never need his credentials.
+- [What the screen calls it (E3)](tickets/screen-words.md): the recommended words, with This PC ("Copies on this PC") as the first storage row; "backup" leaves the screen.
+- [Lock copies on cloud storage with a passphrase? (E4)](tickets/lock-cloud-copies.md): no passphrase or lock of any kind; secrets never travel; any later encryption must never need him to remember anything.
 
-Each open answer changes a default or a word, not the design's shape.
+Every ticket is closed. The design is written in `../research/sync/06-sync-and-connect-design.md`.
 
 ## Not yet specified
 
@@ -85,7 +85,7 @@ Each open answer changes a default or a word, not the design's shape.
 - **The desktop installer and updater themselves:** the desktop session builds them. This map fixes their step lists and the backend calls.
 - **Broker reads over REST** (UIH §26 gap 2): broker and connections work.
 - **The attach route and `@file`** (UIH §26 gap 9): the parked attach plan. Its secret-list fix is in here.
-- **PR 229's failing check and the Hub heartbeat `[engine]` wipe:** PR 229's own fix round, the coordinator's call.
+- **PR 229's failing check and the Hub heartbeat `[engine]` wipe:** PR 229's own fix round. The design places both and makes the wipe fix a precondition of the sync work (`../research/sync/06-sync-and-connect-design.md` section 15).
 - **The sealed key copy (planned PR 7):** parked in the backlog. He never asked for it (`words:29`).
 - **A QMX-run account service with its own sign-in:** settled by his words. Each person connects their own storage (`words:185`).
 - **The trading node's own backup and its Prometheus, Loki and Grafana stack:** the trading-node session's; node internals are not re-discussed here.

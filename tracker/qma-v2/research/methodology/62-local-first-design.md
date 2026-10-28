@@ -2,6 +2,21 @@
 
 Written 2026-10-26 by the local-first architect. Rulings 105 to 145 of file 26 bind, the latest winning; rulings 136 to 145 drive this. Inputs: `62a-local-first-rubric-walk.md` (the walk of every system, the messy files, the no-server first boot, the UI's compute places), `62b-local-first-research.md` (patterns, folders per OS, versions, local backups, OpenObserve and Hindsight on Windows), `61-server-substitute-and-wu9b.md` section D (gaps G1 to G12). Code truth is `build/wu9` at `d7391716` in `D:/QMX-worktrees/bld-wu9` (equal to `engine/base` `d82be318` apart from merges); the UI design is `ui-review/repair`, read for intent only. The three spines were amended in place with the `bmad-architecture` skill in amend mode (section I). Nothing was committed or pushed, and no file under `~/.qmx`, Documents, `DATA_NARL`, a vault or a keyring was read.
 
+**Amended 2026-10-28 by `../sync/06-sync-and-connect-design.md` (sync to my storage, and connect from the screen).** Where the two disagree, 06 wins. It replaces:
+
+- H's "QMX backs itself up" bullet: 06 section 0.
+- B3's pre-change hold: 06 sections 5 and 7.
+- C1 (what is copied): 06 section 2, the class table.
+- C2 (quick undo, second drive, off-site tiers, the layout): 06 sections 3, 4 and 5. This PC is the first storage, every other storage is connected from the dialog, and copies are packed and compressed.
+- C3 (restore): 06 section 8, restore from any storage.
+- C4 (the sealed key copy): parked. Secrets never travel and nothing is locked (06 section 2, invariants I3 and I4).
+- C5 (the GitHub backup): removed (06 section 13).
+- D1's "the second drive is not a place" and D2's `[placements]`: 06 section 4, the built `[engine] placement.*` list with `kind` and `can`.
+- D4's Backups, Buckets, OpenObserve, collector and sealed-copy rows: 06 sections 2, 4 and 9.
+- F step 5, F step 14 and F1: 06 sections 9 and 10.
+- G's LF8, LF9, LF10, LF12 (backup targets) and LF13: 06 section 16.
+- L1: 06 section 4. L2 and L6 still bind.
+
 ## H. In plain words (for him)
 
 - **Your data gets one folder of its own.** It is called `QMX`. On your PC it goes on the drive with the most free room, so `D:\QMX` today (your C: drive is short of space). You can pick another place on the first start and move it later in Settings.
