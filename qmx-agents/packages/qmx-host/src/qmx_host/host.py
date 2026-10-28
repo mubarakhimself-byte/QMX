@@ -1022,11 +1022,20 @@ def section(control: ControlService, name: str) -> Document:
 
 
 def hear(link: HubLink, row: Heartbeat, control: ControlService, *, heed: bool = True) -> None:
-    """One push, and with `heed` the Hub's flag written into this host's settings when it
-    changed."""
+    """One push, and with `heed` the Hub's flag merged into `[engine] autonomy.paused` when it
+    changes the value the engine reads; every other `[engine]` key stays."""
     reply = link.push(row)
-    if heed and reply.autonomy_paused != bool(section(control, "engine").get("autonomy.paused")):
-        control.settings_put("engine", {"autonomy": {"paused": reply.autonomy_paused}})
+    if not heed:
+        return
+
+    def heeded(engine: Document) -> Document:
+        found = engine.get("autonomy")
+        autonomy = dict(found) if isinstance(found, dict) else {}
+        if bool(autonomy.get("paused")) == reply.autonomy_paused:
+            return engine
+        return {**engine, "autonomy": {**autonomy, "paused": reply.autonomy_paused}}
+
+    control.settings_update(cast("Any", "engine"), heeded)
 
 
 def placement_name(control: ControlService, role: Role, place: str = "") -> str:

@@ -235,6 +235,56 @@ def test_the_pause_is_a_merge_a_hub_does_not_clear_and_carry_on_gives_back_its_e
     assert again is None
 
 
+class Writes(ControlService):
+    """A control service counting each section it writes to `settings.toml`."""
+
+    def __init__(self, home: Path) -> None:
+        super().__init__(home, secret_getter=lambda _service, _name: None)
+        self.writes = 0
+
+    def settings_put(self, section: Any, values: Any) -> Any:
+        self.writes += 1
+        return super().settings_put(section, values)
+
+
+HIS_ENGINE: dict[str, Any] = {
+    "host_name": "pc-1",
+    "disk": {"floor_gb": 3},
+    "scheduler": {"tick": 5, "grace": 900},
+    "places": [{"name": "usb", "kind": "folder", "path": "E:/QMX-backup"}],
+}
+PAUSED = {**HIS_ENGINE, "autonomy": {"paused": True}}
+RUNNING = {**HIS_ENGINE, "autonomy": {"paused": False}}
+
+
+@pytest.mark.parametrize(
+    ("answers", "seen", "writes"),
+    [
+        ((True, True, True), [PAUSED, PAUSED, PAUSED], 1),
+        ((False, False, False), [HIS_ENGINE, HIS_ENGINE, HIS_ENGINE], 0),
+        ((True, False, False, True), [PAUSED, RUNNING, RUNNING, PAUSED], 3),
+    ],
+)
+def test_a_hub_heartbeat_changes_only_the_pause_and_writes_only_when_the_answer_changes_it(
+    tmp_path: Path, answers: tuple[bool, ...], seen: list[dict[str, Any]], writes: int
+) -> None:
+    layout = resolve(tmp_path / "QMX", create=True)
+    control = Writes(layout.home)
+    control.settings_put(ENGINE, HIS_ENGINE)
+    control.writes = 0
+    hub = Hub()
+
+    sections: list[object] = []
+    for flag in answers:
+        hub.autonomy_paused = flag
+        hear(cast("Any", hub), cast("Any", "row"), control)
+        sections.append(control.settings_get(ENGINE))
+
+    assert sections == seen
+    assert control.writes == writes
+    assert hub.pushed == ["row"] * len(answers)
+
+
 @pytest.mark.parametrize("role", ["writer", "replica"])
 def test_each_blob_the_restore_names_is_purged_again_on_a_writer_with_its_ref(
     tmp_path: Path, role: str, capsys: pytest.CaptureFixture[str]
