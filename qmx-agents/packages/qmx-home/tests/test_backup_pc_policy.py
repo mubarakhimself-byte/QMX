@@ -4,6 +4,8 @@ sections 2, 4 and 5). Every folder and every storage is in pytest's tmp folder."
 from __future__ import annotations
 
 import tomllib
+from collections.abc import Generator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,6 +23,7 @@ from qmx_home.classes import NEVER, class_of
 
 NOW = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)
 PASTED = "sk-ant-api03-pastedByHandIntoSettings0000"
+NAMED = "api_key"
 SETTINGS = f"""[engine]
 host_name = "pc"
 
@@ -29,7 +32,7 @@ id = "kimi"
 
 [[providers]]
 id = "glm"
-api_key = "glm-planted-key"
+{NAMED} = "glm-planted-key"
 
 [notes]
 innocent = "{PASTED}"
@@ -167,3 +170,41 @@ def test_a_held_copy_goes_once_a_whole_copy_reaches_a_storage_on_another_disk(
     (filled.layout.data / "chats" / "c1.json").write_text('{"n": 2}', encoding="utf-8")
     run_round(filled.layout, plan, now=NOW + timedelta(days=1), floor=0)
     assert not pre.exists()
+
+
+def test_a_mini_apps_road_is_copied_while_its_road_lease_is_held(tmp_path: Path) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=3)
+    road = filled.layout.data / "apps" / "demo" / "road" / "r.json"
+    seen: list[str] = []
+
+    @contextmanager
+    def lease(app_id: str) -> Generator[object]:
+        seen.append(app_id)
+        road.write_bytes(b'{"road": "written under the lease"}')
+        try:
+            yield None
+        finally:
+            road.write_bytes(b'{"road": "after the lease"}')
+
+    run_round(filled.layout, Plan(), now=NOW, floor=0, road_lease=lease)
+
+    quick = FolderRepository(filled.layout.backups / "quick")
+    copy = quick.manifest(quick.copies()[-1])
+    entry = next(e for e in copy.entries if e.path == "apps/demo/road/r.json")
+    assert seen == ["demo"]
+    assert quick.pool_path(entry.sha256).read_bytes() == b'{"road": "written under the lease"}'
+
+
+def test_a_road_whose_lease_stays_held_is_named_as_left_out_of_this_copy(tmp_path: Path) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=3)
+
+    def busy(_app_id: str) -> AbstractContextManager[object]:
+        raise RuntimeError("demo is held by a road step")
+
+    report = run_round(filled.layout, Plan(), now=NOW, floor=0, road_lease=busy)
+
+    assert report.places[0].partial
+    assert report.places[0].line.endswith(
+        "this copy lacks 1 file: apps/demo/road/r.json (its road lease was held: demo is held by "
+        "a road step)"
+    )
