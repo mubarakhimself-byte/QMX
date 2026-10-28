@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from qmx_control.server import create_app
 from qmx_home.backup.plan import NO_SECOND_DRIVE
 from qmx_home.files import hold
-from test_backups_service import Clock, folder, proposing, service, target
+from test_backups_service import Clock, connect, folder, proposing, service, target
 
 from qmx_host import backups as module
 from qmx_host.backups import Backups, backups_router
@@ -80,7 +80,7 @@ def test_a_round_asked_for_while_one_runs_is_409_naming_it_and_after_it_is_202(
 ) -> None:
     layout, clock = folder(tmp_path / "QMX"), Clock()
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(tmp_path / "usb")]})
+    connect(backups, target(tmp_path / "usb"))
     with TestClient(app_of(backups)) as rest, held_rounds(monkeypatch) as go:
         scheduled = backups.sweep()
         assert scheduled is not None
@@ -108,7 +108,7 @@ def test_a_round_asked_for_while_one_runs_is_409_naming_it_and_after_it_is_202(
         unknown = rest.post("/api/backups/run", headers=BEARER, json={"target": "tape"})
         assert (unknown.status_code, unknown.json()) == (
             404,
-            {"detail": "there is no backup place 'tape' in Settings"},
+            {"detail": "there is no storage 'tape' in Settings"},
         )
 
 
@@ -117,7 +117,7 @@ def test_the_view_shows_each_place_with_its_last_copy_and_lists_its_copies(
 ) -> None:
     layout, clock = folder(tmp_path / "QMX"), Clock()
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(tmp_path / "usb")]})
+    connect(backups, target(tmp_path / "usb"))
     with TestClient(app_of(backups)) as rest:
         started = rest.post("/api/backups/run", headers=BEARER)
         assert ended(rest, str(started.json()["id"]))["state"] == "finished"
@@ -140,7 +140,7 @@ def test_the_view_shows_each_place_with_its_last_copy_and_lists_its_copies(
     assert missing.status_code == 404
     assert (accept.status_code, accept.json()) == (
         409,
-        {"detail": "you already named a backup place; change it in Settings, Data and backups"},
+        {"detail": "you already connected a storage; change it in Settings, Sync to my storage"},
     )
 
 
@@ -177,7 +177,7 @@ def serving(app: FastAPI) -> Generator[str]:
 def test_health_answers_in_under_a_second_all_through_a_round(tmp_path: Path) -> None:
     layout = folder(tmp_path / "QMX", files=400, store_rows=20_000)
     backups = service(layout, Clock())
-    backups.control.settings_put("backup", {"targets": [target(tmp_path / "usb")]})
+    connect(backups, target(tmp_path / "usb"))
     with serving(app_of(backups)) as url, httpx.Client(base_url=url, timeout=10) as rest:
         started = rest.post("/api/backups/run", headers=BEARER)
         assert started.status_code == 202

@@ -42,6 +42,7 @@ from qmx_control.catalog import (
     rows,
     spill,
 )
+from qmx_home.classes import secret_paths
 
 from qma.harness.delegate import DelegateRefused
 from qma.harness.guard import QMX_SERVER, GuardRules, Rule, is_qmx_server, normalize_path
@@ -907,19 +908,16 @@ def _both(paths: list[Path]) -> tuple[str, ...]:
 
 
 def secret_files(home: QmxHome) -> list[Path]:
-    """Files that hold or may hold a login or a key: the plan login in both forms under each
-    QMX Claude home and his `~/.claude`, his `~/.claude.json`, the QMX home's `settings.toml`
-    and `rclone.conf`, and the QMX folder's `keys/` with everything in it."""
+    """Files that hold or may hold a login or a key: every `secret` path of the QMX folder's
+    class table (`keys/`, `data/vault/`, `rclone.conf`, both Claude homes' logins and the rest),
+    the plan login in both forms under his `~/.claude`, his `~/.claude.json`, and the QMX home's
+    `settings.toml`, which a hand edit may put a key in."""
     personal = Path.home() / ".claude"
     return [
-        folder / name
-        for folder in (home.plan_dir, home.relayed_dir, personal)
-        for name in (".credentials.json", ".claude.json")
-    ] + [
+        *(home.layout.root / path for path in secret_paths()),
+        *(personal / name for name in (".credentials.json", ".claude.json")),
         Path.home() / ".claude.json",
         home.root / "settings.toml",
-        home.root / "rclone.conf",
-        home.layout.keys,
     ]
 
 

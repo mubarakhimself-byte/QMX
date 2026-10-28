@@ -171,12 +171,14 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def backup(layout: Layout, only: str | None) -> int:
-    """One round in the foreground, with the floor the host keeps on the folder's drive."""
+    """One round in the foreground, with the local floor on the folder's drive, each mini app's
+    `road/` copied under its road lease."""
     from qmx_home.backup.plan import PlanRefused, parse  # noqa: PLC0415
     from qmx_home.backup.round import run_round  # noqa: PLC0415
-    from qmx_home.files import Busy  # noqa: PLC0415
+    from qmx_home.files import Busy, local_floor  # noqa: PLC0415
 
-    from qmx_host.disk import floor_bytes, free_bytes  # noqa: PLC0415
+    from qmx_host.backups import road_lease_of  # noqa: PLC0415
+    from qmx_host.disk import free_bytes  # noqa: PLC0415
 
     path = layout.home / "settings.toml"
     settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
@@ -184,11 +186,13 @@ def backup(layout: Layout, only: str | None) -> int:
     try:
         report = run_round(
             layout,
-            parse(settings.get("backup", {}), layout),
+            parse(settings.get("backup", {}), layout, engine),
             now=datetime.now().astimezone(),
-            floor=floor_bytes(engine, free_bytes(layout.home)),
+            floor=local_floor(engine, free_bytes(layout.home)),
             only=only,
+            asked=True,
             progress=lambda step: print(step, file=sys.stderr, flush=True),
+            road_lease=road_lease_of(layout),
         )
     except (Busy, PlanRefused) as refused:
         print(f"refused: {refused}", file=sys.stderr)
@@ -216,18 +220,21 @@ def _finish_restore(parser: argparse.ArgumentParser, layout: Layout) -> None:
 
 
 def _copy_before_upgrade(layout: Layout) -> None:
-    """One quick copy of the whole folder tagged `before-upgrade`, with the floor the host keeps.
-    One that cannot be made is a line on stderr, and the start goes on: each store still copies
-    itself before its own upgrade."""
+    """One copy of the whole folder into This PC's copies tagged `before-upgrade`, with the local
+    floor. One that cannot be made is a line on stderr, and the start goes on: each store still
+    copies itself before its own upgrade."""
     from qmx_home.backup.plan import PlanRefused, parse  # noqa: PLC0415
     from qmx_home.backup.round import quick  # noqa: PLC0415
+    from qmx_home.files import local_floor  # noqa: PLC0415
 
-    from qmx_host.disk import floor_bytes, free_bytes  # noqa: PLC0415
+    from qmx_host.backups import road_lease_of  # noqa: PLC0415
+    from qmx_host.disk import free_bytes  # noqa: PLC0415
 
     path = layout.home / "settings.toml"
     try:
         settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-        leave_out = parse(settings.get("backup", {}), layout).leave_out
+        engine = cast("dict[str, object]", settings.get("engine", {}))
+        leave_out = parse(settings.get("backup", {}), layout, engine).leave_out
     except OSError, ValueError, PlanRefused:
         settings, leave_out = {}, ()
     engine = cast("dict[str, object]", settings.get("engine", {}))
@@ -235,8 +242,9 @@ def _copy_before_upgrade(layout: Layout) -> None:
         report = quick(
             layout,
             "before-upgrade",
-            floor=floor_bytes(engine, free_bytes(layout.home)),
+            floor=local_floor(engine, free_bytes(layout.home)),
             leave_out=leave_out,
+            road_lease=road_lease_of(layout),
         )
     except Exception as failed:  # the stores' own pre-change copies still guard the upgrade
         why = str(failed) or type(failed).__name__

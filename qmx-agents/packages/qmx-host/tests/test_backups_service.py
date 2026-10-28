@@ -12,7 +12,7 @@ from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from qmx_control.models import Document
@@ -71,8 +71,21 @@ def proposing(found: Proposal | None) -> Callable[[Layout], Proposal | None]:
     return lambda _layout: found
 
 
-def target(path: Path, every: str = "day", place: str = "usb") -> Document:
-    return {"id": place, "kind": "folder", "path": str(path), "every": every, "at": "03:00"}
+def target(path: Path, every: str = "1d", place: str = "usb") -> Document:
+    """A folder storage: its `[engine]` row and its `[backup]` policy, as `connect` writes them."""
+    return {"id": place, "path": str(path), "every": every}
+
+
+def connect(backups: Backups, *storages: Document) -> None:
+    """Each storage as the connect dialog leaves it: one `[engine]` row that can keep, and its
+    policy by place id."""
+    rows: Document = {
+        str(s["id"]): {"id": s["id"], "via": "folder", "can": ["keep"], "path": s["path"]}
+        for s in storages
+    }
+    policies: Document = {str(s["id"]): {"every": s["every"], "at": "03:00"} for s in storages}
+    backups.control.settings_put(cast("Any", "engine"), {"placement": rows})
+    backups.control.settings_put("backup", {"place": policies})
 
 
 def finished(backups: Backups, job: Job | None) -> Job:
@@ -153,18 +166,15 @@ def test_accepting_the_proposal_writes_one_target_row_and_the_next_round_sends_t
 
     accepted = backups.accept()
 
-    assert backups.control.settings_get("backup") == {
-        "targets": [
-            {
+    assert backups.control.settings_get(cast("Any", "engine")) == {
+        "placement": {
+            "second-drive": {
                 "id": "second-drive",
-                "kind": "folder",
+                "via": "folder",
+                "can": ["keep"],
                 "path": str(drive),
-                "every": "day",
-                "at": "03:00",
-                "keep": {"daily": 14, "weekly": 8, "monthly": 12},
-                "on": True,
             }
-        ]
+        }
     }
     assert accepted["line"] == (
         f"QMX copies your work to {drive} every day at 03:00; the first copy is made at the "
@@ -185,7 +195,7 @@ def test_a_full_target_opens_one_incident_that_the_next_copy_there_resolves(
     layout, clock = folder(tmp_path / "QMX"), Clock()
     usb = tmp_path / "usb"
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(usb, "hour")]})
+    connect(backups, target(usb, "1h"))
     room = FolderRepository.room
 
     def full(repo: FolderRepository) -> int:
@@ -197,7 +207,7 @@ def test_a_full_target_opens_one_incident_that_the_next_copy_there_resolves(
     first = incident(layout, "usb")
     assert first is not None
     assert first[:2] == ("refused", 1)
-    assert "has 0.0 MB free; nothing was written there" in first[2]
+    assert "has 0.0 MB free; QMX keeps at least 1,024 MB free there" in first[2]
     assert not backups.doctor_line().ok
     clock.advance(minutes=61)
     finished(backups, backups.sweep())
@@ -217,7 +227,7 @@ def test_an_unplugged_target_opens_its_incident_only_after_seven_intervals_with_
     layout, clock = folder(tmp_path / "QMX"), Clock()
     letter = next(c for c in reversed(string.ascii_uppercase) if not Path(f"{c}:\\").exists())
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(Path(f"{letter}:\\usb"), "hour")]})
+    connect(backups, target(Path(f"{letter}:\\usb"), "1h"))
 
     for _hour in range(7):
         assert results(finished(backups, backups.sweep())) == {"quick": "copied", "usb": "skipped"}
@@ -240,7 +250,7 @@ def test_a_copy_that_lacks_files_or_could_not_read_one_opens_its_incident_naming
     layout, clock = folder(tmp_path / "QMX"), Clock()
     usb = tmp_path / "usb"
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(usb)]})
+    connect(backups, target(usb))
     finished(backups, backups.sweep())
     key = cast("list[dict[str, object]]", log_lines(layout)[-1]["places"])[1]["key"]
 
@@ -275,14 +285,10 @@ def test_settings_it_cannot_read_open_the_settings_incident_until_they_are_fixed
     layout, clock = folder(tmp_path / "QMX"), Clock()
     backups = service(layout, clock)
     settings = layout.home / "settings.toml"
-    settings.write_text('[[backup.targets]]\nid = "usb"\nkind = "tape"\n', encoding="utf-8")
+    settings.write_text('[backup]\non = "yes"\n', encoding="utf-8")
 
     assert backups.sweep() is None
-    assert incident(layout, "settings") == (
-        "refused",
-        1,
-        "backup place 'usb': the kind 'tape' is not one QMX knows; use folder",
-    )
+    assert incident(layout, "settings") == ("refused", 1, "[backup] on must be true or false")
     assert not backups.doctor_line().ok
 
     settings.write_text("", encoding="utf-8")
@@ -296,7 +302,7 @@ def test_the_doctor_row_names_each_places_age_and_size_and_a_quick_undo_without_
     layout, clock = folder(tmp_path / "QMX"), Clock()
     usb = tmp_path / "usb"
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(usb, "hour")]})
+    connect(backups, target(usb, "1h"))
     finished(backups, backups.sweep())
     clock.advance(hours=2, minutes=5)
     size = sum(p.stat().st_size for p in (layout.backups / "quick").rglob("*") if p.is_file())
@@ -306,8 +312,9 @@ def test_the_doctor_row_names_each_places_age_and_size_and_a_quick_undo_without_
 
     assert (row.name, row.ok) == ("backups", True)
     assert row.detail == (
-        f"the quick undo: newest whole copy from 2 hours ago, {size / (1 << 20):,.1f} MB in "
-        f"all; usb ({where}): newest whole copy from 2 hours ago"
+        f"This PC's copies: newest whole copy from 2 hours ago, {size / (1 << 20):,.1f} MB in "
+        "all, a copy every 1h when something changed, kept 48 hours, 7 days; "
+        f"usb ({where}): newest whole copy from 2 hours ago"
     )
 
     starved = service(layout, clock, floor=1 << 60)
@@ -317,7 +324,7 @@ def test_the_doctor_row_names_each_places_age_and_size_and_a_quick_undo_without_
     row = starved.doctor_line()
     assert not row.ok
     assert f"; the last round made no copy, so none went to {usb} either" in row.detail
-    assert "the quick undo: newest whole copy from 2 hours ago" in row.detail
+    assert "This PC's copies: newest whole copy from 2 hours ago" in row.detail
 
 
 def test_the_command_runs_one_round_exits_1_while_a_round_holds_the_lock_and_never_loads_the_host(
@@ -358,11 +365,11 @@ def test_a_round_another_folder_sent_to_the_target_is_refused_until_he_carries_o
     layout, clock = folder(tmp_path / "QMX"), Clock()
     usb = tmp_path / "usb"
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(usb, "hour")]})
+    connect(backups, target(usb, "1h"))
     finished(backups, backups.sweep())
     twin = folder(tmp_path / "twin")
     twin.label.write_bytes(layout.label.read_bytes())
-    carry_on(twin, backups.plan().targets[0])
+    carry_on(twin, backups.plan().folders[0])
     sent = run_round(twin, backups.plan(), now=clock.now + timedelta(minutes=1), floor=0)
     assert [place.result for place in sent.places] == ["copied", "copied"]
 
@@ -382,7 +389,7 @@ def test_a_round_that_stops_with_an_unexpected_error_is_logged_raised_and_tried_
 ) -> None:
     layout, clock = folder(tmp_path / "QMX"), Clock()
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(tmp_path / "usb")]})
+    connect(backups, target(tmp_path / "usb"))
 
     def denied(*_args: object, **_kwargs: object) -> object:
         raise PermissionError(13, "Permission denied", "D:/QMX/data/notes")
@@ -414,7 +421,7 @@ def test_after_a_restart_the_incident_of_a_place_no_longer_in_settings_is_resolv
     layout, clock = folder(tmp_path / "QMX"), Clock()
     usb = tmp_path / "usb"
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(usb)]})
+    connect(backups, target(usb))
     room = FolderRepository.room
 
     def full(repo: FolderRepository) -> int:
@@ -423,7 +430,7 @@ def test_after_a_restart_the_incident_of_a_place_no_longer_in_settings_is_resolv
     monkeypatch.setattr(FolderRepository, "room", full)
     assert results(finished(backups, backups.sweep()))["usb"] == "refused"
     assert incident(layout, "usb") is not None
-    backups.control.settings_put("backup", {})
+    backups.control.settings_put(cast("Any", "engine"), {"remove": ["placement.usb"]})
 
     restarted = service(layout, clock)
     clock.advance(minutes=5)

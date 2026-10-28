@@ -1,14 +1,16 @@
 """The host makes his copies on its own (design 62 C2 and F step 14), and restores one from
 Settings (C3).
 
-Every minute the host reads `[backup]` and the record in `backups/backups.jsonl`. When the quick
-undo is due (hourly) or a place he named is due and there, it runs one round as a `backup` job on
-its own thread, so a copy never holds a request, and the quick undo never takes the folder's drive
-below the host's floor. A place he must act on has one open inbox incident `backup:<place>`: a
-round it refused (no room, another QMX folder's copies, a file that could not be read), a copy
-that lacks files, or a disk that has been away for seven of its intervals. The next whole copy
-there resolves it. `[backup]` that cannot be read opens `backup:settings`. The doctor row and
-`GET /api/backups` read the same record, which the command line's rounds write too.
+Every minute the host reads `[backup]`, the storages in `[engine]` and the record in
+`backups/backups.jsonl`. When This PC's copies are due (by its policy) or a storage he connected is
+due and there, it runs one round as a `backup` job on its own thread, so a copy never holds a
+request, and This PC's copies never take the folder's drive below the local floor. With
+`[backup] on = false` it starts no round and no drill. A place he must act on has one open
+inbox incident `backup:<place>`: a round it refused (no room, another QMX folder's copies, a
+file that could not be read), a copy that lacks files, or a disk that has been away for seven of
+its intervals. The next whole copy there resolves it. `[backup]` that cannot be read opens
+`backup:settings`. The doctor row and `GET /api/backups` read the same record, which the command
+line's rounds write too.
 
 A restore from Settings is checked first (what it replaces, counted), then staged as a `restore`
 job while the host serves, and finished at the next start, so no store is replaced under an open
@@ -19,8 +21,9 @@ opens `backup-drill:<place>`.
 A round, a restore being staged and the drill each hold the folder's backup lock, so they run one
 at a time.
 
-Nothing is written outside the QMX folder until he names a place or accepts the proposed second
-drive, which writes one `[[backup.targets]]` row, so the place never moves with free space.
+Nothing is written outside the QMX folder until he connects a storage or accepts the proposed
+second drive, which writes one `[engine]` place row that can keep, so the place never moves with
+free space.
 """
 
 from __future__ import annotations
@@ -33,8 +36,8 @@ import sqlite3
 import sys
 import threading
 import time as monotonic
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
+from collections.abc import Callable, Generator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -44,6 +47,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, JsonValue
 from qma.harness.home import DoctorLine
+from qmx_apps.errors import AppError
+from qmx_apps.volume import VolumeLease
 from qmx_control.models import Document
 from qmx_control.service import ControlService
 from qmx_engine.ledger.inbox_table import InboxTable
@@ -53,16 +58,18 @@ from qmx_home import Label, Layout
 from qmx_home.backup import restore
 from qmx_home.backup.keep import when
 from qmx_home.backup.plan import (
+    KEEP_KEYS,
     NO_SECOND_DRIVE,
-    Every,
     Plan,
     PlanRefused,
+    Policy,
     Proposal,
-    Target,
+    Storage,
     parse,
     proposal,
     repository_of,
     same_drive,
+    span,
 )
 from qmx_home.backup.repository import FolderRepository, Repository, Unreadable, free_bytes
 from qmx_home.backup.restore import (
@@ -80,13 +87,14 @@ from qmx_home.backup.round import (
     Placed,
     RoundReport,
     _last,  # pyright: ignore[reportPrivateUsage] - the round's own record of a place's last copy
-    _target_key,  # pyright: ignore[reportPrivateUsage] - and the key it logs a place under
     carry_on,
     due,
     run_round,
+    storage_key,
 )
+from qmx_home.backup.snapshot import RoadLease
 from qmx_home.files import Busy, hold, plain
-from qmx_home.versions import FLOOR_BYTES, log_line, log_lines
+from qmx_home.versions import log_line, log_lines
 from qmx_library.port import LibraryRefused
 from qmx_library.principal import Principal
 from qmx_library.store import Store
@@ -105,15 +113,6 @@ RETRY: Final = timedelta(hours=1)
 """A place that refused or was not there is tried again an hour after it was last tried."""
 AWAY: Final = 7
 """Intervals with no copy before a place that is not there opens its incident."""
-INTERVAL: Final[Mapping[Every, timedelta]] = {
-    "hour": timedelta(hours=1),
-    "day": timedelta(days=1),
-    "week": timedelta(weeks=1),
-}
-DRILL_EVERY: Final[Mapping[str, timedelta]] = {
-    "week": timedelta(days=7),
-    "month": timedelta(days=30),
-}
 DRILL_INCIDENT: Final = "backup-drill:"
 """A failed drill's incident, per place. Not `backup:`, whose incidents follow the rounds."""
 DOWNLOADS: Final = frozenset({"rclone"})
@@ -130,6 +129,16 @@ NOT_A_FOLDER: Final = (
     "this home is not a QMX folder (it has no qmx-home.toml), so QMX makes no copies of it"
 )
 EARLIEST: Final = datetime.min.replace(tzinfo=UTC)
+ROAD_WAIT_S: Final = 60.0
+"""A probe bound, not a cap: how long a round waits for a road step to let a mini app's road
+lease go before it leaves that `road/` out of this copy, named; the next round tries again."""
+ROAD_POLL_S: Final = 0.2
+STORAGE_AT: Final = "03:00"
+"""A storage's daily time until he changes it (Appendix D)."""
+OFF_LINE: Final = (
+    "Sync to my storage is off: QMX makes no copy anywhere, This PC included, and deletes none "
+    "until you turn it on in Settings"
+)
 
 type Signature = Literal["refused", "partial", "away"]
 
@@ -170,7 +179,7 @@ class Standing:
 
     id: str
     where: str
-    every: Every
+    every: timedelta
     seen: tuple[Seen, ...]
     carried: bool
     """He carried on there after its last round."""
@@ -196,7 +205,7 @@ class Standing:
             return None
         if last.result == "skipped":
             good = next((s.at for s in reversed(self.seen) if s.result in GOOD), self.seen[0].at)
-            if now - good >= AWAY * INTERVAL[self.every]:
+            if now - good >= AWAY * self.every:
                 return Concern(
                     "away", f"{self.where} has had no copy for {_age(now - good)}: {last.line}"
                 )
@@ -219,7 +228,7 @@ def standing(
     key: str,
     place_id: str,
     where: str,
-    every: Every,
+    every: timedelta,
     *,
     on: bool = True,
 ) -> Standing:
@@ -256,13 +265,14 @@ class Look:
     log: list[dict[str, object]]
     home_id: str
     places: list[Standing]
-    """The quick undo first, then each target in the plan's order."""
+    """This PC first, then each folder storage in the plan's order."""
 
 
 class Backups:
     """The host's backup service: the sweep, the jobs, the incidents, the doctor row, the view,
     a restore from Settings and the start after one, and the drill. `clock` is local time with
-    its zone; `floor` the room the host keeps on the folder's drive."""
+    its zone; `floor` the local floor on the folder's drive. `road_lease` holds a mini app's road
+    lease while a round copies its `road/`."""
 
     def __init__(
         self,
@@ -271,11 +281,13 @@ class Backups:
         *,
         clock: Callable[[], datetime],
         floor: int,
+        road_lease: RoadLease | None = None,
     ) -> None:
         self.layout = layout
         self.control = control
         self.clock = clock
         self.floor = floor
+        self.road_lease = road_lease if road_lease is not None else road_lease_of(layout)
         self.jobs = Jobs()
         self.after: AfterRestore | None = None
         """The finished restore he has not carried on from: server sync and fires stay paused."""
@@ -308,7 +320,9 @@ class Backups:
                 print(f"backups: a sweep failed: {type(error).__name__}: {error}", file=sys.stderr)
 
     def plan(self) -> Plan:
-        return parse(self.control.settings_get("backup"), self.layout)
+        return parse(
+            self.control.settings_get("backup"), self.layout, self.control.settings_get(ENGINE)
+        )
 
     def sweep(self) -> Job | None:
         """Bring the incidents in line with the log, then start a round when the quick undo, or
@@ -317,20 +331,24 @@ class Backups:
         if not self.layout.label.is_file():
             return None
         look = self._look()
-        if look is None or self._busy() is not None:
+        if look is None or not look.plan.on or self._busy() is not None:
             return None
         now = self.clock()
-        quick_due = due(_last(look.log, QUICK), now, "hour", now.time()) and look.places[0].ready(
+        pc = look.plan.pc
+        quick_due = due(_last(look.log, QUICK), now, pc.interval, pc.at) and look.places[0].ready(
             now
         )
         ready = any(
-            target.on
-            and Path(target.path.anchor or "/").exists()
+            storage.policy.on
+            and Path(_path(storage).anchor or "/").exists()
             and due(
-                _last(look.log, _target_key(target, look.home_id)), now, target.every, target.at
+                _last(look.log, storage_key(storage, look.home_id)),
+                now,
+                storage.policy.interval,
+                storage.policy.at,
             )
             and place.ready(now)
-            for target, place in zip(look.plan.targets, look.places[1:], strict=True)
+            for storage, place in zip(look.plan.folders, look.places[1:], strict=True)
         )
         if not (quick_due or ready):
             return self._drill_if_due(look, now)
@@ -348,14 +366,14 @@ class Backups:
         if not self.layout.label.is_file():
             raise Refusal(NOT_A_FOLDER)
         if only is not None:
-            self._target(self.plan(), only)
+            self._storage(self.plan(), only)
         with self._starting:
             other = self._busy()
             if other is not None and other.kind != KIND:
                 raise Refusal(self.busy_line(other))
             if other is None:
                 self._unheld()
-            started = self.jobs.start(KIND, lambda progress: self._round(only, progress))
+            started = self.jobs.start(KIND, lambda progress: self._round(only, progress, asked))
         if started.new:
             self._asked[started.job.id] = asked
         return started
@@ -393,7 +411,7 @@ class Backups:
                 f"{self.layout.root}; it ends by itself, then ask again"
             ) from None
 
-    def _round(self, only: str | None, progress: Progress) -> Mapping[str, object]:
+    def _round(self, only: str | None, progress: Progress, asked: bool) -> Mapping[str, object]:
         try:
             report = run_round(
                 self.layout,
@@ -401,7 +419,9 @@ class Backups:
                 now=self.clock(),
                 floor=self.floor,
                 only=only,
+                asked=asked,
                 progress=progress,
+                road_lease=self.road_lease,
             )
         except (Busy, PlanRefused) as refused:
             raise Stopped(str(refused)) from None
@@ -428,15 +448,16 @@ class Backups:
         log, home_id = log_lines(self.layout), self._home_id()
         quick = FolderRepository(self.layout.backups / QUICK)
         places = [Placed(QUICK, quick.where, "refused", line)]
-        for target in plan.targets:
-            key = _target_key(target, home_id)
-            if target.id == only or (
-                only is None and target.on and due(_last(log, key), now, target.every, target.at)
+        for storage in plan.folders:
+            key = storage_key(storage, home_id)
+            policy = storage.policy
+            if storage.id == only or (
+                only is None and policy.on and due(_last(log, key), now, policy.interval, policy.at)
             ):
-                where = plain(target.path)
+                where = plain(storage.path)
                 places.append(
                     Placed(
-                        target.id,
+                        storage.id,
                         where,
                         "skipped",
                         f"no copy was made, so none went to {where}",
@@ -549,14 +570,15 @@ class Backups:
         return {
             **found,
             "refused": None,
-            "line": None if plan.targets else NO_SECOND_DRIVE,
+            "on": plan.on,
+            "line": None if plan.folders else NO_SECOND_DRIVE,
             "proposal": None
             if offered is None
             else {"path": str(offered.path), "line": offered.line},
             "quick_undo_bytes": self._quick_size(),
             "places": [
-                _place_document(place, target, now, self.layout)
-                for place, target in zip(places, (None, *plan.targets), strict=True)
+                _place_document(place, storage, now, self.layout, plan)
+                for place, storage in zip(places, (None, *plan.folders), strict=True)
             ],
             **restoring,
         }
@@ -649,18 +671,22 @@ class Backups:
         log = log_lines(self.layout)
         places = self._standings(plan, log, self._home_id())
         parts = [_doctor_part(place, now) for place in places]
-        parts[0] += f", {_mb(self._quick_size())} in all" + _skipped_with_quick(log)
-        if not plan.targets:
+        parts[0] += (
+            f", {_mb(self._quick_size())} in all, {_policy_line(plan.pc)}"
+            + _skipped_with_quick(log)
+        )
+        if not plan.folders:
             offered = self._proposal(plan)
             parts.append(NO_SECOND_DRIVE + (f"; {offered.line}" if offered else ""))
         drills, failed = self._drill_parts(plan, log, now)
         recall = self._recall_line()
         first = [
+            *([] if plan.on else [OFF_LINE]),
             *([] if self.after is None else [_paused_line(self.after, self._interrupted)]),
             *([] if recall is None else [recall]),
         ]
         ok = (
-            bool(plan.targets)
+            bool(plan.folders)
             and all(place.concern(now) is None for place in places)
             and not first
             and not failed
@@ -673,8 +699,8 @@ class Backups:
         """Each place's newest drill, what a drill there costs, and whether a newest drill
         failed."""
         home_id = self._home_id()
-        names = {QUICK: ("the quick undo", "folder")} | {
-            _target_key(t, home_id): (t.id, str(t.kind)) for t in plan.targets
+        names = {QUICK: ("This PC's copies", "folder")} | {
+            storage_key(s, home_id): (s.id, s.via) for s in plan.folders
         }
         newest: dict[str, Mapping[str, object]] = {}
         for line in log:
@@ -728,45 +754,39 @@ class Backups:
             )
         return found
 
-    def carry_on(self, target_id: str) -> str:
-        """His choice to keep sending to a place the fork guard refused. The next sweep tries it
-        again at once."""
-        return carry_on(self.layout, self._target(self.plan(), target_id))
+    def carry_on(self, place_id: str) -> str:
+        """His choice to keep sending to a storage the fork guard refused. The next sweep tries
+        it again at once."""
+        return carry_on(self.layout, self._storage(self.plan(), place_id))
 
     def accept(self) -> dict[str, object]:
-        """His yes to the proposed second drive: one `[[backup.targets]]` row at its path."""
-        if self.plan().targets:
+        """His yes to the proposed second drive: one `[engine]` place row that can keep, at its
+        path. Its policy is the storage defaults until he changes one."""
+        if self.plan().folders:
             raise Refusal(
-                "you already named a backup place; change it in Settings, Data and backups"
+                "you already connected a storage; change it in Settings, Sync to my storage"
             )
         offered = proposal(self.layout)
         if offered is None:
             raise Refusal(NO_SECOND_DRIVE)
-        target = Target(DEFAULT_TARGET, "folder", offered.path)
         row: Document = {
-            "id": target.id,
-            "kind": target.kind,
-            "path": str(target.path),
-            "every": target.every,
-            "at": target.at.strftime("%H:%M"),
-            "keep": {
-                "daily": target.keep.days,
-                "weekly": target.keep.weeks,
-                "monthly": target.keep.months,
-            },
-            "on": target.on,
+            "id": DEFAULT_TARGET,
+            "via": "folder",
+            "can": ["keep"],
+            "path": str(offered.path),
         }
 
         def added(section: Document) -> Document:
-            rows = section.get("targets", [])
-            return {**section, "targets": [*(rows if isinstance(rows, list) else []), row]}
+            placement = _table(section.get("placement"))
+            return {**section, "placement": {**placement, DEFAULT_TARGET: row}}
 
-        self.control.settings_update("backup", added)
+        self.control.settings_update(ENGINE, added)
         self._proposed = None
+        at = STORAGE_AT
         return {
             "target": row,
-            "line": f"QMX copies your work to {offered.path} every day at {row['at']}; the "
-            "first copy is made at the next round, within a few minutes",
+            "line": f"QMX copies your work to {offered.path} every day at {at}; the first copy "
+            "is made at the next round, within a few minutes",
         }
 
     def check_restore(self, body: object) -> dict[str, object]:
@@ -827,7 +847,7 @@ class Backups:
                 self.layout,
                 repo,
                 stamp,
-                keep_free=max(FLOOR_BYTES, self.floor),
+                keep_free=self.floor,
                 progress=progress,
             )
         except (RestoreRefused, Busy) as refused:
@@ -953,14 +973,20 @@ class Backups:
         drills = [line for line in look.log if line.get("kind") == "drill"]
         rounds = [line for line in look.log if line.get("kind") == "round"]
         since = drills[-1] if drills else (rounds[0] if rounds else None)
-        if since is None or now - _logged_at(since) < DRILL_EVERY[plan.drill.every]:
+        if (
+            not plan.upkeep.drill
+            or since is None
+            or now - _logged_at(since) < span(plan.upkeep.drill_every)
+        ):
             return None
         if self._drill_tried is not None and now - self._drill_tried < RETRY:
             return None
         held = [
-            (target.id, repository_of(target, self.layout), _target_key(target, look.home_id))
-            for target, place in zip(plan.targets, look.places[1:], strict=True)
-            if target.on and place.complete is not None and Path(target.path.anchor or "/").exists()
+            (storage.id, repository_of(storage, self.layout), storage_key(storage, look.home_id))
+            for storage, place in zip(plan.folders, look.places[1:], strict=True)
+            if storage.policy.on
+            and place.complete is not None
+            and Path(_path(storage).anchor or "/").exists()
         ]
         if not held and look.places[0].complete is not None:
             held = [(QUICK, FolderRepository(self.layout.backups / QUICK), QUICK)]
@@ -973,7 +999,7 @@ class Backups:
                 return None
             self._drill_tried = now
             started = self.jobs.start(
-                DRILL, lambda _progress: self._drill(place_id, repo, plan.drill.sample)
+                DRILL, lambda _progress: self._drill(place_id, repo, plan.upkeep.drill_sample)
             )
         return started.job
 
@@ -984,7 +1010,7 @@ class Backups:
                 repo,
                 sample=sample,
                 rng=random.Random(),  # noqa: S311 - which files a drill samples, not a secret
-                keep_free=max(FLOOR_BYTES, self.floor),
+                keep_free=self.floor,
             )
         except Busy as busy:
             raise Stopped(str(busy)) from None
@@ -1022,29 +1048,29 @@ class Backups:
     ) -> list[Standing]:
         quick = FolderRepository(self.layout.backups / QUICK)
         return [
-            standing(log, QUICK, QUICK, quick.where, "hour"),
+            standing(log, QUICK, QUICK, quick.where, plan.pc.interval, on=plan.on),
             *(
                 standing(
                     log,
-                    _target_key(target, home_id),
-                    target.id,
-                    repository_of(target, self.layout).where,
-                    target.every,
-                    on=target.on,
+                    storage_key(storage, home_id),
+                    storage.id,
+                    repository_of(storage, self.layout).where,
+                    storage.policy.interval,
+                    on=plan.on and storage.policy.on,
                 )
-                for target in plan.targets
+                for storage in plan.folders
             ),
         ]
 
     def _repository(self, plan: Plan, place_id: str) -> Repository:
         if place_id == QUICK:
             return FolderRepository(self.layout.backups / QUICK)
-        return repository_of(self._target(plan, place_id), self.layout)
+        return repository_of(self._storage(plan, place_id), self.layout)
 
-    def _target(self, plan: Plan, target_id: str) -> Target:
-        found = next((t for t in plan.targets if t.id == target_id), None)
+    def _storage(self, plan: Plan, place_id: str) -> Storage:
+        found = next((s for s in plan.folders if s.id == place_id), None)
         if found is None:
-            raise Refusal(f"there is no backup place {target_id!r} in Settings", 404)
+            raise Refusal(f"there is no storage {place_id!r} in Settings", 404)
         return found
 
     def _home_id(self) -> str:
@@ -1056,7 +1082,7 @@ class Backups:
         return self._quick_bytes
 
     def _proposal(self, plan: Plan) -> Proposal | None:
-        if plan.targets:
+        if plan.folders:
             return None
         now = monotonic.monotonic()
         if self._proposed is None or now - self._proposed[0] >= PROPOSAL_S:
@@ -1136,6 +1162,30 @@ def backups_router(backups: Backups) -> APIRouter:
 
     _ = view, copies, run, job, accept, carry, check, stage, cancel, carry_on_restore
     return router
+
+
+def road_lease_of(layout: Layout, *, wait: float = ROAD_WAIT_S) -> RoadLease:
+    """The hook a round copies a mini app's `road/` under: its road lease
+    (`VolumeLease(data / "road-locks", app_id)`), taken as soon as a road step lets it go."""
+
+    @contextmanager
+    def held(app_id: str) -> Generator[object]:
+        deadline = monotonic.monotonic() + wait
+        while True:
+            try:
+                lease = VolumeLease(layout.data / "road-locks", app_id)
+            except AppError:
+                if monotonic.monotonic() >= deadline:
+                    raise
+                monotonic.sleep(ROAD_POLL_S)
+            else:
+                break
+        try:
+            yield lease
+        finally:
+            lease.close()
+
+    return held
 
 
 def purge_again(store: Store, restored: AfterRestore) -> list[str]:
@@ -1240,6 +1290,20 @@ def _table(value: object) -> dict[str, JsonValue]:
     return dict(cast("dict[str, JsonValue]", value)) if isinstance(value, dict) else {}
 
 
+def _path(storage: Storage) -> Path:
+    return cast("Path", storage.path)
+
+
+def _policy_line(policy: Policy) -> str:
+    """This PC's policy, as the doctor row says it."""
+    if not policy.on:
+        return "copies on this PC are off"
+    counts = [
+        f"{getattr(policy.keep, key)} {key}" for key in KEEP_KEYS if getattr(policy.keep, key)
+    ]
+    return f"a copy every {policy.every} when something changed, kept {', '.join(counts)}"
+
+
 def _logged_at(line: Mapping[str, object]) -> datetime:
     """When a backup log line was written."""
     try:
@@ -1249,17 +1313,20 @@ def _logged_at(line: Mapping[str, object]) -> datetime:
 
 
 def _place_document(
-    place: Standing, target: Target | None, now: datetime, layout: Layout
+    place: Standing, storage: Storage | None, now: datetime, layout: Layout, plan: Plan
 ) -> dict[str, object]:
     last, complete, concern = place.last, place.complete, place.concern(now)
+    policy = plan.pc if storage is None else storage.policy
     return {
         "id": place.id,
         "where": place.where,
-        "every": place.every,
-        "path": None if target is None else str(target.path),
-        "at": None if target is None else target.at.strftime("%H:%M"),
+        "every": policy.every,
+        "keep": {key: getattr(policy.keep, key) for key in KEEP_KEYS},
+        "save": list(policy.save),
+        "path": None if storage is None else str(storage.path),
+        "at": None if storage is None else policy.at.strftime("%H:%M"),
         "on": place.on,
-        "same_drive": target is not None and same_drive(target, layout),
+        "same_drive": storage is not None and same_drive(storage, layout),
         "last": None
         if last is None
         else {
@@ -1275,7 +1342,7 @@ def _place_document(
 
 
 def _doctor_part(place: Standing, now: datetime) -> str:
-    name = "the quick undo" if place.id == QUICK else f"{place.id} ({place.where})"
+    name = "This PC's copies" if place.id == QUICK else f"{place.id} ({place.where})"
     complete = place.complete
     part = (
         f"{name}: no whole copy yet"
@@ -1313,7 +1380,7 @@ def _title(place: str) -> str:
     if place == SETTINGS:
         return "Backups: the [backup] settings need you"
     if place == QUICK:
-        return "Backups: the quick undo needs you"
+        return "Backups: This PC's copies need you"
     return f"Backups: the backup place {place} needs you"
 
 

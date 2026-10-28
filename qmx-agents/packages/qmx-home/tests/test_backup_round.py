@@ -12,11 +12,11 @@ from pathlib import Path
 from typing import IO
 
 import pytest
-from backup_fixtures import SECRETS, filled_folder
+from backup_fixtures import SECRETS, filled_folder, folder
 
 from qmx_home import Label, Layout
 from qmx_home.backup import repository
-from qmx_home.backup.plan import Plan, Target
+from qmx_home.backup.plan import Plan, Storage, span
 from qmx_home.backup.repository import FolderRepository
 from qmx_home.backup.round import carry_on, due, quick, run_round
 from qmx_home.files import Busy, hold, sha256_of
@@ -26,8 +26,8 @@ NOW = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)
 GIB = 1 << 30
 
 
-def target(tmp_path: Path, ident: str = "usb") -> Target:
-    return Target(ident, "folder", tmp_path / "usb" / "QMX-backup")
+def target(tmp_path: Path, ident: str = "usb") -> Storage:
+    return folder(tmp_path / "usb" / "QMX-backup", ident)
 
 
 def place(layout: Layout, tmp_path: Path) -> FolderRepository:
@@ -43,7 +43,7 @@ def test_a_round_copies_to_the_quick_undo_and_the_target_and_a_second_copies_not
     tmp_path: Path,
 ) -> None:
     filled = filled_folder(tmp_path / "QMX")
-    plan = Plan(targets=(target(tmp_path),))
+    plan = Plan(storages=(target(tmp_path),))
 
     first = run_round(filled.layout, plan, now=NOW, floor=0)
     usb = place(filled.layout, tmp_path)
@@ -56,7 +56,7 @@ def test_a_round_copies_to_the_quick_undo_and_the_target_and_a_second_copies_not
     assert (filled.layout.backups / "quick" / "snapshots" / stamp / "manifest.jsonl").is_file()
     assert (usb.root / "snapshots" / stamp / "manifest.jsonl").is_file()
     copied = usb.manifest(stamp)
-    assert len(copied.entries) == 67
+    assert len(copied.entries) == 65
     assert {e.at for e in copied.entries} == {"pool"}
     for entry in copied.entries:
         assert sha256_of(usb.pool_path(entry.sha256)) == entry.sha256
@@ -87,7 +87,7 @@ def test_a_changed_file_pools_only_itself_and_the_keep_rule_runs_after_the_new_c
     tmp_path: Path,
 ) -> None:
     filled = filled_folder(tmp_path / "QMX", files=5)
-    plan = Plan(targets=(target(tmp_path),))
+    plan = Plan(storages=(target(tmp_path),))
     run_round(filled.layout, plan, now=NOW, floor=0)
     usb = place(filled.layout, tmp_path)
     pooled = len(files_under(usb.pool))
@@ -103,15 +103,17 @@ def test_a_changed_file_pools_only_itself_and_the_keep_rule_runs_after_the_new_c
 @pytest.mark.parametrize(
     ("last", "now", "every", "expected"),
     [
-        (None, "2026-10-27T10:00", "day", True),
-        ("2026-10-27T03:00", "2026-10-27T23:59", "day", False),
-        ("2026-10-27T03:00", "2026-10-28T03:00", "day", True),
-        ("2026-10-20T03:00", "2026-10-27T09:00", "day", True),
-        ("2026-10-27T09:30", "2026-10-27T10:29", "hour", False),
-        ("2026-10-27T09:30", "2026-10-27T10:30", "hour", True),
-        ("2026-10-26T03:00", "2026-11-01T23:00", "week", False),
-        ("2026-10-26T03:00", "2026-11-02T03:00", "week", True),
-        ("2026-10-26T09:00", "2026-11-02T03:00", "week", True),
+        (None, "2026-10-27T10:00", "1d", True),
+        ("2026-10-27T03:00", "2026-10-27T23:59", "1d", False),
+        ("2026-10-27T03:00", "2026-10-28T03:00", "1d", True),
+        ("2026-10-20T03:00", "2026-10-27T09:00", "1d", True),
+        ("2026-10-27T09:30", "2026-10-27T10:29", "1h", False),
+        ("2026-10-27T09:30", "2026-10-27T10:30", "1h", True),
+        ("2026-10-27T09:30", "2026-10-27T11:29", "2h", False),
+        ("2026-10-27T09:30", "2026-10-27T11:30", "2h", True),
+        ("2026-10-26T03:00", "2026-11-01T23:00", "1w", False),
+        ("2026-10-26T03:00", "2026-11-02T03:00", "1w", True),
+        ("2026-10-26T09:00", "2026-11-02T03:00", "1w", True),
     ],
 )
 def test_due_answers_for_hour_day_and_week_across_a_pc_that_was_off(
@@ -122,7 +124,7 @@ def test_due_answers_for_hour_day_and_week_across_a_pc_that_was_off(
     def local(text: str) -> datetime:
         return datetime.fromisoformat(text).replace(tzinfo=zone)
 
-    found = due(None if last is None else local(last), local(now), every, time(3, 0))  # type: ignore[arg-type]
+    found = due(None if last is None else local(last), local(now), span(every), time(3, 0))
     assert found is expected
 
 
@@ -138,14 +140,14 @@ def test_a_target_with_too_little_room_refuses_whole_and_writes_nothing(
 
     monkeypatch.setattr(repository, "free_bytes", free)
 
-    report = run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=0)
+    report = run_round(filled.layout, Plan(storages=(target(tmp_path),)), now=NOW, floor=0)
 
     usb = report.places[1]
     assert (usb.result, usb.files) == ("refused", 0)
     assert usb.line.startswith(f"{usb.where} needs ")
     assert usb.line.endswith(
-        "MB free; nothing was written there. Free some space on it, or name another place in "
-        "Settings"
+        "MB free there, so nothing was written. Free some space on it, or connect another "
+        "storage in Settings"
     )
     assert not usb_drive.exists() or files_under(usb_drive) == []
 
@@ -160,7 +162,7 @@ def test_the_quick_undo_refuses_below_the_hosts_floor_before_writing(
 
     monkeypatch.setattr(repository, "free_bytes", free)
 
-    report = run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=3 * GIB)
+    report = run_round(filled.layout, Plan(storages=(target(tmp_path),)), now=NOW, floor=3 * GIB)
 
     assert [(p.id, p.result) for p in report.places] == [("quick", "refused"), ("usb", "skipped")]
     assert report.places[0].line.endswith(
@@ -172,7 +174,7 @@ def test_the_quick_undo_refuses_below_the_hosts_floor_before_writing(
 
 def test_a_killed_rounds_leftovers_are_removed_by_the_next_round(tmp_path: Path) -> None:
     filled = filled_folder(tmp_path / "QMX", files=5)
-    plan = Plan(targets=(target(tmp_path),))
+    plan = Plan(storages=(target(tmp_path),))
     run_round(filled.layout, plan, now=NOW, floor=0)
     usb = place(filled.layout, tmp_path)
     for where in (filled.layout.backups / "quick", usb.root):
@@ -202,17 +204,17 @@ def test_a_place_another_folder_wrote_to_or_a_missing_backup_toml_is_refused_unt
     (twin_root / "backups" / "backups.jsonl").unlink(missing_ok=True)
     shutil.rmtree(twin_root / "backups" / "quick", ignore_errors=True)
     twin = Layout(twin_root)
-    plan = Plan(targets=(target(tmp_path),))
+    plan = Plan(storages=(target(tmp_path),))
     run_round(filled.layout, plan, now=NOW, floor=0)
     (twin.data / "chats" / "c1.json").write_bytes(b'{"title": "the twin"}')
 
     forked = run_round(twin, plan, now=NOW + timedelta(hours=1), floor=0)
-    carry_on(twin, plan.targets[0])
+    carry_on(twin, plan.storages[0])
     after = run_round(twin, plan, now=NOW + timedelta(hours=2), floor=0)
     usb = place(filled.layout, tmp_path)
     (usb.root / "backup.toml").unlink()
     other_disk = run_round(twin, plan, now=NOW + timedelta(days=2), floor=0)
-    carry_on(twin, plan.targets[0])
+    carry_on(twin, plan.storages[0])
     again = run_round(twin, plan, now=NOW + timedelta(days=3), floor=0)
 
     assert forked.places[1].result == "refused"
@@ -220,7 +222,7 @@ def test_a_place_another_folder_wrote_to_or_a_missing_backup_toml_is_refused_unt
         f"{usb.where} holds a copy another QMX folder made since this one last sent there: the "
         f"newest, 20261027T030000000000Z, is from {platform.node()} ({filled.layout.root}). "
         "Carry on to keep sending this "
-        "folder's copies there, or name another place"
+        "folder's copies there, or pick another storage"
     )
     assert after.places[1].result == "copied"
     assert other_disk.places[1].line == (
@@ -234,12 +236,10 @@ def test_a_place_another_folder_wrote_to_or_a_missing_backup_toml_is_refused_unt
 
 def test_a_torn_manifest_stops_the_sweep_and_is_never_thinned(tmp_path: Path) -> None:
     filled = filled_folder(tmp_path / "QMX", files=5)
-    keep_one = Target("usb", "folder", tmp_path / "usb" / "QMX-backup", every="hour")
-    from dataclasses import replace
-
     from qmx_home.backup.plan import Keep
 
-    plan = Plan(targets=(replace(keep_one, keep=Keep(days=1)),))
+    hourly = folder(tmp_path / "usb" / "QMX-backup", every="1h", keep=Keep(days=1))
+    plan = Plan(storages=(hourly,))
     run_round(filled.layout, plan, now=NOW, floor=0)
     usb = place(filled.layout, tmp_path)
     torn = usb.root / "snapshots" / "20261027T030000000000Z" / "manifest.jsonl"
@@ -281,7 +281,7 @@ def test_a_damaged_blob_is_left_out_of_a_target_copy_by_name_and_the_rest_is_sen
     blob = filled.layout.data / filled.written_once[0]
     blob.write_bytes(b"damaged on his disk")
 
-    report = run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=0)
+    report = run_round(filled.layout, Plan(storages=(target(tmp_path),)), now=NOW, floor=0)
 
     usb = place(filled.layout, tmp_path)
     assert [p.result for p in report.places] == ["copied", "copied"]
@@ -292,7 +292,7 @@ def test_a_damaged_blob_is_left_out_of_a_target_copy_by_name_and_the_rest_is_sen
     copied = usb.manifest(usb.copies()[-1])
     assert copied.header["partial"] is True
     assert filled.written_once[0] not in {e.path for e in copied.entries}
-    assert len(copied.entries) == 31
+    assert len(copied.entries) == 29
     assert log_lines(filled.layout)[-1]["places"][1]["partial"] is True  # type: ignore[index]
 
 
@@ -302,7 +302,7 @@ def test_a_round_killed_after_a_targets_copy_is_up_never_refuses_that_target_nex
     from qmx_home.backup import round as module
 
     filled = filled_folder(tmp_path / "QMX", files=5)
-    plan = Plan(targets=(target(tmp_path),))
+    plan = Plan(storages=(target(tmp_path),))
 
     def killed(*_args: object) -> str:
         raise KeyboardInterrupt
@@ -338,7 +338,7 @@ def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_it
     monkeypatch.setattr(files, "create_new", created)
     monkeypatch.setattr(repository.os, "replace", renamed)
 
-    run_round(filled.layout, Plan(targets=(target(tmp_path),)), now=NOW, floor=0)
+    run_round(filled.layout, Plan(storages=(target(tmp_path),)), now=NOW, floor=0)
 
     usb = place(filled.layout, tmp_path)
     manifest_at = next(
@@ -352,7 +352,7 @@ def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_it
         for kind, what in events[:manifest_at]
         if kind == "rename" and str(usb.pool) in what.partition(" -> ")[2]
     ]
-    assert len(placed) == 32
+    assert len(placed) == 30
     assert set(placed) <= durable
 
 
@@ -365,8 +365,8 @@ def test_a_copy_missing_a_file_is_partial_and_the_newest_whole_copy_is_never_thi
     from qmx_home.backup.plan import Keep
 
     filled = filled_folder(tmp_path / "QMX", files=5)
-    hourly = replace(target(tmp_path), every="hour", keep=Keep(hours=1))
-    plan = Plan(quick_undo=Keep(hours=1), targets=(hourly,))
+    hourly = folder(tmp_path / "usb" / "QMX-backup", every="1h", keep=Keep(hours=1))
+    plan = Plan(pc=replace(Plan().pc, keep=Keep(hours=1)), storages=(hourly,))
     run_round(filled.layout, plan, now=NOW, floor=0)
     real = snapshot.copy_file
 

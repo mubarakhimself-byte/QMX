@@ -238,7 +238,10 @@ def test_the_install_runs_on_the_engines_loop_with_no_request_principal(
 
     with hosted(resolve(tmp_path / "QMX", create=True, drives=[]).home) as (rest, _, door):
         monkeypatch.setattr(door.svc.tests, "run", run)
-        ended(rest, rest.post(ROUTE, json={"templates": ["connections-health"]}, headers=BEARER).json())
+        ended(
+            rest,
+            rest.post(ROUTE, json={"templates": ["connections-health"]}, headers=BEARER).json(),
+        )
 
     assert seen == [("agent", "unnamed")]
 

@@ -8,14 +8,9 @@ newest copy and the newest copy that passed a drill are always kept.
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
-from datetime import UTC, datetime, timedelta
-from typing import Final
+from datetime import UTC, datetime
 
 from qmx_home.backup.plan import Keep
-
-HELD_AFTER: Final = timedelta(days=30)
-"""How long a copy taken before an upgrade, or a store's pre-change copy, stays after the first
-copy to another place made after it."""
 
 
 def when(stamp: str) -> datetime:
@@ -54,11 +49,10 @@ def kept(
     return frozenset(kept_now)
 
 
-def released(made: datetime, elsewhere: Sequence[datetime], now: datetime) -> bool:
-    """Whether a copy held until another place had a copy made after it, and 30 days more, may
-    go: True once the first such copy is `HELD_AFTER` old at `now`."""
-    after = [moment for moment in elsewhere if moment > made]
-    return bool(after) and now >= min(after) + HELD_AFTER
+def released(made: datetime, elsewhere: Sequence[datetime]) -> bool:
+    """Whether a copy held until a whole copy made after it reached a storage on another disk
+    may go: `elsewhere` are the moments such copies were made (design 06 section 5)."""
+    return any(moment > made for moment in elsewhere)
 
 
 def _hour(moment: datetime) -> tuple[int, ...]:

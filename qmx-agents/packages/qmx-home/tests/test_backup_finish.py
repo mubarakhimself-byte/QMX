@@ -13,11 +13,11 @@ from pathlib import Path
 
 import psutil
 import pytest
-from backup_fixtures import SECRETS, Filled, filled_folder
+from backup_fixtures import SECRETS, Filled, filled_folder, folder
 
 from qmx_home import Label, Layout, resolve
 from qmx_home.backup import restore
-from qmx_home.backup.plan import Plan, Target
+from qmx_home.backup.plan import Plan
 from qmx_home.backup.repository import FolderRepository
 from qmx_home.backup.restore import HostServes, RestoreRefused
 from qmx_home.backup.round import run_round
@@ -36,9 +36,7 @@ def staged(tmp_path: Path) -> tuple[Filled, FolderRepository, str, dict[str, str
     """A folder copied to a USB target, then changed, with that copy staged; and the folder's
     data as it was before the finish."""
     filled = filled_folder(tmp_path / "QMX", files=4)
-    report = run_round(
-        filled.layout, Plan(targets=(Target("usb", "folder", tmp_path / "usb"),)), now=NOW, floor=0
-    )
+    report = run_round(filled.layout, Plan(storages=(folder(tmp_path / "usb"),)), now=NOW, floor=0)
     place, stamp = report.places[1], report.places[1].stamp
     assert stamp is not None
     target = FolderRepository(Path(place.where))
@@ -230,8 +228,8 @@ def test_a_folder_restored_on_a_new_pc_carries_on_sending_to_the_disk_it_came_fr
     tmp_path: Path,
 ) -> None:
     filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
-    usb = Target("usb", "folder", tmp_path / "usb")
-    run_round(filled.layout, Plan(targets=(usb,)), now=NOW, floor=0)
+    usb = folder(tmp_path / "usb")
+    run_round(filled.layout, Plan(storages=(usb,)), now=NOW, floor=0)
     home_id = Label.parse(filled.layout.label.read_text(encoding="utf-8")).home_id
     place = FolderRepository(tmp_path / "usb" / "QMX-backup" / home_id)
     fresh = resolve(tmp_path / "New", create=True)
@@ -239,7 +237,7 @@ def test_a_folder_restored_on_a_new_pc_carries_on_sending_to_the_disk_it_came_fr
     restore.stage(fresh, place, place.copies()[-1], keep_free=0)
     restore.finish(fresh)
     (fresh.data / "chats" / "c1.json").write_bytes(b'{"title": "on the new PC"}')
-    report = run_round(fresh, Plan(targets=(usb,)), now=datetime.now(UTC), floor=0)
+    report = run_round(fresh, Plan(storages=(usb,)), now=datetime.now(UTC), floor=0)
 
     assert [(p.id, p.result) for p in report.places] == [("quick", "copied"), ("usb", "copied")]
 

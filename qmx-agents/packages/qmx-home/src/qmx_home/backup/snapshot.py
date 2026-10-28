@@ -9,8 +9,10 @@ copied ledger row, ref or price state names a file the copy lacks.
 A store is copied by `VACUUM INTO` from a `mode=ro` connection, so the copy holds what was
 committed and the live store is never checkpointed. A log is copied up to its last full line. A
 file whose size and `mtime_ns` (and its `-wal`'s, for a store) match the previous copy is not
-read again. Nothing in `LEFT_OUT` or `SECRET` is ever in a copy, and no link is followed or
-copied.
+read again. A copy holds only the classes it is asked for (`qmx_home.classes`): nothing
+`rebuildable`, `secret` or `scratch` is ever in one, and no link is followed or copied.
+`settings.toml` is copied without any key-shaped value, each named in the header's
+`keys_to_fill`. A mini app's `road/` is copied under its road lease when the host hands one.
 """
 
 from __future__ import annotations
@@ -22,62 +24,36 @@ import os
 import platform
 import re
 import sqlite3
+import tomllib
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
-from contextlib import closing
+from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass
+from datetime import date, datetime
+from datetime import time as clock_time
 from importlib.metadata import version
 from pathlib import Path
 from typing import Final, cast
 
 from qmx_home import Label, Layout
 from qmx_home.backup.repository import FORMAT, Entry, FolderRepository, Kind, Manifest
+from qmx_home.classes import LIBRARY, NEVER, SENT, Class, pruned, rule_of, secret_values, sent
+from qmx_home.classes import without as without_keys
 from qmx_home.files import copy_file, flush_file, long_path, open_shared, plain, sha256_of
 from qmx_home.stores import STORES
 
-LEFT_OUT: Final[tuple[tuple[str, str], ...]] = (
-    ("library/catalog.db", "the Library's index, made again from its files"),
-    ("memory/fts.db", "the recall index, made again from the Library"),
-    ("memory/hindsight/pg/**", "Hindsight's database, made again from Library rows"),
-    ("library/blobs/fetched/**", "cache copies fetched again from the store that made them"),
-    ("library/blobs/transient/**", "checkpoints the host deletes to make room"),
-    ("cache/prices/**", "prices fetched again"),
-    ("queue/telemetry/**", "telemetry the host deletes to make room"),
-    ("library/uploads/*.part", "uploads that did not finish"),
-    ("market/.staging/**", "price commits still being written"),
-    ("market/**/.state.tmp", "a price state still being written"),
-    ("market/**/.incoming.parquet", "a price file still being written"),
-    ("market/**/.verify-*", "a price check's scratch"),
-    ("settings.tmp", "settings still being written"),
-    ("chats/*/**", "a chat's launch files, made again at each launch"),
-    ("apps/*/data/heartbeat-*", "a mini app's heartbeat"),
-    ("apps/*/data/tmp/**", "a mini app's scratch"),
-    ("**/*.lock", "a lock"),
-    ("control-process.json", "the record of a running process"),
-    ("router.port", "a running process's port"),
-    ("node.port", "a running process's port"),
-    ("**/*-wal", "SQLite's own file; the store is copied whole"),
-    ("**/*-shm", "SQLite's own file; the store is copied whole"),
-    ("**/*-journal", "SQLite's own file; the store is copied whole"),
-    ("**/*.qmx-copying", "a copy still being written"),
-)
-"""Paths in `data/` never in a copy, and why. Under `library/` a writer's temporary name
-`.<name>.<32 hex>` is left out too (`TEMPORARY`), while `checkout/.../.checkout.json` is copied."""
-TEMPORARY: Final = re.compile(r"\..+\.[0-9a-f]{32}")
+type RoadLease = Callable[[str], AbstractContextManager[object]]
+"""One mini app's road lease, held while its `road/` is copied. The host hands it to the round,
+because `qmx-home` cannot import the apps' own lease."""
+type Kinds = Mapping[str, tuple[str, ...]]
+"""Each Library object's kind, and the kinds of the objects naming each blob, by path in `data/`."""
+
 BORN_BLOB: Final = re.compile(
     r"library/blobs/([0-9a-f]{2})/([0-9a-f]{2})/((?:\1)(?:\2)[0-9a-f]{60})"
 )
 """A blob born on this store, named by the sha256 of its bytes, so its hash is read from its name
 and checked when a target copies it."""
-SECRET: Final[tuple[str, ...]] = (
-    "vault/**",
-    "rclone.conf",
-    "claude/.credentials.json",
-    "claude/.claude.json",
-    "claude-relayed/.credentials.json",
-    "claude-relayed/.claude.json",
-)
-"""Paths in `data/` that hold a key, a token or a login, never in a copy in clear. A restore
-carries them over from the data it sets aside; the sealed key copy holds the keys among them."""
+OBJECT: Final = re.compile(r"library/objects/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}\.json")
+SETTINGS: Final = "settings.toml"
 WRITE_ONCE: Final[tuple[str, ...]] = (
     "library/objects/**",
     "library/blobs/??/**",
@@ -98,6 +74,7 @@ moving before the round gives up on it and the next round tries again."""
 SQLITE_HEADER: Final = b"SQLite format 3\x00"
 BUSY_TIMEOUT_S: Final = 30.0
 STEPS: Final = ("stores", "library logs", "files", "price months", "files written once")
+ROAD: Final = re.compile(r"apps/([^/]+)/road/.+")
 _CASE: Final = os.name != "nt"
 
 
@@ -128,17 +105,69 @@ def _matcher(globs: tuple[str, ...]) -> re.Pattern[str]:
 
 
 def left_out(path: str, extra: Sequence[str] = ()) -> str | None:
-    """Why `path` (relative to `data/`) is never in a copy, or None when it is copied."""
-    if _matcher(SECRET).match(path):
-        return "a key, token or login"
-    if _matcher(tuple(g for g, _ in LEFT_OUT)).match(path):
-        return next(why for g, why in LEFT_OUT if _matcher((g,)).match(path))
-    name = path.rpartition("/")[2]
-    if path.startswith("library/") and TEMPORARY.fullmatch(name):
-        return "a file the Library is still writing"
+    """Why `path` (relative to `data/`) is never in a copy, or None when its class may be: it is
+    `rebuildable`, `secret` or `scratch`, or he left it out in Settings."""
+    rule = rule_of(f"data/{path}")
+    if rule is not None and rule.answer in NEVER:
+        return rule.why
     if _matcher(tuple(extra)).match(path):
         return "left out in Settings"
     return None
+
+
+def library_kinds(data: Path) -> dict[str, tuple[str, ...]]:
+    """Each Library object's kind, and the kinds of the objects that name each blob, by path
+    relative to `data/`, read from the objects themselves (each is written once and small)."""
+    found: dict[str, list[str]] = {}
+    for folder, _, names in os.walk(long_path(data / "library" / "objects")):
+        for name in names:
+            if not name.endswith(".json") or len(name) != 69:
+                continue
+            try:
+                manifest = json.loads(Path(folder, name).read_bytes())
+            except OSError, ValueError:
+                continue
+            fields = cast("dict[str, object]", manifest) if isinstance(manifest, dict) else {}
+            kind = fields.get("kind")
+            if not isinstance(kind, str):
+                continue
+            found[f"library/objects/{name[:2]}/{name[2:4]}/{name}"] = [kind]
+            blobs = fields.get("blobs")
+            for spec in (
+                cast("dict[str, object]", blobs).values() if isinstance(blobs, dict) else ()
+            ):
+                held = (
+                    cast("dict[str, object]", spec).get("sha256")
+                    if isinstance(spec, dict)
+                    else None
+                )
+                blob = str(held or "").removeprefix("sha256:")
+                if len(blob) == 64:
+                    found.setdefault(f"library/blobs/{blob[:2]}/{blob[2:4]}/{blob}", []).append(
+                        kind
+                    )
+    return {path: tuple(kinds) for path, kinds in found.items()}
+
+
+def needs_kinds(*saves: Collection[Class]) -> bool:
+    """Whether some switches leave a Library class out, so objects must be told apart by kind."""
+    return any(not set(save) >= LIBRARY for save in saves)
+
+
+def only(copy: Manifest, save: Collection[Class], kinds: Kinds) -> Manifest:
+    """The part of `copy` a place with the switches `save` keeps, its header naming the Library
+    objects the switches left out."""
+    chosen: tuple[Class, ...] = tuple(c for c in SENT if c in save)
+    entries = tuple(e for e in copy.entries if _kept(e.path, chosen, kinds))
+    head = {k: v for k, v in copy.header.items() if k != "left_out"} | {"save": list(chosen)}
+    left = sorted(p for p in kinds if OBJECT.fullmatch(p) and not _kept(p, chosen, kinds))
+    if left:
+        head["left_out"] = [f"{path} (left out by your switches)" for path in left]
+    return Manifest(head, entries)
+
+
+def _kept(path: str, save: Collection[Class], kinds: Kinds) -> bool:
+    return sent(f"data/{path}", save, kinds.get(path))
 
 
 def written_once(path: str) -> bool:
@@ -172,19 +201,31 @@ def make(
     stamp: str,
     why: str = "round",
     leave_out: Sequence[str] = (),
+    save: Collection[Class] = SENT,
+    kinds: Kinds | None = None,
     keep_free: int = 0,
     progress: Callable[[str], None] | None = None,
+    road_lease: RoadLease | None = None,
 ) -> Manifest:
-    """Copy `data/` into the quick undo's pool and return the copy's manifest (not yet written).
-    A file written once stays in `data/` and its line says `at: live`; every other file is in
-    the pool. `previous` is the newest copy, whose hashes an unchanged file keeps. Raises NoRoom
-    before writing when the files to copy would leave the drive below `keep_free`, and Changing
-    when a price month never held still."""
+    """Copy the classes `save` of `data/` into the quick undo's pool and return the copy's
+    manifest (not yet written). A file written once stays in `data/` and its line says
+    `at: live`; every other file is in the pool. `previous` is the newest copy, whose hashes an
+    unchanged file keeps. `kinds` tells Library objects apart when `save` leaves a Library class
+    out (`library_kinds`). Raises NoRoom before writing when the files to copy would leave the
+    drive below `keep_free`, and Changing when a price month never held still."""
     quick = FolderRepository(layout.backups / "quick")
     told = progress or _quiet
     known = {} if previous is None else {entry.path: entry for entry in previous.entries}
-    found, months = _survey(layout.data, leave_out, known)
+    chosen: tuple[Class, ...] = tuple(c for c in SENT if c in save)
+    by_kind: Kinds = kinds if kinds is not None else {}
+
+    def kept(path: str) -> bool:
+        return _kept(path, chosen, by_kind)
+
+    found, months = _survey(layout.data, leave_out, known, kept)
+    months = {month for month in months if kept(f"{month}/{STATE}")}
     copying = _Copying(layout, quick, known)
+    copying.keys = [] if previous is None or "recipe" not in chosen else _keys_of(previous)
     need = sum(f.size for f in found if not copying.reusable(f))
     room = quick.room()
     if room - need < keep_free:
@@ -202,34 +243,90 @@ def make(
     )
     logs = [f for f in found if f.kind != "store" and f.path.startswith(LIBRARY_LOGS)]
     others = [f for f in found if f.kind != "store" and not f.path.startswith(LIBRARY_LOGS)]
+    roads: dict[str, list[_Found]] = {}
+    for one in others:
+        road = ROAD.fullmatch(one.path)
+        if road is not None:
+            roads.setdefault(road.group(1), []).append(one)
+    others = [f for f in others if ROAD.fullmatch(f.path) is None]
     for step, files in zip(STEPS[:3], (stores, logs, others), strict=True):
         told(step)
         for one in files:
             copying.copy(one)
+    for app, files in sorted(roads.items()):
+        copying.road(app, files, road_lease)
     told(STEPS[3])
     for month in sorted(months):
         copying.month(month, leave_out)
     told(STEPS[4])
-    for one in _walk(layout.data, leave_out):
+    for one in _walk(layout.data, leave_out, kept=kept):
         if one in copying.done or not written_once(one) or _in_month(one, months):
             continue
         copying.once(one)
-    head = header(layout, stamp, why)
+    head = header(layout, stamp, why) | {"save": list(chosen), "keys_to_fill": copying.keys}
+    left = sorted(p for p in by_kind if OBJECT.fullmatch(p) and not kept(p))
+    if left:
+        head["left_out"] = [f"{path} (left out by your switches)" for path in left]
     if copying.unread:
         head |= {"partial": True, "unread": copying.unread}
     return Manifest(head, tuple(copying.entries))
 
 
+def _keys_of(copy: Manifest) -> list[str]:
+    found = copy.header.get("keys_to_fill")
+    return [str(key) for key in cast("list[object]", found)] if isinstance(found, list) else []
+
+
+def _scanned(path: Path) -> tuple[list[str], bytes | str | None]:
+    """`settings.toml`'s key paths that hold a secret, and what its copy holds: None for the file
+    as it is (no secret in it), the bytes without them, or the line saying why it is left out."""
+    raw = _read(path)
+    if raw is None:
+        return [], None
+    try:
+        values = tomllib.loads(raw.decode("utf-8"))
+    except UnicodeDecodeError, tomllib.TOMLDecodeError:
+        return [], (
+            "it is not TOML QMX can read, so its keys could not be left out; fix it in Settings"
+        )
+    keys = sorted(secret_values(values))
+    if not keys:
+        return [], None
+    return keys, _dumps(without_keys(values, keys)).encode("utf-8")
+
+
 class _Copying:
     """The files of one copy as they are copied, in order."""
 
-    def __init__(self, layout: Layout, quick: FolderRepository, known: Mapping[str, Entry]):
+    def __init__(
+        self,
+        layout: Layout,
+        quick: FolderRepository,
+        known: Mapping[str, Entry],
+    ):
         self.data = layout.data
         self.quick = quick
         self.known = known
+        self.keys: list[str] = []
+        """The `settings.toml` key paths left out of this copy, read again only when the file
+        changed."""
         self.entries: list[Entry] = []
         self.done: set[str] = set()
         self.unread: list[str] = []
+
+    def road(self, app: str, files: Sequence[_Found], lease: RoadLease | None) -> None:
+        """One mini app's `road/`, copied while its road lease is held, so its journal and blobs
+        are copied at one serialized point."""
+        if lease is None:
+            for one in files:
+                self.copy(one)
+            return
+        try:
+            with lease(app):
+                for one in files:
+                    self.copy(one)
+        except Exception as busy:  # the lease is the apps' own; any refusal leaves the road out
+            self.unread += [f"{one.path} (its road lease was held: {busy})" for one in files]
 
     def reusable(self, found: _Found) -> bool:
         before = self.known.get(found.path)
@@ -248,6 +345,15 @@ class _Copying:
         if self.reusable(found):
             self.keep(self.known[found.path])
             return
+        if found.path == SETTINGS:
+            self.keys, held = _scanned(self.data / SETTINGS)
+            if isinstance(held, str):
+                self.unread.append(f"{SETTINGS} ({held})")
+                return
+            if held is not None:
+                digest = self.quick.put_bytes(held)
+                self.keep(Entry(found.path, digest, len(held), found.kind, found.seen))
+                return
         source = self.data / found.path
         writing = self.quick.temporary()
         try:
@@ -354,12 +460,15 @@ class _Copying:
 
 
 def _survey(
-    data: Path, leave_out: Sequence[str], known: Mapping[str, Entry]
+    data: Path,
+    leave_out: Sequence[str],
+    known: Mapping[str, Entry],
+    kept: Callable[[str], bool],
 ) -> tuple[list[_Found], set[str]]:
     """Every file that changes, with its kind and live stats, and every price month folder."""
     found: list[_Found] = []
     months: set[str] = set()
-    for path in _walk(data, leave_out, months):
+    for path in _walk(data, leave_out, months, kept):
         if written_once(path) or _in_month(path, months):
             continue
         source = data / path
@@ -385,10 +494,15 @@ def _survey(
     return found, months
 
 
-def _walk(data: Path, leave_out: Sequence[str], months: set[str] | None = None) -> Iterator[str]:
-    """Every file under `data` that is not left out, as a path relative to it, never through a
-    link or a junction. A price month folder (under `market/`, holding `state.json`) is added
-    to `months` when given."""
+def _walk(
+    data: Path,
+    leave_out: Sequence[str],
+    months: set[str] | None = None,
+    kept: Callable[[str], bool] | None = None,
+) -> Iterator[str]:
+    """Every file under `data` that is not left out and that `kept` keeps, as a path relative to
+    it, never through a link or a junction. A price month folder (under `market/`, holding
+    `state.json`) is added to `months` when given."""
     pending = [""]
     while pending:
         folder = pending.pop()
@@ -406,14 +520,19 @@ def _walk(data: Path, leave_out: Sequence[str], months: set[str] | None = None) 
             if entry.is_dir():
                 if not _pruned(path, leave_out):
                     pending.append(path)
-            elif entry.is_file() and left_out(path, leave_out) is None:
+            elif (
+                entry.is_file()
+                and left_out(path, leave_out) is None
+                and (kept is None or kept(path))
+            ):
                 yield path
 
 
 def _pruned(folder: str, leave_out: Sequence[str]) -> bool:
     """Whether everything under `folder` is left out, so it is not walked at all."""
-    every = (*SECRET, *(g for g, _ in LEFT_OUT), *leave_out)
-    return _matcher(tuple(g[:-3] for g in every if g.endswith("/**"))).match(folder) is not None
+    if pruned(f"data/{folder}"):
+        return True
+    return _matcher(tuple(g[:-3] for g in leave_out if g.endswith("/**"))).match(folder) is not None
 
 
 def _in_month(path: str, months: Collection[str]) -> bool:
@@ -522,3 +641,76 @@ def _why(error: BaseException) -> str:
     if isinstance(error, OSError) and error.strerror:
         return f"{error.strerror}: {plain(error.filename)}" if error.filename else error.strerror
     return type(error).__name__
+
+
+_BARE: Final = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _dumps(values: Mapping[str, object]) -> str:
+    """`values` (as `tomllib` reads them) written as TOML again, for the copy of a
+    `settings.toml` whose keys were left out. Comments and layout are not kept."""
+    lines: list[str] = []
+    _section(lines, values, (), array=False)
+    return "\n".join(lines).strip("\n") + "\n"
+
+
+def _section(
+    lines: list[str], table: Mapping[str, object], at: tuple[str, ...], *, array: bool
+) -> None:
+    flat = [(k, v) for k, v in table.items() if not _is_table(v) and not _is_tables(v)]
+    if array:
+        lines += ["", f"[[{_dotted(at)}]]"]
+    elif at and (flat or not any(_is_table(v) or _is_tables(v) for v in table.values())):
+        lines += ["", f"[{_dotted(at)}]"]
+    lines += [f"{_key(k)} = {_value(v)}" for k, v in flat]
+    for key, value in table.items():
+        if _is_table(value):
+            _section(lines, cast("Mapping[str, object]", value), (*at, key), array=False)
+        elif _is_tables(value):
+            for item in cast("list[Mapping[str, object]]", value):
+                _section(lines, item, (*at, key), array=True)
+
+
+def _is_table(value: object) -> bool:
+    return isinstance(value, Mapping)
+
+
+def _is_tables(value: object) -> bool:
+    if not isinstance(value, list):
+        return False
+    items = cast("list[object]", value)
+    return bool(items) and all(isinstance(item, Mapping) for item in items)
+
+
+def _dotted(at: Sequence[str]) -> str:
+    return ".".join(_key(part) for part in at)
+
+
+def _key(key: str) -> str:
+    return key if _BARE.fullmatch(key) else _string(key)
+
+
+def _string(text: str) -> str:
+    return json.dumps(text, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
+def _value(value: object) -> str:
+    match value:
+        case bool():
+            return "true" if value else "false"
+        case int():
+            return str(value)
+        case float():
+            text = repr(value)
+            return {"inf": "inf", "-inf": "-inf", "nan": "nan"}.get(text, text)
+        case str():
+            return _string(value)
+        case datetime() | date() | clock_time():
+            return value.isoformat()
+        case Mapping():
+            items = cast("Mapping[str, object]", value).items()
+            return "{" + ", ".join(f"{_key(k)} = {_value(v)}" for k, v in items) + "}"
+        case list():
+            return "[" + ", ".join(_value(v) for v in cast("list[object]", value)) + "]"
+        case _:
+            return _string(str(value))

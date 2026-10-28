@@ -40,13 +40,11 @@ def test_a_copy_holds_every_file_but_the_left_out_the_secret_and_the_links(tmp_p
     copy = make(filled.layout, previous=None, stamp=STAMP)
 
     paths = {entry.path for entry in copy.entries}
-    assert len(paths) == 67
+    assert len(paths) == 65
     assert not paths & {*LEFT_OUT, *SECRETS}
     assert not [p for p in paths if p.startswith("claude-relayed/")]
     assert {
         "library/checkout/main/i0/.checkout.json",
-        "vault-store.json",
-        "passes/revoked.json",
         "claude/projects/p/chat.jsonl",
         f"{MONTH}/2026-02/open.parquet",
         f"{MONTH}/2026-02/state.json",

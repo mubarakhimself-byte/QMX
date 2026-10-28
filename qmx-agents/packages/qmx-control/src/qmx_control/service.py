@@ -35,8 +35,10 @@ from qmx_broker.models import Broker, BrokerSettings
 from qmx_broker.sandbox import demo_refusal
 from qmx_broker.service import read_proposals
 from qmx_home import Layout
-from qmx_home.backup.plan import APP_KEYS, PlanRefused
+from qmx_home.backup.plan import PlanRefused, orphans_dropped
+from qmx_home.backup.plan import defaults as backup_defaults
 from qmx_home.backup.plan import parse as parse_backup_plan
+from qmx_home.classes import secret_name
 from qmx_home.versions import open_sqlite, too_new
 from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
@@ -275,35 +277,59 @@ def _data_settings(values: Document) -> Document:
     return values
 
 
-BACKUP_PLAN_KEYS: Final = frozenset({"quick_undo", "targets", "leave_out", "drill", "keys"})
-"""The keys of `[backup]` his copies read (`qmx_home.backup.plan`); `APP_KEYS` are the rest."""
+WHOLE_SECTIONS: Final[frozenset[str]] = frozenset({"observers", "brokers", "connections"})
+"""Sections a write sends whole: an observer mint or revoke, and the broker row lists."""
+VOLUME_KEYS: Final = frozenset({"remote", "bucket", "node", "interval_seconds", "enabled"})
+"""The keys of `[backup]` the mini apps' volume backup reads."""
 
 
-def _check_backup_plan(values: Document, layout: Layout) -> None:
+def _check_backup_plan(values: Document, layout: Layout, engine: Document) -> None:
     """Refuse a `[backup]` section his copies cannot use, naming the row, before it is saved."""
-    unknown = sorted(set(values) - BACKUP_PLAN_KEYS - APP_KEYS)
-    if unknown:
-        raise ControlError(
-            "invalid_backup_settings",
-            f"[backup] has {', '.join(unknown)}, which QMX does not know; use "
-            f"{', '.join(sorted(BACKUP_PLAN_KEYS | APP_KEYS))}",
-        )
     try:
-        parse_backup_plan(values, layout)
+        parse_backup_plan(values, layout, engine)
     except PlanRefused as refused:
         raise ControlError("invalid_backup_settings", str(refused)) from refused
 
 
 def _volume_keys(values: Document) -> Document:
     """The keys of `[backup]` the mini apps' volume backup reads."""
-    return {key: value for key, value in values.items() if key in APP_KEYS - {"repository"}}
+    return {key: value for key, value in values.items() if key in VOLUME_KEYS}
+
+
+def _merged(stored: Document, sent: Document) -> Document:
+    """`sent` merged into `stored`: a table sent merges key by key, any other value replaces."""
+    merged = dict(stored)
+    for key, value in sent.items():
+        before = merged.get(key)
+        if isinstance(value, dict) and isinstance(before, dict):
+            merged[key] = _merged(cast(Document, before), cast(Document, value))
+        else:
+            merged[key] = value
+    return merged
+
+
+def _removed(section: Document, path: Sequence[str]) -> Document:
+    """`section` less the dotted key `path`, and less any table that held only it."""
+    head, rest = path[0], path[1:]
+    if head not in section:
+        return section
+    kept = dict(section)
+    inner = kept[head]
+    if not rest:
+        del kept[head]
+    elif isinstance(inner, dict):
+        trimmed = _removed(cast(Document, inner), rest)
+        if trimmed:
+            kept[head] = trimmed
+        else:
+            del kept[head]
+    return kept
 
 
 def _no_secrets(value: JsonValue) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
-            normalized = key.lower().replace("_", "").replace("-", "")
-            if normalized in {"key", "apikey", "token", "password", "secret", "clientkey"}:
+            if secret_name(key):
                 raise ControlError(
                     "secret_ref_required",
                     "Store secrets in Credential Manager; use credential_ref.",
@@ -774,17 +800,35 @@ class ControlService:
                     "credential_ref": "qmx/firecrawl",
                     **firecrawl,
                 }
+            if section == "backup":
+                values = cast(
+                    Document, backup_defaults(values, cast(Document, stored.get("engine", {})))
+                )
             return values
+
+    def _stored(self, section: str) -> Document:
+        """One section exactly as `settings.toml` holds it: no default filled in."""
+        with self._lock:
+            path = self.home / "settings.toml"
+            if not path.exists():
+                return {}
+            with path.open("rb") as file:
+                found = tomllib.load(file).get(section, {})
+            return cast(Document, found) if isinstance(found, dict) else {}
 
     def settings_update(
         self, section: SettingsSection, change: Callable[[Document], Document]
     ) -> Document:
-        """Read, change and write one section under the settings lock, so concurrent updates
-        all land. Writes nothing when the change returns the section as it was."""
+        """Read the stored section, change it and write what the change returns, under the
+        settings lock, so concurrent updates all land and a change can remove a key. Writes
+        nothing when the change returns the section as it was. A `[backup]` policy whose
+        storage row is gone is dropped on the way."""
         with self._lock:
-            current = self.settings_get(section)
+            current = self._stored(section)
             values = change(current)
-            return values if values == current else self.settings_put(section, values)
+            if section == "backup":
+                values = cast(Document, orphans_dropped(values, self._stored("engine")))
+            return values if values == current else self._settings_put(section, values)
 
     @operation(
         "settings_read",
@@ -795,9 +839,25 @@ class ControlService:
         left_out="an agent that edits a provider row could send a stored key to a host",
     )
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
-        """Replace a settings section; credentials must be vault references."""
+        """Merge `values` into the stored section, key by key, so a screen saving from an old
+        read never drops another writer's keys; `remove` lists dotted keys to delete, such as
+        `placement.usb`. Brokers and connections send their whole row list. Credentials must be
+        vault references."""
         with self._lock:
-            return self._settings_put(section, values)
+            if section in WHOLE_SECTIONS:
+                return self._settings_put(section, values)
+            sent = dict(values)
+            removed = sent.pop("remove", [])
+            if not isinstance(removed, list) or not all(
+                isinstance(key, str) and key for key in removed
+            ):
+                raise ControlError(
+                    "invalid_settings", "remove lists dotted keys to delete, such as placement.usb."
+                )
+            merged = _merged(self._stored(section), sent)
+            for key in cast("list[str]", removed):
+                merged = _removed(merged, key.split("."))
+            return self._settings_put(section, merged)
 
     def _observers_put(self, values: Document) -> Document:
         """Mint or revoke one observer token, as a Settings write by the operator (AD-69).
@@ -860,13 +920,7 @@ class ControlService:
                     "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
                 )
         if section == "backup":
-            if "repository" in values:
-                repository = values["repository"]
-                if not isinstance(repository, str) or not repository.strip():
-                    raise ControlError(
-                        "invalid_settings", "Backup repository must be nonempty text."
-                    )
-            _check_backup_plan(values, Layout.from_home(self.home))
+            _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
             app_settings = _volume_keys(values)
             if app_settings:
                 BackupSettings.model_validate(app_settings).destination("validation", "validation")
