@@ -441,9 +441,12 @@ def _update(name: str, state: str) -> list[str]:
 
 
 def _answer_of(run: Run, option: Mapping[str, Any]) -> tuple[str | None, bool]:
-    """His answer to the pending question: a key read from the key store for a password, the
-    question's own default for an empty answer."""
+    """His answer to the pending question: a key read from the key store for a password (none,
+    for a password rclone does not require, when he answers it empty), the question's own default
+    for an empty answer."""
     if option.get("IsPassword"):
+        if run.answer.get("result") == "" and not option.get("Required"):
+            return "", True
         expected = _secret_name(run.place, str(option.get("Name")))
         if run.answer.get("key") != expected:
             return None, True

@@ -8,7 +8,6 @@ import dataclasses
 import secrets
 import time
 import tomllib
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -174,8 +173,8 @@ def test_a_kill_after_any_step_converges_on_one_row(tmp_path: Path, killed_after
     cut = dataclasses.replace(kind, steps=kind.steps[:killed_after])
     answer: dict[str, object] = {"fields": {"path": str(tmp_path / "usb")}}
 
-    def ignore(_step: str, **_counts: int) -> None:
-        return None
+    def ignore(step: str, *, done: int = 0, total: int = 0, **counts: int) -> None:
+        del step, done, total, counts
 
     run_kind(cut, "usb", answer, report=ignore, world=world(layout))
     first = dict(rows(layout))
@@ -225,7 +224,9 @@ def test_a_folder_on_the_qmx_folders_drive_is_kept_with_a_warning_and_a_missing_
     with TestClient(app_of(Connect(world(layout), KINDS))) as rest:
         kept = connected(rest, "folder", "usb", {"fields": {"path": str(tmp_path / "usb")}})
         gone = connected(rest, "folder", "gone", {"fields": {"path": str(tmp_path / "unplugged")}})
-    assert any("is on the same drive as your QMX folder" in line for line in kept["result"]["lines"])
+    assert any(
+        "is on the same drive as your QMX folder" in line for line in kept["result"]["lines"]
+    )
     assert gone["state"] == "stopped"
     assert "is not there (is its drive plugged in?)" in gone["line"]
     assert list(rows(layout)) == ["usb"]
@@ -245,6 +246,3 @@ def test_an_unknown_kind_and_a_bad_place_name_answer_400(
     with TestClient(app_of(Connect(world(qmx_folder(tmp_path / "QMX")), KINDS))) as rest:
         answer = rest.post("/api/connect/jobs", json=body, headers=BEARER)
     assert answer.status_code == status
-
-
-Answered = Callable[[TestClient, str, str, dict[str, object]], dict[str, Any]]
