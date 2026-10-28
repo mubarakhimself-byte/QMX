@@ -12,6 +12,7 @@ rclone_path = ""                   # per machine; empty means PATH, then the pin
 on = true
 save = ["recipe", "content", "result", "prices"]
 every = "1h"                       # when something changed
+at = "03:00"                       # local time, read when every is a day or more
 keep = { hours = 48, days = 7 }
 
 [backup.place.<place id>]          # any other storage; absent means the defaults
@@ -78,7 +79,7 @@ RETIRED: Final = frozenset(
 )
 """Keys of `[backup]` from before this shape: kept as written, read by nothing, never refused."""
 KEYS: Final = frozenset({"on", "leave_out", "rclone_path", "place", "upkeep"})
-PC_KEYS: Final = frozenset({"on", "save", "every", "keep"})
+PC_KEYS: Final = frozenset({"on", "save", "every", "at", "keep"})
 STORAGE_KEYS: Final = frozenset({"on", "save", "every", "at", "keep", "floor"})
 KEEP_KEYS: Final = ("hours", "days", "weeks", "months")
 UPKEEP: Final[Mapping[str, object]] = {
@@ -404,10 +405,11 @@ def _document(policy: Policy, *, pc: bool) -> dict[str, object]:
         "on": policy.on,
         "save": list(policy.save),
         "every": policy.every,
+        "at": policy.at.strftime("%H:%M"),
         "keep": {key: getattr(policy.keep, key) for key in KEEP_KEYS if getattr(policy.keep, key)},
     }
     if not pc:
-        shown |= {"at": policy.at.strftime("%H:%M"), "floor": "auto"}
+        shown["floor"] = "auto"
     return shown
 
 

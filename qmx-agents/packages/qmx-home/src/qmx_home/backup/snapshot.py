@@ -225,7 +225,6 @@ def make(
     found, months = _survey(layout.data, leave_out, known, kept)
     months = {month for month in months if kept(f"{month}/{STATE}")}
     copying = _Copying(layout, quick, known)
-    copying.keys = [] if previous is None or "recipe" not in chosen else _keys_of(previous)
     need = sum(f.size for f in found if not copying.reusable(f))
     room = quick.room()
     if room - need < keep_free:
@@ -272,11 +271,6 @@ def make(
     return Manifest(head, tuple(copying.entries))
 
 
-def _keys_of(copy: Manifest) -> list[str]:
-    found = copy.header.get("keys_to_fill")
-    return [str(key) for key in cast("list[object]", found)] if isinstance(found, list) else []
-
-
 def _scanned(path: Path) -> tuple[list[str], bytes | str | None]:
     """`settings.toml`'s key paths that hold a secret, and what its copy holds: None for the file
     as it is (no secret in it), the bytes without them, or the line saying why it is left out."""
@@ -308,8 +302,7 @@ class _Copying:
         self.quick = quick
         self.known = known
         self.keys: list[str] = []
-        """The `settings.toml` key paths left out of this copy, read again only when the file
-        changed."""
+        """The `settings.toml` key paths left out of this copy."""
         self.entries: list[Entry] = []
         self.done: set[str] = set()
         self.unread: list[str] = []
@@ -342,10 +335,8 @@ class _Copying:
         self.done.add(entry.path)
 
     def copy(self, found: _Found) -> None:
-        if self.reusable(found):
-            self.keep(self.known[found.path])
-            return
         if found.path == SETTINGS:
+            # Scanned every time: a copy made before this release holds the file whole, keys in.
             self.keys, held = _scanned(self.data / SETTINGS)
             if isinstance(held, str):
                 self.unread.append(f"{SETTINGS} ({held})")
@@ -354,6 +345,9 @@ class _Copying:
                 digest = self.quick.put_bytes(held)
                 self.keep(Entry(found.path, digest, len(held), found.kind, found.seen))
                 return
+        if self.reusable(found):
+            self.keep(self.known[found.path])
+            return
         source = self.data / found.path
         writing = self.quick.temporary()
         try:

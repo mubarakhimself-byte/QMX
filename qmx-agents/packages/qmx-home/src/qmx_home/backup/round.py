@@ -76,6 +76,8 @@ class Placed:
     """The copy lacks a file it should hold; its manifest says which."""
     other_disk: bool = False
     """The place is a storage on another disk than the QMX folder's."""
+    save: tuple[Class, ...] = SENT
+    """The classes the place keeps."""
 
     def document(self) -> dict[str, object]:
         return {
@@ -90,6 +92,7 @@ class Placed:
             "seconds": round(self.seconds, 3),
             "partial": self.partial,
             "other_disk": self.other_disk,
+            "save": list(self.save),
         }
 
 
@@ -378,7 +381,18 @@ def _send(
     ) -> Placed:
         seconds = clock.monotonic() - started
         return Placed(
-            storage.id, where, result, line, key, stamp, files, size, seconds, partial, apart
+            storage.id,
+            where,
+            result,
+            line,
+            key,
+            stamp,
+            files,
+            size,
+            seconds,
+            partial,
+            apart,
+            storage.policy.save,
         )
 
     anchor = Path(path.anchor or "/")
@@ -641,7 +655,8 @@ def _thin_pre_change(
 def _copies_elsewhere(
     log: Sequence[Mapping[str, object]], placed: Sequence[Placed]
 ) -> list[datetime]:
-    """When each whole copy that reached a storage on another disk was made."""
+    """When each whole copy that reached a storage on another disk was made: one that lacks no
+    file and holds every sent class. A log line older than `save` held them all."""
     rows = [
         place
         for line in log
@@ -656,6 +671,7 @@ def _copies_elsewhere(
         and row.get("result") == "copied"
         and row.get("other_disk") is True
         and row.get("partial") is not True
+        and set(cast("list[str]", row.get("save", SENT))) >= set(SENT)
         and row.get("stamp")
     ]
 

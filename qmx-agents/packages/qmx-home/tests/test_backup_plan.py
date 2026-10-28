@@ -148,6 +148,7 @@ def test_the_read_names_every_default_and_a_storage_with_no_policy_reads_them_al
                 "on": True,
                 "save": ["recipe", "content", "result", "prices"],
                 "every": "1h",
+                "at": "03:00",
                 "keep": {"hours": 48, "days": 7},
             },
             "01J-USB": {

@@ -176,14 +176,17 @@ PER_MACHINE_KEYS: Final[tuple[str, ...]] = (
 """`settings.toml` keys kept from the new machine when a copy is restored onto it."""
 
 SECRET_NAMES: Final = frozenset({"key", "apikey", "token", "password", "secret", "clientkey"})
-"""Key names, lower case with `_` and `-` dropped, whose values are never stored or sent."""
+"""Key names, lower case with `_` and `-` dropped, that the settings writer refuses."""
+SECRET_ENDINGS: Final = ("key", "token", "secret", "password")
+"""Endings of key names, lower case with `_` and `-` dropped, whose values a copy leaves out:
+`access_token`, `private_key` and `client_secret` as well as every name of `SECRET_NAMES`."""
 SECRET_SHAPES: Final = re.compile(
     r"(?:sk-ant-|sk-or-|sk-proj-|sk-|ghp_|gho_|github_pat_|xox[abp]-|AKIA|AIza|hf_|GOCSPX-)"
     r"[A-Za-z0-9_\-]{16,}"
 )
 """The published prefixes of provider keys and tokens: a value that is one of these whole."""
-PUBLIC: Final = re.compile(r"engine\.placement\.[^.]+\.client_secret")
-"""A Drive place row's client secret: a Desktop client's is public, so it travels."""
+PUBLIC: Final = re.compile(r"engine\.placement\.([^.\[]+)\.client_secret")
+"""Where a Drive storage row's client secret sits: a Desktop client's is public, so it travels."""
 
 _CASE: Final = os.name != "nt"
 
@@ -198,19 +201,14 @@ def rule_of(path: str) -> Rule | None:
 
 def class_of(path: str, kind: str | Collection[str] | None = None) -> Class:
     """The class of `path`, relative to the QMX folder. `kind` is a Library object's kind, or
-    the kinds of the objects that name a blob: the blob is the class of any of them that is
-    sent, so a recipe's blob travels with the recipe."""
-    found = rule_of(path)
-    if found is None:
-        return "content"
-    if found.answer != "kind":
-        return found.answer
-    kinds = (kind,) if isinstance(kind, str) else tuple(kind or ())
-    classes: set[Class] = {KINDS.get(one, "content") for one in kinds}
-    for sent_class in SENT:
-        if sent_class in classes:
-            return sent_class
-    return "content"
+    the kinds of the objects that name a blob, which answers the first of their classes in
+    `SENT` order. Whether a copy holds such a blob is `sent`'s to say: any of its classes will
+    do."""
+    classes = _classes(path, kind)
+    for one in SENT:
+        if one in classes:
+            return one
+    return next(iter(classes))
 
 
 def is_library_log(path: str) -> bool:
@@ -218,11 +216,21 @@ def is_library_log(path: str) -> bool:
 
 
 def sent(path: str, save: Collection[Class], kind: str | Collection[str] | None = None) -> bool:
-    """Whether a copy with the switches `save` holds `path`: its class is switched on, or it is
-    a Library log and some Library class is."""
+    """Whether a copy with the switches `save` holds `path`: its class is switched on (for a blob,
+    the class of any kind that names it), or it is a Library log and some Library class is."""
     if is_library_log(path):
         return any(one in LIBRARY for one in save)
-    return class_of(path, kind) in save
+    return not _classes(path, kind).isdisjoint(save)
+
+
+def _classes(path: str, kind: str | Collection[str] | None) -> frozenset[Class]:
+    found = rule_of(path)
+    if found is None:
+        return frozenset({"content"})
+    if found.answer != "kind":
+        return frozenset({found.answer})
+    kinds = (kind,) if isinstance(kind, str) else tuple(kind or ())
+    return frozenset(KINDS.get(one, "content") for one in kinds) or frozenset({"content"})
 
 
 def pruned(folder: str) -> bool:
@@ -244,8 +252,8 @@ def secret_paths() -> tuple[str, ...]:
 def secret_values(settings: Mapping[str, object]) -> dict[str, str]:
     """Each value of `settings` (as `settings.toml` reads) under a key named like a secret, or
     shaped like a key, by its key path: `providers.kimi.api_key`, an array's entry by index
-    (`providers[2].api_key`). A Drive place row's `client_secret` is public and never named."""
-    return {path: value for path, value in _strings(settings, "") if not PUBLIC.fullmatch(path)}
+    (`providers[2].api_key`). A Drive storage row's `client_secret` is public and never named."""
+    return {path: value for path, value in _strings(settings, "") if not _public(settings, path)}
 
 
 def without(settings: Mapping[str, object], paths: Collection[str]) -> dict[str, object]:
@@ -254,13 +262,32 @@ def without(settings: Mapping[str, object], paths: Collection[str]) -> dict[str,
 
 
 def secret_name(key: str) -> bool:
-    return key.lower().replace("_", "").replace("-", "") in SECRET_NAMES
+    """Whether the settings writer refuses `key`."""
+    return _plain(key) in SECRET_NAMES
+
+
+def _plain(key: str) -> str:
+    return key.lower().replace("_", "").replace("-", "")
+
+
+def _public(settings: Mapping[str, object], path: str) -> bool:
+    found = PUBLIC.fullmatch(path)
+    if found is None:
+        return False
+    row = _inner(_inner(_inner(settings, "engine"), "placement"), found.group(1))
+    return row.get("via") == "rclone" and row.get("type") == "drive"
+
+
+def _inner(table: Mapping[str, object], key: str) -> Mapping[str, object]:
+    found = table.get(key)
+    return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else {}
 
 
 def _strings(value: object, at: str, named: bool = False) -> Iterator[tuple[str, str]]:
     if isinstance(value, Mapping):
         for key, item in cast("Mapping[str, object]", value).items():
-            yield from _strings(item, f"{at}.{key}" if at else key, named or secret_name(key))
+            inner = f"{at}.{key}" if at else key
+            yield from _strings(item, inner, named or _plain(key).endswith(SECRET_ENDINGS))
     elif isinstance(value, list):
         for index, item in enumerate(cast("list[object]", value)):
             yield from _strings(item, f"{at}[{index}]", named)

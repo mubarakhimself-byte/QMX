@@ -83,7 +83,7 @@ def test_each_store_is_copied_as_committed_with_its_row_counts_and_never_checkpo
     assert after == before, "the copy never checkpoints the live store"
 
 
-def test_a_second_copy_of_an_unchanged_folder_reads_no_file_again(
+def test_a_second_copy_of_an_unchanged_folder_reads_only_settings_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     filled = filled_folder(tmp_path / "QMX")
@@ -109,7 +109,7 @@ def test_a_second_copy_of_an_unchanged_folder_reads_no_file_again(
 
     second = make(filled.layout, previous=first, stamp="20261027T040000000000Z")
 
-    assert opened == []
+    assert opened == [str(filled.layout.data / "settings.toml")]
     assert second.files == first.files
     assert sorted(p.name for p in pool.pool.rglob("*") if p.is_file()) == pooled
 

@@ -12,6 +12,7 @@ from backup_fixtures import WRITER_APP, filled_folder
 from qmx_home.classes import (
     NEVER,
     SENT,
+    Class,
     class_of,
     rule_of,
     secret_paths,
@@ -80,15 +81,20 @@ def test_the_library_logs_travel_with_any_library_class_and_never_alone() -> Non
     assert not sent("data/library/objects/ab/cd/x.json", ("recipe",), "note")
 
 
+DRIVE_ROW = {
+    "via": "rclone",
+    "type": "drive",
+    "can": ["keep"],
+    "client_secret": "GOCSPX-publicDesktopClientSecret",
+}
+
+
 def test_secret_values_name_key_named_and_key_shaped_values_at_any_depth() -> None:
     settings: dict[str, object] = {
         "providers": [{"id": "kimi"}, {"id": "glm", "api_key": "k-planted-1"}],
         "connections": {"bot": {"token": "t-planted-2"}},
         "notes": {"innocent": "sk-ant-api03-planted3planted3planted3"},
-        "engine": {
-            "host_name": "pc",
-            "placement": {"gdrive": {"client_secret": "GOCSPX-publicDesktopClientSecret"}},
-        },
+        "engine": {"host_name": "pc", "placement": {"gdrive": DRIVE_ROW}},
         "elsewhere": "GOCSPX-publicDesktopClientSecret",
         "model": "sk-short",
     }
@@ -105,12 +111,77 @@ def test_secret_values_name_key_named_and_key_shaped_values_at_any_depth() -> No
         "providers": [{"id": "kimi"}, {"id": "glm"}],
         "connections": {"bot": {}},
         "notes": {},
-        "engine": {
-            "host_name": "pc",
-            "placement": {"gdrive": {"client_secret": "GOCSPX-publicDesktopClientSecret"}},
-        },
+        "engine": {"host_name": "pc", "placement": {"gdrive": DRIVE_ROW}},
         "model": "sk-short",
     }
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "key",
+        "api_key",
+        "apikey",
+        "token",
+        "password",
+        "secret",
+        "client_key",
+        "access_token",
+        "refresh_token",
+        "bot_token",
+        "private_key",
+        "client_secret",
+        "Access-Token",
+        "SMTP_PASSWORD",
+        "webhookSecret",
+    ],
+)
+def test_a_value_under_a_name_that_ends_like_a_secret_is_named(name: str) -> None:
+    assert secret_values({"connections": {"bot": {name: "planted-value"}}}) == {
+        f"connections.bot.{name}": "planted-value"
+    }
+
+
+@pytest.mark.parametrize("name", ["max_tokens", "keep", "keys_to_fill", "token_budget", "host"])
+def test_a_value_under_an_ordinary_name_is_not_named(name: str) -> None:
+    assert secret_values({"engine": {name: "plain-value"}}) == {}
+
+
+def test_only_a_drive_storage_rows_client_secret_travels() -> None:
+    settings: dict[str, object] = {
+        "engine": {
+            "placement": {
+                "gdrive": DRIVE_ROW,
+                "onedrive": {**DRIVE_ROW, "type": "onedrive"},
+                "folder": {"via": "folder", "client_secret": "planted-folder"},
+            }
+        },
+        "connections": {"oauth": {"client_secret": "planted-oauth"}},
+    }
+
+    assert secret_values(settings) == {
+        "engine.placement.onedrive.client_secret": "GOCSPX-publicDesktopClientSecret",
+        "engine.placement.folder.client_secret": "planted-folder",
+        "connections.oauth.client_secret": "planted-oauth",
+    }
+
+
+BLOB = "data/library/blobs/ab/cd/abcd"
+
+
+@pytest.mark.parametrize(
+    ("save", "expected"),
+    [
+        (("content",), True),
+        (("recipe",), True),
+        (("result",), False),
+        (("prices",), False),
+    ],
+)
+def test_a_blob_named_by_several_kinds_travels_with_any_kept_class_of_them(
+    save: tuple[Class, ...], expected: bool
+) -> None:
+    assert sent(BLOB, save, ("strategy", "note")) is expected
 
 
 def test_the_secret_paths_are_the_fixed_secret_rules() -> None:

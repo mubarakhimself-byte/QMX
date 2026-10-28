@@ -33,6 +33,7 @@ def test_this_pcs_policy_saves_through_the_route_and_the_read_fills_every_defaul
         "on": True,
         "save": ["recipe", "content", "result", "prices"],
         "every": "2h",
+        "at": "03:00",
         "keep": {"hours": 4},
     }
     assert (read["on"], read["leave_out"], read["upkeep"]["drill_sample"]) == (True, [], 200)
