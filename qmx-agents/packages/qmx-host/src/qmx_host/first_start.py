@@ -828,6 +828,9 @@ def first_start_router(
     """Each job's folder, by job id."""
     newest: list[Job] = []
     """The card's newest job as it started; read again by id."""
+    shown_at_start: list[dict[str, object]] = []
+    """The card as it stood when the newest job started, shown while it runs: reading the stores
+    of a folder while a restore renames its `data/` can make the rename fail on Windows."""
 
     def finished(root: Path) -> None:
         chosen[:] = [root]
@@ -840,6 +843,7 @@ def first_start_router(
         return job if job is not None and job.state == "running" else None
 
     def started(kind: str, work: Callable[[Progress], dict[str, object]], folder: Path) -> Job:
+        shown_at_start[:] = [offer(old, places, drives).document()]
         job = jobs.start(kind, work).job
         targets[job.id] = folder
         newest[:] = [job]
@@ -847,8 +851,9 @@ def first_start_router(
 
     def card() -> dict[str, object]:
         job = latest()
-        shown = offer(old, places, drives).document()
-        target = None if job is None or job.state != "running" else targets.get(job.id)
+        busy = job is not None and job.state == "running"
+        shown = dict(shown_at_start[0]) if busy else offer(old, places, drives).document()
+        target = None if job is None or not busy else targets.get(job.id)
         folder = None if target is None else str(target)
         for name in ("unfinished", "restore_unfinished"):
             again = cast("dict[str, str] | None", shown[name])

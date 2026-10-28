@@ -404,6 +404,43 @@ def test_a_host_on_the_folder_or_a_running_restore_is_409_by_name(
     assert done["state"] == "finished", done["line"]
 
 
+def test_the_card_reads_no_store_of_the_folder_while_its_restore_runs(
+    pc: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layout, usb = folder(pc / "QMX"), pc / "usb"
+    stamp = sent(layout, usb)
+    first_start.write_pointer(layout.root)
+    read: list[Path] = []
+    checking, finishing = first_start.check_open, first_start.finish
+    gate, entered = threading.Event(), threading.Event()
+
+    def counted(at: Layout) -> Any:
+        read.append(at.root)
+        return checking(at)
+
+    def held(*args: Any, **kwargs: Any) -> Any:
+        entered.set()
+        gate.wait(30)
+        return finishing(*args, **kwargs)
+
+    monkeypatch.setattr(first_start, "check_open", counted)
+    monkeypatch.setattr(first_start, "finish", held)
+    client = card(pc)
+    body = {"folder": str(layout.root), "source": source(usb), "copy": stamp, "confirmed": True}
+
+    asked = client.post("/api/first-start/restore", json=body)
+    assert entered.wait(30)
+    before = len(read)
+    shown = client.get("/api/first-start").json()
+    during = len(read) - before
+    gate.set()
+    job = ended(client, asked.json()["id"])
+
+    assert during == 0, "the card read the folder's stores while its restore ran"
+    assert (shown["found"], shown["running"]) == (str(layout.root), str(layout.root))
+    assert job["state"] == "finished", job["line"]
+
+
 def test_a_restore_while_a_bring_in_runs_is_409_naming_it(
     pc: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
