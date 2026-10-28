@@ -61,24 +61,19 @@ def test_a_key_neither_the_plan_nor_an_older_release_knows_is_refused_by_name(
     assert refused.value.code == "invalid_backup_settings"
 
 
-def test_the_volume_keys_save_as_before_and_only_they_reach_the_volume_model(
+def test_the_old_volume_keys_are_kept_as_written_and_the_app_backup_routes_are_gone(
     tmp_path: Path,
 ) -> None:
     service = _service(tmp_path)
-    values: Document = {
-        "remote": "fixture",
-        "bucket": "qmx",
-        "enabled": False,
-        "repository": "git@example.invalid:qmx.git",
-        "quick_undo": {"hours": 48},
-    }
-    assert service.settings_put("backup", values) == values
-    volumes = service._backup_settings()  # pyright: ignore[reportPrivateUsage]
-    assert volumes is not None
-    assert (volumes.remote, volumes.bucket, volumes.enabled) == ("fixture", "qmx", False)
-
-
-def test_a_plan_without_volume_keys_gives_the_volumes_nothing_to_run(tmp_path: Path) -> None:
-    service = _service(tmp_path)
-    service.settings_put("backup", {"quick_undo": {"hours": 48, "days": 7}})
-    assert service._backup_settings() is None  # pyright: ignore[reportPrivateUsage]
+    token = secrets.token_urlsafe(32)
+    bearer = {"Authorization": f"Bearer {token}"}
+    old: Document = {"remote": "fixture", "bucket": "qmx", "enabled": False, "repository": "r"}
+    with TestClient(create_app(service, token)) as rest:
+        saved = rest.put("/api/settings/backup", headers=bearer, json=old)
+        backup = rest.post("/api/apps/demo/backup", headers=bearer)
+        restore = rest.post("/api/apps/demo/restore", headers=bearer, params={"snapshot_id": "s"})
+    assert saved.status_code == 200, saved.text
+    assert (tmp_path / "QMX" / "data" / "settings.toml").read_text(encoding="utf-8") == (
+        '[backup]\nremote = "fixture"\nbucket = "qmx"\nenabled = false\nrepository = "r"\n'
+    )
+    assert (backup.status_code, restore.status_code) == (404, 404)

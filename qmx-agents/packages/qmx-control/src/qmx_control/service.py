@@ -23,14 +23,11 @@ from urllib.parse import urlsplit
 import keyring
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
-from qmx_apps.backup import BackupSettings, backup, restore
-from qmx_apps.backup_schedule import BackupSchedule
 from qmx_apps.docker import DockerSupervisor
 from qmx_apps.errors import AppError
 from qmx_apps.manifest import Trust
 from qmx_apps.road.models import Stage
 from qmx_apps.supervisor import Supervisor
-from qmx_apps.volume import Volume
 from qmx_broker.models import Broker, BrokerSettings
 from qmx_broker.sandbox import demo_refusal
 from qmx_broker.service import read_proposals
@@ -279,8 +276,6 @@ def _data_settings(values: Document) -> Document:
 
 WHOLE_SECTIONS: Final[frozenset[str]] = frozenset({"observers", "brokers", "connections"})
 """Sections a write sends whole: an observer mint or revoke, and the broker row lists."""
-VOLUME_KEYS: Final = frozenset({"remote", "bucket", "node", "interval_seconds", "enabled"})
-"""The keys of `[backup]` the mini apps' volume backup reads."""
 
 
 def _check_backup_plan(values: Document, layout: Layout, engine: Document) -> None:
@@ -289,11 +284,6 @@ def _check_backup_plan(values: Document, layout: Layout, engine: Document) -> No
         parse_backup_plan(values, layout, engine)
     except PlanRefused as refused:
         raise ControlError("invalid_backup_settings", str(refused)) from refused
-
-
-def _volume_keys(values: Document) -> Document:
-    """The keys of `[backup]` the mini apps' volume backup reads."""
-    return {key: value for key, value in values.items() if key in VOLUME_KEYS}
 
 
 def _merged(stored: Document, sent: Document) -> Document:
@@ -649,8 +639,6 @@ class ControlService:
         self._lock = threading.RLock()
         self._app_hooks: dict[str, Callable[[str, Document], None]] = {}
         self._apps: Supervisor | None = None
-        self._backup_lock = threading.Lock()
-        self._backup_schedule: BackupSchedule | None = None
         self.tier = tier
         self.node = node
         self.secret_getter = secret_getter
@@ -921,9 +909,6 @@ class ControlService:
                 )
         if section == "backup":
             _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
-            app_settings = _volume_keys(values)
-            if app_settings:
-                BackupSettings.model_validate(app_settings).destination("validation", "validation")
         elif section in ("brokers", "connections"):
             try:
                 parsed = BrokerSettings.model_validate(values)
@@ -1647,62 +1632,8 @@ class ControlService:
                         event_sink=self._app_event,
                         secret_getter=self.secret_getter,
                     )
-                self._backup_schedule = BackupSchedule(
-                    self._backup_settings,
-                    self._backup_apps,
-                    self.apps_backup,
-                    self._backup_failed,
-                )
                 self._apps.attach_library(self.library.landed)
             return self._apps
-
-    def _backup_settings(self) -> BackupSettings | None:
-        values = _volume_keys(self.settings_get("backup"))
-        return BackupSettings.model_validate(values) if values else None
-
-    def _backup_apps(self) -> list[str]:
-        return [
-            str(item["definition"]["id"])
-            for item in self.apps_list()
-            if isinstance(item["definition"], dict)
-            and Volume(self.home, str(item["definition"]["id"])).root.joinpath("app.db").is_file()
-        ]
-
-    def _backup_failed(self, app_id: str, error: Exception) -> None:
-        with self._lock, self._connect() as db:
-            self._event(
-                db, "apps", app_id, {"type": "backup_failed", "error": type(error).__name__}
-            )
-
-    @operation("apps_admin", "backup", "domain_write", rest=("POST", "/api/apps/{app_id}/backup"))
-    def apps_backup(self, app_id: str) -> Document:
-        """Back up now using the UI-editable remote and verify a downloaded restore."""
-        self.app_runtime().get(app_id)
-        settings = self._backup_settings()
-        if settings is None:
-            raise ControlError(
-                "backup_unconfigured", "Configure the backup remote in Settings.", 409
-            )
-        with self._backup_lock:
-            result = backup(Volume(self.home, app_id), settings)
-        with self._lock, self._connect() as db:
-            self._event(db, "apps", app_id, {"type": "backup", **result})
-        return result
-
-    @operation("apps_admin", "restore", "manage", rest=("POST", "/api/apps/{app_id}/restore"))
-    def apps_restore(self, app_id: str, snapshot_id: str) -> Document:
-        """Verify and replace a stopped app's volume from a backup snapshot."""
-        self.app_runtime().get(app_id)
-        settings = self._backup_settings()
-        if settings is None:
-            raise ControlError(
-                "backup_unconfigured", "Configure the backup remote in Settings.", 409
-            )
-        with self._backup_lock:
-            result = restore(self.home, app_id, settings, snapshot_id)
-        with self._lock, self._connect() as db:
-            self._event(db, "apps", app_id, {"type": "restored", **result})
-        return result
 
     def _app_event(self, app_id: str, data: Document) -> None:
         with self._lock, self._connect() as db:
@@ -1722,9 +1653,6 @@ class ControlService:
             self._event(db, "apps", app_id, data)
 
     def close(self) -> None:
-        if self._backup_schedule is not None:
-            self._backup_schedule.close()
-            self._backup_schedule = None
         if self._apps is not None:
             self._apps.close()
             self._apps = None
