@@ -8,8 +8,10 @@ instead of taking the volume back (AD-64, probe P-APP).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import sys
 from contextlib import closing
@@ -239,3 +241,45 @@ class VolumeLease:
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def checksum(path: Path) -> str:
+    with path.open("rb") as file:
+        return hashlib.file_digest(file, "sha256").hexdigest()
+
+
+def _files(root: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink() or path.is_junction():
+            raise AppError("invalid_volume", "Volume files cannot be symlinks or junctions.")
+        if path.is_file() and path.name != "backup.json":
+            files.append(path)
+    return files
+
+
+def snapshot(volume: Volume, root: Path) -> None:
+    """Copy a volume's files to `root`, its databases consistently while they are written, for
+    a handover and the road check's isolated proof."""
+    root.mkdir(parents=True, exist_ok=True)
+    for source in _files(volume.root):
+        relative = source.relative_to(volume.root)
+        if (
+            source.name.endswith(("-wal", "-shm", "-journal", ".lock"))
+            or source.name == "backup.json.tmp"
+            or (relative.parent == Path("data") and source.name.startswith("heartbeat-"))
+            or relative.parts[:2] == ("data", "tmp")
+            or relative.parts[0] == "road"
+        ):
+            continue
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.suffix == ".db":
+            with (
+                closing(sqlite3.connect(f"{source.as_uri()}?mode=ro", uri=True)) as src,
+                closing(sqlite3.connect(target)) as dst,
+            ):
+                src.backup(dst, pages=256)
+                dst.execute("PRAGMA journal_mode=DELETE")
+        else:
+            shutil.copyfile(source, target)

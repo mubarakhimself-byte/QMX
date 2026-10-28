@@ -31,12 +31,11 @@ from qmx_home import Layout
 from qmx_home.versions import open_sqlite
 
 from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
-from qmx_apps.backup import checksum, snapshot
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Definition, Trust, image_files, image_hash
 from qmx_apps.road import PackSink, Road
 from qmx_apps.store import open_store
-from qmx_apps.volume import Lease, Volume, VolumeLease
+from qmx_apps.volume import Lease, Volume, VolumeLease, checksum, snapshot
 from qmx_apps.windows_job import WindowsJob
 
 T = TypeVar("T")

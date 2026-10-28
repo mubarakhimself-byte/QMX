@@ -52,7 +52,6 @@ extend-exclude = []
 "**/tests/**" = ["S101", "S105", "S106", "S107", "PLC0415"]
 "src/qmx_apps/bootstrap.py" = ["S404"]
 "src/qmx_apps/supervisor.py" = ["S404"]
-"src/qmx_apps/backup.py" = ["S404"]
 "src/qmx_apps/road/validation.py" = ["S404"]
 "src/qmx_apps/windows_job.py" = ["PLC0415"]
 

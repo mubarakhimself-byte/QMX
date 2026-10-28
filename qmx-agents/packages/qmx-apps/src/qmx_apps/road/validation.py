@@ -11,10 +11,9 @@ from typing import TYPE_CHECKING, cast
 from pydantic import JsonValue
 from qmx_ledger.journal import fingerprint
 
-from qmx_apps.backup import snapshot
 from qmx_apps.errors import AppError, Document
 from qmx_apps.road.models import Proof, Stage, json_document
-from qmx_apps.volume import Volume, VolumeLease
+from qmx_apps.volume import Volume, VolumeLease, snapshot
 from qmx_apps.windows_job import WindowsJob
 
 if TYPE_CHECKING:

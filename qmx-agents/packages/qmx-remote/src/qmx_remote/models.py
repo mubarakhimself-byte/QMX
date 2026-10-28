@@ -121,26 +121,6 @@ class Target(StrictModel):
         return self
 
 
-class RemoteSettings(StrictModel):
-    default_target: str = ""
-    bucket: str = ""
-    targets: dict[str, Target] = Field(default_factory=dict)
-
-    def place(self, requested: str | None, resources: Resources) -> tuple[str, Target]:
-        name = requested or self.default_target
-        if name not in self.targets:
-            raise RemoteError("Configure the remote target in Settings first.")
-        target = self.targets[name]
-        if resources.gpu > target.gpu:
-            if requested:
-                raise RemoteError("Requested target does not have enough GPUs.")
-            for candidate, node in self.targets.items():
-                if node.gpu >= resources.gpu:
-                    return candidate, node
-            raise RemoteError("Configure a GPU node or provider before submitting this job.")
-        return name, target
-
-
 class Artifact(StrictModel):
     path: str
     sha256: Digest

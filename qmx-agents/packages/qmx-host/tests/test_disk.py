@@ -48,7 +48,9 @@ def test_a_machine_with_room_gives_nothing_away(tmp_path: Path) -> None:
     assert free_on(root, total) == total - 4 * MIB
 
 
-def test_the_floor_is_a_twentieth_of_the_measured_free_space_until_he_raises_it() -> None:
-    assert floor_bytes({}, 1_000 * MIB) == 50 * MIB
+def test_the_floor_is_a_twentieth_of_the_free_space_at_least_1_gib_until_he_raises_it() -> None:
+    assert floor_bytes({}, 1_000 * MIB) == 1024 * MIB
+    assert floor_bytes({}, 100_000 * MIB) == 5_000 * MIB
     assert floor_bytes({"disk.floor_gb": 2}, 1_000 * MIB) == 2 * 1024 * MIB
-    assert floor_bytes({"disk.floor_gb": 0}, 1_000 * MIB) == 50 * MIB
+    assert floor_bytes({"disk": {"floor_gb": 3}}, 1_000 * MIB) == 3 * 1024 * MIB
+    assert floor_bytes({"disk.floor_gb": 0}, 100_000 * MIB) == 5_000 * MIB

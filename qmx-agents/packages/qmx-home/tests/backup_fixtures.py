@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from qmx_home import Layout, resolve
+from qmx_home.backup.plan import STORAGE_POLICY, Keep, Policy, Storage
 from qmx_home.files import long_path
 
 STORES = (
@@ -35,6 +36,8 @@ SECRETS = (
     "vault/pairing-key.previous",
     "vault/run-pass-key",
     "vault/tokens.json",
+    "vault-store.json",
+    "passes/revoked.json",
     "rclone.conf",
     "claude/.credentials.json",
     "claude/.claude.json",
@@ -86,10 +89,14 @@ def filled_folder(
     once_bytes: int = 256 * 1024,
     long_path_file: bool = True,
     secrets: bool = True,
+    writers: bool = False,
 ) -> Filled:
-    """A labelled QMX folder at `root` (made empty), filled as the module says."""
+    """A labelled QMX folder at `root` (made empty), filled as the module says. With `writers`
+    it is also filled through each package's own writers (`with_writers`)."""
     layout = resolve(root, create=True)
     data = layout.data
+    if writers:
+        with_writers(layout)
     made = tuple(STORES[:stores])
     for number, path in enumerate(made):
         _store(data / path, rows=max(1, store_bytes // 1024), seed=number)
@@ -139,8 +146,6 @@ def filled_folder(
             _write(data, path, b"left out")
     _write(data, "settings.toml", b'[engine]\nhost_name = "pc"\n')
     _write(data, "chats/c1.json", b'{"title": "first chat"}')
-    _write(data, "vault-store.json", b'{"sealed": "ciphertext"}')
-    _write(data, "passes/revoked.json", b"[]")
     _write(data, "apps/demo/data/state.json", b'{"n": 1}')
     _write(data, "apps/demo/road/r.json", b'{"road": 1}')
     _write(data, "claude/projects/p/chat.jsonl", b'{"role": "user"}\n')
@@ -158,6 +163,76 @@ def filled_folder(
         planted["../keys/vault.key"] = f"planted-vault-key-{uuid.uuid4().hex}".encode()
         _write(layout.root, "keys/vault.key", planted["../keys/vault.key"])
     return Filled(layout, made, tuple(once), planted, long, junction)
+
+
+WRITER_APP = "writer-demo"
+WRITER_CHAT = "chat-from-the-writer"
+
+
+def with_writers(layout: Layout) -> None:
+    """Write through each package's own writers: every store of `STORES`, every `Layout` part,
+    a mini app's volume (`Volume.create`) with a road step's files, both Claude homes with the
+    relayed `projects/` link (`ensure_homes`), a chat transcript and its record, a Library put of
+    a recipe kind and of a note, and a price month (`SeriesStore`)."""
+    from qma.harness.home import QmxHome, ensure_homes, record_path, session_id
+    from qmf.core import is_ok
+    from qmf.data.calendar_feed import CalendarEvent, calendar_key, land_calendar
+    from qmf.data.series import SeriesStore
+    from qmx_apps.volume import Volume
+    from qmx_engine.ledger import redact
+    from qmx_library.port import Draft
+    from qmx_library.principal import Principal
+    from qmx_library.store import Store
+
+    from qmx_home.stores import STORES as KNOWN
+
+    data = layout.data
+    for store in KNOWN.values():
+        if store.path and not (data / store.path).exists():
+            _store(data / store.path, rows=2, seed=7)
+    for part in (layout.keys, layout.cache, layout.logs):
+        _write(part, "made-by-the-host.txt", b"part")
+    home = QmxHome(data)
+    ensure_homes(home)
+    chat = session_id("0193c0de-0000-7000-8000-000000000001")
+    _write(home.plan_dir, f"projects/D--work/{chat}.jsonl", b'{"type": "user"}\n')
+    _write(home.plan_dir, "settings.json", b"{}")
+    record_path(home, chat).write_text('{"title": "from the writer"}', encoding="utf-8")
+    volume = Volume(data, WRITER_APP)
+    volume.create(agents=True)
+    _write(volume.root, "road/steps.jsonl", b'{"step": 1}\n')
+    _write(volume.root, "logs/app.log", b"started\n")
+    with Store.open(data / "library", redactor=redact) as store:
+        operator = Principal("operator")
+        store.put(
+            operator,
+            Draft("strategy", "s-writer", title="a recipe"),
+            on="refs/drafts/s-writer",
+            expected_head=None,
+        )
+        store.put(
+            operator, Draft("note", "n-writer", title="his note"), on="main", expected_head=None
+        )
+    month = calendar_key(2026, 9)
+    assert is_ok(month)
+    at = 1_789_000_000_000_000_000
+    landed = land_calendar(
+        SeriesStore(data / "market" / "series"),
+        month.value,
+        [
+            CalendarEvent(
+                source="news-calendar",
+                source_native_id="us-nfp",
+                revision="r1",
+                event_time_ns=at,
+                known_at_ns=at,
+                impact_label="High",
+                currency="USD",
+                title="Non-Farm Payrolls",
+            )
+        ],
+    )
+    assert is_ok(landed)
 
 
 def rows(path: Path) -> dict[str, int]:
@@ -206,6 +281,8 @@ def _write(base: Path, relative: str, data: bytes) -> str:
 def _junction(target: Path, link: Path) -> str:
     target.mkdir(parents=True, exist_ok=True)
     link.parent.mkdir(parents=True, exist_ok=True)
+    if link.is_junction() or link.is_symlink():
+        return "claude-relayed/projects"
     if os.name == "nt":
         import _winapi
 
@@ -213,3 +290,11 @@ def _junction(target: Path, link: Path) -> str:
     else:
         os.symlink(target, link, target_is_directory=True)
     return "claude-relayed/projects"
+
+
+def folder(
+    path: Path, ident: str = "usb", *, every: str = "1d", keep: Keep | None = None
+) -> Storage:
+    """A folder storage at `path`, as an `[engine]` row with `can = ["keep"]` reads."""
+    policy = Policy(every=every, keep=keep or STORAGE_POLICY.keep)
+    return Storage(ident, ident, "folder", path, policy)

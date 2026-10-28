@@ -1,17 +1,19 @@
-"""One backup round: a copy of `data/` into the quick undo, sent to every place that is due
-(design 62 C2, Appendix D).
+"""One round: a copy of `data/` into This PC's copies, sent to every storage that is due
+(design 06 sections 4 and 5).
 
 A round runs under `backups/backups.lock`, one at a time per QMX folder. It first removes what a
-killed round left, makes one copy (`snapshot.make`), writes it to the quick undo unless nothing
-changed, then sends it to each due target: the files its pool lacks, the sealed key copy when
-there is one, `backup.toml`, and the manifest last. Only then does it thin each place by its keep
-rule and sweep its pool. Every round is one line in `backups/backups.jsonl`, which is also the
-record the fork guard and `due` read: no other state file is kept.
+killed round left, makes one copy (`snapshot.make`) of every class some place keeps, writes This
+PC's part of it (when This PC is due) unless nothing changed, then sends each due storage its own
+part: the files its pool lacks, `backup.toml`, and the manifest last. Only then does it thin each
+place by its keep rule and sweep its pool. With `[backup] on = false` a round copies nothing and
+deletes nothing. Every round is one line in `backups/backups.jsonl`, which is also the record the
+fork guard and `due` read: no other state file is kept.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import time as clock
 from collections.abc import Callable, Mapping, Sequence
@@ -22,7 +24,7 @@ from typing import Final, Literal, cast
 
 from qmx_home import Label, Layout
 from qmx_home.backup.keep import kept, released, when
-from qmx_home.backup.plan import Every, Plan, PlanRefused, Target, same_drive, target_root
+from qmx_home.backup.plan import Plan, PlanRefused, Storage, same_drive, storage_root
 from qmx_home.backup.repository import (
     ABOUT,
     Entry,
@@ -31,19 +33,29 @@ from qmx_home.backup.repository import (
     Mismatch,
     Unreadable,
 )
-from qmx_home.backup.snapshot import Changing, NoRoom, make
-from qmx_home.files import hold, plain
-from qmx_home.versions import FLOOR_BYTES, log_line, log_lines
+from qmx_home.backup.snapshot import (
+    Changing,
+    NoRoom,
+    RoadLease,
+    library_kinds,
+    make,
+    needs_kinds,
+)
+from qmx_home.backup.snapshot import only as part_for
+from qmx_home.classes import SENT, Class
+from qmx_home.files import floor_of, hold, plain
+from qmx_home.versions import log_line, log_lines
 
 LOCK: Final = "backups.lock"
 QUICK: Final = "quick"
-SEALED: Final = "keys.sealed.json"
 STAMP: Final = "%Y%m%dT%H%M%S%fZ"
+_STAMP: Final = re.compile(r"\d{8}T\d{12}Z")
+OFF: Final = (
+    "Sync to my storage is off in Settings, so QMX made no copy and deleted none; turn it on to "
+    "copy again"
+)
 
 type Result = Literal["copied", "unchanged", "refused", "skipped"]
-type SealedKeys = Callable[[], tuple[bytes, str]]
-"""The sealed key copy's bytes and a digest of what it seals; a changed digest makes a new copy
-even when the data did not change (B7)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,6 +74,10 @@ class Placed:
     seconds: float = 0.0
     partial: bool = False
     """The copy lacks a file it should hold; its manifest says which."""
+    other_disk: bool = False
+    """The place is a storage on another disk than the QMX folder's."""
+    save: tuple[Class, ...] = SENT
+    """The classes the place keeps."""
 
     def document(self) -> dict[str, object]:
         return {
@@ -75,6 +91,8 @@ class Placed:
             "bytes": self.bytes,
             "seconds": round(self.seconds, 3),
             "partial": self.partial,
+            "other_disk": self.other_disk,
+            "save": list(self.save),
         }
 
 
@@ -110,17 +128,16 @@ class RoundReport:
         }
 
 
-def due(last: datetime | None, now: datetime, every: Every, at: time) -> bool:
-    """Whether a place copied last at `last` is due at `now`. Hourly: an hour after the last
-    copy. Daily: once `at` (local time, in `now`'s zone) has passed since the last copy. Weekly:
-    at the first `at` six days after the last copy. A PC that was off is due at its next
-    start."""
+def due(last: datetime | None, now: datetime, every: timedelta, at: time) -> bool:
+    """Whether a place copied last at `last` is due at `now`. Under a day: `every` after the
+    last copy. A day or more: at the first `at` (local time, in `now`'s zone) once `every` less a
+    day has passed since the last copy. A PC that was off is due at its next start."""
     if last is None:
         return True
     last = last.astimezone(now.tzinfo)
-    if every == "hour":
-        return now - last >= timedelta(hours=1)
-    after = last + timedelta(days=6) if every == "week" else last
+    if every < timedelta(days=1):
+        return now - last >= every
+    after = last + every - timedelta(days=1)
     slot = datetime.combine(after.date(), at, tzinfo=now.tzinfo)
     if slot <= after:
         slot += timedelta(days=1)
@@ -134,15 +151,24 @@ def run_round(
     now: datetime,
     floor: int,
     only: str | None = None,
-    sealed_keys: SealedKeys | None = None,
+    asked: bool = False,
     progress: Callable[[str], None] | None = None,
+    road_lease: RoadLease | None = None,
 ) -> RoundReport:
-    """One round at `now`: the quick undo, and every target that is due (or only the target
-    `only`, due or not). `floor` is the room the host keeps on the folder's drive; the quick
-    undo never takes the drive below it or below 1 GiB. Raises Busy while another round holds
-    the lock, and PlanRefused when `only` names no target."""
+    """One round at `now`: This PC's copies when due or `asked` (he asked for the round), and
+    every storage that is due (or only the storage `only`, due or not). `floor` is the local
+    floor on the folder's drive, which This PC's copies never cross. `road_lease` holds a mini
+    app's road lease while its `road/` is copied. Raises Busy while another round holds the lock,
+    and PlanRefused when `only` names no storage."""
     return _round(
-        layout, plan, now=now, floor=floor, only=only, sealed_keys=sealed_keys, progress=progress
+        layout,
+        plan,
+        now=now,
+        floor=floor,
+        only=only,
+        asked=asked,
+        progress=progress,
+        road_lease=road_lease,
     )
 
 
@@ -153,10 +179,11 @@ def quick(
     floor: int,
     leave_out: Sequence[str] = (),
     now: datetime | None = None,
+    road_lease: RoadLease | None = None,
 ) -> RoundReport:
-    """One copy into the quick undo at once, tagged `why`, written even when nothing changed
-    (a copy taken before an upgrade). It thins nothing: the next round thins by his own keep
-    rule. Raises Busy while a round holds the lock."""
+    """One copy of every sent class into This PC's copies at once, tagged `why`, written even
+    when nothing changed (a copy taken before an upgrade). It thins nothing: the next round thins
+    by his own keep rule. Raises Busy while a round holds the lock."""
     return _round(
         layout,
         Plan(leave_out=tuple(leave_out)),
@@ -164,19 +191,20 @@ def quick(
         floor=floor,
         why=why,
         force=True,
+        road_lease=road_lease,
     )
 
 
-def carry_on(layout: Layout, target: Target) -> str:
-    """His choice to keep sending to a place the fork guard refused: the place's newest copy is
-    taken as this folder's own from now on. The line to show."""
-    repo = FolderRepository(target_root(target.path, _label(layout).home_id))
+def carry_on(layout: Layout, storage: Storage) -> str:
+    """His choice to keep sending to a storage the fork guard refused: the storage's newest copy
+    is taken as this folder's own from now on. The line to show."""
+    repo = FolderRepository(storage_root(cast("Path", storage.path), _label(layout).home_id))
     stamps = repo.copies()
     log_line(
         layout,
         {
             "kind": "carry-on",
-            "id": target.id,
+            "id": storage.id,
             "key": place_key(repo),
             "stamp": stamps[-1] if stamps else None,
         },
@@ -193,8 +221,9 @@ def _round(
     why: str = "round",
     force: bool = False,
     only: str | None = None,
-    sealed_keys: SealedKeys | None = None,
+    asked: bool = False,
     progress: Callable[[str], None] | None = None,
+    road_lease: RoadLease | None = None,
 ) -> RoundReport:
     started = clock.monotonic()
     told = progress or _quiet
@@ -204,21 +233,44 @@ def _round(
         quick_repo.clean()
         log = log_lines(layout)
         home_id = _label(layout).home_id
-        if only is not None and not any(t.id == only for t in plan.targets):
-            raise PlanRefused(f"there is no backup place {only!r} in Settings")
+        if only is not None and not any(s.id == only for s in plan.folders):
+            raise PlanRefused(f"there is no storage {only!r} in Settings")
+        if not plan.on and not force:
+            places = (
+                Placed(QUICK, quick_repo.where, "skipped", OFF),
+                *(
+                    Placed(s.id, plain(s.path), "skipped", OFF, storage_key(s, home_id))
+                    for s in plan.folders
+                ),
+            )
+            return _logged(layout, RoundReport(_stamp(now, (quick_repo,), log), why, places, 0.0))
         chosen = [
-            target
-            for target in plan.targets
-            if (target.id == only)
+            storage
+            for storage in plan.folders
+            if (storage.id == only)
             or (
                 only is None
-                and target.on
-                and due(_last(log, _target_key(target, home_id)), now, target.every, target.at)
+                and storage.policy.on
+                and due(
+                    _last(log, storage_key(storage, home_id)),
+                    now,
+                    storage.policy.interval,
+                    storage.policy.at,
+                )
             )
         ]
+        pc_due = (
+            force
+            or asked
+            or only is not None
+            or due(_last(log, QUICK), now, plan.pc.interval, plan.pc.at)
+        )
         previous = _newest(quick_repo)
-        stamp = _stamp(now, quick_repo)
-        quick_where = quick_repo.where
+        repos = [quick_repo, *(_repository(s, home_id) for s in chosen)]
+        stamp = _stamp(now, repos, log)
+        saves = [plan.pc.save, *(s.policy.save for s in chosen)]
+        union: tuple[Class, ...] = tuple(c for c in SENT if any(c in save for save in saves))
+        kinds = library_kinds(layout.data) if needs_kinds(*saves) else {}
         try:
             copy = make(
                 layout,
@@ -226,32 +278,43 @@ def _round(
                 stamp=stamp,
                 why=why,
                 leave_out=plan.leave_out,
-                keep_free=max(FLOOR_BYTES, floor),
+                save=union,
+                kinds=kinds,
+                keep_free=floor,
                 progress=told,
+                road_lease=road_lease,
             )
         except (NoRoom, Changing) as refused:
             places = (
-                Placed(QUICK, quick_where, "refused", str(refused)),
+                Placed(QUICK, quick_repo.where, "refused", str(refused)),
                 *(
                     Placed(
-                        t.id,
-                        plain(t.path),
+                        s.id,
+                        plain(s.path),
                         "skipped",
-                        f"no copy was made, so none went to {plain(t.path)}",
-                        _target_key(t, home_id),
+                        f"no copy was made, so none went to {plain(s.path)}",
+                        storage_key(s, home_id),
                     )
-                    for t in chosen
+                    for s in chosen
                 ),
             )
             return _logged(layout, RoundReport(stamp, why, places, clock.monotonic() - started))
-        placed = [_quick_place(quick_repo, copy, previous, force, started)]
-        sealed = sealed_keys() if sealed_keys is not None and chosen else None
-        for target in chosen:
-            told(f"sending the copy to {plain(target.path)}")
-            placed.append(_send(layout, target, copy, quick_repo, sealed, log, home_id))
+        if pc_due:
+            pc_copy = part_for(copy, plan.pc.save, kinds)
+            placed = [_quick_place(quick_repo, pc_copy, previous, force, started)]
+        else:
+            line = (
+                f"This PC's copies are made every {plan.pc.every}; the newest in "
+                f"{quick_repo.where} is not that old yet"
+            )
+            placed = [Placed(QUICK, quick_repo.where, "skipped", line)]
+        for storage in chosen:
+            told(f"sending the copy to {plain(storage.path)}")
+            part = part_for(copy, storage.policy.save, kinds)
+            placed.append(_send(layout, plan, storage, part, quick_repo, log, home_id))
         if not force and any(place.result == "copied" for place in placed):
-            placed[0] = _thin_quick(quick_repo, plan, log, placed, now)
-            _thin_pre_change(layout, log, placed, now)
+            placed[0] = _thin_quick(quick_repo, plan, log, placed)
+            _thin_pre_change(layout, log, placed)
         return _logged(layout, RoundReport(stamp, why, tuple(placed), clock.monotonic() - started))
 
 
@@ -263,7 +326,7 @@ def _quick_place(
     started: float,
 ) -> Placed:
     if not force and previous is not None and previous.files == copy.files:
-        line = f"nothing changed since the last copy; the quick undo in {repo.where} holds it"
+        line = f"nothing changed since the last copy; This PC's copies in {repo.where} hold it"
         return Placed(
             QUICK, repo.where, "unchanged", line, stamp=previous.stamp, partial=_partial(previous)
         )
@@ -272,7 +335,7 @@ def _quick_place(
     new = [e for e in copy.entries if e.at == "pool" and (e.path, e.sha256) not in old]
     size = sum(e.size for e in new)
     line = (
-        f"copied {_count(len(new), 'changed file')} ({_mb(size)}) into the quick undo in "
+        f"copied {_count(len(new), 'changed file')} ({_mb(size)}) into This PC's copies in "
         f"{repo.where}"
     ) + _lacks(cast("list[str]", copy.header.get("unread", [])))
     return Placed(
@@ -290,20 +353,22 @@ def _quick_place(
 
 def _send(
     layout: Layout,
-    target: Target,
+    plan: Plan,
+    storage: Storage,
     copy: Manifest,
     quick_repo: FolderRepository,
-    sealed: tuple[bytes, str] | None,
     log: Sequence[Mapping[str, object]],
     home_id: str,
 ) -> Placed:
-    """Send one copy to one target. A file whose bytes do not match its hash is left out of
-    the target's copy by name, and the copy is marked partial; the rest is sent. The place's
+    """Send one copy to one folder storage. A file whose bytes do not match its hash is left out
+    of the storage's copy by name, and the copy is marked partial; the rest is sent. The place's
     result is logged as soon as its manifest is up, so a round killed later never makes this
     folder's own copy look like another folder's."""
     started = clock.monotonic()
-    repo = FolderRepository(target_root(target.path, home_id))
+    path = cast("Path", storage.path)
+    repo = _repository(storage, home_id)
     key, where = place_key(repo), repo.where
+    apart = not same_drive(storage, layout)
 
     def placed(
         result: Result,
@@ -315,13 +380,26 @@ def _send(
         partial: bool = False,
     ) -> Placed:
         seconds = clock.monotonic() - started
-        return Placed(target.id, where, result, line, key, stamp, files, size, seconds, partial)
+        return Placed(
+            storage.id,
+            where,
+            result,
+            line,
+            key,
+            stamp,
+            files,
+            size,
+            seconds,
+            partial,
+            apart,
+            storage.policy.save,
+        )
 
-    anchor = Path(target.path.anchor or "/")
+    anchor = Path(path.anchor or "/")
     if not anchor.exists():
         return placed(
             "skipped",
-            f"{plain(target.path)} is not there (is its drive plugged in?); the copy waits for it",
+            f"{plain(path)} is not there (is its drive plugged in?); the copy waits for it",
         )
     try:
         refusal = _guard(log, key, repo)
@@ -329,11 +407,9 @@ def _send(
             return placed("refused", refusal)
         repo.clean()
         newest = _newest(repo)
-        keys = {"keys": sealed[1]} if sealed else {}
         if (
             newest is not None
             and _intended(newest) == copy.files
-            and newest.header.get("keys") == keys.get("keys")
             and all(repo.pool_has(entry.sha256) for entry in newest.entries)
         ):
             if repo.about() is None:
@@ -348,11 +424,13 @@ def _send(
         missing = [e for e in unique.values() if not repo.pool_has(e.sha256)]
         need = sum(e.size for e in missing) + len(copy.dump())
         room = repo.room()
-        if room < need:
+        keep_free = floor_of(plan.floor_gb, room)
+        if room - need < keep_free:
             return placed(
                 "refused",
-                f"{where} needs {_mb(need)} for this copy and has {_mb(room)} free; nothing was "
-                "written there. Free some space on it, or name another place in Settings",
+                f"{where} needs {_mb(need)} for this copy and its drive has {_mb(room)} free; "
+                f"QMX keeps at least {_whole_mb(keep_free)} free there, so nothing was written. "
+                "Free some space on it, or connect another storage in Settings",
             )
         written, damaged = 0, set[str]()
         for entry in missing:
@@ -366,17 +444,17 @@ def _send(
             except Mismatch:
                 damaged.add(entry.sha256)
         skipped = [e for e in copy.entries if e.sha256 in damaged]
-        held = _without(copy, skipped, keys)
+        held = _without(copy, skipped)
         repo.set_about(_about(home_id, layout, held))
-        repo.put_copy(held, {SEALED: sealed[0]} if sealed else None)
-        log_line(layout, {"kind": "sent", "id": target.id, "key": key, "stamp": held.stamp})
-        thinned = _thin(repo, target, log, key)
+        repo.put_copy(held)
+        log_line(layout, {"kind": "sent", "id": storage.id, "key": key, "stamp": held.stamp})
+        thinned = _thin(repo, storage, log, key)
     except OSError as failed:
         return placed(
             "refused", f"the copy to {where} stopped: {_why(failed)}; the next round tries again"
         )
     line = f"copied {_count(len(missing) - len(damaged), 'file')} ({_mb(written)}) to {where}"
-    if same_drive(target, layout):
+    if not apart:
         line += "; it is on the same drive as the QMX folder, so it does not survive that disk"
     if thinned:
         line += f"; {thinned}"
@@ -401,16 +479,14 @@ DAMAGED: Final = (
 )
 
 
-def _without(copy: Manifest, skipped: Sequence[Entry], keys: Mapping[str, str]) -> Manifest:
-    """The copy a target holds: every file in its pool, less the files it could not take, which
-    its header names, so the copy reads as partial and a later round knows what it meant to
-    hold."""
+def _without(copy: Manifest, skipped: Sequence[Entry]) -> Manifest:
+    """The copy a storage holds: every file in its pool, less the files it could not take,
+    which its header names, so the copy reads as partial and a later round knows what it meant
+    to hold."""
     if not skipped:
-        return copy.pooled(**keys)
+        return copy.pooled()
     gone = {entry.path for entry in skipped}
-    pooled = copy.pooled(
-        **keys, partial=True, skipped=[[entry.path, entry.sha256] for entry in skipped]
-    )
+    pooled = copy.pooled(partial=True, skipped=[[entry.path, entry.sha256] for entry in skipped])
     return Manifest(pooled.header, tuple(e for e in pooled.entries if e.path not in gone))
 
 
@@ -464,7 +540,7 @@ def _guard(log: Sequence[Mapping[str, object]], key: str, repo: FolderRepository
         return (
             f"{repo.where} holds a copy another QMX folder made since this one last sent there: "
             f"the newest, {newest}, is from {made}. Carry on to keep sending this folder's copies "
-            "there, or name another place"
+            "there, or pick another storage"
         )
     return None
 
@@ -507,12 +583,12 @@ def _drilled(log: Sequence[Mapping[str, object]], key: str) -> str | None:
 
 
 def _thin(
-    repo: FolderRepository, target: Target, log: Sequence[Mapping[str, object]], key: str
+    repo: FolderRepository, storage: Storage, log: Sequence[Mapping[str, object]], key: str
 ) -> str:
     """Drop the copies the keep rule lets go, then sweep the pool. Returns a line when the sweep
     could not run."""
     readable, whole = _readable(repo)
-    keep = kept(list(readable), target.keep, drilled=_drilled(log, key), held=whole)
+    keep = kept(list(readable), storage.policy.keep, drilled=_drilled(log, key), held=whole)
     for stamp in readable:
         if stamp not in keep:
             repo.drop(stamp)
@@ -538,16 +614,13 @@ def _thin_quick(
     plan: Plan,
     log: Sequence[Mapping[str, object]],
     placed: Sequence[Placed],
-    now: datetime,
 ) -> Placed:
-    elsewhere = _target_copies(log, placed)
+    elsewhere = _copies_elsewhere(log, placed)
     readable, held = _readable(repo)
     for stamp, manifest in readable.items():
-        if manifest.header.get("why") == "before-upgrade" and not released(
-            when(stamp), elsewhere, now
-        ):
+        if manifest.header.get("why") == "before-upgrade" and not released(when(stamp), elsewhere):
             held.add(stamp)
-    keep = kept(list(readable), plan.quick_undo, drilled=_drilled(log, QUICK), held=held)
+    keep = kept(list(readable), plan.pc.keep, drilled=_drilled(log, QUICK), held=held)
     for stamp in readable:
         if stamp not in keep:
             repo.drop(stamp)
@@ -559,11 +632,11 @@ def _thin_quick(
 
 
 def _thin_pre_change(
-    layout: Layout, log: Sequence[Mapping[str, object]], placed: Sequence[Placed], now: datetime
+    layout: Layout, log: Sequence[Mapping[str, object]], placed: Sequence[Placed]
 ) -> None:
-    """Remove each store's pre-change copy (LF3's `backups/pre-*`) once a copy to another place
-    made after it is 30 days old (design 62 B3)."""
-    elsewhere = _target_copies(log, placed)
+    """Remove each store's pre-change copy (LF3's `backups/pre-*`) once a whole copy made after
+    it reached a storage on another disk."""
+    elsewhere = _copies_elsewhere(log, placed)
     for line in log:
         if line.get("kind") != "pre-change":
             continue
@@ -575,20 +648,32 @@ def _thin_pre_change(
         ):
             continue
         made = datetime.fromisoformat(str(line["at"]))
-        if released(made, elsewhere, now):
+        if released(made, elsewhere):
             shutil.rmtree(folder)
 
 
-def _target_copies(log: Sequence[Mapping[str, object]], placed: Sequence[Placed]) -> list[datetime]:
-    moments = [
-        when(str(place.get("stamp")))
+def _copies_elsewhere(
+    log: Sequence[Mapping[str, object]], placed: Sequence[Placed]
+) -> list[datetime]:
+    """When each whole copy that reached a storage on another disk was made: one that lacks no
+    file and holds every sent class. A log line older than `save` held them all."""
+    rows = [
+        place
         for line in log
         if line.get("kind") == "round"
         for place in cast("list[dict[str, object]]", line.get("places", []))
-        if place.get("id") != QUICK and place.get("result") == "copied" and place.get("stamp")
     ]
-    moments += [when(p.stamp) for p in placed if p.id != QUICK and p.result == "copied" and p.stamp]
-    return moments
+    rows += [p.document() for p in placed]
+    return [
+        when(str(row["stamp"]))
+        for row in rows
+        if row.get("id") != QUICK
+        and row.get("result") == "copied"
+        and row.get("other_disk") is True
+        and row.get("partial") is not True
+        and set(cast("list[str]", row.get("save", SENT))) >= set(SENT)
+        and row.get("stamp")
+    ]
 
 
 def _newest(repo: FolderRepository) -> Manifest | None:
@@ -601,12 +686,18 @@ def _newest(repo: FolderRepository) -> Manifest | None:
     return None
 
 
-def _stamp(now: datetime, repo: FolderRepository) -> str:
-    """The copy's stamp: `now` in UTC, after every copy the quick undo holds."""
+def _stamp(
+    now: datetime, repos: Sequence[FolderRepository], log: Sequence[Mapping[str, object]]
+) -> str:
+    """The copy's stamp: `now` in UTC, after the newest copy on every place it joins and after
+    the last stamp in the backup log, so a clock moved back never makes this folder's own copy
+    look like another folder's."""
     stamp = now.astimezone(UTC).strftime(STAMP)
-    stamps = repo.copies()
-    if stamps and stamp <= stamps[-1]:
-        stamp = (when(stamps[-1]) + timedelta(microseconds=1)).strftime(STAMP)
+    seen = [s for repo in repos for s in repo.copies()[-1:]]
+    seen += [str(line["stamp"]) for line in log if _STAMP.fullmatch(str(line.get("stamp", "")))]
+    latest = max(seen, default=None)
+    if latest is not None and stamp <= latest:
+        stamp = (when(latest) + timedelta(microseconds=1)).strftime(STAMP)
     return stamp
 
 
@@ -615,8 +706,12 @@ def place_key(repo: FolderRepository) -> str:
     return f"folder:{os.path.normcase(os.path.abspath(repo.root))}"
 
 
-def _target_key(target: Target, home_id: str) -> str:
-    return place_key(FolderRepository(target_root(target.path, home_id)))
+def storage_key(storage: Storage, home_id: str) -> str:
+    return place_key(_repository(storage, home_id))
+
+
+def _repository(storage: Storage, home_id: str) -> FolderRepository:
+    return FolderRepository(storage_root(cast("Path", storage.path), home_id))
 
 
 def _label(layout: Layout) -> Label:
@@ -638,6 +733,11 @@ def _count(count: int, word: str) -> str:
 
 def _mb(count: int) -> str:
     return f"{max(count, 0) / (1 << 20):,.1f} MB"
+
+
+def _whole_mb(count: int) -> str:
+    """As every floor refusal names the floor."""
+    return f"{max(count, 0) / (1 << 20):,.0f} MB"
 
 
 def _why(error: OSError) -> str:

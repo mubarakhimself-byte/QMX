@@ -239,7 +239,7 @@ def rest(log: Log, out: Path) -> None:
     found: dict[str, Any] = {}
     with TestClient(create_app(service, "cat-rest-bearer")) as client:
         for name, verb, path in table:
-            if name in ("sessions_stream", "backup_weekly"):
+            if name == "sessions_stream":
                 continue
             url = re.sub(r"\{(\w+)\}", lambda m: str(SAMPLES[m.group(1)]), path)
             response = client.request(

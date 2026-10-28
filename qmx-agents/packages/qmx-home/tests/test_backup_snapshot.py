@@ -40,13 +40,11 @@ def test_a_copy_holds_every_file_but_the_left_out_the_secret_and_the_links(tmp_p
     copy = make(filled.layout, previous=None, stamp=STAMP)
 
     paths = {entry.path for entry in copy.entries}
-    assert len(paths) == 67
+    assert len(paths) == 65
     assert not paths & {*LEFT_OUT, *SECRETS}
     assert not [p for p in paths if p.startswith("claude-relayed/")]
     assert {
         "library/checkout/main/i0/.checkout.json",
-        "vault-store.json",
-        "passes/revoked.json",
         "claude/projects/p/chat.jsonl",
         f"{MONTH}/2026-02/open.parquet",
         f"{MONTH}/2026-02/state.json",
@@ -85,7 +83,7 @@ def test_each_store_is_copied_as_committed_with_its_row_counts_and_never_checkpo
     assert after == before, "the copy never checkpoints the live store"
 
 
-def test_a_second_copy_of_an_unchanged_folder_reads_no_file_again(
+def test_a_second_copy_of_an_unchanged_folder_reads_only_settings_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     filled = filled_folder(tmp_path / "QMX")
@@ -111,7 +109,7 @@ def test_a_second_copy_of_an_unchanged_folder_reads_no_file_again(
 
     second = make(filled.layout, previous=first, stamp="20261027T040000000000Z")
 
-    assert opened == []
+    assert opened == [str(filled.layout.data / "settings.toml")]
     assert second.files == first.files
     assert sorted(p.name for p in pool.pool.rglob("*") if p.is_file()) == pooled
 

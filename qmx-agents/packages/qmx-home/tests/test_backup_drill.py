@@ -12,11 +12,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from backup_fixtures import filled_folder
+from backup_fixtures import filled_folder, folder
 
 from qmx_home import Label, Layout
 from qmx_home.backup import restore
-from qmx_home.backup.plan import Plan, Target
+from qmx_home.backup.plan import Plan
 from qmx_home.backup.repository import FolderRepository, Manifest, Unreadable
 from qmx_home.backup.round import run_round
 from qmx_home.files import long_path, sha256_of
@@ -27,7 +27,7 @@ NOW = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)
 
 def copied(tmp_path: Path) -> tuple[Layout, Plan, FolderRepository]:
     filled = filled_folder(tmp_path / "QMX", files=4, secrets=False)
-    plan = Plan(targets=(Target("usb", "folder", tmp_path / "usb"),))
+    plan = Plan(storages=(folder(tmp_path / "usb"),))
     run_round(filled.layout, plan, now=NOW, floor=0)
     home_id = Label.parse(filled.layout.label.read_text(encoding="utf-8")).home_id
     return filled.layout, plan, FolderRepository(tmp_path / "usb" / "QMX-backup" / home_id)
@@ -35,9 +35,9 @@ def copied(tmp_path: Path) -> tuple[Layout, Plan, FolderRepository]:
 
 def data_hashes(layout: Layout) -> dict[str, str]:
     found: dict[str, str] = {}
-    for folder, _, names in os.walk(long_path(layout.data)):
+    for where, _, names in os.walk(long_path(layout.data)):
         for name in names:
-            path = Path(folder, name)
+            path = Path(where, name)
             found[path.relative_to(long_path(layout.data)).as_posix()] = sha256_of(path)
     return found
 

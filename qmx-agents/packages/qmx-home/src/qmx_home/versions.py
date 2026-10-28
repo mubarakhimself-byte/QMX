@@ -25,6 +25,7 @@ import os
 import shutil
 import sqlite3
 import time
+import tomllib
 from collections.abc import Mapping, Sequence
 from contextlib import closing, suppress
 from dataclasses import dataclass, replace
@@ -34,12 +35,12 @@ from pathlib import Path
 from typing import Final, Literal, cast
 
 from qmx_home import LABEL, TREE, Label, Layout, restore_hint
+from qmx_home.files import MIN_FLOOR, local_floor
 from qmx_home.stores import APPLICATION_ID, STORES, Store, Version
 
-FLOOR_BYTES: Final = 1 << 30
-"""The free space a pre-change copy leaves on its drive at least. A copy that would go below it is
-refused before it starts, so a backup never fills the drive his data lives on. A safety floor for
-the disk, not a limit on what he keeps."""
+FLOOR_BYTES: Final = MIN_FLOOR
+"""The least free space any local copy leaves on its drive; the local floor (`local_floor`) is
+never below it. A safety floor for the disk, not a limit on what he keeps."""
 LOG: Final = "backups.jsonl"
 """The backup log in `backups/`: one line per pre-change copy and per failed upgrade step."""
 SQLITE_HEADER: Final = b"SQLite format 3\x00"
@@ -247,8 +248,9 @@ def snapshot(
     copy. `closed` says no process has the stores open (the layout step): then every file is
     copied byte for byte, a SQLite file with its `-wal`, so no connection makes or removes a file
     beside a store about to move. Refuses before it starts when the copy would leave its drive
-    below `FLOOR_BYTES`, and removes a copy that fails part way (a full disk included). Writes
-    nothing outside `backups/`, and logs the copy's bytes and seconds in `backups/backups.jsonl`."""
+    below the local floor (`local_floor` of `[engine]`), and removes a copy that fails part way
+    (a full disk included). Writes nothing outside `backups/`, and logs the copy's bytes and
+    seconds in `backups/backups.jsonl`."""
     started = time.monotonic()
     named = [*files, *(f.with_name(f"{f.name}-wal") for f in files)] if closed else files
     present = [file for file in named if file.is_file()]
@@ -260,10 +262,11 @@ def snapshot(
         free = shutil.disk_usage(layout.root).free
     except OSError as refused:
         raise SnapshotFailed(f"cannot use {layout.root}: {refused.strerror}") from None
-    if free - needed < FLOOR_BYTES:
+    floor = local_floor(_engine_settings(layout), free)
+    if free - needed < floor:
         raise SnapshotFailed(
             f"the copy needs {_mb(needed)} and the drive holding {layout.root} has {_mb(free)} "
-            f"free; QMX keeps at least {_mb(FLOOR_BYTES)} free there. Free some space and start "
+            f"free; QMX keeps at least {_mb(floor)} free there. Free some space and start "
             "QMX again"
         )
     made_backups = not layout.backups.exists()
@@ -738,3 +741,13 @@ def log_lines(layout: Layout) -> list[dict[str, object]]:
         if isinstance(record, dict):
             records.append(cast("dict[str, object]", record))
     return records
+
+
+def _engine_settings(layout: Layout) -> Mapping[str, object]:
+    """`[engine]` as `settings.toml` holds it, or nothing when it cannot be read."""
+    try:
+        read = tomllib.loads((layout.data / "settings.toml").read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    engine = read.get("engine")
+    return cast("Mapping[str, object]", engine) if isinstance(engine, dict) else {}

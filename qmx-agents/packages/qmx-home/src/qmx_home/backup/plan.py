@@ -1,25 +1,37 @@
-"""The `[backup]` section as one plan: the quick undo's keep rule, the places he named, what he
-leaves out, the drill and the key copy's public half (design 62 C2, Appendix D).
+"""The `[backup]` section as one plan: the main switch, what he leaves out, This PC's policy,
+each storage's policy and QMX's upkeep (design 06 sections 4 and 5, Appendix D). The screen says
+"Sync to my storage".
 
 ```toml
-[backup.quick_undo]
-hours = 48
-days = 7
+[backup]
+on = true                          # off pauses every storage and deletes nothing
+leave_out = []                     # his own globs under data/
+rclone_path = ""                   # per machine; empty means PATH, then the pinned release
 
-[[backup.targets]]
-id = "usb"
-kind = "folder"
-path = 'E:\\QMX-backup'
-every = "day"        # hour, day or week
-at = "03:00"         # local time; a PC that was off copies at its next start
-keep = { daily = 14, weekly = 8, monthly = 12 }
+[backup.place.pc]                  # This PC, "Copies on this PC"
 on = true
+save = ["recipe", "content", "result", "prices"]
+every = "1h"                       # when something changed
+at = "03:00"                       # local time, read when every is a day or more
+keep = { hours = 48, days = 7 }
+
+[backup.place.<place id>]          # any other storage; absent means the defaults
+save = ["recipe", "content", "result", "prices"]
+every = "1d"
+at = "03:00"
+keep = { days = 14, weeks = 8, months = 12 }
+floor = "auto"
+
+[backup.upkeep]
+drill_every = "1mo"
+drill_sample = 200
 ```
 
-A target folder's copies go to `<path>/QMX-backup/<home_id>/`, or to `<path>/<home_id>/` when the
-path he named is itself a `QMX-backup` folder. The mini apps' volume keys and `repository` belong
-to the volume backup and the weekly snapshot and are left alone (`APP_KEYS`). No target means only
-the quick undo. The default second drive is only ever a `proposal`, never a target by itself.
+The storages are the `[engine] placement.<name>` rows whose `can` holds `keep`, each with its
+policy keyed by the row's stable `id`. A folder storage (`via = "folder"`) gets copies at
+`<path>/QMX-backup/<home_id>/`. A policy whose row is gone is ignored. Keys this release does not
+read (an old `repository`, the mini apps' old volume keys, `[[backup.targets]]`) are kept as
+written and read by nothing.
 """
 
 from __future__ import annotations
@@ -28,10 +40,10 @@ import os
 import re
 import shutil
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
-from datetime import time
+from dataclasses import dataclass, field, replace
+from datetime import time, timedelta
 from pathlib import Path, PurePath
-from typing import Final, Literal, cast
+from typing import Final, cast
 
 from qmx_home import (
     Label,
@@ -39,33 +51,66 @@ from qmx_home import (
     _fixed_drives,  # pyright: ignore[reportPrivateUsage] - the one drive list
 )
 from qmx_home.backup.repository import FolderRepository, Repository
-from qmx_home.files import plain
+from qmx_home.classes import SENT, Class
+from qmx_home.files import GIB, floor_gb, plain
 
-type Every = Literal["hour", "day", "week"]
-type TargetKind = Literal["folder"]
-
-EVERY: Final[tuple[Every, ...]] = ("hour", "day", "week")
-KINDS: Final[tuple[TargetKind, ...]] = ("folder",)
-APP_KEYS: Final = frozenset(
-    {"remote", "bucket", "node", "interval_seconds", "enabled", "repository"}
-)
-"""Keys of `[backup]` that are not this plan's: the mini apps' volume backup and the weekly
-snapshot's repository."""
+PC: Final = "pc"
+"""This PC's place id: always the first storage."""
 FOLDER: Final = "QMX-backup"
-GIB: Final = 1 << 30
 FREE_SHARE: Final = 10
 """A proposed second drive keeps at least a tenth of itself free after the first copy (L1)."""
 NO_SECOND_DRIVE: Final = (
-    "your work has no copy on another drive: name a USB disk or another drive as a backup place "
-    "in Settings, Data and backups"
+    "your work has no copy on another drive: connect a USB disk or another drive as a storage "
+    "in Settings, Sync to my storage"
 )
-_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,64}")
+RETIRED: Final = frozenset(
+    {
+        "repository",
+        "remote",
+        "bucket",
+        "node",
+        "interval_seconds",
+        "enabled",
+        "quick_undo",
+        "targets",
+        "drill",
+        "keys",
+    }
+)
+"""Keys of `[backup]` from before this shape: kept as written, read by nothing, never refused."""
+KEYS: Final = frozenset({"on", "leave_out", "rclone_path", "place", "upkeep"})
+PC_KEYS: Final = frozenset({"on", "save", "every", "at", "keep"})
+STORAGE_KEYS: Final = frozenset({"on", "save", "every", "at", "keep", "floor"})
+KEEP_KEYS: Final = ("hours", "days", "weeks", "months")
+UPKEEP: Final[Mapping[str, object]] = {
+    "on": True,
+    "every": "1mo",
+    "repack_past": 0.05,
+    "repack_per_run": "all",
+    "safety": "24h",
+    "check_slice": 12,
+    "drill": True,
+    "drill_every": "1mo",
+    "drill_sample": 200,
+    "before_update_wait": "10m",
+}
+"""QMX's own upkeep, per storage, This PC included (design 06 section 6)."""
+_SPAN: Final = re.compile(r"(\d+)(s|m|min|h|d|w|mo)")
+_UNIT: Final[Mapping[str, timedelta]] = {
+    "s": timedelta(seconds=1),
+    "m": timedelta(minutes=1),
+    "min": timedelta(minutes=1),
+    "h": timedelta(hours=1),
+    "d": timedelta(days=1),
+    "w": timedelta(weeks=1),
+    "mo": timedelta(days=30),
+}
 _AT: Final = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
-TARGET_KEYS: Final = frozenset({"id", "kind", "path", "every", "at", "keep", "on"})
+_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 class PlanRefused(Exception):
-    """A `[backup]` row this release cannot use. The message names the row and what to fix."""
+    """A `[backup]` or storage row this release cannot use. The message names it and the fix."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,147 +124,317 @@ class Keep:
     months: int = 0
 
 
-QUICK_KEEP: Final = Keep(hours=48, days=7)
-TARGET_KEEP: Final = Keep(days=14, weeks=8, months=12)
+PC_KEEP: Final = Keep(hours=48, days=7)
+STORAGE_KEEP: Final = Keep(days=14, weeks=8, months=12)
+
+
+def span(text: str) -> timedelta:
+    """A span as Settings writes it: a whole number and `s`, `m` (minutes), `h`, `d`, `w` or
+    `mo` (30 days), such as `10m`, `2h`, `1d` or `1mo`. Raises ValueError for any other text."""
+    found = _SPAN.fullmatch(text)
+    if found is None or int(found.group(1)) == 0:
+        raise ValueError(text)
+    return int(found.group(1)) * _UNIT[found.group(2)]
 
 
 @dataclass(frozen=True, slots=True)
-class Target:
-    id: str
-    kind: TargetKind
-    path: Path
-    every: Every = "day"
-    at: time = time(3, 0)
-    keep: Keep = TARGET_KEEP
+class Policy:
+    """When one storage gets a copy, of what, and how many it keeps."""
+
     on: bool = True
+    save: tuple[Class, ...] = SENT
+    every: str = "1d"
+    at: time = time(3, 0)
+    keep: Keep = STORAGE_KEEP
+    floor: float | None = None
+    """GB a storage that reports free space keeps free; None is `auto`."""
+
+    @property
+    def interval(self) -> timedelta:
+        return span(self.every)
+
+
+PC_POLICY: Final = Policy(every="1h", keep=PC_KEEP)
+STORAGE_POLICY: Final = Policy()
 
 
 @dataclass(frozen=True, slots=True)
-class Drill:
-    every: str = "month"
-    sample: int = 200
+class Storage:
+    """A place that can keep: an `[engine]` row whose `can` holds `keep`."""
+
+    id: str
+    name: str
+    via: str
+    """How copies are kept there: `folder`, or `rclone` once its adapter is in."""
+    path: Path | None
+    policy: Policy = STORAGE_POLICY
+
+
+@dataclass(frozen=True, slots=True)
+class Upkeep:
+    drill: bool = True
+    drill_every: str = "1mo"
+    drill_sample: int = 200
 
 
 @dataclass(frozen=True, slots=True)
 class Plan:
-    quick_undo: Keep = QUICK_KEEP
-    targets: tuple[Target, ...] = ()
+    on: bool = True
+    """The main switch: off pauses every storage and deletes nothing."""
     leave_out: tuple[str, ...] = ()
     """Globs relative to `data/` he leaves out of every copy."""
-    drill: Drill = field(default_factory=Drill)
-    keys: Mapping[str, object] = field(default_factory=dict[str, object])
-    """`[backup.keys]` as written, for the sealed key copy (B7)."""
+    rclone_path: str = ""
+    pc: Policy = PC_POLICY
+    storages: tuple[Storage, ...] = ()
+    """Every place that can keep, in `[engine]`'s order."""
+    upkeep: Upkeep = field(default_factory=Upkeep)
+    floor_gb: float | None = None
+    """`[engine] disk.floor_gb`, which the one local floor reads."""
+
+    @property
+    def folders(self) -> tuple[Storage, ...]:
+        """The storages this release copies to: folders on a drive."""
+        return tuple(s for s in self.storages if s.via == "folder" and s.path is not None)
 
 
 @dataclass(frozen=True, slots=True)
 class Proposal:
-    """The second drive QMX suggests. It is a target only once he accepts it."""
+    """The second drive QMX suggests. It is a storage only once he accepts it."""
 
     path: Path
     line: str
 
 
-def parse(section: Mapping[str, object], layout: Layout) -> Plan:
-    """The plan in `section`, the `[backup]` table as read. Raises PlanRefused naming the first
-    row it cannot use: an unknown kind, a duplicate id, a target inside the QMX folder, a bad
-    `every`, `at` or keep count, or a key a row does not have."""
-    quick = section.get("quick_undo", {})
-    if not isinstance(quick, dict):
-        raise PlanRefused("[backup.quick_undo] must be a table with hours and days")
-    rows = section.get("targets", [])
-    if not isinstance(rows, list):
-        raise PlanRefused("[[backup.targets]] must be a list of tables, one per backup place")
-    targets: list[Target] = []
-    for number, row in enumerate(cast("list[object]", rows), 1):
-        target = _target(number, row, layout)
-        if any(seen.id == target.id for seen in targets):
-            raise PlanRefused(f"backup place {number}: the id {target.id!r} is used twice")
-        targets.append(target)
+def parse(
+    section: Mapping[str, object], layout: Layout, engine: Mapping[str, object] | None = None
+) -> Plan:
+    """The plan in `section`, the `[backup]` table as read, with the storages of `engine`, the
+    `[engine]` table. Raises PlanRefused naming the first key or row it cannot use."""
+    unknown = sorted(set(section) - KEYS - RETIRED)
+    if unknown:
+        raise PlanRefused(
+            f"[backup] has {', '.join(unknown)}, which QMX does not know; use "
+            f"{', '.join(sorted(KEYS))}"
+        )
+    on = _bool("[backup] on", section.get("on", True))
+    rclone_path = section.get("rclone_path", "")
+    if not isinstance(rclone_path, str):
+        raise PlanRefused("[backup] rclone_path must be the path of rclone, or empty")
+    places = _table("[backup.place]", section.get("place", {}))
+    pc = _policy(PC, _table("[backup.place.pc]", places.get(PC, {})), PC_POLICY, PC_KEYS)
+    rows = engine or {}
+    storages = tuple(
+        replace(
+            storage,
+            policy=_policy(
+                storage.id,
+                _table(f"[backup.place.{storage.id}]", places.get(storage.id, {})),
+                STORAGE_POLICY,
+                STORAGE_KEYS,
+            ),
+        )
+        for storage in _storages(rows, layout)
+    )
     return Plan(
-        quick_undo=_keep(
-            "[backup.quick_undo]", cast("dict[str, object]", quick), {"hours", "days"}, QUICK_KEEP
-        ),
-        targets=tuple(targets),
-        leave_out=_leave_out(section.get("leave_out", [])),
-        drill=_drill(section.get("drill", {})),
-        keys=cast("dict[str, object]", section.get("keys") or {}),
+        on,
+        _leave_out(section.get("leave_out", [])),
+        rclone_path,
+        pc,
+        storages,
+        _upkeep(_table("[backup.upkeep]", section.get("upkeep", {}))),
+        floor_gb(rows),
     )
 
 
-def _target(number: int, row: object, layout: Layout) -> Target:
-    if not isinstance(row, dict):
-        raise PlanRefused(f"backup place {number} is not a table")
-    fields = cast("dict[str, object]", row)
-    named = f"backup place {number}"
-    unknown = sorted(set(fields) - TARGET_KEYS)
+def defaults(section: Mapping[str, object], engine: Mapping[str, object]) -> dict[str, object]:
+    """`[backup]` with every default filled in, a policy for This PC and for each storage of
+    `engine` included: what the screen reads. Nothing stores this view."""
+    places = _loose(section.get("place"))
+    filled: dict[str, object] = {
+        **section,
+        "on": section.get("on", True),
+        "leave_out": section.get("leave_out", []),
+        "rclone_path": section.get("rclone_path", ""),
+        "upkeep": {**UPKEEP, **_loose(section.get("upkeep"))},
+    }
+    shown: dict[str, object] = {PC: {**_document(PC_POLICY, pc=True), **_loose(places.get(PC))}}
+    for place_id in _keeping_ids(engine):
+        shown[place_id] = {**_document(STORAGE_POLICY, pc=False), **_loose(places.get(place_id))}
+    for place_id, policy in places.items():
+        shown.setdefault(place_id, policy)
+    filled["place"] = shown
+    return filled
+
+
+def orphans_dropped(
+    section: Mapping[str, object], engine: Mapping[str, object]
+) -> dict[str, object]:
+    """`[backup]` less each storage policy whose `[engine]` row is gone."""
+    places = section.get("place")
+    if not isinstance(places, dict):
+        return dict(section)
+    alive = {PC, *_keeping_ids(engine)}
+    kept = {k: v for k, v in cast("dict[str, object]", places).items() if k in alive}
+    if kept:
+        return {**section, "place": kept}
+    return {k: v for k, v in section.items() if k != "place"}
+
+
+def _keeping_ids(engine: Mapping[str, object]) -> list[str]:
+    return [place_id for _, place_id, row in _rows(engine) if "keep" in can_of(row)]
+
+
+def _rows(engine: Mapping[str, object]) -> list[tuple[str, str, Mapping[str, object]]]:
+    """Each `[engine] placement.<name>` row as (name, stable id, fields), in its order."""
+    placement = engine.get("placement")
+    if not isinstance(placement, dict):
+        return []
+    found: list[tuple[str, str, Mapping[str, object]]] = []
+    for name, row in cast("dict[str, object]", placement).items():
+        if name == PC or not isinstance(row, dict):
+            continue
+        fields = cast("dict[str, object]", row)
+        ident = fields.get("id")
+        found.append((name, ident if isinstance(ident, str) and ident else name, fields))
+    return found
+
+
+def can_of(row: Mapping[str, object]) -> tuple[str, ...]:
+    """What a place row can do; a row that says nothing can run, as every row before it did."""
+    can = row.get("can", ["run"])
+    if isinstance(can, str):
+        return (can,)
+    if isinstance(can, list | tuple):
+        return tuple(str(one) for one in cast("Sequence[object]", can))
+    return ("run",)
+
+
+def _storages(engine: Mapping[str, object], layout: Layout) -> list[Storage]:
+    storages: list[Storage] = []
+    for name, ident, row in _rows(engine):
+        if "keep" not in can_of(row):
+            continue
+        named = f"the storage {name!r}"
+        if ident == PC or not _ID.fullmatch(ident):
+            raise PlanRefused(f"{named} needs an id of letters, digits, - and _, other than pc")
+        via = row.get("via", "folder")
+        if not isinstance(via, str):
+            raise PlanRefused(f"{named}: via must be folder or rclone")
+        path: Path | None = None
+        if via == "folder":
+            given = row.get("path")
+            if not isinstance(given, str) or not given.strip() or not PurePath(given).is_absolute():
+                raise PlanRefused(f"{named} needs a full folder path, such as E:\\")
+            path = Path(given)
+            if _inside(path, layout.root):
+                raise PlanRefused(
+                    f"{named}: {given} is inside the QMX folder {layout.root}, so a copy there is "
+                    "lost with the folder; pick a folder on another drive"
+                )
+        storages.append(Storage(ident, name, via, path))
+    return storages
+
+
+def _policy(
+    place_id: str, table: Mapping[str, object], default: Policy, allowed: frozenset[str]
+) -> Policy:
+    named = f"[backup.place.{place_id}]"
+    unknown = sorted(set(table) - allowed)
     if unknown:
-        raise PlanRefused(f"{named} has {', '.join(unknown)}, which a backup place does not have")
-    ident = fields.get("id")
-    if not isinstance(ident, str) or not _ID.fullmatch(ident):
-        raise PlanRefused(f"{named} needs an id of letters, digits, - and _")
-    named = f"backup place {ident!r}"
-    kind = fields.get("kind", "folder")
-    if kind not in KINDS:
-        raise PlanRefused(f"{named}: the kind {kind!r} is not one QMX knows; use folder")
-    path = fields.get("path")
-    if not isinstance(path, str) or not path.strip() or not PurePath(path).is_absolute():
-        raise PlanRefused(f"{named} needs a full folder path, such as E:\\QMX-backup")
-    where = Path(path)
-    if _inside(where, layout.root):
-        raise PlanRefused(
-            f"{named}: {path} is inside the QMX folder {layout.root}, so a copy there is lost "
-            "with the folder; name a folder on another drive"
-        )
-    every = fields.get("every", "day")
-    if every not in EVERY:
-        raise PlanRefused(f"{named}: every must be hour, day or week, not {every!r}")
-    at = fields.get("at", "03:00")
+        raise PlanRefused(f"{named} has {', '.join(unknown)}; use {', '.join(sorted(allowed))}")
+    save = table.get("save", list(default.save))
+    if not isinstance(save, list) or any(one not in SENT for one in cast("list[object]", save)):
+        raise PlanRefused(f"{named}: save lists classes from {', '.join(SENT)}")
+    every = table.get("every", default.every)
+    if not isinstance(every, str) or not _valid_span(every) or span(every) < timedelta(hours=1):
+        raise PlanRefused(f"{named}: every is a span of an hour or more, such as 1h, 1d or 1w")
+    at = table.get("at", default.at.strftime("%H:%M"))
     found = _AT.fullmatch(at) if isinstance(at, str) else None
     if found is None:
         raise PlanRefused(f"{named}: at must be a time such as 03:00, not {at!r}")
-    on = fields.get("on", True)
-    if not isinstance(on, bool):
-        raise PlanRefused(f"{named}: on must be true or false")
-    keep = fields.get("keep", {})
-    if not isinstance(keep, dict):
-        raise PlanRefused(f"{named}: keep must be a table such as {{ daily = 14 }}")
-    return Target(
-        ident,
-        kind,
-        where,
+    floor = table.get("floor", "auto")
+    if floor != "auto" and (
+        not isinstance(floor, int | float) or isinstance(floor, bool) or floor < 0
+    ):
+        raise PlanRefused(f"{named}: floor is auto or a number of GB to keep free")
+    return Policy(
+        _bool(f"{named} on", table.get("on", default.on)),
+        tuple(c for c in SENT if c in cast("list[str]", save)),
         every,
         time(int(found.group(1)), int(found.group(2))),
-        _keep(named, cast("dict[str, object]", keep), {"daily", "weekly", "monthly"}, TARGET_KEEP),
-        on,
+        _keep(named, _table(f"{named} keep", table.get("keep", {})), default.keep),
+        None if floor == "auto" else float(cast("float", floor)),
     )
 
 
-_KEEP_FIELDS: Final = {
-    "hours": "hours",
-    "days": "days",
-    "daily": "days",
-    "weekly": "weeks",
-    "monthly": "months",
-}
-
-
-def _keep(named: str, table: Mapping[str, object], allowed: set[str], default: Keep) -> Keep:
-    unknown = sorted(set(table) - allowed)
+def _upkeep(table: Mapping[str, object]) -> Upkeep:
+    unknown = sorted(set(table) - set(UPKEEP))
     if unknown:
         raise PlanRefused(
-            f"{named}: keep has {', '.join(unknown)}; use {', '.join(sorted(allowed))}"
+            f"[backup.upkeep] has {', '.join(unknown)}; use {', '.join(sorted(UPKEEP))}"
         )
-    counts = {
-        "hours": default.hours,
-        "days": default.days,
-        "weeks": default.weeks,
-        "months": default.months,
-    }
+    values = {**UPKEEP, **table}
+    for key in ("every", "safety", "drill_every", "before_update_wait"):
+        value = values[key]
+        if not isinstance(value, str) or not _valid_span(value):
+            raise PlanRefused(f"[backup.upkeep] {key} is a span such as 24h or 1mo")
+    sample = values["drill_sample"]
+    if not isinstance(sample, int) or isinstance(sample, bool) or sample < 0:
+        raise PlanRefused("[backup.upkeep] drill_sample must be a whole number of files")
+    return Upkeep(
+        _bool("[backup.upkeep] drill", values["drill"]),
+        cast("str", values["drill_every"]),
+        sample,
+    )
+
+
+def _keep(named: str, table: Mapping[str, object], default: Keep) -> Keep:
+    unknown = sorted(set(table) - set(KEEP_KEYS))
+    if unknown:
+        raise PlanRefused(f"{named}: keep has {', '.join(unknown)}; use {', '.join(KEEP_KEYS)}")
+    counts = {key: int(getattr(default, key)) for key in KEEP_KEYS}
     for key, value in table.items():
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
             raise PlanRefused(f"{named}: {key} must be a whole number of copies, not {value!r}")
-        counts[_KEEP_FIELDS[key]] = value
+        counts[key] = value
     return Keep(**counts)
+
+
+def _document(policy: Policy, *, pc: bool) -> dict[str, object]:
+    shown: dict[str, object] = {
+        "on": policy.on,
+        "save": list(policy.save),
+        "every": policy.every,
+        "at": policy.at.strftime("%H:%M"),
+        "keep": {key: getattr(policy.keep, key) for key in KEEP_KEYS if getattr(policy.keep, key)},
+    }
+    if not pc:
+        shown["floor"] = "auto"
+    return shown
+
+
+def _valid_span(text: str) -> bool:
+    try:
+        span(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _bool(named: str, value: object) -> bool:
+    if not isinstance(value, bool):
+        raise PlanRefused(f"{named} must be true or false")
+    return value
+
+
+def _table(named: str, value: object) -> Mapping[str, object]:
+    if not isinstance(value, dict):
+        raise PlanRefused(f"{named} must be a table")
+    return cast("dict[str, object]", value)
+
+
+def _loose(value: object) -> dict[str, object]:
+    return dict(cast("dict[str, object]", value)) if isinstance(value, dict) else {}
 
 
 def _leave_out(value: object) -> tuple[str, ...]:
@@ -236,26 +451,14 @@ def _leave_out(value: object) -> tuple[str, ...]:
     return globs
 
 
-def _drill(value: object) -> Drill:
-    if not isinstance(value, dict):
-        raise PlanRefused("[backup.drill] must be a table with every and sample")
-    table = cast("dict[str, object]", value)
-    every, sample = table.get("every", "month"), table.get("sample", 200)
-    if every not in ("week", "month"):
-        raise PlanRefused(f"[backup.drill] every must be week or month, not {every!r}")
-    if not isinstance(sample, int) or isinstance(sample, bool) or sample < 0:
-        raise PlanRefused(f"[backup.drill] sample must be a whole number of files, not {sample!r}")
-    return Drill(str(every), sample)
-
-
-def target_root(path: Path, home_id: str) -> Path:
-    """Where one folder's copies go in the place he named."""
+def storage_root(path: Path, home_id: str) -> Path:
+    """Where one folder's copies go in a folder storage."""
     return path / home_id if path.name.casefold() == FOLDER.casefold() else path / FOLDER / home_id
 
 
-def repository_of(target: Target, layout: Layout) -> Repository:
-    """The place a target row names, for this folder."""
-    return FolderRepository(target_root(target.path, _home_id(layout)))
+def repository_of(storage: Storage, layout: Layout) -> Repository:
+    """The folder a folder storage names, for this QMX folder."""
+    return FolderRepository(storage_root(cast("Path", storage.path), _home_id(layout)))
 
 
 def source_of(document: Mapping[str, object]) -> Repository:
@@ -263,7 +466,7 @@ def source_of(document: Mapping[str, object]) -> Repository:
     `path` is the folder he named or a folder's own place in it; without `home_id` the place
     must hold exactly one QMX folder's copies. Raises PlanRefused naming what is missing."""
     kind, path = document.get("kind"), document.get("path")
-    if kind not in KINDS:
+    if kind != "folder":
         raise PlanRefused(f"a backup source of kind {kind!r} is not one QMX knows; use folder")
     if not isinstance(path, str) or not PurePath(path).is_absolute():
         raise PlanRefused("a backup source needs the full path of the folder that holds copies")
@@ -288,9 +491,10 @@ def source_of(document: Mapping[str, object]) -> Repository:
     )
 
 
-def same_drive(target: Target, layout: Layout) -> bool:
-    """Whether a target sits on the QMX folder's own drive, where it does not survive the disk."""
-    return _drive(target.path) == _drive(layout.root)
+def same_drive(storage: Storage, layout: Layout) -> bool:
+    """Whether a folder storage sits on the QMX folder's own drive, where it does not survive the
+    disk."""
+    return storage.path is not None and _drive(storage.path) == _drive(layout.root)
 
 
 def proposal(
@@ -323,7 +527,7 @@ def proposal(
     return Proposal(
         path,
         f"QMX proposes {plain(path)} on another drive for a daily copy of your work; accept it in "
-        "Settings, Data and backups, or name a USB disk instead",
+        "Settings, Sync to my storage, or connect a USB disk instead",
     )
 
 

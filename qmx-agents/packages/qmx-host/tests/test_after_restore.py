@@ -242,9 +242,9 @@ class Writes(ControlService):
         super().__init__(home, secret_getter=lambda _service, _name: None)
         self.writes = 0
 
-    def settings_put(self, section: Any, values: Any) -> Any:
+    def _settings_put(self, section: Any, values: Any) -> Any:
         self.writes += 1
-        return super().settings_put(section, values)
+        return super()._settings_put(section, values)
 
 
 HIS_ENGINE: dict[str, Any] = {
