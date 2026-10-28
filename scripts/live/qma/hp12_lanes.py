@@ -256,7 +256,7 @@ async def perf(log: Log) -> None:
             times.append(took if chat.is_live else float("inf"))
     finally:
         await session.harness.close()
-        control.settings_put("providers", found)
+        control.settings_update("providers", lambda _current: found)
         log(f"ship home [providers] restored to {sorted(control.settings_get('providers'))}")
         fake.stop()
     median = statistics.median(times)

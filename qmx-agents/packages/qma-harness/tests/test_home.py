@@ -386,8 +386,28 @@ def test_a_whole_section_put_keeps_remembered_rules_unless_it_names_them(
             **allowed,
             "remembered": remembered,
         }
-        rest.put("/api/settings/claude", json={"remembered": {}}, headers=HEADERS)
+        rest.put("/api/claude-settings", json={"remembered": {}}, headers=HEADERS)
         assert rest.get("/api/claude-settings", headers=HEADERS).json() == {"remembered": {}}
+
+
+def test_the_claude_screen_removes_a_rule_it_leaves_out_and_the_settings_route_needs_remove(
+    home: QmxHome,
+) -> None:
+    control = control_service(home)
+    extra = router(home, control, scrubbed=(), keep=())
+    both = {"permissions": {"allow": ["Read"], "deny": ["Bash(rm -rf *)"]}}
+    allowed = {"permissions": {"allow": ["Read"]}}
+    with TestClient(create_app(control, BEARER, extra_routers=[extra])) as rest:
+        rest.put("/api/claude-settings", json=both, headers=HEADERS)
+        rest.put("/api/claude-settings", json=allowed, headers=HEADERS)
+        assert rest.get("/api/claude-settings", headers=HEADERS).json() == allowed
+
+        rest.put("/api/settings/claude", json=both, headers=HEADERS)
+        rest.put("/api/settings/claude", json=allowed, headers=HEADERS)
+        assert rest.get("/api/claude-settings", headers=HEADERS).json() == both
+        removed = {"remove": ["permissions.deny"]}
+        rest.put("/api/settings/claude", json=removed, headers=HEADERS)
+        assert rest.get("/api/claude-settings", headers=HEADERS).json() == allowed
 
 
 def _http_hook(headers: dict[str, str]) -> Document:

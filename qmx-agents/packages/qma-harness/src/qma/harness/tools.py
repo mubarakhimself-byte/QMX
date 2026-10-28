@@ -911,14 +911,21 @@ def secret_files(home: QmxHome) -> list[Path]:
     """Files that hold or may hold a login or a key: every `secret` path of the QMX folder's
     class table (`keys/`, `data/vault/`, `rclone.conf`, both Claude homes' logins and the rest),
     the plan login in both forms under his `~/.claude`, his `~/.claude.json`, and the QMX home's
-    `settings.toml`, which a hand edit may put a key in."""
+    `settings.toml`, which a hand edit may put a key in. A table path under `data/` is found
+    under the home itself, whatever the home's folder is named."""
     personal = Path.home() / ".claude"
     return [
-        *(home.layout.root / path for path in secret_paths()),
+        *(_in_folder(home, path) for path in secret_paths()),
         *(personal / name for name in (".credentials.json", ".claude.json")),
         Path.home() / ".claude.json",
         home.root / "settings.toml",
     ]
+
+
+def _in_folder(home: QmxHome, path: str) -> Path:
+    """A class-table path, relative to the QMX folder, on disk: `data/` is the home."""
+    inner = path.removeprefix("data/")
+    return home.root / inner if inner != path else home.layout.root / path
 
 
 STORE_FILES: Final = ("control.db", "portfolio.db", "library.db", "memory.db", "runs.db")

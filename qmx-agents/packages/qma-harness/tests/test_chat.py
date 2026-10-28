@@ -1146,7 +1146,8 @@ def test_a_removed_or_keyless_provider_offers_no_sub_agent(
     run(body, home)
     keys.discard("qmx/kimi")
     run(body, home)
-    control.settings_put("providers", {"openrouter": ROUTER_ROW})
+    control.settings_put("providers", {"remove": ["kimi"]})
+    assert sorted(control.settings_get("providers")) == ["openrouter"]
     keys.add("qmx/kimi")
     run(body, home)
     with_kimi, keyless, removed = models
