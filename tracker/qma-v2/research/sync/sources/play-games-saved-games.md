@@ -1,0 +1,1304 @@
+<!-- Source: https://developer.android.com/games/pgs/savedgames
+     Fetched: 2026-10-28. Text extracted from the HTML page (markup, scripts and navigation removed). -->
+
+Cloud save  |  Android game development  |  Android Developers
+
+ Skip to main content
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+
+- 
+
+- 
+- 
+
+- 
+
+- 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+ /
+
+- 
+ English
+
+- 
+ Deutsch
+
+- 
+ Español – América Latina
+
+- 
+ Français
+
+- 
+ Indonesia
+
+- 
+ Italiano
+
+- 
+ Polski
+
+- 
+ Português – Brasil
+
+- 
+ Tiếng Việt
+
+- 
+ Türkçe
+
+- 
+ Русский
+
+- 
+ עברית
+
+- 
+ العربيّة
+
+- 
+ فارسی
+
+- 
+ हिंदी
+
+- 
+ বাংলা
+
+- 
+ ภาษาไทย
+
+- 
+ 中文 – 简体
+
+- 
+ 中文 – 繁體
+
+- 
+ 日本語
+
+- 
+ 한국어
+
+ Android Studio
+
+ Sign in
+
+- 
+
+ Games dev center
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+- 
+
+ Android Developers
+
+- 
+
+ Google Play
+
+- 
+
+ Games dev center
+
+- 
+
+ Guides
+
+ Send feedback
+
+# 
+ Cloud save
+
+ Stay organized with collections
+
+ Save and categorize content based on your preferences.
+
+Players play on multiple devices and install a game on same device multiple
+times. As a result, they always need to start their game from their last
+progress state. To achieve this, you must implement a cloud save solution in
+your game.
+
+To meet the Google Play Games Level Up user experience guidelines,
+your game needs to implement a cloud save solution which has two parts:
+
+- 
+Cloud save
+
+Save your player's game state to the cloud. Retrieve it when they start the
+game. Play Games Services Saved Games provides a service for
+this, but you can use any cloud save solution of your choice.
+Note: If your game supports guest mode, player progress is not saved or
+ restored. This limitation occurs because guest mode is tied to a
+ single device.
+
+- 
+Conflict resolution for multiple game states
+
+If a user has multiple accounts or if there's a conflict between saved game
+data on their device and in the cloud, you need a conflict
+resolution policy. Usually, the user decides how to resolve these
+conflicts.
+Your conflict resolution policy should address the following key
+scenarios:
+
+- Multiple accounts per user: Handle instances where a single user
+interacts with the application using different accounts.
+
+- State conflicts: Resolve discrepancies that arise between the local
+game state and the cloud-saved game state.
+
+## Guest account
+
+When a player on a guest account signs in and links to a Player
+ID with existing cloud-saved
+progress, your game might accidentally overwrite significant historical data. If
+a player has a local guest account with significant progress and a cloud backup
+of the last played In-Game Account (IGA) linked to Play Games Services, your game
+shouldn't automatically overwrite any data. A game should prioritize the best
+possible player experience, thus it is recommended that the game informs the
+player of this choice before making it for the player or explicitly ask the
+player to choose from the options.
+
+Considering this, you have two options:
+
+- Option 1: Maintain the current flow where cloud or a local progress is
+restored. A warning message is displayed to indicate an existing account was
+detected, and its progress will be used.
+
+- Option 2 (Recommended): Display a message informing the player that an
+existing account with progress was detected. Linking the guest account
+replaces the cloud progress with the current guest progress. The message
+displayed for both local and cloud-saved progress so the player can make an
+informed decision.
+
+ Conflict resolution flow between Cloud save and Guest account progress.
+
+## Saved Games
+
+The Saved Games service gives you a convenient way to save
+your players' game progression to Google's servers. Your game can retrieve the
+saved game data to allow returning players to continue a game at their last
+save point from any device.
+
+This service offers several key advantages for both players and developers:
+
+- Synchronize game data across multiple devices. For example, a player can
+start a game on an Android phone and seamlessly continue playing on a tablet
+without losing progress.
+
+- Ensure data persistence. Players can resume their game even if their
+device is lost, destroyed, or traded in for a newer model.
+
+Note: Before using the Saved Games service, you must first
+enable it in Google Play Console.
+
+To learn how to implement saved games for your platform, see
+Client implementations.
+
+### Saved Games basics
+
+A saved game consists of two parts:
+
+- An unstructured binary blob - this data can represent whatever you choose,
+and your game is responsible for parsing and writing to it.
+
+- Structured metadata - additional properties
+associated with the binary data that allow Google Play Games Services to visually
+present Saved Games in the default Saved Games list user interface (UI), and to
+present useful information in the
+Google Play Games app (for example, last updated timestamp).
+
+A game can write any number of Saved Games for a single player, subject to file
+size restrictions, so there is no requirement to limit players to a single
+save file.
+
+### Conflict resolution
+
+When using the Saved Games service, your game may encounter conflicts when
+attempting to save data. These conflicts can occur when a user is running more
+than one instance of your application on different devices or computers. Your
+application must be able to resolve these conflicts in a way that provides the
+best user experience.
+
+Typically, data conflicts occur when an instance of your application is unable
+to reach the Saved Games service while attempting to load data or save it. In
+general, the best way to avoid data conflicts is to always load the latest data
+from the service when your application starts up or resumes, and save data to
+the service with reasonable frequency. However, it is not always possible to
+avoid data conflicts. Your application should make every effort to handle
+conflicts such that your users' data is preserved and that they have a good
+experience.
+
+### Cover images
+
+The Saved Games service provides a visual user experience in addition to
+persistence features. You are strongly encouraged to associate representative
+images with corresponding save files. If you are using the default Saved Games
+list user interface (UI) provided by the Play Games SDK in your game,
+the UI will display these cover images. The cover images may also appear in the
+Google Play Games app.
+
+### Descriptions
+
+You can provide a short text description of the content of a particular saved
+game. This description is directly displayed to players and should summarize
+the state that the saved game represents; for example, "Fighting the Goblins
+in the Dark Woods".
+
+### Size limit
+
+You are not charged for saved game data in Google Cloud, but each saved game
+file has a maximum size of 3 MB.
+
+### Offline support
+
+Your game can still read and write to a saved game when the player's device is
+offline, but won't be able to sync with Google Play Games Services until
+network connectivity is established. Once reconnected, Google Play Games Services
+asynchronously updates the saved game data on Google's servers.
+
+### Limits
+
+Google Play Games Services enforces size limits on binary data and cover
+image sizes of 3 MB and 800 KB respectively.
+
+### Saved Game metadata
+
+The structured metadata for a saved game contains these these properties:
+
+ | Property
+ | Description
+
+ | ID
+ | A unique string generated by Google Play Games Services for this saved
+ game. Use this ID to refer to the saved game in your game
+ clients.
+
+ | Name
+ | A developer-supplied short name for the saved game, for example
+ "Save slot 1" or "PlayerName_Save1". This is not shown to players.
+
+ | Description
+ | A developer-supplied description of the saved game.
+
+ | Last modified
+ | Timestamp in milliseconds generated by Google Play Games Services
+ for when the saved game was last updated.
+
+ | Played time
+ | 
+A developer-supplied time (in milliseconds) to display on the saved
+ game. This value should represent how long the player has played
+ the corresponding save game.
+
+For example, a played time value of 3600000 will be displayed by Google Play Games Services as "1 hr".
+
+ | Cover image
+ | This is an optional, developer-supplied property that contains
+ information about the
+ cover image.
+
+### Client implementations
+
+To learn how to implement saved game for your platform, see the following
+resources:
+
+- Android
+
+- Checklist for implementing Cloud save
+
+ Send feedback
+
+Content and code samples on this page are subject to the licenses described in the Content License. Java and OpenJDK are trademarks or registered trademarks of Oracle and/or its affiliates.
+
+Last updated 2026-10-06 UTC.
+
+ Need to tell us more?
+
+ [[["Easy to understand","easyToUnderstand","thumb-up"],["Solved my problem","solvedMyProblem","thumb-up"],["Other","otherUp","thumb-up"]],[["Missing the information I need","missingTheInformationINeed","thumb-down"],["Too complicated / too many steps","tooComplicatedTooManySteps","thumb-down"],["Out of date","outOfDate","thumb-down"],["Samples / code issue","samplesCodeIssue","thumb-down"],["Other","otherDown","thumb-down"]],["Last updated 2026-10-06 UTC."],[],[]]
+
+- 
+
+- 
+
+- 
+
+- 
+### 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+### 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+### 
+- 
+- 
+- 
+- 
+- 
+- 
+### 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+### 
+- 
+- 
+- 
+- 
+- 
+- 
+### 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+-
