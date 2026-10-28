@@ -91,6 +91,8 @@ from qmx_engine.service.rest import engine_router
 from qmx_engine.settings import PC
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_home import Layout
+from qmx_home.backup.restore import RESTORE_LOCK
+from qmx_home.files import Busy, Held, hold
 from qmx_home.versions import StoreRefused
 from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
@@ -181,16 +183,35 @@ def _lock(handle: IO[bytes]) -> None:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
+class RestoreFinishing(Exception):
+    """A restore is being finished in the folder, so no host may start on it now."""
+
+
 @contextmanager
 def single_instance(home: Path) -> Generator[None]:
     """Hold the home's lock and its record for as long as the block runs. Raises `HostRunning`
-    while another process holds it."""
+    while another process holds it, and `RestoreFinishing` while a restore's finish holds the
+    folder's `backups/restore.lock`, which a QMX folder's host takes first and lets go once it
+    holds `engine.lock`, so no host starts while a finish runs (F5)."""
+    layout = Layout.from_home(home)
+    gate: Held | None = None
+    if layout.label.is_file():
+        try:
+            gate = hold(layout.backups / RESTORE_LOCK, "")
+        except Busy:
+            raise RestoreFinishing(
+                f"QMX did not start: a restore is finishing in {layout.root}; start QMX again "
+                "when it has"
+            ) from None
     handle = (home / LOCK).open("a+b")
     try:
         _lock(handle)
     except OSError:
         handle.close()
         raise HostRunning(home, recorded_host(home)) from None
+    finally:
+        if gate is not None:
+            gate.release()
     me = psutil.Process()
     record = home / STATE
     try:
@@ -230,7 +251,7 @@ def serve_forever(
                     home, sock, role, ui_origin, scrubbed, keep, library_root, place, served=served
                 )
             )
-    except (HostRunning, PlaceRefused) as refused:
+    except (HostRunning, PlaceRefused, RestoreFinishing) as refused:
         print(refused, file=sys.stderr)
         return 1
     except PortTaken as taken:
@@ -760,11 +781,14 @@ async def serve(
                     clock=lambda: datetime.now().astimezone(),
                     floor=floor,
                 )
+                # Before the engine opens: a restored folder's fires and held runs stay paused.
+                backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(
                     compose_memory, harness, store, home, control, role
                 )
+                backups.reindex(lambda: memory.rebuild("all"), hindsight=memory.index is not None)
                 adopt_router(RelayRouter(harness_relay(harness)))
                 try:
                     async with EngineDoor.open(
@@ -806,16 +830,27 @@ async def serve(
                         )
                         server = uvicorn.Server(uvicorn.Config(app))
                         beating = asyncio.create_task(
-                            heartbeats(home, name, control, harness, engine, link)
+                            heartbeats(
+                                home,
+                                name,
+                                control,
+                                harness,
+                                engine,
+                                link,
+                                heeding=lambda: backups.after is None,
+                            )
                         )
                         exporting = asyncio.create_task(harness.idle_exports())
                         holding = asyncio.create_task(asking.hold_all())
-                        replicator = Replicator.for_home(home, store, control)
-                        syncing = (
-                            asyncio.create_task(replicator.run())
-                            if replicator is not None
-                            else None
-                        )
+                        syncing: list[asyncio.Task[None]] = []
+                        loop = asyncio.get_running_loop()
+
+                        def sync() -> None:
+                            replicator = Replicator.for_home(home, store, control)
+                            if replicator is not None:
+                                syncing.append(asyncio.create_task(replicator.run()))
+
+                        backups.when_carried_on(lambda: loop.call_soon_threadsafe(sync))
                         copying = asyncio.create_task(backups.run())
                         # Uvicorn logs no started line for a socket it was handed.
                         address, _ = sock.getsockname()
@@ -829,9 +864,7 @@ async def serve(
                         finally:
                             if server.started:
                                 served.set()
-                            for task in (beating, exporting, holding, syncing, copying):
-                                if task is None:
-                                    continue
+                            for task in (beating, exporting, holding, *syncing, copying):
                                 task.cancel()
                                 with suppress(asyncio.CancelledError):
                                     await task
@@ -946,13 +979,17 @@ async def heartbeats(
     harness: Harness,
     engine: EngineDoor,
     link: HubLink | None = None,
+    *,
+    heeding: Callable[[], bool] = lambda: True,
 ) -> None:
     """Write this host's rows every `heartbeat.interval` until cancelled. A failed beat is
     skipped, never fatal: the next one carries the same facts.
 
     When a Hub answers, the row goes there too and the reply's flag becomes this host's own, so
     one switch pauses every machine (AD-65). A Hub that stops answering leaves the last flag in
-    force and the row reads `pause_state: unknown` once five minutes have passed.
+    force and the row reads `pause_state: unknown` once five minutes have passed. While
+    `heeding()` is False (after a restore, until he carries on) the row still goes but the Hub's
+    flag is not written, so a Hub cannot end the pause.
     """
     core = engine.svc.ctx.engine
     me = psutil.Process()
@@ -969,7 +1006,7 @@ async def heartbeats(
             ]
             await asyncio.to_thread(log.write, rows)
             if link is not None:
-                await asyncio.to_thread(hear, link, rows[0], control)
+                await asyncio.to_thread(hear, link, rows[0], control, heed=heeding())
             hour = int(time.time() // 3600)
             if hour != pruned:
                 await asyncio.to_thread(log.prune, datetime.now(UTC))
@@ -984,10 +1021,11 @@ def section(control: ControlService, name: str) -> Document:
     return control.settings_get(cast("Any", name))
 
 
-def hear(link: HubLink, row: Heartbeat, control: ControlService) -> None:
-    """One push, and the Hub's flag written into this host's settings when it changed."""
+def hear(link: HubLink, row: Heartbeat, control: ControlService, *, heed: bool = True) -> None:
+    """One push, and with `heed` the Hub's flag written into this host's settings when it
+    changed."""
     reply = link.push(row)
-    if reply.autonomy_paused != bool(section(control, "engine").get("autonomy.paused")):
+    if heed and reply.autonomy_paused != bool(section(control, "engine").get("autonomy.paused")):
         control.settings_put("engine", {"autonomy": {"paused": reply.autonomy_paused}})
 
 
