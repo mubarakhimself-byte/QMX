@@ -164,10 +164,10 @@ def run_kind(
     steps = [s for s in kind.steps if not (card and s.name in ROW_STEPS)]
     for number, step in enumerate(steps):
         report(step.name, done=number, total=len(steps))
-        if step.check(run):
-            run.say(f"{step.name}: already done, skipped")
-            continue
         try:
+            if step.check(run):
+                run.say(f"{step.name}: already done, skipped")
+                continue
             needs = step.do(run)
         except RcloneRefused as refused:
             raise Stopped(f"{place}: {refused}", {"lines": run.lines}) from None
