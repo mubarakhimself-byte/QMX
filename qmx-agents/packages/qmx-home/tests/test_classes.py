@@ -147,6 +147,31 @@ def test_a_value_under_an_ordinary_name_is_not_named(name: str) -> None:
     assert secret_values({"engine": {name: "plain-value"}}) == {}
 
 
+def test_a_table_named_by_the_operator_like_a_secret_keeps_its_ordinary_values() -> None:
+    settings: dict[str, object] = {
+        "engine": {
+            "placement": {
+                "usb-key": {
+                    "id": "usb-key",
+                    "via": "folder",
+                    "path": "E:/qmx",
+                    "can": ["copies"],
+                    "api_key": "planted-usb",
+                }
+            }
+        },
+        "claude": {
+            "remembered": {"d:/work/turkey": {"allow": ["Bash(git status)"]}},
+            "access_token": "planted-claude",
+        },
+    }
+
+    assert secret_values(settings) == {
+        "engine.placement.usb-key.api_key": "planted-usb",
+        "claude.access_token": "planted-claude",
+    }
+
+
 def test_only_a_drive_storage_rows_client_secret_travels() -> None:
     settings: dict[str, object] = {
         "engine": {

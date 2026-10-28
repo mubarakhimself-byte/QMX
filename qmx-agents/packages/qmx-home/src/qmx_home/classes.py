@@ -178,8 +178,9 @@ PER_MACHINE_KEYS: Final[tuple[str, ...]] = (
 SECRET_NAMES: Final = frozenset({"key", "apikey", "token", "password", "secret", "clientkey"})
 """Key names, lower case with `_` and `-` dropped, that the settings writer refuses."""
 SECRET_ENDINGS: Final = ("key", "token", "secret", "password")
-"""Endings of key names, lower case with `_` and `-` dropped, whose values a copy leaves out:
-`access_token`, `private_key` and `client_secret` as well as every name of `SECRET_NAMES`."""
+"""Endings of key names, lower case with `_` and `-` dropped, whose string or strings a copy leaves
+out (never a table's whole contents): `access_token`, `private_key` and `client_secret` as well
+as every name of `SECRET_NAMES`."""
 SECRET_SHAPES: Final = re.compile(
     r"(?:sk-ant-|sk-or-|sk-proj-|sk-|ghp_|gho_|github_pat_|xox[abp]-|AKIA|AIza|hf_|GOCSPX-)"
     r"[A-Za-z0-9_\-]{16,}"
@@ -283,11 +284,22 @@ def _inner(table: Mapping[str, object], key: str) -> Mapping[str, object]:
     return cast("Mapping[str, object]", found) if isinstance(found, Mapping) else {}
 
 
+def _named(key: str, item: object) -> bool:
+    """Whether `key` makes `item` a secret. An ending is read only on the key that holds the
+    string or strings, because a table's key is the operator's own name, such as `usb-key`."""
+    if secret_name(key):
+        return True
+    strings = isinstance(item, str) or (
+        isinstance(item, list) and all(isinstance(one, str) for one in cast("list[object]", item))
+    )
+    return strings and _plain(key).endswith(SECRET_ENDINGS)
+
+
 def _strings(value: object, at: str, named: bool = False) -> Iterator[tuple[str, str]]:
     if isinstance(value, Mapping):
         for key, item in cast("Mapping[str, object]", value).items():
             inner = f"{at}.{key}" if at else key
-            yield from _strings(item, inner, named or _plain(key).endswith(SECRET_ENDINGS))
+            yield from _strings(item, inner, named or _named(key, item))
     elif isinstance(value, list):
         for index, item in enumerate(cast("list[object]", value)):
             yield from _strings(item, f"{at}[{index}]", named)
