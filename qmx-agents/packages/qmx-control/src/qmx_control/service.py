@@ -41,7 +41,6 @@ from qmx_home.versions import open_sqlite, too_new
 from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
-from qmx_remote.models import RemoteSettings
 
 from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
@@ -62,7 +61,6 @@ type SettingsSection = Literal[
     "backup",
     "brokers",
     "connections",
-    "remote",
     "claude",
     "environment",
     "agents",
@@ -837,13 +835,6 @@ class ControlService:
             values = _rule_lists(values)
         if section == "data":
             values = _data_settings(values)
-        if section == "remote":
-            try:
-                RemoteSettings.model_validate(values)
-            except ValueError as error:
-                raise ControlError(
-                    "invalid_settings", "Use valid remote targets and bucket settings."
-                ) from error
         if section == "mcp_servers" and "firecrawl" in values:
             firecrawl = values["firecrawl"]
             if not isinstance(firecrawl, dict) or set(firecrawl) - {
