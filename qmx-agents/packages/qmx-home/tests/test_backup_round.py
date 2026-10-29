@@ -81,6 +81,7 @@ def test_a_round_copies_to_the_quick_undo_and_the_target_and_a_second_copies_not
     )
     assert [(line["kind"], line.get("result")) for line in log_lines(filled.layout)] == [
         ("round", "copied"),
+        ("sending", None),
         ("sent", None),
         ("round", "copied"),
         ("round", "unchanged"),

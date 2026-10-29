@@ -247,6 +247,68 @@ def test_a_send_slower_than_the_window_never_leaves_a_copy_naming_a_pack_that_is
     assert stored_bytes(FolderRepository(usb.root), old_sha, tmp_path / "back") == b'{"n": "old"}'
 
 
+@pytest.mark.parametrize("stop", ["killed at the check", "error after the copy"])
+def test_a_send_stopped_before_its_check_leaves_a_copy_the_next_send_makes_whole(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop: str
+) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=2, stores=1, once_bytes=4096, secrets=False)
+    layout = filled.layout
+    plan = Plan(storages=(folder(tmp_path / "usb"),))
+    chat = layout.data / "chats" / "c1.json"
+    for tag in ("first", "old", "new"):
+        chat.write_text(f'{{"n": "{tag}"}}', encoding="utf-8")
+        run_round(layout, plan, now=datetime.now(UTC), floor=0, only="usb")
+    usb = storage_of(tmp_path)
+    for stamp in usb.copies()[1:-1]:
+        usb.drop(stamp)
+    old_sha = hashlib.sha256(b'{"n": "old"}').hexdigest()
+    chat.write_text('{"n": "old"}', encoding="utf-8")
+    day = timedelta(days=1)
+    later = datetime.now(UTC)
+    deleted: list[int] = []
+    landed: list[bool] = []
+    real_step = FolderRepository._step  # pyright: ignore[reportPrivateUsage]
+    real_refresh = FolderRepository.refresh
+    real_put_copy = FolderRepository.put_copy
+
+    def step(self: FolderRepository, op: str) -> None:
+        if op == "manifest" and self.root == usb.root and not deleted:
+            pruner = FolderRepository(usb.root)
+            deleted.extend(pruner.sweep(safety=day, now=later + n * day).removed for n in (2, 4))
+        real_step(self, op)
+
+    def refresh(self: FolderRepository) -> None:
+        if landed == [True]:
+            landed.append(True)
+            raise Killed
+        real_refresh(self)
+
+    def put_copy(self: FolderRepository, manifest: Manifest, extra: object = None) -> None:
+        real_put_copy(self, manifest, extra)  # pyright: ignore[reportArgumentType]
+        if self.root == usb.root and not landed:
+            landed.append(True)
+            if stop == "error after the copy":
+                landed.append(True)
+                raise OSError(5, "the storage stopped answering")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(FolderRepository, "_step", step)
+        patched.setattr(FolderRepository, "refresh", refresh)
+        patched.setattr(FolderRepository, "put_copy", put_copy)
+        with suppress(Killed):
+            run_round(layout, plan, now=datetime.now(UTC), floor=0, only="usb")
+    left_broken = broken_copies(usb, tmp_path / "back")
+    chat.write_text('{"n": "newer"}', encoding="utf-8")
+    report = run_round(layout, plan, now=datetime.now(UTC), floor=0, only="usb")
+
+    assert deleted[1] >= 1
+    assert len(landed) == 2
+    assert [line.split(" ")[1] for line in left_broken] == ["chats/c1.json"]
+    assert report.places[-1].result == "copied"
+    assert broken_copies(usb, tmp_path / "back") == []
+    assert stored_bytes(FolderRepository(usb.root), old_sha, tmp_path / "back") == b'{"n": "old"}'
+
+
 def test_the_one_fact_no_kept_copy_ever_names_a_pack_that_is_gone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
