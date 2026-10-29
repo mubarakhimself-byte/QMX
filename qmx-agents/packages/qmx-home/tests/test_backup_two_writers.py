@@ -182,6 +182,71 @@ def test_a_copy_written_after_a_prune_let_go_of_its_file_keeps_that_file(
     assert stored_bytes(FolderRepository(root), old_sha, tmp_path / "back") == b"old work"
 
 
+def test_a_copy_written_while_a_prune_runs_keeps_a_file_that_prune_was_letting_go(
+    tmp_path: Path,
+) -> None:
+    start = datetime.now(UTC) - timedelta(days=10)
+    root = tmp_path / "storage"
+    repo = FolderRepository(root, clock=lambda: start)
+    (tmp_path / "old.txt").write_bytes(b"old work")
+    (tmp_path / "new.txt").write_bytes(b"new work")
+    old_sha = hashlib.sha256(b"old work").hexdigest()
+    one_file_copy(repo, stamp_of(start + timedelta(hours=1)), "old.txt", tmp_path / "old.txt")
+    one_file_copy(repo, stamp_of(start + timedelta(hours=2)), "new.txt", tmp_path / "new.txt")
+    repo.drop(stamp_of(start + timedelta(hours=1)))
+    late = Manifest(
+        {"format": FORMAT, "stamp": stamp_of(start + timedelta(hours=3))},
+        (Entry("old.txt", old_sha, 8, "file", (1, 1)),),
+    )
+
+    def heard(step: str) -> None:
+        if step == "checking the copies again":
+            FolderRepository(root).put_copy(late)
+
+    repo.prune(safety=timedelta(days=1), now=start + timedelta(days=2), step=heard)
+
+    assert FolderRepository(root).pool_has(old_sha) is True
+    assert stored_bytes(FolderRepository(root), old_sha, tmp_path / "back") == b"old work"
+
+
+def test_a_send_slower_than_the_window_never_leaves_a_copy_naming_a_pack_that_is_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=2, stores=1, once_bytes=4096, secrets=False)
+    layout = filled.layout
+    plan = Plan(storages=(folder(tmp_path / "usb"),))
+    chat = layout.data / "chats" / "c1.json"
+    for tag in ("first", "old", "new"):
+        chat.write_text(f'{{"n": "{tag}"}}', encoding="utf-8")
+        run_round(layout, plan, now=datetime.now(UTC), floor=0, only="usb")
+    usb = storage_of(tmp_path)
+    for stamp in usb.copies()[1:-1]:
+        usb.drop(stamp)
+    old_sha = hashlib.sha256(b'{"n": "old"}').hexdigest()
+    chat.write_text('{"n": "old"}', encoding="utf-8")
+    day = timedelta(days=1)
+    later = datetime.now(UTC)
+    deleted: list[int] = []
+    real = FolderRepository._step  # pyright: ignore[reportPrivateUsage]
+
+    def step(self: FolderRepository, op: str) -> None:
+        if op == "manifest" and self.root == usb.root and not deleted:
+            pruner = FolderRepository(usb.root)
+            deleted.extend(pruner.sweep(safety=day, now=later + n * day).removed for n in (2, 4))
+        real(self, op)
+
+    monkeypatch.setattr(FolderRepository, "_step", step)
+    report = run_round(layout, plan, now=datetime.now(UTC), floor=0, only="usb")
+
+    newest = FolderRepository(usb.root).manifest(usb.copies()[-1])
+    assert deleted[0] == 0
+    assert deleted[1] >= 1
+    assert report.places[-1].result == "copied"
+    assert old_sha in {entry.sha256 for entry in newest.entries}
+    assert broken_copies(usb, tmp_path / "back") == []
+    assert stored_bytes(FolderRepository(usb.root), old_sha, tmp_path / "back") == b'{"n": "old"}'
+
+
 def test_the_one_fact_no_kept_copy_ever_names_a_pack_that_is_gone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
