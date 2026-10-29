@@ -259,7 +259,7 @@ def snapshot(
 
     One copy per upgrade (design 06 section 7): when this start already copied the whole folder
     for its upgrade (`upgrade_copied`) and that copy holds every file, no pre-change copy is made,
-    the release is logged, and This PC's copies' folder is returned."""
+    the release is logged, and that copy's own folder among This PC's copies is returned."""
     started = time.monotonic()
     named = [*files, *(f.with_name(f"{f.name}-wal") for f in files)] if closed else files
     present = [file for file in named if file.is_file()]
@@ -278,7 +278,7 @@ def snapshot(
                 "copy": covering,
             },
         )
-        return layout.backups / QUICK
+        return layout.backups / QUICK / "snapshots" / covering
     needed = sum(_bytes(file) for file in present)
     try:
         free = shutil.disk_usage(layout.root).free

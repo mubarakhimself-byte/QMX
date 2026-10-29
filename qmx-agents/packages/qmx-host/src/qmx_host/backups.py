@@ -54,7 +54,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qma.harness.home import DoctorLine
 from qmx_apps.errors import AppError
 from qmx_apps.volume import VolumeLease
-from qmx_control.models import Document
+from qmx_control.models import ControlError, Document
 from qmx_control.service import ControlService
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.store import Reader
@@ -114,6 +114,7 @@ from qmx_home.backup.round import (
 )
 from qmx_home.backup.snapshot import RoadLease
 from qmx_home.backup.upkeep import check, repack
+from qmx_home.classes import PER_MACHINE_KEYS
 from qmx_home.files import Busy, hold, plain
 from qmx_home.rclone import Keys, Rclone
 from qmx_home.versions import log_line, log_lines
@@ -1289,13 +1290,14 @@ class Backups:
             row = rows.get(one.name)
             if storage_key(one, home_id) == key and isinstance(row, dict):
                 storage = Connected(one.name, cast("dict[str, object]", row))
-        path = self.layout.home / "settings.toml"
-        stored = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-        settings, _ = restored_settings(stored, machine, storage)
-        for section in sorted({*settings, *stored}):
-            if settings.get(section) != stored.get(section):
-                value = cast("Document", settings.get(section, {}))
-                self.control.settings_update(cast("Any", section), lambda _c, v=value: v)
+        for section in sorted({key.partition(".")[0] for key in PER_MACHINE_KEYS} | {"engine"}):
+
+            def settle(current: Document, section: str = section) -> Document:
+                ours = storage if section == "engine" else None
+                settings, _ = restored_settings({section: current}, machine, ours)
+                return cast("Document", settings.get(section, {}))
+
+            self.control.settings_update(cast("Any", section), settle)
 
     def keys_to_fill(self) -> dict[str, object]:
         """`GET /api/backups/keys-to-fill`: the key names the restored settings refer to that
@@ -1315,14 +1317,28 @@ class Backups:
 
     def fill(self, path: str, value: str) -> None:
         """One `settings.toml` value the restored copy left out, written back at its path.
-        Raises Refusal for a path the list does not name."""
+        Raises Refusal for a path the list does not name, for an array entry past its list, and
+        while a restore is being staged or waits for the next start: its finish sets this
+        folder's `settings.toml` aside, so the key would not reach the restored one."""
         listed = cast("list[str]", self.keys_to_fill()["settings"])
         if path not in listed:
             raise Refusal(
                 f"{path!r} is not a settings.toml key this restore left out; fill one of "
                 "GET /api/backups/keys-to-fill, or change other settings in Settings"
             )
-        self.control.fill_setting(path, value)
+        with self._starting:
+            staging = self.jobs.latest(RESTORE)
+            if (staging is not None and staging.state == "running") or _read_journal(
+                self.layout
+            ) is not None:
+                raise Refusal(
+                    f"a restore is staged: restart QMX to finish it, then fill {path!r}; a key "
+                    "written now would be set aside with the work the restore replaces"
+                )
+            try:
+                self.control.fill_setting(path, value)
+            except ControlError as refused:
+                raise Refusal(str(refused)) from None
         record = _fill_record(self.layout)
         keep_fill_record(
             self.layout,

@@ -25,7 +25,14 @@ from test_card_restore import ended, folder, home_id, notes
 from test_connect import Store
 
 from qmx_host import first_start
-from qmx_host.first_start import Connected, first_start_router, offer, restore_into, settled
+from qmx_host.first_start import (
+    Connected,
+    first_start_router,
+    offer,
+    restore_into,
+    restored_settings,
+    settled,
+)
 
 needs_rclone = pytest.mark.skipif(shutil.which("rclone") is None, reason="rclone is not on PATH")
 COPY_AT = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)
@@ -206,6 +213,51 @@ def test_the_storage_restored_from_takes_the_copys_row_id_and_this_machines_keys
     assert settings["backup"]["place"]["OLDCLOUD"] == {"every": "1w"}
     assert settings["telemetry"] == {"send_to": "off"}
     assert "disk.floor_gb" not in settings["engine"]
+
+
+def test_the_storage_restored_from_keeps_its_row_when_its_root_differs_by_a_trailing_slash() -> (
+    None
+):
+    row = {"id": "G1", "via": "rclone", "can": ["keep"], "remote": "qmx_g1", "type": "drive"}
+    stored = {"engine": {"placement": {"gdrive": {**row, "root": "QMX-backup"}}}}
+    storage = Connected("lane", {**row, "id": "NEW", "remote": "qmx_new", "root": "QMX-backup/"})
+
+    settings, ident = restored_settings(stored, {}, storage)
+
+    assert ident == "G1"
+    assert list(settings["engine"]["placement"]) == ["gdrive"]
+    assert settings["engine"]["placement"]["gdrive"]["remote"] == "qmx_new"
+
+
+@needs_rclone
+def test_the_card_key_route_writes_only_the_key_the_waiting_card_asks_for(
+    card: tuple[TestClient, Store], tmp_path: Path
+) -> None:
+    client, keys = card
+    asking = job(
+        client,
+        "/api/first-start/connect",
+        {
+            "folder": str(tmp_path / "QMX"),
+            "kind": "r2",
+            "place": "cloud",
+            "answer": {"fields": {"root": "lane-bucket"}},
+        },
+    )
+
+    other = client.put("/api/first-start/keys/qmx/firecrawl", json={"value": PLANTED})
+    asked = client.put("/api/first-start/keys/qmx/r2-cloud", json={"value": PLANTED})
+
+    assert asking["needs"]["card"] == "secret"
+    assert asking["needs"]["key"] == "qmx/r2-cloud"
+    assert (other.status_code, other.json()["detail"]) == (
+        409,
+        "the card waiting in this first start asks for qmx/r2-cloud, not qmx/firecrawl; nothing "
+        "was written",
+    )
+    assert keys.read("qmx/firecrawl") is None
+    assert asked.status_code == 204
+    assert keys.read("qmx/r2-cloud") == PLANTED
 
 
 @needs_rclone

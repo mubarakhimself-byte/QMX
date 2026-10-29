@@ -622,21 +622,26 @@ def _key_path(path: str) -> list[str | int]:
     ]
 
 
-def _placed(value: object, parts: Sequence[str | int], filled: str) -> Any:
+def _placed(value: object, parts: Sequence[str | int], filled: str, path: str) -> Any:
     """`value` with `filled` at `parts`: a missing table is made, and an array entry by index is
-    put back in its place."""
+    put back in its place. Raises ControlError for an index past the list: a left-out entry
+    goes back among the entries the copy kept, at most one past the last."""
     head, rest = parts[0], parts[1:]
     if isinstance(head, int):
         items = list(cast("list[object]", value)) if isinstance(value, list) else []
+        if head > len(items) or (rest and head == len(items)):
+            raise ControlError(
+                "invalid_settings",
+                f"{path!r} names entry {head} of a list that holds {len(items)}; nothing was "
+                "written.",
+            )
         if not rest:
-            items.insert(min(head, len(items)), filled)
-        elif head < len(items):
-            items[head] = _placed(items[head], rest, filled)
+            items.insert(head, filled)
         else:
-            items.append(_placed({}, rest, filled))
+            items[head] = _placed(items[head], rest, filled, path)
         return items
     table = dict(cast("dict[str, object]", value)) if isinstance(value, dict) else {}
-    table[head] = filled if not rest else _placed(table.get(head), rest, filled)
+    table[head] = filled if not rest else _placed(table.get(head), rest, filled, path)
     return table
 
 
@@ -902,7 +907,7 @@ class ControlService:
             target = self.home / "settings.toml"
             text = target.read_text(encoding="utf-8") if target.exists() else ""
             stored = cast(Document, tomllib.loads(text))
-            settings = _placed(stored, parts, value)
+            settings = _placed(stored, parts, value, path)
             temporary = target.with_suffix(".tmp")
             temporary.write_text(kept_word_for_word(text, stored, settings), encoding="utf-8")
             temporary.replace(target)

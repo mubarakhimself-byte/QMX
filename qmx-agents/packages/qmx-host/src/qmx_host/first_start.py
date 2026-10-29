@@ -989,11 +989,14 @@ def _same_target(row: Mapping[str, object], other: Mapping[str, object]) -> bool
     if row.get("via", "folder") != other.get("via", "folder"):
         return False
     if other.get("via") == "rclone":
-        return row.get("type") == other.get("type") and (row.get("root") or FOLDER) == (
-            other.get("root") or FOLDER
-        )
+        return row.get("type") == other.get("type") and _root(row) == _root(other)
     here, there = row.get("path"), other.get("path")
     return isinstance(here, str) and isinstance(there, str) and same_folder(Path(here), Path(there))
+
+
+def _root(row: Mapping[str, object]) -> str:
+    """Where an rclone row points inside its storage, a trailing slash or none read alike."""
+    return str(row.get("root") or FOLDER).rstrip("/\\")
 
 
 def write_pointer(root: Path) -> None:
@@ -1342,11 +1345,23 @@ def first_start_router(
         return JSONResponse(connect_document(job), status_code=202)
 
     def put_key(name: str, body: KeyValue) -> Response:
-        """A key a storage's secret card asks for, written to Credential Manager under its `qmx/`
-        name, never read back."""
+        """The key the waiting secret card asks for, written to Credential Manager under its
+        `qmx/` name, never read back; any other name is refused."""
         refused = key_refusal(name)
         if refused is not None:
             raise HTTPException(400, detail=refused)
+        job = latest()
+        needs = None if job is None else (job.result or {}).get("needs")
+        card = cast("dict[str, object]", needs) if isinstance(needs, dict) else {}
+        asked = card.get("key") if card.get("card") == "secret" else None
+        if name != asked:
+            raise HTTPException(
+                409,
+                detail=f"no card in this first start waits for a key, so {name} was not written"
+                if asked is None
+                else f"the card waiting in this first start asks for {asked}, not {name}; "
+                "nothing was written",
+            )
         keys().replace(name, body.value)
         return Response(status_code=204)
 
