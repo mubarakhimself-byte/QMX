@@ -95,7 +95,7 @@ from qmx_home import Layout
 from qmx_home.backup.restore import RESTORE_LOCK
 from qmx_home.files import Busy, Held, hold
 from qmx_home.rclone import Rclone
-from qmx_home.versions import StoreRefused
+from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
@@ -838,6 +838,7 @@ async def serve(
                             passes,
                             library_service(home, store, serving, bearer),
                         )
+                        upgrade_moment_ended(Layout.from_home(home))
                         server = uvicorn.Server(uvicorn.Config(app))
                         beating = asyncio.create_task(
                             heartbeats(

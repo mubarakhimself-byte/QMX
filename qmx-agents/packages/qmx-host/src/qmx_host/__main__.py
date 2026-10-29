@@ -30,9 +30,10 @@ Before `serve` or `start`, a restore staged for the folder is finished (`qmx_hom
 before any store opens; one that cannot finish stops the start with its line and stays staged.
 Then every store of the folder is read against this release (design 62 B2): a store opened
 read-only is named on stderr, and a refused one stops the start with its name and the version it
-needs. When a store upgrades, `serve` first takes a quick copy of the whole folder tagged
-`before-upgrade` (design 62 B3); a copy that cannot be made is one line on stderr and the start
-goes on.
+needs. When a store upgrades, `serve` first syncs (design 06 section 7): one copy of the whole
+folder tagged `before-update` into This PC's copies, sent to every storage that is on within
+`[backup.upkeep] before_update_wait`. A storage that refused or did not answer, or a copy that
+cannot be made, is one line on stderr and the start goes on.
 
 Exit codes the desktop app branches on (loose strings P1, Appendix E): `serve`, `start`, `status`
 and `stop` exit 3 when a first start is due (no QMX folder yet, only his old data, or an
@@ -238,13 +239,18 @@ def _finish_restore(parser: argparse.ArgumentParser, layout: Layout) -> None:
         print(done.line, file=sys.stderr, flush=True)
 
 
-def _copy_before_upgrade(layout: Layout) -> None:
-    """One copy of the whole folder into This PC's copies tagged `before-upgrade`, with the local
-    floor. One that cannot be made is a line on stderr, and the start goes on: each store still
-    copies itself before its own upgrade."""
-    from qmx_home.backup.plan import PlanRefused, parse  # noqa: PLC0415
-    from qmx_home.backup.round import quick  # noqa: PLC0415
+def _copy_before_upgrade(layout: Layout, *, wait: float | None = None) -> None:
+    """Sync before the update (design 06 section 7): one copy of the whole folder into This PC's
+    copies tagged `before-update`, sent to every storage that is on, waiting at most `wait`
+    seconds (`[backup.upkeep] before_update_wait` when None). A storage that refused or did not
+    answer is one line, and the start goes on with the copy on this PC. When that copy could not
+    be made, a local `before-upgrade` copy is tried instead; one that cannot be made either is a
+    line on stderr, and the start goes on: each store still copies itself before its own
+    upgrade."""
+    from qmx_home.backup.plan import Plan, PlanRefused, parse  # noqa: PLC0415
+    from qmx_home.backup.round import quick, sync_now  # noqa: PLC0415
     from qmx_home.files import local_floor  # noqa: PLC0415
+    from qmx_home.versions import upgrade_copied  # noqa: PLC0415
 
     from qmx_host.backups import road_lease_of  # noqa: PLC0415
     from qmx_host.disk import free_bytes  # noqa: PLC0415
@@ -253,9 +259,35 @@ def _copy_before_upgrade(layout: Layout) -> None:
     try:
         settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         engine = cast("dict[str, object]", settings.get("engine", {}))
-        leave_out = parse(settings.get("backup", {}), layout, engine).leave_out
+        plan = parse(settings.get("backup", {}), layout, engine)
     except OSError, ValueError, PlanRefused:
-        settings, leave_out = {}, ()
+        settings, plan = {}, Plan()
+    try:
+        synced = sync_now(
+            layout,
+            plan,
+            "before-update",
+            wait=wait,
+            runner=_rclone(layout, plan),
+            road_lease=road_lease_of(layout),
+        )
+    except Exception as failed:  # the local copy below still guards the upgrade
+        print(f"before the upgrade: the sync did not run: {failed}", file=sys.stderr, flush=True)
+    else:
+        if synced.copied:
+            upgrade_copied(layout, synced.report.stamp)
+            for line in synced.missed:
+                print(
+                    f"before the upgrade: {line}. The update goes on; your copy on this PC is "
+                    "fresh.",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            reached = [p.where for p in synced.sent if p.result in ("copied", "unchanged")]
+            to = f", and sent to {', '.join(reached)}" if reached else ""
+            print(f"before the upgrade: {synced.report.places[0].line}{to}", file=sys.stderr)
+            return
+    leave_out = plan.leave_out
     engine = cast("dict[str, object]", settings.get("engine", {}))
     try:
         report = quick(
@@ -270,6 +302,7 @@ def _copy_before_upgrade(layout: Layout) -> None:
     else:
         place = report.places[0]
         if place.result == "copied":
+            upgrade_copied(layout, report.stamp)
             print(f"before the upgrade: {place.line}", file=sys.stderr, flush=True)
             return
         why = place.line
