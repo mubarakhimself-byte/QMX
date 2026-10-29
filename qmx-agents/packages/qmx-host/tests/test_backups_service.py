@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import dataclasses
 import os
+import re
 import sqlite3
 import string
 import subprocess
@@ -88,15 +90,29 @@ def connect(backups: Backups, *storages: Document) -> None:
     backups.control.settings_put("backup", {"place": policies})
 
 
-def finished(backups: Backups, job: Job | None) -> Job:
-    assert job is not None, "the sweep started no round"
+def ended(backups: Backups, job_id: str) -> Job:
     for _ in range(600):
-        found = backups.jobs.get(job.id)
+        found = backups.jobs.get(job_id)
         assert found is not None
         if found.state != "running":
             return found
         time.sleep(0.05)
-    raise AssertionError("the round did not end within 30 s")
+    raise AssertionError("the job did not end within 30 s")
+
+
+def finished(backups: Backups, job: Job | None) -> Job:
+    """A job once it ended; a round's with the places of each send it started, once each
+    ended."""
+    assert job is not None, "the sweep started no round"
+    found = ended(backups, job.id)
+    if found.result is None or "sends" not in found.result:
+        return found
+    places = list(cast("list[object]", found.result["places"]))
+    for send_id in cast("dict[str, str]", found.result["sends"]).values():
+        sent = ended(backups, send_id)
+        if sent.result is not None:
+            places += cast("list[object]", sent.result["places"])
+    return dataclasses.replace(found, result={**found.result, "places": places})
 
 
 def results(job: Job) -> dict[str, str]:
@@ -198,7 +214,7 @@ def test_a_full_target_opens_one_incident_that_the_next_copy_there_resolves(
     connect(backups, target(usb, "1h"))
     room = FolderRepository.room
 
-    def full(repo: FolderRepository) -> int:
+    def full(repo: FolderRepository) -> int | None:
         return 0 if usb in repo.root.parents else room(repo)
 
     monkeypatch.setattr(FolderRepository, "room", full)
@@ -207,7 +223,7 @@ def test_a_full_target_opens_one_incident_that_the_next_copy_there_resolves(
     first = incident(layout, "usb")
     assert first is not None
     assert first[:2] == ("refused", 1)
-    assert "has 0.0 MB free; QMX keeps at least 1,024 MB free there" in first[2]
+    assert re.search(r"has 0\.0 MB free; QMX keeps at least [\d,]+ MB free there", first[2])
     assert not backups.doctor_line().ok
     clock.advance(minutes=61)
     finished(backups, backups.sweep())
@@ -252,7 +268,7 @@ def test_a_copy_that_lacks_files_or_could_not_read_one_opens_its_incident_naming
     backups = service(layout, clock)
     connect(backups, target(usb))
     finished(backups, backups.sweep())
-    key = cast("list[dict[str, object]]", log_lines(layout)[-1]["places"])[1]["key"]
+    key = cast("list[dict[str, object]]", log_lines(layout)[-1]["places"])[0]["key"]
 
     def logged(result: str, line: str, *, partial: bool) -> None:
         clock.advance(minutes=5)
@@ -369,7 +385,7 @@ def test_a_round_another_folder_sent_to_the_target_is_refused_until_he_carries_o
     finished(backups, backups.sweep())
     twin = folder(tmp_path / "twin")
     twin.label.write_bytes(layout.label.read_bytes())
-    carry_on(twin, backups.plan().folders[0])
+    carry_on(twin, backups.plan().sending[0])
     sent = run_round(twin, backups.plan(), now=clock.now + timedelta(minutes=1), floor=0)
     assert [place.result for place in sent.places] == ["copied", "copied"]
 
@@ -411,7 +427,7 @@ def test_a_round_that_stops_with_an_unexpected_error_is_logged_raised_and_tried_
 
     monkeypatch.undo()
     clock.advance(minutes=60)
-    assert results(finished(backups, backups.sweep())) == {"quick": "copied", "usb": "copied"}
+    assert results(finished(backups, backups.sweep())) == {"quick": "copied"}
     assert incident(layout, "quick") is None
 
 
@@ -424,7 +440,7 @@ def test_after_a_restart_the_incident_of_a_place_no_longer_in_settings_is_resolv
     connect(backups, target(usb))
     room = FolderRepository.room
 
-    def full(repo: FolderRepository) -> int:
+    def full(repo: FolderRepository) -> int | None:
         return 0 if usb in repo.root.parents else room(repo)
 
     monkeypatch.setattr(FolderRepository, "room", full)

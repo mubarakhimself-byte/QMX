@@ -14,13 +14,16 @@ import hashlib
 import json
 import os
 import sqlite3
+import time
 import uuid
-from contextlib import closing
+from collections.abc import Callable, Generator
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from qmx_home import Layout, resolve
 from qmx_home.backup.plan import STORAGE_POLICY, Keep, Policy, Storage
+from qmx_home.backup.repository import FolderRepository
 from qmx_home.files import long_path
 
 STORES = (
@@ -298,3 +301,83 @@ def folder(
     """A folder storage at `path`, as an `[engine]` row with `can = ["keep"]` reads."""
     policy = Policy(every=every, keep=keep or STORAGE_POLICY.keep)
     return Storage(ident, ident, "folder", path, policy)
+
+
+def stored(repo: FolderRepository) -> set[str]:
+    """Every file a folder storage holds, by sha256: loose, or in a pack an index names."""
+    repo.refresh()
+    loose = (
+        {p.name for p in repo.pool.rglob("*") if p.is_file() and len(p.name) == 64}
+        if repo.pool.is_dir()
+        else set[str]()
+    )
+    held = repo.index()
+    return loose | {sha for sha in held.where if held.good(sha)}
+
+
+def stored_bytes(repo: FolderRepository, sha256: str, scratch: Path) -> bytes:
+    """One file's bytes as the storage gives them back."""
+    scratch.mkdir(parents=True, exist_ok=True)
+    target = scratch / uuid.uuid4().hex
+    try:
+        repo.fetch(sha256, target)
+        return target.read_bytes()
+    finally:
+        target.unlink(missing_ok=True)
+
+
+@contextmanager
+def slowed(seconds: float, *, at: Callable[[str], bool] = lambda _op: True) -> Generator[None]:
+    """The folder storage's slow-down seam: every step that writes or deletes on a folder
+    storage (a pack, an index, a manifest, a drop) waits `seconds` first, so a lane or a test can
+    stop a send halfway. `RCLONE_BWLIMIT` slows only rclone."""
+    real = FolderRepository._step  # pyright: ignore[reportPrivateUsage]
+
+    def step(self: FolderRepository, op: str) -> None:
+        if at(op):
+            time.sleep(seconds)
+        real(self, op)
+
+    FolderRepository._step = step  # type: ignore[method-assign]  # pyright: ignore[reportPrivateUsage]
+    try:
+        yield
+    finally:
+        FolderRepository._step = real  # type: ignore[method-assign]  # pyright: ignore[reportPrivateUsage]
+
+
+def damage(repo: FolderRepository, sha256: str) -> Path:
+    """Flip one byte of one stored file where the storage keeps it: inside its frame in its
+    pack, or in its loose file. The file it changed."""
+    if repo.loose(sha256):
+        path = repo.pool_path(sha256)
+        offset = 0
+    else:
+        repo.refresh()
+        found = repo.index().good(sha256)[0]
+        path = repo.local_pack(found.pack)
+        offset = found.offset + found.length // 2
+    with long_path(path).open("r+b") as changed:
+        changed.seek(offset)
+        byte = changed.read(1)
+        changed.seek(offset)
+        changed.write(bytes([byte[0] ^ 0xFF]))
+    return path
+
+
+def readable_files(folder: Path) -> list[tuple[Path, bytes]]:
+    """Every file under `folder` as a reader sees it: each pack opened into the files it holds,
+    so a search for a planted value is not fooled by compression."""
+    from compression import zstd
+
+    from qmx_home.backup.repository import pack_list, read_frame
+
+    found: list[tuple[Path, bytes]] = []
+    for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+        listed = pack_list(path) if path.suffix == ".pack" else None
+        if listed is None:
+            found.append((path, path.read_bytes()))
+            continue
+        for sha, at in listed[1].items():
+            frame = read_frame(path, at)
+            found.append((path / sha, frame if at.raw else zstd.decompress(frame)))
+    return found

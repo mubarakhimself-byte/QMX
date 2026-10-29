@@ -63,6 +63,9 @@ from qmx_home import RESTORE_UNFINISHED, Layout, NoQmxFolder, resolve
 from qmx_home.versions import check_open
 
 if TYPE_CHECKING:
+    from qmx_home.backup.plan import Plan
+    from qmx_home.rclone import Rclone
+
     from qmx_host.first_start import Places
 
 FIRST_START = ("first-start", "new", "open", "bring-in", "restore")
@@ -184,21 +187,37 @@ def backup(layout: Layout, only: str | None) -> int:
     settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     engine = cast("dict[str, object]", settings.get("engine", {}))
     try:
+        plan = parse(settings.get("backup", {}), layout, engine)
         report = run_round(
             layout,
-            parse(settings.get("backup", {}), layout, engine),
+            plan,
             now=datetime.now().astimezone(),
             floor=local_floor(engine, free_bytes(layout.home)),
             only=only,
             asked=True,
             progress=lambda step: print(step, file=sys.stderr, flush=True),
             road_lease=road_lease_of(layout),
+            rclone=_rclone(layout, plan),
         )
     except (Busy, PlanRefused) as refused:
         print(f"refused: {refused}", file=sys.stderr)
         return 1
     print("\n".join(report.lines))
     return 1 if report.result == "refused" else 0
+
+
+def _said(step: str, **_counts: int) -> None:
+    print(step, file=sys.stderr, flush=True)
+
+
+def _rclone(layout: Layout, plan: Plan) -> Rclone | None:
+    """The one rclone runner, on Credential Manager, when a storage is reached through rclone."""
+    if not any(storage.via == "rclone" for storage in plan.sending):
+        return None
+    from qmx_broker.credentials import CredentialManager  # noqa: PLC0415
+    from qmx_home.rclone import Rclone  # noqa: PLC0415
+
+    return Rclone(layout, keys=CredentialManager(), path=plan.rclone_path)
 
 
 def _finish_restore(parser: argparse.ArgumentParser, layout: Layout) -> None:
@@ -386,7 +405,7 @@ def restore(parser: argparse.ArgumentParser, args: argparse.Namespace, places: P
                 repository,
                 copy,
                 replace=args.replace,
-                progress=lambda step: print(step, file=sys.stderr, flush=True),
+                progress=_said,
             )
     except HostServes as hosted:
         print(f"refused: {hosted}", file=sys.stderr)

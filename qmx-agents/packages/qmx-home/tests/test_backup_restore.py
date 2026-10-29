@@ -274,7 +274,7 @@ def test_a_copy_of_a_newer_format_or_with_stores_too_new_is_refused_before_anyth
     target, stamp = sent(filled.layout, tmp_path)
     held = target.manifest(stamp)
     newer = Manifest(
-        {**held.header, "stamp": "20261028T030000000000Z", "format": "qmx-backup/2"},
+        {**held.header, "stamp": "20261028T030000000000Z", "format": "qmx-backup/3"},
         held.entries,
     )
     target.put_copy(newer)
@@ -285,7 +285,7 @@ def test_a_copy_of_a_newer_format_or_with_stores_too_new_is_refused_before_anyth
     )
     target.put_copy(closed)
 
-    with pytest.raises(RestoreRefused, match=r"copy format \(qmx-backup/2\)"):
+    with pytest.raises(RestoreRefused, match=r"copy format \(qmx-backup/3\)"):
         restore.stage(filled.layout, target, newer.stamp, keep_free=0)
     with pytest.raises(RestoreRefused, match=r"run ledger at version 9.*version 7 or newer"):
         restore.stage(filled.layout, target, closed.stamp, keep_free=0)
@@ -351,13 +351,39 @@ def test_a_quick_copy_skips_a_purged_blob_places_its_tombstone_and_names_it_for_
     assert after.purge == (f"sha256:{hexdigest}",)
 
 
-def test_a_quick_copy_whose_file_written_once_is_gone_without_a_tombstone_is_refused_by_name(
+def test_a_file_written_once_removed_by_hand_comes_back_from_this_pcs_linked_copy(
     tmp_path: Path,
 ) -> None:
     filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
     undo, stamp = quick_copy(filled.layout)
     data = filled.layout.data
     gone = next(p for p in filled.written_once if p.startswith("library/objects/"))
+    held = next(e for e in undo.manifest(stamp).entries if e.path == gone)
+    (data / gone).unlink()
+
+    restore.stage(filled.layout, undo, stamp, keep_free=0)
+    restore.finish(filled.layout)
+
+    assert held.at == "pool"
+    assert sha256_of(data / gone) == held.sha256
+
+
+def test_where_the_drive_refuses_links_a_file_written_once_and_gone_is_refused_by_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmx_home.backup import repository
+
+    filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
+
+    def refused(*_: object) -> None:
+        raise OSError(1, "links are not allowed on this drive")
+
+    with monkeypatch.context() as patched:
+        patched.setattr(repository.os, "link", refused)
+        undo, stamp = quick_copy(filled.layout)
+    data = filled.layout.data
+    gone = next(p for p in filled.written_once if p.startswith("library/objects/"))
+    assert {e.at for e in undo.manifest(stamp).entries if e.kind == "once"} == {"live"}
     (data / gone).unlink()
     before = listing(data)
 
@@ -399,7 +425,7 @@ def test_files_written_once_are_linked_where_the_drive_allows_and_copied_elsewhe
 ) -> None:
     filled = filled_folder(tmp_path / "QMX", files=3, secrets=False)
     undo, stamp = quick_copy(filled.layout)
-    once = len([e for e in undo.manifest(stamp).entries if e.at == "live"])
+    once = len([e for e in undo.manifest(stamp).entries if e.kind == "once"])
 
     linked = restore.stage(filled.layout, undo, stamp, keep_free=0)
     restore.cancel(filled.layout)
@@ -413,7 +439,7 @@ def test_files_written_once_are_linked_where_the_drive_allows_and_copied_elsewhe
 
     assert (linked.linked, copied.linked) == (once, 0)
     assert copied.bytes == linked.bytes + sum(
-        e.size for e in undo.manifest(stamp).entries if e.at == "live"
+        e.size for e in undo.manifest(stamp).entries if e.kind == "once"
     )
     placed = {e.path: e.sha256 for e in undo.manifest(stamp).entries}
     assert listing(filled.layout.data) == {**placed, LEASE: sha256_of(filled.layout.data / LEASE)}
