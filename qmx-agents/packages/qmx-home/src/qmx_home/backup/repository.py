@@ -825,6 +825,8 @@ class Packed:
         used = {
             entry.sha256 for m in manifests.values() for entry in m.entries if entry.at == "pool"
         }
+        moment = stamp_of(now)
+        keep = self._named_again(held, used, listing, moment)
         chosen = {sha: places[0] for sha in used if (places := self._present(held, sha, listing))}
         window = _window(manifests, safety, now)
         named_by: dict[str, list[tuple[str, Location]]] = {}
@@ -833,7 +835,6 @@ class Packed:
                 if at.pack in listing:
                     named_by.setdefault(at.pack, []).append((sha, at))
         framed = {name: sum(at.length for _, at in held_by) for name, held_by in named_by.items()}
-        keep: set[str] = set()
         rewrite: list[str] = []
         letting: set[str] = set()
         budget = per_run
@@ -871,14 +872,17 @@ class Packed:
             ]
             written = self.put_frames(frames)
             letting |= set(rewrite)
-        moment = stamp_of(now)
         dropping = {name: held.dropping.get(name, moment) for name in letting}
         gone = {name for name, since in dropping.items() if moment_of(since) <= now - safety}
         told("checking the copies again")
         late, _ = self.manifests()
-        for stamp, copy in late.items():
-            if stamp in manifests:
-                continue
+        written_since = [copy for stamp, copy in late.items() if stamp not in manifests]
+        since_used = {e.sha256 for c in written_since for e in c.entries if e.at == "pool"}
+        back = self._named_again(held, since_used, listing, moment)
+        gone -= back
+        dropping = {k: v for k, v in dropping.items() if k not in back}
+        keep |= back
+        for copy in written_since:
             for entry in copy.entries:
                 places = self._present(held, entry.sha256, listing)
                 if places and all(at.pack in gone for at in places):
@@ -935,6 +939,34 @@ class Packed:
 
     def _present(self, held: Index, sha256: str, listing: Mapping[str, int]) -> list[Location]:
         return [at for at in held.good(sha256) if at.pack in listing]
+
+    def _named_again(
+        self, held: Index, used: set[str], listing: Mapping[str, int], moment: str
+    ) -> set[str]:
+        """The packs a prune is letting go that hold a file in `used` no named pack holds, read
+        from their own lists and named again in `held` from `moment`. A writer trusts a file it
+        found named, so its copy can name a file in a pack a prune let go after that."""
+        letting = sorted(name for name in set(held.dropping) - set(held.named) if name in listing)
+        missing = {sha for sha in used if not self.pool_has(sha)} if letting else set[str]()
+        back: set[str] = set()
+        for name in letting:
+            if not missing:
+                break
+            try:
+                found = pack_list(self.local_pack(name))
+            except FileNotFoundError:
+                continue
+            if found is None:
+                continue
+            _, files = found
+            needed = {sha for sha in files if sha in missing and (sha, name) not in held.bad}
+            if not needed:
+                continue
+            for sha, at in files.items():
+                held.add(sha, at, moment)
+            missing -= needed
+            back.add(name)
+        return back
 
     def _load(self) -> Index:
         held = Index()
