@@ -109,7 +109,8 @@ def acts(sent: Sequence[str]) -> list[str]:
     """The service, firewall, wait and login acts setup sent after the bootstrap, in order."""
     return [
         line
-        for text in sent[1:]
+        for text in sent
+        if not text.startswith("#!/usr/bin/env bash")
         for line in text.splitlines()
         if line.startswith(("systemctl", RECOVER, f"sudo {RECOVER}", "wait"))
     ]
@@ -262,7 +263,7 @@ def test_a_dropped_ssh_session_is_told_apart_from_a_command_that_failed(tmp_path
 
 
 def test_the_import_and_the_host_unit_name_the_one_root_and_the_servers_place() -> None:
-    steps = dict(setup_steps(REVISION, machine=MACHINE))
+    steps = {step.name: step.script for step in setup_steps(REVISION, machine=MACHINE)}
     importing = steps["import as qmx"]
     installed = steps["install the host"]
     exec_start = next(line for line in installed.splitlines() if line.startswith("ExecStart="))
@@ -320,14 +321,15 @@ def test_a_dry_run_prints_the_order_and_writes_nothing(tmp_path: Path) -> None:
     )
     assert [line for line in said if line.startswith("step ")] == [
         "step 1: bootstrap",
-        "step 2: install the recovery script",
-        "step 3: close the firewall",
-        "step 4: install the host",
-        "step 5: stop and disable the standalone Hub",
-        "step 6: lay out the QMX folder",
-        "step 7: move the pairing key and the control token",
-        "step 8: import as qmx",
-        "step 9: start the host",
+        "step 2: join the tailnet",
+        "step 3: install the recovery script",
+        "step 4: close the firewall",
+        "step 5: install the host",
+        "step 6: stop and disable the standalone Hub",
+        "step 7: lay out the QMX folder",
+        "step 8: move the pairing key and the control token",
+        "step 9: import as qmx",
+        "step 10: start the host",
     ]
     assert list(tmp_path.iterdir()) == []
 

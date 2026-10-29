@@ -46,8 +46,9 @@ import time
 import tomllib
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Final, cast
+from typing import Any, Final, NamedTuple, cast
 
 import uvicorn
 from qmx_home import NoQmxFolder, resolve
@@ -612,6 +613,124 @@ FIREWALL_STEP: Final = "close the firewall"
 type Call = Callable[[list[str], str | None], str]
 """One command on this PC or over ssh, with its stdin; returns stdout and raises on failure."""
 
+SETUP_MARKS: Final = f"{NODE_STATE}/setup"
+"""One empty file per server step that finished, in a folder named for the revision it ran at,
+so setup run again at that revision skips it, and an update to another revision runs it again."""
+TAILSCALE_KEY: Final = "/run/qmx-tailscale-key"
+"""Where the one-off Tailscale key waits for `tailscale up`, root's alone, removed after."""
+
+
+class SetupStopped(Exception):
+    """A step that stops setup on purpose: `line` says why and what to do next."""
+
+    def __init__(self, line: str) -> None:
+        super().__init__(line)
+        self.line = line
+
+
+@dataclass(slots=True)
+class Server:
+    """One server as setup reaches it: the ssh command that logs in, this PC's home, the place
+    name and revision, the one way commands are sent, and what setup has read from it so far."""
+
+    ssh: tuple[str, ...]
+    home: Path
+    machine: str
+    revision: str
+    call: Call
+    say: Callable[[str], None] = print
+    sleep: Callable[[float], None] = time.sleep
+    auth_key: Callable[[], str | None] = lambda: None
+    """The one-off Tailscale key, for a server that is not on the tailnet yet."""
+    hub: Callable[[Path, str], None] = set_hub_url
+    """How `[library] hub_url` is written: the file itself, or a running host's settings."""
+    read: dict[str, str] = field(default_factory=dict[str, str])
+    marks: set[str] | None = None
+
+    def send(self, command: str, stdin: str | None = None) -> str:
+        return self.call([*self.ssh, command], stdin)
+
+    def login(self, command: str) -> str:
+        """`command` through a fresh SSH login, as the firewall check needs one."""
+        return self.call([self.ssh[0], "-o", "ConnectTimeout=10", *self.ssh[1:], command], None)
+
+
+class NodeStep(NamedTuple):
+    name: str
+    script: str
+    """The script the step sends for `sudo bash`, or "" for a step on this PC."""
+    check: Callable[[Server], bool]
+    """True when the step's work is already in place, so the step is skipped."""
+    do: Callable[[Server], None]
+    """Raises SetupStopped with one line for a refusal."""
+
+
+def _slug(name: str) -> str:
+    return name.replace(" ", "-")
+
+
+def _marked(server: Server) -> set[str]:
+    if server.marks is None:
+        listed = server.send(f"sudo ls {SETUP_MARKS}/{server.revision} 2>/dev/null || true")
+        server.marks = {line.strip() for line in listed.splitlines() if line.strip()}
+    return server.marks
+
+
+def _mark(server: Server, name: str) -> None:
+    folder = f"{SETUP_MARKS}/{server.revision}"
+    server.send(f"sudo sh -c 'install -d -m 700 {folder} && touch {folder}/{_slug(name)}'")
+    _marked(server).add(_slug(name))
+
+
+def _scripted(name: str, script: str) -> NodeStep:
+    def done(server: Server) -> bool:
+        return _slug(name) in _marked(server)
+
+    def do(server: Server) -> None:
+        try:
+            server.send("sudo bash -s", script)
+        except SessionLost:
+            # Switching ufw on can reset the session that asked; the fresh login below decides.
+            if name != FIREWALL_STEP:
+                raise
+        if name == FIREWALL_STEP:
+            refused = kept_closed(server)
+            if refused is not None:
+                raise SetupStopped(refused)
+        _mark(server, name)
+
+    return NodeStep(name, script, done, do)
+
+
+def _on_tailnet(server: Server) -> bool:
+    try:
+        found = server.send("tailscale ip -4").split()
+    except RuntimeError:
+        return False
+    if found:
+        server.read["address"] = found[0]
+    return bool(found)
+
+
+def _join_tailnet(server: Server) -> None:
+    key = server.auth_key()
+    if not key:
+        raise SetupStopped(
+            "the server is not on your tailnet yet; make a one-off auth key in the Tailscale admin "
+            "console, then run setup again with it"
+        )
+    server.send(f"sudo sh -c 'umask 077; cat > {TAILSCALE_KEY}'", key)
+    server.send(
+        "sudo bash -s",
+        f"set -eu\ntrap 'rm -f {TAILSCALE_KEY}' EXIT\n"
+        f"tailscale up --auth-key=file:{TAILSCALE_KEY}\n",
+    )
+    if not _on_tailnet(server):
+        raise SetupStopped(
+            "the server ran tailscale up but has no tailnet address; check the key is unused and "
+            "not expired, then run setup again"
+        )
+
 
 def setup_steps(
     revision: str,
@@ -620,35 +739,126 @@ def setup_steps(
     hindsight: bool = False,
     hub_port: int = 0,
     pc_name: str = "",
-) -> list[tuple[str, str]]:
-    """The server's half of `qmx node setup`, in order, as `(step, script for sudo bash)`.
-    `machine` is the server's place name, which its host's unit runs under.
+) -> list[NodeStep]:
+    """The server's half of `qmx node setup`, in order, each with its check. `machine` is the
+    server's place name, which its host's unit runs under.
 
-    The recovery script comes straight after the bootstrap, because it owns the firewall's rules
-    and is his way in if a later step fails. The standalone Hub stops before the import because it
-    would hold the old store's lock and serve a second root; the QMX folder is laid out once the
-    host has stopped, so a flat home from an earlier setup moves while nothing holds it open; the
-    host starts last, so it opens the store the import wrote.
+    The server joins the tailnet right after the bootstrap installs Tailscale, reading its key
+    from a file, never an argument. The recovery script comes next, because it owns the
+    firewall's rules and is his way in if a later step fails. The standalone Hub stops before the
+    import because it would hold the old store's lock and serve a second root; the QMX folder is
+    laid out once the host has stopped, so a flat home from an earlier setup moves while nothing
+    holds it open; the host starts last, so it opens the store the import wrote.
     """
     return [
-        ("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
-        ("install the recovery script", recover_script(pc_name)),
-        (FIREWALL_STEP, f"set -eu\n{RECOVER} firewall close\n"),
-        ("install the host", host_unit_script(machine)),
-        (
+        _scripted("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
+        NodeStep("join the tailnet", "", _on_tailnet, _join_tailnet),
+        _scripted("install the recovery script", recover_script(pc_name)),
+        _scripted(FIREWALL_STEP, f"set -eu\n{RECOVER} firewall close\n"),
+        _scripted("install the host", host_unit_script(machine)),
+        _scripted(
             "stop and disable the standalone Hub",
             "set -eu\nsystemctl stop qmx-host || true\n"
             f"systemctl disable --now {' '.join(STANDALONE)}\n",
         ),
-        ("lay out the QMX folder", layout_script()),
-        ("move the pairing key and the control token", move_key_script()),
-        (
+        _scripted("lay out the QMX folder", layout_script()),
+        _scripted("move the pairing key and the control token", move_key_script()),
+        _scripted(
             "import as qmx",
             f"set -eu\nrunuser -u qmx -- {SERVER_VENV}/bin/qmx node import "
             f"--home {NODE_STATE} --root {SERVER_LIBRARY}\n",
         ),
-        ("start the host", "set -eu\nsystemctl enable --now qmx-host\n"),
+        _scripted("start the host", "set -eu\nsystemctl enable --now qmx-host\n"),
     ]
+
+
+def _address(server: Server) -> str:
+    if "address" not in server.read and not _on_tailnet(server):
+        raise SetupStopped("the server has no tailnet address; run: sudo tailscale up there")
+    return server.read["address"]
+
+
+def _hub(server: Server) -> str:
+    return f"http://{_address(server)}:{host_port(host_unit())}"
+
+
+def _server_key(server: Server) -> str:
+    if "key" not in server.read:
+        server.read["key"] = server.send(f"sudo cat {SERVER_HOME}/vault/{PAIRING_KEY}").strip()
+    return server.read["key"]
+
+
+def _key_held(server: Server) -> bool:
+    held = server.home / "vault" / PAIRING_KEY
+    return held.exists() and held.read_text(encoding="utf-8").strip() == _server_key(server)
+
+
+def _hub_written(server: Server) -> bool:
+    return hub_url(server.home) == _hub(server)
+
+
+def _write_hub(server: Server) -> None:
+    server.hub(server.home, _hub(server))
+    server.say(f"hub: {_hub(server)}")
+    server.say(f"primary: {library_primary(server.home)} (the flip is his click)")
+
+
+def _twin_rows(server: Server) -> list[str]:
+    return [f"TARGET={server.ssh[-1]}", f"SERVER_TAILNET={_address(server)}"]
+
+
+def _twin_written(server: Server) -> bool:
+    conf = server.home / TWIN_FOLDER / "qmx-recover.conf"
+    if not conf.is_file():
+        return False
+    return conf.read_text(encoding="utf-8").splitlines()[:2] == _twin_rows(server)
+
+
+def _write_twin(server: Server) -> None:
+    twin = write_twin(server.home, server.ssh[-1], _address(server))
+    server.say(f"recovery on this PC: {twin}")
+
+
+def _never(_server: Server) -> bool:
+    return False
+
+
+def _doctor(server: Server) -> None:
+    checks = server.send(f"sudo {SERVER_VENV}/bin/qmx node verify --home {SERVER_HOME} || true")
+    server.say(checks)
+    if "FAIL" in checks:
+        raise SetupStopped("the server's own doctor named a problem above; fix it, then run again")
+
+
+def _pair(server: Server) -> None:
+    pair(server.home, _server_key(server))
+
+
+def pc_steps() -> list[NodeStep]:
+    """The PC's half of setup: the pairing key (written, never printed, so it cannot land in a
+    log; MIGRATION step 7, AD-11), `[library] hub_url` and never `primary`, the recovery twin,
+    then the server's own doctor."""
+    return [
+        NodeStep("copy the pairing key", "", _key_held, _pair),
+        NodeStep("write the hub address", "", _hub_written, _write_hub),
+        NodeStep("write the recovery twin", "", _twin_written, _write_twin),
+        NodeStep("read the server's doctor", "", _never, _doctor),
+    ]
+
+
+def run_steps(server: Server, steps: Sequence[NodeStep]) -> str | None:
+    """Run `steps` in order on `server`, skipping each whose check passes. None when all are
+    done, or the line that stopped them."""
+    for number, step in enumerate(steps, start=1):
+        if step.check(server):
+            server.say(f"step {number}: {step.name}: already done")
+            continue
+        server.say(f"step {number}: {step.name}")
+        try:
+            step.do(server)
+        except SetupStopped as stopped:
+            return stopped.line
+    return None
 
 
 def setup(
@@ -663,16 +873,16 @@ def setup(
     say: Callable[[str], None] = print,
     dry_run: bool = False,
     sleep: Callable[[float], None] = time.sleep,
+    auth_key: Callable[[], str | None] = lambda: None,
 ) -> int:
     """`qmx node setup` after the source archive is on `host`: the server steps, then the PC's
     pairing key and `hub_url`, then the server's own doctor. `primary` is not written. `machine`
     is the server's place name (`PLACE`), the one its host runs under and its vault is sealed for.
+    The connect dialog's server kind runs the same two lists.
 
     `dry_run` prints every step's script and the PC's three writes, and runs and writes nothing.
     A fresh SSH login that fails once the firewall closes stops setup there, before the host.
     """
-    ssh = ["ssh", host]
-    port = host_port(host_unit())
     steps = setup_steps(
         revision,
         machine=machine,
@@ -680,42 +890,27 @@ def setup(
         hub_port=hub_port,
         pc_name=socket.gethostname().lower(),
     )
-    for number, (step, script) in enumerate(steps, start=1):
-        say(f"step {number}: {step}")
-        if dry_run:
-            say(f"node-bootstrap.sh at {revision}" if step == "bootstrap" else script.rstrip())
-            continue
-        try:
-            call([*ssh, "sudo bash -s"], script)
-        except SessionLost:
-            # Switching ufw on can reset the session that asked; the fresh login below decides.
-            if step != FIREWALL_STEP:
-                raise
-        if step == FIREWALL_STEP and not kept_closed(host, call, say, sleep):
-            return 1
-    server_key = f"{SERVER_HOME}/vault/{PAIRING_KEY}"
     if dry_run:
-        say(f"then on this PC: copy {server_key} to {home}/vault")
+        for number, step in enumerate(steps, start=1):
+            say(f"step {number}: {step.name}")
+            say(
+                f"node-bootstrap.sh at {revision}"
+                if step.name == "bootstrap"
+                else step.script.rstrip() or f"tailscale up --auth-key=file:{TAILSCALE_KEY}"
+            )
+        port = host_port(host_unit())
+        say(f"then on this PC: copy {SERVER_HOME}/vault/{PAIRING_KEY} to {home}/vault")
         say(f'then on this PC: [library] hub_url = "http://<tailnet address>:{port}"')
         say(f"then on this PC: write the recovery twin to {home / TWIN_FOLDER}")
         return 0
-    address = call([*ssh, "tailscale ip -4"], None).splitlines()[0]
-    url = f"http://{address}:{port}"
-    key = call([*ssh, f"sudo cat {server_key}"], None).strip()
-    # The key is written, never printed, so it cannot land in a log (MIGRATION step 7, AD-11).
-    held = home / "vault" / PAIRING_KEY
-    if not held.exists() or held.read_text(encoding="utf-8").strip() != key:
-        pair(home, key)
-    set_hub_url(home, url)
-    twin = write_twin(home, host, address)
-    say(f"hub: {url}")
-    say(f"recovery on this PC: {twin}")
-    say(f"primary: {library_primary(home)} (the flip is his click)")
-    checks = call(
-        [*ssh, f"sudo {SERVER_VENV}/bin/qmx node verify --home {SERVER_HOME} || true"], None
+    server = Server(
+        ("ssh", host), home, machine, revision, call, say=say, sleep=sleep, auth_key=auth_key
     )
-    say(checks)
-    return int("FAIL" in checks)
+    stopped = run_steps(server, [*steps, *pc_steps()])
+    if stopped is not None:
+        say(stopped)
+        return 1
+    return 0
 
 
 CLOSE_WAIT_S: Final = 5.0
@@ -724,39 +919,33 @@ CLOSE_TRIES: Final = 18
 each after the wait, give it a minute and a half to say on."""
 
 
-def kept_closed(
-    host: str, call: Call, say: Callable[[str], None], sleep: Callable[[float], None]
-) -> bool:
+def kept_closed(server: Server) -> str | None:
     """After the firewall closes, keep it closed only when a fresh SSH login works and the
-    server's own `firewall status` says on (AD-71).
+    server's own `firewall status` says on (AD-71). None when kept, or the line that stops setup.
 
     The close armed a timer that turns ufw off in five minutes, so a failed login undoes itself.
     """
     shown = ""
     for _ in range(CLOSE_TRIES):
-        sleep(CLOSE_WAIT_S)
+        server.sleep(CLOSE_WAIT_S)
         try:
-            shown = call(
-                ["ssh", "-o", "ConnectTimeout=10", host, f"sudo {RECOVER} firewall status"], None
-            )
+            shown = server.login(f"sudo {RECOVER} firewall status")
         except RuntimeError:
-            say(
+            return (
                 "A fresh SSH login to the server failed after the firewall closed. The undo "
                 "switches the firewall off within five minutes; then run setup again. If SSH "
                 "stays shut, Contabo's VNC console is the way back: log in there and run: "
                 "sudo qmx-recover firewall open"
             )
-            return False
         if any(row.startswith("firewall ") and row.endswith("PASS") for row in shown.splitlines()):
-            call(["ssh", host, f"sudo {RECOVER} firewall keep"], None)
-            return True
-    say(
+            server.send(f"sudo {RECOVER} firewall keep")
+            return None
+    return (
         "The firewall did not say on within a minute and a half, so setup stops here. If it "
         "came on later, the undo switches it off within five minutes. The server said:\n"
         f"{shown}\n"
         "Run setup again once that is fixed."
     )
-    return False
 
 
 TWIN_FOLDER: Final = "bin"
@@ -920,6 +1109,12 @@ def main() -> int:
     setting_up.add_argument("--hindsight", action="store_true")
     setting_up.add_argument("--dry-run", action="store_true", help="print the steps, run nothing")
     setting_up.add_argument("--machine", default="", help="the server's place name")
+    setting_up.add_argument(
+        "--auth-key-file",
+        type=Path,
+        default=None,
+        help="a file holding a one-off Tailscale auth key, for a server not on the tailnet yet",
+    )
     importer = commands.add_parser("import")
     importer.add_argument("--home", type=Path, default=Path(NODE_STATE))
     importer.add_argument("--bucket", type=Path, default=None)
@@ -1017,6 +1212,7 @@ def main() -> int:
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise RuntimeError("Setup needs an exact Git commit.")
         dry_run = bool(args.dry_run)
+        key_file = cast(Path | None, args.auth_key_file)
         if not dry_run:
             transfer(host, revision)
         return setup(
@@ -1028,6 +1224,7 @@ def main() -> int:
             hindsight=bool(args.hindsight) or hindsight_enabled(home),
             hub_port=int(args.hub_port),
             dry_run=dry_run,
+            auth_key=lambda: key_file.read_text(encoding="utf-8").strip() if key_file else None,
         )
     if args.command == "bootstrap":
         host = cast(str, args.ssh_host)
