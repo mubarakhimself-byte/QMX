@@ -607,6 +607,39 @@ def _top_key(header: re.Match[str]) -> str | None:
     return next(iter(parsed), None)
 
 
+_KEY_PATH = re.compile(r"[^.\[\]]+(?:\.[^.\[\]]+|\[\d+\])*")
+_KEY_PART = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
+
+
+def _key_path(path: str) -> list[str | int]:
+    """`providers[2].api_key` as `["providers", 2, "api_key"]`. Raises ControlError for any
+    other text."""
+    if not _KEY_PATH.fullmatch(path):
+        raise ControlError("invalid_settings", f"{path!r} is not a settings.toml key path.")
+    return [
+        found.group(1) if found.group(1) is not None else int(found.group(2))
+        for found in _KEY_PART.finditer(path)
+    ]
+
+
+def _placed(value: object, parts: Sequence[str | int], filled: str) -> Any:
+    """`value` with `filled` at `parts`: a missing table is made, and an array entry by index is
+    put back in its place."""
+    head, rest = parts[0], parts[1:]
+    if isinstance(head, int):
+        items = list(cast("list[object]", value)) if isinstance(value, list) else []
+        if not rest:
+            items.insert(min(head, len(items)), filled)
+        elif head < len(items):
+            items[head] = _placed(items[head], rest, filled)
+        else:
+            items.append(_placed({}, rest, filled))
+        return items
+    table = dict(cast("dict[str, object]", value)) if isinstance(value, dict) else {}
+    table[head] = filled if not rest else _placed(table.get(head), rest, filled)
+    return table
+
+
 def kept_word_for_word(text: str, stored: Document, settings: Document) -> str:
     """`settings.toml` rewritten to hold `settings`, keeping every section that did not change
     as its own lines, comments and all (design 62 B2 rule 3): an older release never drops or
@@ -857,6 +890,22 @@ class ControlService:
             with path.open("rb") as file:
                 found = tomllib.load(file).get(section, {})
             return cast(Document, found) if isinstance(found, dict) else {}
+
+    def fill_setting(self, path: str, value: str) -> None:
+        """Write `value` back at one `settings.toml` key path, as a copy's `keys_to_fill` names
+        it (`providers.kimi.api_key`, an array entry by index such as `providers[2].api_key`),
+        under the settings lock, keeping every other line. Only the restore's keys-to-fill route
+        calls it, for a path its list names, so a key he pasted into `settings.toml` before the
+        copy goes back where it was; every other writer still refuses a key-named value."""
+        parts = _key_path(path)
+        with self._lock:
+            target = self.home / "settings.toml"
+            text = target.read_text(encoding="utf-8") if target.exists() else ""
+            stored = cast(Document, tomllib.loads(text))
+            settings = _placed(stored, parts, value)
+            temporary = target.with_suffix(".tmp")
+            temporary.write_text(kept_word_for_word(text, stored, settings), encoding="utf-8")
+            temporary.replace(target)
 
     def settings_update(
         self, section: SettingsSection, change: Callable[[Document], Document]

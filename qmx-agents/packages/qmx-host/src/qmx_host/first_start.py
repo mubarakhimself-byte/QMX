@@ -837,7 +837,7 @@ def restore_copy(
     layout = into.layout
     if into.new and (layout.backups / JOURNAL).is_file():
         cancel(layout)
-    left_out = _keys_left_out(repository, copy.stamp)
+    left_out = keys_left_out(repository, copy.stamp)
     stage(layout, repository, copy.stamp, replace=replace or into.new, progress=progress)
     done = finish(layout, running=recorded_host)
     if done is None:
@@ -859,7 +859,7 @@ class Connected:
     row: Mapping[str, object]
 
 
-def _keys_left_out(repository: Repository, stamp: str) -> list[str]:
+def keys_left_out(repository: Repository, stamp: str) -> list[str]:
     """The `settings.toml` paths the copy left out, as its header names them."""
     try:
         named = repository.manifest(stamp).header.get("keys_to_fill") or []
@@ -868,10 +868,12 @@ def _keys_left_out(repository: Repository, stamp: str) -> list[str]:
     return [str(p) for p in cast("list[object]", named)] if isinstance(named, list) else []
 
 
-def keep_fill_record(layout: Layout, stamp: str, paths: Sequence[str]) -> None:
-    """Record the restored copy's left-out `settings.toml` paths for `GET
-    /api/backups/keys-to-fill`; names only, never a value."""
-    record = {"copy": stamp, "settings": sorted(set(paths)), "filled": []}
+def keep_fill_record(
+    layout: Layout, stamp: str, paths: Sequence[str], *, filled: Sequence[str] = ()
+) -> None:
+    """Record the restored copy's left-out `settings.toml` paths, and those `filled` since, for
+    `GET /api/backups/keys-to-fill`; paths only, never a value."""
+    record = {"copy": stamp, "settings": sorted(set(paths)), "filled": sorted(set(filled))}
     target = layout.backups / FILL_RECORD
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(f"{target.name}.new")
@@ -889,20 +891,32 @@ def settled(layout: Layout, aside: Path, storage: Connected | None) -> str | Non
     path = layout.home / "settings.toml"
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     stored = cast("dict[str, Any]", tomllib.loads(text)) if text else {}
-    earlier = Path(aside) / "data" / "settings.toml"
-    try:
-        machine = tomllib.loads(earlier.read_text(encoding="utf-8")) if earlier.is_file() else {}
-    except OSError, ValueError:
-        machine = {}
-    settings = deepcopy(stored)
-    for key in PER_MACHINE_KEYS:
-        _machine_key(settings, machine, key)
-    ident = None if storage is None else _storage_back(settings, storage)
+    settings, ident = restored_settings(stored, machine_settings(aside), storage)
     if settings != stored:
         staged = path.with_name(f"{path.name}.new")
         staged.write_text(kept_word_for_word(text, stored, settings), encoding="utf-8")
         staged.replace(path)
     return ident
+
+
+def machine_settings(aside: Path) -> dict[str, Any]:
+    """The settings a restore set aside in `aside`: this machine's own, before the restore."""
+    earlier = Path(aside) / "data" / "settings.toml"
+    try:
+        return tomllib.loads(earlier.read_text(encoding="utf-8")) if earlier.is_file() else {}
+    except OSError, ValueError:
+        return {}
+
+
+def restored_settings(
+    stored: Mapping[str, Any], machine: Mapping[str, Any], storage: Connected | None
+) -> tuple[dict[str, Any], str | None]:
+    """`settled`'s change, read only: the restored settings with this machine's keys and the
+    storage restored from, and the id that storage's row holds."""
+    settings = deepcopy(dict(stored))
+    for key in PER_MACHINE_KEYS:
+        _machine_key(settings, machine, key)
+    return settings, None if storage is None else _storage_back(settings, storage)
 
 
 def _machine_key(settings: dict[str, Any], machine: Mapping[str, Any], dotted: str) -> None:
