@@ -403,10 +403,12 @@ def test_the_smoke_runs_through_the_servers_own_host_while_it_holds_the_engines_
         ended = once(there, "server", {})
 
     assert [(c[0], c[1], c[2]) for c in Door.calls] == [
+        ("PUT", "/api/settings/engine", "Bearer the-servers-bearer"),
         ("PUT", "/api/workflows/qmx-smoke/draft", "Bearer the-servers-bearer"),
         ("POST", "/api/workflows/qmx-smoke/test?fake=true", "Bearer the-servers-bearer"),
     ]
-    assert json.loads(Door.calls[0][3]) == {
+    assert json.loads(Door.calls[0][3]) == {"placement": {PLACE: {"kind": "owned"}}}
+    assert json.loads(Door.calls[1][3]) == {
         "schema": "qmx.workflow/1",
         "id": "qmx-smoke",
         "name": "QMX smoke test",
@@ -416,6 +418,7 @@ def test_the_smoke_runs_through_the_servers_own_host_while_it_holds_the_engines_
                 "name": "start",
                 "type": "trigger",
                 "typeVersion": 1,
+                "runs_on": PLACE,
                 "parameters": {"kinds": ["manual"]},
             }
         ],

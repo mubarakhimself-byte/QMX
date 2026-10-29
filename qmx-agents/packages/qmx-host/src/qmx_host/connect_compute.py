@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import json
 import os
 import re
 import socket
@@ -52,33 +53,54 @@ NODE_ROOT: Final = "/srv/qmx/home"
 ATTEMPT_CPUS: Final = 2
 ATTEMPT_TIMEOUT: Final = "2h"
 """What an attempt reads a machine's row for (`NEEDS`); both are his to edit in Settings."""
-SMOKE_FLOW: Final = (
-    '{"schema": "qmx.workflow/1", "id": "qmx-smoke", "name": "QMX smoke test", "nodes": [{"id": '
-    '"start", "name": "start", "type": "trigger", "typeVersion": 1, "parameters": {"kinds": '
-    '["manual"]}}], "connections": {}}'
-)
-"""A one-node workflow every engine runs: its trigger alone."""
+
+
+def smoke_flow(place: str) -> str:
+    """A one-node workflow every engine runs: its trigger alone, on the server itself. A node
+    that names no place runs on This PC, which a server's engine cannot reach."""
+    return json.dumps(
+        {
+            "schema": "qmx.workflow/1",
+            "id": "qmx-smoke",
+            "name": "QMX smoke test",
+            "nodes": [
+                {
+                    "id": "start",
+                    "name": "start",
+                    "type": "trigger",
+                    "typeVersion": 1,
+                    "runs_on": place,
+                    "parameters": {"kinds": ["manual"]},
+                }
+            ],
+            "connections": {},
+        }
+    )
+
+
 SMOKE_FOLDER: Final = "/var/lib/qmx/smoke"
 SMOKE_RUN: Final = (
     "import json, sys, urllib.request\n"
-    "port, token, flow = sys.argv[1:]\n"
+    "port, token, flow, place = sys.argv[1:]\n"
     "with open(token, encoding='utf-8') as held:\n"
     "    bearer = held.read().strip()\n"
     "with open(flow, 'rb') as held:\n"
     "    definition = held.read()\n"
     "def call(method, path, body):\n"
     "    asked = urllib.request.Request(\n"
-    "        f'http://127.0.0.1:{port}/api/workflows/qmx-smoke{path}', data=body, method=method,\n"
+    "        f'http://127.0.0.1:{port}{path}', data=body, method=method,\n"
     "        headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})\n"
     "    with urllib.request.urlopen(asked, timeout=120) as answer:\n"
     "        return json.load(answer)\n"
-    "call('PUT', '/draft', definition)\n"
-    "print(call('POST', '/test?fake=true', None)['run']['run_id'])\n"
+    "own = {'placement': {place: {'kind': 'owned'}}}\n"
+    "call('PUT', '/api/settings/engine', json.dumps(own).encode())\n"
+    "call('PUT', '/api/workflows/qmx-smoke/draft', definition)\n"
+    "print(call('POST', '/api/workflows/qmx-smoke/test?fake=true', None)['run']['run_id'])\n"
 )
-"""What the server runs as `qmx` for the smoke: it saves the one-node workflow as a draft on the
-server's running host and tests it there on fake models, through the host's loopback door with
-the bearer the host keeps in `keys/`, so the host stays the engine's one writer. It prints the
-run's id."""
+"""What the server runs as `qmx` for the smoke, through its running host's loopback door with the
+bearer the host keeps in `keys/`, so the host stays the engine's one writer: the server's own
+name joins its place list (its engine runs only work placed on that name), the one-node workflow
+is saved as a draft and tested there on fake models, and the run's id is printed."""
 STATUS_LINE: Final = re.compile(r"^(\S+)\s+(.*?)\s+(PASS|FAIL)$")
 
 
@@ -550,17 +572,17 @@ def _forwarder(run: Run) -> Forwarder:
     )
 
 
-def smoke_script() -> str:
+def smoke_script(place: str) -> str:
     folder = SMOKE_FOLDER
     return (
         "set -eu\n"
         f"install -d -o qmx -g qmx -m 750 {folder}\n"
-        f"cat > {folder}/definition.json <<'QMXFLOW'\n{SMOKE_FLOW}\nQMXFLOW\n"
+        f"cat > {folder}/definition.json <<'QMXFLOW'\n{smoke_flow(place)}\nQMXFLOW\n"
         f"cat > {folder}/smoke.py <<'QMXSMOKE'\n{SMOKE_RUN}QMXSMOKE\n"
         f"chown qmx:qmx {folder}/definition.json {folder}/smoke.py\n"
         f"runuser -u qmx -- {node.SERVER_VENV}/bin/python -I {folder}/smoke.py "
         f"{node.host_port(node.host_unit())} {node.SERVER_KEYS}/control-token "
-        f"{folder}/definition.json\n"
+        f"{folder}/definition.json {place}\n"
     )
 
 
@@ -569,7 +591,7 @@ def _smoke(run: Run) -> Card | None:
     the run back from it the way this PC's runs view does."""
     server = server_of(run)
     try:
-        said = server.send("sudo bash -s", smoke_script()).split()
+        said = server.send("sudo bash -s", smoke_script(run.place)).split()
     except RuntimeError as failed:
         raise Stopped(
             f"{run.place}: the server's host did not run the smoke workflow ({failed}); check it "
