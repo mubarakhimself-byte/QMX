@@ -3,6 +3,7 @@ and a send killed halfway (design 06 sections 4 and 14, review M8, M9 and M10)."
 
 from __future__ import annotations
 
+import hashlib
 import os
 import random
 import shutil
@@ -14,11 +15,18 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from backup_fixtures import filled_folder, folder
+from backup_fixtures import filled_folder, folder, stored_bytes
 
 from qmx_home import Layout
 from qmx_home.backup.plan import Plan, Upkeep
-from qmx_home.backup.repository import FolderRepository, Unreadable
+from qmx_home.backup.repository import (
+    FORMAT,
+    Entry,
+    FolderRepository,
+    Manifest,
+    Unreadable,
+    stamp_of,
+)
 from qmx_home.backup.round import carry_on, run_round
 from qmx_home.files import Busy
 
@@ -131,6 +139,47 @@ def test_a_killed_send_leaves_its_arrived_packs_named_and_the_next_send_reuses_t
     assert all(len({at.pack for at in places}) == 1 for places in held.where.values())
     assert usb.copies()
     assert broken_copies(usb, tmp_path / "back") == []
+
+
+def one_file_copy(repo: FolderRepository, stamp: str, name: str, path: Path) -> None:
+    sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    repo.put_pool(sha, path, path=name)
+    entry = Entry(name, sha, path.stat().st_size, "file", (1, 1))
+    repo.put_copy(Manifest({"format": FORMAT, "stamp": stamp}, (entry,)))
+
+
+@pytest.mark.parametrize("kept", [1, 2])
+def test_a_copy_written_after_a_prune_let_go_of_its_file_keeps_that_file(
+    tmp_path: Path, kept: int
+) -> None:
+    start = datetime.now(UTC) - timedelta(days=10)
+    root = tmp_path / "storage"
+    a = FolderRepository(root, clock=lambda: start)
+    b = FolderRepository(root, clock=lambda: start)
+    (tmp_path / "old.txt").write_bytes(b"old work")
+    (tmp_path / "new.txt").write_bytes(b"new work")
+    old_sha = hashlib.sha256(b"old work").hexdigest()
+    one_file_copy(a, stamp_of(start + timedelta(hours=1)), "old.txt", tmp_path / "old.txt")
+    for hour in range(2, kept + 2):
+        one_file_copy(a, stamp_of(start + timedelta(hours=hour)), "new.txt", tmp_path / "new.txt")
+    a.drop(stamp_of(start + timedelta(hours=1)))
+    day = timedelta(hours=24)
+
+    b.refresh()
+    trusted = b.pool_has(old_sha)
+    a.sweep(safety=day, now=start + timedelta(days=2))
+    let_go = FolderRepository(root).pool_has(old_sha)
+    b.put_copy(
+        Manifest(
+            {"format": FORMAT, "stamp": stamp_of(start + timedelta(days=2, hours=1))},
+            (Entry("old.txt", old_sha, 8, "file", (1, 1)),),
+        )
+    )
+    removed = [a.sweep(safety=day, now=start + timedelta(days=n)).removed for n in (4, 6)]
+
+    assert (trusted, let_go) == (True, False)
+    assert removed == [0, 0]
+    assert stored_bytes(FolderRepository(root), old_sha, tmp_path / "back") == b"old work"
 
 
 def test_the_one_fact_no_kept_copy_ever_names_a_pack_that_is_gone(
