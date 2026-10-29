@@ -881,7 +881,7 @@ async def serve(
                             await asking.close()
                 finally:
                     if connect.world.logs is not None and connect.world.logs.process is not None:
-                        await asyncio.to_thread(connect.world.logs.process.stop)
+                        await asyncio.to_thread(connect.world.logs.process.close)
                     adopt_router(None)
                     install(None)
                     await asyncio.to_thread(memory.close)

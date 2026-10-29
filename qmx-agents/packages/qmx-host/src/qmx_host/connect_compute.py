@@ -23,7 +23,6 @@ import base64
 import dataclasses
 import os
 import re
-import secrets
 import socket
 import subprocess
 import sys
@@ -60,6 +59,26 @@ SMOKE_FLOW: Final = (
 )
 """A one-node workflow every engine runs: its trigger alone."""
 SMOKE_FOLDER: Final = "/var/lib/qmx/smoke"
+SMOKE_RUN: Final = (
+    "import json, sys, urllib.request\n"
+    "port, token, flow = sys.argv[1:]\n"
+    "with open(token, encoding='utf-8') as held:\n"
+    "    bearer = held.read().strip()\n"
+    "with open(flow, 'rb') as held:\n"
+    "    definition = held.read()\n"
+    "def call(method, path, body):\n"
+    "    asked = urllib.request.Request(\n"
+    "        f'http://127.0.0.1:{port}/api/workflows/qmx-smoke{path}', data=body, method=method,\n"
+    "        headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})\n"
+    "    with urllib.request.urlopen(asked, timeout=120) as answer:\n"
+    "        return json.load(answer)\n"
+    "call('PUT', '/draft', definition)\n"
+    "print(call('POST', '/test?fake=true', None)['run']['run_id'])\n"
+)
+"""What the server runs as `qmx` for the smoke: it saves the one-node workflow as a draft on the
+server's running host and tests it there on fake models, through the host's loopback door with
+the bearer the host keeps in `keys/`, so the host stays the engine's one writer. It prints the
+run's id."""
 STATUS_LINE: Final = re.compile(r"^(\S+)\s+(.*?)\s+(PASS|FAIL)$")
 
 
@@ -301,23 +320,32 @@ def _make_key(run: Run) -> Card | None:
     path = _key_file(run)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(private)
-    owner_only(path)
+    if not owner_only(path):
+        path.unlink(missing_ok=True)
+        raise Stopped(
+            f"{run.place}: Windows would not make QMX's key in {plain(path.parent)} readable by "
+            "you alone, so QMX removed it; check you own that folder, then answer again"
+        )
     path.with_suffix(".pub").write_bytes(public + f" qmx {run.place}\n".encode())
     run.say(f"{run.place}: QMX made its own key for this server in {plain(path.parent)}")
     return None
 
 
-def owner_only(path: Path) -> None:
-    """Only this user may read `path`, which ssh insists on for a key file."""
+def owner_only(path: Path) -> bool:
+    """Only this user may read `path`, which ssh insists on for a key file. False when Windows
+    did not take that, or no user is named to give it to."""
     if os.name != "nt":
         path.chmod(0o600)
-        return
+        return True
     user = os.environ.get("USERNAME", "")
-    subprocess.run(
+    if not user:
+        return False
+    done = subprocess.run(
         ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],  # noqa: S607
         capture_output=True,
         check=False,
     )
+    return done.returncode == 0
 
 
 def _logs_in(run: Run) -> bool:
@@ -330,24 +358,41 @@ def _logs_in(run: Run) -> bool:
     return True
 
 
+AUTHORIZE: Final = (
+    "umask 077; mkdir -p ~/.ssh && touch ~/.ssh/authorized_keys && key=$(cat) && "
+    '{ grep -qxF "$key" ~/.ssh/authorized_keys || printf \'%s\\n\' "$key" >> '
+    "~/.ssh/authorized_keys; }"
+)
+"""What the window's ssh runs on the server: QMX's key, read from its input, added once."""
+
+
 def _password(run: Run) -> Card:
-    public = _key_file(run).with_suffix(".pub")
-    ssh = [
-        "ssh",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        "-o",
-        f"UserKnownHostsFile={_known_hosts(run)}",
-        _target(run),
-        "umask 077; mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys",
-    ]
-    command = [sys.executable, "-I", "-c", COPY_KEY, str(public), *ssh]
-    ports(run).terminal.open(command, f"QMX: sign in to {run.place}")
-    return Card(
+    again = cast("dict[str, object]", run.answer.get("fields") or {}).get("again") == "yes"
+    if not run.memory.get("window") or again:
+        public = _key_file(run).with_suffix(".pub")
+        ssh = [
+            "ssh",
+            "-o",
+            "StrictHostKeyChecking=accept-new",
+            "-o",
+            f"UserKnownHostsFile={_known_hosts(run)}",
+            _target(run),
+            AUTHORIZE,
+        ]
+        command = [sys.executable, "-I", "-c", COPY_KEY, str(public), *ssh]
+        ports(run).terminal.open(command, f"QMX: sign in to {run.place}")
+        run.memory["window"] = True
+        return Card(
+            "password",
+            f"{run.place}: type the server's password in the window QMX opened. It goes straight "
+            "to the server, and QMX never sees it; the window gives the server QMX's own key, so "
+            "you type it this once. Then answer this card",
+        )
+    return _fields_card(
         "password",
-        f"{run.place}: type the server's password in the window QMX opened. It goes straight to "
-        "the server, and QMX never sees it; the window gives the server QMX's own key, so you "
-        "type it this once. Then answer this card",
+        f"{run.place}: QMX still cannot sign in with its own key. If the window said it did not "
+        "work, answer yes and QMX opens it once more",
+        ("again", "yes, to open the window again"),
     )
 
 
@@ -505,20 +550,34 @@ def _forwarder(run: Run) -> Forwarder:
     )
 
 
-def _smoke(run: Run) -> Card | None:
-    """Run a one-node workflow on the server's own engine, then read the run back from it the way
-    this PC's runs view does."""
-    server = server_of(run)
-    run_id = f"smoke-{secrets.token_hex(6)}"
-    folder = f"{SMOKE_FOLDER}/{run_id}"
-    server.send(
-        "sudo bash -s",
-        f"set -eu\ninstall -d -o qmx -g qmx -m 750 {folder}\n"
-        f"cat > {folder}/definition.json <<'QMXSMOKE'\n{SMOKE_FLOW}\nQMXSMOKE\n"
-        f"chown qmx:qmx {folder}/definition.json\n"
-        f"runuser -u qmx -- {node.SERVER_VENV}/bin/python -m qmx_engine run {folder} "
-        f"--home {node.SERVER_FOLDER} --run-id {run_id} --fake\n",
+def smoke_script() -> str:
+    folder = SMOKE_FOLDER
+    return (
+        "set -eu\n"
+        f"install -d -o qmx -g qmx -m 750 {folder}\n"
+        f"cat > {folder}/definition.json <<'QMXFLOW'\n{SMOKE_FLOW}\nQMXFLOW\n"
+        f"cat > {folder}/smoke.py <<'QMXSMOKE'\n{SMOKE_RUN}QMXSMOKE\n"
+        f"chown qmx:qmx {folder}/definition.json {folder}/smoke.py\n"
+        f"runuser -u qmx -- {node.SERVER_VENV}/bin/python -I {folder}/smoke.py "
+        f"{node.host_port(node.host_unit())} {node.SERVER_KEYS}/control-token "
+        f"{folder}/definition.json\n"
     )
+
+
+def _smoke(run: Run) -> Card | None:
+    """Run a one-node workflow on the server's own engine, through its running host, then read
+    the run back from it the way this PC's runs view does."""
+    server = server_of(run)
+    try:
+        said = server.send("sudo bash -s", smoke_script()).split()
+    except RuntimeError as failed:
+        raise Stopped(
+            f"{run.place}: the server's host did not run the smoke workflow ({failed}); check it "
+            f"is running with: sudo {node.RECOVER} status"
+        ) from None
+    if not said:
+        raise Stopped(f"{run.place}: the server's host started no smoke run; read its log there")
+    run_id = said[-1]
     try:
         found = _forwarder(run).read("runs.get", {"run_id": run_id})
     except (ForwardRefused, OSError) as refused:
@@ -632,6 +691,12 @@ def _keep_storage(run: Run) -> Card | None:
     world = dataclasses.replace(run.world, control=None, first_sync=None)
     typed = run.answer.get("fields")
     given = {**fields, **(cast("dict[str, object]", typed) if isinstance(typed, dict) else {})}
+    root = str(held.get("root") or NODE_ROOT)
+    if str(given.get("root") or root) != root:
+        raise Stopped(
+            f"{run.place}: the server keeps copies under {root}, the folder its work runs in, "
+            f"and one row holds one folder; QMX does not keep them at {given['root']} instead"
+        )
     ended = run_kind(
         storage,
         run.place,
@@ -654,27 +719,28 @@ def _keep_storage(run: Run) -> Card | None:
             job=str(asked.get("job") or ""),
         )
     source = cast("dict[str, object]", ended.get("source") or {})
-    run.facts["kept"] = {
-        "remote": source.get("remote"),
-        "type": given.get("type") or storage.id,
-        "root": source.get("path"),
-    }
+    run.facts["kept"] = {"remote": source.get("remote"), "type": given.get("type") or storage.id}
     return None
 
 
 def _add_keep(run: Run) -> Card | None:
+    """The server's row gains `keep` and the remote that reaches it; its `root` stays the one its
+    work runs in, which the storage kind's own root matched."""
     kept = cast("dict[str, object]", run.facts["kept"])
     held = _a_server(run)
     row = {**held, "can": ["run", "keep"], "via": "rclone", **kept}
+    root = row.get("root")
 
     def refusal(rows: Rows) -> str | None:
         for name, other in rows.items():
-            if name != run.place and all(other.get(k) == row[k] for k in ("via", "type", "root")):
-                return f"the storage {name} already keeps copies at {kept['type']}:{kept['root']}"
+            if name != run.place and all(
+                other.get(k) == row.get(k) for k in ("via", "type", "root")
+            ):
+                return f"the storage {name} already keeps copies at {kept['type']}:{root}"
         return None
 
     _write(run, row, refusal)
-    run.say(f"{run.place}: it keeps copies too now, at {kept['root']}")
+    run.say(f"{run.place}: it keeps copies too now, at {root}")
     return None
 
 

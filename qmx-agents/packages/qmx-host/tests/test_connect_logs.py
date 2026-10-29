@@ -184,8 +184,59 @@ def test_a_program_that_needs_administrator_rights_ends_at_one_approval_card(
 
     assert ended["step"] == "start"
     assert ended["needs"]["card"] == "approval"
-    assert "it ended with code 5 and said access is denied" in ended["needs"]["line"]
+    assert ended["needs"]["line"] == (
+        "deep logs: OpenObserve would not start as you on this PC (it ended with code 5 and said "
+        "access is denied), and QMX does not give it administrator rights; answering here will "
+        "not either. To keep deep logs on this PC, close QMX, start it again as administrator "
+        "and connect deep logs again. Or connect deep logs on your server instead. Nothing is "
+        "left running"
+    )
     assert not [p for p in children(process) if psutil.pid_exists(p)]
+    settings = tomllib.loads((there.layout.home / "settings.toml").read_text(encoding="utf-8"))
+    assert "send_to" not in settings.get("telemetry", {}), "no sender posts to a dead address"
+
+
+def test_a_host_back_after_a_crash_stops_the_openobserve_qmx_started_and_no_other(
+    tmp_path: Path,
+) -> None:
+    there, crashed = deep(tmp_path)
+    there.keys.replace(ROOT_KEY, "planted-root")
+    crashed.start()
+    left = children(crashed)
+    again = OpenObserveProcess(
+        there.layout, there.keys, crashed.settings, port=crashed.port, program=crashed.program
+    )
+    adopted = again.start()
+    again.stop()
+    stranger, _url = served(b"")
+    other = OpenObserveProcess(
+        there.layout, there.keys, crashed.settings, port=int(stranger.server_address[1])
+    )
+    try:
+        with pytest.raises(Stopped) as refused:
+            other.start()
+    finally:
+        stranger.shutdown()
+
+    assert adopted == f"OpenObserve answers on http://127.0.0.1:{crashed.port}"
+    assert left and not psutil.pid_exists(left[0])
+    assert not again.healthy()
+    assert refused.value.line == (
+        f"another program answers on http://127.0.0.1:{stranger.server_address[1]}, where QMX "
+        "runs OpenObserve; stop it, then connect deep logs again"
+    )
+
+
+def test_a_start_that_lands_after_the_host_stopped_starts_nothing(tmp_path: Path) -> None:
+    there, process = deep(tmp_path)
+    there.keys.replace(ROOT_KEY, "planted-root")
+    process.close()
+    with pytest.raises(Stopped) as refused:
+        process.start()
+
+    assert refused.value.line == "the host is stopping, so OpenObserve was not started"
+    assert children(process) == []
+    assert not process.healthy()
 
 
 class Release(http.server.BaseHTTPRequestHandler):

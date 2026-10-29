@@ -687,9 +687,12 @@ def mark(server: Server, name: str) -> None:
     _marked(server).add(_slug(name))
 
 
-def _scripted(name: str, script: str) -> NodeStep:
+def _scripted(name: str, script: str, live: Callable[[Server], bool] | None = None) -> NodeStep:
+    """A step that sends `script`. A mark says it ran at this revision; `live`, when given, says
+    its work is still in place, so a rerun does it again when it was undone since."""
+
     def finished(server: Server) -> bool:
-        return done(server, name)
+        return done(server, name) and (live is None or live(server))
 
     def do(server: Server) -> None:
         try:
@@ -717,19 +720,34 @@ def _on_tailnet(server: Server) -> bool:
     return bool(found)
 
 
+def join_script(key: str) -> str:
+    """One root shell that sets the trap first, then reads the key from the line after its
+    `read` (bash reads a piped script a byte at a time, so `read` takes that line and bash never
+    runs it), writes it to a root-only file and joins. The key is in no command line, and the
+    trap removes the file however the shell ends."""
+    return (
+        "set -eu\n"
+        "umask 077\n"
+        f"trap 'rm -f {TAILSCALE_KEY}' EXIT\n"
+        "IFS= read -r key\n"
+        f"{key}\n"
+        '[ -n "$key" ]\n'
+        f"printf '%s\\n' \"$key\" > {TAILSCALE_KEY}\n"
+        "unset key\n"
+        f"tailscale up --auth-key=file:{TAILSCALE_KEY}\n"
+    )
+
+
 def _join_tailnet(server: Server) -> None:
-    key = server.auth_key()
+    key = (server.auth_key() or "").strip()
     if not key:
         raise SetupStopped(
             "the server is not on your tailnet yet; make a one-off auth key in the Tailscale admin "
             "console, then run setup again with it"
         )
-    server.send(f"sudo sh -c 'umask 077; cat > {TAILSCALE_KEY}'", key)
-    server.send(
-        "sudo bash -s",
-        f"set -eu\ntrap 'rm -f {TAILSCALE_KEY}' EXIT\n"
-        f"tailscale up --auth-key=file:{TAILSCALE_KEY}\n",
-    )
+    if len(key.split()) != 1:
+        raise SetupStopped("that Tailscale key has spaces in it; copy the key again and rerun")
+    server.send("sudo bash -s", join_script(key))
     if not _on_tailnet(server):
         raise SetupStopped(
             "the server ran tailscale up but has no tailnet address; check the key is unused and "
@@ -759,7 +777,7 @@ def setup_steps(
         _scripted("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
         NodeStep("join the tailnet", "", _on_tailnet, _join_tailnet),
         _scripted("install the recovery script", recover_script(pc_name)),
-        _scripted(FIREWALL_STEP, f"set -eu\n{RECOVER} firewall close\n"),
+        _scripted(FIREWALL_STEP, f"set -eu\n{RECOVER} firewall close\n", _firewall_on),
         _scripted("install the host", host_unit_script(machine)),
         _scripted(
             "stop and disable the standalone Hub",
@@ -773,8 +791,28 @@ def setup_steps(
             f"set -eu\nrunuser -u qmx -- {SERVER_VENV}/bin/qmx node import "
             f"--home {NODE_STATE} --root {SERVER_LIBRARY}\n",
         ),
-        _scripted("start the host", "set -eu\nsystemctl enable --now qmx-host\n"),
+        _scripted("start the host", "set -eu\nsystemctl enable --now qmx-host\n", _host_running),
     ]
+
+
+def _says_on(shown: str) -> bool:
+    """The server's `firewall status` row reads on."""
+    return any(row.startswith("firewall ") and row.endswith("PASS") for row in shown.splitlines())
+
+
+def _firewall_on(server: Server) -> bool:
+    try:
+        return _says_on(server.send(f"sudo {RECOVER} firewall status"))
+    except RuntimeError:
+        return False
+
+
+def _host_running(server: Server) -> bool:
+    try:
+        shown = server.send(f"systemctl is-active {HOST_UNIT.removesuffix('.service')}")
+    except RuntimeError:
+        return False
+    return shown.split() == ["active"]
 
 
 def address(server: Server) -> str:
@@ -943,7 +981,7 @@ def kept_closed(server: Server) -> str | None:
                 "stays shut, Contabo's VNC console is the way back: log in there and run: "
                 "sudo qmx-recover firewall open"
             )
-        if any(row.startswith("firewall ") and row.endswith("PASS") for row in shown.splitlines()):
+        if _says_on(shown):
             server.send(f"sudo {RECOVER} firewall keep")
             return None
     return (

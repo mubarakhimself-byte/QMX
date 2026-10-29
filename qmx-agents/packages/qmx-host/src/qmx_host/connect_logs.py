@@ -131,10 +131,29 @@ class OpenObserveProcess:
         self.program = program
         self._child: subprocess.Popen[bytes] | None = None
         self._lock = threading.Lock()
+        self._closed = False
 
     @property
     def folder(self) -> Path:
         return self.layout.cache / "openobserve"
+
+    @property
+    def record(self) -> Path:
+        """The pid and start time of the OpenObserve QMX started, so a host that comes back after
+        a crash stops that one and no other."""
+        return self.folder / "openobserve.pid"
+
+    def _recorded(self) -> psutil.Process | None:
+        try:
+            pid, started = self.record.read_text(encoding="utf-8").split()
+            found = psutil.Process(int(pid))
+            return found if f"{found.create_time():.3f}" == started else None
+        except OSError, ValueError, psutil.Error:
+            return None
+
+    def ours(self) -> bool:
+        """It answers, and it is the one QMX started."""
+        return self.healthy() and self._recorded() is not None
 
     def binary(self) -> Path | None:
         """OpenObserve on PATH, or the one fetched into `cache/openobserve/`."""
@@ -176,7 +195,14 @@ class OpenObserveProcess:
         """Start it, or find it running, and wait for its health. Raises NeedsAdmin when it
         would not start as this user, and Stopped with one line for anything else."""
         with self._lock:
+            if self._closed:
+                raise Stopped("the host is stopping, so OpenObserve was not started")
             if self.healthy():
+                if self._recorded() is None:
+                    raise Stopped(
+                        f"another program answers on http://{LOOPBACK}:{self.port}, where QMX "
+                        "runs OpenObserve; stop it, then connect deep logs again"
+                    )
                 return f"OpenObserve answers on http://{LOOPBACK}:{self.port}"
             program = self.binary()
             if program is None:
@@ -200,6 +226,9 @@ class OpenObserveProcess:
                     raise NeedsAdmin(f"Windows said: {error.strerror}") from None
                 raise Stopped(f"OpenObserve did not start: {error.strerror}") from None
             child = self._child
+            with contextlib.suppress(psutil.Error):
+                started = psutil.Process(child.pid).create_time()
+                self.record.write_text(f"{child.pid} {started:.3f}\n", encoding="utf-8")
         while time.perf_counter() - began < START_WAIT_S:
             if self.healthy():
                 return (
@@ -220,16 +249,25 @@ class OpenObserveProcess:
             f"OpenObserve did not answer within {START_WAIT_S:.0f} s; its log is {plain(log)}"
         )
 
+    def close(self) -> None:
+        """The host's stop: no start after it, then the stop."""
+        with self._lock:
+            self._closed = True
+        self.stop()
+
     def stop(self) -> None:
-        """Stop it with every process it started. Safe to call when nothing runs."""
+        """Stop the OpenObserve QMX started, this host's child or one a crashed host left, with
+        every process it started. Safe to call when nothing runs."""
         with self._lock:
             child, self._child = self._child, None
-        if child is None or child.poll() is not None:
-            return
+            parent = self._recorded()
+            self.record.unlink(missing_ok=True)
         tree: list[psutil.Process] = []
         with contextlib.suppress(psutil.Error):
-            parent = psutil.Process(child.pid)
-            tree = [*parent.children(recursive=True), parent]
+            if parent is None and child is not None and child.poll() is None:
+                parent = psutil.Process(child.pid)
+            if parent is not None:
+                tree = [*parent.children(recursive=True), parent]
         for one in tree:
             with contextlib.suppress(psutil.Error):
                 one.terminate()
@@ -237,8 +275,9 @@ class OpenObserveProcess:
         for one in alive:
             with contextlib.suppress(psutil.Error):
                 one.kill()
-        with contextlib.suppress(subprocess.TimeoutExpired):
-            child.wait(10)
+        if child is not None:
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                child.wait(10)
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,21 +344,26 @@ def _fetch(run: Run) -> Card | None:
             f"the OpenObserve {pinned.version} QMX fetched is not the one pinned (its checksum "
             "differs), so it was deleted and not run; try again later"
         )
-    (folder / pinned.program).write_bytes(_member(body, pinned.program))
+    program = _member(body, pinned.program)
+    if program is None:
+        raise Stopped(
+            f"the OpenObserve {pinned.version} release holds no {pinned.program}; put openobserve "
+            "on PATH, then connect deep logs again"
+        )
+    (folder / pinned.program).write_bytes(program)
     run.say(f"deep logs: OpenObserve {pinned.version} fetched and checked into {plain(folder)}")
     return None
 
 
-def _member(archive: bytes, name: str) -> bytes:
+def _member(archive: bytes, name: str) -> bytes | None:
     if archive[:2] == b"PK":
         with zipfile.ZipFile(io.BytesIO(archive)) as zipped:
-            found = next(i for i in zipped.namelist() if Path(i).name == name)
-            return zipped.read(found)
+            found = next((i for i in zipped.namelist() if Path(i).name == name), None)
+            return None if found is None else zipped.read(found)
     with tarfile.open(fileobj=io.BytesIO(archive)) as packed:
-        member = next(m for m in packed.getmembers() if Path(m.name).name == name)
-        handle = packed.extractfile(member)
-        assert handle is not None  # noqa: S101 - a regular file in the release
-        return handle.read()
+        member = next((m for m in packed.getmembers() if Path(m.name).name == name), None)
+        handle = None if member is None else packed.extractfile(member)
+        return None if handle is None else handle.read()
 
 
 def _signed(run: Run) -> bool:
@@ -368,7 +412,7 @@ def _send_to(target: Callable[[Run], str]) -> Callable[[Run], Card | None]:
 
 
 def _answering(run: Run) -> bool:
-    return _process(run).healthy()
+    return _process(run).ours()
 
 
 def _start(run: Run) -> Card | None:
@@ -378,10 +422,11 @@ def _start(run: Run) -> Card | None:
         _process(run).stop()
         return Card(
             "approval",
-            f"deep logs: OpenObserve would not start as you on this PC ({needs.why}). It needs "
-            "administrator rights here. Approve on this PC as administrator, or connect deep "
-            "logs on your server instead; nothing is left running",
-            ({"Name": "approve", "Help": "yes", "Examples": [], "Type": "string"},),
+            f"deep logs: OpenObserve would not start as you on this PC ({needs.why}), and QMX "
+            "does not give it administrator rights; answering here will not either. To keep deep "
+            "logs on this PC, close QMX, start it again as administrator and connect deep logs "
+            "again. Or connect deep logs on your server instead. Nothing is left running",
+            ({"Name": "again", "Help": "yes, to try once more", "Examples": [], "Type": "string"},),
         )
     return None
 
@@ -403,8 +448,8 @@ ON_THIS_PC: Final = Kind(
     (
         Step("openobserve", "qmx", _found, _fetch),
         Step("sign-in", "qmx", _signed, _sign_in),
-        Step("send-to", "qmx", _sending_to(THIS_PC), _send_to(lambda _run: THIS_PC)),
         Step("start", "his", _answering, _start),
+        Step("send-to", "qmx", _sending_to(THIS_PC), _send_to(lambda _run: THIS_PC)),
         Step("agent-door", "qmx", _never, _door),
     ),
 )
