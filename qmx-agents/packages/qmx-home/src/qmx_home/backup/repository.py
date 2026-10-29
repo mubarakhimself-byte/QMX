@@ -40,6 +40,7 @@ import struct
 import uuid
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from compression import zstd
+from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath
@@ -281,11 +282,13 @@ class Index:
             self.named[found.pack] = stamp
 
     def good(self, sha256: str) -> list[Location]:
-        """The places a file's bytes are, those found damaged left out, newest pack first."""
+        """The places a file's bytes are, newest pack first, leaving out those found damaged and
+        those in a pack on the drop list: a pack on it is never trusted again, only deleted."""
         found = [
             at
             for at in self.where.get(sha256, ())
             if (sha256, at.pack) not in self.bad
+            and at.pack not in self.dropping
             and (self.present is None or at.pack in self.present)
         ]
         return sorted(found, key=lambda at: self.named.get(at.pack, ""), reverse=True)
@@ -729,7 +732,11 @@ class Packed:
         return [name]
 
     def fetch(self, sha256: str, target: Path) -> str:
-        places = self.index().good(sha256) or self.index().where.get(sha256, [])
+        held = self.index()
+        places = held.good(sha256) or held.where.get(sha256, [])
+        if not places:
+            dropped = [n for n in held.dropping if held.present is None or n in held.present]
+            places = list(self._in_dropped(held, {sha256}, dropped).values())
         if not places:
             raise FileNotFoundError(f"{self.where} holds no such file")
         found = places[0]
@@ -802,7 +809,10 @@ class Packed:
         is above it or that holds a damaged file, up to `per_run` bytes of packs. A pack younger
         than the window (`safety`, or the two newest copies here, whichever is later) is never
         deleted, its age read from the index file that first named it, and neither is a pack
-        some index named in the window. `step` hears each of the four steps as it starts."""
+        some index named in the window. A pack let go goes on the drop list, is never trusted
+        again, and is deleted by a later prune once it has been on the list for `safety`, after
+        each file a copy read then names and only it holds is written into a new pack. `step`
+        hears each of the four steps as it starts."""
         told = step or _quiet
         manifests, torn = self.manifests()
         if torn:
@@ -822,11 +832,7 @@ class Packed:
             for sha, at in files.items():
                 held.add(sha, at, made)
             rebuilt += 1
-        used = {
-            entry.sha256 for m in manifests.values() for entry in m.entries if entry.at == "pool"
-        }
-        moment = stamp_of(now)
-        keep = self._named_again(held, used, listing, moment)
+        used = _used(manifests)
         chosen = {sha: places[0] for sha in used if (places := self._present(held, sha, listing))}
         window = _window(manifests, safety, now)
         named_by: dict[str, list[tuple[str, Location]]] = {}
@@ -835,13 +841,14 @@ class Packed:
                 if at.pack in listing:
                     named_by.setdefault(at.pack, []).append((sha, at))
         framed = {name: sum(at.length for _, at in held_by) for name, held_by in named_by.items()}
+        keep: set[str] = set()
         rewrite: list[str] = []
         letting: set[str] = set()
         budget = per_run
         for name, size in sorted(listing.items()):
             needed = [(sha, at) for sha, at in named_by.get(name, []) if chosen.get(sha) == at]
             born = held.named.get(name)
-            if born is None and name in held.dropping:
+            if name in held.dropping:
                 letting.add(name)
             elif born is None or born > window:
                 keep.add(name)
@@ -872,29 +879,41 @@ class Packed:
             ]
             written = self.put_frames(frames)
             letting |= set(rewrite)
-        dropping = {name: held.dropping.get(name, moment) for name in letting}
-        gone = {name for name, since in dropping.items() if moment_of(since) <= now - safety}
+        gone = {
+            name
+            for name in letting
+            if name in held.dropping and moment_of(held.dropping[name]) <= now - safety
+        }
         told("checking the copies again")
         late, _ = self.manifests()
-        written_since = [copy for stamp, copy in late.items() if stamp not in manifests]
-        since_used = {e.sha256 for c in written_since for e in c.entries if e.at == "pool"}
-        back = self._named_again(held, since_used, listing, moment)
-        gone -= back
-        dropping = {k: v for k, v in dropping.items() if k not in back}
-        keep |= back
-        for copy in written_since:
-            for entry in copy.entries:
-                places = self._present(held, entry.sha256, listing)
-                if places and all(at.pack in gone for at in places):
-                    gone -= {at.pack for at in places}
-                    dropping = {
-                        k: v for k, v in dropping.items() if k not in {at.pack for at in places}
-                    }
-                    keep |= {at.pack for at in places}
+        late_used = _used(late) - used
+        for sha in late_used:
+            places = self._present(held, sha, listing)
+            if places and all(at.pack in letting for at in places):
+                letting -= {at.pack for at in places}
+                keep |= {at.pack for at in places}
+        lost = {sha for sha in used | late_used if not self._present(held, sha, listing)}
+        saved: list[tuple[str, bytes, Location]] = []
+        for sha, at in self._in_dropped(held, lost, gone).items():
+            with suppress(FileNotFoundError):
+                saved.append((sha, self.frame(sha, at), at))
+        if saved:
+            again = self.put_frames(saved)
+            # Written from all of one pack's frames in the same microsecond, a new pack has that
+            # pack's bytes and name, so it is the pack itself, kept.
+            same = set(again) & set(held.dropping)
+            letting -= same
+            gone -= same
+            keep |= same
+            written += again
+            frames += saved
+        moment = stamp_of(now)
+        since = stamp_of(max(now, self._clock()))
+        dropping = {name: held.dropping.get(name, since) for name in letting}
         new_index = self.index()
         kept = keep | set(written)
         changed = (
-            bool(written)
+            bool(written or gone)
             or set(dropping) != set(held.dropping)
             or bool(held.torn)
             or rebuilt > 0
@@ -906,11 +925,7 @@ class Packed:
             lines: list[Mapping[str, object]] = [{"index": "merged", "stamp": moment}]
             for sha, places in new_index.where.items():
                 lines += [at.document(sha) for at in places if at.pack in kept]
-            lines += [
-                {"drop": name, "since": since}
-                for name, since in sorted(dropping.items())
-                if name not in gone
-            ]
+            lines += [{"drop": name, "since": at} for name, at in sorted(dropping.items())]
             merged = f"merged-{moment}.json"
             self._step("merged")
             self._put_bytes(f"index/{merged}", dump_lines(lines))
@@ -940,33 +955,22 @@ class Packed:
     def _present(self, held: Index, sha256: str, listing: Mapping[str, int]) -> list[Location]:
         return [at for at in held.good(sha256) if at.pack in listing]
 
-    def _named_again(
-        self, held: Index, used: set[str], listing: Mapping[str, int], moment: str
-    ) -> set[str]:
-        """The packs a prune is letting go that hold a file in `used` no named pack holds, read
-        from their own lists and named again in `held` from `moment`. A writer trusts a file it
-        found named, so its copy can name a file in a pack a prune let go after that."""
-        letting = sorted(name for name in set(held.dropping) - set(held.named) if name in listing)
-        missing = {sha for sha in used if not self.pool_has(sha)} if letting else set[str]()
-        back: set[str] = set()
-        for name in letting:
-            if not missing:
-                break
+    def _in_dropped(
+        self, held: Index, wanted: set[str], names: Iterable[str]
+    ) -> dict[str, Location]:
+        """Where each file in `wanted` is in the packs `names` on the drop list, read from the
+        packs' own lists, as no index names a file in a pack on it. A pack already gone is
+        skipped: the prune that deleted it wrote out first each file a copy it read named."""
+        found: dict[str, Location] = {}
+        for name in sorted(names):
             try:
-                found = pack_list(self.local_pack(name))
+                listed = pack_list(self.local_pack(name))
             except FileNotFoundError:
                 continue
-            if found is None:
-                continue
-            _, files = found
-            needed = {sha for sha in files if sha in missing and (sha, name) not in held.bad}
-            if not needed:
-                continue
-            for sha, at in files.items():
-                held.add(sha, at, moment)
-            missing -= needed
-            back.add(name)
-        return back
+            for sha, at in ({} if listed is None else listed[1]).items():
+                if sha in wanted and sha not in found and (sha, name) not in held.bad:
+                    found[sha] = at
+        return found
 
     def _load(self) -> Index:
         held = Index()
@@ -1000,11 +1004,12 @@ class Packed:
             lines = parse_lines(data) if BAD_NAME.fullmatch(name) else None
             for line in (lines or [])[1:]:
                 held.bad.add((str(line.get("sha256")), str(line.get("pack"))))
-        for name in list(held.dropping):
-            if name in held.named:
-                del held.dropping[name]
         held.present = set(self.packs())
         return held
+
+
+def _used(manifests: Mapping[str, Manifest]) -> set[str]:
+    return {entry.sha256 for m in manifests.values() for entry in m.entries if entry.at == "pool"}
 
 
 def _window(manifests: Mapping[str, Manifest], safety: timedelta, now: datetime) -> str:
@@ -1151,6 +1156,7 @@ class FolderRepository(Packed):
     def drop(self, stamp: str) -> None:
         self._step("drop")
         shutil.rmtree(long_path(self.snapshots / stamp))
+        self._made.discard(self.snapshots / stamp)
 
     def sweep(self, *, safety: timedelta, now: datetime) -> Swept:
         swept = super().sweep(safety=safety, now=now)

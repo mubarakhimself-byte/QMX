@@ -81,6 +81,9 @@ OFF: Final = (
     "copy again"
 )
 PC_OFF: Final = "copies on this PC are off in Settings, so the copy went only to your storages"
+CHECKS: Final = 4
+"""How many times a send reads the storage's lists for its copy's files: once before it writes
+the copy, and after each write."""
 STORAGE_FLOOR_GB: Final = 2
 """A storage that reports its size keeps at least this much free by default, or a tenth of
 itself, whichever is larger. A floor that protects his storage, not a cap."""
@@ -750,13 +753,15 @@ def _sent(
         )
     skipped = [e for e in copy.entries if e.sha256 in damaged]
     held = _without(copy, skipped)
-    repo.refresh()
-    for entry in {e.sha256: e for e in held.entries}.values():
-        if not repo.pool_has(entry.sha256):
-            written += _put(repo, entry, staging, quick_repo, layout, scratch)
-    repo.seal()
     repo.set_about(_about(layout, held))
-    repo.put_copy(held)
+    again = _checked_copy(repo, held, staging, quick_repo, layout, scratch)
+    if again is None:
+        return placed(
+            "refused",
+            f"the copy to {where} stopped: files it names left {where} while it was sent, and "
+            "this PC could not send them again; the next round tries again",
+        )
+    written += again
     log_line(layout, {"kind": "sent", "id": storage.id, "key": key, "stamp": held.stamp})
     try:
         swept = _thin(repo, storage, plan, log, key)
@@ -796,6 +801,39 @@ def _pinned(staging: FolderRepository, quick_repo: FolderRepository, stamp: str)
                 return repo.manifest(stamp)
             except Unreadable:
                 continue
+    return None
+
+
+def _checked_copy(
+    repo: Repository,
+    held: Manifest,
+    staging: FolderRepository,
+    quick_repo: FolderRepository,
+    layout: Layout,
+    scratch: Path,
+) -> int | None:
+    """Write `held` as a copy, then read the storage's lists again and send again each file it
+    names that no named pack holds now: a prune can let a file's pack go and delete it while a
+    send runs, however slow the send. The copy is taken down while a file is sent again, so it
+    never stays naming a file that is gone. The bytes sent again; None, with the copy taken
+    down, when a file cannot be sent again or the copy is still not whole after `CHECKS`."""
+    written = 0
+    files = {entry.sha256: entry for entry in held.entries}
+    for attempt in range(CHECKS):
+        repo.refresh()
+        lost = [entry for sha, entry in files.items() if not repo.pool_has(sha)]
+        if attempt > 0 and not lost:
+            return written
+        if attempt > 0:
+            repo.drop(held.stamp)
+        if attempt == CHECKS - 1:
+            return None
+        try:
+            for entry in lost:
+                written += _put(repo, entry, staging, quick_repo, layout, scratch)
+        except Mismatch:
+            return None
+        repo.put_copy(held)
     return None
 
 
