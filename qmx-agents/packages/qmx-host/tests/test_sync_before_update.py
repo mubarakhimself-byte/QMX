@@ -6,6 +6,7 @@ folder; the host itself, Credential Manager and pg0 are never started."""
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import sqlite3
 import threading
@@ -58,7 +59,7 @@ def storage_row(root: Path, *, wait: str | None = None) -> str:
     upkeep = f'\n[backup.upkeep]\nbefore_update_wait = "{wait}"\n' if wait else ""
     return (
         '[engine.placement.cloud]\nid = "cloud01"\nvia = "rclone"\ncan = ["keep"]\n'
-        f'remote = "qmx_cloud"\ntype = "local"\nroot = {str(root)!r}\n{upkeep}'
+        f'remote = "qmx_cloud"\ntype = "local"\nroot = {json.dumps(str(root))}\n{upkeep}'
     )
 
 

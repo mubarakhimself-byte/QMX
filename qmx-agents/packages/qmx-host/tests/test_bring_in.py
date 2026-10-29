@@ -464,7 +464,7 @@ def test_the_card_offers_the_bring_in_first_and_answers_each_choice(pc: Path) ->
         None,
         None,
     )
-    assert card["choices"] == ["bring-in", "new", "open", "restore"]
+    assert card["choices"] == ["bring-in", "new", "open", "restore-storage", "restore"]
     assert refused.status_code == 409
     assert "inside your OneDrive folder" in refused.json()["detail"]
     assert after_refusal is None, "a refused bring-in starts no job"
@@ -889,7 +889,7 @@ def test_a_bring_in_stopped_mid_copy_is_offered_again_into_the_same_folder(
     assert (offered.found, offered.old, offered.choices) == (
         None,
         str(old),
-        ("bring-in", "open", "restore"),
+        ("bring-in", "open", "restore-storage", "restore"),
     )
     assert serve.value.code == 3
     assert str(wrong_old.value) == (
@@ -925,7 +925,7 @@ def test_the_host_exits_3_when_a_first_start_is_due_and_2_for_a_folder_it_refuse
     assert refused.value.code == 2
     assert line.startswith(f"{newer} was written by QMX 9.0.0 (folder format 3).")
     assert offered["refused"] == {"folder": str(newer.resolve()), "line": line}
-    assert (offered["found"], offered["choices"]) == (None, ["open", "restore"])
+    assert (offered["found"], offered["choices"]) == (None, ["open", "restore-storage", "restore"])
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="drive letters are Windows' own")
@@ -1144,6 +1144,6 @@ def test_a_pointer_to_a_folder_that_is_gone_is_refused_not_offered_a_new_one(
     assert serve.value.code == 2
     assert line.startswith(f"the QMX folder {usb.resolve()} is not there")
     assert (offered.choices, offered.refused) == (
-        ("open", "restore"),
+        ("open", "restore-storage", "restore"),
         {"folder": str(usb.resolve()), "line": line},
     )

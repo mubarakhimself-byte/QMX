@@ -253,7 +253,7 @@ def test_a_restore_that_fails_leaves_the_new_folder_marked_unpointed_and_offered
         "line": f"Restoring a copy into {new} did not finish. Restore it again into the same "
         "folder; nothing of yours was in it.",
     }
-    assert offered["choices"] == ["restore", "open"]
+    assert offered["choices"] == ["restore", "restore-storage", "open"]
     assert serve.value.code == 3
     assert said == (
         f"QMX did not start: restoring a copy into {new} did not finish. Start the first start "
@@ -294,7 +294,10 @@ def test_a_folder_refused_for_a_newer_format_is_offered_the_restore_and_opens_af
     shown = client.get("/api/first-start").json()
     job = restored(client, {"folder": str(layout.root), "source": source(usb), "copy": stamp})
 
-    assert (shown["refused"]["folder"], shown["choices"]) == (str(layout.root), ["open", "restore"])
+    assert (shown["refused"]["folder"], shown["choices"]) == (
+        str(layout.root),
+        ["open", "restore-storage", "restore"],
+    )
     assert "or restore a copy from before the upgrade" in shown["refused"]["line"]
     assert job["state"] == "finished", job["line"]
     assert resolve(layout.root).root == layout.root
@@ -311,7 +314,7 @@ def test_a_folder_with_a_refused_store_is_offered_the_restore(pc: Path) -> None:
 
     shown = offer(pc / "no-old", places(pc), drives=[])
 
-    assert (shown.found, shown.choices) == (None, ("open", "restore"))
+    assert (shown.found, shown.choices) == (None, ("open", "restore-storage", "restore"))
     assert shown.refused is not None
     assert shown.refused["folder"] == str(layout.root)
     assert str(shown.refused["line"]).endswith(
