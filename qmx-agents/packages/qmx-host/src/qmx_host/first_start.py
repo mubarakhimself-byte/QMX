@@ -862,9 +862,10 @@ class Connected:
 def keys_left_out(repository: Repository, stamp: str) -> list[str]:
     """The `settings.toml` paths the copy left out, as its header names them."""
     try:
-        named = repository.manifest(stamp).header.get("keys_to_fill") or []
+        head: Mapping[str, object] = repository.manifest(stamp).header
     except Exception:
         return []
+    named = head.get("keys_to_fill")
     return [str(p) for p in cast("list[object]", named)] if isinstance(named, list) else []
 
 
@@ -890,7 +891,7 @@ def settled(layout: Layout, aside: Path, storage: Connected | None) -> str | Non
     holds now, or None."""
     path = layout.home / "settings.toml"
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    stored = cast("dict[str, Any]", tomllib.loads(text)) if text else {}
+    stored: dict[str, Any] = tomllib.loads(text) if text else {}
     settings, ident = restored_settings(stored, machine_settings(aside), storage)
     if settings != stored:
         staged = path.with_name(f"{path.name}.new")
@@ -926,7 +927,7 @@ def _machine_key(settings: dict[str, Any], machine: Mapping[str, Any], dotted: s
     table = cast("dict[str, Any]", ours) if isinstance(ours, dict) else {}
     table.pop(rest, None)
     _drop_path(table, rest.split("."))
-    held = cast("Mapping[str, Any]", theirs) if isinstance(theirs, Mapping) else {}
+    held: dict[str, Any] = cast("dict[str, Any]", theirs) if isinstance(theirs, dict) else {}
     if rest in held:
         table[rest] = held[rest]
     else:
@@ -940,12 +941,12 @@ def _machine_key(settings: dict[str, Any], machine: Mapping[str, Any], dotted: s
 
 
 def _at_path(table: Mapping[str, Any], parts: Sequence[str]) -> object | None:
-    found: object = table
+    found: Any = table
     for part in parts:
-        if not isinstance(found, Mapping) or part not in found:
+        if not isinstance(found, dict) or part not in found:
             return None
-        found = cast("Mapping[str, Any]", found)[part]
-    return found
+        found = cast("dict[str, Any]", found)[part]
+    return cast("object", found)
 
 
 def _put_path(table: dict[str, Any], parts: Sequence[str], value: object) -> None:
@@ -967,10 +968,11 @@ def _drop_path(table: dict[str, Any], parts: Sequence[str]) -> None:
 
 
 def _storage_back(settings: dict[str, Any], storage: Connected) -> str:
-    engine = settings.setdefault("engine", {})
-    rows = engine.setdefault("placement", {})
-    for name, held in rows.items():
-        if isinstance(held, dict) and "keep" in can_of(held) and _same_target(held, storage.row):
+    engine = cast("dict[str, Any]", settings.setdefault("engine", {}))
+    rows = cast("dict[str, object]", engine.setdefault("placement", {}))
+    for name, found in rows.items():
+        held = cast("dict[str, object]", found) if isinstance(found, dict) else None
+        if held is not None and "keep" in can_of(held) and _same_target(held, storage.row):
             ident = str(held.get("id") or name)
             can = [*can_of(held), *(c for c in can_of(storage.row) if c not in can_of(held))]
             rows[name] = {**held, **storage.row, "id": ident, "can": can}

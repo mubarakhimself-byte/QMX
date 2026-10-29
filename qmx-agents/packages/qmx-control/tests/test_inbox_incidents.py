@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fastapi.testclient import TestClient
+from pydantic import JsonValue
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ports.library import RunSummary
@@ -18,7 +19,12 @@ from qmx_library.store import Store
 from qmx_control.server import create_app
 from qmx_control.service import ControlService, WorkflowEngine
 
-PLACED = {"place": "myserver", "place_id": "01JSERVER", "machine": "vm-1", "placed_by": "row"}
+PLACED: dict[str, JsonValue] = {
+    "place": "myserver",
+    "place_id": "01JSERVER",
+    "machine": "vm-1",
+    "placed_by": "row",
+}
 
 
 class Engine:

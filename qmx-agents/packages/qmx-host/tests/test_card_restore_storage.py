@@ -109,7 +109,7 @@ def test_the_keep_your_work_card_connects_a_folder_storage_and_makes_its_first_c
     (Layout(root).data / "notes.txt").write_text("a note", encoding="utf-8")
     usb = tmp_path / "usb"
     usb.mkdir()
-    body = {"folder": str(root), "kind": "folder", "place": "usb", "answer": {}}
+    body: dict[str, object] = {"folder": str(root), "kind": "folder", "place": "usb", "answer": {}}
     asked = {"fields": {"path": str(usb)}}
 
     first = job(client, "/api/first-start/keep", body)
@@ -128,7 +128,12 @@ def test_a_drive_restore_with_no_shipped_client_stops_at_the_client_card_naming_
 ) -> None:
     client, _ = card
     root = tmp_path / "QMX"
-    body = {"folder": str(root), "kind": "drive", "place": "gdrive", "answer": {}}
+    body: dict[str, object] = {
+        "folder": str(root),
+        "kind": "drive",
+        "place": "gdrive",
+        "answer": {},
+    }
 
     found = job(client, "/api/first-start/connect", body)
 

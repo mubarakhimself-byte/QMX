@@ -21,9 +21,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from fastapi import APIRouter
+from pydantic import JsonValue
 from qmx_engine.templates.catalog import PACK
 from qmx_library.port import Draft
 from qmx_library.principal import MAIN, Principal
+
+type JsonObject = dict[str, JsonValue]
 
 if TYPE_CHECKING:
     from qmx_library.store import Store
@@ -43,7 +46,7 @@ HOST_JOBS: Final[tuple[tuple[str, str, str], ...]] = (
 def landed(store: Store, job: str, state: str, line: str) -> None:
     """One `maintenance-result` artifact for a host job that ended. A landing that fails is a
     line on stderr: it never fails the job."""
-    result = {"job": job, "state": state, "line": line}
+    result: JsonObject = {"job": job, "state": state, "line": line}
     draft = Draft(
         "artifact",
         None,
@@ -66,9 +69,10 @@ def marked(pack: Path = PACK) -> list[dict[str, object]]:
             definition = json.loads(path.read_text(encoding="utf-8"))
         except OSError, ValueError:
             continue
-        meta = definition.get("meta") if isinstance(definition, dict) else None
+        read = cast("dict[str, object]", definition) if isinstance(definition, dict) else {}
+        meta = read.get("meta")
         if isinstance(meta, dict) and cast("dict[str, object]", meta).get("kind") == MARK:
-            found.append({"id": definition.get("id"), "name": definition.get("name")})
+            found.append({"id": read.get("id"), "name": read.get("name")})
     return found
 
 
@@ -88,7 +92,7 @@ def maintenance_router(
             "upkeep": [f"upkeep:{p}" for p in places],
             "drill": ["drill"],
         }
-        host = []
+        host: list[dict[str, object]] = []
         for ident, name, key in HOST_JOBS:
             jobs = [backups.jobs.latest(kind) for kind in kinds[ident]]
             running = [job.id for job in jobs if job is not None and job.state == "running"]
@@ -103,7 +107,7 @@ def maintenance_router(
                     "output": RESULT,
                 }
             )
-        workflows = []
+        workflows: list[dict[str, object]] = []
         for workflow in marked():
             found: Sequence[Mapping[str, object]] = []
             installed = False

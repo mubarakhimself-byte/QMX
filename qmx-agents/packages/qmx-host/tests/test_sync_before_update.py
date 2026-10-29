@@ -97,7 +97,7 @@ class Unanswering:
 @pytest.fixture
 def unanswering(monkeypatch: pytest.MonkeyPatch) -> Iterator[Unanswering]:
     runner = Unanswering()
-    monkeypatch.setattr(qmx_host.__main__, "_rclone", lambda _layout, _plan: runner)
+    monkeypatch.setattr(qmx_host.__main__, "_rclone", lambda _layout, _plan: runner)  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
     yield runner
     runner.stop.set()
 
@@ -133,7 +133,9 @@ def test_serve_sends_a_copy_to_the_storage_before_its_store_upgrades_and_release
     assert made.code == 0, made.line
     (layout.data / "settings.toml").write_text(storage_row(storage), encoding="utf-8")
     monkeypatch.setattr(
-        qmx_host.__main__, "_rclone", lambda folder, _plan: Rclone(folder, keys=keys)
+        qmx_host.__main__,
+        "_rclone",
+        lambda folder, _plan: Rclone(folder, keys=keys),  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
     )
     monkeypatch.setenv("SY5_STORAGE", str(storage))
 

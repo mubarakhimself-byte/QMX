@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -97,9 +98,8 @@ def test_a_host_job_lands_one_maintenance_result_that_an_event_trigger_follows(
             for e in library.events(0)
             if library.get(e.object_id).fields.get("type") == "maintenance-result"
         ]
+        made = [(r.kind, cast("dict[str, Any]", r.fields["metadata"])) for r in results]
 
     assert round_job.state == "finished"
     assert (before.fired, len(after.fired)) == ((), 1)
-    assert [
-        (r.kind, r.fields["metadata"]["job"], r.fields["metadata"]["state"]) for r in results
-    ] == [("artifact", "sync", "finished")]
+    assert [(kind, m["job"], m["state"]) for kind, m in made] == [("artifact", "sync", "finished")]
