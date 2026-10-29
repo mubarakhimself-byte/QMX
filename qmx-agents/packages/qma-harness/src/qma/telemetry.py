@@ -4,6 +4,11 @@ One setting decides it for every sender on the machine: each chat's CLI, the eng
 and Hindsight's tracing. `off` is the default and sends nothing. `this-pc` sends to OpenObserve on
 this machine's loopback. Any other value names a place, whose collector is reached by that name
 over the tailnet. No sender holds an address of its own.
+
+OpenObserve on this PC takes nothing without its sign-in, so every sender sends `headers(home)`:
+the ingest credential the deep-logs dialog put in the key store, as an `Authorization` header.
+It goes to this PC's loopback only. A place's collector listens on the tailnet with no sign-in,
+and a key never leaves this PC.
 """
 
 from __future__ import annotations
@@ -11,6 +16,7 @@ from __future__ import annotations
 import logging
 import re
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final, cast
 
@@ -26,6 +32,8 @@ COLLECTOR_PORT: Final = 4318
 """OTLP/HTTP's registered port, where a place's collector listens."""
 PLACE: Final = re.compile(r"[a-z0-9][a-z0-9-]{0,62}")
 """A place name as a tailnet machine name: lowercase letters, digits and hyphens."""
+INGEST_KEY: Final = "qmx/openobserve-ingest"
+"""The key-store name of this PC's OpenObserve ingest credential: the whole header value."""
 
 
 def send_to(raw: object) -> str:
@@ -46,20 +54,39 @@ def endpoint(target: str) -> str:
     return f"http://{target}:{COLLECTOR_PORT}"
 
 
-def configured(home: Path) -> str:
-    """The OTLP/HTTP root `<home>/settings.toml` names, or "" when it names none. A file that
-    does not parse, or a value that is not one of the three, sends nothing."""
+def target(home: Path) -> str:
+    """The parsed `send_to` `<home>/settings.toml` names. A file that does not parse, or a value
+    that is not one of the three, sends nothing."""
     try:
         document = tomllib.loads((home / "settings.toml").read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return ""
+        return OFF
     except (OSError, ValueError) as error:
         LOG.warning("telemetry: settings.toml was not read, so nothing is sent: %s", error)
-        return ""
+        return OFF
     section: object = document.get(SECTION)
     raw = cast("dict[str, object]", section).get("send_to") if isinstance(section, dict) else None
     try:
-        return endpoint(send_to(raw))
+        return send_to(raw)
     except ValueError as error:
         LOG.warning("telemetry: %s; nothing is sent", error)
-        return ""
+        return OFF
+
+
+def configured(home: Path) -> str:
+    """The OTLP/HTTP root `<home>/settings.toml` names, or "" when it names none."""
+    return endpoint(target(home))
+
+
+def headers(home: Path, read: Callable[[str], str | None]) -> dict[str, str]:
+    """The headers every sender adds: the ingest credential `read` finds under `INGEST_KEY`, for
+    `this-pc` only. A key store that fails sends no header, so the sender's own failure counter
+    says what went wrong rather than every send raising."""
+    if target(home) != THIS_PC:
+        return {}
+    try:
+        found = read(INGEST_KEY)
+    except Exception as error:  # any key store failure: send without the header
+        LOG.warning("telemetry: the key store did not answer (%s)", type(error).__name__)
+        return {}
+    return {"Authorization": found} if found else {}

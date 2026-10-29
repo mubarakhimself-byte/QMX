@@ -33,8 +33,9 @@ from importlib import metadata
 from pathlib import Path
 from typing import Final, Literal, cast
 
+import keyring
 from pydantic import JsonValue
-from qma.telemetry import configured
+from qma.telemetry import configured, headers
 
 from qmx_engine.ledger import redact
 from qmx_engine.ledger.spans import Span, from_record
@@ -107,9 +108,12 @@ class _Batch:
         return len(self.spans) + len(self.metrics) + len(self.logs)
 
 
-def _post(url: str, body: bytes) -> None:
+def _post(url: str, body: bytes, headers: Mapping[str, str] | None = None) -> None:
     request = urllib.request.Request(  # noqa: S310 (the home's own setting)
-        url, data=body, headers={"Content-Type": "application/json"}, method="POST"
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", **(headers or {})},
+        method="POST",
     )
     with urllib.request.urlopen(request, timeout=TIMEOUT_S) as answer:  # noqa: S310
         answer.read()
@@ -359,7 +363,7 @@ class Telemetry:
         self.counters = Counters()
         self.service = service
         self.state = state
-        self._post = post or _post
+        self._post = post or (lambda url, body: _post(url, body, self.headers))
         self._batch = _Batch([], [], [])
         self._lock = threading.Lock()
         """Guards the batch only, so an emitter holds it for an append and never for a send."""
@@ -547,13 +551,21 @@ def configure(
 
 
 def opened(home: Path, *, service: str = "qmx-host") -> Telemetry | None:
-    """Configure from a home's `[telemetry] send_to`, once, or stay off while it names none."""
+    """Configure from a home's `[telemetry] send_to`, once, or stay off while it names none. The
+    exporter sends the ingest credential the key store holds for OpenObserve on this PC."""
     if _resident.found is not None:
         return _resident.found
     endpoint = configured(home)
     if not endpoint:
         return None
-    return configure(endpoint, service=service, state=home / STATE_FILE)
+    return configure(
+        endpoint, headers=headers(home, key_of), service=service, state=home / STATE_FILE
+    )
+
+
+def key_of(name: str) -> str | None:
+    """One `qmx/` key from this machine's key store, under the name the dialog wrote it."""
+    return keyring.get_password(name, name.removeprefix("qmx/"))
 
 
 def reset() -> None:

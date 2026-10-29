@@ -35,17 +35,19 @@ from enum import Enum
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
+from urllib.parse import quote
 
 import psutil
 from claude_agent_sdk import AgentDefinition, ClaudeAgentOptions, HookMatcher
 from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport
+from qmx_broker.credentials import CredentialManager
 from qmx_router.profiles import TIER_ENV, ProfileName
 from qmx_router.registry import bundled
 from qmx_router.server import PORT_FILE
 
 from qma.boot import banned_fragment
 from qma.harness import guard
-from qma.telemetry import configured
+from qma.telemetry import configured, headers
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpServerConfig, SdkPluginConfig
@@ -404,18 +406,26 @@ DesignSync and PushNotification tools (measured, CLI 2.1.299). On Windows, vanil
 offers PowerShell, so it is turned back on by name; the other three stay off."""
 
 
-def telemetry_env(endpoint: str) -> dict[str, str]:
+def telemetry_env(endpoint: str, sent: Mapping[str, str] | None = None) -> dict[str, str]:
     """What a chat's CLI needs to send its own events to `endpoint` over OTLP/HTTP (H60), or
-    nothing while `endpoint` is empty. The CLI redacts prompt text; QMX adds nothing to it."""
+    nothing while `endpoint` is empty. `sent` are the headers every sender adds (the ingest
+    credential for OpenObserve on this PC), passed in OpenTelemetry's percent-encoded
+    `name=value` list, in the CLI's environment only. The CLI redacts prompt text; QMX adds
+    nothing to it."""
     if not endpoint:
         return {}
-    return {
+    found = {
         "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
         "OTEL_METRICS_EXPORTER": "otlp",
         "OTEL_LOGS_EXPORTER": "otlp",
         "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
         "OTEL_EXPORTER_OTLP_ENDPOINT": endpoint,
     }
+    if sent:
+        found["OTEL_EXPORTER_OTLP_HEADERS"] = ",".join(
+            f"{quote(name, safe='')}={quote(value, safe='')}" for name, value in sent.items()
+        )
+    return found
 
 
 LAUNCHER: Final = Path(sys.executable).parent / (
@@ -564,7 +574,7 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
                 routing["API_TIMEOUT_MS"] = str(api_timeout_ms())
     return {
         **CONSTANT_ENV,
-        **telemetry_env(configured(home.root)),
+        **telemetry_env(configured(home.root), headers(home.root, CredentialManager().read)),
         **routing,
         "QMA_CHAT_ID": session_id,
         "QMA_PROC_DIR": str(home.procs_dir),
