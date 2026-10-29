@@ -13,7 +13,10 @@ from typing import Any, cast
 import pytest
 from fastapi.testclient import TestClient
 from qmx_control.server import create_app
+from qmx_engine.ledger.inbox_table import InboxTable
+from qmx_home import Label, Layout
 from qmx_home.backup.repository import FolderRepository
+from qmx_home.files import plain
 from test_backups_service import Clock, connect, ended, finished, folder, results, service, target
 from test_connect import TOKEN, Store, rows
 from test_connect_storage import walk
@@ -73,6 +76,55 @@ def test_with_this_pcs_copies_off_and_no_storage_the_doctor_says_his_work_has_no
     assert row.ok is False
     assert row.detail.startswith(NO_COPY_LINE)
     assert swept is None
+
+
+def tear(path: Path) -> None:
+    path.write_bytes(path.read_bytes()[:-20])
+
+
+def upkeep_incident(layout: Layout, place: str) -> tuple[str, str] | None:
+    with InboxTable.open(layout.home) as inbox:
+        found = inbox.open_incident(f"upkeep:{place}")
+    return None if found is None else (found.title, found.cause)
+
+
+def test_a_torn_index_or_copy_list_a_round_finds_opens_the_upkeep_incident_naming_the_storage(
+    tmp_path: Path,
+) -> None:
+    layout, clock = folder(tmp_path / "QMX"), Clock()
+    backups = service(layout, clock)
+    connect(backups, target(tmp_path / "usb"))
+    finished(backups, backups.start(None, asked=True).job)
+    home_id = Label.parse(layout.label.read_text(encoding="utf-8")).home_id
+    usb = tmp_path / "usb" / "QMX-backup" / home_id
+    quick = layout.backups / "quick"
+    (layout.data / "notes" / "0000.txt").write_bytes(b"changed once")
+    clock.advance(hours=2)
+    finished(backups, backups.start(None, asked=True).job)
+    (usb_index,) = sorted((usb / "index").iterdir())[:1]
+    (pc_index,) = sorted((quick / "index").iterdir())[:1]
+    oldest = sorted((quick / "snapshots").iterdir())[0]
+    tear(usb_index)
+    tear(pc_index)
+    tear(oldest / "manifest.jsonl")
+    (layout.data / "notes" / "0000.txt").write_bytes(b"changed twice")
+    clock.advance(days=1, hours=1)
+
+    finished(backups, backups.start(None, asked=True).job)
+
+    assert upkeep_incident(layout, "usb") == (
+        f"Backups: QMX's upkeep of {plain(tmp_path / 'usb')} found something",
+        f"QMX found 1 list of where files are kept at {plain(usb)} that was not whole, and wrote "
+        "it again from the stored files themselves, so no copy was lost",
+    )
+    assert upkeep_incident(layout, "quick") == (
+        "Backups: QMX's upkeep of This PC's copies found something",
+        f"QMX removed 1 copy list at {plain(quick)} that was never whole ({oldest.name}); it was "
+        "older than the newest whole copy there, so no copy was lost. QMX found 1 list of where "
+        f"files are kept at {plain(quick)} that was not whole, and wrote it again from the stored "
+        "files themselves, so no copy was lost",
+    )
+    assert not usb_index.exists() and not pc_index.exists() and not oldest.exists()
 
 
 @needs_rclone

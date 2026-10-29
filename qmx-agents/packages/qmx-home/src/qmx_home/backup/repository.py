@@ -296,6 +296,8 @@ class Swept:
     removed: int
     blocked: str | None
     """Why the sweep did not run: a copy whose manifest is not whole, named."""
+    torn: tuple[str, ...] = ()
+    """Index files found torn and written again."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -727,7 +729,7 @@ class Packed:
     def fetch(self, sha256: str, target: Path) -> str:
         places = self.index().good(sha256) or self.index().where.get(sha256, [])
         if not places:
-            raise FileNotFoundError(f"{self.where} holds no file {sha256}")
+            raise FileNotFoundError(f"{self.where} holds no such file")
         found = places[0]
         return unpack(self.local_pack(found.pack), found, target)
 
@@ -781,7 +783,7 @@ class Packed:
 
     def sweep(self, *, safety: timedelta, now: datetime) -> Swept:
         pruned = self.prune(safety=safety, now=now)
-        return Swept(pruned.deleted, pruned.blocked)
+        return Swept(pruned.deleted, pruned.blocked, pruned.torn)
 
     # The prune.
 
@@ -856,7 +858,7 @@ class Packed:
                 keep.add(name)
         written: list[str] = []
         if rewrite:
-            told("writing new packs")
+            told("writing the kept files again, closer together")
             frames = [
                 (sha, self.frame(sha, at), at)
                 for name in rewrite
@@ -892,7 +894,7 @@ class Packed:
             or sum(1 for f in held.files if f.startswith("merged-")) > 1
         )
         if changed:
-            told("writing the merged index")
+            told("writing one list of where files are kept")
             lines: list[Mapping[str, object]] = [{"index": "merged", "stamp": moment}]
             for sha, places in new_index.where.items():
                 lines += [at.document(sha) for at in places if at.pack in kept]
@@ -908,7 +910,7 @@ class Packed:
                 if name != merged:
                     self._step("unindex")
                     self._remove(f"index/{name}")
-        told("removing packs no copy needs")
+        told("removing what no copy needs")
         freed = 0
         for name in sorted(gone):
             self._step("unpack")
@@ -1128,7 +1130,7 @@ class FolderRepository(Packed):
             if path.name not in named:
                 path.unlink()
                 removed += 1
-        return Swept(swept.removed + removed, None)
+        return Swept(swept.removed + removed, None, swept.torn)
 
     def room(self) -> int | None:
         return free_bytes(self.root)
@@ -1249,7 +1251,7 @@ class FolderRepository(Packed):
     def local_pack(self, name: str) -> Path:
         path = self.root / "packs" / name[:2] / f"{name}.pack"
         if not long_path(path).is_file():
-            raise FileNotFoundError(f"{plain(path)} is gone")
+            raise FileNotFoundError(f"part of {self.where} is gone")
         return path
 
     def _scratch(self) -> Path:
@@ -1335,7 +1337,7 @@ class RcloneRepository(Packed):
         }
         if arrived.get(name) != str(size):
             raise StorageRefused(
-                f"{self.name} did not keep {rel} as it was sent; QMX sends it again at the next "
+                f"{self.name} did not keep a file as it was sent; QMX sends it again at the next "
                 "sync",
                 "other",
             )
@@ -1390,7 +1392,7 @@ class RcloneRepository(Packed):
         listed = self._list(f"packs/{name[:2]}")
         size = listed.get(f"{name}.pack")
         if size is None:
-            raise FileNotFoundError(f"{self.name} no longer holds the pack {name}")
+            raise FileNotFoundError(f"{self.name} no longer holds part of its copies")
         long_path(self.fetched).mkdir(parents=True, exist_ok=True)
         if free_bytes(self.fetched) - size < self.keep_free:
             raise StorageRefused(
@@ -1401,7 +1403,7 @@ class RcloneRepository(Packed):
         self._run(["copy", self._at(rel), str(self.fetched)])
         path = self.fetched / f"{name}.pack"
         if not long_path(path).is_file():
-            raise FileNotFoundError(f"{self.name} did not give back the pack {name}")
+            raise FileNotFoundError(f"{self.name} did not give back part of its copies")
         self._pack = (name, path)
         return path
 

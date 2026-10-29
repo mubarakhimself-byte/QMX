@@ -327,6 +327,30 @@ def test_a_round_killed_after_a_targets_copy_is_up_never_refuses_that_target_nex
     assert [p.result for p in report.places] == ["copied", "copied"]
 
 
+def test_a_copy_that_landed_reads_copied_when_tidying_the_storage_after_it_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=5)
+    plan = Plan(storages=(target(tmp_path),))
+    real = FolderRepository.sweep
+
+    def unplugged(self: FolderRepository, **kwargs: object) -> object:
+        if "usb" in str(self.root):
+            raise OSError(5, "Access is denied")
+        return real(self, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(FolderRepository, "sweep", unplugged)
+    report = run_round(filled.layout, plan, now=NOW, floor=0)
+    usb = place(filled.layout, tmp_path)
+
+    assert report.places[-1].result == "copied"
+    assert report.places[-1].line.endswith(
+        f"; tidying {usb.where} after the copy stopped (Access is denied); the next round tries "
+        "again"
+    )
+    assert usb.copies() == ("20261027T030000000000Z",)
+
+
 def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_its_manifest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

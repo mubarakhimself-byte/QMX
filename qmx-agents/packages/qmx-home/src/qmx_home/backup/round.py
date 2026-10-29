@@ -53,6 +53,7 @@ from qmx_home.backup.repository import (
     Mismatch,
     Repository,
     StorageRefused,
+    Swept,
     Unreadable,
 )
 from qmx_home.backup.snapshot import (
@@ -115,6 +116,8 @@ class Placed:
     """Why a storage refused, sorted: `offline`, `signin`, `full`, `missing` or `other`."""
     torn: tuple[str, ...] = ()
     """Torn copies removed at the place, each older than its newest whole copy."""
+    torn_index: tuple[str, ...] = ()
+    """Index files at the place found torn, skipped and written again by the sweep."""
 
     def document(self) -> dict[str, object]:
         found: dict[str, object] = {
@@ -136,6 +139,8 @@ class Placed:
             found["failure"] = self.failure
         if self.torn:
             found["torn"] = list(self.torn)
+        if self.torn_index:
+            found["torn_index"] = list(self.torn_index)
         return found
 
 
@@ -350,7 +355,7 @@ def copy_round(
     busy = f"a backup round is already running for {layout.root}; it ends by itself"
     with hold(layout.backups / LOCK, busy):
         quick_repo = FolderRepository(layout.backups / QUICK, key=QUICK)
-        quick_repo.clean()
+        torn = quick_repo.clean().torn
         clear_scratch(layout, plan, keep=held)
         log = log_lines(layout)
         home_id = _label(layout).home_id
@@ -377,7 +382,7 @@ def copy_round(
                 ),
             )
             stamp = _stamp(now, (quick_repo,), log)
-            return _logged(layout, RoundReport(stamp, why, places, 0.0)), None
+            return _logged(layout, RoundReport(stamp, why, _at_pc(places, torn), 0.0)), None
         chosen = [
             storage
             for storage in plan.sending
@@ -410,7 +415,7 @@ def copy_round(
                 f"{quick_repo.where} is not that old yet"
             )
             places = (Placed(QUICK, quick_repo.where, "skipped", line, tried=False), *unknown)
-            return _logged(layout, RoundReport(stamp, why, places, 0.0)), None
+            return _logged(layout, RoundReport(stamp, why, _at_pc(places, torn), 0.0)), None
         previous = _newest(quick_repo) if pc_on else None
         saves = [*([plan.pc.save] if pc_due else []), *(s.policy.save for s in chosen)]
         union: tuple[Class, ...] = tuple(c for c in SENT if any(c in save for save in saves))
@@ -448,7 +453,7 @@ def copy_round(
                 *unknown,
             )
             return _logged(
-                layout, RoundReport(stamp, why, places, clock.monotonic() - started)
+                layout, RoundReport(stamp, why, _at_pc(places, torn), clock.monotonic() - started)
             ), None
         staging.put_copy(copy)
         if pc_due:
@@ -467,12 +472,18 @@ def copy_round(
         if not force and placed.result == "copied":
             placed = _thin_quick(quick_repo, plan, log, placed, {*held, stamp})
             _thin_pre_change(layout, log, [placed])
-        report = RoundReport(stamp, why, (placed, *unknown), clock.monotonic() - started)
+        places = _at_pc((placed, *unknown), torn)
+        report = RoundReport(stamp, why, places, clock.monotonic() - started)
         _logged(layout, report)
     if not chosen:
         unstage(layout, stamp)
         return report, None
     return report, Pinned(stamp, tuple(s.id for s in chosen))
+
+
+def _at_pc(places: tuple[Placed, ...], torn: tuple[str, ...]) -> tuple[Placed, ...]:
+    """The round's places with This PC's torn copies, which its `clean` removed, on its line."""
+    return tuple(replace(p, torn=torn) if p.key == QUICK and torn else p for p in places)
 
 
 def send(
@@ -619,6 +630,7 @@ def _send(
         partial: bool = False,
         failure: str | None = None,
         torn: tuple[str, ...] = (),
+        torn_index: tuple[str, ...] = (),
     ) -> Placed:
         return Placed(
             storage.id,
@@ -635,6 +647,7 @@ def _send(
             storage.policy.save,
             failure=failure,
             torn=torn,
+            torn_index=torn_index,
         )
 
     if storage.path is not None and not Path(storage.path.anchor or "/").exists():
@@ -745,13 +758,19 @@ def _sent(
     repo.set_about(_about(layout, held))
     repo.put_copy(held)
     log_line(layout, {"kind": "sent", "id": storage.id, "key": key, "stamp": held.stamp})
-    thinned = _thin(repo, storage, plan, log, key)
+    try:
+        swept = _thin(repo, storage, plan, log, key)
+    except (OSError, StorageRefused) as failed:
+        why = _why(failed) if isinstance(failed, OSError) else str(failed)
+        swept = Swept(
+            0, f"tidying {where} after the copy stopped ({why}); the next round tries again"
+        )
     sent = len(missing) - len(damaged)
     line = f"copied {_count(sent, 'file')} ({_mb(written)}) to {where}"
     if same_drive(storage, layout):
         line += "; it is on the same drive as the QMX folder, so it does not survive that disk"
-    if thinned:
-        line += f"; {thinned}"
+    if swept.blocked:
+        line += f"; {swept.blocked}"
     line += _lacks(
         [
             *cast("list[str]", copy.header.get("unread", [])),
@@ -766,6 +785,7 @@ def _sent(
         size=written,
         partial=_partial(held),
         torn=cleaned.torn,
+        torn_index=swept.torn,
     )
 
 
@@ -978,15 +998,14 @@ def _thin(
     plan: Plan,
     log: Sequence[Mapping[str, object]],
     key: str,
-) -> str:
-    """Drop the copies the keep rule lets go, then sweep. Returns a line when the sweep could not
-    run."""
+) -> Swept:
+    """Drop the copies the keep rule lets go, then sweep."""
     readable, whole = _readable(repo)
     keep = kept(list(readable), storage.policy.keep, drilled=_drilled(log, key), held=whole)
     for stamp in readable:
         if stamp not in keep:
             repo.drop(stamp)
-    return repo.sweep(safety=safety_of(plan), now=datetime.now(UTC)).blocked or ""
+    return repo.sweep(safety=safety_of(plan), now=datetime.now(UTC))
 
 
 def _readable(repo: Repository) -> tuple[dict[str, Manifest], set[str]]:
@@ -1020,10 +1039,9 @@ def _thin_quick(
     for stamp in readable:
         if stamp not in keep:
             repo.drop(stamp)
-    blocked = repo.sweep(safety=safety_of(plan), now=datetime.now(UTC)).blocked
-    if blocked is None:
-        return placed
-    return replace(placed, line=f"{placed.line}; {blocked}")
+    swept = repo.sweep(safety=safety_of(plan), now=datetime.now(UTC))
+    line = placed.line if swept.blocked is None else f"{placed.line}; {swept.blocked}"
+    return replace(placed, line=line, torn_index=swept.torn)
 
 
 def _thin_pre_change(

@@ -1,10 +1,12 @@
 """QMX's monthly upkeep of a storage (design 06 section 6): the re-pack, killed after each of its
-four steps, and the check, a different slice of the packs each month."""
+four steps, and the check, a different slice of the packs each month that reads every pack
+within twelve months."""
 
 from __future__ import annotations
 
 import hashlib
 import os
+import random
 from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -102,22 +104,47 @@ def test_a_whole_repack_then_a_second_leaves_under_five_percent_unused(tmp_path:
     assert every_kept_copy_restores(repo, tmp_path / "back")
 
 
-def test_the_check_reads_a_different_slice_each_month_and_names_a_flipped_byte(
+def test_the_check_names_a_flipped_byte_by_its_file_and_puts_it_on_the_bad_list(
     tmp_path: Path,
 ) -> None:
     repo, files = storage(tmp_path)
-    packs = sorted(repo.packs())
-    held = repo.index()
-    sha = next(s for s, places in held.where.items() if places[0].pack == packs[1])
+    sha = hashlib.sha256(files["f10.bin"]).hexdigest()
     damage(repo, sha)
 
-    months = [check(repo, slice=12, month=m, work=tmp_path / "work") for m in range(3)]
+    months = [check(repo, slice=12, month=m, work=tmp_path / "work") for m in range(12)]
+    found = [m for m in months if m.damaged]
 
-    assert len(packs) == 3
-    assert [m.packs for m in months] == [1, 1, 1]
-    assert [bool(m.damaged) for m in months] == [False, True, False]
-    assert months[1].damaged == (f"{sha} in the pack {packs[1]}",)
+    assert [m.packs >= 1 for m in months] == [True] * 12
+    assert len(found) == 1
+    assert found[0].damaged == ("f10.bin",)
+    assert "f10.bin is damaged and goes on the list of damaged files" in found[0].line
+    assert "pack" not in found[0].line and sha not in found[0].line
     assert FolderRepository(repo.root).pool_has(sha) is False
-    assert sum(m.files for m in months) == len(held.where)
     assert not (tmp_path / "work").exists() or not any((tmp_path / "work").iterdir())
-    _ = files
+
+
+def test_every_pack_is_read_back_within_twelve_months_as_packs_come_and_go(tmp_path: Path) -> None:
+    repo = FolderRepository(tmp_path / "storage", clock=lambda: START)
+    made = random.Random(7)  # noqa: S311 - which slice each pack falls in, not a secret
+    src = tmp_path / "src"
+    src.mkdir()
+
+    def packed(name: str) -> str:
+        body = made.randbytes(4000)
+        (src / name).write_bytes(body)
+        sha = hashlib.sha256(body).hexdigest()
+        repo.put_pool(sha, src / name, path=name)
+        repo.seal()
+        return sha
+
+    first = [packed(f"first-{n}.bin") for n in range(6)]
+    for sha in first:
+        damage(repo, sha)
+
+    for month in range(12):
+        packed(f"month-{month}-a.bin")
+        packed(f"month-{month}-b.bin")
+        check(repo, slice=12, month=month, work=tmp_path / "work")
+
+    fresh = FolderRepository(repo.root)
+    assert [fresh.pool_has(sha) for sha in first] == [False] * 6

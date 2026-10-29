@@ -469,6 +469,7 @@ class Backups:
                 road_lease=self.road_lease,
                 held=held,
             )
+            self._torn(plan, next(p for p in report.places if p.key == QUICK))
             if pinned is not None:
                 sends = self._send_all(plan, pinned.stamp, pinned.due)
         except (Busy, PlanRefused) as refused:
@@ -523,15 +524,7 @@ class Backups:
         finally:
             self._unpin(stamp, place_id)
             self._settle()
-        placed = report.places[0]
-        if placed.torn:
-            self._note(
-                place_id,
-                "torn",
-                f"QMX removed {len(placed.torn)} copy list(s) at {placed.where} that were never "
-                f"whole ({', '.join(placed.torn)}); each was older than the newest whole copy "
-                "there, so no copy was lost",
-            )
+        self._torn(plan, report.places[0])
         return report.document()
 
     def _unpin(self, stamp: str, place_id: str) -> None:
@@ -566,15 +559,22 @@ class Backups:
             self._runner = Rclone(self.layout, keys=keys, path=plan.rclone_path)
         return self._runner
 
-    def _note(self, place_id: str, signature: str, line: str) -> None:
-        """An upkeep incident at one storage, `upkeep:<place>`; the next clean upkeep there
-        resolves it."""
+    def _torn(self, plan: Plan, placed: Placed) -> None:
+        """The upkeep incident for what a round's clean and sweep found torn at one place."""
+        line = _torn_line(placed)
+        if line:
+            self._note(plan, placed.id, "torn", line)
+
+    def _note(self, plan: Plan, place_id: str, signature: str, line: str) -> None:
+        """An upkeep incident at one storage, `upkeep:<place>`, named as he reads the storage;
+        the next clean upkeep there resolves it."""
         at = self.clock().astimezone(UTC).isoformat()
+        shown = "This PC's copies" if place_id == QUICK else self._storage(plan, place_id).shown
         with InboxTable.open(self.layout.home) as inbox:
             inbox.incident(
                 f"{UPKEEP}{place_id}",
                 signature,
-                f"Backups: QMX's upkeep of {place_id} found something",
+                f"Backups: QMX's upkeep of {shown} found something",
                 line,
                 at=at,
             )
@@ -731,21 +731,21 @@ class Backups:
         plan = self.plan()
         repo = self._repository(plan, place_id)
         if not isinstance(repo, Packed):
-            raise Stopped(f"{repo.where} keeps no packs, so QMX has no upkeep to do there")
+            raise Stopped(f"{repo.where} needs no upkeep from QMX")
         lock = self.layout.backups / LOCK if place_id == QUICK else send_lock(self.layout, place_id)
         upkeep = plan.upkeep
         now = self.clock()
         try:
             with hold(lock, f"QMX is working on {repo.where}; its upkeep waits", removed=True):
-                progress("re-packing")
+                progress(f"tidying {repo.where}")
                 packed = repack(
                     repo,
                     past=upkeep.repack_past,
                     per_run=upkeep.repack_per_run,
                     safety=safety_of(plan),
-                    step=lambda step: progress(f"re-packing: {step}"),
+                    step=lambda step: progress(f"tidying {repo.where}: {step}"),
                 )
-                progress("checking a slice of the packs")
+                progress(f"reading back a twelfth of what {repo.where} stores")
                 checked = check(
                     repo,
                     slice=upkeep.check_slice,
@@ -757,13 +757,18 @@ class Backups:
         except StorageRefused as refused:
             raise Stopped(f"{refused}; QMX tries the upkeep again next month") from None
         line = (
-            f"the re-pack of {repo.where} removed {packed.deleted} pack(s) and wrote "
-            f"{packed.written}; {packed.unused:.0%} of its packs' bytes are unused; "
-            f"{checked.line}"
+            f"the upkeep of {repo.where} freed {_mb(packed.freed)}; {packed.unused:.0%} of what it "
+            f"stores is used by no kept copy; {checked.line}"
         )
+        if packed.torn:
+            line += (
+                f"; QMX wrote {_count(len(packed.torn), 'list', 'lists')} of where files are kept "
+                "again from the stored files themselves, as "
+                f"{'it was' if len(packed.torn) == 1 else 'they were'} not whole"
+            )
         if packed.blocked:
             line = f"{line}; {packed.blocked}"
-        found = [*checked.damaged, *(f"index/{t} is not whole" for t in packed.torn)]
+        found = [*checked.damaged, *packed.torn]
         log_line(
             self.layout,
             {
@@ -782,7 +787,7 @@ class Backups:
         )
         trigger = f"{UPKEEP}{place_id}"
         if found or checked.torn:
-            self._note(place_id, "damaged" if checked.damaged else "torn", line)
+            self._note(plan, place_id, "damaged" if checked.damaged else "torn", line)
         else:
             with InboxTable.open(self.layout.home) as inbox:
                 if inbox.open_incident(trigger) is not None:
@@ -1662,6 +1667,28 @@ def _open_places(inbox: InboxTable) -> set[str]:
         "SELECT trigger_id FROM incidents WHERE trigger_id LIKE 'backup:%' AND resolved_at IS NULL"
     ).fetchall()
     return {str(row[0]).removeprefix("backup:") for row in rows}
+
+
+def _torn_line(placed: Placed) -> str:
+    """What a round's clean and sweep found torn at one place, for him; empty when nothing."""
+    found: list[str] = []
+    if placed.torn:
+        one = len(placed.torn) == 1
+        found.append(
+            f"QMX removed {_count(len(placed.torn), 'copy list', 'copy lists')} at {placed.where} "
+            f"that {'was' if one else 'were'} never whole ({', '.join(placed.torn)}); "
+            f"{'it was' if one else 'each was'} older than the newest whole copy there, so no "
+            "copy was lost"
+        )
+    if placed.torn_index:
+        one = len(placed.torn_index) == 1
+        found.append(
+            f"QMX found {_count(len(placed.torn_index), 'list', 'lists')} of where files are "
+            f"kept at {placed.where} that {'was' if one else 'were'} not whole, and wrote "
+            f"{'it' if one else 'them'} again from the stored files themselves, so no copy was "
+            "lost"
+        )
+    return ". ".join(found)
 
 
 def _title(place: str) -> str:
