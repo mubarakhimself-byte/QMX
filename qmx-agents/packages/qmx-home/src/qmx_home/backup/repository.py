@@ -318,7 +318,9 @@ class Pruned:
     freed: int = 0
     """Bytes of the packs removed."""
     unused: float = 0.0
-    """The share of pack bytes no kept copy needs, after the prune."""
+    """The share of the stored files' bytes in packs that no kept copy needs, after the prune.
+    A pack's own list of what it holds is not counted, so a pack of small files whose every
+    file is needed reads as wholly used."""
     blocked: str | None = None
     torn: tuple[str, ...] = ()
     """Index files found torn and replaced."""
@@ -830,6 +832,7 @@ class Packed:
             for at in places:
                 if at.pack in listing:
                     named_by.setdefault(at.pack, []).append((sha, at))
+        framed = {name: sum(at.length for _, at in held_by) for name, held_by in named_by.items()}
         keep: set[str] = set()
         rewrite: list[str] = []
         letting: set[str] = set()
@@ -847,7 +850,7 @@ class Packed:
                 past is not None
                 and (
                     any((sha, name) in held.bad for sha, _ in named_by.get(name, []))
-                    or 1 - sum(at.length for _, at in needed) / max(size, 1) > past
+                    or 1 - sum(at.length for _, at in needed) / max(framed.get(name, 0), 1) > past
                 )
                 and (budget is None or budget >= size)
             ):
@@ -857,6 +860,7 @@ class Packed:
             else:
                 keep.add(name)
         written: list[str] = []
+        frames: list[tuple[str, bytes, Location]] = []
         if rewrite:
             told("writing the kept files again, closer together")
             frames = [
@@ -917,8 +921,8 @@ class Packed:
             self._remove(f"packs/{name[:2]}/{name}.pack")
             freed += listing[name]
         self.refresh()
-        total = sum(size for name, size in listing.items() if name not in gone)
-        total += sum(self.packs().get(name, 0) for name in written)
+        total = sum(framed.get(name, 0) for name in listing if name not in gone)
+        total += sum(len(frame) for _, frame, _ in frames)
         needed = sum(at.length for at in chosen.values())
         return Pruned(
             deleted=len(gone),

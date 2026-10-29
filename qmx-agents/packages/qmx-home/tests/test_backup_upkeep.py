@@ -104,6 +104,35 @@ def test_a_whole_repack_then_a_second_leaves_under_five_percent_unused(tmp_path:
     assert every_kept_copy_restores(repo, tmp_path / "back")
 
 
+def test_a_pack_the_repack_wrote_is_not_written_again_however_small_its_files(
+    tmp_path: Path,
+) -> None:
+    repo = FolderRepository(tmp_path / "storage", clock=lambda: START)
+    src = tmp_path / "src"
+    src.mkdir()
+    entries: list[Entry] = []
+    for n in range(20):
+        body = os.urandom(1500)
+        (src / f"s{n}.txt").write_bytes(body)
+        sha = hashlib.sha256(body).hexdigest()
+        repo.put_pool(sha, src / f"s{n}.txt", path=f"s{n}.txt")
+        entries.append(Entry(f"s{n}.txt", sha, len(body), "file", (1, 1)))
+    stamps = [stamp_of(START + timedelta(hours=n)) for n in range(3)]
+    repo.put_copy(Manifest({"format": FORMAT, "stamp": stamps[0]}, tuple(entries)))
+    for stamp in stamps[1:]:
+        repo.put_copy(Manifest({"format": FORMAT, "stamp": stamp}, tuple(entries[:10])))
+    repo.drop(stamps[0])
+
+    runs = [
+        repack(repo, past=0.05, per_run=None, safety=timedelta(hours=1), now=LATER + day)
+        for day in (timedelta(0), timedelta(days=1), timedelta(days=2))
+    ]
+
+    assert [(r.written, r.deleted) for r in runs] == [(1, 0), (0, 1), (0, 0)]
+    assert runs[-1].unused < 0.05
+    assert every_kept_copy_restores(repo, tmp_path / "back")
+
+
 def test_the_check_names_a_flipped_byte_by_its_file_and_puts_it_on_the_bad_list(
     tmp_path: Path,
 ) -> None:
