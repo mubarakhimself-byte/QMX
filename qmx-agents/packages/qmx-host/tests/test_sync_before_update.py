@@ -5,8 +5,8 @@ folder; the host itself, Credential Manager and pg0 are never started."""
 
 from __future__ import annotations
 
-import os
 import json
+import os
 import shutil
 import sqlite3
 import threading

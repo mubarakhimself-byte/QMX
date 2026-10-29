@@ -1855,8 +1855,23 @@ class ControlService:
 
     @operation("workflows", "runs_get", "read", rest=("GET", "/api/workflow-runs/{run_id}"))
     def workflow_runs_get(self, run_id: str) -> Document:
-        """Read one workflow run and its node states."""
-        return self._engine("workflow_runs.get").workflow_runs_get(run_id)
+        """Read one workflow run and its node states, with `placement`: where it ran, from the
+        run's Library object (None while it runs, before its summary lands)."""
+        found = self._engine("workflow_runs.get").workflow_runs_get(run_id)
+        return {**found, "placement": self._placement_of(run_id)}
+
+    def _placement_of(self, run_id: str) -> JsonValue:
+        """The newest `workflow-run` summary's `placement` for `run_id`, or None."""
+        try:
+            store = self.library.store
+            placed = store.placed(run_id, "workflow-run", None)
+            if not placed:
+                return None
+            fields = store.get(store.engine, placed[-1][0]).fields
+        except LibraryRefused, ControlError, OSError, sqlite3.Error:
+            return None
+        found = fields.get("placement")
+        return cast("JsonValue", found) if isinstance(found, dict) else None
 
     @operation(
         "workflows", "runs_explain", "read", rest=("GET", "/api/workflow-runs/{run_id}/explain")
@@ -1998,13 +2013,49 @@ class ControlService:
 
     @operation("workflows", "inbox_list", "read", rest=("GET", "/api/inbox"))
     def workflow_inbox_list(self) -> list[Document]:
-        """List open workflow inbox items, then the diagnoses outside agents left."""
-        return [*self._notes(), *self._engine("workflow_inbox.list").workflow_inbox_list()]
+        """List the diagnoses outside agents left, every open incident (a storage that refused,
+        a failed drill, a trigger that keeps failing), then the open workflow inbox items."""
+        items = self._engine("workflow_inbox.list").workflow_inbox_list()
+        return [*self._notes(), *open_incidents(self.home), *items]
 
     @operation("apps_admin", "archive", "manage", rest=("POST", "/api/apps/{app_id}/archive"))
     def apps_archive(self, app_id: str) -> Document:
         """Archive a mini app."""
         return self._unavailable("apps.archive", ENGINE)
+
+
+INCIDENTS: Final = (
+    "SELECT id, trigger_id, signature, title, cause, count, first_seen, last_seen, "
+    "acknowledged_at FROM incidents WHERE resolved_at IS NULL ORDER BY last_seen DESC, id"
+)
+
+
+def open_incidents(home: Path) -> list[Document]:
+    """Every open incident in the engine's inbox (`engine/inbox.sqlite`), newest first, read
+    without writing; none when the inbox is not there yet."""
+    path = home / "engine" / "inbox.sqlite"
+    if not path.is_file():
+        return []
+    try:
+        with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+            found = db.execute(INCIDENTS).fetchall()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "kind": "incident",
+            "id": row[0],
+            "trigger_id": row[1],
+            "signature": row[2],
+            "title": row[3],
+            "cause": row[4],
+            "count": row[5],
+            "first_seen": row[6],
+            "last_seen": row[7],
+            "acknowledged": row[8] is not None,
+        }
+        for row in found
+    ]
 
 
 def _json_file(path: Path) -> object | None:

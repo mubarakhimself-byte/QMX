@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import time
 import tomllib
 from collections.abc import Iterator
 from datetime import UTC, datetime
