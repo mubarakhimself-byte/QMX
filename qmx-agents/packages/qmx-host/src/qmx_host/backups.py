@@ -336,9 +336,10 @@ class Backups:
         self._drill_tried: datetime | None = None
         self._drill_waits: Drilled | None = None
         """The newest drill that did not run for want of room."""
-        with suppress(PlanRefused, OSError, ValueError):
+        with suppress(Busy, PlanRefused, OSError, ValueError):
             if layout.label.is_file():
-                clear_scratch(layout, self.plan())
+                with hold(layout.backups / LOCK, CLI_BUSY):
+                    clear_scratch(layout, self.plan())
 
     async def run(self) -> None:
         """The sweep, every `SWEEP_S`, until the host stops."""
