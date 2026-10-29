@@ -265,7 +265,7 @@ def _address_card(run: Run) -> Card:
     return _fields_card(
         "address",
         f"{run.place}: give the server's address from your provider's page",
-        ("address", "Its IP address or name, such as 203.0.113.7"),
+        ("address", "Its IP address or name, as your provider's page shows it"),
         ("user", "The user to sign in as; root unless your provider says otherwise"),
     )
 
