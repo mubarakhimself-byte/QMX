@@ -79,7 +79,12 @@ def test_telemetry_send_to_is_edited_from_settings(tmp_path: Path) -> None:
         named = rest.put("/api/settings/telemetry", headers=HEADERS, json={"send_to": "this-pc"})
         stored = rest.get("/api/settings/telemetry", headers=HEADERS).json()
 
-    assert (fresh, named.status_code, stored) == ({}, 200, {"send_to": "this-pc"})
+    sizes = {"cache_gb": 1, "keep_days": 30}
+    assert (fresh, named.status_code, stored) == (
+        {"send_to": "off", "openobserve": sizes},
+        200,
+        {"send_to": "this-pc", "openobserve": sizes},
+    )
     assert '[telemetry]\nsend_to = "this-pc"' in (tmp_path / "settings.toml").read_text()
 
 
