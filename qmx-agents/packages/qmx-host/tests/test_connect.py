@@ -131,6 +131,12 @@ def test_the_kinds_name_what_each_can_do_and_every_route_needs_the_bearer(tmp_pa
         ("r2", ["keep"], True),
         ("sftp", ["keep"], True),
         ("rclone", ["keep"], True),
+        ("server", ["run"], False),
+        ("server-keep", ["keep"], True),
+        ("modal", ["run"], False),
+        ("e2b", ["run"], False),
+        ("deep-logs-pc", [], False),
+        ("deep-logs-server", [], False),
     ]
     assert bare == [401] * 4
 

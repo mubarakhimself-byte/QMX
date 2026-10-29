@@ -676,15 +676,20 @@ def _marked(server: Server) -> set[str]:
     return server.marks
 
 
-def _mark(server: Server, name: str) -> None:
+def done(server: Server, name: str) -> bool:
+    """True when the server step `name` finished at this revision."""
+    return _slug(name) in _marked(server)
+
+
+def mark(server: Server, name: str) -> None:
     folder = f"{SETUP_MARKS}/{server.revision}"
     server.send(f"sudo sh -c 'install -d -m 700 {folder} && touch {folder}/{_slug(name)}'")
     _marked(server).add(_slug(name))
 
 
 def _scripted(name: str, script: str) -> NodeStep:
-    def done(server: Server) -> bool:
-        return _slug(name) in _marked(server)
+    def finished(server: Server) -> bool:
+        return done(server, name)
 
     def do(server: Server) -> None:
         try:
@@ -697,9 +702,9 @@ def _scripted(name: str, script: str) -> NodeStep:
             refused = kept_closed(server)
             if refused is not None:
                 raise SetupStopped(refused)
-        _mark(server, name)
+        mark(server, name)
 
-    return NodeStep(name, script, done, do)
+    return NodeStep(name, script, finished, do)
 
 
 def _on_tailnet(server: Server) -> bool:
@@ -772,14 +777,15 @@ def setup_steps(
     ]
 
 
-def _address(server: Server) -> str:
+def address(server: Server) -> str:
+    """The server's tailnet address, which every later call and this PC's settings name."""
     if "address" not in server.read and not _on_tailnet(server):
         raise SetupStopped("the server has no tailnet address; run: sudo tailscale up there")
     return server.read["address"]
 
 
 def _hub(server: Server) -> str:
-    return f"http://{_address(server)}:{host_port(host_unit())}"
+    return f"http://{address(server)}:{host_port(host_unit())}"
 
 
 def _server_key(server: Server) -> str:
@@ -804,7 +810,7 @@ def _write_hub(server: Server) -> None:
 
 
 def _twin_rows(server: Server) -> list[str]:
-    return [f"TARGET={server.ssh[-1]}", f"SERVER_TAILNET={_address(server)}"]
+    return [f"TARGET={server.ssh[-1]}", f"SERVER_TAILNET={address(server)}"]
 
 
 def _twin_written(server: Server) -> bool:
@@ -815,7 +821,7 @@ def _twin_written(server: Server) -> bool:
 
 
 def _write_twin(server: Server) -> None:
-    twin = write_twin(server.home, server.ssh[-1], _address(server))
+    twin = write_twin(server.home, server.ssh[-1], address(server))
     server.say(f"recovery on this PC: {twin}")
 
 
