@@ -151,6 +151,9 @@ RETRY: Final = timedelta(hours=1)
 """A drill that did not start is tried again an hour later."""
 AWAY: Final = 7
 """Intervals with no copy before a place that is not there opens its incident."""
+EARLIER: Final = "earlier"
+"""The keys-to-fill record a staged restore replaced, kept in the new one so its cancel puts the
+earlier list back. The record a fill rewrites drops it: a fill waits until no restore is staged."""
 DRILL_INCIDENT: Final = "backup-drill:"
 """A failed drill's incident, per place. Not `backup:`, whose incidents follow the rounds."""
 DOWNLOADS: Final = frozenset({"rclone"})
@@ -1170,7 +1173,16 @@ class Backups:
             raise Stopped(f"{refused}; the restore did not start") from None
         except (RestoreRefused, Busy) as refused:
             raise Stopped(str(refused)) from None
-        keep_fill_record(self.layout, stamp, keys_left_out(repo, stamp))
+        earlier = {k: v for k, v in _fill_record(self.layout).items() if k != EARLIER}
+        _put_fill_record(
+            self.layout,
+            {
+                "copy": stamp,
+                "settings": sorted(set(keys_left_out(repo, stamp))),
+                "filled": [],
+                **({EARLIER: earlier} if earlier else {}),
+            },
+        )
         record = _read_journal(self.layout)
         aside = f"backups/{ASIDE}{'' if record is None else record.id}"
         return {
@@ -1198,7 +1210,11 @@ class Backups:
             if _read_journal(self.layout) is None:
                 raise Refusal(f"no restore is staged for {self.layout.root}", 404)
             line = restore.cancel(self.layout)
-            (self.layout.backups / FILL_RECORD).unlink(missing_ok=True)
+            earlier = _fill_record(self.layout).get(EARLIER)
+            if isinstance(earlier, dict):
+                _put_fill_record(self.layout, cast("dict[str, object]", earlier))
+            else:
+                (self.layout.backups / FILL_RECORD).unlink(missing_ok=True)
             return line
 
     def hold_after_restore(self, store: Store) -> AfterRestore | None:
@@ -1320,17 +1336,20 @@ class Backups:
         Raises Refusal for a path the list does not name, for an array entry past its list, and
         while a restore is being staged or waits for the next start: its finish sets this
         folder's `settings.toml` aside, so the key would not reach the restored one."""
-        listed = cast("list[str]", self.keys_to_fill()["settings"])
-        if path not in listed:
-            raise Refusal(
-                f"{path!r} is not a settings.toml key this restore left out; fill one of "
-                "GET /api/backups/keys-to-fill, or change other settings in Settings"
-            )
         with self._starting:
+            if path not in cast("list[str]", self.keys_to_fill()["settings"]):
+                raise Refusal(
+                    f"{path!r} is not a settings.toml key this restore left out; fill one of "
+                    "GET /api/backups/keys-to-fill, or change other settings in Settings"
+                )
             staging = self.jobs.latest(RESTORE)
-            if (staging is not None and staging.state == "running") or _read_journal(
-                self.layout
-            ) is not None:
+            if staging is not None and staging.state == "running":
+                raise Refusal(
+                    f"a restore is being staged (job {staging.id}); wait for it to end, then "
+                    f"fill {path!r}"
+                )
+            waiting = _read_journal(self.layout)
+            if waiting is not None and waiting.step != "staging":
                 raise Refusal(
                     f"a restore is staged: restart QMX to finish it, then fill {path!r}; a key "
                     "written now would be set aside with the work the restore replaces"
@@ -1339,13 +1358,13 @@ class Backups:
                 self.control.fill_setting(path, value)
             except ControlError as refused:
                 raise Refusal(str(refused)) from None
-        record = _fill_record(self.layout)
-        keep_fill_record(
-            self.layout,
-            str(record.get("copy", "")),
-            cast("list[str]", record.get("settings", [])),
-            filled=[*cast("list[str]", record.get("filled", [])), path],
-        )
+            record = _fill_record(self.layout)
+            keep_fill_record(
+                self.layout,
+                str(record.get("copy", "")),
+                cast("list[str]", record.get("settings", [])),
+                filled=[*cast("list[str]", record.get("filled", [])), path],
+            )
 
     def _keys(self) -> Keys:
         if self.keys is not None:
@@ -1693,6 +1712,13 @@ def _lines_of(found: Mapping[str, object]) -> list[str]:
         for p in cast("list[object]", places)
         if isinstance(p, dict)
     ]
+
+
+def _put_fill_record(layout: Layout, record: Mapping[str, object]) -> None:
+    target = layout.backups / FILL_RECORD
+    staged = target.with_name(f"{target.name}.new")
+    staged.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    staged.replace(target)
 
 
 def _fill_record(layout: Layout) -> dict[str, object]:

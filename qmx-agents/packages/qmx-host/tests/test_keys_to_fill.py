@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
+import time
 import tomllib
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -124,9 +126,9 @@ def test_an_array_index_past_the_list_is_refused_and_nothing_is_written(tmp_path
     assert backups.keys_to_fill()["settings"] == ["providers[5].api_key"]
 
 
-def staged_restore(tmp_path: Path) -> tuple[Layout, Backups, Clock]:
+def with_a_copy(tmp_path: Path) -> tuple[Layout, Backups, Clock, str]:
     """A folder whose copy at `usb` left out `providers.kimi.api_key` and holds telemetry
-    `this-pc`, then this machine's telemetry `off` and that copy's restore staged."""
+    `this-pc`, then this machine's telemetry `off`; the copy's stamp."""
     layout, clock = folder(tmp_path / "QMX"), clock_now()
     (layout.data / "settings.toml").write_text(
         '[telemetry]\nsend_to = "this-pc"\n\n'
@@ -140,6 +142,12 @@ def staged_restore(tmp_path: Path) -> tuple[Layout, Backups, Clock]:
     (stamp,) = [c["stamp"] for c in backups.copies("usb")]
     backups.control.settings_update("providers", lambda _c: {"kimi": {"model": "kimi-k2"}})
     backups.control.settings_put("telemetry", {"send_to": "off"})
+    return layout, backups, clock, str(stamp)
+
+
+def staged_restore(tmp_path: Path) -> tuple[Layout, Backups, Clock]:
+    """`with_a_copy`, and that copy's restore staged."""
+    layout, backups, clock, stamp = with_a_copy(tmp_path)
     staged = ended(
         backups, backups.stage_restore({"target": "usb", "copy": stamp, "confirmed": True}).id
     )
@@ -179,6 +187,112 @@ def test_a_key_filled_while_a_restore_is_staged_is_refused_and_after_the_finish_
     assert later.status_code == 204
     assert settled["providers"]["kimi"] == {"model": "kimi-k2", "api_key": PLANTED}
     assert after["settings"] == []
+
+
+def test_a_stage_cut_off_while_staging_leaves_the_fill_route_open(tmp_path: Path) -> None:
+    layout, _backups, clock = staged_restore(tmp_path)
+    journal = layout.backups / restore.JOURNAL
+    cut_off = {**json.loads(journal.read_text(encoding="utf-8")), "step": "staging"}
+    journal.write_text(json.dumps(cut_off), encoding="utf-8")
+    restarted = service(layout, clock)
+    restarted.keys = Store()
+    app = FastAPI()
+    app.include_router(backups_router(restarted))
+
+    filled = TestClient(app).put(
+        "/api/backups/keys-to-fill", json={"path": "providers.kimi.api_key", "value": PLANTED}
+    )
+
+    settled = tomllib.loads((layout.data / "settings.toml").read_text(encoding="utf-8"))
+    assert cast("dict[str, object]", restarted.view()["restore"])["staged"] is None
+    assert filled.status_code == 204
+    assert settled["providers"]["kimi"] == {"model": "kimi-k2", "api_key": PLANTED}
+
+
+def test_a_fill_while_a_restore_is_being_staged_says_to_wait_for_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layout, backups, _clock, stamp = with_a_copy(tmp_path)
+    keep_fill_record(layout, stamp, ["providers.kimi.api_key"])
+    release = threading.Event()
+    stage = restore.stage
+
+    def held(*args: Any, **kwargs: Any) -> Any:
+        release.wait(30)
+        return stage(*args, **kwargs)
+
+    monkeypatch.setattr(restore, "stage", held)
+    app = FastAPI()
+    app.include_router(backups_router(backups))
+
+    job = backups.stage_restore({"target": "usb", "copy": stamp, "confirmed": True})
+    refused = TestClient(app).put(
+        "/api/backups/keys-to-fill", json={"path": "providers.kimi.api_key", "value": PLANTED}
+    )
+    release.set()
+
+    assert ended(backups, job.id).state == "finished"
+    assert (refused.status_code, refused.json()["detail"]) == (
+        409,
+        f"a restore is being staged (job {job.id}); wait for it to end, then fill "
+        "'providers.kimi.api_key'",
+    )
+
+
+def test_cancelling_a_second_restore_keeps_the_first_restores_keys_to_fill(
+    tmp_path: Path,
+) -> None:
+    layout, _backups, clock = staged_restore(tmp_path)
+    assert restore.finish(layout) is not None
+    restarted = service(layout, clock)
+    restarted.keys = Store()
+    restarted.carry_on_restore()
+    first = restarted.keys_to_fill()
+    second = ended(
+        restarted,
+        restarted.stage_restore({"target": "usb", "copy": first["copy"], "confirmed": True}).id,
+    )
+    restarted.cancel_restore()
+    after_cancel = restarted.keys_to_fill()
+    restarted.fill("providers.kimi.api_key", PLANTED)
+
+    settled = tomllib.loads((layout.data / "settings.toml").read_text(encoding="utf-8"))
+    assert first["settings"] == ["providers.kimi.api_key"]
+    assert second.state == "finished", second.line
+    assert after_cancel == first
+    assert settled["providers"]["kimi"] == {"model": "kimi-k2", "api_key": PLANTED}
+    assert restarted.keys_to_fill()["settings"] == []
+
+
+def test_two_fills_at_once_both_stay_filled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from qmx_host import backups as module
+
+    layout = folder(tmp_path / "QMX")
+    (layout.data / "settings.toml").write_text(
+        '[providers.kimi]\nmodel = "kimi-k2"\n\n[providers.zai]\nmodel = "glm"\n', encoding="utf-8"
+    )
+    paths = ["providers.kimi.api_key", "providers.zai.api_key"]
+    keep_fill_record(layout, "20261027T030000000000Z", paths)
+    backups = service(layout, Clock())
+    backups.keys = Store()
+    keep = module.keep_fill_record
+
+    def slow_keep(*args: Any, **kwargs: Any) -> None:
+        time.sleep(0.3)
+        keep(*args, **kwargs)
+
+    monkeypatch.setattr(module, "keep_fill_record", slow_keep)
+    fills = [threading.Thread(target=backups.fill, args=(path, PLANTED)) for path in paths]
+    for one in fills:
+        one.start()
+    for one in fills:
+        one.join()
+
+    written = tomllib.loads((layout.data / "settings.toml").read_text(encoding="utf-8"))
+    assert backups.keys_to_fill()["settings"] == []
+    assert [written["providers"][name]["api_key"] for name in ("kimi", "zai")] == [PLANTED] * 2
 
 
 def test_carry_on_settles_each_section_from_what_it_holds_when_written(
