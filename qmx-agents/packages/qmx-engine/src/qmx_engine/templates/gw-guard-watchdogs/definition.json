@@ -47,5 +47,5 @@
                          "fail": [[{"node": "Stop on a failed check", "port": "in",
                                     "map": "one"}]]}
   },
-  "meta": {"template": "trading-guards-alive", "needs": ["trading-node"]}
+  "meta": {"template": "trading-guards-alive", "needs": ["trading-node"], "kind": "maintenance"}
 }

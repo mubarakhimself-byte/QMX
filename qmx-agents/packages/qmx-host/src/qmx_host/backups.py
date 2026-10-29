@@ -129,9 +129,10 @@ from qmx_host.first_start import (
     machine_settings,
     restored_settings,
 )
-from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped
+from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped, Work
 from qmx_host.keys import NAME as KEY_NAME
 from qmx_host.keys import refusal as key_refusal
+from qmx_host.maintenance import landed
 
 KIND: Final = "backup"
 RESTORE: Final = "restore"
@@ -313,8 +314,11 @@ class Backups:
         floor: int,
         road_lease: RoadLease | None = None,
         keys: Keys | None = None,
+        store: Store | None = None,
     ) -> None:
         self.layout = layout
+        self.store = store
+        """The Library each host job lands its `maintenance-result` in; none lands without it."""
         self.control = control
         self.clock = clock
         self.floor = floor
@@ -418,7 +422,9 @@ class Backups:
                 raise Refusal(self.busy_line(other))
             if other is None:
                 self._unheld()
-            started = self.jobs.start(KIND, lambda progress: self._round(only, progress, asked))
+            started = self.jobs.start(
+                KIND, self._landing("sync", lambda progress: self._round(only, progress, asked))
+            )
         if started.new:
             self._asked[started.job.id] = asked
         return started
@@ -509,7 +515,7 @@ class Backups:
             def work(progress: Progress, place_id: str = place_id) -> Mapping[str, object]:
                 return self._send(plan, place_id, stamp, progress)
 
-            job = self.jobs.start(f"{SEND}{place_id}", work)
+            job = self.jobs.start(f"{SEND}{place_id}", self._landing("sync", work))
             if job.new:
                 started[place_id] = job.job.id
             else:
@@ -537,6 +543,29 @@ class Backups:
             self._settle()
         self._torn(plan, report.places[0])
         return report.document()
+
+    def _landing(self, job: str, work: Work) -> Work:
+        """`work` that lands one `maintenance-result` artifact when it ends, however it ends."""
+
+        def landing(progress: Progress) -> Mapping[str, object]:
+            state, line = "stopped", ""
+            try:
+                found = work(progress)
+            except Stopped as stopped:
+                line = stopped.line
+                raise
+            except Exception as error:
+                line = f"{type(error).__name__}: {error}"
+                raise
+            else:
+                state = "finished"
+                line = str(found.get("line") or "; ".join(_lines_of(found)))
+                return found
+            finally:
+                if self.store is not None:
+                    landed(self.store, job, state, line)
+
+        return landing
 
     def _unpin(self, stamp: str, place_id: str) -> None:
         with self._pinning:
@@ -733,7 +762,8 @@ class Backups:
             return None
         _, place_id = min(due_now)
         started = self.jobs.start(
-            f"{UPKEEP}{place_id}", lambda progress: self._upkeep(place_id, progress)
+            f"{UPKEEP}{place_id}",
+            self._landing("upkeep", lambda progress: self._upkeep(place_id, progress)),
         )
         return started.job
 
@@ -1365,7 +1395,10 @@ class Backups:
                 return None
             self._drill_tried = now
             started = self.jobs.start(
-                DRILL, lambda _progress: self._drill(place_id, repo, plan.upkeep.drill_sample)
+                DRILL,
+                self._landing(
+                    "drill", lambda _progress: self._drill(place_id, repo, plan.upkeep.drill_sample)
+                ),
             )
         return started.job
 
@@ -1633,6 +1666,17 @@ async def _json(request: Request) -> object:
         return json.loads(await request.body() or b"null")
     except ValueError:
         return None
+
+
+def _lines_of(found: Mapping[str, object]) -> list[str]:
+    places = found.get("places")
+    if not isinstance(places, list):
+        return []
+    return [
+        str(cast("dict[str, object]", p).get("line"))
+        for p in cast("list[object]", places)
+        if isinstance(p, dict)
+    ]
 
 
 def _fill_record(layout: Layout) -> dict[str, object]:

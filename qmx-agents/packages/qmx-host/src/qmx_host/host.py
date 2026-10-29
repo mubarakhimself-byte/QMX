@@ -132,6 +132,7 @@ from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
+from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
@@ -786,6 +787,7 @@ async def serve(
                     control,
                     clock=lambda: datetime.now().astimezone(),
                     floor=floor,
+                    store=store,
                 )
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
@@ -822,6 +824,7 @@ async def serve(
                         answering = [*answering_router(home, engine), drain_router(core)]
                         answering.append(templates_router(engine))
                         answering.append(backups_router(backups))
+                        answering.append(maintenance_router(backups, triggers_of(control)))
                         answering.extend(dialog_routers(connect, control))
                         answering.append(
                             market_router(door)
@@ -1011,6 +1014,15 @@ def deep_logs(home: Path, connect: Connect) -> None:
             print(f"deep logs: OpenObserve did not start: {refused}", file=sys.stderr)
 
     threading.Thread(target=start, name="openobserve", daemon=True).start()
+
+
+def triggers_of(control: ControlService) -> Callable[[str], Sequence[Mapping[str, object]]]:
+    """One installed workflow's triggers, as the maintenance list reads them."""
+
+    def listed(workflow_id: str) -> Sequence[Mapping[str, object]]:
+        return control.workflow_triggers_list(workflow_id)
+
+    return listed
 
 
 def dialog_routers(connect: Connect, control: ControlService) -> list[APIRouter]:
