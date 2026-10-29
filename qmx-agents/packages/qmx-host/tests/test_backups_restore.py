@@ -214,13 +214,11 @@ def test_the_restore_routes_need_the_bearer_and_a_body_that_is_not_json_is_400(
 
 
 def damage(place: Path) -> int:
-    """Overwrite every pooled file at a place; how many."""
+    """Overwrite the start of every pack at a place; how many."""
     damaged = 0
-    for pool in place.rglob("pool"):
-        for path in pool.rglob("*"):
-            if path.is_file():
-                path.write_bytes(b"damaged" + path.read_bytes()[7:])
-                damaged += 1
+    for path in place.rglob("*.pack"):
+        path.write_bytes(b"damaged" + path.read_bytes()[7:])
+        damaged += 1
     return damaged
 
 

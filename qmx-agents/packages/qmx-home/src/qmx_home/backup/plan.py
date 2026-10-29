@@ -22,16 +22,27 @@ at = "03:00"
 keep = { days = 14, weeks = 8, months = 12 }
 floor = "auto"
 
-[backup.upkeep]
+[backup.upkeep]                    # QMX's own upkeep, per storage, This PC included
+on = true
+every = "1mo"
+repack_past = 0.05
+repack_per_run = "all"             # or a size such as "2GB"
+safety = "24h"
+check_slice = 12
+drill = true
 drill_every = "1mo"
 drill_sample = 200
+before_update_wait = "10m"
 ```
 
 The storages are the `[engine] placement.<name>` rows whose `can` holds `keep`, each with its
 policy keyed by the row's stable `id`. A folder storage (`via = "folder"`) gets copies at
-`<path>/QMX-backup/<home_id>/`. A policy whose row is gone is ignored. Keys this release does not
-read (an old `repository`, the mini apps' old volume keys, `[[backup.targets]]`) are kept as
-written and read by nothing.
+`<path>/QMX-backup/<home_id>/`, and an rclone storage (`via = "rclone"`) at
+`<remote>:<root>/QMX-backup/<home_id>/` (or `<root>/<home_id>/` when its root is itself named
+QMX-backup). `open_storage` opens either; a keeping row with any other `via` is not set up as a
+storage, and the round says so in one line. A policy whose row is gone is ignored. Keys this
+release does not read (an old `repository`, the mini apps' old volume keys, `[[backup.targets]]`)
+are kept as written and read by nothing.
 """
 
 from __future__ import annotations
@@ -50,9 +61,10 @@ from qmx_home import (
     Layout,
     _fixed_drives,  # pyright: ignore[reportPrivateUsage] - the one drive list
 )
-from qmx_home.backup.repository import FolderRepository, Repository
+from qmx_home.backup.repository import FolderRepository, RcloneRepository, Repository
 from qmx_home.classes import SENT, Class
 from qmx_home.files import GIB, floor_gb, plain
+from qmx_home.rclone import Rclone
 
 PC: Final = "pc"
 """This PC's place id: always the first storage."""
@@ -107,6 +119,16 @@ _UNIT: Final[Mapping[str, timedelta]] = {
 }
 _AT: Final = re.compile(r"([01]\d|2[0-3]):([0-5]\d)")
 _ID: Final = re.compile(r"[A-Za-z0-9_-]{1,64}")
+_REMOTE: Final = re.compile(r"[A-Za-z0-9_]{1,64}")
+_SIZE: Final = re.compile(r"(\d+)(MB|GB)", re.IGNORECASE)
+VIAS: Final = ("folder", "rclone")
+"""How copies are kept at a storage this release opens."""
+KEY_OPTION: Final[Mapping[str, str]] = {"s3": "secret_access_key"}
+"""The rclone option each storage type's key in the key store fills, per call."""
+NOT_SET_UP: Final = (
+    "{name} is not set up as a storage this QMX can copy to (via {via!r}); connect it again in "
+    "Settings, Sync to my storage"
+)
 
 
 class PlanRefused(Exception):
@@ -165,16 +187,46 @@ class Storage:
     id: str
     name: str
     via: str
-    """How copies are kept there: `folder`, or `rclone` once its adapter is in."""
+    """How copies are kept there: `folder`, `rclone`, or a kind this release does not open."""
     path: Path | None
     policy: Policy = STORAGE_POLICY
+    remote: str | None = None
+    """An rclone storage's remote in `data/rclone.conf`."""
+    type: str = ""
+    root: str = FOLDER
+    credential_ref: str | None = None
+    """The key store's name for the remote's key, handed to each call."""
+
+    @property
+    def opens(self) -> bool:
+        """Whether this release can copy there."""
+        return (self.via == "folder" and self.path is not None) or (
+            self.via == "rclone" and self.remote is not None
+        )
+
+    @property
+    def shown(self) -> str:
+        """The storage as he reads it."""
+        if self.via == "folder" and self.path is not None:
+            return plain(self.path)
+        return self.name
 
 
 @dataclass(frozen=True, slots=True)
 class Upkeep:
+    """QMX's own upkeep of each storage (design 06 section 6)."""
+
+    on: bool = True
+    every: str = "1mo"
+    repack_past: float = 0.05
+    repack_per_run: int | None = None
+    """Bytes of packs one re-pack rewrites at most; None is all."""
+    safety: str = "24h"
+    check_slice: int = 12
     drill: bool = True
     drill_every: str = "1mo"
     drill_sample: int = 200
+    before_update_wait: str = "10m"
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,9 +244,14 @@ class Plan:
     """`[engine] disk.floor_gb`, which the one local floor reads."""
 
     @property
-    def folders(self) -> tuple[Storage, ...]:
-        """The storages this release copies to: folders on a drive."""
-        return tuple(s for s in self.storages if s.via == "folder" and s.path is not None)
+    def sending(self) -> tuple[Storage, ...]:
+        """The storages this release copies to: folders, and rclone remotes."""
+        return tuple(s for s in self.storages if s.opens)
+
+    @property
+    def not_set_up(self) -> tuple[Storage, ...]:
+        """Keeping rows this release cannot open, each read as one line."""
+        return tuple(s for s in self.storages if not s.opens)
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +377,23 @@ def _storages(engine: Mapping[str, object], layout: Layout) -> list[Storage]:
         via = row.get("via", "folder")
         if not isinstance(via, str):
             raise PlanRefused(f"{named}: via must be folder or rclone")
+        if via == "rclone":
+            remote, root = row.get("remote"), row.get("root", FOLDER)
+            reference = row.get("credential_ref")
+            usable = isinstance(remote, str) and _REMOTE.fullmatch(remote) is not None
+            storages.append(
+                Storage(
+                    ident,
+                    name,
+                    via,
+                    None,
+                    remote=cast("str", remote) if usable else None,
+                    type=str(row.get("type", "")),
+                    root=root if isinstance(root, str) and root.strip() else FOLDER,
+                    credential_ref=reference if isinstance(reference, str) else None,
+                )
+            )
+            continue
         path: Path | None = None
         if via == "folder":
             given = row.get("path")
@@ -381,10 +455,29 @@ def _upkeep(table: Mapping[str, object]) -> Upkeep:
     sample = values["drill_sample"]
     if not isinstance(sample, int) or isinstance(sample, bool) or sample < 0:
         raise PlanRefused("[backup.upkeep] drill_sample must be a whole number of files")
+    past = values["repack_past"]
+    if not isinstance(past, int | float) or isinstance(past, bool) or not 0 <= past <= 1:
+        raise PlanRefused("[backup.upkeep] repack_past is a share between 0 and 1, such as 0.05")
+    slice_ = values["check_slice"]
+    if not isinstance(slice_, int) or isinstance(slice_, bool) or slice_ < 1:
+        raise PlanRefused("[backup.upkeep] check_slice is a whole number of slices, such as 12")
+    per_run = values["repack_per_run"]
+    found = _SIZE.fullmatch(per_run) if isinstance(per_run, str) else None
+    if per_run != "all" and found is None:
+        raise PlanRefused('[backup.upkeep] repack_per_run is "all" or a size such as "2GB"')
     return Upkeep(
+        _bool("[backup.upkeep] on", values["on"]),
+        cast("str", values["every"]),
+        float(past),
+        None
+        if found is None
+        else int(found.group(1)) << (30 if found.group(2).upper() == "GB" else 20),
+        cast("str", values["safety"]),
+        slice_,
         _bool("[backup.upkeep] drill", values["drill"]),
         cast("str", values["drill_every"]),
         sample,
+        cast("str", values["before_update_wait"]),
     )
 
 
@@ -456,18 +549,84 @@ def storage_root(path: Path, home_id: str) -> Path:
     return path / home_id if path.name.casefold() == FOLDER.casefold() else path / FOLDER / home_id
 
 
-def repository_of(storage: Storage, layout: Layout) -> Repository:
-    """The folder a folder storage names, for this QMX folder."""
-    return FolderRepository(storage_root(cast("Path", storage.path), _home_id(layout)))
+def rclone_root(root: str, home_id: str) -> str:
+    """Where one folder's copies go on an rclone storage, by the rule `storage_root` keeps."""
+    trimmed = root.strip().rstrip("/\\")
+    if PurePath(trimmed or ".").name.casefold() == FOLDER.casefold():
+        return f"{trimmed}/{home_id}"
+    return f"{trimmed}/{FOLDER}/{home_id}" if trimmed else f"{FOLDER}/{home_id}"
 
 
-def source_of(document: Mapping[str, object]) -> Repository:
-    """The place a card's `source` names: `{"kind": "folder", "path": ..., "home_id": ...}`.
-    `path` is the folder he named or a folder's own place in it; without `home_id` the place
-    must hold exactly one QMX folder's copies. Raises PlanRefused naming what is missing."""
+def storage_key(storage: Storage, home_id: str) -> str:
+    """A storage's key in the backup log, the one its adapter gives: a folder's own path as the
+    OS compares names, or an rclone remote (`qmx_<place id>`, stable for the place) and its folder.
+    A restore from a card's `source`, which names no place, reads the same key."""
+    if storage.via == "folder" and storage.path is not None:
+        return folder_key(storage_root(storage.path, home_id))
+    if storage.via == "rclone" and storage.remote is not None:
+        return f"rclone:{storage.remote}:{rclone_root(storage.root, home_id)}"
+    return f"place:{storage.id}"
+
+
+def folder_key(root: Path) -> str:
+    return f"folder:{os.path.normcase(os.path.abspath(root))}"
+
+
+def open_storage(
+    storage: Storage,
+    layout: Layout,
+    *,
+    rclone: Rclone | None = None,
+    keep_free: int = 0,
+) -> Repository:
+    """The storage a keeping row names, for this QMX folder: a folder, or an rclone remote
+    through `rclone`, the one runner on this PC. Raises PlanRefused with the one line for a row
+    this release does not open, or an rclone storage with no runner."""
+    home_id = _home_id(layout)
+    key = storage_key(storage, home_id)
+    if storage.via == "folder" and storage.path is not None:
+        return FolderRepository(storage_root(storage.path, home_id), key=key)
+    if storage.via == "rclone" and storage.remote is not None:
+        if rclone is None:
+            raise PlanRefused(
+                f"{storage.name} is copied to through rclone, which this command does not run; "
+                "QMX's host sends to it"
+            )
+        option = KEY_OPTION.get(storage.type)
+        secrets = (
+            rclone.secrets_for(storage.remote, option, storage.credential_ref)
+            if option and storage.credential_ref
+            else {}
+        )
+        return RcloneRepository(
+            rclone,
+            storage.remote,
+            rclone_root(storage.root, home_id),
+            work=layout.cache / "sync-staging" / f"send-{storage.id}",
+            fetched=layout.cache / "sync-fetch" / storage.id,
+            name=storage.name,
+            key=key,
+            secrets=secrets,
+            keep_free=keep_free,
+        )
+    raise PlanRefused(NOT_SET_UP.format(name=storage.name, via=storage.via))
+
+
+def source_of(
+    document: Mapping[str, object], layout: Layout | None = None, rclone: Rclone | None = None
+) -> Repository:
+    """The place a card's `source` names: `{"kind": "folder", "path": ..., "home_id": ...}`, or
+    `{"kind": "rclone", "remote": ..., "path": ..., "home_id": ...}` read through `rclone` on
+    `layout`'s conf. `path` is the folder he named or a folder's own place in it; without
+    `home_id` the place must hold exactly one QMX folder's copies. Raises PlanRefused naming what
+    is missing."""
     kind, path = document.get("kind"), document.get("path")
+    if kind == "rclone":
+        return _rclone_source(document, layout, rclone)
     if kind != "folder":
-        raise PlanRefused(f"a backup source of kind {kind!r} is not one QMX knows; use folder")
+        raise PlanRefused(
+            f"a backup source of kind {kind!r} is not one QMX knows; use folder or rclone"
+        )
     if not isinstance(path, str) or not PurePath(path).is_absolute():
         raise PlanRefused("a backup source needs the full path of the folder that holds copies")
     root = Path(path)
@@ -488,6 +647,38 @@ def source_of(document: Mapping[str, object]) -> Repository:
         raise PlanRefused(f"{plain(root)} holds no QMX copies")
     raise PlanRefused(
         f"{plain(holder)} holds copies of {len(homes)} QMX folders ({', '.join(homes)}); pick one"
+    )
+
+
+def _rclone_source(
+    document: Mapping[str, object], layout: Layout | None, rclone: Rclone | None
+) -> Repository:
+    remote, root = document.get("remote"), document.get("path")
+    if not isinstance(remote, str) or not _REMOTE.fullmatch(remote) or not isinstance(root, str):
+        raise PlanRefused("an rclone backup source needs its remote and the folder on it")
+    if layout is None or rclone is None:
+        raise PlanRefused(f"QMX cannot read the storage {remote} here; connect it first")
+    home_id = document.get("home_id")
+    work = layout.cache / "sync-staging" / f"source-{remote}"
+    fetched = layout.cache / "sync-fetch" / f"source-{remote}"
+    if not (isinstance(home_id, str) and _ID.fullmatch(home_id)):
+        holder = rclone_root(root, "x").rpartition("/")[0]
+        listed = rclone.run(["lsf", "--dirs-only", f"{remote}:{holder}"])
+        homes = sorted(
+            line.rstrip("/")
+            for line in ([] if listed.code else listed.out.splitlines())
+            if _ID.fullmatch(line.rstrip("/"))
+        )
+        if len(homes) != 1:
+            raise PlanRefused(
+                f"{remote}:{holder} holds no QMX copies"
+                if not homes
+                else f"{remote}:{holder} holds copies of {len(homes)} QMX folders "
+                f"({', '.join(homes)}); pick one"
+            )
+        home_id = homes[0]
+    return RcloneRepository(
+        rclone, remote, rclone_root(root, home_id), work=work, fetched=fetched, name=remote
     )
 
 

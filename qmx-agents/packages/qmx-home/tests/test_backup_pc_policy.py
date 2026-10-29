@@ -11,7 +11,7 @@ from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
-from backup_fixtures import filled_folder, folder
+from backup_fixtures import filled_folder, folder, readable_files, stored_bytes
 
 from qmx_home import Label, Layout
 from qmx_home.backup import restore, snapshot
@@ -58,7 +58,7 @@ def test_a_copy_leaves_a_pasted_key_out_of_settings_and_names_it_to_fill_in(
     copy = usb.manifest(usb.copies()[-1])
     assert copy.header["keys_to_fill"] == ["notes.innocent", "providers[1].api_key"]
     entry = next(e for e in copy.entries if e.path == "settings.toml")
-    copied = usb.pool_path(entry.sha256).read_bytes()
+    copied = stored_bytes(usb, entry.sha256, tmp_path / "back")
     assert PASTED.encode() not in copied and b"glm-planted-key" not in copied
     assert tomllib.loads(copied.decode()) == {
         "engine": {"host_name": "pc"},
@@ -66,7 +66,7 @@ def test_a_copy_leaves_a_pasted_key_out_of_settings_and_names_it_to_fill_in(
         "notes": {},
     }
     assert not [e.path for e in copy.entries if class_of(f"data/{e.path}") in NEVER]
-    pooled = b"".join(p.read_bytes() for p in usb.root.rglob("*") if p.is_file())
+    pooled = b"".join(held for _, held in readable_files(usb.root))
     assert PASTED.encode() not in pooled
     assert not [v for v in filled.planted.values() if v in pooled]
 
@@ -84,7 +84,7 @@ def test_an_earlier_copy_that_held_settings_whole_sends_no_key_to_a_storage_afte
         earlier_release.setattr(snapshot, "_scanned", whole)
         run_round(filled.layout, Plan(), now=NOW, floor=0)
     quick = FolderRepository(filled.layout.backups / "quick")
-    assert PASTED.encode() in b"".join(p.read_bytes() for p in quick.root.rglob("*") if p.is_file())
+    assert PASTED.encode() in b"".join(held for _, held in readable_files(quick.root))
 
     run_round(
         filled.layout,
@@ -262,7 +262,9 @@ def test_a_mini_apps_road_is_copied_while_its_road_lease_is_held(tmp_path: Path)
     copy = quick.manifest(quick.copies()[-1])
     entry = next(e for e in copy.entries if e.path == "apps/demo/road/r.json")
     assert seen == ["demo"]
-    assert quick.pool_path(entry.sha256).read_bytes() == b'{"road": "written under the lease"}'
+    assert stored_bytes(quick, entry.sha256, tmp_path / "back") == (
+        b'{"road": "written under the lease"}'
+    )
 
 
 def test_a_road_whose_lease_stays_held_is_named_as_left_out_of_this_copy(tmp_path: Path) -> None:

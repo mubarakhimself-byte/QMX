@@ -197,6 +197,8 @@ def header(layout: Layout, stamp: str, why: str) -> dict[str, object]:
 def make(
     layout: Layout,
     *,
+    into: FolderRepository,
+    have: FolderRepository | None = None,
     previous: Manifest | None,
     stamp: str,
     why: str = "round",
@@ -207,13 +209,14 @@ def make(
     progress: Callable[[str], None] | None = None,
     road_lease: RoadLease | None = None,
 ) -> Manifest:
-    """Copy the classes `save` of `data/` into the quick undo's pool and return the copy's
-    manifest (not yet written). A file written once stays in `data/` and its line says
-    `at: live`; every other file is in the pool. `previous` is the newest copy, whose hashes an
-    unchanged file keeps. `kinds` tells Library objects apart when `save` leaves a Library class
-    out (`library_kinds`). Raises NoRoom before writing when the files to copy would leave the
-    drive below `keep_free`, and Changing when a price month never held still."""
-    quick = FolderRepository(layout.backups / "quick")
+    """Copy the classes `save` of `data/` into the loose pool of `into` (the round's staging)
+    and return the copy's manifest (not yet written). A new file written once stays in `data/`
+    and its line says `at: live`, for This PC's copies to link and each send to read there; every
+    other new file is in `into`. `previous` is the newest of This PC's copies `have`, whose
+    hashes an unchanged file keeps while `have` still holds its bytes. `kinds` tells Library
+    objects apart when `save` leaves a Library class out (`library_kinds`). Raises NoRoom before
+    writing when the files to copy would leave the drive below `keep_free`, and Changing when a
+    price month never held still."""
     told = progress or _quiet
     known = {} if previous is None else {entry.path: entry for entry in previous.entries}
     chosen: tuple[Class, ...] = tuple(c for c in SENT if c in save)
@@ -224,12 +227,12 @@ def make(
 
     found, months = _survey(layout.data, leave_out, known, kept)
     months = {month for month in months if kept(f"{month}/{STATE}")}
-    copying = _Copying(layout, quick, known)
+    copying = _Copying(layout, into, have, known)
     need = sum(f.size for f in found if not copying.reusable(f))
-    room = quick.room()
+    room = into.room() or 0
     if room - need < keep_free:
         raise NoRoom(
-            f"the quick undo in {quick.where} needs {_mb(need)} and its drive has {_mb(room)} "
+            f"the copy in {into.where} needs {_mb(need)} and its drive has {_mb(room)} "
             f"free; QMX keeps at least {_mb(keep_free)} free there so QMX itself never runs "
             "out of room. Free some space; the next round tries again"
         )
@@ -295,11 +298,13 @@ class _Copying:
     def __init__(
         self,
         layout: Layout,
-        quick: FolderRepository,
+        into: FolderRepository,
+        have: FolderRepository | None,
         known: Mapping[str, Entry],
     ):
         self.data = layout.data
-        self.quick = quick
+        self.into = into
+        self.have = have
         self.known = known
         self.keys: list[str] = []
         """The `settings.toml` key paths left out of this copy."""
@@ -327,7 +332,9 @@ class _Copying:
             before is not None
             and before.kind == found.kind
             and before.seen == found.seen
-            and (before.at == "live" or self.quick.pool_has(before.sha256))
+            and (
+                before.at == "live" or (self.have is not None and self.have.pool_has(before.sha256))
+            )
         )
 
     def keep(self, entry: Entry) -> None:
@@ -342,14 +349,14 @@ class _Copying:
                 self.unread.append(f"{SETTINGS} ({held})")
                 return
             if held is not None:
-                digest = self.quick.put_bytes(held)
+                digest = self.into.put_bytes(held)
                 self.keep(Entry(found.path, digest, len(held), found.kind, found.seen))
                 return
         if self.reusable(found):
             self.keep(self.known[found.path])
             return
         source = self.data / found.path
-        writing = self.quick.temporary()
+        writing = self.into.temporary()
         try:
             match found.kind:
                 case "store":
@@ -415,7 +422,7 @@ class _Copying:
             after = self._state(state, last)
             if before == after and first == last and _named(after) in (None, *names):
                 if after is not None and first is not None:
-                    digest = self.quick.put_bytes(after)
+                    digest = self.into.put_bytes(after)
                     self.keep(Entry(state, digest, len(after), "file", first))
                 return
             self.done.difference_update(f"{folder}/{name}" for name in names)
@@ -427,10 +434,10 @@ class _Copying:
 
     def _state(self, path: str, stat: tuple[int, int] | None) -> bytes | None:
         before = self.known.get(path)
-        if stat is not None and before is not None and before.seen == stat:
-            pooled = self.quick.pool_path(before.sha256)
-            if long_path(pooled).is_file():
-                return long_path(pooled).read_bytes()
+        if stat is not None and before is not None and before.seen == stat and self.have:
+            pooled = self.have.read_pool(before.sha256)
+            if pooled is not None:
+                return pooled
         return _read(self.data / path)
 
     def _store(self, found: _Found, source: Path, writing: Path) -> Entry:
@@ -441,7 +448,7 @@ class _Copying:
         tables, user_version, floor = _store_facts(writing, found.path)
         digest = sha256_of(writing)
         size = writing.stat().st_size
-        self.quick.adopt(writing, digest)
+        self.into.adopt(writing, digest)
         return Entry(
             found.path, digest, size, "store", found.seen, "pool", tables, user_version, floor
         )
@@ -449,7 +456,7 @@ class _Copying:
     def _file(self, found: _Found, source: Path, writing: Path, length: int | None) -> Entry:
         digest = copy_file(source, writing, length=length)
         size = long_path(writing).stat().st_size
-        self.quick.adopt(writing, digest)
+        self.into.adopt(writing, digest)
         return Entry(found.path, digest, size, found.kind, found.seen)
 
 

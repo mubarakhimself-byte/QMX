@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from backup_fixtures import SECRETS, filled_folder, folder
+from backup_fixtures import SECRETS, filled_folder, folder, readable_files
 
 from qmx_home.backup.plan import Plan
 from qmx_home.backup.round import run_round
@@ -23,13 +23,11 @@ def test_no_planted_secret_value_is_anywhere_in_the_quick_undo_or_on_a_target(
     assert report.result == "copied"
     assert sorted(filled.planted) == sorted([*SECRETS, "../keys/vault.key"])
     searched = [
-        path
+        one
         for folder in (filled.layout.backups / "quick", tmp_path / "usb")
-        for path in folder.rglob("*")
-        if path.is_file()
+        for one in readable_files(folder)
     ]
     assert len(searched) > 60
-    for path in searched:
-        held = path.read_bytes()
+    for path, held in searched:
         found = [name for name, value in filled.planted.items() if value in held]
         assert found == [], f"{path} holds {found}"

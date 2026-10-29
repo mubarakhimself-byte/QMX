@@ -18,8 +18,12 @@ connection. Until he carries on after it, server sync and fires stay paused. Onc
 no round is due, the drill restores a sample of one copy of each place in turn; a failed drill
 opens `backup-drill:<place>`.
 
-A round, a restore being staged and the drill each hold the folder's backup lock, so they run one
-at a time.
+A round makes This PC's copy as one `backup` job and then starts one `send:<place>` job per due
+storage from that pinned copy, so a slow storage never holds This PC's copies; a second send to a
+storage while one runs is refused. A round, a restore being staged and the drill each hold the
+folder's backup lock, so they run one at a time; a send, the drill of a storage and its monthly
+upkeep (re-pack and check, `upkeep:<place>`) hold that storage's own lock. A storage that refused
+is tried again at its next due round.
 
 Nothing is written outside the QMX folder until he connects a storage or accepts the proposed
 second drive, which writes one `[engine]` place row that can keep, so the place never moves with
@@ -37,7 +41,7 @@ import sys
 import threading
 import time as monotonic
 from collections.abc import Callable, Generator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -66,13 +70,23 @@ from qmx_home.backup.plan import (
     Policy,
     Proposal,
     Storage,
+    open_storage,
     parse,
     proposal,
-    repository_of,
+    rclone_root,
     same_drive,
     span,
+    storage_key,
+    storage_root,
 )
-from qmx_home.backup.repository import FolderRepository, Repository, Unreadable, free_bytes
+from qmx_home.backup.repository import (
+    FolderRepository,
+    Packed,
+    Repository,
+    StorageRefused,
+    Unreadable,
+    free_bytes,
+)
 from qmx_home.backup.restore import (
     ASIDE,
     AfterRestore,
@@ -87,14 +101,20 @@ from qmx_home.backup.round import (
     STAMP,
     Placed,
     RoundReport,
-    _last,  # pyright: ignore[reportPrivateUsage] - the round's own record of a place's last copy
+    _tried,  # pyright: ignore[reportPrivateUsage] - the round's own record of a place's last try
     carry_on,
+    clear_scratch,
+    copy_round,
     due,
-    run_round,
-    storage_key,
+    safety_of,
+    send,
+    send_lock,
+    unstage,
 )
 from qmx_home.backup.snapshot import RoadLease
+from qmx_home.backup.upkeep import check, repack
 from qmx_home.files import Busy, hold, plain
+from qmx_home.rclone import Keys, Rclone
 from qmx_home.versions import log_line, log_lines
 from qmx_library.port import LibraryRefused
 from qmx_library.principal import Principal
@@ -105,13 +125,17 @@ from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped
 KIND: Final = "backup"
 RESTORE: Final = "restore"
 DRILL: Final = "drill"
+SEND: Final = "send:"
+"""A send to one storage, one job per storage: `send:<place id>`."""
+UPKEEP: Final = "upkeep:"
+"""QMX's monthly upkeep of one storage, This PC included: `upkeep:<place id>`."""
 ROW: Final = "backups"
 """The doctor row's name."""
 SWEEP_S: Final = 60.0
 """How often the host looks whether a place is due. The first look is one sweep after it serves,
 so a start is never slowed by a copy."""
 RETRY: Final = timedelta(hours=1)
-"""A place that refused or was not there is tried again an hour after it was last tried."""
+"""A drill that did not start is tried again an hour later."""
 AWAY: Final = 7
 """Intervals with no copy before a place that is not there opens its incident."""
 DRILL_INCIDENT: Final = "backup-drill:"
@@ -137,6 +161,10 @@ ROAD_POLL_S: Final = 0.2
 OFF_LINE: Final = (
     "Sync to my storage is off: QMX makes no copy anywhere, This PC included, and deletes none "
     "until you turn it on in Settings"
+)
+NO_COPY_LINE: Final = (
+    "your work has no copy anywhere: copies on this PC are off and no storage gets one; turn "
+    "This PC's copies on or connect a storage in Settings, Sync to my storage"
 )
 
 type Signature = Literal["refused", "partial", "away"]
@@ -213,14 +241,6 @@ class Standing:
             return None
         return Concern("refused" if decided.result == "refused" else "partial", decided.line)
 
-    def ready(self, now: datetime) -> bool:
-        """Whether a round may try the place now: it was never tried, its last round left a
-        copy, an hour passed since a round it refused or missed, or he carried on since."""
-        last = self.last
-        if last is None or last.result in GOOD or self.carried:
-            return True
-        return now - last.at >= RETRY
-
 
 def standing(
     log: Sequence[Mapping[str, object]],
@@ -281,13 +301,21 @@ class Backups:
         clock: Callable[[], datetime],
         floor: int,
         road_lease: RoadLease | None = None,
+        keys: Keys | None = None,
     ) -> None:
         self.layout = layout
         self.control = control
         self.clock = clock
         self.floor = floor
         self.road_lease = road_lease if road_lease is not None else road_lease_of(layout)
+        self.keys = keys
+        """The key store an rclone storage's runner reads; Credential Manager when None, made
+        only once a storage needs it."""
         self.jobs = Jobs()
+        self._runner: Rclone | None = None
+        self._pins: dict[str, set[str]] = {}
+        """Each pinned copy's stamp and the storages whose sends still read it."""
+        self._pinning = threading.Lock()
         self.after: AfterRestore | None = None
         """The finished restore he has not carried on from: server sync and fires stay paused."""
         self._resume: Callable[[], object] | None = None
@@ -308,6 +336,10 @@ class Backups:
         self._drill_tried: datetime | None = None
         self._drill_waits: Drilled | None = None
         """The newest drill that did not run for want of room."""
+        with suppress(Busy, PlanRefused, OSError, ValueError):
+            if layout.label.is_file():
+                with hold(layout.backups / LOCK, CLI_BUSY):
+                    clear_scratch(layout, self.plan())
 
     async def run(self) -> None:
         """The sweep, every `SWEEP_S`, until the host stops."""
@@ -334,23 +366,21 @@ class Backups:
             return None
         now = self.clock()
         pc = look.plan.pc
-        quick_due = due(_last(look.log, QUICK), now, pc.interval, pc.at) and look.places[0].ready(
-            now
-        )
+        quick_due = pc.on and due(_tried(look.log, QUICK), now, pc.interval, pc.at)
         ready = any(
             storage.policy.on
-            and Path(_path(storage).anchor or "/").exists()
+            and (storage.path is None or Path(storage.path.anchor or "/").exists())
+            and not self._sending(storage.id)
             and due(
-                _last(look.log, storage_key(storage, look.home_id)),
+                _tried(look.log, storage_key(storage, look.home_id)),
                 now,
                 storage.policy.interval,
                 storage.policy.at,
             )
-            and place.ready(now)
-            for storage, place in zip(look.plan.folders, look.places[1:], strict=True)
+            for storage in look.plan.sending
         )
         if not (quick_due or ready):
-            return self._drill_if_due(look, now)
+            return self._drill_if_due(look, now) or self._upkeep_if_due(look, now)
         try:
             started = self.start(None, asked=False)
         except Refusal:
@@ -365,7 +395,12 @@ class Backups:
         if not self.layout.label.is_file():
             raise Refusal(NOT_A_FOLDER)
         if only is not None:
-            self._storage(self.plan(), only)
+            storage = self._storage(self.plan(), only)
+            if self._sending(only):
+                raise Refusal(
+                    f"QMX is already sending a copy to {storage.shown} (job "
+                    f"{self._send_job(only)}); it ends by itself, then ask again"
+                )
         with self._starting:
             other = self._busy()
             if other is not None and other.kind != KIND:
@@ -378,6 +413,11 @@ class Backups:
         return started
 
     def busy_line(self, job: Job) -> str:
+        if job.kind.startswith(SEND):
+            return (
+                f"QMX is already sending a copy to {job.kind.removeprefix(SEND)} (job {job.id}); "
+                "it ends by itself, then ask again"
+            )
         if job.kind == RESTORE:
             return f"a restore is being staged (job {job.id}); it ends by itself, then ask again"
         if job.kind == DRILL:
@@ -411,17 +451,27 @@ class Backups:
             ) from None
 
     def _round(self, only: str | None, progress: Progress, asked: bool) -> Mapping[str, object]:
+        """This PC's copy, then one send job per due storage from that pinned copy. The result
+        names each send's job."""
+        sends: dict[str, str] = {}
         try:
-            report = run_round(
+            plan = self.plan()
+            with self._pinning:
+                held = set(self._pins)
+            report, pinned = copy_round(
                 self.layout,
-                self.plan(),
+                plan,
                 now=self.clock(),
                 floor=self.floor,
                 only=only,
                 asked=asked,
                 progress=progress,
                 road_lease=self.road_lease,
+                held=held,
             )
+            self._torn(plan, next(p for p in report.places if p.key == QUICK))
+            if pinned is not None:
+                sends = self._send_all(plan, pinned.stamp, pinned.due)
         except (Busy, PlanRefused) as refused:
             raise Stopped(str(refused)) from None
         except Exception as error:  # a round that broke is logged like one that refused
@@ -433,7 +483,101 @@ class Backups:
             raise Stopped(line) from None
         finally:
             self._settle()
+        return {**report.document(), "sends": sends}
+
+    def _send_all(self, plan: Plan, stamp: str, due: Sequence[str]) -> dict[str, str]:
+        """Start one send job per storage in `due` from the pinned copy `stamp`; a storage whose
+        send still runs waits for its next due round. The staging goes once the last ends."""
+        started: dict[str, str] = {}
+        with self._pinning:
+            self._pins[stamp] = {""}
+        for place_id in due:
+            with self._pinning:
+                self._pins[stamp].add(place_id)
+
+            def work(progress: Progress, place_id: str = place_id) -> Mapping[str, object]:
+                return self._send(plan, place_id, stamp, progress)
+
+            job = self.jobs.start(f"{SEND}{place_id}", work)
+            if job.new:
+                started[place_id] = job.job.id
+            else:
+                self._unpin(stamp, place_id)
+        self._unpin(stamp, "")
+        return started
+
+    def _send(
+        self, plan: Plan, place_id: str, stamp: str, progress: Progress
+    ) -> Mapping[str, object]:
+        try:
+            report = send(
+                self.layout,
+                plan,
+                place_id,
+                stamp,
+                progress=progress,
+                rclone=self.rclone(plan),
+                floor=self.floor,
+            )
+        except (Busy, PlanRefused) as refused:
+            raise Stopped(str(refused)) from None
+        finally:
+            self._unpin(stamp, place_id)
+            self._settle()
+        self._torn(plan, report.places[0])
         return report.document()
+
+    def _unpin(self, stamp: str, place_id: str) -> None:
+        with self._pinning:
+            left = self._pins.get(stamp)
+            if left is None:
+                return
+            left.discard(place_id)
+            if left:
+                return
+            del self._pins[stamp]
+        unstage(self.layout, stamp)
+
+    def _sending(self, place_id: str) -> bool:
+        latest = self.jobs.latest(f"{SEND}{place_id}")
+        return latest is not None and latest.state == "running"
+
+    def _send_job(self, place_id: str) -> str:
+        latest = self.jobs.latest(f"{SEND}{place_id}")
+        return "" if latest is None else latest.id
+
+    def rclone(self, plan: Plan) -> Rclone | None:
+        """The one rclone runner on this folder, made when a storage needs it."""
+        if not any(s.via == "rclone" for s in plan.storages):
+            return None
+        if self._runner is None or self._runner.path != plan.rclone_path:
+            keys = self.keys
+            if keys is None:
+                from qmx_broker.credentials import CredentialManager  # noqa: PLC0415
+
+                keys = CredentialManager()
+            self._runner = Rclone(self.layout, keys=keys, path=plan.rclone_path)
+        return self._runner
+
+    def _torn(self, plan: Plan, placed: Placed) -> None:
+        """The upkeep incident for what a round's clean and sweep found torn at one place."""
+        line = _torn_line(placed)
+        if line:
+            self._note(plan, placed.id, "torn", line)
+
+    def _note(self, plan: Plan, place_id: str, signature: str, line: str) -> None:
+        """An upkeep incident at one storage, `upkeep:<place>`, named as he reads the storage;
+        the next clean upkeep there resolves it."""
+        at = self.clock().astimezone(UTC).isoformat()
+        shown = "This PC's copies" if place_id == QUICK else self._storage(plan, place_id).shown
+        with InboxTable.open(self.layout.home) as inbox:
+            inbox.incident(
+                f"{UPKEEP}{place_id}",
+                signature,
+                f"Backups: QMX's upkeep of {shown} found something",
+                line,
+                at=at,
+            )
 
     def _log_failed(self, only: str | None, line: str) -> None:
         """A round line for a round that broke: the quick undo refused with `line`, and each place
@@ -447,13 +591,15 @@ class Backups:
         log, home_id = log_lines(self.layout), self._home_id()
         quick = FolderRepository(self.layout.backups / QUICK)
         places = [Placed(QUICK, quick.where, "refused", line)]
-        for storage in plan.folders:
+        for storage in plan.sending:
             key = storage_key(storage, home_id)
             policy = storage.policy
             if storage.id == only or (
-                only is None and policy.on and due(_last(log, key), now, policy.interval, policy.at)
+                only is None
+                and policy.on
+                and due(_tried(log, key), now, policy.interval, policy.at)
             ):
-                where = plain(storage.path)
+                where = storage.shown
                 places.append(
                     Placed(
                         storage.id,
@@ -538,6 +684,116 @@ class Backups:
         latest = self.jobs.latest(KIND)
         return latest if latest is not None and latest.state == "running" else None
 
+    def _upkeep_if_due(self, look: Look, now: datetime) -> Job | None:
+        """QMX's monthly upkeep of the place upkept longest ago (or never) of those due: This PC
+        and each storage, each `[backup.upkeep] every` since its last upkeep, or since its first
+        copy. One upkeep at a time, so a re-pack never reads a storage beside another."""
+        plan = look.plan
+        if not plan.upkeep.on:
+            return None
+        if any(
+            job.kind.startswith(UPKEEP) and job.state == "running"
+            for job in (self.jobs.latest(f"{UPKEEP}{p.id}") for p in look.places)
+            if job is not None
+        ):
+            return None
+        every = span(plan.upkeep.every)
+        last: dict[str, datetime] = {}
+        first: dict[str, datetime] = {}
+        for line in look.log:
+            key = str(line.get("key"))
+            if line.get("kind") == "upkeep":
+                last[key] = _logged_at(line)
+            if line.get("kind") == "round":
+                for place in cast("list[dict[str, object]]", line.get("places", [])):
+                    if place.get("result") == "copied":
+                        first.setdefault(str(place.get("key")), when(str(line["stamp"])))
+        keys = {QUICK: QUICK} | {
+            s.id: storage_key(s, look.home_id) for s in plan.sending if s.policy.on
+        }
+        due_now = [
+            (last.get(key, EARLIEST), place_id)
+            for place_id, key in keys.items()
+            if key in first
+            and now - last.get(key, first[key]) >= every
+            and not self._sending(place_id)
+        ]
+        if not due_now:
+            return None
+        _, place_id = min(due_now)
+        started = self.jobs.start(
+            f"{UPKEEP}{place_id}", lambda progress: self._upkeep(place_id, progress)
+        )
+        return started.job
+
+    def _upkeep(self, place_id: str, progress: Progress) -> Mapping[str, object]:
+        """One place's re-pack and check, under its lock, logged as an `upkeep` line."""
+        plan = self.plan()
+        repo = self._repository(plan, place_id)
+        if not isinstance(repo, Packed):
+            raise Stopped(f"{repo.where} needs no upkeep from QMX")
+        lock = self.layout.backups / LOCK if place_id == QUICK else send_lock(self.layout, place_id)
+        upkeep = plan.upkeep
+        now = self.clock()
+        try:
+            with hold(lock, f"QMX is working on {repo.where}; its upkeep waits", removed=True):
+                progress(f"tidying {repo.where}")
+                packed = repack(
+                    repo,
+                    past=upkeep.repack_past,
+                    per_run=upkeep.repack_per_run,
+                    safety=safety_of(plan),
+                    step=lambda step: progress(f"tidying {repo.where}: {step}"),
+                )
+                progress(f"reading back a twelfth of what {repo.where} stores")
+                checked = check(
+                    repo,
+                    slice=upkeep.check_slice,
+                    month=now.year * 12 + now.month,
+                    work=self.layout.cache / "sync-fetch",
+                )
+        except Busy as busy:
+            raise Stopped(str(busy)) from None
+        except StorageRefused as refused:
+            raise Stopped(f"{refused}; QMX tries the upkeep again next month") from None
+        line = (
+            f"the upkeep of {repo.where} freed {_mb(packed.freed)}; {packed.unused:.0%} of what it "
+            f"stores is used by no kept copy; {checked.line}"
+        )
+        if packed.torn:
+            line += (
+                f"; QMX wrote {_count(len(packed.torn), 'list', 'lists')} of where files are kept "
+                "again from the stored files themselves, as "
+                f"{'it was' if len(packed.torn) == 1 else 'they were'} not whole"
+            )
+        if packed.blocked:
+            line = f"{line}; {packed.blocked}"
+        found = [*checked.damaged, *packed.torn]
+        log_line(
+            self.layout,
+            {
+                "kind": "upkeep",
+                "key": repo.key,
+                "id": place_id,
+                "at": now.astimezone(UTC).isoformat(),
+                "deleted": packed.deleted,
+                "written": packed.written,
+                "unused": round(packed.unused, 4),
+                "checked": checked.packs,
+                "damaged": list(checked.damaged),
+                "torn": [*packed.torn, *checked.torn],
+                "line": line,
+            },
+        )
+        trigger = f"{UPKEEP}{place_id}"
+        if found or checked.torn:
+            self._note(plan, place_id, "damaged" if checked.damaged else "torn", line)
+        else:
+            with InboxTable.open(self.layout.home) as inbox:
+                if inbox.open_incident(trigger) is not None:
+                    inbox.resolve_incident(trigger, at=now.astimezone(UTC).isoformat())
+        return {"place": place_id, "where": repo.where, "line": line}
+
     def view(self) -> dict[str, object]:
         """`GET /api/backups`: the plan, the proposal, each place's last round and newest whole
         copy, the quick undo's size and the round that runs; a staged restore, the pause after a
@@ -570,14 +826,14 @@ class Backups:
             **found,
             "refused": None,
             "on": plan.on,
-            "line": None if plan.folders else NO_SECOND_DRIVE,
+            "line": None if plan.sending else NO_SECOND_DRIVE,
             "proposal": None
             if offered is None
             else {"path": str(offered.path), "line": offered.line},
             "quick_undo_bytes": self._quick_size(),
             "places": [
                 _place_document(place, storage, now, self.layout, plan)
-                for place, storage in zip(places, (None, *plan.folders), strict=True)
+                for place, storage in zip(places, (None, *plan.sending), strict=True)
             ],
             **restoring,
         }
@@ -674,18 +930,25 @@ class Backups:
             f", {_mb(self._quick_size())} in all, {_policy_line(plan.pc)}"
             + _skipped_with_quick(log)
         )
-        if not plan.folders:
+        if not plan.sending:
             offered = self._proposal(plan)
             parts.append(NO_SECOND_DRIVE + (f"; {offered.line}" if offered else ""))
+        parts += [
+            f"{s.name} is not set up as a storage this QMX can copy to (via {s.via!r}); connect "
+            "it again in Settings, Sync to my storage"
+            for s in plan.not_set_up
+        ]
+        nowhere = plan.on and not plan.pc.on and not any(s.policy.on for s in plan.sending)
         drills, failed = self._drill_parts(plan, log, now)
         recall = self._recall_line()
         first = [
             *([] if plan.on else [OFF_LINE]),
+            *([NO_COPY_LINE] if nowhere else []),
             *([] if self.after is None else [_paused_line(self.after, self._interrupted)]),
             *([] if recall is None else [recall]),
         ]
         ok = (
-            bool(plan.folders)
+            bool(plan.sending)
             and all(place.concern(now) is None for place in places)
             and not first
             and not failed
@@ -699,7 +962,7 @@ class Backups:
         failed."""
         home_id = self._home_id()
         names = {QUICK: ("This PC's copies", "folder")} | {
-            storage_key(s, home_id): (s.id, s.via) for s in plan.folders
+            storage_key(s, home_id): (s.id, s.via) for s in plan.sending
         }
         newest: dict[str, Mapping[str, object]] = {}
         for line in log:
@@ -756,12 +1019,16 @@ class Backups:
     def carry_on(self, place_id: str) -> str:
         """His choice to keep sending to a storage the fork guard refused. The next sweep tries
         it again at once."""
-        return carry_on(self.layout, self._storage(self.plan(), place_id))
+        plan = self.plan()
+        try:
+            return carry_on(self.layout, self._storage(plan, place_id), rclone=self.rclone(plan))
+        except StorageRefused as refused:
+            raise Refusal(str(refused)) from None
 
     def accept(self) -> dict[str, object]:
         """His yes to the proposed second drive: one `[engine]` place row that can keep, at its
         path. Its policy is the storage defaults until he changes one."""
-        if self.plan().folders:
+        if self.plan().sending:
             raise Refusal(
                 "you already connected a storage; change it in Settings, Sync to my storage"
             )
@@ -837,18 +1104,28 @@ class Backups:
             if waiting is not None and waiting.step != "staging":
                 raise Refusal(_waits(self.layout, waiting))
             self._unheld()
-            started = self.jobs.start(RESTORE, lambda progress: self._stage(repo, stamp, progress))
+            started = self.jobs.start(
+                RESTORE, lambda progress: self._stage(place_id, repo, stamp, progress)
+            )
         return started.job
 
-    def _stage(self, repo: Repository, stamp: str, progress: Progress) -> Mapping[str, object]:
+    def _stage(
+        self, place_id: str, repo: Repository, stamp: str, progress: Progress
+    ) -> Mapping[str, object]:
         try:
-            staged = restore.stage(
-                self.layout,
-                repo,
-                stamp,
-                keep_free=self.floor,
-                progress=progress,
-            )
+            with ExitStack() as held:
+                if place_id != QUICK:
+                    busy = f"QMX is working on {repo.where}; ask again once it ends"
+                    held.enter_context(hold(send_lock(self.layout, place_id), busy, removed=True))
+                staged = restore.stage(
+                    self.layout,
+                    repo,
+                    stamp,
+                    keep_free=self.floor,
+                    progress=progress,
+                )
+        except StorageRefused as refused:
+            raise Stopped(f"{refused}; the restore did not start") from None
         except (RestoreRefused, Busy) as refused:
             raise Stopped(str(refused)) from None
         record = _read_journal(self.layout)
@@ -981,11 +1258,12 @@ class Backups:
         if self._drill_tried is not None and now - self._drill_tried < RETRY:
             return None
         held = [
-            (storage.id, repository_of(storage, self.layout), storage_key(storage, look.home_id))
-            for storage, place in zip(plan.folders, look.places[1:], strict=True)
+            (storage.id, self._repository(plan, storage.id), storage_key(storage, look.home_id))
+            for storage, place in zip(plan.sending, look.places[1:], strict=True)
             if storage.policy.on
             and place.complete is not None
-            and Path(_path(storage).anchor or "/").exists()
+            and (storage.path is None or Path(storage.path.anchor or "/").exists())
+            and not self._sending(storage.id)
         ]
         if not held and look.places[0].complete is not None:
             held = [(QUICK, FolderRepository(self.layout.backups / QUICK), QUICK)]
@@ -1010,9 +1288,12 @@ class Backups:
                 sample=sample,
                 rng=random.Random(),  # noqa: S311 - which files a drill samples, not a secret
                 keep_free=self.floor,
+                lock=None if place_id == QUICK else send_lock(self.layout, place_id),
             )
         except Busy as busy:
             raise Stopped(str(busy)) from None
+        except StorageRefused as refused:
+            raise Stopped(f"{refused}; the drill runs again next month") from None
         self._drill_waits = drilled if drilled.passed is None and drilled.stamp else None
         if drilled.passed is not None:
             self._drill_incident(place_id, drilled)
@@ -1037,8 +1318,9 @@ class Backups:
                 trigger,
                 "drill-failed",
                 f"Backups: the restore drill of {place_id} found damage",
-                f"{drilled.line}. QMX removed each damaged file there and the next round copies "
-                "it again; the copies that named it lack it until then",
+                f"{drilled.line}. QMX put each damaged file on that storage's list of damaged "
+                "files and the next round sends it again; the copies that named it lack it until "
+                "then",
                 at=at,
             )
 
@@ -1053,21 +1335,22 @@ class Backups:
                     log,
                     storage_key(storage, home_id),
                     storage.id,
-                    repository_of(storage, self.layout).where,
+                    _where(storage, home_id),
                     storage.policy.interval,
                     on=plan.on and storage.policy.on,
                 )
-                for storage in plan.folders
+                for storage in plan.sending
             ),
         ]
 
     def _repository(self, plan: Plan, place_id: str) -> Repository:
         if place_id == QUICK:
-            return FolderRepository(self.layout.backups / QUICK)
-        return repository_of(self._storage(plan, place_id), self.layout)
+            return FolderRepository(self.layout.backups / QUICK, key=QUICK)
+        storage = self._storage(plan, place_id)
+        return open_storage(storage, self.layout, rclone=self.rclone(plan), keep_free=self.floor)
 
     def _storage(self, plan: Plan, place_id: str) -> Storage:
-        found = next((s for s in plan.folders if s.id == place_id), None)
+        found = next((s for s in plan.storages if s.id == place_id), None)
         if found is None:
             raise Refusal(f"there is no storage {place_id!r} in Settings", 404)
         return found
@@ -1081,7 +1364,7 @@ class Backups:
         return self._quick_bytes
 
     def _proposal(self, plan: Plan) -> Proposal | None:
-        if plan.folders:
+        if plan.sending:
             return None
         now = monotonic.monotonic()
         if self._proposed is None or now - self._proposed[0] >= PROPOSAL_S:
@@ -1289,8 +1572,13 @@ def _table(value: object) -> dict[str, JsonValue]:
     return dict(cast("dict[str, JsonValue]", value)) if isinstance(value, dict) else {}
 
 
-def _path(storage: Storage) -> Path:
-    return cast("Path", storage.path)
+def _where(storage: Storage, home_id: str) -> str:
+    """Where a storage's copies are, as he reads it, without reaching the storage."""
+    if storage.via == "folder" and storage.path is not None:
+        return plain(storage_root(storage.path, home_id))
+    if storage.via == "rclone" and storage.remote is not None:
+        return f"{storage.name} ({rclone_root(storage.root, home_id)})"
+    return storage.name
 
 
 def _policy_line(policy: Policy) -> str:
@@ -1354,11 +1642,17 @@ def _doctor_part(place: Standing, now: datetime) -> str:
 
 def _skipped_with_quick(log: Sequence[Mapping[str, object]]) -> str:
     """When the newest round's quick undo was refused, the places it then skipped."""
-    rounds = [line for line in log if line.get("kind") == "round"]
+    rounds = [
+        line
+        for line in log
+        if line.get("kind") == "round"
+        and cast("list[dict[str, object]]", line.get("places", []))[:1]
+        and cast("list[dict[str, object]]", line.get("places", []))[0].get("key") == QUICK
+    ]
     if not rounds:
         return ""
     places = cast("list[dict[str, object]]", rounds[-1].get("places", []))
-    if not places or places[0].get("key") != QUICK or places[0].get("result") != "refused":
+    if places[0].get("result") != "refused":
         return ""
     skipped = [str(p.get("where")) for p in places[1:] if p.get("result") == "skipped"]
     if not skipped:
@@ -1373,6 +1667,28 @@ def _open_places(inbox: InboxTable) -> set[str]:
         "SELECT trigger_id FROM incidents WHERE trigger_id LIKE 'backup:%' AND resolved_at IS NULL"
     ).fetchall()
     return {str(row[0]).removeprefix("backup:") for row in rows}
+
+
+def _torn_line(placed: Placed) -> str:
+    """What a round's clean and sweep found torn at one place, for him; empty when nothing."""
+    found: list[str] = []
+    if placed.torn:
+        one = len(placed.torn) == 1
+        found.append(
+            f"QMX removed {_count(len(placed.torn), 'copy list', 'copy lists')} at {placed.where} "
+            f"that {'was' if one else 'were'} never whole ({', '.join(placed.torn)}); "
+            f"{'it was' if one else 'each was'} older than the newest whole copy there, so no "
+            "copy was lost"
+        )
+    if placed.torn_index:
+        one = len(placed.torn_index) == 1
+        found.append(
+            f"QMX found {_count(len(placed.torn_index), 'list', 'lists')} of where files are "
+            f"kept at {placed.where} that {'was' if one else 'were'} not whole, and wrote "
+            f"{'it' if one else 'them'} again from the stored files themselves, so no copy was "
+            "lost"
+        )
+    return ". ".join(found)
 
 
 def _title(place: str) -> str:
