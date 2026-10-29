@@ -973,12 +973,13 @@ class Packed:
 
 def _window(manifests: Mapping[str, Manifest], safety: timedelta, now: datetime) -> str:
     """The stamp a pack must be named before to be let go: the safety window back from `now`,
-    or the second newest copy here, whichever is earlier."""
+    or the second newest copy here, whichever is earlier. A storage whose keep rule holds one
+    copy reads that copy in place of the second, or it would never let go of a pack."""
     edge = stamp_of(now - safety)
     stamps = sorted(manifests)
-    if len(stamps) < 2:
+    if not stamps:
         return "0"
-    return min(edge, stamps[-2])
+    return min(edge, stamps[-2] if len(stamps) > 1 else stamps[-1])
 
 
 class FolderRepository(Packed):

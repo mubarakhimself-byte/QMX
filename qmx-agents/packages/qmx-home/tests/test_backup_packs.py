@@ -194,6 +194,27 @@ def test_no_pack_named_in_the_safety_window_is_deleted_whatever_its_files_mtime(
     assert all(repo.pool_has(e.sha256) for s in repo.copies() for e in repo.manifest(s).entries)
 
 
+def test_a_storage_that_keeps_one_copy_lets_go_of_the_packs_it_no_longer_needs(
+    tmp_path: Path,
+) -> None:
+    start = datetime.now(UTC) - timedelta(days=10)
+    repo = FolderRepository(tmp_path / "storage", clock=lambda: start)
+    old, _ = written(tmp_path / "src", "old.txt", b"old work")
+    new, new_sha = written(tmp_path / "src", "new.txt", b"new work")
+    hours = [stamp_of(start + timedelta(hours=n)) for n in (1, 2)]
+    copies_of(repo, {"old.txt": old}, hours[:1])
+    copies_of(repo, {"new.txt": new}, hours[1:])
+    repo.drop(hours[0])
+    day = timedelta(hours=24)
+
+    marked = repo.sweep(safety=day, now=start + timedelta(days=2))
+    gone = repo.sweep(safety=day, now=start + timedelta(days=4))
+
+    assert (marked.removed, gone.removed) == (0, 1)
+    assert set(repo.packs()) == {repo.index().where[new_sha][0].pack}
+    assert repo.pool_has(new_sha)
+
+
 def test_dropping_a_copy_removes_only_its_manifest(tmp_path: Path) -> None:
     repo = FolderRepository(tmp_path / "storage")
     work, _ = written(tmp_path / "src", "work.txt", b"his work")
