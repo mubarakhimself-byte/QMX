@@ -363,7 +363,7 @@ class Telemetry:
         self.counters = Counters()
         self.service = service
         self.state = state
-        self._post = post or (lambda url, body: _post(url, body, self.headers))
+        self._post: Post = post or self._signed
         self._batch = _Batch([], [], [])
         self._lock = threading.Lock()
         """Guards the batch only, so an emitter holds it for an append and never for a send."""
@@ -372,6 +372,9 @@ class Telemetry:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def _signed(self, url: str, body: bytes) -> None:
+        _post(url, body, self.headers)
 
     def start(self) -> None:
         if self._thread is not None:

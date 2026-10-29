@@ -298,7 +298,11 @@ def _check_telemetry(values: Document, engine: Document) -> None:
     """Refuse a `[telemetry]` section no sender can use, naming the value, before it is saved:
     a `send_to` that is not `off`, `this-pc` or a place that can run, and OpenObserve sizes it
     does not take (it keeps no fewer than 3 days)."""
-    from qma.telemetry import OFF, THIS_PC, send_to  # noqa: PLC0415 - the one grammar, a leaf
+    from qma.telemetry import (  # noqa: PLC0415  # pyright: ignore[reportMissingTypeStubs]
+        OFF,
+        THIS_PC,
+        send_to,
+    )
 
     try:
         target = send_to(values.get("send_to"))

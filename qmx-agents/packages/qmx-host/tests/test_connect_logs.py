@@ -27,9 +27,9 @@ import psutil
 import pytest
 import qma.telemetry
 from qmx_engine import telemetry
-from qmx_engine.ledger.spans import Span, encoded
+from qmx_engine.ledger.spans import Span
 from test_connect import Store, qmx_folder, world
-from test_connect_compute import ADDRESS, PLACE, Server, at, through_the_cards
+from test_connect_compute import ADDRESS, PLACE, Server, at, quiet, through_the_cards
 
 from qmx_host.connect import KINDS, Run, World, run_kind
 from qmx_host.connect_logs import (
@@ -88,7 +88,7 @@ def deep(tmp_path: Path, *, deny: bool = False) -> tuple[World, OpenObserveProce
 
 
 def connect(there: World, kind: str = "deep-logs-pc") -> dict[str, Any]:
-    ended = run_kind(KINDS[kind], PLACE, {}, report=lambda *_a, **_k: None, world=there)
+    ended = run_kind(KINDS[kind], PLACE, {}, report=quiet, world=there)
     return dict(ended)
 
 
@@ -122,7 +122,7 @@ def test_deep_logs_on_this_pc_run_openobserve_on_the_loopback_and_a_span_lands_s
             ended_at="2026-10-29T09:00:01+00:00",
             status="ok",
         )
-        exporter.hand("span", encoded(asdict(span)).decode())
+        exporter.hand("span", json.dumps(asdict(span)))
         assert exporter.flush() is None
         found = httpx.post(
             f"http://127.0.0.1:{process.port}/api/default/_search",
@@ -227,13 +227,11 @@ def test_the_pinned_release_is_fetched_checked_and_unpacked_only_when_its_sha256
     release = Pinned("v1.1.2", "open source", url, len(archive), sha256, "openobserve.exe")
     pinned = dataclasses.replace(there, logs=Logs(process, release=release))
     step = next(s for s in KINDS["deep-logs-pc"].steps if s.name == "openobserve")
+    line = ""
     try:
-        run = Run(KINDS["deep-logs-pc"], PLACE, {}, pinned)
-        if pin == "right":
-            step.do(run)
-        else:
-            with pytest.raises(Stopped) as stopped:
-                step.do(run)
+        step.do(Run(KINDS["deep-logs-pc"], PLACE, {}, pinned))
+    except Stopped as stopped:
+        line = stopped.line
     finally:
         server.shutdown()
     folder = there.layout.cache / "openobserve"
@@ -244,7 +242,7 @@ def test_the_pinned_release_is_fetched_checked_and_unpacked_only_when_its_sha256
     assert not (folder / "openobserve.exe").exists()
     assert list(folder.iterdir()) == [] if folder.exists() else True
     assert (
-        stopped.value.line
+        line
         == {
             "wrong": "the OpenObserve v1.1.2 QMX fetched is not the one pinned (its checksum "
             "differs), so it was deleted and not run; try again later",

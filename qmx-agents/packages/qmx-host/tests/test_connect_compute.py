@@ -131,8 +131,16 @@ def at(tmp_path: Path, server: Server, keys: Store | None = None, **changed: Any
     return dataclasses.replace(found, compute=ports_for(server, **changed))
 
 
+def quiet(step: str, *, done: int = 0, total: int = 0, **counts: int) -> None:
+    del step, done, total, counts
+
+
+def answered(_url: str, _headers: Mapping[str, str]) -> int:
+    return 200
+
+
 def once(there: World, kind: str, answer: Mapping[str, object]) -> Mapping[str, Any]:
-    return run_kind(KINDS[kind], PLACE, answer, report=lambda *_a, **_k: None, world=there)
+    return run_kind(KINDS[kind], PLACE, answer, report=quiet, world=there)
 
 
 def through_the_cards(there: World) -> list[str]:
@@ -305,7 +313,7 @@ def test_the_tailscale_key_reaches_the_server_in_a_file_and_never_in_a_command_l
         f"tailscale up --auth-key=file:{node.TAILSCALE_KEY}\n"
     ]
     assert server.secrets == [TAILSCALE]
-    assert not [command for command, stdin in server.sent if TAILSCALE in " ".join(command)]
+    assert not [command for command, _stdin in server.sent if TAILSCALE in " ".join(command)]
     assert not [stdin for _command, stdin in server.sent if stdin and TAILSCALE in stdin]
 
 
@@ -416,8 +424,8 @@ def test_the_provider_worker_builds_for_the_server_modal_and_e2b_and_a_plan_logi
             KINDS[kind],
             f"my{kind}",
             {},
-            report=lambda *_a, **_k: None,
-            world=dataclasses.replace(there, compute=ports_for(Server(), probe=lambda _u, _h: 200)),
+            report=quiet,
+            world=dataclasses.replace(there, compute=ports_for(Server(), probe=answered)),
         )
     control = there.control
     assert control is not None
@@ -447,7 +455,12 @@ def test_keeping_copies_on_the_server_adds_keep_with_its_remote_type_and_root_to
     there = at(tmp_path, server, keep_as=local)
     through_the_cards(there)
     synced: list[str] = []
-    keeping = dataclasses.replace(there, first_sync=lambda ident: synced.append(ident) or "started")
+
+    def first_sync(ident: str) -> str:
+        synced.append(ident)
+        return "started"
+
+    keeping = dataclasses.replace(there, first_sync=first_sync)
     while (ended := once(keeping, "server-keep", {}))["needs"] is not None:
         needs = ended["needs"]
         assert needs["card"] == "question", needs
