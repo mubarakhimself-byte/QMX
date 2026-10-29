@@ -706,8 +706,10 @@ def _send(
 ) -> Placed:
     """Send one pinned copy to one storage. A file whose bytes do not match its hash is left out
     of the storage's copy by name, and the copy is marked partial; the rest is sent. The send is
-    logged as soon as its manifest is up, so a send killed later never makes this folder's own
-    copy look like another folder's."""
+    logged before its manifest goes up and again once its files are checked, and the next send
+    checks a copy that has the first line and not the second before anything else, so a send
+    killed in between never leaves this folder's own copy broken or looking like another
+    folder's."""
     started = clock.monotonic()
     key = storage_key(storage, _label(layout).home_id)
     apart = not same_drive(storage, layout)
@@ -803,6 +805,7 @@ def _sent(
         )
     kinds = library_kinds(layout.data) if needs_kinds(storage.policy.save) else {}
     copy = part_for(pinned, storage.policy.save, kinds)
+    log = [*log, *_mend(layout, storage, log, repo, staging, quick_repo, scratch)]
     refusal = _guard(log, key, repo)
     if refusal is not None:
         return placed("refused", refusal)
@@ -849,6 +852,7 @@ def _sent(
     skipped = [e for e in copy.entries if e.sha256 in damaged]
     held = _without(copy, skipped)
     repo.set_about(_about(layout, held))
+    log_line(layout, {"kind": "sending", "id": storage.id, "key": key, "stamp": held.stamp})
     again = _checked_copy(repo, held, staging, quick_repo, layout, scratch)
     if again is None:
         return placed(
@@ -930,6 +934,50 @@ def _checked_copy(
             return None
         repo.put_copy(held)
     return None
+
+
+def _mend(
+    layout: Layout,
+    storage: Storage,
+    log: Sequence[Mapping[str, object]],
+    repo: Repository,
+    staging: FolderRepository,
+    quick_repo: FolderRepository,
+    scratch: Path,
+) -> list[dict[str, object]]:
+    """Check each copy at this place that this folder began writing and never logged as checked,
+    as a send killed or stopped between its copy and its check leaves one, which can name a file
+    a prune deleted meanwhile. A whole copy is logged as checked. One that is not is taken down
+    and written again with its missing files sent from This PC, or stays down when This PC no
+    longer holds them. The log lines written."""
+    begun = {
+        line.get("stamp")
+        for line in log
+        if line.get("kind") == "sending" and line.get("key") == repo.key
+    }
+    checked = {stamp for kind, stamp in _events(log, repo.key) if kind == "sent"}
+    written: list[dict[str, object]] = []
+    for stamp in repo.copies():
+        if stamp not in begun or stamp in checked:
+            continue
+        try:
+            copy = repo.manifest(stamp)
+        except Unreadable:
+            continue
+        repo.refresh()
+        if not all(repo.pool_has(entry.sha256) for entry in copy.entries):
+            repo.drop(stamp)
+            if _checked_copy(repo, copy, staging, quick_repo, layout, scratch) is None:
+                continue
+        record: dict[str, object] = {
+            "kind": "sent",
+            "id": storage.id,
+            "key": repo.key,
+            "stamp": stamp,
+        }
+        log_line(layout, record)
+        written.append(record)
+    return written
 
 
 def _put(
