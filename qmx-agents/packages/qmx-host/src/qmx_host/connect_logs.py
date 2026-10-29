@@ -80,14 +80,14 @@ RELEASES: Final[Mapping[str, Pinned]] = {
         "https://downloads.openobserve.ai/releases/openobserve/v1.1.2/"
         "openobserve-v1.1.2-windows-amd64.zip",
         150_297_501,
-        None,
+        "6beb3e4d0325319206b2b8cd7f291d081fe68487fb50a2c46bbfedf462c4fdbb",
         "openobserve.exe",
     ),
 }
 """The open-source edition, the one with no licence to accept and no ingest limit of its own. Its
 size is the download server's answer (`research/sync/sources/openobserve-windows-binaries-head
-.md`); the page lists the sha256 behind a button no saved copy holds, so it is recorded at the
-program's arm step and a fetch refuses until then."""
+.md`); its sha256 is the one openobserve.ai/downloads publishes for the open-source edition
+(read 2026-10-29), and a download of that size was checked against it."""
 
 
 def system() -> str:
