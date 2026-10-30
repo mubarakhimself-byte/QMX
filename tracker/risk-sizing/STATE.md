@@ -141,6 +141,14 @@ Every brief carries `STANDING-ORDERS.md` verbatim. Opus `poteto-agent`s, at most
 - **Move slowly.** Keep track of every seed; no need to do it all at once.
 - **Sources for QML (his word):** the pillars and the dictionary design are the Hermes agent's work in `Desktop\Stats` (incl. `.hermes\orchestration`) and `Desktop\strats` (holds a 97 KB Hermes session, `resume-strats-ground-state-work-20260827.json`; research 10 called the folder empty). That work is very important. The old vault (`Documents\Claude\QMX-discussion`) is very old and weak: use it only for risk and sizing ideas. The MIS research follows what he explained on 28-30 Oct (style, then timeframe, then data).
 
+**His calls on research 34 and 35 (2026-10-30, later):**
+- **Exit methodology, stops, targets, time-varying targets, profit caps, account-wide halts and probability exits go to the risk-and-sizing session.** That session combines the old relentless system ("nuclear": every FX session, quantity over quality, accelerating growth) with the organised Book/BMS system into one standard. This run only leaves room for it: the unit owns its exits (the old "exits owned outside the bot" is reversed), and the risk socket must take whatever that session designs. No exit or sizing maths here.
+- **The same unit on the same pair on 1m and 5m is one idea, and the two are correlated: correlation, not two bets** ("I just didn't see it, but I see it now"). This supersedes his 20 Oct seed.
+- **Deep modules is the reason QML looks the way it does** (his 25 Oct explanation in the first transcript). Designing for agents means designing out ambiguity.
+- **The dictionary must expand far beyond FX** (indices were added yesterday); how it expands is code to plan.
+- **The gold mine session must be read start to finish.** It is the GPT-built session that carried most of the dictionary (role-neutral entries, hybrids such as an exit used as a trigger). He supplied two Hermes review sessions from Downloads as a paper trail.
+- **Data versus execution:** who provides order flow and other data is a separate question from which broker executes. cTrader gives depth but no public trade tape (research 21); CCXT covers crypto execution.
+
 **No rush (his word, 2026-10-30):** planning, brainstorming and architecture may take three to four days. QML takes priority. Use as many agents as the work needs. The trading lens was weak in the run (questions any trader already knows the answer to were asked as open): every QML step now carries a trader's view, from practitioner sources and the MQL5 corpus.
 
 **His proposal for the architecture step (2026-10-30, a seed):** before `bmad-architecture` folds anything, run party mode on how to build it: high level and low level, the lean shape against the shapes with more variants, so implementation issues show up while it is still cheap. A Fable advisor is on the table (he is curious; run it only on his explicit go).
