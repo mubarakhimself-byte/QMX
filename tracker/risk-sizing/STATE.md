@@ -139,6 +139,7 @@ Every brief carries `STANDING-ORDERS.md` verbatim. Opus `poteto-agent`s, at most
 - **The 28 Oct discussion after the second explainer site is key** to the MIS work right now.
 - **External connection and the node:** live market access, not just stored data. How does he trade real futures (can cTrader do it, with order flow?), Hyperliquid, and what does the trading node hold. Added as the group F ticket "which platforms and brokers give which markets and data" (research 38).
 - **Move slowly.** Keep track of every seed; no need to do it all at once.
+- **Sources for QML (his word):** the pillars and the dictionary design are the Hermes agent's work in `Desktop\Stats` (incl. `.hermes\orchestration`) and `Desktop\strats` (holds a 97 KB Hermes session, `resume-strats-ground-state-work-20260827.json`; research 10 called the folder empty). That work is very important. The old vault (`Documents\Claude\QMX-discussion`) is very old and weak: use it only for risk and sizing ideas. The MIS research follows what he explained on 28-30 Oct (style, then timeframe, then data).
 
 **No rush (his word, 2026-10-30):** planning, brainstorming and architecture may take three to four days. QML takes priority. Use as many agents as the work needs. The trading lens was weak in the run (questions any trader already knows the answer to were asked as open): every QML step now carries a trader's view, from practitioner sources and the MQL5 corpus.
 
