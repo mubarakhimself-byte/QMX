@@ -58,6 +58,11 @@ So I read both sessions in full:
 - The subagent reports each received: `PKG`, `EXP`, `DOS`, `AUD` in full; `BND`, round-1 reports, the Prime Terminal and OpenKnowledge reports through the summaries the sessions show.
 - `SC` and `CB` in full.
 
+Cross-check with the paper-trail agent (research 40), relayed by the lead. It agrees: the gold mine originals are the 25 Aug rows 2700-3261, the lowest id of each duplicate is the original, rows 4065-4067 are replays, and GM 3261 is the last answer before "good morning". Two more stores exist:
+
+- **Row 5678** (session `20260826_180446_36307b`, 26 Aug, 55,992 chars, 20 sections, "STRATS design-decision recovery"). Never saved to a file. I read its section list and four sections. It restates the same design and adds only two small points, now C17 and H20. It also cites the gold mine as "GM M4065-M4070", repeating the replay-row mistake. CHECKED.
+- **Session `20260826_153051_f809fd`** ("Review saved sessions for status", 151 rows, ids 4663-5732). Never exported. I did not read it.
+
 Not read in full: tool outputs (about 4.2 MB of file reads and searches), attached web pages, the compaction summaries (FG 1209, 1675, 1808, 2112, 2217, 2397; GM 3431, 3511, 4137), which restate the dialogue. I sampled their decision sections and quote one line from FG 1209 below, labelled. The lineage file `transcripts-lineage/20260824_121737_86f88c-friendly-greeting.md` (575 KB, exported 24 Aug 18:41, 175 messages) is an earlier, shorter export of FG; it stops before FG 2096. CHECKED (`manifest.jsonl`).
 
 ---
@@ -162,6 +167,7 @@ Status words: **seed** (operator said it), **proposed** (assistant or bot), **ag
 | C13 | Folder layout by family (`patterns/`, `indicators/`, `market-structure/`, `liquidity/`, `order-flow/`, `time-and-sessions/`) **plus** `bindings/` folders by role (level, trigger, confirmation, exit). | FG 941 | proposed; the role folders were later dropped (27 Aug session, per R34 §2.3) | 34 (later tree only) |
 | C14 | Trader marketing names become neutral concepts with aliases; separate raw price facts from derived indicators from discretionary reading. | SC | used | 34 |
 | C15 | The dictionary was designed but never populated in these sessions; 123 candidate entries survived the 26 Aug run as scratch. | GM 3261, GM 4193 | fact | both |
+| C17 | Helper scripts (deterministic parsers, indicator reference semantics, alias and dedupe support, coverage reports) are construction tools that "do not turn STRATS into a codebase". Defaults carry a sixth label: "generated for future experimentation". | row 5678 §4.1, §10.2 | proposed | no |
 | C16 | Big gaps flagged: when is the dictionary "complete enough"; whether STRATS defines standard defaults at all. | AUD §8 | open | 34 |
 
 ### D. Bindings, coordinates and timing
@@ -249,6 +255,7 @@ Status words: **seed** (operator said it), **proposed** (assistant or bot), **ag
 | H16 | Use Gemini afterwards to check a finished spec against the video: "we are not backtesting we just want to confirm like the descriptions". | GM 2725 | seed | **no** |
 | H17 | Gemini and NotebookLM as the main way to resolve ambiguity: ask them "like a student". | GM 3262 | seed | 34 (mentioned) |
 | H18 | Indirect source mining: MQL5 articles, CodeBase, forum comments, parameter names, author histories; TradingView scripts, inputs, comments, similar scripts under other names. | FG 795 | agreed ("you literally went all out", FG 796) | **no** |
+| H20 | Research status stays separate from source truth: clear or codable is not edge; claimed performance is a cited claim; later results live apart. | row 5678 §4.1 item 14 | proposed | 10 (partly) |
 | H19 | AutoChartist as a source of pattern definitions and a benchmark, never proof of edge. | FG 795 | proposed | **no** |
 
 ### I. How context was meant to be described and measured
