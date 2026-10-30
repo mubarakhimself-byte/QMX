@@ -131,7 +131,7 @@ Every brief carries `STANDING-ORDERS.md` verbatim. Opus `poteto-agent`s, at most
 3. **Wayfinder chart**: destination = architecture-ready decisions for the code parts. Research tickets go to Codex; grilling tickets go to him; fog stays fog.
 4. Research (Codex), then funnel convergence, then talking with him over an explainer site. Only then architecture, the edge-case review, the independent review, the PR plan and the build prompt.
 
-**Operator away (2026-10-30): he is not reading.** Run steps 2 and 3 and an explainer site of what they find, then stop. Research on Codex waits for him (his tool). Architecture waits for him. Nothing is relayed as if he has read it.
+**Operator away (2026-10-30): he is not reading.** Run steps 2 and 3, then stop. No explainer site (his word, 10-30): everything stays in chat and in these files; he reads the playing field slowly. Research on Codex waits for him (his tool). Architecture waits for him. Nothing is relayed as if he has read it.
 
 ## Research findings (short; detail in each file)
 
