@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unit Playing Field</title>
+<style>
+:root { --bg:#f4f1ea; --ink:#1d2321; --muted:#5d665f; --card:#fffdf8; --line:#d8d2c4;
+  --a:#2f6f62; --b:#b5562b; --c:#3d5a9c; --d:#8a6d1f; --e:#7a3d7a; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141816; --ink:#e7e4dc; --muted:#9aa39c;
+  --card:#1d2220; --line:#323a36; --a:#6cc1ad; --b:#e58a5c; --c:#8fa8e6; --d:#d9b85a; --e:#c88ac8; } }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 Georgia, 'Iowan Old Style', serif; }
+.wrap { max-width:1100px; margin:0 auto; padding:24px 16px 80px; }
+.hero { border-bottom:2px solid var(--ink); padding-bottom:18px; margin-bottom:18px; }
+.hero h1 { font-size:clamp(28px,6vw,52px); margin:0; letter-spacing:-0.02em; }
+.hero p { color:var(--muted); max-width:70ch; }
+.stat { display:flex; gap:24px; flex-wrap:wrap; font-family:ui-monospace,Menlo,monospace; font-size:13px; }
+.stat b { font-size:28px; display:block; font-family:Georgia,serif; }
+nav { position:sticky; top:0; background:var(--bg); padding:8px 0; display:flex; flex-wrap:wrap; gap:6px; z-index:5; border-bottom:1px solid var(--line); }
+.chip { font:12px ui-monospace,Menlo,monospace; text-decoration:none; color:var(--bg); background:var(--a); padding:3px 7px; border-radius:3px; }
+section.tech { margin:34px 0; }
+section.tech header { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; border-bottom:1px solid var(--line); padding-bottom:6px; }
+.num { font:700 14px ui-monospace,Menlo,monospace; color:var(--muted); }
+h2 { margin:0; font-size:22px; }
+.domain { font:12px ui-monospace,Menlo,monospace; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+ol.ideas { list-style:none; padding:0; margin:14px 0 0; display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); }
+.idea { background:var(--card); border:1px solid var(--line); padding:12px 12px 10px; border-radius:4px; display:flex; flex-direction:column; gap:6px; }
+.bid { font:700 11px ui-monospace,Menlo,monospace; color:var(--a); }
+.src { font:11px ui-monospace,Menlo,monospace; color:var(--muted); }
+/* per-technique treatments */
+.qs .idea { border-left:4px solid var(--a); }
+.star ol.ideas { grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); }
+.star .idea { border-radius:50% 50% 8px 8px / 30px 30px 8px 8px; padding-top:20px; }
+.morph ol.ideas { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+.morph .idea { background:repeating-linear-gradient(0deg,transparent 0 23px,var(--line) 23px 24px),var(--card); }
+.persona .idea { border-top:6px solid var(--c); }
+.reverse .idea { transform:rotate(-0.6deg); border-color:var(--b); }
+.reverse .idea:nth-child(even) { transform:rotate(0.6deg); }
+.chaos .idea { border:2px dashed var(--b); }
+.eco ol.ideas { grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); }
+.eco .idea { border-radius:24px; border-color:var(--a); }
+.flip .idea { background:linear-gradient(135deg,var(--card) 50%,color-mix(in srgb,var(--c) 12%,var(--card)) 50%); }
+.triz .idea { border-left:4px solid var(--b); border-right:4px solid var(--c); }
+.cross ol.ideas { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.ladder ol.ideas { grid-template-columns:1fr; }
+.ladder .idea { margin-left:calc(var(--i,0) * 18px); border-left:3px solid var(--d); }
+.alien .idea { font-style:italic; border-color:var(--e); }
+.pollen .idea { border-bottom:4px solid var(--d); }
+.whys .idea { border-left:8px double var(--c); }
+.constraint .idea { background:var(--card); outline:1px solid var(--line); outline-offset:3px; }
+.genie .idea { border-color:var(--e); box-shadow:4px 4px 0 var(--e); }
+.crown .idea { text-decoration-line:none; border:1px solid var(--b); position:relative; }
+.crown .idea::after { content:''; position:absolute; inset:50% 8px auto; border-top:1px solid color-mix(in srgb,var(--b) 40%,transparent); }
+.observer .idea { border-radius:999px 999px 6px 6px; text-align:center; }
+.climax { margin-top:60px; border:2px solid var(--ink); padding:20px; background:var(--card); }
+.climax h2 { font-size:28px; }
+.climax li { margin:10px 0; }
+.note { color:var(--muted); font-size:14px; }
+@media (max-width:600px) { .cross ol.ideas { grid-template-columns:1fr; } .ladder .idea { margin-left:0; } }
+</style></head><body><div class="wrap">
+<div class="hero">
+<h1>The unit's playing field</h1>
+<p>A headless brainstorm over the operator's own words and grounding files 16 to 19. Every card is a question or an option, never a decision. Built from the session memlog, which is the single source.</p>
+<div class="stat"><span><b>150</b>ideas</span><span><b>18</b>techniques</span><span><b>7</b>connections</span></div>
+</div>
+<nav><a href="#t1" class="chip qs">01</a><a href="#t2" class="chip star">02</a><a href="#t3" class="chip morph">03</a><a href="#t4" class="chip persona">04</a><a href="#t5" class="chip reverse">05</a><a href="#t6" class="chip chaos">06</a><a href="#t7" class="chip eco">07</a><a href="#t8" class="chip flip">08</a><a href="#t9" class="chip triz">09</a><a href="#t10" class="chip cross">10</a><a href="#t11" class="chip ladder">11</a><a href="#t12" class="chip alien">12</a><a href="#t13" class="chip pollen">13</a><a href="#t14" class="chip whys">14</a><a href="#t15" class="chip constraint">15</a><a href="#t16" class="chip genie">16</a><a href="#t17" class="chip crown">17</a><a href="#t18" class="chip observer">18</a><a href="#climax" class="chip">links</a></nav>
+<section class="tech qs" id="t1"><header><span class="num">01</span><h2>Question Storming</h2><span class="domain">technical, the unit core</span></header><ol class="ideas"><li class="idea"><span class="bid">B001</span><span class="txt">What is the smallest set of fields a unit must declare before QMX can do anything with it?</span><span class="src">ST:21; R16 §6</span></li>
+<li class="idea"><span class="bid">B002</span><span class="txt">Which of a unit&#x27;s numbers may move by themselves, and which only through a new version?</span><span class="src">U13; R16 §2 edit types</span></li>
+<li class="idea"><span class="bid">B003</span><span class="txt">Is a unit&#x27;s style (scalper, intraday, swing) a field, a family, or a consequence of its timeframe?</span><span class="src">T2:132 malleable</span></li>
+<li class="idea"><span class="bid">B004</span><span class="txt">Does a unit own its own clock for recalibration, or does a QMX workflow own it?</span><span class="src">U15; R14 one clock per job</span></li>
+<li class="idea"><span class="bid">B005</span><span class="txt">Can one unit hold two entries with one shared exit, and is that one unit or two?</span><span class="src">T1:264 hybrids; DOCS FM-10</span></li>
+<li class="idea"><span class="bid">B006</span><span class="txt">Where does a plain-Python or ML unit put its context needs if it has no QML pillars?</span><span class="src">ST:47; R16 §6 item 3</span></li>
+<li class="idea"><span class="bid">B007</span><span class="txt">What is a unit&#x27;s identity when its code is unchanged but its calibrated numbers drifted far?</span><span class="src">07a disagreement: bytes vs behaviour</span></li>
+<li class="idea"><span class="bid">B008</span><span class="txt">What does a unit carry when it moves from the PC to the node: state, journal, warm indicators?</span><span class="src">N01; DEC-0261 warm-up</span></li>
+<li class="idea"><span class="bid">B009</span><span class="txt">Can a unit be paused on one market and live on another at the same time?</span><span class="src">R19 §5 old breaker states</span></li>
+<li class="idea"><span class="bid">B010</span><span class="txt">What does a unit need from QMX that it cannot compute itself?</span><span class="src">ST:64 independence</span></li></ol></section><section class="tech star" id="t2"><header><span class="num">02</span><h2>Starbursting on &quot;a System 2 is earned from a paper trail&quot;</h2><span class="domain">statistics and evidence</span></header><ol class="ideas"><li class="idea"><span class="bid">B011</span><span class="txt">Who chooses the market a paper trail is kept on, and is it chosen before or after the trail is read?</span><span class="src">T2:216; R16 §1.3</span></li>
+<li class="idea"><span class="bid">B012</span><span class="txt">What counts as &quot;paper&quot; for a System 2: demo account, simulated fills on live quotes, minimum-lot live?</span><span class="src">Q16; T2:216</span></li>
+<li class="idea"><span class="bid">B013</span><span class="txt">Where does the trail live: unit journal rows tagged by market, or a separate child record?</span><span class="src">J01; R16 §3.1 Markets tab</span></li>
+<li class="idea"><span class="bid">B014</span><span class="txt">When is the trail read: continuously, at a count, on his request, by a workflow trigger?</span><span class="src">T2:322 agents propose ranges</span></li>
+<li class="idea"><span class="bid">B015</span><span class="txt">Why would a System 2 differ from its parent: calibrated numbers only, or logic edits too?</span><span class="src">U31; T1:2051</span></li>
+<li class="idea"><span class="bid">B016</span><span class="txt">How does a System 2 notice that its market changed after it was earned?</span><span class="src">T2:216 &quot;Remember, markets change&quot;</span></li>
+<li class="idea"><span class="bid">B017</span><span class="txt">What happens to a System 2 when its parent gets a new logic version?</span><span class="src">U30</span></li>
+<li class="idea"><span class="bid">B018</span><span class="txt">Can two System 2s on correlated markets be earned from what is really one trail?</span><span class="src">R16 break 3</span></li>
+<li class="idea"><span class="bid">B019</span><span class="txt">Does a System 2 get its own exam baseline or inherit the parent&#x27;s?</span><span class="src">U06</span></li>
+<li class="idea"><span class="bid">B020</span><span class="txt">What if the trail is long on one session and empty on others: one System 2 or a session child?</span><span class="src">sniping seed, SE</span></li></ol></section><section class="tech morph" id="t3"><header><span class="num">03</span><h2>Morphological Analysis on the MIS</h2><span class="domain">market intelligence</span></header><ol class="ideas"><li class="idea"><span class="bid">B021</span><span class="txt">MIS axes to cross: style; timeframe (ticks to D); data class (quotes only, quotes plus depth, trades plus book, funding plus OI); output form (label, score, rank, list, raw feature); place (in unit, feed keeper, node, PC); clock (tick, bar, session, day).</span><span class="src">ST:119; T2:216</span></li>
+<li class="idea"><span class="bid">B022</span><span class="txt">Cell: scalper x 1m x quotes-only FX x label x in-unit x per bar. What can it honestly say?</span><span class="src">R16 §1.2</span></li>
+<li class="idea"><span class="bid">B023</span><span class="txt">Cell: order-flow scalper x ticks x trades plus book futures x raw feature x in-unit x per tick.</span><span class="src">T2:132 order flow</span></li>
+<li class="idea"><span class="bid">B024</span><span class="txt">Cell: intraday x 15m x any data x ranked list x PC x per session.</span><span class="src">T1:1903 ORB example</span></li>
+<li class="idea"><span class="bid">B025</span><span class="txt">Cell: perps x 1m x funding plus OI x event flag x feed keeper x funding clock.</span><span class="src">R17 T14; R02</span></li>
+<li class="idea"><span class="bid">B026</span><span class="txt">Cell: swing x daily x any x regime label x PC x daily.</span><span class="src">T05 swing barely</span></li>
+<li class="idea"><span class="bid">B027</span><span class="txt">Which MIS cells are empty because the data does not exist, e.g. FX trade tape on cTrader?</span><span class="src">R17 T11</span></li>
+<li class="idea"><span class="bid">B028</span><span class="txt">Which MIS cells share one computation and differ only in thresholds?</span><span class="src">M19 one family</span></li>
+<li class="idea"><span class="bid">B029</span><span class="txt">Is the MIS output form chosen by the reading unit or fixed by the MIS?</span><span class="src">M15 &quot;units pick the output&quot;</span></li>
+<li class="idea"><span class="bid">B030</span><span class="txt">What is the cheapest MIS cell that still answers &quot;find mean reverting markets at that time&quot;?</span><span class="src">T2:132</span></li></ol></section><section class="tech persona" id="t4"><header><span class="num">04</span><h2>Persona Journey across trader types</h2><span class="domain">trader experience</span></header><ol class="ideas"><li class="idea"><span class="bid">B031</span><span class="txt">A 1m scalper checks spread now, volatility now versus usual for this minute, news in N minutes, own last trades. What does the MIS add that the unit cannot read itself?</span><span class="src">T1:442 bot took live data too</span></li>
+<li class="idea"><span class="bid">B032</span><span class="txt">An order-flow trader needs a tape. Which QMX venues give one, and which never will?</span><span class="src">R02; R18 §8</span></li>
+<li class="idea"><span class="bid">B033</span><span class="txt">A perps trader defines sessions by volume and funding hours, not by clock. How does QMX define a session for 24/7 markets?</span><span class="src">T2:322</span></li>
+<li class="idea"><span class="bid">B034</span><span class="txt">An intraday trader uses opening range, session high and low, prior-day levels. Are those context, logic or terrain?</span><span class="src">R16 §2</span></li>
+<li class="idea"><span class="bid">B035</span><span class="txt">A swing trader wants weekly regime, carry, an events calendar. Does QMX serve swing units at all now?</span><span class="src">T05; T2:132 malleable</span></li>
+<li class="idea"><span class="bid">B036</span><span class="txt">A prop risk manager asks for a daily loss limit, a max loss and a consistency rule. Which exist in code today?</span><span class="src">R18 §5 no daily loss limit</span></li>
+<li class="idea"><span class="bid">B037</span><span class="txt">A $300 trader asks first &quot;can I afford this trade at all at minimum lot?&quot; Where does that check live?</span><span class="src">R16 §7 point 3</span></li>
+<li class="idea"><span class="bid">B038</span><span class="txt">Map a human scalper&#x27;s day (prep, live, review) onto QMX workflows and triggers.</span><span class="src">T2:132 human trader rhythms</span></li>
+<li class="idea"><span class="bid">B039</span><span class="txt">A human journal records rule breaks. What is a unit&#x27;s &quot;rule break&quot;: a refused trade, an override, a missed signal?</span><span class="src">J04</span></li>
+<li class="idea"><span class="bid">B040</span><span class="txt">What would each trader type refuse to let an agent do?</span><span class="src">A12</span></li></ol></section><section class="tech reverse" id="t5"><header><span class="num">05</span><h2>Reverse Brainstorming: how could QMX make a unit lose money?</h2><span class="domain">failure modes</span></header><ol class="ideas"><li class="idea"><span class="bid">B041</span><span class="txt">Make the MIS and the unit read the same indicator so the edge is counted twice and hidden.</span><span class="src">T2:216 repetition</span></li>
+<li class="idea"><span class="bid">B042</span><span class="txt">Retrain the MIS and silently relabel every past trade, so every verdict becomes look-ahead.</span><span class="src">R16 §1.3</span></li>
+<li class="idea"><span class="bid">B043</span><span class="txt">Let the router or MIS go down and have every unit stop.</span><span class="src">T1:1573</span></li>
+<li class="idea"><span class="bid">B044</span><span class="txt">Let two of his own units take opposite trades on one symbol and pay two spreads.</span><span class="src">R19 §2 Intent Aggregator</span></li>
+<li class="idea"><span class="bid">B045</span><span class="txt">Let twenty units open on twenty markets that are one dollar trade.</span><span class="src">R16 break 3</span></li>
+<li class="idea"><span class="bid">B046</span><span class="txt">Let a unit hold an index CFD through an early broker roll.</span><span class="src">R02; T2:216 &quot;expiry&quot;</span></li>
+<li class="idea"><span class="bid">B047</span><span class="txt">Let the PC and the node share one cTrader grant so a token refresh blinds one of them.</span><span class="src">R17 N09</span></li>
+<li class="idea"><span class="bid">B048</span><span class="txt">Let an agent&#x27;s morning shortlist pick yesterday&#x27;s luckiest markets.</span><span class="src">R16 break 4; T2:322</span></li>
+<li class="idea"><span class="bid">B049</span><span class="txt">Let sizing self-tune upward on a lucky streak.</span><span class="src">R08 ratchet; U15</span></li>
+<li class="idea"><span class="bid">B050</span><span class="txt">Let a System 2 keep full size after its market changed.</span><span class="src">T2:216</span></li>
+<li class="idea"><span class="bid">B051</span><span class="txt">Let a backtest with optimistic fills and uncalibrated costs count as proof.</span><span class="src">R18 §2 GAP-0048</span></li>
+<li class="idea"><span class="bid">B052</span><span class="txt">Let data from a feed whose terms forbid bots and databases become the core history.</span><span class="src">STATE awareness note</span></li></ol></section><section class="tech chaos" id="t6"><header><span class="num">06</span><h2>Chaos Engineering</h2><span class="domain">operations and failure</span></header><ol class="ideas"><li class="idea"><span class="bid">B053</span><span class="txt">Kill the MIS mid-session: what does each unit do, and what does its journal say about it?</span><span class="src">ST:64</span></li>
+<li class="idea"><span class="bid">B054</span><span class="txt">Kill the feed keeper: do units fall back to their own broker connection, or stop?</span><span class="src">R12 feed pool</span></li>
+<li class="idea"><span class="bid">B055</span><span class="txt">Drop the PC link: what does the node still know about admissions and limits?</span><span class="src">R09 signed plan</span></li>
+<li class="idea"><span class="bid">B056</span><span class="txt">Broker disconnect with open orders: which record wins when the node and the PC journal disagree?</span><span class="src">N04</span></li>
+<li class="idea"><span class="bid">B057</span><span class="txt">Clock skew between PC and node: which timestamp does a journal trust?</span><span class="src">J10 stamp at entry</span></li>
+<li class="idea"><span class="bid">B058</span><span class="txt">News calendar goes stale: does the kill switch fail closed and stop every unit?</span><span class="src">R18 §5 fail closed</span></li>
+<li class="idea"><span class="bid">B059</span><span class="txt">Disk fills mid-recording: drop ticks, drop bars, or stop trading?</span><span class="src">R12; 12 GB free</span></li>
+<li class="idea"><span class="bid">B060</span><span class="txt">A labeler version changes while units are live: who notices, and what happens to open matches?</span><span class="src">R16 §1.4</span></li>
+<li class="idea"><span class="bid">B061</span><span class="txt">A venue delists a market a unit is trading.</span><span class="src">Hyperliquid listings, R02</span></li>
+<li class="idea"><span class="bid">B062</span><span class="txt">A daylight-saving change lands inside an open session window.</span><span class="src">R18 §1.2 cron with DST</span></li></ol></section><section class="tech eco" id="t7"><header><span class="num">07</span><h2>Ecosystem Thinking: who feeds whom</h2><span class="domain">agents and workflows</span></header><ol class="ideas"><li class="idea"><span class="bid">B063</span><span class="txt">Do market-analysis workflows feed the MIS, does the MIS feed them, or do they only compare against it?</span><span class="src">T2:322 agents replicate the MIS</span></li>
+<li class="idea"><span class="bid">B064</span><span class="txt">Unit-analysis workflows read unit journals and write proposals into them: is the journal both food and output?</span><span class="src">J03</span></li>
+<li class="idea"><span class="bid">B065</span><span class="txt">A coroner workflow over dead and benched units feeds the funnel&#x27;s fail branch.</span><span class="src">R19 §8 Coroner; SE fail branch</span></li>
+<li class="idea"><span class="bid">B066</span><span class="txt">A cartographer workflow keeps a dated weather map per market that the MIS can be checked against.</span><span class="src">R19 §8</span></li>
+<li class="idea"><span class="bid">B067</span><span class="txt">A librarian workflow proposes dictionary entries when sources keep naming an unknown context.</span><span class="src">M17; L25</span></li>
+<li class="idea"><span class="bid">B068</span><span class="txt">One scout workflow per source class feeds idea records.</span><span class="src">R19 §7</span></li>
+<li class="idea"><span class="bid">B069</span><span class="txt">Which workflow is the predator that catches a bad agent claim before it reaches him?</span><span class="src">R19 §8 disagreement resolver</span></li>
+<li class="idea"><span class="bid">B070</span><span class="txt">Which workflows share one trigger: a trade closes, a session ends, a week ends, a result lands?</span><span class="src">R18 §1.2 event triggers</span></li>
+<li class="idea"><span class="bid">B071</span><span class="txt">Which of the 9 templates waiting on the trading node matter first for units?</span><span class="src">R18 §1.5</span></li>
+<li class="idea"><span class="bid">B072</span><span class="txt">The copilot as the explainer at the top of the chain for him: what does it read, what can it never change?</span><span class="src">A18; QMX.md money read-only</span></li></ol></section><section class="tech flip" id="t8"><header><span class="num">08</span><h2>Assumption Reversal</h2><span class="domain">how agents prove analysis</span></header><ol class="ideas"><li class="idea"><span class="bid">B073</span><span class="txt">Reverse &quot;agents analyse and propose&quot;: agents only make timestamped predictions that are scored later.</span><span class="src">T2:382</span></li>
+<li class="idea"><span class="bid">B074</span><span class="txt">Reverse &quot;scripts keep agents honest&quot;: an agent wrote the script, so who checks the script?</span><span class="src">T2:382 &quot;can&#x27;t be cheated&quot;</span></li>
+<li class="idea"><span class="bid">B075</span><span class="txt">Reverse &quot;deterministic cannot be cheated&quot;: a deterministic check is cheated by re-running inputs until it passes.</span><span class="src">R17 C15</span></li>
+<li class="idea"><span class="bid">B076</span><span class="txt">Reverse &quot;one agent per analysis&quot;: two different models must disagree before a claim is marked weak.</span><span class="src">R19 §8 multi-model lens</span></li>
+<li class="idea"><span class="bid">B077</span><span class="txt">Reverse &quot;agents read charts as images&quot;: agents read numbers, the chart is for him.</span><span class="src">A09</span></li>
+<li class="idea"><span class="bid">B078</span><span class="txt">Reverse &quot;cost means tokens&quot;: cost means the trades an analysis caused and their result.</span><span class="src">T2:382 &quot;after which costs?&quot;</span></li>
+<li class="idea"><span class="bid">B079</span><span class="txt">Reverse &quot;agents see everything&quot;: agents see only a landmark window and must state what they did not see.</span><span class="src">T2:382 landmark</span></li>
+<li class="idea"><span class="bid">B080</span><span class="txt">Reverse &quot;agents decide nothing&quot;: what is the smallest decision an agent could own without touching money?</span><span class="src">A12; A19</span></li>
+<li class="idea"><span class="bid">B081</span><span class="txt">Reverse &quot;agent memory helps&quot;: memory makes agents retell yesterday&#x27;s story.</span><span class="src">I19</span></li>
+<li class="idea"><span class="bid">B082</span><span class="txt">Reverse &quot;proof per claim&quot;: proof is an agent&#x27;s track record over many claims.</span><span class="src">R19 §8 calibration of weekly calls</span></li></ol></section><section class="tech triz" id="t9"><header><span class="num">09</span><h2>TRIZ Contradiction</h2><span class="domain">unit versus system</span></header><ol class="ideas"><li class="idea"><span class="bid">B083</span><span class="txt">Unit stands alone versus System 1 needs the MIS to find markets: could both hold if the unit computes its own labels when the MIS is missing? Option only.</span><span class="src">ST:64; R16 §6 item 2</span></li>
+<li class="idea"><span class="bid">B084</span><span class="txt">Only he promotes versus variables configure themselves as units are added: split admission (his) from budget share (automatic)? Option only.</span><span class="src">T1:1573; T2:216</span></li>
+<li class="idea"><span class="bid">B085</span><span class="txt">No separations versus inspectable parts: one artifact with named internal slots? Option only.</span><span class="src">U09; R17 row R02 socket seed</span></li>
+<li class="idea"><span class="bid">B086</span><span class="txt">Breadth versus independence: count breadth in independent bets, not markets? Option only.</span><span class="src">R16 §7 point 2</span></li>
+<li class="idea"><span class="bid">B087</span><span class="txt">Local first versus 24/7 tick archives: record bars locally and ticks only where a unit needs them? Option only.</span><span class="src">N07; R12</span></li>
+<li class="idea"><span class="bid">B088</span><span class="txt">Agents never touch money versus agents shortlist markets: a shortlist as a proposal with an expiry, admitted by class? Option only.</span><span class="src">A12; M34</span></li>
+<li class="idea"><span class="bid">B089</span><span class="txt">Fast scalper versus slow context: separate placement-time context from trade-time context? Option only.</span><span class="src">M27; C9</span></li>
+<li class="idea"><span class="bid">B090</span><span class="txt">Numbers later versus nothing can be judged without numbers: editable defaults that carry where they came from? Option only.</span><span class="src">R20; T2:216 &quot;where are you getting that number&quot;</span></li></ol></section><section class="tech cross" id="t10"><header><span class="num">10</span><h2>Scenario Cross</h2><span class="domain">strategy of the whole platform</span></header><ol class="ideas"><li class="idea"><span class="bid">B091</span><span class="txt">MIS useful at scalper speed AND $300 account: two units, the MIS chooses among a few affordable markets per session.</span><span class="src">U50</span></li>
+<li class="idea"><span class="bid">B092</span><span class="txt">MIS useful AND large capital: breadth compounding where correlation control is the binding limit.</span><span class="src">M44</span></li>
+<li class="idea"><span class="bid">B093</span><span class="txt">MIS too slow AND $300: units trade home markets; the MIS only builds an almanac for later.</span><span class="src">M28</span></li>
+<li class="idea"><span class="bid">B094</span><span class="txt">MIS too slow AND large capital: daily placement lists, units do the per-trade work.</span><span class="src">R16 §1.2</span></li>
+<li class="idea"><span class="bid">B095</span><span class="txt">What must exist in all four futures (journals, terrain record, labels on trades, feed)?</span><span class="src">R16 §6</span></li>
+<li class="idea"><span class="bid">B096</span><span class="txt">Second cross: agents trustworthy or not, crossed with data rich (order flow) or poor (quotes only).</span><span class="src">T2:382; T2:132</span></li>
+<li class="idea"><span class="bid">B097</span><span class="txt">Agents untrusted AND data poor: agents only summarise; all placement stays deterministic.</span><span class="src">A19</span></li>
+<li class="idea"><span class="bid">B098</span><span class="txt">Agents trusted AND data rich: agents may propose new sensors from order-flow patterns, user approves.</span><span class="src">M17</span></li></ol></section><section class="tech ladder" id="t11"><header><span class="num">11</span><h2>Time Horizon Ladder</h2><span class="domain">the operator as user</span></header><ol class="ideas"><li class="idea"><span class="bid">B099</span><span class="txt">Week 1 live: one unit, one market, demo account. What is the least that must exist?</span><span class="src">T2:6 &quot;start using QMX&quot;</span></li>
+<li class="idea"><span class="bid">B100</span><span class="txt">Month 1: two units on $300, a few markets. What does he look at each day?</span><span class="src">T2:216</span></li>
+<li class="idea"><span class="bid">B101</span><span class="txt">Month 6: dozens of units, some System 2s earned. What changes on his screens?</span><span class="src">UI01</span></li>
+<li class="idea"><span class="bid">B102</span><span class="txt">Year 2: hundreds of units, several nodes. What breaks first?</span><span class="src">M33</span></li>
+<li class="idea"><span class="bid">B103</span><span class="txt">What does he stop doing by hand at each rung?</span><span class="src">T2:216 &quot;so that I don&#x27;t have to come and manually do it&quot;</span></li>
+<li class="idea"><span class="bid">B104</span><span class="txt">What does he never want automated at any rung?</span><span class="src">T1:1573 &quot;nothing actually ever enters live without me&quot;</span></li>
+<li class="idea"><span class="bid">B105</span><span class="txt">Which rung needs the risk-and-sizing session finished?</span><span class="src">R01; R02</span></li>
+<li class="idea"><span class="bid">B106</span><span class="txt">Which rung forces paid data (futures depth, perps depth)?</span><span class="src">J15</span></li></ol></section><section class="tech alien" id="t12"><header><span class="num">12</span><h2>Alien Anthropologist</h2><span class="domain">vocabulary</span></header><ol class="ideas"><li class="idea"><span class="bid">B107</span><span class="txt">Why is one thing called router, MIS, load balancer, matcher, scanner and sentinel?</span><span class="src">R17 M01-M14</span></li>
+<li class="idea"><span class="bid">B108</span><span class="txt">Why does &quot;correlation ledger&quot; mean order lineage in the docs and a market-correlation control in his memory?</span><span class="src">R18 §9 row 7</span></li>
+<li class="idea"><span class="bid">B109</span><span class="txt">Why is &quot;system one&quot; both a kind of unit and a kind of small MIS model?</span><span class="src">R17 C23</span></li>
+<li class="idea"><span class="bid">B110</span><span class="txt">Why does &quot;node&quot; mean a workflow server and a trading server?</span><span class="src">R18 §1.3, §7</span></li>
+<li class="idea"><span class="bid">B111</span><span class="txt">Why is the thing called a unit when he keeps saying bot?</span><span class="src">R17 §1</span></li>
+<li class="idea"><span class="bid">B112</span><span class="txt">Why does &quot;workflow&quot; mean a QMX engine document and also this planning run?</span><span class="src">A13</span></li>
+<li class="idea"><span class="bid">B113</span><span class="txt">Why is &quot;sniping&quot; a time window and also an order-flow trigger type?</span><span class="src">M43</span></li>
+<li class="idea"><span class="bid">B114</span><span class="txt">Why is a dictionary of 239 prose entries with no code treated as a library?</span><span class="src">R19 §6</span></li></ol></section><section class="tech pollen" id="t13"><header><span class="num">13</span><h2>Cross-Pollination</h2><span class="domain">wildcards from other industries</span></header><ol class="ideas"><li class="idea"><span class="bid">B115</span><span class="txt">Ad tech: units bid for market impressions, the MIS is audience segments, frequency caps are same-bet limits.</span><span class="src">M03 load balancer seed</span></li>
+<li class="idea"><span class="bid">B116</span><span class="txt">Kubernetes: taints and tolerations for markets and units; node selectors as the admission envelope.</span><span class="src">R07a</span></li>
+<li class="idea"><span class="bid">B117</span><span class="txt">Air traffic control: units fly on their own instruments, tower advice is optional, collision avoidance is local.</span><span class="src">ST:64</span></li>
+<li class="idea"><span class="bid">B118</span><span class="txt">Weather forecasting: the MIS as a forecast with calibrated probabilities and a skill score.</span><span class="src">R19 §8</span></li>
+<li class="idea"><span class="bid">B119</span><span class="txt">Medicine: System 1 as a drug class, System 2 as a dose per patient; trials versus post-market surveillance.</span><span class="src">T1:1999</span></li>
+<li class="idea"><span class="bid">B120</span><span class="txt">Ecology, his fish in a lake: habitat suitability models, a niche as context needs, invasive spread as correlation.</span><span class="src">T2:132</span></li>
+<li class="idea"><span class="bid">B121</span><span class="txt">Recommender systems: cold start for a unit on a new market, which he rejects as &quot;thin air&quot;.</span><span class="src">T2:216</span></li>
+<li class="idea"><span class="bid">B122</span><span class="txt">Sports scouting: shrink a rookie&#x27;s numbers toward the position average until the record is long.</span><span class="src">R16 shrinkage</span></li></ol></section><section class="tech whys" id="t14"><header><span class="num">14</span><h2>Five Whys on &quot;why does he want System 2&quot;</h2><span class="domain">values</span></header><ol class="ideas"><li class="idea"><span class="bid">B123</span><span class="txt">Why System 2? To be specific. Why specific? To amplify an edge where it is best. Why amplify? Scalper edges are small and costs are big. Why trade at all? Compounding beats speed. Question left: is System 2 a sizing idea more than a placement idea?</span><span class="src">T2:132; SE breadth compounding</span></li>
+<li class="idea"><span class="bid">B124</span><span class="txt">Why only he promotes? One mistake costs a lot. Question left: which promotions cost a lot and which barely move money?</span><span class="src">T1:1573</span></li>
+<li class="idea"><span class="bid">B125</span><span class="txt">Why local first? Trust and control. Question left: what must keep working with the internet down?</span><span class="src">N07</span></li></ol></section><section class="tech constraint" id="t15"><header><span class="num">15</span><h2>Constraint Mapping</h2><span class="domain">data and hard limits</span></header><ol class="ideas"><li class="idea"><span class="bid">B126</span><span class="txt">Real: cTrader limits request rate. Imagined: one live connection per app is advice, not a cap.</span><span class="src">R12; R14</span></li>
+<li class="idea"><span class="bid">B127</span><span class="txt">Real: Hyperliquid keeps about 3.5 days of 1m candles; Dukascopy sits behind a bot wall with restrictive terms.</span><span class="src">R17 T14; R12</span></li>
+<li class="idea"><span class="bid">B128</span><span class="txt">Real: about 12 GB free disk. Check: is the PC truly unable to hold bars, or only ticks?</span><span class="src">R13; R12</span></li>
+<li class="idea"><span class="bid">B129</span><span class="txt">Real: QMB&#x27;s reader copies the whole history every step.</span><span class="src">R18 §2</span></li>
+<li class="idea"><span class="bid">B130</span><span class="txt">Real: cost calibration is empty, so no QMB verdict is proof.</span><span class="src">GAP-0048</span></li>
+<li class="idea"><span class="bid">B131</span><span class="txt">Imagined: the &quot;1,000 step limit&quot; is a bug, not a rule.</span><span class="src">R12</span></li>
+<li class="idea"><span class="bid">B132</span><span class="txt">Real: no catalog row lets agents read the MIS today.</span><span class="src">R18 §4</span></li>
+<li class="idea"><span class="bid">B133</span><span class="txt">Unknown: is Python too slow for the live path, or only for some parts?</span><span class="src">T2:52</span></li></ol></section><section class="tech genie" id="t16"><header><span class="num">16</span><h2>Cursed Genie</h2><span class="domain">wildcards</span></header><ol class="ideas"><li class="idea"><span class="bid">B134</span><span class="txt">Wish &quot;units configure themselves&quot;; the genie sizes them up after every win.</span><span class="src">T2:216</span></li>
+<li class="idea"><span class="bid">B135</span><span class="txt">Wish &quot;the MIS finds mean-reverting markets&quot;; the genie finds them after they stopped reverting.</span><span class="src">C9</span></li>
+<li class="idea"><span class="bid">B136</span><span class="txt">Wish &quot;agents prove their analysis&quot;; the genie proves it on the data it just looked at.</span><span class="src">T2:382</span></li>
+<li class="idea"><span class="bid">B137</span><span class="txt">Wish &quot;nothing capped&quot;; the genie runs a 1990 tick backtest that fills the disk.</span><span class="src">ST:46</span></li>
+<li class="idea"><span class="bid">B138</span><span class="txt">Wish &quot;nothing live without me&quot;; the genie makes him click 400 times a day.</span><span class="src">T1:1573</span></li>
+<li class="idea"><span class="bid">B139</span><span class="txt">Wish &quot;record everything&quot;; the genie copies the same spread rows into 200 journals.</span><span class="src">ST:59 no duplication</span></li>
+<li class="idea"><span class="bid">B140</span><span class="txt">Wish &quot;plain Python always possible&quot;; an agent writes plain Python to skip the tries counter.</span><span class="src">ST:47; R07b</span></li></ol></section><section class="tech crown" id="t17"><header><span class="num">17</span><h2>Kill the Crown Jewel</h2><span class="domain">wildcards</span></header><ol class="ideas"><li class="idea"><span class="bid">B141</span><span class="txt">Delete the MIS: what do units lose, and how would anyone measure the loss?</span><span class="src">T1:264 noise question</span></li>
+<li class="idea"><span class="bid">B142</span><span class="txt">Delete System 2: does QMX still compound?</span><span class="src">T2:132</span></li>
+<li class="idea"><span class="bid">B143</span><span class="txt">Delete the router: is the MIS alone enough?</span><span class="src">ST:24</span></li>
+<li class="idea"><span class="bid">B144</span><span class="txt">Delete QML: what stops agents writing unsafe Python?</span><span class="src">T1:1573 standard for agents</span></li>
+<li class="idea"><span class="bid">B145</span><span class="txt">Delete the dictionary: does context still have a shared vocabulary?</span><span class="src">R16 §7 point 7</span></li></ol></section><section class="tech observer" id="t18"><header><span class="num">18</span><h2>Observer Effect</h2><span class="domain">wildcards</span></header><ol class="ideas"><li class="idea"><span class="bid">B146</span><span class="txt">Does publishing MIS labels change how his own units trade enough that the labels stop predicting?</span><span class="src">M15</span></li>
+<li class="idea"><span class="bid">B147</span><span class="txt">Does his attaching markets by hand bias the paper trail he later reads?</span><span class="src">T2:216 &quot;you trade oil&quot;</span></li>
+<li class="idea"><span class="bid">B148</span><span class="txt">Do agents&#x27; shortlists crowd his own units into the same few markets?</span><span class="src">M34</span></li>
+<li class="idea"><span class="bid">B149</span><span class="txt">Does watching a System 2 closely make him intervene and spoil its record?</span><span class="src">T2:216 no rush</span></li>
+<li class="idea"><span class="bid">B150</span><span class="txt">Does recording every signal not taken change what the unit is allowed to do?</span><span class="src">J04</span></li></ol></section>
+<div class="climax" id="climax"><h2>Connections, not conclusions</h2><ol><li>Connection: B041, B060, B042 and P3 are one question wearing three hats: what does a unit and the MIS share, and who owns the version of a shared measurement.</li>
+<li>Connection: B011, B018, B048 and P2 show selection bias moving from the backtest grid to the paper trail and then to the agent shortlist; the same guard question appears three times.</li>
+<li>Connection: B083, B053, B010 and P7 make &quot;units stand alone&quot; the hard edge of System 1; any design of the MIS output must say what a unit does without it.</li>
+<li>Connection: B084, B103, B124 and P5 put self-configuration on the same line as his click; the line between admission and budget share is unnamed.</li>
+<li>Connection: B095 lists what wins in every future (journals, terrain record, labels on trades, feed); those are also what the party said is missing (P8, P9).</li>
+<li>Connection: B107-B114 show at least seven words with two meanings; the glossary agent&#x27;s work and this map touch.</li>
+<li>Not converged by design. These connections are inputs to the wayfinder chart, not chosen directions.</li></ol>
+<p class="note">Source: <code>.memlog.md</code> in this folder. The full question map with tags and sources is <code>playing-field.md</code>.</p></div>
+</div>
+<script>
+document.querySelectorAll('.ladder .idea').forEach((el,i)=>el.style.setProperty('--i',Math.min(i,6)));
+</script>
+</body></html>
