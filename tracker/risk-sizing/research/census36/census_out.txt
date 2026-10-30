@@ -1,0 +1,31 @@
+included articles 2038 of 3128
+indicators: concepts 46 covered=17 renamed=1 partial=5 missing=23 | covered+renamed 39% | article-weighted: covered=67% renamed=3% partial=6% missing=25%
+stats-and-models: concepts 40 covered=0 renamed=0 partial=1 missing=39 | covered+renamed 0% | article-weighted: covered=0% renamed=0% partial=7% missing=93%
+price-action-and-structure: concepts 46 covered=31 renamed=1 partial=7 missing=7 | covered+renamed 70% | article-weighted: covered=74% renamed=0% partial=12% missing=14%
+order-flow-and-volume: concepts 13 covered=9 renamed=0 partial=3 missing=1 | covered+renamed 69% | article-weighted: covered=60% renamed=0% partial=39% missing=0%
+context-and-regime: concepts 16 covered=9 renamed=0 partial=2 missing=5 | covered+renamed 56% | article-weighted: covered=56% renamed=0% partial=20% missing=23%
+session-and-calendar: concepts 11 covered=6 renamed=2 partial=1 missing=2 | covered+renamed 73% | article-weighted: covered=47% renamed=39% partial=2% missing=13%
+entry-types: concepts 21 covered=9 renamed=2 partial=2 missing=8 | covered+renamed 52% | article-weighted: covered=42% renamed=19% partial=12% missing=28%
+exit-types: concepts 23 covered=11 renamed=1 partial=5 missing=6 | covered+renamed 52% | article-weighted: covered=85% renamed=3% partial=5% missing=7%
+trade-management: concepts 9 covered=1 renamed=1 partial=2 missing=5 | covered+renamed 22% | article-weighted: covered=16% renamed=10% partial=32% missing=41%
+money-management-and-sizing: concepts 17 covered=3 renamed=1 partial=2 missing=11 | covered+renamed 24% | article-weighted: covered=33% renamed=10% partial=4% missing=53%
+filters-and-confirmations: concepts 10 covered=4 renamed=3 partial=1 missing=2 | covered+renamed 70% | article-weighted: covered=70% renamed=11% partial=8% missing=11%
+inputs 4845 articles with inputs 664
+  other: 2459 inputs in 513 articles
+  period/length: 561 inputs in 227 articles
+  time/session: 349 inputs in 115 articles
+  lot/volume: 226 inputs in 128 articles
+  stop-loss: 161 inputs in 100 articles
+  multiplier/coefficient: 160 inputs in 76 articles
+  risk %: 131 inputs in 48 articles
+  timeframe: 130 inputs in 84 articles
+  level/threshold: 122 inputs in 62 articles
+  take-profit: 121 inputs in 82 articles
+  grid/martingale: 99 inputs in 64 articles
+  magic/id: 98 inputs in 78 articles
+  ml/training: 58 inputs in 22 articles
+  breakeven: 43 inputs in 20 articles
+  drawdown/loss limit: 43 inputs in 21 articles
+  trailing: 42 inputs in 20 articles
+  spread/slippage: 36 inputs in 27 articles
+  max positions/orders: 6 inputs in 6 articles
