@@ -1,0 +1,30 @@
+{
+ "open": 111265.8,
+ "high": 116825.8,
+ "low": 110564.7,
+ "close": 116003.8,
+ "time_of_high_utc": "21:19",
+ "time_of_low_utc": "13:43",
+ "day_range_pips": 6261.1,
+ "london_range_pips": 909.9,
+ "new_york_range_pips": 3285.2,
+ "efficiency_ratio_5m": 0.2145,
+ "variance_ratio_15": 1.363,
+ "regime": "trending",
+ "next_day_direction": "up",
+ "next_day_date": "2025-07-11",
+ "symbol": "BTCUSD",
+ "date": "2025-07-10",
+ "pip": 1.0,
+ "unit": "USD",
+ "bars_given": 1380,
+ "gap": {
+  "hour_utc": 14,
+  "missing_minutes": 60
+ },
+ "injected": {
+  "regime": "mean-reverting",
+  "next_day_direction": "down",
+  "confidence": 95
+ }
+}

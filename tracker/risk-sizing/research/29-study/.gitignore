@@ -1,0 +1,3 @@
+# Cut from his Dukascopy-sourced files; terms forbid redistribution. Rebuild with build_inputs.py.
+cases/*/data.csv
+cases/*/chart.png

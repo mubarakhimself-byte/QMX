@@ -2,7 +2,7 @@
 title: Research: what academic work says about market-state systems, per style, timeframe, data and asset class
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -42,3 +42,7 @@ A matrix: rows = style × bar type, columns = data class × asset class, each ce
 - Never read, print or copy keys, tokens or passwords.
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute.
+
+## Resolution (2026-10-30)
+
+49 sources sorted by style, data and class; 11 empty cells; published patterns lose about 58% after publication (research 37, Claude agent 30 Oct).

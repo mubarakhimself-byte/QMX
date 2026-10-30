@@ -2,7 +2,7 @@
 title: Research: how trading desks analyse markets and strategies, by style and rhythm
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -44,3 +44,7 @@ A catalogue of analyses by style and cadence, with inputs and outputs, mapped on
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+Session habits are an honest almanac for activity, not profit; six places where today's tools stall, five of which units, journals, workflows and the MIS address (research 30).

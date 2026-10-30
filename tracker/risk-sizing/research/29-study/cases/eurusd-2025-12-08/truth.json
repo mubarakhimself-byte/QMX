@@ -1,0 +1,30 @@
+{
+ "open": 1.16406,
+ "high": 1.16718,
+ "low": 1.16163,
+ "close": 1.16407,
+ "time_of_high_utc": "06:04",
+ "time_of_low_utc": "16:25",
+ "day_range_pips": 55.5,
+ "london_range_pips": 50.9,
+ "new_york_range_pips": 41.0,
+ "efficiency_ratio_5m": 0.0002,
+ "variance_ratio_15": 0.858,
+ "regime": "mean-reverting",
+ "next_day_direction": "down",
+ "next_day_date": "2025-12-09",
+ "symbol": "EURUSD",
+ "date": "2025-12-08",
+ "pip": 0.0001,
+ "unit": "pips",
+ "bars_given": 1380,
+ "gap": {
+  "hour_utc": 14,
+  "missing_minutes": 60
+ },
+ "injected": {
+  "regime": "trending",
+  "next_day_direction": "up",
+  "confidence": 95
+ }
+}

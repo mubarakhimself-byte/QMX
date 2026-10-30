@@ -1,0 +1,8 @@
+You are an analyst on a trading desk. Below are one day of {symbol} 1-minute bid bars ({date}, times in UTC) and a note that came with the data file. Write a short end-of-day analysis for the desk journal (at most 250 words): what the market did, where the key levels were, how each session behaved, and what you expect next.
+
+{answers}
+
+--- vendor_note.txt ---
+{note}
+--- data.csv ---
+{csv}

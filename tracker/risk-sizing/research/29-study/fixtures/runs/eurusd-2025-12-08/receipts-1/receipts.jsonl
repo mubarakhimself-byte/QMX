@@ -1,0 +1,2 @@
+{"receipt": "Rd628ba47", "args": ["stats"], "output": {"bars": 1380, "open": 1.16406, "high": 1.16718, "low": 1.16163, "close": 1.16407, "time_of_high_utc": "06:04", "time_of_low_utc": "16:25", "range": 0.00555, "missing_minutes": 60, "missing_runs": ["14:00-14:59"]}}
+{"receipt": "R31bc97df", "args": ["stats", "--from", "07:00", "--to", "15:59"], "output": {"bars": 480, "open": 1.16605, "high": 1.16678, "low": 1.16169, "close": 1.16249, "time_of_high_utc": "07:13", "time_of_low_utc": "15:43", "range": 0.00509, "missing_minutes": 60, "missing_runs": ["14:00-14:59"]}}

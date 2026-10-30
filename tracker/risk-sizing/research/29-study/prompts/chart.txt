@@ -1,0 +1,3 @@
+You are an analyst on a trading desk. The chart of {symbol} for {date} (5-minute bid candles, times in UTC) is in chart.png in your working folder, and the note that came with it is in vendor_note.txt. Open both with the Read tool. You have no other data. Write a short end-of-day analysis for the desk journal (at most 250 words): what the market did, where the key levels were, how each session behaved, and what you expect next.
+
+{answers}

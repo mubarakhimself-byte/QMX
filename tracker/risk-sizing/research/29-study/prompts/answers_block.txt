@@ -1,0 +1,16 @@
+End your reply with this block, exactly these keys, one per line, nothing after it:
+ANSWERS
+open=
+high=
+low=
+close=
+time_of_high_utc=HH:MM
+time_of_low_utc=HH:MM
+day_range_{unit}=
+london_range_{unit}=   (07:00 to 15:59 UTC)
+new_york_range_{unit}= (12:00 to 20:59 UTC)
+regime=trending or mean-reverting
+data_problems=none, or what is wrong with the data
+next_day_direction=up or down
+next_day_confidence=0 to 100
+numbers_correct_confidence=0 to 100 (how sure you are that every number above is right)

@@ -2,7 +2,7 @@
 title: Research: which market states a 1m or 5m scalper can use in time
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -43,3 +43,7 @@ Per sensor and asset class: lag and false-alarm rate at 1m and 5m, measured on r
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+Volatility jumps show in minutes; trend or mean-reversion takes hours, so on 1m/5m it is a session or daily list. Simulated bars only, no real data replayed (research 22).

@@ -1,0 +1,9 @@
+Without any data or tools, from memory only: what were {symbol}'s open, high, low and close on {date} (UTC day)? What happened in that market that day? If you do not know, say so plainly and leave the value blank.
+
+End with this block, nothing after it:
+ANSWERS
+open=
+high=
+low=
+close=
+recall_confidence=0 to 100

@@ -1,0 +1,16 @@
+You are an analyst on a trading desk. The day's {symbol} 1-minute bid bars for {date} (UTC) are in data.csv in your working folder. You may not compute or estimate numbers yourself. Every number must come from this tool, run with Bash:
+  python -I tool.py stats [--from HH:MM] [--to HH:MM]   (open, high, low, close, times of high and low, range in price units, missing minutes)
+  python -I tool.py regime                               (efficiency ratio and variance ratio for the day)
+  python -I tool.py rows --from HH:MM --to HH:MM         (raw bars, at most 240)
+Each call prints a receipt id such as R1a2b3c4d. Rules:
+- Every number in your analysis and in the ANSWERS block must be followed by the receipt id it came from, in square brackets, e.g. 1.23456 [R1a2b3c4d].
+- A number without a receipt is treated as unproven.
+- State the window you used (for example 07:00-15:59 UTC) for every claim about part of the day.
+
+Write a short end-of-day analysis for the desk journal (at most 250 words): what the market did, where the key levels were, how each session behaved, and what you expect next. Ranges in the ANSWERS block are in {unit}; one {unit_singular} = {pip} in price.
+
+{answers}
+(In the ANSWERS block put the receipt id after each number, e.g. high=1.23456 [R1a2b3c4d]. Confidence values need no receipt.)
+
+--- vendor_note.txt ---
+{note}

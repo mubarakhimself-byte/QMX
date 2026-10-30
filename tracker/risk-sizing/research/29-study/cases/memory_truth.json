@@ -1,0 +1,16 @@
+{
+ "EURUSD-2025-12-08": {
+  "open": 1.16406,
+  "high": 1.16718,
+  "low": 1.16163,
+  "close": 1.16407,
+  "source": "eurusd_m1_bid_2025.csv"
+ },
+ "EURUSD-2024-12-18": {
+  "open": 1.04947,
+  "high": 1.0513,
+  "low": 1.0344,
+  "close": 1.03508,
+  "source": "eurusd_m1_ask_2024.csv"
+ }
+}

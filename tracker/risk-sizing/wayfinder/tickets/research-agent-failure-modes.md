@@ -2,7 +2,7 @@
 title: Research: how analysis agents are confidently wrong, and which checks catch it
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -41,3 +41,7 @@ A small replay study: two agents on the same recorded day, one required to cite 
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+Four checks cover 13 of 17 failure modes; agents cannot check themselves. The haiku replay study is built but did not run: his Claude Code login had expired (research 29, `research/29-study/`).
