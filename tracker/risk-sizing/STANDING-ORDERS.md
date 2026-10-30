@@ -7,7 +7,7 @@ Pasted verbatim into every brief. One rule per line. The operator's rulings in `
 3. Read his words in the verbatim transcripts (`operator/transcript-*.md`), never a summary of them.
 4. Broaden before defining. In grounding, research and funnel steps, produce questions, options and evidence, not a design.
 5. Code first, numbers later. Anything that can change by editing a value, a template or a QMX workflow is a number: name it and give a starting default, do not settle it.
-6. Design for complexity, not a complex system. Rich scenarios, the simplest mechanism that holds. No "every part must prove itself" machinery, no hundreds of tests, no money gates: agents never touch money.
+6. Capable at the edges, simple at the core. Handle the hard cases fully (the 95th percentile, real failures, every market and data type in scope) with few concepts and deep modules: a small surface, the depth hidden inside. Judge every option on three things at once: can it do the hard cases, can it be maintained and debugged, can it be explained to him in a few plain sentences. Reject an option that fails the hard cases as firmly as one that is over-built. No "every part must prove itself" machinery, no hundreds of tests, no money gates: agents never touch money.
 7. Only the operator promotes anything to live. The only automatic transition is a risk rule stopping a unit, logged.
 8. Local first: everything works on his PC alone; servers stand in or extend, never replace.
 9. Nothing capped: no lookback limits, no invented limits, providers' own limits only. Plain Python is always possible beside QML.
