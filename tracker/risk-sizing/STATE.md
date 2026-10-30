@@ -121,6 +121,16 @@ Verbatim: `operator/transcript-2026-10-29-to-30.md` (this round) and `operator/t
 - **Branches:** planning on `plan/unit-system` (worktree `D:\QMX-worktrees\unit-plan`), building on `build/unit-system`. The merge target is decided later; never `main`.
 - **Research runs on Codex** when it comes. Fable only if he asks. Coding speed is not a constraint: agents stack PRs fast once the plan is right.
 
+## The planning run (started 2026-10-30)
+
+Every brief carries `STANDING-ORDERS.md` verbatim. Opus `poteto-agent`s, at most three at once, one file or workspace each. The lead commits after each result.
+1. **Grounding**, three agents in parallel: history ledger (`research/17`), what QMX has today including how QMX workflows run (`research/18`), the old system and Stats (`research/19`).
+2. **Expansion: the playing field.** It comes *before* wayfinder, because wayfinder only charts decisions and its grilling tickets need him live. Two agents in parallel, each keeping its skill's own memlog workspace under `research/funnel3/`:
+   - party mode (session mode, non-interactive) then brainstorming (headless) over the verbatim transcripts plus 17-19: every lens, question, contradiction and permutation, aiming past 100, no answers;
+   - the CIS methods (problem solving on the contradictions, design thinking with his personas) plus domain-modeling for a draft glossary of contested words (unit, logic, context, terrain, System 1 and 2, family).
+3. **Wayfinder chart**: destination = architecture-ready decisions for the code parts. Research tickets go to Codex; grilling tickets go to him; fog stays fog.
+4. Research (Codex), then funnel convergence, then talking with him over an explainer site. Only then architecture, the edge-case review, the independent review, the PR plan and the build prompt.
+
 ## Research findings (short; detail in each file)
 
 | File | Most important findings |
