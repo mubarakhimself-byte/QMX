@@ -109,6 +109,18 @@ Verbatim: `operator/2026-10-28-router-system1-system2.md`.
 - **His two expansions:** bounded domain expansion (development: logic and variants) and live domain expansion (System 1).
 - **Claude's proposal (not agreed):** System 2 in research, System 1 live. Research proves each unit's universe and its condition fingerprint. Live, the MIS scans, matches and ranks inside that universe. A new variant only when the logic changes. Per-instrument calibrated settings stay inside one unit. **This revises the Q1 answer** ("new instrument = sibling unit"), which needs his confirmation.
 
+## Operator round 2026-10-29 / 30: code first, broaden before defining (binding)
+
+Verbatim: `operator/transcript-2026-10-29-to-30.md` (this round) and `operator/transcript-2026-10-20-to-28.md` (the whole earlier session). Both are dialogue only, word for word.
+- **Everything he says is a seed.** The planning run expands, rejects or improves it. Agents read the verbatim transcripts, never a summary of them.
+- **Code first, numbers later.** First, everything QMX must be able to do as a system for units (the QMB, QML, MIS, journals, agents, node). Numbers (thresholds, sizing maths, pass marks, portfolio optimisation) ship as editable defaults or templates.
+- **Broaden before defining.** No design of the MIS, the unit or anything else before grounding, research and the funnel. The questions come out of the run, not from the lead.
+- **QMX agents as analysts** (a seed to expand): QMX workflows that analyse markets and that analyse units, as separate families. How agents prove their analysis (skills, scripts, tools that can't be cheated) is a question for the run.
+- **The MIS is shaped by trading style, then timeframe, then the data a market offers** (a seed). Instruments matter through their data, not one by one.
+- **Path A:** a System 2 version is earned from a record the System 1 unit built on that market. It never appears from thin air.
+- **Branches:** planning on `plan/unit-system` (worktree `D:\QMX-worktrees\unit-plan`), building on `build/unit-system`. The merge target is decided later; never `main`.
+- **Research runs on Codex** when it comes. Fable only if he asks. Coding speed is not a constraint: agents stack PRs fast once the plan is right.
+
 ## Research findings (short; detail in each file)
 
 | File | Most important findings |
