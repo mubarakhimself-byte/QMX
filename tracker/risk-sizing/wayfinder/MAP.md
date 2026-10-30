@@ -50,6 +50,9 @@ Architecture-ready decisions for every part QMX must build so a unit can live in
 - [Generative funnel: party mode, brainstorming and CIS over all lenses](tickets/funnel.md). Stands in part: the unit as one complete algorithm became a ruling. Reversed on 27 Oct: the router does not switch units on or off. Its foundations list is an input, not a plan.
 - [Operator review: 9 scalper types and 12 seed additions from report 09](tickets/scalper-types-and-seed-additions.md). Closed 30 Oct: research 02 gave the verdict per type, and his 27 Oct answer made types defaults, never a cage.
 
+- [Research: what self-configuring trading systems read and change](tickets/research-self-configuring-systems.md). Three meanings of self-configuring; nobody ships policy change without a human (research 20).
+- [Research: old-system loose ends (WF4, the pillars, the tick-data fix)](tickets/research-old-system-loose-ends.md). Four pillars in the Stats lock; cTrader has no public trade tape (research 21).
+
 ## Not yet specified
 
 In scope, not sharp enough to ticket yet.

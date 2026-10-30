@@ -2,10 +2,12 @@
 title: Research: what self-configuring trading systems read and change
 type: research
 mode: AFK
-status: open
+status: closed
+resolution: resolved
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
+updated: 2026-10-30
 covers: [L01-02]
 ---
 
@@ -40,3 +42,7 @@ A table: system × what it reads × what it changes × its limits × where a hum
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30, resolved)
+
+Research 20 (Codex, group A): three different things get called self-configuration: (a) recalculating an order from a balance and a fixed rule, (b) updating the rule's inputs from finished trades, (c) changing the trading policy itself. MT5, freqtrade and Jesse ship (a), some ship (b); none ships (c) without a human. The old house-money rules conflict with each other, and July's Kelly calculation was left unfinished. Feeds the self-configuration prototype. `research/20-self-configuring-systems.md`.

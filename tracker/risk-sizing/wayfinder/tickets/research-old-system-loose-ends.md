@@ -2,10 +2,12 @@
 title: Research: old-system loose ends (WF4, the pillars, the tick-data fix)
 type: research
 mode: AFK
-status: open
+status: closed
+resolution: resolved
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
+updated: 2026-10-30
 covers: [L20-04, L04-04, Q68]
 ---
 
@@ -44,3 +46,7 @@ Three answers, each with a CHECKED citation, or "not found" with the searches ru
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30, resolved)
+
+Research 21 (Codex, group A): WF4 only partly matches domain expansion; the Stats lock has four pillars (location, context, trigger, confirmation), and his October recollection was uncertain, so the 'four became seven' memory is still unconfirmed; cTrader's Open API gives quotes and depth but no public trade tape. `research/21-old-system-loose-ends.md`.
