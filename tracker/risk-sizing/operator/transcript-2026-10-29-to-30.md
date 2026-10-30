@@ -1,6 +1,6 @@
 # Session transcript 2026-10-29 to 2026-10-30 (resume and third-party read), dialogue only
 
-Verbatim user and assistant text from session ed09cf0c. Tool calls and output omitted. The operator's words are seeds, not decisions.
+Verbatim user and assistant text from session ed09cf0c, refreshed 2026-10-30 later the same day. Tool calls, tool output and agent reports are omitted. The operator's words are seeds, not decisions.
 
 ##### USER 2026-10-29T16:00
 All right, good evening. I want you to have a look at this session transcript. I want to resume it. However, we are resuming with two things in mind, all right? The thing, okay, you know what? Let me first start by pointing out the issues I'm having at the moment. Issue number one is I want to start using QMX. This is one of the last things that QMX needs in order to start working, all right? Most of the work is done for QMX, I'm not gonna lie, apart from the UI, but for the backend, this is, I think, the last huge part, okay? So we discovered last time that QMX is divided into two parts, the human facing, then the non-human facing, and of course the agents are part of the human facing, and so on and so forth. I think you have that in memory. But the thing I'm having problems with at the moment is that while designing things under the unit work, or while discussing things rather, under the unit work, I'm having issues in that I want to, first of all, split it in two ways. I don't know the right way to say it, but the way I'm seeing it is that I want to first get the things that need to be coded out of the way, okay? So in other words, I want to make something that I can use inside QMX, because I don't think the right way to do this is to talk about the numbers and stuff like configuration and so on and so forth. It won't make sense. So in the conversation, I think you either look at it or have a sub-agent look at it. What we are going to realize is that I had started looking deeply into the architecture and the numbers, which is not wrong. Okay, not the architecture, I think, is viable, but I wanted to just understand. I think, okay, my bad, I'm dictating. So that's the first part. The first part is I want to first get the things that need to be coded out of the way. So things that are part of QMX as a system. In other words, that make up QMX to be part of, out of the way. Then we deal with the numbers. So in other words, we don't want to handle things that QMX itself is meant to be doing. So things like portfolio optimization and so on and so forth. Obviously we can handle them now, but then have them as like templates or defaults. For example, there are multiple workflows inside QMX, actually in QMV2, we made multiple workflows, all right, as templates and stuff, but they're ideal. We can, obviously workflows can be enhanced. What I'm trying to say is, all in all, things that make part of QMX, or things that we want to do this unit stuff, whereby we want to make sure that everything that the unit needs and to interact rather to with QMX and everything that QMX is meant to do. So think of the trading node, backtesting, the agentic parts, and most of all that stuff is sorted out, all right? Then what remains? Things like discussing scenarios, ideas, and so on and so forth. So that's the first part, but not the first part rather, that's the first part of what I'm thinking of. But there are lots of issues you will see that we have tried to encounter in the session, as you realize, okay? Anyway, this is already a very long message, but you will see that session transcript and you'll understand. Read it or have a sub-agent read it. All right. Then for this session, I don't know which skills you're going to use, because we need to work quickly, if I'm being honest, quickly and efficiently. Okay. In other words, we need to keep it stupid simple, design for complexity, not a complex system. All right. Yeah. So we obviously have a lot of things like the workflow you have in memory that uses BMAD, potato mod, and Matt pocock skills. All right, so anyway, first have this. And forgive any gibberish, I have been dictating. Okay, so I actually had to walk away for a minute and think through this. So in other words, what the goal of this session I think should be is to get things that need to be coded out of the picture. So architecture, things that make QMX, in other words, be able to do what it should do. So which means we need to first define what it should do, and I'll come in there. Because for me, I think most of what you're going to be doing in terms of the unit is just defining what a unit mostly is. Okay, I think it's already defined, but also multiple experiences that a unit can provide. So what makes QMX unique compared to things like Copilot and all that? Anyway, it's what I'm trying to justify to myself, okay? Compared to rather MT5, my bad, and all that stuff. All right, so that's that. I don't know if you're getting me. I'm not so articulate and I'm dictating a lot. Let me now give you the session transcript. Okay, the transcript is being exported, but yeah, I think, let me first send a message before I give you the transcript so that you'll be ready. All right, so the next part will just involve the transcript mostly only.
@@ -437,3 +437,517 @@ All right, you start the earlier things for now because we have a lot to do. Oka
 
 ##### ASSISTANT 2026-10-30T04:43
 Now saving both conversations word for word, checking them for any secrets first.
+
+##### ASSISTANT 2026-10-30T04:44
+Got it: planning goes on `plan/unit-system`, and the build will be `build/unit-system`.
+
+##### ASSISTANT 2026-10-30T04:44
+Now the state-file entry for this round, then the three grounding agents.
+
+##### ASSISTANT 2026-10-30T04:45
+Committed. Launching the three grounding agents now, each with its own sources and its own output file.
+
+##### ASSISTANT 2026-10-30T04:46
+All three are running. While they read, I'm reading the planning skills myself.
+
+##### ASSISTANT 2026-10-30T04:48
+I've read all the skills I'll use. Writing the standing orders once, so every agent gets the same rules word for word.
+
+##### ASSISTANT 2026-10-30T04:48
+The grounding step has started. All work goes on the `plan/unit-system` branch, in its own folder `D:\QMX-worktrees\unit-plan`, and the build will be `build/unit-system`, as you said.
+
+**Saved word for word in the repo:** both conversations, 20 to 28 Oct and 29 to 30 Oct, so agents read your exact words instead of my summary. I checked them for keys and passwords first, and found none.
+
+**Three grounding agents are running now:**
+1. **History.** Every idea from the whole journey with its status (ruling, seed, proposal, reversed), where "unit" came from, ideas that only ever lived in chat, the contradictions still open, and every time you corrected Claude.
+2. **What QMX has today.** The shipped code, `docs/` and `_docwork/`, starting with how QMX workflows actually work, because your agent ideas have to fit them. Then QMB, QML, the MIS, the BMS, SQS, the kill switches, the correlation ledger, the Library, the node and the data feeds.
+3. **The old system.** `QMX-discussion` and the Stats folder: WF1 to WF3, the router, tagging, the correlation ledger, market physics, the dictionary, and what agents did back then.
+
+**I read the skills myself.** What changes:
+- **Party mode** is built for a live conversation with you. Run by an agent, it has to be told it's non-interactive, and it must keep the voices clashing instead of tidying them into agreement.
+- **Brainstorming** has a mode built for agents. It aims past 100 ideas and switches technique every ~10, and narrowing is a separate, later phase. It also keeps a running log on disk. Last week's agents skipped that log because I limited them to one file; this time they keep it.
+- **Wayfinder answers your question about order: expansion comes first.** Wayfinder only charts decisions, and its "grilling" questions are meant to be answered by *you*, live. So party mode and brainstorming widen the field first, then wayfinder charts the route. Questions that need research go to Codex; questions only you can answer come to you.
+- **Forge-idea** comes later, for hardening one idea at a time.
+- **The architecture skill** has a mode for agents, and its own lint check and reviewers.
+- **The review skill's** adversarial lens must find at least ten real problems.
+
+I also wrote one standing-orders file with your rules. Every agent gets it word for word, so I don't have to restate your rules in every brief or water them down along the way.
+
+**Next, when the grounding lands:** two expansion agents in parallel. One runs party mode, then brainstorming, over your exact words plus the grounding: every lens, question, contradiction and combination, no answers. The other runs the CIS problem-solving and design-thinking methods on the contradictions, plus a draft glossary of the contested words: unit, logic, context, terrain, System 1 and 2.
+
+##### ASSISTANT 2026-10-30T05:02
+The first of the three grounding agents, the history one, is done. Its file is saved and committed, and its summary is now in `STATE.md`.
+
+What it found:
+- **307 ideas** from 8 to 30 October, each with its status and where it lives. About 50 of them only ever existed in chat.
+- **The word "unit" was mine (Claude's), coined on 8 October; the idea behind it was yours.** Your April design was the opposite: bots never handled their own risk.
+- **60 times you corrected Claude, falling into 10 repeat patterns.** Over-building is one of them.
+- **23 contradictions are still open.** The three biggest:
+  - Do units read the MIS? Your 20, 27 and 28 October answers differ.
+  - Is the same strategy on a new market or timeframe a new unit? Timeframe was never defined.
+  - Does a market-correlation check exist? You say yes; the agents found it was never written up or built.
+
+Nothing gets settled yet; these go into the expansion step. The other two agents, today's QMX and the old system, are still reading.
+
+##### ASSISTANT 2026-10-30T05:03
+Both spot-checks hold. Recording both files, then starting the expansion.
+
+##### ASSISTANT 2026-10-30T05:03
+Grounding is done. Starting the two expansion agents.
+
+##### ASSISTANT 2026-10-30T05:05
+The grounding is finished. All three files are committed, and I checked one claim from each against the actual code or folder.
+
+**What QMX has today:**
+- **QMX workflows are real, but none can analyse markets or units yet.** The engine runs on your PC or on remote machines, has 46 templates, and can be triggered when something lands in the Library. But every template that touches QMB, prices or the trading node is a draft, waiting on parts that don't exist yet.
+- **Agents still can't run a backtest.** The fix is an open PR, and it can't place trades yet.
+- **QMB, QML, the trading node and the risk code haven't changed since 24 October.** Everything merged since then was on the agent side.
+- **The risk and MIS code lives only inside the trading node, and that has never been deployed.** There's no account-guard code, no daily loss limit and no house money.
+- **The "correlation ledger" in today's docs is only a record** linking each order to the decision behind it. The real market-correlation maths exists only as a draft template.
+
+**What the old system had that got lost:**
+- **The Intent Aggregator.** It looked at each market in a 50-millisecond window. When bots wanted opposite trades it settled them by confluence, it capped total risk per market, and it dropped trades that pushed correlation too high. Bots that lost the call went back to the pool with no penalty. So the correlation control you remember was real, in the old design.
+- **Bots did read the MIS back then.** You once said bots should have their own "market sentinels that are complementary". That bears directly on the "do units read the MIS" contradiction.
+- **Placement fields already existed:** a bot could cover several markets and declare the market conditions it was built for.
+- **More lifecycle stages:** live, then paper, then recovery, then retired.
+- **WF4 existed:** it mutated bots onto new markets and features.
+- **Two old rules clash with today's scope:** April's Sharia rules (no leverage, swap-free, no futures) and the July Scalper Book's "never compound between cycles". Both are your call later.
+
+**Running now, two expansion agents:**
+1. **Party mode, then brainstorming,** over your exact words plus the grounding. A cast of about 15 voices: a scalper, an order-flow trader, a perps trader, a QMX agent, the copilot, a workflow engineer, a $300 trader, and you, quoted only from the transcripts. It produces a map of every lens and question (150 or more). Each question is marked by what settles it: research, your answer, a technical call, or not yet clear. All 23 contradictions go in.
+2. **The CIS methods:**
+   - problem solving on the contradictions, and on "how agents prove their analysis"
+   - design thinking on journeys: yours, the agents', and the unit's, including what a unit goes through before it places a trade
+   - a short take on what makes QMX different
+   - a draft glossary of the disputed words, listing the competing definitions without picking any
+
+Neither one designs anything. When they land, wayfinder charts the route from what they found.
+
+##### USER 2026-10-30T05:05
+Okay, I forgot to tell you, so I think you will pause before architecture. I'm off for a lot of time. In other words, I'm not reading. I haven't been reading ever since I sent you the last message. That night, in other words. So don't assume I'm here.
+
+##### ASSISTANT 2026-10-30T05:06
+Understood. I'll stop before architecture, and I won't treat anything as read by you. The pause is written into `STATE.md`.
+
+What runs while you're away:
+1. The two expansion agents now running: party mode with brainstorming, and the CIS methods with the draft glossary.
+2. The wayfinder chart built from their output. The research questions become tickets ready for Codex, and the questions only you can answer wait for you.
+3. A phone-friendly explainer site of what they find, so you can catch up when you're back.
+
+Then I stop.
+
+What waits for you:
+- the Codex research, since it's your tool
+- your answers to the questions marked for you
+- the architecture and everything after it
+
+##### ASSISTANT 2026-10-30T05:23
+The CIS expansion is done and committed, for when you're back. It produced 81 questions, each marked by what would settle it. It worked through all 23 contradictions, and it drafted a glossary of 22 disputed words, with their competing definitions side by side and none picked.
+
+**It traced the contradictions to three root causes:**
+1. **Nothing says what makes two units the same unit.** The old answer, one sibling unit per market, stopped working on 28 October, when units became defined by the market context they need. Nothing replaced it.
+2. **There's no shared vocabulary.** Many of the contradictions are the same word meaning different things. QMX's own glossary already rules on some of them: bare "timeframe" was retired for "BarSpec", and I checked that line in `docs/glossary.md`. The unit work never used those rulings.
+3. **The data that would settle the arguments doesn't exist yet.** That means:
+   - market labels on backtest trades
+   - results in R
+   - a live MIS
+   - a way to measure correlation
+   - receipts for what agents claim
+
+   So every "is it luck?" or "is it correlated?" question gets argued in words.
+
+**Two direct answers to things you raised:**
+- **The correlation control was real.** Across the system's versions it existed as six different things, the Intent Aggregator among them. Today's docs just reused the name for something else.
+- **How agents can be confidently wrong:** one agent makes the claim, picks the data and writes the proof, all in one go. Most errors come from which data was picked, not from the maths. Proof that can't be cheated separates those jobs. For example, an agent's dated call about a market gets scored later by what the market actually did.
+
+The most disputed words are "context" (five different meanings), "System 1 / System 2", and "unit" (ten definitions).
+
+The party mode and brainstorming agent is still running. The wayfinder chart starts when it lands.
+
+##### ASSISTANT 2026-10-30T05:28
+Expansion is done. Starting the wayfinder chart.
+
+##### ASSISTANT 2026-10-30T05:29
+The expansion is finished and committed. Here's what's waiting for when you're back.
+
+**The playing field:** 220 questions sorted under 20 lenses, each marked by what would settle it.
+- 59 need research.
+- 38 need you: your intent, money, or words you care about.
+- 95 are technical calls.
+- 28 are still too unclear to ask sharply.
+
+There are 38 contradictions: the 23 known ones plus 15 new. A script checked every quote of your words against the transcripts, and none were wrong.
+
+**The five questions it ranks most important:**
+1. Can a unit really stand alone if it only learns *where* to trade from the MIS?
+2. What exactly does "self-configuring" read and change, and where must it stop before your click?
+3. Is a specialised version's market picked before or after its record is read? If after, the luck problem just moves from backtests to journals to agent shortlists.
+4. Will QMB stamp the market's state and the result in R on every trade? Most other questions can't be measured without it.
+5. What steps does a unit go through before a trade, and which of them still work when the router, the MIS, the feed or your PC is down?
+
+**Running now:** the wayfinder agent is turning all of this into a map of decisions:
+- Research tickets are written so a Codex run can take each group cold.
+- Questions only you can answer are left untouched for you.
+- The 24 October tickets are updated, closed where research already answered them, or marked superseded.
+
+After that comes an explainer site for your phone, and then the run stops for you. The Codex research, your answers and the architecture are all still waiting on you.
+
+##### USER 2026-10-30T05:30
+No need for an explainer site. No need. Okay. Let's keep everything in chat for now. I'll go through when I get a time. There is no need for anything from you. Just compile. I'm seeing you already have an artifact, the unit playing field or something. I think that will be enough. Though it's blood. This is a lot of text. I'll go through it slowly by slowly. No need. Okay.
+
+##### ASSISTANT 2026-10-30T05:30
+Understood. There won't be an explainer site; that's now noted in `STATE.md`. When the wayfinder chart lands, I'll put a short summary here in chat, and then I stop until you're back.
+
+The main file to read when you have time is `tracker/risk-sizing/research/funnel3/party-brainstorm/playing-field.md`.
+
+##### ASSISTANT 2026-10-30T05:44
+Coverage confirmed: all 339 questions land exactly once. Committing the map.
+
+##### ASSISTANT 2026-10-30T05:44
+The run has stopped where you said it should, before architecture. Everything is committed on `plan/unit-system`, and nothing is pushed.
+
+**What got done:**
+1. **Grounding.** The history ledger (307 ideas, 23 contradictions), what QMX has today, and the old system.
+2. **Expansion.** Party mode with brainstorming produced the playing field: 220 questions in 20 lenses and 38 contradictions. The CIS methods produced 81 more questions, three root causes and a draft glossary of 22 disputed words.
+3. **The wayfinder map.** All 339 questions are sorted, and I re-ran the check myself: none missing, none counted twice.
+   - 14 research questions, set up for Codex.
+   - 21 questions only you can answer.
+   - 3 prototypes, small mock-ups to react to: the steps before one trade, a unit configuring itself step by step, and one unit's records and family tree.
+   - 62 technical calls I settle at architecture.
+   - 11 out of scope (the risk maths among them) and 2 still too unclear to ask.
+
+**What waits for you:**
+- **The Codex research.** It's six groups, one Codex run each, in order. The queue is in `tracker/risk-sizing/wayfinder/RESEARCH-QUEUE.md` and includes a ready-to-paste start prompt.
+  - Group A is small and feeds the "how a unit configures itself" walkthrough you said you need most.
+  - Group B, the MIS, unblocks the most of your questions.
+- **Your questions.** Two can start any time: "What sits inside a unit, and what sits outside" and "Words to settle before architecture". The other 19 wait on those two or on the research.
+
+**The one finding that matters most:** QMB needs to stamp the market's state and the result in R on every trade. Without that, most of the research questions can't be measured on QMX's own data.
+
+**Where to read, in order:**
+1. `tracker/risk-sizing/STATE.md`
+2. `research/funnel3/party-brainstorm/playing-field.md`
+3. `wayfinder/MAP.md`
+
+##### USER 2026-10-30T05:48
+Base directory for this skill: C:\Users\Mubarak\.claude\skills\bro
+
+Restate your last message. Stop using jargon and speak coherently. State it more simply and concisely, like one human talking to another.
+
+
+ARGUMENTS: All right, I am back. So what have you been up to ever since I left?
+
+##### ASSISTANT 2026-10-30T05:48
+Welcome back. Here's what happened while you were away, in plain words.
+
+**I got everyone on the same page first.** Three helpers read everything: our whole conversation from 20 to 28 October, what QMX can actually do today, and your old QMX folders. The surprises:
+- Your old system had a piece that sorted out clashing trades between bots and stopped too many similar bets at once. You were right that it existed. It got lost along the way.
+- Your old bots did read market information. So "should units read the MIS?" has an old answer we'd forgotten.
+- Today, agents still can't run a backtest, and most of the risk code was never switched on.
+
+**Then I had two helpers widen the field instead of deciding things.** One ran a roundtable of pretend traders and experts, plus a big brainstorm. The other worked through the contradictions and listed the words we keep using in different ways, like "unit", "context" and "System 1 and 2". Together they found 339 questions. Nobody answered any of them, on purpose.
+
+**Then I sorted all 339 questions into a map:**
+- 14 are research questions, set up for Codex in six batches.
+- 21 are questions only you can answer.
+- 3 are small mock-ups for you to react to, like "watch one unit set itself up, step by step".
+- The rest are technical calls I can make later, or things we've parked.
+
+**Then I stopped, before designing anything, as you asked.** Everything is saved on the `plan/unit-system` branch. Nothing is pushed and nothing is built.
+
+**The single most important finding:** QMB needs to record what the market was doing, and the result in R, on every backtest trade. Without that, most of our questions can't be tested on real data.
+
+**What's waiting on you:**
+1. Starting the Codex research. The instructions are in `tracker/risk-sizing/wayfinder/RESEARCH-QUEUE.md`.
+2. Answering your questions. Two can start now: what goes inside a unit and what stays outside, and which words we settle first.
+
+##### USER 2026-10-30T05:51
+All right. You give me a prompt in chat for Codex, but I might actually switch the model. Not just Codex, I might switch to DeepSeek or something.
+
+##### ASSISTANT 2026-10-30T05:52
+This prompt works in any harness: Codex, DeepSeek or anything else. Open the session in `D:/QMX-worktrees/unit-plan`, change the group letter, and paste. One group per run, in order A to F.
+
+```text
+You are a research agent for the QMX unit-system planning run. You research and write; you do not design, decide, or change code.
+
+GROUP: A   (change to B, C, D, E or F for later runs)
+
+Read first, in this order, all in D:/QMX-worktrees/unit-plan/tracker/risk-sizing/:
+1. STANDING-ORDERS.md: follow every line. If your harness has the poteto-mode skill, read its SKILL.md as rule 1 says; if it doesn't, skip that part and keep every other rule. Do not spawn sub-agents.
+2. STATE.md: the operator's rulings. They outrank everything else.
+3. wayfinder/RESEARCH-QUEUE.md: find your group. Its table lists your tickets and the output file for each.
+4. For each ticket in your group, read the ticket file in wayfinder/tickets/ in full and follow its "How to run it" section.
+
+How to work:
+- Primary sources first: vendor docs, academic papers (arXiv, SSRN, journals), broker specs, and the QMX repo and docs themselves. Save the URL or path for every claim and label it CHECKED or INFERRED. Never invent a source.
+- If you can't browse the web, say so at the top of each output file and mark every claim that needed the web as NOT VERIFIED.
+- Price data: use the Library's partitions or Binance Vision. Do not download from Dukascopy; that needs the operator's go.
+- Never read, print or copy keys, tokens or passwords. Old Hermes logs and the old vault (Documents/Claude/QMX-discussion) can contain them.
+- Answer each ticket's question with evidence and options. Do not pick a design. Where a number is involved, give a starting default and say it is editable.
+
+Write only the output file each ticket names, under research/. Do not edit tickets, the map, STATE.md or any code. Do not commit or push.
+
+When done, end with a short message: the files you wrote, and for each ticket the three findings that matter most, in plain words.
+```
+
+Two things to know:
+- **Some harnesses can't write to `D:` by default.** If the run complains about permissions, allow that folder.
+- **Group E makes model calls.** It runs its own checks on how agents get things wrong, so it costs a little. The ticket says to use the cheapest model that can do the job.
+
+When a file lands, tell me and I'll check it, close the ticket and update the map.
+
+##### USER 2026-10-30T05:54
+All right, while Codex is handling the research, let's look at those questions in chat, please, and with your recommendations. Then I was thinking we can perhaps use a Fable model for some advice or something. I'm curious. And at the same time, there is something I'm proposing. For the technical calls, or after we sort ourselves out in terms of mental models and ideas and so on and so forth, before we start architecture, because it's very important, okay? It's literally the end goal, okay? We have to look at low level, high level. Party mode has to come in. I'm proposing it comes in, not has to, but I'm proposing it comes in, yeah? Because it can show us issues again, because we are right now looking at ideas, but without architecture, okay? But when we look at now how to implement this into code, you know, there are many possible ideas, and you know, some are lean and efficient, others, you know, give us multiple variants. You get the idea. So that's my proposal. Then, yeah, I think that's mostly it. Let's look at the questions in chat. Whether you walk me through them or actually, I think, yeah, you use the bro skill, dumb them down for me. I'll give you a brain dump. I don't think I'll answer them directly, but a brain dump, then we go on.
+
+##### ASSISTANT 2026-10-30T05:55
+First, your proposal is saved as a seed. Before the architecture is written, party mode looks at how to actually build it, high level and low level, comparing the lean way against the ways with more variants. I agree with it: it's the cheapest moment to catch building problems.
+
+Of the 21 questions waiting for you, only two can start now. The rest wait on these two or on the research. Here they are in plain words, with what I'd recommend. Brain-dump on them however you like.
+
+## Question 1: What's inside a unit, and what stays outside?
+
+**My recommendation, in four parts:**
+
+**1. The fixed part, set once it's tested:**
+- the entry rules and the exits
+- the kind of market it needs ("ranging, normal spread, London or New York")
+- the ranges its numbers are allowed to move within
+
+This is your "what exactly do you trade?", the roughly 60%.
+
+**2. The part that tunes itself:**
+- its numbers, inside those ranges
+- its risk per trade and its size, through the plug the risk session wires in later
+- which sessions it favours
+
+**3. Its records:**
+- its journal
+- its exam result (what "normal" looked like in testing, so live can be compared against it)
+- a pointer back to where it came from
+
+**4. An ID card.** This is what QMX must know before it can test, place or watch the unit:
+- what data it reads: bar type, and whether it needs volume or order flow
+- what market it needs
+- what market facts it can live with (maximum cost, lot size, hours)
+- its style template
+- its ranges
+- its source
+
+**What stays outside, because it protects everything at once:**
+- **The account-level stops:** kill switches, news stop, daily loss limit.
+- **The MIS:** reading the markets.
+- **The correlation control:** not stacking the same bet.
+- **The market journal:** costs per market.
+- **The Library.**
+
+**What a unit needs from QMX and can't make itself:**
+- the price feed
+- the market facts
+- how much of the budget it may use
+- your admission
+
+**Standing alone:** for every MIS reading a unit uses, its ID card says what it does when that reading is missing.
+
+**Its own stop-loss and exits are inside. The account-wide stops are outside.**
+
+**Plain Python and ML models get the same rights, as long as they carry the same ID card.** QML is a standard for agents. It never blocks you.
+
+**The other 40%:** money management, timing and sessions, plus its records and self-checks.
+
+**One thing I can't guess:** you once said a unit can provide "multiple experiences". My guess is watching it, understanding why it traded, trusting it (comparing its exam with live), growing specialists from it, and retiring it. Tell me what you meant.
+
+## Question 2: Which words get settled before architecture?
+
+**Must have one meaning:** unit, logic, context, market facts, specialist, journal, family. The rest can carry a qualifier.
+
+**Rename System 1 and System 2.** I'd call them **"general unit"** and **"specialist"**:
+- "System 1" already meant small MIS models back in September.
+- The famous "System 1 / System 2" from psychology means fast and slow thinking, which points the wrong way here.
+- A specialist is a general unit earned on one market from its own record.
+
+**"Terrain" becomes "market facts":** costs, lot size, trading hours. It's plain and needs no explaining.
+
+**"Context" splits in two:**
+- **"Market state"** is what the MIS measures.
+- **"Market need"** is what a unit asks for.
+
+**"Timeframe" becomes "bar type," as QMX's own docs already ruled.** It covers time bars, tick bars, volume bars and so on. I'd say the existing doc rulings apply here.
+
+**"Workflow"** gets said in full in the files: a QMX workflow inside the product, and the planning run for what we do.
+
+##### USER 2026-10-30T06:11
+Okay, now, for what is inside the unit, I think I almost forgot this. Seriously, I don't know how we missed it. We haven't talked about QML. It is literally what makes up the unit. I don't think, remember yesterday I was rather saying, QML needs to be touched a lot. That's why I was asking the dictionary and so on and so forth. I think that's the part we forgot to handle in the workflow we just run. All right. So I'll propose we go ahead and look at it, because the dictionary, like I said, it needs to be most likely be redone, most of it. The logic behind a unit, in other words, needs to also be revised, because if you look at the stuff from the Hermes session or sessions, and you literally look at what happened in the earlier session where I was looking at the Hermes sessions, the stats or the stats folder, I think it's a stats folder on desktop. There is something already there, right? So when I talked about the four pillars, then they turned into seven, stuff like that, okay? I'm not certain, because this happened in May, around May, I believe. So for the fixed part, I don't think I'm certain yet, because we are mostly dealing with how it interacts with the market and not all of it. But what is inside the thing that interacts with the market is a good question. But at the same time, remember, if it's going to be self-configuring, we need to know how it is going to be able to do that, which means risk management and position sizing might come in. All right. So for part one, or the question number one, I think, actually, let me first read through your thing. The part that tunes itself actually is part two, under question number one. It's numbers. I think in numbers, I mean, if I am to think about this, this is why, like I said, I don't know how we missed this, yeah? Because it was meant to be touched under the workflow we just read. I think we need to actually define what is meant to be tuning itself, because we haven't really defined the unit in terms of structure. We don't know what it is fully, okay? I can say entry, exit rules and logic, because my idea was simple, yeah? If it can self-tune, I don't have to tune it myself, right? But it does beg the question, how does it do it and what is it actually tuning? Right? If you look at the structure, you're going to see that we have, of course, parts of risk management and pressure sizing, obviously, but at the same time, we have, you know what? No, no, no. Let me dumb this down a bit. Let me first go back to first principles. When you go back to first principles, what is a trading bot? It's just a set of rules. In programming, it's if-else statements. That's it. Okay. So how do we make sure that those if-else statements can self-tune? Maybe that's the question at hand, in my opinion. Because things like a journal, man, those things are simple, okay? Those things are simple. For me, I'm imagining this like JSON. Most of it is JSON. Because in a way, it's actually very similar to a workflow. Because these are just conditionals. They are gets, it has what. Obviously, you know, look at how it interacts with things like the book or a BMS. Now, the problem is I don't want to confuse you when I say the BMS, rather. Not the book, the BMS. So in other words, the centralized parts, the BMS, the MIS, which the BMS is just what controls everything else, you know, not controls, but what holds things like the SQS and so on and so forth. You get me? So that's that. But then where I was saying it records, these things are simple, like a journal, the pointer back, that stuff is simple. You don't really need me. Now, this ID card, now for part number four, part number one, these are mostly related to QML. Four and one are very related to QML. Three is partially, but it's mostly not related to QML, but part number four, because part number four is actually more important than most things, I'm not gonna lie. But in the conversation with a Hermes agent, we might need to really look into it, okay? In that, because I think it covered most of that stuff. I don't know if you can recover it, because we covered out of ground. That is where we started QML upgrade, because QML is very old, but the upgrade to it, where we made a dictionary and all that, there are reasons as to why the dictionary was made like that. And remember, we have to expand it. So like I said, I don't know how we missed it, okay? Let me just skim through most of the other parts. Standing alone, those things, which I also in the architecture, you haven't confined anything yet, okay? Things like, you know, what the MIS is. I mean, we should have structure and intention, but it's not set in stone, yeah? So you can't say that this stands alone and, you know, you describe it as such that it should use this. No, no, no. It's possible, but okay, I know you are right, but the problem is I don't want to set it in stone yet, until we can prove that it works, or, you know, it's the right way. Okay, exhaust the angles, not prove, but we exhaust the angles. The other 40%, man, yeah, yeah. The other thing, like, you can't guess. Now, multiple experiences, I think. I really don't recall when I said multiple experiences. I don't. I'm actually confused what you mean. When did I say that? If you give me a little bit of context or a few words or a message that I can look at, I can re-explain based off that. But I don't recall where I said multiple experiences. It might have even been gibberish from a dictation. Who knows? Okay, question number two. Okay, question number two. Unit is literally a replacement of a trading bot. It's just a self-configuring trading bot. Simple as that. Logic is inside a unit. Context is what the market, I believe, should be using, or that should be producing. Market context. Now, these are the things I really thought would have been sorted out a long time ago. Okay, so things like context, market context. Okay, when you are looking at a chart, a market chart, you have to have market context. In other words, price action and technical analysis. If you don't use fundamentals, you get the idea. So that's what I meant. That's why the dictionary was built in such a way. That dictionary, what it did is assumed, okay, the way GPT built it, I don't know how to explain this, but the idea was you get what multiple traders would use from languages. That's why it's called a dictionary, yeah? From languages, terminologies, stuff like that. You combine everything so that if someone from a source mentions anything, we already know what it is, okay? Or if it's new, we can append it. In other words, the agents working in the workflows that are building the units are not confused. That's how we wanted to keep QML. Because if you, again, have an issue whereby you don't have something in QML that caters for this, you'll have QML again having its appendix having new things, however, without it improving in any way, shape, or form. That's why the dictionary is very broad and it contains things in multiple areas. So entry rules, it contains a lot. Exit rules, it contains a lot with room for expansion, because entry and exit rules, man, they can expand in a way you can't think of, right? So for question number two, I thought you would have sorted this out, especially party mode. I thought it really, because when you explained party mode the way you did it, I thought you would have sorted it out. I'm not gonna lie. Specialist, what do you mean by a specialist? I don't know what you mean by that. Anyway, let me continue. No, okay. Now there are things that are bothering me. Remember system one and system two, those things were me explaining. I don't know if you reread that conversation when I actually introduced system one and system two. In fact, I confused them at first, not me, rather the agent confused them at first. And then I corrected. If you read through that part, you really understand, or you will see this. Don't just admit, read through it, okay? You will see why and how. Because I stopped reading, I was reading this thing, the artifact that was given to me. Then I was re-explaining the MIS, okay? And that's how we came up with system one and system two, because those are realizations I made on my own. Okay, based off the poor representation of the MIS from, you know, this thing. I recall this vividly because it was a night or two ago, okay? Then, because the wording is not set in stone again, like, these were just to explain and separate. I didn't have the wording, but system one and system two were never any definition under QMX. It was just for explanation so that the agent can understand it, okay? This is so sloppy. Then terrain is also not my wording. Most of these were used during the chat so that we had what to use. We had to give them names. We couldn't just continue explaining them. Terrain was not mine, and market facts. Some are technical, others are not. Others are just things we are using for brainstorming. Yeah, sure, they can become terminologies under QMX, but at the same time, most of them came from, for example, yesterday we were brainstorming a lot of things. System 1 and System 2, I already explained how they came about. If you read through that conversation or the transcript, you will see it, that when I introduced them, I was trying to drive a point home. In fact, I had to re-explain because the agent understood it the other way around. Get me? Okay. Then there are things now that are technical. Market context. Things that I wanted to, I feel like the trading lens hasn't really been taken into proper consideration. Really, like, you can't tell me market context is something that you are not understanding. Look at the dictionary, perhaps, or look at the stats or strats. Man, let me first confirm that folder. It is stats, I believe. Because if you look at what the old transcript looked at in those conversations that I requested for. Because if you look at that transcript, I requested for the Hermes agent conversations to be, there is something I requested for, I requested it to do against what the Hermes agent had done earlier. Okay, to either find a conversation or find what it had done. And I think it did it properly. Okay, so that's where the dictionary and QML upgrading came about. But if you look at the transcripts again of now the Hermes agent, okay, you realize that the dictionary, the way it was built, it was considering the workflow that is going to be building the strategies. Because it was the whole point of the dictionary, or rather building QML before QMX was finished, was so that we populate our strategy library as soon as possible. But that has changed over time, obviously. Okay. So it means we needed structure. Again, QML is a library so that we don't just write Python, okay? So question number two has been presented in a very sloppy way, to be honest. I expected better. And research is done. Let me give you the final response.
+=====
+[[
+
+<pasted_content id="963a">
+Wrote both files under `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/research/`:
+
+* 20-self-configuring-systems.md: automatic resizing differs from learning; old house-money rules conflict; July’s Kelly calculation was unfinished.
+* 21-old-system-loose-ends.md: WF4 only partly matches domain expansion; the pillars are location, context, trigger and confirmation; cTrader supports quotes and depth, but no public trade tape was found in its [API catalogue](https://help.ctrader.com/open-api/messages/).
+
+Only those two files changed. No code changes, commits or pushes.
+</pasted_content id="963a">
+
+]]
+]
+
+##### ASSISTANT 2026-10-30T06:13
+Status: research files 20 and 21 are filed and their two tickets are closed. Next I commit, then start one agent on the part we missed: QML and the dictionary.
+
+##### ASSISTANT 2026-10-30T06:14
+You're right on all of it, and the QML gap is a real miss.
+
+**QML and the dictionary.** The run gave QML no grounding and no expansion of its own, even though a unit is literally built from it. That's fixed now: one agent is reading the QML and dictionary history in full. It covers:
+- **The Stats folder,** including the Hermes orchestration notes.
+- **Both Hermes exports.** It won't copy any passwords from them.
+- **The old vault.**
+- **QML as it is in code and docs today.**
+
+**What it will report:**
+- why the dictionary was built the way it was
+- what's in it today and what's missing
+- which parts of a strategy are numbers that could tune themselves, and which are structure
+
+That's your first-principles question: a bot is a set of if-else rules, so how do those rules tune themselves, and what exactly tunes? It's also hunting for your "four pillars became seven". Research 21 only found four in the Stats files, so the change to seven may be in the Hermes sessions.
+
+**Where I was sloppy on question 2:**
+- **System 1, System 2 and "terrain" were names we used in chat to explain ideas.** They were never QMX terms. I treated them as terms to rename, which was wrong.
+- **"Specialist" was my own word** for the System 2 version. Drop it.
+- **Market context is the trader's sense:** price action and technical analysis, plus fundamentals where they're used. The dictionary exists so that whatever a source mentions is already known, or gets added, and the building agents never get confused.
+
+**Question 1:** agreed. The fixed part and the self-tuning part can't be defined until QML is understood. That waits for the QML agent. "Standing alone" isn't set in stone either; it's a direction, not a decision.
+
+**"Multiple experiences":** you said it in your very first message of this session: "most of what you're going to be doing in terms of the unit is just defining what a unit mostly is... but also multiple experiences that a unit can provide. So what makes QMX unique compared to things like Copilot... MT5". So it was about what makes QMX different, not a part of the unit.
+
+**Codex group A, in plain words:**
+- **Self-configuring means three different things:**
+  1. working out a trade's size from the balance with a fixed rule
+  2. updating that rule's inputs from finished trades
+  3. changing the trading rules themselves
+
+  MT5, freqtrade and Jesse do the first two. None of them do the third without a human.
+- **Your old house-money rules contradicted each other,** and the July Kelly sizing was never finished.
+- **cTrader gives prices and order-book depth, but no public feed of individual trades.**
+
+**Next:** when the QML agent lands, a party-mode and brainstorming round on QML itself, built around your if-else question. Then we come back to the two questions. Codex can start group B, the MIS, whenever you like.
+
+##### USER 2026-10-30T06:14
+I don't think one agent will be enough. Please, there is no rush. Take priority of these things because sloppiness won't be tolerated, okay? There is no rush. If QML needs revision and it needs to be thought through a lot, take priority. Because like I said, there was a lot of sloppiness in the threading lens, a lot. Okay, you took it under the MIS, but when you look at QML, the questions even you are asking, so most of them, even me as a newbie trader, I already know what they mean. Okay, so again, there is no rush, and this is a nudge, you don't have to respond. So if you need to use more than one agent, use it. There is no problem with that. Take priority. This planning and brainstorming and architecture can take up to 3 to 4 days because it's very important. A small mistake here can cost us a lot after coding.
+
+##### ASSISTANT 2026-10-30T06:17
+Got it: no rush, QML comes first, and a sloppy job isn't acceptable. That's saved in `STATE.md` and in my memory, so later sessions keep it too.
+
+Three agents are now working on QML at once, each with its own sources:
+1. **The QML and dictionary history.** Why the dictionary was built the way it was, what's in it, what QML is in code today, and the four-or-seven pillars question.
+2. **A trader's view.** How traders and platforms actually break a strategy into parts: setup, trigger, filter, confirmation, entry types, every family of exits, money management. It compares MT5, TradingView, NinjaTrader, cTrader, StrategyQuant, QuantConnect, Jesse and freqtrade, plus price action, ICT and SMC, order flow and VWAP. It also covers what traders let tune automatically and what they tune by hand. It ends with a list of things any trader already knows, so I stop asking them as open questions.
+3. **Your MQL5 library as a vocabulary check.** It counts which trading concepts across the 3,128 articles the dictionary covers and which are missing, with exits counted separately. It also records how real strategies in those articles are put together, and what their authors tune.
+
+When all three land, a party-mode and brainstorming round on QML itself, built around your if-else question. After that come the two questions for you.
+
+##### USER 2026-10-30T06:19
+Okay. All right. So what I meant by multiple experiences is in terms of now, how does, if me, I'm a user, how am I going to be using units, okay, to literally trade and make money, to be honest. But I think you're already seeing this. Yeah, the way we interact with rather brought in agents, the way we've been defining how the MIS, because all this just gives us a beefier advantage compared to a person just using a simple bot, if I'm being honest. And unless I'm wrong, but you can give me your take. So I think that's what I tried to mean by experience. Okay, so in a way of user experience. Now, for research, I think there is also a misunderstanding, I believe. It's most likely on my end. I think I was a bit sloppy. For research, I think let's also look at academic research specifically. Okay? Because when you look at the MIS, I don't know if those two are different. The research I requested is in two ways. There is research in the MT5 articles, but then there is also a lot of research towards the MIS variants, because we can't, like, I don't know, look at the part where, that last part, seriously, the last part after the second artifact was given to me is very key, very key right now to what we are doing, okay? Because right now, I feel like there is a lot of sloppiness in what you are proposing everywhere. So, Codex Group A is done. Is that the end? Then, secondly, I hope you are launching these agents with intent, because I'm seeing you're just now randomly launching agents. Oh, it's okay. It's okay. You are saying adding to my agents. Okay, no problem. Then, of course, also the data we are meant to be using, so open, high, low, close volumes, so on and so forth. But the MIS research, I think, is still necessary. Yeah, but let's take this slowly, because I don't want to start a fresh session for nothing, okay? Let's take this slowly. Even if we move very little today, it's okay. But the research, I got it. Then, hang on. Maybe I didn't understand. What was the research firstly about? Because you're saying group A, which means we have group B until E, is it? Did I see properly? Yeah, till F, which means the MIS stuff is already planned for, unless I'm wrong. Okay, first have this. Oh, at the same time, remember QML now, we might propose new ways in which, remember, we have a lot of things to think through. Trading node, how market data is going to be like accessed, live markets, in other words, not just market data, live markets. Then also remember we expanded the bloody domain. So we might also need to understand, for example, futures. How am I trading futures? Can I trade futures on CTrader? With order flow and stuff? Then of course, Hyperliquid, like man, we have a lot. Okay, so that external connection of QMX is also important, but also inside the trading node, in other words, QMN, as you can see. I'm expanding the seed, but you know, keep track, keep track. I don't think we need to do all this at a go. We need to move slowly.
+
+##### ASSISTANT 2026-10-30T06:19
+Adding the two research tickets your message shows are missing: an academic survey of MIS variants, and a check of which platforms and brokers actually give you futures, order flow and Hyperliquid.
+
+##### ASSISTANT 2026-10-30T06:21
+Now recording your meaning of "experiences" and the new seeds, then committing.
+
+##### ASSISTANT 2026-10-30T06:21
+We'll take it slowly. Here's each of your points in turn.
+
+**"Multiple experiences" = your user experience.** Got it: how you, as the user, use units to trade and make money. My take, honestly: a simple bot trades one market the same way every day. What QMX adds:
+- **Placement.** It puts a unit in the markets that suit it right now.
+- **Sizing.** The unit sizes itself from its own record.
+- **Agents as analysts.** They review markets and units every day.
+- **Judging.** It tells luck apart from real edge before your money goes in.
+- **Lineage.** You always know where a unit came from and why it traded.
+
+Each one is an edge a simple bot doesn't have. The risk is that each also adds parts that can break, which is why the planning matters.
+
+**Is Codex done? No. Group A was the first of six:**
+- **A** (done): how self-configuring works elsewhere, and old loose ends.
+- **B:** the MIS.
+- **C:** earning a specialised version without luck, and how quant desks judge.
+- **D:** correlation, and what a $300 account can trade.
+- **E:** how agents can be wrong, and how desks analyse markets.
+- **F:** the live path: node, feeds, brokers and data.
+
+You run them one at a time, B next.
+
+**You were right about the MIS research.** Group B looked at speed and organisation, but nothing in it was a proper academic survey. I've added a ticket for that. It takes the papers (arXiv, SSRN, journals) and sorts what they found in your order: trading style first, then bar type, then the data a market offers, then the asset class. For each it records which methods are tested, how well they held up on unseen data, how slow they are, and where nobody has studied it at all. It starts from your 28 October words after the second explainer site, since you say that part is key.
+
+**Your connection question is a ticket too, in group F.** For each market type: which platform or broker you can actually use, and what live data it gives. Specifically:
+- Can cTrader trade real futures, or only CFDs?
+- Which routes give real futures with order flow at your size (NinjaTrader with Rithmic, Tradovate, Interactive Brokers and others)?
+- What does Hyperliquid's API give and limit?
+- So what does the trading node need to hold?
+
+Both tickets are wired into the questions they unblock.
+
+**On launching agents with intent:** the three QML agents each have their own job and their own sources.
+1. **History and code:** why the dictionary is built this way.
+2. **Trader practice:** how real traders and platforms build strategies.
+3. **Your MQL5 library:** which concepts the dictionary covers and which it misses.
+
+Together they cover the QML gap from three sides. They're still running.
+
+Every seed from today is saved in `STATE.md`.
+
+##### USER 2026-10-30T06:22
+The pillars are in the stats folder and most likely on those either stats or strats. These were mostly handled by the Hermes agent. I'm seeing you are searching for them in documentation. Yeah, they are not there. Okay, that documentation stuff, like, sorry, not documentation. The documents QMX version is very old. Okay, it's mostly had risk management and version sizing parts that I wanted. But most of it is not really that good. Okay, maybe risk management then a minus. Okay. Then for the MIS research, I think I had explained in either the last session transcript or this one yesterday, where I explained what I meant. Okay. Yeah, that's that. So anyway, first of this, but that's all the Hermes agent, what it did inside that whatever, that folder is very important.
+
+##### ASSISTANT 2026-10-30T06:23
+I've passed your correction to the agent working on the QML history. It was still running, so it gets the change mid-job. It now reads the Hermes work first and most deeply: the Stats folder with its Hermes notes, and the `strats` folder. The old `Documents` vault is used only for risk and sizing ideas, and it no longer searches the docs for the pillars.
+
+I checked what's actually there:
+- The Stats files mention the **four pillars** about 15 times.
+- The `strats` folder isn't empty, as an earlier report claimed. It holds a 97 KB Hermes session from 27 August.
+
+So if the change from four to seven pillars happened, it's most likely recorded in those Hermes sessions.
+
+On the MIS research: the new academic ticket follows what you explained on 28 to 30 October (trading style, then timeframe, then the data a market offers). It points the researcher at both transcripts.
+
+All of this is saved in `STATE.md`. The three QML agents are still working.
+
+##### ASSISTANT 2026-10-30T06:29
+The first of the three QML agents is done: the trader's view of how strategies are actually built. It's committed, and I checked its key sources in the file.
+
+**What it found:**
+- **Every platform and trading book splits a strategy into the same parts:**
+  - context
+  - trigger
+  - filter
+  - confirmation
+  - entry type
+  - stop
+  - targets
+  - trade management
+  - size
+  - account-wide halts
+
+  The only thing they disagree on is who owns the exit and the size: the strategy or the platform. Your Stats schema already has slots for all of these parts.
+- **Exits come in 16 known families,** and each is used somewhere. The dictionary is missing five:
+  - profit targets that change over time
+  - caps on open profit
+  - giving back profit from the peak
+  - account-wide halts
+  - probability-based exits
+
+  It also has only one generic trailing stop.
+- **The real open question about exits is which exit suits which market.** No platform links exits to market context. Research (Kaminski and Lo) shows stops lose money in random, choppy markets and can help in trending ones. That's the gap your "exit methodology" was pointing at.
+- **What's safe to let tune itself:** stop and target distances that scale with volatility, indicators that adapt on their own, and smaller risk when volatility is high. The riskiest thing to automate is changing the rules themselves, meaning which blocks and which exits.
+
+**It also listed things any trader takes as given,** so I stop asking them as open questions:
+- The stop is set first, and size comes from the stop's distance.
+- Loss limits are counted on the whole account.
+- Markets have session habits: London carries 38% of all FX turnover.
+- When data goes stale, take no new entries and leave the protective orders at the broker.
+
+**One point I didn't accept as given:** it says a timeframe is just a setting, so the same strategy on 1m and 5m is one idea, not two bets. On 20 October you were struck by the opposite: the same rules on 1m and 5m behave like two different units, each needing its own proof. So I've marked it as disputed, not settled. It's one for you.
+
+Still running: the QML history agent (now reading the Hermes work first) and the MQL5 vocabulary census.
+
+##### ASSISTANT 2026-10-30T06:32
+Confirmed: the seven views are in the Stats file. Refreshing the saved transcript of today so agents see your newest words, then recording.
