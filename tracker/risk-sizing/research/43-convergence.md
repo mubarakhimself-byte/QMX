@@ -1,16 +1,17 @@
 # 43: Convergence of the unit-system planning run
 
-Written 2026-10-30 by the convergence agent (planning run, after the seven expansion rounds). This file narrows the field into what the architecture step needs. It is **not** the architecture: there is no spine, no decision id and no code layout here. Risk and sizing maths, exits, the book and correlation control belong to the separate risk-and-sizing session; this file only says what the unit system leaves for it.
+Written 2026-10-30 by the convergence agent (planning run, after the seven expansion rounds). Revised the same day after the independent review in `research/44-review-of-convergence.md` and the lead's ten rulings on the disputed points; what changed and what was handled differently is in the final section, "Review response". This file narrows the field into what the architecture step needs. It is **not** the architecture: there is no spine, no decision id and no code layout here. Risk and sizing maths, exits, the book and correlation control belong to the separate risk-and-sizing session; this file only says what the unit system leaves for it, and where it touches one of that session's open questions it says so and leaves it open.
 
 ## How this was made
 
 - **Method.** `bmad-brainstorming` convergence (`references/converge.md`) in "ideate for me" stance: affinity clustering across every field first (Appendix A), then MoSCoW for the build scope (Appendix B). Then `bmad-forge-idea` in attack mode on ten top recommendations, two voices each, one BMad persona and one generated outsider (Appendix C, summarised per area). Principles applied, each read this session: attack-the-premise, subtract-before-you-add, model-the-domain, foundational-thinking.
 - **Deviations, forced by the brief (write exactly one file).** No memlog was written for the convergence or the forge sessions, and the forge's `forge-report.html` was not rendered. Both skills allow running in conversation when state cannot persist; the forge record lives in Appendix C instead.
-- **Read in full this session.** `STATE.md`, `STANDING-ORDERS.md`, `RISK-SIZING-PACK.md` §1 and §4, `wayfinder/MAP.md`, `wayfinder/RESEARCH-QUEUE.md`, every open grilling and prototype ticket, the five expansion fields (`playing-field.md`, `qml-field.md`, `mis-field.md`, `live-field.md`, `workflows-field.md`), `funnel4-qml/cis/seams-options.md`, `research/42`.
-- **Read in part (sections named in the text).** research 18 §2-§9; 35 §0, §4, §6, §7; 20 §1-§5; 21 §2; 41 §0, §2; 17 §1.8, §5.4; 19 closing list; 36 §0; 39 §4-§5; funnel4 CIS problem-solving §3-§5; funnel3 CIS problem-solving knots (b) and (c), §4.3; the ruling 135 text (`tracker/qma-v2/research/methodology/26-operator-rulings-and-alignment.md:244-257`). **Not read:** research 34, 36, 39, 40 and 17 beyond those sections, the CIS design-thinking, glossary and question files, and the transcripts beyond his last four turns of 30 Oct and the quotes grepped below. The fields that summarised them script-checked their quotes; this file leans on those checks where it cites a field.
-- **Quotes.** His words are quoted only after a `grep -n` this session on the transcript. Line numbers here are `grep -n` lines (`T1` = `operator/transcript-2026-10-20-to-28.md`, `T2` = `operator/transcript-2026-10-29-to-30.md`). The fields' `T2` numbers run one to nine lines lower in places (their own note, `workflows-field.md` §8).
-- **Labels.** CHECKED = read at the cited path or line this session, or CHECKED by the cited research file ("CHECKED in r42" means research 42 checked it). INFERRED = reasoning. **Every recommendation in this file is the lead's judgement and is INFERRED**; the facts it rests on carry their own labels.
+- **Read in full this session.** `STATE.md`, `STANDING-ORDERS.md`, `RISK-SIZING-PACK.md` §1 and §4, `wayfinder/MAP.md`, `wayfinder/RESEARCH-QUEUE.md`, every open grilling and prototype ticket, the five expansion fields (`playing-field.md`, `qml-field.md`, `mis-field.md`, `live-field.md`, `workflows-field.md`), `funnel4-qml/cis/seams-options.md`, research 42, research 44 (the review).
+- **Read in part (sections named in the text).** Research 14 §9.3; 18 §2-§9; 35 §0, §4, §6, §7; 20 §1-§5; 21 §2; 41 §0, §2; 17 §1.8, §5.4; 19 closing list; 36 §0; 39 §4-§5; funnel4 CIS problem-solving §3-§5; funnel3 CIS problem-solving knots (b) and (c), §4.3; rulings 135 to 142 (`tracker/qma-v2/research/methodology/26-operator-rulings-and-alignment.md:244-274`). **Not read:** research 34, 36, 39, 40 and 17 beyond those sections, the CIS design-thinking, glossary and question files, and the transcripts beyond his last turns of 30 Oct and the passages grepped below. The fields and the review script-checked their quotes; this file leans on those checks where it cites them.
+- **Quotes.** His words are quoted only after a `grep -n` this session. Line numbers are `grep -n` lines (`T1` = `operator/transcript-2026-10-20-to-28.md`, `T2` = `operator/transcript-2026-10-29-to-30.md`, `D28` = `operator/2026-10-28-router-system1-system2.md`). The fields' `T2` numbers run one to nine lines lower in places (their own note, `workflows-field.md` §8).
+- **Labels.** CHECKED = read at the cited path or line this session, or CHECKED by the cited research file ("CHECKED in r42" means research 42 checked it; "CHECKED in r44" means the review did). INFERRED = reasoning. **Every recommendation in this file is the lead's judgement and is INFERRED**; the facts it rests on carry their own labels.
 - **Provisional marks.** Codex research 22 to 33, 37 and 38 has not run. A recommendation that leans on one is marked "provisional until research N", with what would change it.
+- **Open for him.** No grilling ticket is answered here. Section 8 gives each one a recommended answer and leaves it open for him, live.
 
 ---
 
@@ -20,12 +21,14 @@ Written 2026-10-30 by the convergence agent (planning run, after the seven expan
 2. A unit stays what you ruled: one complete trading algorithm with its own entry, exits, risk and sizing, its own needs and its own journal.
 3. Six building blocks carry everything else: each trade saved with the market's state and its result in risk units, each market reading saved with the moment it was made, the unit written down as data, simple journals, a count of every test tried, and one record of each market's facts at each broker.
 4. A unit is written as a short document that names its parts and fills each part from a shared library of tested blocks, and plain Python stays allowed.
-5. The same logic on another market or timeframe stays the same unit, with that market's own settings once its record earns them; it becomes a new unit only when its rules change.
+5. Your System 2 holds two things, and both stay: a market's own settings, earned from the unit's record there, and a market's own version, where the rules are changed or enhanced for that market, like your EMA crossover example.
 6. The market intelligence service becomes a telescope: it reads every market with the same code the units use, saves what it saw, and proposes where a unit's conditions hold, but no unit needs it to trade.
-7. The backtester is reshaped, not rebuilt: it gets a runner that really trades a unit, no lookback limit, and results in risk units with the market state on every trade.
-8. Your PC runs the whole trading stack first, on practice accounts and on live prices; whether the real-money key may also live on your PC is your call.
-9. For workflows, I recommend building the shared parts every recipe uses (the judge, the test counter, the chain from stage to stage) and writing the rest as ready drafts that say what they wait for.
-10. Ten decisions are yours (section 6); everything technical is settled here with a reason, some of it provisional until the Codex research lands, and nothing is folded into the architecture until you say so.
+7. The backtester's core loop is rebuilt around the unit, on what LEAN, Jesse and StrategyQuant do well, and its measuring parts that already work are kept.
+8. Your PC runs the whole trading stack first, on practice accounts; whether the real-money key may also live on your PC is your call.
+9. The dictionary is rebuilt, as you said, and every one of the 239 entries and their ideas is carried in as a seed, never lost.
+10. Nine decisions are yours (section 6), every grilling question still waits for you with my suggested answer, some answers are provisional until the Codex research lands, and nothing is folded into the architecture until you say so.
+
+**Your day with QMX** (your "multiple experiences": "if me, I'm a user, how am I going to be using units, okay, to literally trade and make money", `T2:858`, CHECKED). In the morning you read one card: what each live unit did overnight (traded, skipped and why, missed), which markets changed state, and at most five proposals waiting for your click, each with its evidence and its cost. During the day the trading server shows one word; your units trade on their own inside the markets you ticked, wherever their conditions hold now, and you can ask the copilot "why didn't it trade?" and get the gate that said no. Each week you see which sources produce units that survive, which units died and why, and which new candidates passed the judge. Against one bot on MT5, the difference is this: the bot trades one market with fixed size and nobody counts how many tries made it; a unit trades every market you ticked where its logic has the odds, sizes from its own record once the risk session wires that in, is judged against how many tries it took, and agents keep looking for the next one while you only click.
 
 ---
 
@@ -35,86 +38,89 @@ Per **foundational-thinking**, the data shapes come before any logic: if these s
 
 ### F1. The stamped trade
 
-**What.** Every trade in every world (backtest, stress, paper, demo, live) carries its result in money and in R, its worst and best excursion in R, and a **context receipt**: the ids, versions and ages of the readings the unit saw at entry and at exit, the market-journal minute it traded in, the market settings it used, and every tuned value in force. The receipt holds references and a few compact values, never copies of the reading history.
+**What.** Every trade in every world (backtest, stress, paper, demo, live) carries its result in money and in R, its worst and best excursion in R, and a **context receipt**: the ids, versions and ages of the readings the unit saw at entry and at exit, the market-journal minute it traded in, the market settings it used, and every tuned value in force. The receipt holds references and a few compact values, never copies of the reading history. When the unit computed a reading itself (for example with the MIS down), the receipt keeps the value it computed, so the trade replays without the MIS (review E02).
 
-**Why.** The playing field's cross-map shows six question families that cannot be measured without it (`playing-field.md` §4 row 1, CHECKED). Research 05 named "QMB results aren't in R, and backtest trades carry no market state" as the gap (STATE research table, CHECKED); research 16 called it the biggest missing piece.
+**R.** R comes from the initial risk at entry as the risk socket supplies it. A unit with no price-based stop (fast invalidation, a time exit, a grid) has no 1R; it shows R as a typed "undefined", its money result is judged with a flag, and the risk session is asked whether it wants an invalidation distance per trade (review E03; pack §2.10 C7, stop or not, is unresolved).
 
-**Reuses.** The `trade` kind already has `world` and `initial_risk` (CHECKED in r42 §6.1, `LIB/kinds/trade.schema.json:94`). QMB already returns a typed refusal for an undefined measure and lands one `backtest-result` with `consumed`, `uses` and `tests` edges (CHECKED in r18 §2).
+**Why.** The playing field's cross-map shows six question families that cannot be measured without it (`playing-field.md` §4 row 1, CHECKED). Research 05 named "QMB results aren't in R, and backtest trades carry no market state" as the gap (STATE research table, CHECKED).
 
-**Breaks.** QMB's CT-32 and CT-29 results are money only, so R joins them as a measure (CHECKED in r18 §2). Imported broker fills carry no initial risk (CHECKED in r18 §6), so an imported trade shows R as "undefined" until its stop is known. DEC-0162 (no stored composite score) is untouched: R is a measure, not a score.
+**Reuses.** The `trade` kind already has `world`, `initial_risk` and `r` (CHECKED in r42 §6.1 and r44). QMB already returns a typed refusal for an undefined measure and lands one `backtest-result` with `consumed`, `uses` and `tests` edges (CHECKED in r18 §2).
+
+**Breaks.** QMB's CT-32 and CT-29 results are money only, so R joins them as a measure (CHECKED in r18 §2). Imported broker fills carry no initial risk (CHECKED in r18 §6). DEC-0162 (no stored composite score) is untouched: R is a measure, not a score.
 
 ### F2. Readings stored with the moment they were made
 
-**What.** A reading (spread ratio, tick-rate ratio, trend state, regime label, funding state) is **library code that runs the same in QMB and live**. Every published value is stamped with reading id, version, compute time, input times and a health word (fresh, stale, degraded, shadow, retired). History is append-only: a retrain or a new version writes a new column and never rewrites old values. Backtests, studies and agents ask "what did it say at 08:01 on 3 March" and get the stamped value. Values computed later for old dates carry a backfill flag.
+**What.** A reading (spread ratio, tick-rate ratio, trend state, regime label, perps funding state) is **library code that runs the same in QMB and live**. Every published value is stamped with reading id, version, compute time, venue and receive time of its inputs, and a health word (fresh, stale, degraded, shadow, retired). History is append-only: a retrain or a new version writes a new column and never rewrites old values. Backtests, studies and agents ask "what did it say at 08:01 on 3 March" and get the stamped value. Values computed later for old dates carry a backfill flag. A **golden replay** checks the one-code claim: one recorded day runs through QMB, the MIS and a unit, and values are compared per reading id and version (review V04).
 
-**Why.** A label is only honest if it has a version and a time (research 16 via STATE, CHECKED); lift studies, agent scoring and "where does this unit win" all need what was known then, not what is known now (`mis-field.md` §5 row 1, CHECKED). One code in two callers is also what lets a unit stand alone: when the MIS is down, the unit computes the reading itself (`qml-field.md` B124, P-I3, CHECKED).
+**Why.** A label is only honest with a version and a time (research 16 via STATE, CHECKED); lift studies, agent scoring and "where does this unit win" need what was known then (`mis-field.md` §5 row 1, CHECKED). One code in two callers is also what lets a unit stand alone: with the MIS down, the unit computes the reading itself (`qml-field.md` B124, P-I3, CHECKED).
 
-**Reuses.** QMN's six rule labelers, the fitted liquidity-stress model and the shadow lane are the first readings (CHECKED in r18 §4). Library append-only refs, store versions (PR 213) and the typed monthly price partitions (CHECKED in r42 §0, §2.1).
+**Reuses.** QMN's six rule labelers, the fitted liquidity-stress model and the shadow lane (CHECKED in r18 §4). Library append-only refs, store versions (PR 213) and the typed monthly price partitions (CHECKED in r42 §0, §2.1).
 
-**Breaks.** The docs say the MIS reaches only the Book door and the KSA (`docs/glossary.md:556-558`, CHECKED in r18 §9 row 5), so a doc pass follows. The labelers live inside QMN today; they move to a package both QMB and the trading runtime import (INFERRED).
+**Breaks.** The docs say the MIS reaches only the Book door and the KSA (`docs/glossary.md:558`, CHECKED in r44), so a doc pass follows. The labelers live inside QMN today; they move to a package both QMB and the trading runtime import (INFERRED).
 
 ### F3. The unit written down as data
 
-**What.** A unit is one JSON document (the unit spec). It holds: identity and lineage; the logic as named slots filled by blocks (section 3.1); coordinates (the markets list, bar construction, sessions in broker time); data needs (the minimum data level each block needs); **every number with its kind, range, motion, authority and origin**; context needs written in dictionary words; home markets; the risk socket's slots; and a pointer to its frozen exam baseline.
+**What.** A unit is one JSON document (the unit spec). It holds: identity and lineage; the logic as named slots filled by blocks (section 3.1); coordinates (the markets list, bar construction, sessions in broker time); data needs (the minimum data level each block needs); **every number with its kind, range, motion, authority and origin**; context needs written in dictionary words; the risk socket's slots; and a pointer to its frozen exam baseline. Risk and exit numbers sit in the socket's slots; how they move is the risk session's (pack §4 "expects back" item 1).
 
-**Why.** Identity, tries, placement, UI-editable numbers and agents that read a unit without running it all need the unit's parts visible as data. The QML CIS run found the root cause of the if-else question: "a rule's 'if' is not data", so nothing records what kind of part it is, how it may move or who may move it (STATE funnel4 CIS row, CHECKED). His seed points the same way: "For me, I'm imagining this like JSON. Most of it is JSON." (`T2:788`, CHECKED).
+**Why.** Identity, tries, placement, UI-editable numbers and agents that read a unit without running it all need the unit's parts visible as data. The QML CIS run found the root cause of his if-else question: "a rule's 'if' is not data" (STATE funnel4 CIS row, CHECKED). His seed points the same way: "For me, I'm imagining this like JSON. Most of it is JSON." (`T2:788`, CHECKED).
 
-**Reuses.** The Library's `unit` kind is governed, has manifest identity and a page with Logic, Results, Family tree, Markets and Versions tabs, and no fields yet (CHECKED in r42 §6.1). QML's parameter space already carries type, bounds, step, default and a UI flag, and QMB's optimiser reads it (CHECKED in seams §0). The Alternative Trading Composition (ATC/PolicyPair) is a non-Book money seam already in code (`qml/src/qml/declaration/alternative.py:36-41`, CHECKED in seams §0). Governed kinds land only as drafts that wait for his yes (`LIB/landing.py:8-11`, CHECKED in r42 §1.5).
+**Reuses.** The Library's `unit` kind is governed, has manifest identity and a page with Logic, Results, Family tree, Markets and Versions tabs, and no fields yet (CHECKED in r42 §6.1). QML's parameter space already carries type, bounds, step, default and a UI flag, and QMB's optimiser reads it (CHECKED in seams §0). The ATC/PolicyPair is a non-Book money seam already in code (`qml/src/qml/declaration/alternative.py:36-41`, CHECKED in seams §0 and r44). Governed kinds land only as drafts that wait for his yes (`LIB/landing.py:8-11`, CHECKED in r42 §1.5).
 
-**Breaks.** Eleven QML laws built on "the Book owns money, exits and thresholds" (the census in `funnel4-qml/cis/problem-solving.md` §3.7, CHECKED), among them `intents.py:1-7` ("the bot may not size"), `STAGE0_NEVER_SIZES` and `glossary.md:150` (a tuned assignment is a new version). DEC-0175 (conditions forbidden in declarations) is amended for composition only; leaf conditions stay code.
+**Breaks.** QML laws built on "the Book owns money, exits and thresholds" (the eleven-actor census in `funnel4-qml/cis/problem-solving.md` §3.7, CHECKED), among them `intents.py:1-7` ("the bot may not size"), `STAGE0_NEVER_SIZES` and `glossary.md:150` (a tuned assignment is a new version). These are lifted **for units**; the Book path itself stays in code (section 2, "Subtract first" item 2). DEC-0175 (conditions forbidden in declarations) is amended for composition only; leaf conditions stay code.
 
 ### F4. Journals: one row shape, one writer per stream, links instead of copies
 
-**What.** Five streams, each with exactly one writer:
+**What.** Five streams, each with exactly one writer per partition:
 
 | Stream | Writer | Holds |
 | --- | --- | --- |
-| Unit journal | QMB for backtest and stress; the trading runtime for paper, demo and live | trades (F1), signals seen but not taken with one reason, calibration rows (what moved, from what, to what, driven by which rows), risk events from the socket, state changes |
+| Unit journal | QMB for backtest and stress; the trading runtime for paper, demo and live | trades (F1), signals seen but not taken with one reason, calibration rows (what moved, from what, to what, driven by which rows), risk events from the socket, state changes, guard verdicts as rows of kind `guard` |
 | Market journal | the feed keeper | per broker, account type, instrument and minute: spread, fees, slippage, quote health, session flags |
 | Reading history | the MIS | the stamped values of F2 |
 | Node journal | the trading runtime | start, stop, update, self-test, account-level guard events, reconcile results |
 | Notes | agents | analysis and proposals, each linked to the rows it annotates |
 
-Every row has the same shape: id, venue time and receive time, stream, subject, kind, world, links, body, schema version. Old rows never migrate. Rows live in monthly Parquet partitions with one Library card per partition; agents read through a journal door, never by opening files.
+Every row has the same shape: id, venue time and receive time, stream, subject, kind, world, links, body, schema version, and the writer's build version. Old rows never migrate. Rows live in monthly Parquet partitions with one Library card per partition; agents read through a journal door, never by opening files. **The partition key is unit, world and machine**, so a demo twin on the PC and the live copy on the server never write one file, and a failover takes a lease per unit and account before it writes (review E01).
 
-**Why.** His journal is "literally the DevOps layer for that unit" (2026-10-27 dictation, CHECKED in `live-field.md` S14); he wants "most simple data schemas" (`T2:1148`, CHECKED). One writer per stream follows **separate-before-serializing**: no two actors write one file.
+**Why.** His journal is "literally the DevOps layer for that unit" (2026-10-27 dictation, CHECKED in `live-field.md` S14); he wants "most simple data schemas" (`T2:1148`, CHECKED). One writer per partition follows **separate-before-serializing**.
 
-**Reuses.** The `trade` kind with `world`; the Library outbox for saves made while the PC is away (`LIB/outbox.py:1-18`, CHECKED in r18 §6); Library event triggers on landings (CHECKED in r42 §1.2); OpenObserve for operational logs, not as the store of record; copies by class (PR 231).
+**Reuses.** The `trade` kind with `world`; Library event triggers on landings (CHECKED in r42 §1.2); OpenObserve for operational logs, not as the store of record; copies by class (PR 231).
 
-**Breaks.** Nothing shipped. It adds a `journal` kind (none exists, CHECKED in r18 §6) and a catalog row that reads journals (none exists, CHECKED in r42 §1.7).
+**New work, not reuse.** The shipped Library outbox runs the other way: it keeps the PC's saves while the Library server is away (`LIB/outbox.py:1-2`, CHECKED in r44 V05). A trading server that queues its journals while the PC is off is new work (`live-field.md` B032). A `journal` kind (none exists, CHECKED in r18 §6) and a catalog row that reads journals (none exists, CHECKED in r42 §1.7) are new too.
 
 ### F5. The try ledger
 
-**What.** Every test of any variant, settings profile, market, timeframe or window in a family is counted **at the QMB door**, not by the agent that asked for it, and that includes runs he or the copilot start by hand. The judge corrects the best result of a family by its count.
+**What.** Every test of any variant, settings profile, market, timeframe or window in a family is counted **at the QMB door**, not by the agent that asked for it, and that includes runs he or the copilot start by hand. The judge corrects the best result of a family by its count. A script can open the price door directly today (`TPL/download-dukascopy/scripts/download.py:41`, CHECKED in r42 §1.3), so two checks close the bypass: the judge refuses any result that does not carry a door-issued run id, and the price door records reads per family so an uncounted scoring run shows up (review V01).
 
-**Why.** "When strategies are nearly free to make, judging them is the product" (STATE correction 10, CHECKED). Without a door-side count, luck moves from backtests to journals to agent shortlists (`playing-field.md` §4 row 6, CHECKED). Research 11: every screen and refinement counts as a try (STATE, CHECKED).
+**Why.** "When strategies are nearly free to make, judging them is the product" (STATE correction 10, CHECKED). Without a door-side count, luck moves from backtests to journals to agent shortlists (`playing-field.md` §4 row 6, CHECKED).
 
-**Reuses.** QMB ledgers every trial already (CHECKED in r18 §2); the deflated Sharpe in `TPL/_shared/overfit-gates`; `d4`'s variant label table (`variant_of` for instrument and timeframe, `derived_from` for structure, CHECKED in `workflows-field.md` Q32); PBO and CSCV are designed in `qmb/robustness/` (CHECKED in r18 §2).
+**Reuses.** QMB ledgers every trial already (CHECKED in r18 §2); the deflated Sharpe in `TPL/_shared/overfit-gates`; `d4`'s variant label table (CHECKED in `workflows-field.md` Q32); PBO and CSCV are designed in `qmb/robustness/` (CHECKED in r18 §2).
 
 **Breaks.** QMB applies no correction today, and two templates carry their own copy of the gate scripts (CHECKED in `workflows-field.md` §0 item 2).
 
 ### F6. The instrument record
 
-**What.** One record per instrument per venue: identity, contract facts (tick value, lot step, minimum lot, margin), measured costs (filled from the market journal), a trading calendar in venue time and broker server time with daylight saving, the carry schedule (swap time, funding interval, roll and expiry), the data levels the venue offers (0 calendar, 1 bars, 2 quote ticks, 3 depth, 4 trade tape, 5 derivatives fields, 6 outside data), and the data licence terms.
+**What.** One record per instrument per venue: identity, contract facts (tick value, lot step, minimum lot, margin), measured costs (from the market journal), a trading calendar in venue time and broker server time with daylight saving, the carry schedule (swap time, **perps funding interval and rate history**, roll and expiry dates), the data levels the venue offers (0 calendar, 1 bars, 2 quote ticks, 3 depth, 4 trade tape, 5 derivatives fields, 6 outside data), the data licence terms, and, on the account record beside it, whether the account nets or hedges (review E04). The trading machine keeps a snapshot of every instrument record its units use, refreshed on change, so the sizer has contract facts with the Library down (review E08). For a contract that expires (IC's CFD futures expire early and are never rolled, STATE research 02 row, CHECKED), the record holds the expiry; what a unit does at expiry is an exit-set question for the risk session, and QMB replays whatever that session declares (review E06).
 
-**Why.** The risk socket needs contract facts; QMB needs costs; placement needs "which of my readings exist on this instrument's data?" (`qml-field.md` B128, CHECKED); IC CFD futures expire early and are never rolled, and Hyperliquid funds hourly (STATE research 02 row, CHECKED).
+**Why.** The risk socket needs contract facts; QMB needs costs; placement needs "which of my readings exist on this instrument's data?" (`qml-field.md` B128, CHECKED); Hyperliquid funds hourly (STATE research 02 row, CHECKED), so QMB must charge funding as a carry cost on replay or perps results come out too good (review A04).
 
 **Reuses.** CT-03 instrument identity; the broker `symbol_info` read, stamped demo or live (PR 215, CHECKED in r42 §4); the connections registry (DR round).
 
-**Breaks.** DEC-0015 "no futures and no options ever" (`docs/contracts/ct-03-instrument-identity.yaml:46`, CHECKED in r18 §9 row 1) goes in the doc pass. GAP-0048 (no cost calibration) stays open until the market journal has data.
+**Breaks.** DEC-0015 "no futures and no options ever" (`ct-03-instrument-identity.yaml:46`, CHECKED in r44) goes in the doc pass. GAP-0048 (no cost calibration) stays open until the market journal has data.
 
 ### Subtract first
 
 Per **subtract-before-you-add**, these go before the foundations are built on:
 
 1. **QMB's replay copies all history at every step**, at four places (`replay.py:569`, `replay.py:60`, QML `evidence.py:883`, frames compared whole at `replay_execution.py:824`; CHECKED in research 14 via STATE). Windowing it removes the only lookback limit in the system (research 12 via STATE, CHECKED).
-2. **QML's Book premise for units.** All eleven actors that hold it are code or docs; none is in his words (census CHECKED in funnel4 CIS §3.7). Invert it for units. Reject the dual-path flag (option P-4 there): no real bot uses the old path (CHECKED in r18 §3, "no real bot anywhere"), so per **migrate-callers-then-delete** a flag would only create two kinds of unit agents must tell apart.
+2. **QML's Book premise, for units only.** All eleven actors that hold it are code or docs; none is in his words (census CHECKED in funnel4 CIS §3.7). For units, the laws that forbid sizing and own exits are lifted through the risk socket. **The Book/BMS seam itself stays** (ATC/PolicyPair, the Book admission inputs, `qmf-risk`): his "there should be some sort of centralized parts of this entire system, like the BMS, but not the BMS that we have right now" (`T2:219`, CHECKED in r44) is open in the risk session (pack §2.10 C1, C2), so nothing here deletes what a central BMS might reuse (lead ruling 6).
 3. **Copied scripts.** The gate scripts copied into `b` and `d3`, and seven copies of `lineage.py`, become one judge block and one lineage writer (CHECKED in `workflows-field.md` §1).
-4. **The `library` node kind** is declared runnable with no executor and no template uses it (CHECKED in r42 §1.1). Delete the declaration.
-5. **The router machinery of rounds 13 and 14** (offers that expire, signed plans, load-balancer mappings) is not built. He found it over-built (STATE 28 Oct, CHECKED); the finder's list replaces it (section 3.3).
-6. **The "5 trading days" plan cadence** gives way to one clock per reading tier.
-7. **Loop counts in shipped templates** (`d3` 3 generations, `l4` 200 trials, `d4` 12 variants) become editable numbers on the template card, so no default acts as a cap (standing order 9).
-8. **Contradicting docs** (r18 §9 rows 1 to 10, CHECKED) are rewritten in a doc pass after the fold, not before.
+4. **The router machinery of rounds 13 and 14** (offers that expire, signed plans, load-balancer mappings) is not built. He found it over-built (STATE 28 Oct, CHECKED); the finder's match list replaces it (section 3.3).
+5. **The "5 trading days" plan cadence** gives way to one clock per reading tier.
+6. **Loop counts in shipped templates** (`d3` 3 generations, `l4` 200 trials, `d4` 12 variants) become editable numbers on the template card, so no default acts as a cap (standing order 9).
+7. **Contradicting docs** (r18 §9 rows 1 to 10, CHECKED) are rewritten in a doc pass after the fold, not before.
+
+Logged as a finding for the backlog, not part of the unit build: the `library` node kind is declared runnable with no executor and no template uses it (`registry.py:94`, CHECKED in r42 §1.1 and r44). STATE correction 7 says never remove shipped backend work casually, so it stays until its own owner decides.
 
 ---
 
@@ -124,6 +130,8 @@ Each area gives two or three options judged on standing order 6 (hard cases, mai
 
 ### 3.1 The unit and its identity
 
+**His if-else question, answered in plain words.** He asked: "I think we need to actually define what is meant to be tuning itself [...] how do we make sure that those if-else statements can self-tune? Maybe that's the question at hand" (`T2:788`, CHECKED in r44). The answer: the numbers inside the rules move by themselves, each within a range that was tested, by a rule for moving that was also tested; the rules themselves (which blocks, which branches, which exits) change only as a new version or a new unit, counted as a try, that he approves. That is what every shipped platform does (research 35 §4.1-4.2, CHECKED; research 20 via STATE, CHECKED). The "It's numbers" in the same turn was him reading back the lead's option before asking this question (review A01), so it is not quoted here as his answer.
+
 **Where a rule's structure lives** (the three options that compete for one seam, `seams-options.md` §7, CHECKED):
 
 | Option | Hard cases | Maintain and debug | Explain to him |
@@ -132,25 +140,46 @@ Each area gives two or three options judged on standing order 6 (hard cases, mai
 | Data first: the whole rule graph is JSON that a QML interpreter runs per quote | Weak: per-quote speed and an expressiveness ceiling | A second language and a new runtime; reverses DEC-0175 fully | "A flowchart, like a workflow" |
 | **Declared skeleton, coded blocks (recommended)** | Strong: lifecycle states, model blocks and whole-Python units all fit | One compiler, blocks tested once, the same host seam QMB and the node already use | "A unit is a trading plan with named parts; each part is a tested block from the library" |
 
-**Recommendation.** The unit spec names the anatomy any trader knows (research 35 §6 item 1, CHECKED): context needs, level or setup, trigger, confirmations joined by a combiner, entry order, exit set, sizer, halts, plus an open list of further roles (veto, target, invalidation, regime detector, sizing modifier, arming, timeout; `qml-field.md` B022, CHECKED). Each slot binds a catalogue block by id with its numbers. The combiner vocabulary is small and declared: all, any, k-of-n, weighted vote with open and close thresholds (the MT5 Wizard's form, research 36 §0 item 6, CHECKED), sequence, within, and the lifecycle operators arming, cooldown, reset and re-entry. Leaf conditions stay code inside blocks. QML compiles the document once into today's `factory(spec, assignment, read_surfaces) -> callback(instant) -> intents` seam, with intents widened to carry size and exits. A Python block, or a whole-Python unit with a manifest that declares the same slots it fills, keeps every right a QML unit has: journal, lineage, tries, promotion (STATE "Plain Python is always possible", CHECKED). Combining units happens at build time only and compiles into one unit, so no live unit depends on another (`qml-field.md` P-I8, CHECKED).
+**Recommendation.** The unit spec names the anatomy any trader knows (research 35 §6 item 1, CHECKED): context needs, level or setup, trigger, confirmations joined by a combiner, entry order, exit set, sizer, halts, plus an open list of further roles (veto, target, invalidation, regime detector, sizing modifier, arming, timeout; `qml-field.md` B022, CHECKED). Each slot binds a catalogue block by id with its numbers. The combiner vocabulary is small and declared: all, any, k-of-n, weighted vote with open and close thresholds (the MT5 Wizard's form, research 36 §0 item 6, CHECKED), sequence, within, and the lifecycle operators arming, cooldown, reset and re-entry. Leaf conditions stay code inside blocks. QML compiles the document once into today's `factory(spec, assignment, read_surfaces) -> callback(instant) -> intents` seam. The seam must be able to carry size and exits from whichever part the risk session names (the unit's logic or a sizer module, pack §4 "expects back" item 2, left open). A Python block, or a whole-Python unit with a manifest that declares the same slots it fills, keeps every right a QML unit has: journal, lineage, tries, promotion (STATE "Plain Python is always possible", CHECKED). Combining units happens at build time only and compiles into one unit, so no live unit depends on another (`qml-field.md` P-I8, CHECKED).
 
-**Identity, by the type of edit** (a lookup table, per **model-the-domain**, instead of a judgement per case):
+**Identity, by the type of edit** (a lookup table, per **model-the-domain**, instead of a judgement per case). **Risk and exit numbers are not in this table**: how they move and whether a moved risk number makes a new version is the risk session's (pack §4 "expects back" items 1 and 3; lead ruling 6).
 
 | Edit | Result | Counted try | Needs his click before live |
 | --- | --- | --- | --- |
-| A number moves inside its declared range by its declared motion | Calibration row in the unit journal | No (the motion rule was tested once) | No |
+| A logic number moves inside its declared range by its declared motion | Calibration row in the unit journal | No (the motion rule was tested once) | No |
+| A learned block is retrained inside its declared bounds, and is declared "learned" | Calibration row | No | No |
+| A learned block is retrained outside that, or has no declared bounds | New version of the same unit | Yes | Yes |
 | A range, a settings profile, a bar construction, a session window, or the markets list changes; a market adopts its own settings | New version of the same unit | Yes | Yes |
-| A block is swapped, a role or branch is added or removed, the combiner changes, the exit family or the sizer adapter changes, a part is transplanted from another family | New unit in the same family, linked to its parent | Yes (both families for a transplant) | Yes |
+| A shared block's code is fixed | New version of every unit that uses it, with their re-tests queued (review E11) | Yes, per unit | Yes, per unit |
+| A block is swapped, a role or branch is added or removed, the combiner changes, a part is transplanted from another family, or the logic is changed or enhanced for one market | New unit in the same family, linked to its parent | Yes (both families for a transplant) | Yes |
 | The logic is rewritten by a model or by hand with different behaviour | New unit marked "rewritten from" | Yes | Yes |
 | An ambiguity in the source is resolved | Corrected successor; the old version stays | Yes | Yes |
 
-**Timeframe and market are coordinates.** The same logic on 1m and 5m is one correlated idea (his ruling, STATE 30 Oct, CHECKED; `T2:1000` "that's just correlation", CHECKED), so it is one unit with two coordinates in one same-idea group. The same logic on gold and on EURUSD is one unit. **What he called System 2 becomes "a market's own settings":** by default a unit uses settings pooled across its markets; a market earns its own settings only from the unit's record on that market (his Path A, STATE 29/30 Oct, CHECKED), shrunk toward the pooled values, and going live with them is his click. If gold needs different rules (a fix-time gate, a different exit), that is a new unit in the family whose markets list is gold. This revises his 27 Oct "yes" to sibling units, so it is decision 4.
+**Timeframe is a coordinate.** The same logic on the same pair on 1m and 5m is one correlated idea: "If they are, if it's the same strategy, or rather the same unit trading the same pair on different time frames, that's just correlation." (`T2:1000`, CHECKED; his 30 Oct ruling in STATE). So it is one unit with two coordinates in one same-idea group.
 
-**Lifecycle, as one state machine per unit and one per market inside it.** States: draft, tested, paper, live, stopped, parked, retired. Only he moves a unit or a market toward live. The only automatic transition is the unit's own risk rule moving it to stopped, logged (standing order 7). A stopped unit keeps writing would-have-done rows, which is recording, not trading. The old breaker's automatic LIVE to PAPER to RECOVERY transitions (research 19 via STATE, CHECKED) are not brought back.
+**His System 2, in his own words, holds two things.** On 28 Oct: "I think system two before live can work if we are changing or enhancing different logics for different markets. For example, let's say we are using an EMA crossover variant" (`D28:7`, also `T1:1903`, CHECKED). On 29 Oct: "what system two does is [...] making rather that unit more specific. So it means the amplification is now more specific. In other words, we are trying to do that sniping thing" and "It's as if system two is the end goal of QMX." (`T2:135`, CHECKED). And Path A: a System 2 version is earned from a record the System 1 unit built on that market, never from thin air (STATE 29/30 Oct ruling, CHECKED). The recommendation keeps both halves under two names:
+- **A market's own settings.** Same unit; that market's numbers earned only from the unit's record there, shrunk toward the pooled values, live by his click.
+- **A market's own version.** The logic changed or enhanced for that market (his EMA crossover example, a gold-fix gate, a sniping window); a new unit in the same family, born only from the parent's record on that market (Path A), live by his click.
+Whether both halves are what he means by System 2 is decision 3.
 
-**Forge changed.** Lifecycle operators joined the combiner after a scalper's state machine cracked the slot list. The receipt is stamped at entry and at exit, not only entry. Shrinkage toward pooled values became the default form for a market's own settings. No build is blocked for using a not-yet-implemented dictionary entry; the part is tagged instead.
+**Lifecycle, as a state machine per unit with a state per market inside it** (review E10). Only he moves a unit or a market toward live; the only automatic move toward safety is the unit's own risk rule (standing order 7).
 
-**Research could change.** Research 24 (earning a specialist without luck) sets how much record a market needs and the shrinkage form; research 25 (drift) sets when a market's own settings expire; research 26 sets how structure changes are counted as tries. None changes the slot shape.
+| From | To | Who moves it | Note |
+| --- | --- | --- | --- |
+| draft | tested | the judge's passing verdict | a label, not a promotion |
+| draft or tested | parked | the judge's failing verdict | the fail branch reads it |
+| tested | paper (demo money) | his click, or automatically if he answers the paper question in section 8 that way | no real money |
+| paper | live, per market | his click only | |
+| live | stopped | the unit's own risk rule, automatic, logged | which rules count is the risk session's |
+| stopped | paper or live | his click only | |
+| live | parked | his click | |
+| any | retired | his click | |
+
+A unit is live if any of its markets is live; a unit-level stop stops all its markets. A stopped unit keeps writing would-have-done rows, which is recording, not trading. The old breaker's automatic LIVE to PAPER to RECOVERY transitions (research 19 via STATE, CHECKED) are not brought back.
+
+**Forge changed.** Lifecycle operators joined the combiner after a scalper's state machine cracked the slot list. The receipt is stamped at entry and at exit. Shrinkage toward pooled values became the default form for a market's own settings. No build is blocked for using a not-yet-implemented dictionary entry; the part is tagged instead.
+
+**Research could change.** Research 24 (earning a market's own settings without luck) sets how much record a market needs and the shrinkage form; research 25 (drift) sets when a market's own settings expire; research 26 sets how structure changes are counted as tries. None changes the slot shape.
 
 ### 3.2 QML and the dictionary
 
@@ -158,33 +187,27 @@ Each area gives two or three options judged on standing order 6 (hard cases, mai
 
 | Option | Hard cases | Maintain | Explain |
 | --- | --- | --- | --- |
-| **Upgrade in place, add a block catalogue and the unit spec compiler (recommended)** | Keeps QMB's and the node's real seam; adds what is missing | Protocol and parameter space reused; one premise inverted | "QML gets the parts library agents build units from" |
+| **Upgrade in place, add a block catalogue and the unit spec compiler (recommended)** | Keeps QMB's and the node's real seam; adds what is missing | Protocol and parameter space reused; one premise lifted for units | "QML gets the parts library agents build units from" |
 | Rebuild QML from scratch | Same end state | Throws away a protocol that already matches the industry (research 04 via STATE, CHECKED) | "Start again" |
 | Units outside QML, Python only | Handles anything | Loses visible structure, tries per part, cheap-agent safety | "Agents write programs" |
 
-His words settle the direction: "I think QML deserves an upgrade." (`T1:1211`, CHECKED). The catalogue is the deep module: a small door (`resolve(entry id, profile) -> block`) over implementations, golden values, per-class profiles and aliases (seams S4, CHECKED). A dictionary entry that runs **is** a catalogue block (funnel4 CIS §4.3 insight 3, CHECKED).
+His words set the direction: "I think QML deserves an upgrade." (`T1:1211`, CHECKED). The catalogue is the deep module: a small door (`resolve(entry id, profile) -> block`) over implementations, golden values, per-class profiles and aliases (seams S4, CHECKED). A dictionary entry that runs **is** a catalogue block (funnel4 CIS §4.3 insight 3, CHECKED).
 
-**The dictionary and its 239 entries:**
+**The dictionary: settled as a rebuild that keeps every entry as a seed** (lead ruling 1). His latest words settle it: "the dictionary, like I said, it needs to be most likely be redone, most of it" (`T2:788`, CHECKED) and "the dictionary needs a rebuild, an entire thing, like a whole bloody, because the ideas are there" (`T2:219`, CHECKED). He also said "the dictionary was GPT's idea, not mine" (`T1:1211`, CHECKED). His 26 Aug "permanent" meant never lose the entries and never leave them in limbo in one tool's folder (research 41 §2.1, CHECKED). So: the dictionary is rebuilt in QML's new form, and all 239 entries and their ideas are carried in as seeds and inputs, alongside the 140 concepts the MQL5 census found missing (research 36 §0, CHECKED). Whoever reviews the 239 gets no verdict in the brief (research 41 lesson via `qml-field.md` F11).
 
-| Option | Hard cases | Maintain | Explain |
-| --- | --- | --- | --- |
-| **Review the ideas, rebuild the form (recommended)** | Keeps every concept; adds code, machine specs and the 140 missing concepts | One home, one format, a status per entry | "Every word stays; each one gets working code and a test" |
-| Keep the prose, add code beside it | Two artefacts drift apart | Two sources of truth | "The old notes plus new code" |
-| Rebuild from the MQL5 census and sources, with the 239 as one input | Widest coverage | Risks losing August intent | "Start the dictionary over" |
-
-Each entry gets three faces: trader words, a machine spec (inputs, output type, parameter kinds and ranges), and an implementation (`qml-field.md` B031, CHECKED). Each carries a status: named, specified, implemented, tested on data, used in a unit (B038). Every parameter carries a starting profile with its origin label (RSI 14, 70/30 "published convention"). Folders stay by family, never by job; roles live on the binding (research 34 via `qml-field.md`, CHECKED). This keeps his August ruling that the entries are permanent library content (research 41 §2.1, CHECKED) and his October "the dictionary needs a rebuild, an entire thing" (`T2:219`, CHECKED). It is still decision 2, because whose August design survives is his to judge.
+**The new form.** Each entry gets three faces: trader words, a machine spec (inputs, output type, parameter kinds and ranges), and an implementation (`qml-field.md` B031, CHECKED). Each parameter carries a starting profile with its origin label (RSI 14, 70/30 "published convention"). Folders stay by family, never by job; roles live on the binding. An entry's status (named, specified, implemented, tested on data, used in a unit) is **computed by a script** from what exists (a spec, code, a golden test, a unit that binds it), not stored by hand (review A26).
 
 **How it expands per asset class and data class.**
-- **Three homes per class** (`qml-field.md` P-I4, CHECKED): terrain on the instrument record (F6); class-only readings in the catalogue (funding, open interest, liquidations, basis for perps; roll, settlement, overnight range for futures; cash open, opening drive, breadth for indices; fix windows and real yields for gold; corporate actions for stocks); and a transfer status on each entry per class (native, direct, adapted, conceptual only, not transferable, not assessed).
+- **Three homes per class** (`qml-field.md` P-I4, CHECKED): the market's facts on the instrument record (F6); class-only readings in the catalogue (funding, open interest, liquidations, basis for perps; roll, settlement, overnight range for futures; cash open, opening drive, breadth for indices; fix windows and real yields for gold; corporate actions for stocks); and a transfer status per entry per class (native, direct, adapted, conceptual only, not transferable), which stays "not assessed" until that class's pack is built (review A26).
 - **Data levels.** Each block declares the minimum data level it needs (0 to 6 as in F6) and, where one exists, a fallback at a lower level with its expected loss (order-flow imbalance from depth, falling back to tick-rule imbalance, then range pressure; `mis-field.md` B005, CHECKED). QMB refuses a test on weaker data with a typed refusal. Proxy entries (tick volume for volume, a futures tape for a CFD) are always flagged.
-- **New families.** A statistics and models family (Hurst, variance ratio, ADF, efficiency ratio, half-life, HMM, GARCH, change point), absent today (research 36 §0: 0 of 40 concepts, CHECKED), enters as readings on session and day clocks. Evaluation words (Sharpe, PBO, walk-forward) go to a separate judging glossary, not the dictionary (six of research 36's top ten missing concepts are evaluation words, per the research 36 row in `STATE.md`, CHECKED; `qml-field.md` B058).
-- **Order of packs** follows the doors (decision 5): FX, gold and index CFDs on cTrader first; perps second; futures and stocks later.
+- **New families.** A statistics and models family (Hurst, variance ratio, ADF, efficiency ratio, half-life, HMM, GARCH, change point), absent today (research 36 §0: 0 of 40 concepts, CHECKED), enters as readings on session and day clocks. Fundamentals enter as slow context entries with release time and vintage, used when a source uses them (STATE 30 Oct "fundamentals when used", CHECKED). Evaluation words (Sharpe, PBO, walk-forward) go to a separate judging glossary (six of research 36's top ten missing concepts are evaluation words, per the research 36 row in `STATE.md`, CHECKED; `qml-field.md` B058).
+- **Order of packs** follows the doors (decision 4): FX, gold and index CFDs on cTrader first; perps second; futures and stocks later.
 - **Where it lives.** Library objects are the one source of truth; a snapshot ships as QML package data so the trading machine never needs the Library up (standing order 10). A one-line index serves cheap agents; full entries are fetched on demand (B079).
-- **Appends.** A match script maps each source sentence to an entry id or "unmatched"; unmatched words become append requests that need a family, a data class, and an implementation or a stated gap (B037, B062, B126). His job for it, in his words: "so that if someone from a source mentions anything, we already know what it is, okay? Or if it's new, we can append it." (`T2:788`, CHECKED).
+- **Appends.** A match script maps each source sentence to an entry id or "unmatched"; unmatched words become append requests that need a family, a data class, and an implementation or a stated gap (B037, B062, B126). His job for it: "so that if someone from a source mentions anything, we already know what it is, okay? Or if it's new, we can append it." (`T2:788`, CHECKED). Populating the library from sources stays a goal: the shipped intake templates (`a`, `rs1`, `rs2`, `rs4`) feed it, agents populate, and governed items wait for his yes (review A24, Q39).
 
-**Every number** carries its kind (distance, count, clock, ratio, probability), its range, its motion (fixed; scaled by a live statistic; refit on a window; chosen by state; learned), its authority (inside the range nobody; a new range his click) and its origin. The agent default form is instrument-relative (ATR multiple, percentile of own history, z-score); raw pips only when a source states them (`qml-field.md` B004, Q04; research 35 §6 item 15, CHECKED). His answer to "what tunes" is the frame: "It's numbers." (`T2:788`, CHECKED).
+**Every number** carries its kind (distance, count, clock, ratio, probability), its range, its motion (fixed; scaled by a live statistic; refit on a window; chosen by state; learned), its authority (inside the range nobody; a new range his click, which follows "only he promotes") and its origin. The agent default form is instrument-relative (ATR multiple, percentile of own history, z-score); raw pips only when a source states them (`qml-field.md` B004, Q04; research 35 §6 item 15, CHECKED).
 
-**Forge changed.** "Builds blocked below implemented" was dropped after the census showed 85% of strategy articles use a missing concept (research 36 §0, CHECKED); a part with no implemented entry is tagged "outside QML" and shown on the unit card, no block. Appends need a family plus a data class plus code or a stated gap.
+**Forge changed.** "Builds blocked below implemented" was dropped after the census showed 85% of strategy articles use a missing concept (research 36 §0, CHECKED); a part with no implemented entry is tagged "outside QML" and shown on the unit card. Status became computed, not stored.
 
 **Research could change.** Research 23 and 37 can change which readings live per class and whether one shared word set holds across classes; research 32 fixes the instrument-record fields; research 33 decides which data levels are keepable.
 
@@ -196,29 +219,41 @@ Each entry gets three faces: trader words, a machine spec (inputs, output type, 
 | **A telescope (recommended)**: readings are library code; the MIS runs them across many markets on per-tier clocks, stores stamped history, publishes a board and match lists | Strong: units compute their own needed readings; the MIS only widens what they can see | One code in three callers (unit, MIS, QMB) | "It looks at every market and points; it never drives" |
 | No central MIS at all: shared code and an almanac only | Loses cross-market readings (currency strength, dispersion, lead-lag) | Simplest | "Each unit looks for itself" |
 
-**Recommendation.** The telescope. His order (style, then timeframe, then the data a market offers; STATE 29/30 Oct, CHECKED) becomes three labels on every reading (`mis-field.md` B001-B004, CHECKED): its **clock tier** (tick, bar, session, day, week), its horizon, and the **minimum data level** it needs. A unit's trading style picks which tiers it subscribes to; an asset class enters as a pack of rung tables, calendar and sensors. Every reading is published three ways: the raw number, its percentile against the usual for that instrument and minute of the week, and a word. The fast tier holds "now versus usual" ratios (spread, tick rate, top-of-book depth, realised range, cost against the unit's target) computed where the feed lands; direction and regime labels live on the session and day tiers, because at 1m a strong new trend takes about 8 hours to show (research 05 via `mis-field.md` F-R05, CHECKED). Cross-sectional readings only a shared service can make (currency strength, dispersion, herding counts, dated pair similarity by joint state) are published for the risk session to use; the MIS describes and never controls. Agents may add readings in shadow freely; a reading goes live only with his yes, which is his own wording: "the MIS can be upgraded as the agent see fit, obviously with my approval" (`T1:1951`, CHECKED).
+**Recommendation.** The telescope. His order (style, then timeframe, then the data a market offers; STATE 29/30 Oct, CHECKED) becomes three labels on every reading (`mis-field.md` B001-B004, CHECKED): its **clock tier** (tick, bar, session, day, week), its horizon, and the **minimum data level** it needs. A unit's trading style picks which tiers it subscribes to; an asset class enters as a pack of rung tables, calendar and sensors. Every reading is published three ways: the raw number, its percentile against the usual for that instrument and minute of the session, and a word. The fast tier holds "now versus usual" ratios (spread, tick rate, top-of-book depth, realised range, cost against the unit's target) computed where the feed lands; direction and regime labels live on the session and day tiers, because at 1m a strong new trend takes about 8 hours to show (research 05 via `mis-field.md` F-R05, CHECKED in r44). Cross-sectional readings only a shared service can make (currency strength, dispersion, herding counts, dated pair similarity by joint state) are published for the risk session to use; the MIS describes and never controls. One live version per reading at a time (his August "constant", `mis-field.md` QO09), with new versions and new readings in shadow; a reading goes live only with his yes: "the MIS can be upgraded as the agent see fit, obviously with my approval" (`T1:1951`, CHECKED). Labels he and the copilot write ("these markets were mostly mean reverting this week") are stored dated, with what they could see, and may train a shadow version; that version goes live only with his yes (`mis-field.md` QO04; "we can retrain a version of the MIS that can also see such", cited at `T2:219` in `mis-field.md` S-COPILOT).
 
-**What "units read the MIS" means, settled.** Three uses were mixed (funnel3 CIS §4.3 insight 1, CHECKED): placement, a rule input, a veto. Placement reads the finder's match list inside his ticked markets. A rule input or a veto binds a reading the unit computes itself from its own feed with the same library code, so nothing changes when the MIS is down. This meets all three of his dated positions: units "pick the output and they propose whether to use it or not" (`T1:1951`, CHECKED in `mis-field.md` S-READS), "the unit itself accesses both market and MIS" (S-LIVE), and "if the MIS is not working, it doesn't mean that these bots won't trade. They will" (`T2:135`, CHECKED).
+**How a unit uses the MIS.** Three uses were mixed (funnel3 CIS §4.3 insight 1, CHECKED): placement, a rule input, a veto. The recommendation, open for him in section 8: placement reads the finder's match list inside his ticked markets; a rule input or a veto binds a reading the unit computes itself from its own feed with the same library code, so nothing changes when the MIS is down. This would meet all three of his dated positions: units "pick the output and they propose whether to use it or not" (`T1:1951`, CHECKED in `mis-field.md` S-READS), "the unit itself accesses both market and MIS" (S-LIVE), and "if the MIS is not working, it doesn't mean that these bots won't trade. They will" (`T2:135`, CHECKED).
 
-**Proof that the MIS helps.** Every unit's record includes a dark-MIS run (the same period with no MIS input) and, on paper or in QMB, a shuffled-readings run: if results do not change, the unit never used the MIS (`mis-field.md` B061, B096, CHECKED). These are two cheap judge stages, not a battery.
+**Proof that the MIS helps, defined so it can fail** (review V03). Since a unit computes its own rule inputs, cutting the MIS off changes only placement. So: the **dark-MIS run** trades the same period with placement from his ticked list only, no finder; the difference is the finder's lift. The **shuffled-readings run** shuffles the unit's own context readings in time on paper or in QMB; if results do not change, the unit's context rules do nothing. Two cheap optional judge stages, not a battery.
 
-**Forge changed.** Dispersion became a must-publish after "twenty matches can be one bet" (research 16 break 3 via STATE, CHECKED). Home markets became required for any unit that reads a match list.
+**Forge changed.** Dispersion became a must-publish after "twenty matches can be one bet" (research 16 break 3 via STATE, CHECKED). The fallback when the finder is stale is his choice (decision 2).
 
-**Research could change.** Research 22 decides which fast readings carry information at 1m and 5m after costs; research 23 and 37 decide whether one shared word set holds across classes or each class needs its own models, and whether HMM-type labels earn a day-tier place; research 27 decides which correlation measures the MIS should publish for the risk session. All three are **provisional** inputs to the tier contents, not to the telescope shape.
+**Research could change.** Research 22 decides which fast readings carry information at 1m and 5m after costs; research 23 and 37 decide whether one shared word set holds across classes or each class needs its own models, and whether HMM-type labels earn a day-tier place; research 27 decides which correlation measures the MIS should publish. All three are **provisional** inputs to the tier contents, not to the telescope shape.
 
 ### 3.4 QMB
 
-| Option | Hard cases | Maintain | Explain |
+**His seed.** "we are combining Quant Connect Lean CLI, the JSE framework, and then I think I added strategy quant with that thing of what if scenarios. Now those what if scenarios can also improve. Now we either toss or we rebuild QMB based off this. Because I don't think it's remaining the same." (`T2:135`, CHECKED). And: "All I want is something that an agent can call as a tool. It runs the same way you run your tests. [...] So it means it runs and waits. It doesn't have to tinker with the results. It gets those results." (`T2:135`, CHECKED). Beside it stands his older rule never to remove shipped backend work casually (STATE correction 7, CHECKED).
+
+**Recommendation: rebuild the core loop around the unit, keep the measuring parts that already work.** Research 14 §9.3 already lists what a professional QMB borrows from LEAN and Jesse and what it must not (CHECKED). Each row names its blast radius (the files or contracts it touches; file lists CHECKED in the cited research, the radius itself INFERRED).
+
+| Part | Rebuild or keep | Why | Blast radius |
 | --- | --- | --- | --- |
-| **Reshape (recommended)**: keep QMB's modules; window the reader; add a runner driven by the unit spec; stamp R and context; count tries at the door; add trade-print replay | Covers every instrument kind once the reader is windowed | Projection, rerun, variants, sweeps, optimiser, robustness and synthetic data are already built (CHECKED in r18 §2) | "The tester learns to run a real unit, with no time limit" |
-| Rebuild on LEAN or Jesse | Strong engines | Two worlds to keep in step with QML and the node | "Swap the tester" |
-| Keep QMB and wrap a new runner outside it | Quick | Two replay paths that drift | "A second tester beside the first" |
+| Replay reader | **Rebuild** as a windowed reader | Copies all history per step; the only lookback limit | `qmb/host/replay.py:60`, `:475-572`; `replay_execution.py:824`; QML `evidence.py:883` and `MappingReadSurface`; both replay entries (r12, r14 via STATE) |
+| Runner | **Rebuild**: a runner that trades a unit, replacing the silent runner | PR 204 "Needs a factory, a declaration and Book policy that no recorded config carries" (`42:315`, CHECKED in r44); the unit spec is the declaration, and for units the Book policy input is replaced by the unit's risk socket (the Book path stays for the risk session) | `backtest_door.py` `RUNNERS`; a typed-partition entry to `execute_recorded_replay_request`; `BoundExecution` and `BookAdmissionContext` become inputs from data (STATE QMB door section) |
+| Agent door | **Rebuild** on PR 204's door shape: one tool call that waits and returns one typed result; one verb per job (LEAN's `backtest`, `optimize`, `research`, `report`); an MCP door with agent rules and a significance test (Jesse) | His "runs and waits" | `TOOLS/service.py:280-299` refusal; catalog rows; the `app_op` job; PR 204 rebased onto the stack (conflicts in `HO/host.py`, `qmx_tools/service.py`, r42 §5) |
+| Results | **Extend**: R, excursions, the context receipt, live results overlaid on the backtest (LEAN `report --live-results`) | Money-only today; no live-versus-exam compare | CT-32 and CT-29 contracts; `results/measures.py`; the `backtest-result` kind; `migrate/from_qmb_results.py` |
+| What-if scenarios | **Rebuild** as StrategyQuant-style scenario sets he can improve: a what-if that changes which trades count becomes a counted variant rerun; the saved view stays a view | His "those what if scenarios can also improve"; today a projection is "never a new result, never admission evidence" (r18 §2) | `analysis/project.py` |
+| Judge | **New** shared block, out of the templates | Copied scripts today | `TPL/b`, `d3`, `d4`, `l4` scripts; `_shared/overfit-gates` |
+| Funding as a carry cost | **New** cost port for perps funding | Perps results come out too good without it (review A04) | the `execution/cost.py` family |
+| Cost, fill, spread, slippage, commission and swap ports | **Keep** | Built; they need calibration (GAP-0048), not a rebuild | none |
+| Optuna optimiser with splits, sensitivity and resume; robustness batteries (trade shuffle, candle perturbation, rule significance, walk-forward, carve-out); sweeps; synthetic series | **Keep** | Built, and already what research 14 §9.3 says to borrow from Jesse | none |
+| Exact-integer money, typed refusals, one landing shape, the rerun rule, the trial ledger, a process per run | **Keep** | Better than Jesse's float money; result identity and try counting rest on them | none |
+| LEAN's C# engine in Docker; Jesse's float money, zero slippage and flat fees | **Not borrowed** | Research 14 §9.3, ADR-0017 reasons | none |
 
-**Recommendation.** Reshape. PR 204's door shape stays (one function lands every backtest, one child process, results read by object id; CHECKED in STATE QMB door section); its scaffold breaks are fixed mechanically and it is rebased onto the stack. The missing runner takes the unit spec as its bot, which is exactly what PR 204 lacked ("a factory, a declaration and policy as data", CHECKED in r42 §5). The runner replays the unit's own sizer and exits in the same code as live. Crypto trade prints and trade bars replay with a declared spread model and a lower-fidelity label (today they are refused, CHECKED in r18 §2). The judge (section 3.7) runs stages from cheap to expensive: semantic checks, screening, ablation, sensitivity and plateau, walk-forward, a cost stress, a three-instrument challenge, the dark-MIS and shuffled-readings runs, then one locked look at a sealed window. Until costs are calibrated every verdict says "costs uncalibrated" and the cost stress is on.
+**The judge's default chain is short** (review A13; STATE "don't be too strict", CHECKED): the cost stress, walk-forward, the try count, and the try-corrected best of the family. Every other stage (semantic checks, ablation, sensitivity and plateau, the three-market challenge, the dark-MIS and shuffled-readings runs) is an opt-in step on the judge card. **A sealed window is off by default** and switched on per study by him (ruling 137, `26-operator-rulings-and-alignment.md:266`: "A holdout is an optional setting he chooses per study, off by default", CHECKED; lead ruling 5). The judge also shows each result twice, once with the unit's own sizer and once with a fixed-size baseline, so special sizing cannot hide a weak edge (his "Account for the old risk system's special ('radioactive') sizing when judging", `STATE.md:89`, CHECKED); replaying the old sizing itself is the risk session's content. Until costs are calibrated every verdict says "costs uncalibrated". Research 26 sets the default order.
 
-**Forge changed.** Hand-run tests count too, at the door. Any change of setting during a run makes a new run (QMB's rerun rule already does this, CHECKED in r18 §2), which enforces his "it runs and waits. It doesn't have to tinker with the results" (cited at `T2:132` in funnel3 CIS knot (b), CHECKED there).
+**Forge changed.** Hand-run tests count too, at the door. The tool shape (one call, wait, one typed result) cites his "runs and waits"; the rule that any change of setting mid-run makes a new run stays as a lead call on its own reason (review A05).
 
-**Research could change.** Research 26 (how desks judge) sets the default stage order and numbers; research 33 decides how far crypto trade-bar replay is honest and which history may be kept.
+**Research could change.** Research 26 (how desks judge) sets the default chain and numbers; research 33 decides how far crypto trade-bar replay is honest and which history may be kept.
 
 ### 3.5 Data and journals
 
@@ -230,11 +265,11 @@ Each entry gets three faces: trader words, a machine spec (inputs, output type, 
 | One Library item per row | Too many objects for a 1m scalper | The content-addressed store was not built for this (INFERRED) | "Every row is a file" |
 | The telemetry store (OpenObserve) as the record | Good for ops | Not his content; backup class unclear | "Logs are the diary" |
 
-**Recommendation.** F4 as written, with these settled points. Seen-but-not-taken rows carry one reason from a closed, appendable list plus free text. Missed trades are computed afterwards by replay, never written live (`live-field.md` B067, CHECKED). By default only events are written; logging every decision per bar is switched on per unit for a time box. Guard verdicts are rows of kind `guard` in the unit journal; account-level guard events go to the node journal. Agents read through a journal door (a catalog row), a prebuilt trades-with-context table so they never write joins, and a one-page daily digest per unit made by script before any model reads it. Agents write only in their notes stream. The UI shows a preview card and a detail page; the UI is judged by running its design, never by its code (STATE 30 Oct, CHECKED), and is its own session.
+**Recommendation.** F4 as written, with these settled points. Seen-but-not-taken rows carry one reason from a closed, appendable list plus free text. Missed trades are computed afterwards by replay, never written live (`live-field.md` B067, CHECKED). By default only events are written; logging every decision per bar is switched on per unit for a time box. Agents read through a journal door (a catalog row), a prebuilt trades-with-context table so they never write joins, and a one-page daily digest per unit made by script before any model reads it. Agents write only in their notes stream. The UI shows a preview card and a detail page; the UI is judged by running its design, never by its code (STATE 30 Oct, CHECKED), and is its own session.
 
-**Recording.** Everything a unit or the MIS subscribes to is recorded as bars plus the market-journal minute; quote ticks are recorded for the instruments units trade, on the machine that trades them, as disk allows. Hyperliquid keeps only about 3.5 days of 1m candles, so QMX must record its own perps history from the day a perps door opens (STATE research 02 row, CHECKED). How much disk to buy is decision 6.
+**Recording.** Everything a unit or the MIS subscribes to is recorded as bars plus the market-journal minute; quote ticks are recorded for the instruments units trade, on the machine that trades them, as disk allows. Hyperliquid keeps only about 3.5 days of 1m candles, so QMX must record its own perps history from the day a perps door opens (STATE research 02 row, CHECKED). Disk on 30 Oct: C: 16.0 GB free, D: 57.7 GB free (`Get-PSDrive`, CHECKED in r44 V06). Research 12 put 200 units on 60 instruments at about 14 GB of bars and 150 to 200 GB of ticks (STATE research 12 row, CHECKED): D: holds the bar archive with room, not a full tick archive. Decision 5.
 
-**Forge changed.** A guard stream of its own was folded into kinds. Per-bar decision logging became opt-in and time-boxed after the row-flood attack.
+**Forge changed.** A guard stream of its own was folded into row kinds. Per-bar decision logging became opt-in and time-boxed after the row-flood attack.
 
 **Research could change.** Research 33 decides whether downloaded and recorded history may be kept and used by agents (Dukascopy's terms forbid bots and databases, STATE "For his awareness", CHECKED); research 31 gives real data volumes per unit.
 
@@ -244,23 +279,23 @@ Each entry gets three faces: trader words, a machine spec (inputs, output type, 
 
 | Option | Hard cases | Maintain | Explain |
 | --- | --- | --- | --- |
-| **One image, two places (lean)**: the QMX host gains a trading role; QMN's protection set and venue code move in as packages | The PC rehearses exactly what the server runs | One install path, one observability stack, one set of paths | "The same program runs on your PC and on the server" |
+| **One image, two places (lean)**: the QMX host gains a trading role; QMN's protection set, venue client, reconcile, virtual ledger and recording loop move in as packages | The PC rehearses exactly what the server runs | One install path, one observability stack, one set of paths | "The same program runs on your PC and on the server" |
 | Keep QMN as its own Linux node and run it on the PC under a Linux layer | Rehearsal works if the layer is faithful | Two stacks: QMN's own paths, credential store and Grafana/Loki/Prometheus beside the host's OpenObserve (CHECKED in r42 §3) | "A second program just for trading" |
 | Port QMN to run natively on Windows | Removes the Linux layer | QMN's powers door uses `SO_PEERCRED` Unix sockets and systemd (CHECKED in r42 §3) | "Rewrite the trading program for Windows" |
 
-**Recommendation.** Lean to the first; party mode compares the first two (section 7), because the choice is an implementation shape. Either way the code that runs on a trading server must first run on his PC, which is his rule: "if something is to run on external compute and external storage, it should first run on my machine." (`T2:1148`, CHECKED). QMN needs Linux and systemd today, so his PC needs a Linux layer to run it at all (CHECKED in r42 §3; `live-field.md` §1 fact 2). Running the identical image in that layer counts as "on my machine": his rule is about not re-auditing code when it moves, and the same image removes the move (lead call; he can say otherwise).
+**Recommendation.** Lean to the first; party mode compares the first two (section 7), together with what of QMN's admission, seats and Book door survives (research 42 Q3; seats and Book admission wait on the risk session). Either way the code that runs on a trading server must first run on his PC: "if something is to run on external compute and external storage, it should first run on my machine." (`T2:1148`, CHECKED). QMN needs Linux and systemd today, so his PC needs a Linux layer to run it at all (CHECKED in r42 §3; `live-field.md` §1 fact 2). Whether that layer counts as "on my machine" is his to say (decision 1).
 
-**Setup.** A trading server is one more kind in the connect dialog, on the shipped step runner (his cards, then checked rerun-safe steps, one row written last; CHECKED in r42 §2.2). The wizard starts the cTrader app registration on its first card, because Spotware approves each trading server's app with no published timeline (ruling 135 text `:254`, CHECKED). The connect self-test lands a passport item: kill-switch latency, a demo test trade, broker connection, clock skew, disk, feed freshness. One trading server to start; a second is a clone in another provider, by his click.
+**Setup.** A trading server is one more kind in the connect dialog, on the shipped step runner (his cards, then checked rerun-safe steps, one row written last; CHECKED in r42 §2.2). The wizard starts the cTrader app registration on its first card, because Spotware approves each trading server's app with no published timeline (ruling 135 text `:254`, CHECKED). The connect self-test lands a passport item: kill-switch latency, a demo test trade, broker connection, clock skew, disk, feed freshness, and **the image digest**, so a twin-run diff can tell code drift from venue drift (review V07). One trading server to start; a second is a clone in another provider, by his click.
 
-**Feeds and routes.** One feed keeper per machine, one subscription per symbol, fanned out to the units on that machine, with one home per broker sign-in (research 12 via STATE; ruling 135 text, CHECKED). A connection has two roles, data and execution; a unit binds one data route per data kind and one execution route, so a proxy (CME tape as a signal for a cTrader index CFD) is declared and tested, never silent (`live-field.md` B052-B055, CHECKED).
+**Feeds and routes.** One feed keeper per machine, one subscription per symbol, fanned out to the units on that machine, with one home per broker sign-in (research 12 via STATE; ruling 135 text, CHECKED). Nothing shipped holds a long-running cTrader connection today: broker reads open one short session per read, and the long-running ConnectionManager (WU10) waits on gate G-CT (CHECKED in r42 §4 and its question 11). The feed keeper is built by finishing WU10 or from QMN's recording loop (party mode), and it is in the first build (Appendix B). A connection has two roles, data and execution; a unit binds one data route per data kind and one execution route, so a proxy (CME tape as a signal for a cTrader index CFD) is declared and tested, never silent (`live-field.md` B052-B055, CHECKED).
 
-**Failure.** Every live order carries its stop at the broker. The client order id is the trade's trace id, so a retried send never doubles a position. On restart the broker's positions and deals win and journals rebuild from them. The trading runtime journals before it sends. A laptop that is off is the normal state; the node's outbox syncs when the PC returns. Where a venue offers a dead man's switch, silence cancels resting orders (provisional until research 38). With the feed stale, no new entries and protection stays at the broker (research 35 §6 item 10, CHECKED). All guard levels run on the trading machine with no PC (standing order 10).
+**Failure.** Whatever protection the unit's exit set declares is placed at the broker where the venue allows it. **Whether every live order must carry a broker stop is a risk-session question** (pack §2.10 C7, stop or not, unresolved; lead ruling 6). The client order id is the trade's trace id; before any resend the runtime reads open orders and positions by that id and resends only if absent, because not every venue rejects a repeated id (review V02; provisional until research 38). On restart the broker's positions and deals win and journals rebuild from them. The trading runtime journals before it sends. A laptop that is off is the normal state; the trading server queues its journals until the PC returns (new work, F4). Where a venue offers **cancel on disconnect** (the venue feature; DEC-0261 already uses "liveness heartbeat" for QMX's own external watcher, `docs/AGENTS.md:64`, CHECKED in r44), it is used only if it spares protective orders, or protection is re-placed after it fires (review E05; provisional until research 38). With the feed stale, no new entries, and existing protection stays where it is (research 35 §6 item 10, CHECKED). All guard levels run on the trading machine with no PC (standing order 10).
 
-**Keys.** Ruling 135 against PC first is decision 1. The recommendation there is the lead's earlier candidate, strengthened: the whole stack runs on his PC against demo accounts and, in shadow, on live prices; only the real-money key lives on the trading server; a short difference list (the key, the host name, the broker app) is the only allowed difference between the two; the trading server never shares the PC's SSH key to the workflow server (`live-field.md` B105, CHECKED); a trade-only key with no withdrawal right still counts as a live key (B099).
+**Keys.** Ruling 135 against PC first is decision 1. Shadow trading on live prices from the PC needs a read-only grant on a live account: ruling 135 allows read-only keys on the PC (`26-operator-rulings-and-alignment.md:250`, CHECKED in r44), but the code refuses any live-capable grant there (`BRK/adapters.py:107`, CHECKED in r42 §3). Whether cTrader issues a read-only live grant is unknown, so until research 38 answers it, shadow runs on demo prices (review E14).
 
-**Forge changed.** "Who stands in when the server is down?" cracked the recommendation: under ruling 135 as written, nothing can (`live-field.md` P02, CHECKED). Broker-held stops, a venue dead man's switch and a passive second server reduce the harm; the residual risk is part of decision 1.
+**Forge changed.** "Who stands in when the server is down?" cracked the recommendation: under ruling 135 as written, nothing can (`live-field.md` P02, CHECKED). The residual risk is part of decision 1.
 
-**Research could change.** Research 31 decides whether QMN runs faithfully under WSL2 or a container, how strong a walled Windows account is against an agent shell, and the time per step on the live path; research 38 decides which venues offer account limits, trade-only keys, test environments and dead man's switches, and how futures with order flow are reached; research 32 fills the instrument record.
+**Research could change.** Research 31 decides whether QMN runs faithfully under WSL2 or a container, how strong a walled Windows account is against an agent shell, whether Python is right for the live path, and the time per step; research 38 decides which venues offer account limits, trade-only keys, read-only live grants, test environments and cancel on disconnect, and how futures with order flow are reached; research 32 fills the instrument record.
 
 ### 3.7 QMX workflow templates
 
@@ -276,11 +311,11 @@ The Lab as the first builder of templates is not recommended: the Lab is a works
 
 **The core, built in the coding phase first:** the judge block (one subworkflow every finding, expansion and rewrite template calls; scripts decide, a judging skill explains, he decides what passes), the try ledger and the holdout ledger, a verdict-grid kind, the conveyor (event triggers between stages plus a loop guard so a child's landing never re-fires its own parent's build), one lineage writer, the death certificate (a typed cause from an appendable list, classified by script first), a forecast-ledger kind with a scoring script, the journal door, and the proposal card that collects what waits for his click.
 
-**First families, as validated drafts until their doors exist:** the funnel (a builder from a complete idea card, then the judge, then pass to the expansion matrix, fail to the death certificate and "where would its rules hold", rewrite to one strong-model rewrite on a plateau); market analysis at each session close with dated calls scored later by script; unit analysis of trades taken, skipped and missed; the decay check. The Hermes workflows he named ("Friendly greeting" and the gold mine, close to the old WF1 and WF2) enhance the shipped `b`, `l1`, `d3`, `d4`, `l4` and `rs6` rather than adding new templates, as he asked: "It's far better to enhance them." (`T2:1148`, CHECKED). Templates that need no model (expansion, replay match, decay, negative control, source scorecard) ship first once their doors exist.
+**First families, as validated drafts until their doors exist:** the funnel (a builder from a complete idea card, then the judge, then pass to the expansion matrix, fail to the death certificate and "where would its rules hold", rewrite to one strong-model rewrite on a plateau); market analysis at each session close with dated calls scored later by script; unit analysis of trades taken, skipped and missed; the decay check. In "where would its rules hold", every context tried is counted and the best is judged with the try correction; a sealed window is used only when he chooses one for that study (ruling 137). The Hermes workflows he named ("Friendly greeting" and the gold mine, close to the old WF1 and WF2) enhance the shipped `b`, `l1`, `d3`, `d4`, `l4` and `rs6` rather than adding new templates, as he asked: "It's far better to enhance them." (`T2:1148`, CHECKED). Templates that need no model (expansion, replay match, decay, negative control, source scorecard) ship first once their doors exist.
 
-**Proof for agents** (his "can't be cheated", settled as a lead call, section 4): every number cites a tool-call receipt the engine records; claims are typed with evidence and a superseded link; market calls are dated and scored later by a script, so "the market compares" answers "Who's comparing?" (funnel3 CIS knot (b), CHECKED); a recompute grader reruns cited receipts; every analysis names its window and what it did not see. A workflow cannot declare its own Claude hooks (`HAR/packs.py:8`, `:44`, CHECKED in r42 §7), so the judging skill's "hooks" are grader and script nodes the agent cannot skip.
+**Proof for agents** (the agent-proof ticket stays open for him; section 8 gives the recommended answer). A workflow cannot declare its own Claude hooks (`HAR/packs.py:44`, CHECKED in r42 §7 and r44), so the judging skill's "hooks" are grader and script nodes the agent cannot skip.
 
-**Forge changed.** The core can be tested now on synthetic results from the shipped `synthetic-data` template, before the doors exist. Delivery stays his call (decision 7) because he posed it himself.
+**Forge changed.** The core can be tested now on synthetic results from the shipped `synthetic-data` template, before the doors exist. Delivery stays his call (decision 6) because he posed it himself.
 
 **Research could change.** Research 29 (how agents are confidently wrong) orders which proof tools come first; research 30 (desk analysis) sets the review rhythms and which analyst family is most useful first. Three engine facts are unchecked and change wiring only: whether his Claude hooks reach engine agent steps, whether an event trigger can see his publish click, and whether the memory toolset writes durable rows (`workflows-field.md` Q01-Q03, INFERRED open).
 
@@ -288,29 +323,29 @@ The Lab as the first builder of templates is not recommended: the Lab is a works
 
 ## 4. Lead calls settled
 
-Each is a technical call with its one-line reason. They map to the MAP's lead-call list (ids in brackets). "Provisional (N)" means research N could change it.
+Each is a technical call with its one-line reason. They map to the MAP's lead-call list (ids in brackets). "Provisional (N)" means research N could change it. Grilling-ticket answers are **not** here; they are in section 8, open for him.
 
 **QMB**
-- Reshape QMB, don't rebuild it [L08-01]. Its modules exist and match the funnel; only the runner and the reader are missing.
-- The trading runner takes the unit spec as its bot [L08-02]. That is the declaration-as-data PR 204 lacked.
+- Rebuild QMB's core loop, keep its measuring parts [L08-01]. His "toss or rebuild" weighed against his "never casually remove shipped backend work"; section 3.4 lists each part with its blast radius.
+- The trading runner takes the unit spec as its declaration and the unit's socket in place of the Book policy input [L08-02]. That is what PR 204 lacked.
 - QMB stamps R and the context receipt on every trade [L08-03]. Six question families can't be measured without it.
-- Tries are counted at the QMB door, hand runs included [L08-04]. The agent that asks must not be the one that counts.
+- Tries are counted at the QMB door, hand runs included, and the judge refuses results without a door-issued run id [L08-04]. The agent that asks must not be the one that counts.
 - Crypto trade prints replay with a declared spread model and a lower-fidelity label [L08-07]. Refusing them leaves crypto untestable; provisional (33).
-- The old pass numbers in R return as editable defaults with an origin label [L08-10]. He distrusts numbers he never asked for, so each one says where it came from.
-- The judging skill checks what an agent cannot edit: the try ledger, the sealed spec, the holdout ledger, costs present, failed children present [L08-11]. These are where cheating happens.
-- "It runs and waits" is enforced by the rerun rule: any change mid-run is a new run [L08-12]. QMB already works that way.
+- The judge card ships two presets: the shipped `b` template's values as the default and old QMX's R-based numbers as a second preset, each with its origin [L08-10]. He distrusts numbers he never asked for, so nothing overrides a shipped default silently.
+- The judging skill checks what an agent cannot edit: the try ledger, the study spec, the holdout setting he chose, costs present, failed children present [L08-11]. These are where cheating happens.
+- Any change of setting mid-run makes a new run [L08-12]. QMB's rerun rule already does it, and it keeps the agent from tinkering with results.
 - Until costs are calibrated, every verdict carries "costs uncalibrated" and runs a cost stress [L08-14]. Honest labelling beats a blocked pipeline.
-- QMB replays the unit's own sizer and exits through the same socket code as live [L08-16]. Replay parity is the point of one code path.
+- QMB replays the unit's sizer and exits through the same socket code as live [L08-16]. Replay parity is the point of one code path; the socket's content is the risk session's.
 
 **QML and the unit**
-- What travels from PC to node: the spec, its version, current calibrated values and a journal pointer; indicators warm from stored history [L01-14]. Warm start from history removes DEC-0261's warm-up wait.
+- What travels from PC to node: the spec, its version, current calibrated values, the instrument records it uses and a journal pointer; indicators warm at once from stored history [L01-14]. DEC-0261 bans per-bot warm-up, probation, ramp and a paper lane on the node and makes a bot promoted mid-day wait for the next trading day (`docs/AGENTS.md:60`, CHECKED in r44); "next trading day" has no meaning in 24/7 markets and "no paper lane" clashes with per-unit paper, so both go to the architecture fold as named conflicts.
 - A market's own settings get their own exam-baseline cell; the unit version keeps its frozen baseline [L02-18]. Decay is judged against what was tested.
 - A delisted market moves to retired in the unit's per-market states; the unit trades on elsewhere [L02-19]. Per-market state makes this one transition.
-- The dictionary rebuild covers form, code, status and the census gaps, keeping every concept [L04-02]. Decision 2 confirms whose design survives.
-- QML needs a block catalogue, the unit spec, a compiler and the widened intent door to build units [L04-05]. Everything else exists.
-- QML's small door is `new`, `check`, `test`, `promote`, `watch`, `find` over the unit spec and the journal [L04-06]. Research 07's verbs still fit the new shape.
+- The dictionary rebuild covers form, code, a computed status and the census gaps, carrying every one of the 239 entries as a seed [L04-02]. His 29/30 Oct words settle it (section 3.2).
+- QML needs a block catalogue, the unit spec, a compiler and an intent seam that can carry size and exits to build units [L04-05]. Everything else exists.
+- QML's small door is `new`, `check`, `test`, `promote`, `watch`, `find` over the unit spec and the journal [L04-06]. Research 07's verbs still fit.
 - QML stops cheaper models' mistakes with a one-line index, a match report, labelled builder-chosen numbers, blind building and a red-team builder [L04-07]. Each closes one named failure.
-- Exits are slots filled by blocks; the 57 exit entries become named blocks whose maths the risk session supplies [L04-08]. Room only, no exit maths here.
+- Exits are slots filled by blocks; the 57 exit entries become named blocks whose maths the risk session supplies [L04-08]. Room only.
 - Hybrids are written as build-time composition compiled into one unit [L04-11]. A live dependency on another unit breaks standing alone.
 - A 0 to 100 signal strength may reach the sizer slot as an input; whether sizing uses it is the risk session's [L04-12]. Leaving the input open costs nothing.
 - Plain Python keeps journals, lineage and tries through a manifest that declares its slots, data needs and numbers [L04-13]. The manifest is what the door counts.
@@ -320,18 +355,19 @@ Each is a technical call with its one-line reason. They map to the MAP's lead-ca
 - Stage 0 becomes the idea-record layer in front of units [C-Q5]. Lineage must start before a unit exists (research 10 via STATE).
 - A source with no exit enters with a labelled builder exit from a named exit block, and cannot reach paper until the risk session's default exit set fills it [C-Q4]. The unit must own exits.
 - Builders build blind: the builder step gets no backtest toolset [Q61, Q37]. Hiding files is not enough.
-- An agent-built unit's first judged window starts after the building model's training cutoff, or a memory probe runs [C5 template]. Model memory is a look-ahead.
+- When a model **builds** a unit that is then tested on history, the judged window starts after that model's training cutoff, or a memory probe runs [C5 template]. This applies only to building on history; his objection that analysts use live data, not training memory ("I said they are going to be using live. [...] It's very sloppy", `T2:385`, CHECKED), stands untouched (review A21).
 - LLM-in-the-loop blocks stay out of the live trade path [Q72]. Agents never sit in the trade path (research 11 via `workflows-field.md` §7).
-- Who may widen a declared range: only he, through a proposal card [Q05]. A wider range is new live behaviour.
+- Only he widens a declared range, through a proposal card [Q05]. A wider range is new live behaviour, and only he promotes.
+- Recalibration runs where the unit runs, from its local journal [L15-04 part]. It must not stall when the laptop is shut (review E09).
 
 **MIS mechanics**
-- Label versions: a retrain writes a new version column and never rewrites [L03-12]. Old trades must keep the label they traded on.
+- Label versions: a retrain writes a new version column and never rewrites [L03-12]. Old trades keep the label they traded on.
 - Templates made by workflows: a sensor scout adds readings in shadow; live needs his yes [L03-16]. His own words set the rule.
 - Freshness per tier is a number per tier (section 5) [L03-18]. Stale is relative to the clock a reading runs on.
-- The cheapest useful MIS: fast seasonal ratios plus session and day buckets, models added later through shadow [L03-23]. Practice and research 05 say most scalper context is "now versus usual"; provisional (22).
+- The cheapest useful MIS: fast seasonal ratios plus session and day buckets, models added later through shadow [L03-23]. Research 05 says most scalper context is "now versus usual"; provisional (22).
 - 24/7 markets get sessions from measured activity and the funding clock [L03-24]. A clock session does not exist there; provisional (37).
-- One labeler code runs in QMB and live [L16-03]. F2.
-- Replaying what a unit read costs one reference per reading in the receipt [Q3]. No copies.
+- One labeler code runs in QMB and live, checked by a golden replay [L16-03]. F2.
+- Replaying what a unit read costs one reference per reading in the receipt, or one compact value when the unit computed it [Q3]. No copies.
 - Agents get a toolset that reads the board as of their own timestamp only [L11-11]. Look-ahead is closed by the tool, not by trust.
 - Fast readings compute where the feed lands; slow readings on the PC [L03-17 part]. Place follows tier.
 
@@ -350,138 +386,124 @@ Each is a technical call with its one-line reason. They map to the MAP's lead-ca
 - Templates map to analyses as in `workflows-field.md` §1 [L11-09]. That table is complete.
 - Unit analysis fires on every N closed trades, each session close and each landed result [L11-10]. Event triggers exist; the landings are what is missing.
 - The old Cartographer and Coroner return as the weekly market map and the death-certificate graveyard [L11-14]. Both fit the forecast ledger and the fail branch.
-- Agent claims are typed records with a superseded link [L12-06]. The old opinion node shape (research 19 §8 via STATE).
+- Agent claims are typed records with a superseded link [L12-06]. The old opinion-node shape (research 19 §8 via STATE).
 - Several models are review lenses, never a vote [L12-08]. Numbers decide.
 - An agent's script is checked by the recompute grader and reviewed as code before a template ships it [L12-10]. Self-checking is the failure mode.
 - Every analysis states what it did not see [L12-11]. Silence reads as coverage otherwise.
 - The engine records receipts [Q55]. It already ledgers every tool call.
 - Source text never acts as instructions: it enters marked as data [Q58]. Videos and articles can carry instructions.
-- What "can't be cheated" means: the agent cannot steer the outcome, so proof separates who claims, who controls the inputs, and when the claim is scored [agent-proof ticket]. Provisional (29) on which tools come first; he can say he meant something else.
 
 **Node operations**
-- Self-tests on connect land a passport item [L14-07]. His seed.
+- Self-tests on connect land a passport item with the image digest [L14-07]. His seed, plus build identity.
 - After a crash the broker's record wins [L14-08]. The broker holds the money.
 - Clocks: store UTC, stamp venue time and receive time, calendars as data with daylight saving [L14-09]. Session rules break on time zones otherwise.
-- Full disk: tick recording gives way before journals; a feed gap means no new entries with protection kept [L14-10]. Journals are the record; protection sits at the broker.
+- Full disk: tick recording gives way before journals; a feed gap means no new entries, and existing protection stays where it is [L14-10]. Journals are the record.
 
 **Time and speed**
 - The clock that replaces "5 trading days" is one clock per reading tier [L15-02]. A scalper's context and a swing unit's do not share a week.
 - 24/7 and session instruments live in one book through per-instrument calendars [L15-03]. The calendar is data on the instrument record.
-- A unit recalibrates on its slow clock (nightly or after N trades); only numbers declared "scaled by a live statistic" move per bar [L15-04]. Motion is declared, not improvised.
+- A unit recalibrates on its slow clock; only numbers declared "scaled by a live statistic" move per bar [L15-04]. Motion is declared, not improvised.
 - Router speed comes from precomputing: the board is ready before the session, and units never wait on it [L16-02]. His feed-ranking analogy.
 
 **Words and old ideas**
 - "Sniping" is a named time window held as calendar data, with optional order-flow trigger blocks inside it [L19-06]. A window is a coordinate; the trigger is a block.
-- Of the 20 forgotten old ideas, these return: `capability_spec` as the shape of a unit's context claim (REQUIRE, WARN, BLOCK), `symbol_scope`, the regime-specialist tag, the dated pair ledger (as MIS readings), weekly market selection (as the finder), opinion nodes (typed claims), the Cartographer and Coroner, one scout per source class, the video tag dimensions, the news states SAFE, PRE_NEWS, KILL_ZONE, POST_NEWS as calendar states [L20-03]. The Intent Aggregator, first-setup-wins slots, house money, slot stagger and the complexity penalty go to the risk session; the breaker's automatic transitions stay out; the April Sharia rules are decision 8.
-
-**Cross-ticket calls**
-- Units read the finder for placement and compute their own readings for rules and vetoes (units-and-the-mis ticket). It meets all three of his dated positions without breaking standing alone.
-- No separate router part: placement is the finder's match list inside his ticked markets, and the unit picks by its own record (registry-and-router ticket). "The router only routes" is then the finder pointing; half the router debate was a word problem (`playing-field.md` §4).
-- Agent shortlists stay advisory and are scored like a reading; they never bind a unit [L11-05, Q25]. Steering where money goes would otherwise become agents touching money.
-- The build does not fork between "$300 with one or two units" and breadth (what-qmx-is-for-first ticket). The same parts serve both; his promotion click picks the first live units. Provisional (28) on which markets suit $300.
-- Style is a tag that picks clock tiers, a default exit and sizer template and data needs; "scalpers first" is a build order only, and the schema stays style-neutral (trading-style ticket). Research 35 §6 item 5: style changes holding time, costs, data and exits, not the logic family.
-- Cheap models build by default and a strong model rewrites on a plateau (Q19). It is his seed (`T1:513` via `workflows-field.md` S-FUN) and a UI-editable setting, reversing the shipped default (`ENG/settings.py:175-188`, CHECKED there).
-- The fail branch stays, with every context it tries counted and one sealed window per finding (Q24). Seeds keep it; the count removes the luck.
+- Of the 20 forgotten old ideas, these return: `capability_spec` as the shape of a unit's context claim (REQUIRE, WARN, BLOCK), `symbol_scope`, the regime-specialist tag, the dated pair ledger (as MIS readings), weekly market selection (as the finder), opinion nodes (typed claims), the Cartographer and Coroner, one scout per source class, the video tag dimensions, the news states SAFE, PRE_NEWS, KILL_ZONE, POST_NEWS as calendar states [L20-03]. The Intent Aggregator, first-setup-wins slots, house money, slot stagger and the complexity penalty go to the risk session; the breaker's automatic transitions stay out; the April rules are decision 7.
 
 ---
 
 ## 5. Numbers
 
-Every number is a starting default, shown with its origin, and edited in the UI (his standing rule "configurable = UI-editable always"). "Unit settings" means a unit's page, Settings tab; "template card" means the template's inputs in the Library; "reading card" means the MIS reading's card.
+Every number is a starting default, shown with its origin, and edited in the UI (his standing rule "configurable = UI-editable always"). "Unit settings" means a unit's page, Settings tab; "template card" means the template's inputs in the Library; "reading card" means the MIS reading's card. **Where a row differs from a shipped template default, it says so; where a number is INFERRED, it gives its reason, or says "placeholder until research N".**
 
-| Number | Starting default | Origin | Where he edits it |
+| Number | Starting default | Origin and reason | Where he edits it |
 | --- | --- | --- | --- |
-| Backtest start when none is given | March 2020; any start allowed; older data used when it exists | research 12 | template card, run dialog |
-| Holdout | off; chosen per study as a boundary and a month count | PR 207 | run dialog |
-| Judge: trades before a verdict | 200 | old QMX (research 08) | judge block card |
-| Judge: expectancy after costs | +0.15R | old QMX (research 08) | judge block card |
-| Judge: cost stress | 2x measured or published costs | research 08 | judge block card |
-| Judge: PBO bands | pass below 0.25; dead above 0.50 | old QMX (research 08) | judge block card |
-| Judge: deflated Sharpe confidence | 0.95 | shipped `b` template | judge block card |
-| Judge: walk-forward efficiency | 0.5 | shipped `b` template | judge block card |
-| Instruments in the challenge | 3 (home, close analogue, adversarial) | gold mine (research 39 K1) | judge block card |
+| Backtest start when none is given | March 2020; any start allowed | research 12; never a cap | template card, run dialog |
+| Holdout (sealed window) | off; chosen per study as a boundary and a month count | ruling 137, PR 207 | run dialog |
+| Judge preset "shipped" (default) | 100 trades, walk-forward efficiency 0.5, Monte Carlo 5th percentile above 0, 1.5x costs, deflated Sharpe confidence 0.95 | shipped `b` template (`TPL/b-build-and-prove/README.md:13`, `scripts/gates.py:4-6`, CHECKED in r44); unchanged | judge block card |
+| Judge preset "old QMX" | 200 trades, +0.15R after costs, 2x cost stress, PBO pass below 0.25, dead above 0.50 | research 08; offered beside the shipped preset, overriding nothing | judge block card |
+| Instruments in the optional challenge | 3 (home, close analogue, adversarial) | gold mine (research 39 K1) | judge block card |
 | Decay check | nightly per unit: CUSUM on R, cone, cost and fill drift, trade-rate drift; inform only | research 08 (detects +0.1R to 0 in about 240 trades) | unit settings |
-| Paper before his card | 30 trades or 4 weeks, whichever is later | INFERRED | judge block card |
-| Market's own settings: record needed | 100 trades on that market | INFERRED; provisional (24) | unit settings |
-| Shrinkage toward pooled settings | weight by trade count, half at 100 trades | INFERRED; provisional (24) | unit settings |
+| Paper before his card | 30 trades or 4 weeks, whichever is later | placeholder until research 26 and 31; 4 weeks shows every weekday's sessions four times, and 30 trades is the smallest count at which a mean in R is usually quoted at all | judge block card |
+| A market's own settings: record needed | 100 trades on that market | placeholder until research 24; it equals the shipped judge's minimum, so a market's own settings need as much evidence as a unit's first verdict | unit settings |
+| Shrinkage toward pooled settings | weight by trade count, half at 100 trades | placeholder until research 24; at the minimum record the market's own and the pooled values count equally | unit settings |
 | Range-edge proposal | a number at its range edge 3 times in 10 sessions raises a card | `qml-field.md` B017 | unit settings |
-| Slow recalibration clock | nightly, or after 20 closed trades | INFERRED | unit settings |
+| Slow recalibration clock | nightly, or after 20 closed trades | nightly matches research 08's nightly decay check; 20 trades is a placeholder until research 26 | unit settings |
 | Context states per dimension | 3 (trend up, down, range; volatility low, normal, high) | `qml-field.md` Q77 | reading card |
-| Seasonal baseline | same minute of the week over the last 20 weeks | INFERRED | reading card |
+| Seasonal baseline | same minute of the session, in venue session time, over the last 20 weeks; "thin baseline" shown when less history exists | placeholder until research 22; 20 weeks is about one season; venue session time keeps daylight-saving shifts from firing false alarms (review E07) | reading card |
 | Freshness per tier | tick 2 s; bar one bar; session one session; day one day | `mis-field.md` B056 | reading card |
-| Stale symbol (no new entries) | 30 s without a quote for FX majors; per instrument and hour | INFERRED | instrument record |
+| Stale symbol (no new entries) | 30 s without a quote for FX majors, counted only inside the instrument's open calendar | placeholder until research 31; majors quote several times a second in open hours, so 30 s of silence is abnormal; weekends and holidays never count (review E15) | instrument record |
 | Lag-to-hold admission for a reading | lag at most a third of the unit's median hold | `mis-field.md` B003 | reading card |
-| Sensor retire card | unread for 8 weeks | INFERRED | reading card |
-| Same-idea group | same logic across timeframes counts as one group | his 30 Oct ruling | unit settings |
+| Sensor retire card | unread for 8 weeks | placeholder; two monthly reviews | reading card |
+| Same-idea group | same logic across timeframes on one pair counts as one group | his 30 Oct ruling | unit settings |
 | Seen-not-taken logging | events only; per-bar decisions on request for 1 day | `live-field.md` B068 | unit settings |
 | Journal partition | one month | `live-field.md` B073 | Settings, Data |
 | Unit analysis trigger | every 10 closed trades and every session close | shipped `dc` README | template card |
-| Session clocks | Sydney, Tokyo, London and New York closes; crypto every 8 hours | INFERRED | template card |
-| Calls before a calibration score shows | 100 | `workflows-field.md` §6.4 | template card |
-| Proposals on the morning card | 5 a day, the rest queued | `workflows-field.md` §6.4 | Settings, Morning card |
+| Session clocks | Sydney, Tokyo, London and New York closes; crypto every 8 hours | the four closes are the FX sessions; 8 hours is the default perps funding cycle (research 35 §6 item 19) | template card |
+| Calls before a calibration score shows | 100 | `workflows-field.md` §6.4; placeholder until research 29 | template card |
+| Proposals on the morning card | 5 a day, the rest queued | `workflows-field.md` §6.4; placeholder, so the card fits one screen | Settings, Morning card |
 | Plateau before a strong rewrite | 30 trials without a better validated score | shipped `l4` README | template card |
 | Overnight loop | 6 revolutions, 2 without gain, 200 trials; editable, never a cap | shipped `l4` README | template card |
 | Dead ends that wake the fail-branch miner | 5 new | shipped `rs6` README | template card |
-| Builder model tier | cheap; rewrite step strong | his seed | template card |
-| Twin run before first live | 5 trading days, journals diffed | `live-field.md` B018 | Settings, Trading server |
+| Builder model tier | cheap; rewrite step strong | his seed (`T1:513` via `workflows-field.md` S-FUN); **overrides** the shipped default, which makes the builder strong (`ENG/settings.py:187`, CHECKED in r44) | template card |
+| Twin run before first live | 5 trading days for session markets; 5 calendar days or 50 closed trades, whichever is later, for 24/7 markets | `live-field.md` B018; the 24/7 form added so the rule has a meaning there (review E13) | Settings, Trading server |
 | PC soak before a node release | 24 hours | `live-field.md` B019 | Settings, Trading server |
 | Provider token lifetime in the wizard | 1 hour | `live-field.md` B002 | Settings, Trading server |
-| Drills (power cut, token refresh) | monthly, on demo | INFERRED | Settings, Trading server |
+| Drills (power cut, token refresh, resend) | monthly, on demo | matches the shipped monthly restore drill (PRs 225-229, CHECKED in r42 §2.1) | Settings, Trading server |
 
 ---
 
 ## 6. Decisions for him
 
-Ten decisions. Each one is his because it touches money, his intent, words he cares about, or scope that is hard to undo. The recommendation comes first.
+Nine decisions. Each one is his because it touches money, his intent, words he cares about, or scope that is hard to undo. The recommendation comes first, except in decision 7, which is about his values.
 
-**1. Where the real-money key lives.** Today a lead's rule (not his words) keeps any key that can trade real money off your PC and off any machine an agent can reach; your rule says anything that runs on a server must first run on your PC.
-- **Recommended:** your PC runs everything, on practice accounts and watching live prices; only the real-money key sits on the trading server; the two machines differ only in the key, the name and the broker app. The cost: when the server is down, nothing trades live, and your open trades are protected only by the stops already at the broker.
+**1. Where the real-money key lives.** Today a lead's rule (not your words) keeps any key that can trade real money off your PC and off any machine an agent can reach; your rule says anything that runs on a server must first run on your PC.
+- **Recommended:** your PC runs everything on practice accounts; only the real-money key sits on the trading server; the two machines differ only in the key, the name and the broker app. The cost: when the server is down, nothing trades live, and open trades keep only whatever protection already sits at the broker.
 - Or: your PC also trades live while it is on, and the server takes over when it goes dark. The cost: an agent working on your PC could reach a live key.
+- Or: one small real-money account lives on your PC as a proof run, and the big account lives on the server.
 - Or (waiting on research): the live key sits in a locked part of your PC that agents cannot enter.
+- Three smaller questions inside it. Does a Linux layer inside your PC count as "first run on my machine" (my answer: yes, it is the same code on the same machine)? Does a key that can trade but cannot withdraw still count as a live key (my answer: yes, the harm is placing trades)? Is a second, passive trading server worth its monthly cost before the first unit is live (my answer: not yet)?
+- Dropped, with the reason: a small box at home fails the power cuts the server exists for; a key that exists only while agents are stopped fails on one forgotten restart; a different rule per broker fails the few-sentences test.
 - Why yours: it is about money and about who can press the button.
 
-**2. The 239 dictionary entries.** In August you called them permanent; in October you said the dictionary needs a rebuild.
-- **Recommended:** keep every idea in them, review them in place, and rebuild their form so each one gets working code, a test and a status; add the words the MQL5 articles use that are missing.
-- Or: rebuild the dictionary from the articles and your sources, with the 239 as one input.
-- Why yours: it is your earlier ruling, and only you can say which August choices were your intent and which were the old model's shape.
-
-**3. What your click lets go live.**
-- **Recommended:** you approve a unit together with a list of markets you tick and the broker account; inside that list the unit trades wherever its conditions hold; a market outside the list reaches you as a card.
+**2. What your click lets go live, and what happens when the finder is down.**
+- **Recommended:** you approve a unit together with a list of markets you tick and the broker account; inside that list the unit trades wherever its conditions hold; a market outside the list reaches you as a card. When the finder is down or stale, the unit keeps trading the whole ticked list on its own conditions, which follows your 27 October words: "the unit keeps trading if its own conditions, the pair and the broker allow" (STATE 27 Oct round).
 - Or: you approve one unit on one market at a time.
+- Or, for the finder-down case: the unit falls back to a few home markets only.
 - Why yours: only you promote, and this sets how far one click reaches.
 
-**4. The same logic on another market or timeframe.** On 27 October you said yes to a separate "sibling" unit.
-- **Recommended:** it stays one unit; a market gets its own settings only after the unit's record there earns them, and going live with them is your click; if the rules themselves must change for one market, that is a new unit in the same family.
-- Or: keep your 27 October answer, a sibling unit per market or timeframe.
-- Why yours: it changes an answer you gave.
+**3. What your System 2 is.** On 28 October you said System 2 can mean "changing or enhancing different logics for different markets", like an EMA crossover variant; on 29 October you called it more specific amplification, sniping, and "the end goal of QMX".
+- **Recommended:** keep both halves, under two names. A market's own settings: the same unit, with that market's numbers earned from its record there. A market's own version: the rules changed or enhanced for that market, which is a new unit in the same family, born only from the parent's record there. Both go live only by your click.
+- Or: one word for both, and every market-specific change makes its own unit.
+- Why yours: it is what you call the end goal, and the first draft of this file kept only half of it.
 
-**5. Which markets and broker connections come first.**
+**4. Which markets and broker connections come first.**
 - **Recommended:** forex, gold and index CFDs on cTrader first; Hyperliquid perpetuals second, once the connection research is in; real futures and stocks later.
 - Or: start with Hyperliquid perpetuals beside cTrader from day one.
 - Why yours: it is money and scope. Provisional until the research on small accounts, broker facts and connections.
 
-**6. Recording data and disk space.** Your PC had about 12 GB free when last read; a full tick archive needs 150 to 200 GB.
-- **Recommended:** record minute bars and broker costs for everything, and ticks only for markets your units trade, on the machine that trades them; buy a bigger disk when the first unit needs tick history.
+**5. Recording data and disk space.** On 30 October your C: drive had 16.0 GB free and your D: drive 57.7 GB; the bar archive for 200 units on 60 markets is about 14 GB, a full tick archive 150 to 200 GB.
+- **Recommended:** record minute bars and broker costs for everything on D:, and ticks only for markets your units trade, on the machine that trades them; buy a bigger disk when the first unit needs tick history.
 - Or: record ticks for everything now, on the trading server, with a copy on your PC as space allows.
 - Why yours: it costs money, and Dukascopy's terms limit what can be kept.
 
-**7. Workflow templates: build now or write now.**
+**6. Workflow templates: build now or write now.**
 - **Recommended:** build the shared parts first in the coding phase (the judge, the test counter, the chain between stages), and write every other template as a ready draft that names what it waits for.
 - Or: build them all in the coding phase.
 - Or: write them all up in detail now and code them later.
 - Why yours: you posed the choice, and it decides what the coding phase builds first.
 
-**8. The April rules: no leverage, swap-free, no futures.**
-- **Recommended:** they no longer bind, since CFDs, perpetuals, futures and indices are now in scope; a unit can still be marked swap-free or no-leverage if you want some to follow them.
-- Or: they still bind, which removes perpetuals, futures and most CFD trading.
-- Why yours: it is about your values and your money.
+**7. Your April rules: no leverage, swap-free, no futures.** These rules clash with the markets you added since (CFDs, perpetuals, futures, indices). Which wins, or which units follow them?
+- If the April rules win: perpetuals, futures and most leveraged CFD trading leave the first build.
+- If the new markets win: the April rules stop applying.
+- If some units follow them: each unit carries a "swap-free, no leverage" mark and is only placed where that holds.
+- No recommendation: this is about your values.
 
-**9. Three names on your screens.**
-- **Recommended:** "market settings" for what was called System 2; "finder" or keep "MIS" for the thing that points units at markets; "trading server" for the machine that trades and "workflow server" for the one that runs jobs.
+**8. Names on your screens.**
+- **Recommended:** "market settings" and "market version" for the two halves of System 2; "finder", or keep "MIS", for the thing that points units at markets; "trading server" for the machine that trades and "workflow server" for the one that runs jobs.
 - Or: your own words.
 - Why yours: you said System 1 and System 2 were brainstorming names, and these are the words you will read every day.
 
-**10. News units.**
+**9. News units.**
 - **Recommended:** not in the first build; the news kill switch guards every unit; the design leaves room for news units later.
 - Or: allow news units now, each one marked as allowed to trade through news.
 - Why yours: it is scope, and your two statements disagree.
@@ -493,82 +515,97 @@ Ten decisions. Each one is his because it touches money, his intent, words he ca
 These are implementation shapes still genuinely open. Each names what would separate the options.
 
 **High level**
-1. **Trading runtime: one image or two.** The QMX host with a trading role (QMN's protection and venue code moved in as packages) against QMN kept as its own Linux node. Separate by: install steps, observability, paths, and what the PC rehearsal can prove.
-2. **Brain and arm.** One trading machine holding everything against a split where only a small "arm" holds the key and sends orders. Separate by: decision 1's answer, and whether the arm adds a second concept to the trade path.
-3. **Where the reading history lives.** A Library kind over Parquet partitions against a time-series store beside the Library. Separate by: the as-of query cost from QMB and live, and the backup class.
-4. **The unit compiler.** Compile the unit spec to a Python closure once, against generating plain Python source that is checked in with the unit version. Separate by: per-quote speed on 100 markets on his PC, and debuggability.
-5. **The MIS as one process with tiers, or as products** (a board, a stream, an almanac) sharing one word set. Separate by: freshness per tier and how each fails.
-6. **The feed keeper.** One process per machine against one per broker sign-in. Separate by: cTrader's request-rate limit and token refresh behaviour.
-7. **The try ledger's home.** A family record in the Library against the engine ledger. Separate by: who can write it (only the QMB door) and how hand runs reach it.
-8. **PR 204.** Rebase and widen it against folding its shape into a fresh door. Separate by: conflicts with the stack's edits to `HO/host.py` and `qmx_tools/service.py` (CHECKED in r42 §5).
-9. **Class packs.** One catalogue with a transfer status per entry against one catalogue per asset class. Separate by: how a cheap agent finds an entry, and how aliases resolve.
-10. **The Linux layer on his PC.** WSL2 against a container against a Windows port. Provisional until research 31.
+1. **The stack for the live path.** He said: "We might need to discuss the stack we are going to use. I don't think Python will be suitable, depending." (`T2:55`, CHECKED). Python everywhere (QMF, QML, QMN and QMB are shipped in Python) against a faster runtime for the hot path only (the feed keeper, the compiled unit, the order path) behind the same seams. Separate by: per-quote latency for 100 markets on his PC, measured; research 31 (time per step on the live path) is pending, so this stays open.
+2. **Trading runtime: one image or two.** The QMX host with a trading role against QMN kept as its own Linux node, and what of QMN's admission, seats and Book door survives (seats and Book admission wait on the risk session). Separate by: install steps, observability, paths, and what the PC rehearsal can prove.
+3. **Brain and arm.** One trading machine holding everything against a split where only a small "arm" holds the key and sends orders. Separate by: decision 1's answer, and whether the arm adds a second concept to the trade path.
+4. **The feed keeper.** Finish WU10's ConnectionManager against building on QMN's recording loop; one process per machine against one per broker sign-in. Separate by: cTrader's request-rate limit and token-refresh behaviour.
+5. **Where the reading history lives.** A Library kind over Parquet partitions against a time-series store beside the Library. Separate by: the as-of query cost from QMB and live, and the backup class.
+6. **The unit compiler.** Compile the unit spec to a closure once against generating source that is checked in with the unit version. Separate by: per-quote speed and debuggability.
+7. **The MIS as one process with tiers, or as products** (a board, a stream, an almanac) sharing one word set. Separate by: freshness per tier and how each fails.
+8. **The try ledger's home.** A family record in the Library against the engine ledger. Separate by: who can write it (only the QMB door) and how hand runs reach it.
+9. **PR 204.** Rebase and widen it against folding its shape into a fresh door. Separate by: conflicts with the stack's edits to `HO/host.py` and `qmx_tools/service.py` (CHECKED in r42 §5).
+10. **Class packs.** One catalogue with a transfer status per entry against one catalogue per asset class. Separate by: how a cheap agent finds an entry, and how aliases resolve.
+11. **The Linux layer on his PC.** WSL2 against a container against a Windows port. Provisional until research 31.
 
 **Low level**
-1. The widened callback: how intents carry size, exits and their execution form (stop-market or stop-limit, server-side or client-side, last, mark or index price).
+1. The intent seam: how intents carry size and exits from whichever part the risk session names, with their execution form (stop-market or stop-limit, server-side or client-side, last, mark or index price).
 2. The block interface: typed outputs (event, level, series, state, probability, intent) against free Python.
 3. The reading card schema: tier, clock, data level, version, lag, health and the three output forms.
-4. The journal row and its discriminated kinds; schema-version rules.
+4. The journal row and its discriminated kinds; schema-version and partition-key rules.
 5. The context receipt: which references and compact values it holds, and its size per trade.
-6. Idempotent order sending: client order id equals trace id across retries and restarts.
+6. Safe resend: client order id equals trace id, plus a read of open orders and positions before any resend.
 7. Reconcile precedence after a crash, and how partial fills correct the unit journal.
-8. Clocks: venue time, receive time, broker server time and daylight saving in calendars.
-9. The outbox protocol between a trading server offline for a week and the PC.
-10. The event-trigger loop guard in the conveyor.
-11. The as-of query: one function for QMB and live.
-12. The risk socket's slots: the input set it exposes and the default when a slot is empty. The risk session may reshape them.
+8. Netting accounts: one virtual position per unit (QMN's virtual ledger, CHECKED in r18 §7) against one unit per symbol; who wins a conflict is the risk session's.
+9. Clocks: venue time, receive time, broker server time and daylight saving in calendars.
+10. The trading server's journal queue while the PC is away for a week.
+11. The event-trigger loop guard in the conveyor.
+12. The as-of query: one function for QMB and live, with the golden replay as its test.
+13. The risk socket's slots: the input set it exposes, the demo placeholder, and what an empty slot does. The risk session may reshape all three.
 
 ---
 
 ## 8. The grilling tickets, each with its recommended answer, and the parked list
 
-"Lead" means settled in section 4 and reported; "Decision n" means section 6; "risk session" means handed over through the socket.
+**Every grilling and prototype ticket stays open for him, live** (`wayfinder/MAP.md:24`: "Never answer for him", CHECKED in r44; lead ruling 7). Each row gives my recommended answer for him to accept, change or reject. "Provisional (N)" means its research has not run.
 
-| Ticket | Recommended answer | Status |
+| Ticket | Recommended answer | Also see |
 | --- | --- | --- |
-| What sits inside a unit, and what sits outside | Inside: logic slots, exits, sizer and halts slots, context and data needs, session profile, numbers with motion, market settings, exam baseline, journal. Outside: the finder, the feed keeper, the guards (run locally on the trading machine), the shared budget and pod (risk session). The smallest declaration is F3. | Lead; socket content to the risk session |
-| Words to settle before architecture | Retire System 1, System 2, terrain and bare "timeframe" (bar construction) internally; use unit, logic, version, family, child, market settings, reading, finder, trading server. | Decision 9 for screen names |
-| What makes two units the same unit | The edit-type table in section 3.1; timeframe and market are coordinates. | Decision 4 |
-| What his click admits, and every state a unit can be in | A unit plus his ticked markets and broker account; the state machine of section 3.1 with the risk stop as the only automatic move. | Decision 3; states lead |
-| Trading style | A tag that picks clock tiers, default exit and sizer templates and data needs; changing style is a new version; scalpers first is build order only. | Lead |
-| QML as the unit library, and the dictionary's scope | Upgrade QML in place; the dictionary per section 3.2; scalper types are defaults, never a cage (his 27 Oct answer). | Decision 2 for the 239 |
-| The pod, the account guard and one shared budget | Not designed here. The unit leaves a sizer slot that reads a budget-share input and a halts slot at account scope. | Risk session |
-| Do units read the MIS | Placement from the finder; rule inputs and vetoes computed by the unit itself. | Lead |
-| How the MIS is organised | Clock tiers by data level, class packs, one word set over per-class sensors; versions side by side in shadow; new readings live only with his yes. | Lead; provisional (22, 23, 37) |
-| How a unit finds its markets | No separate router; the finder's match list inside his ticked markets; agent shortlists advisory and scored; a hand-attached market is his tick and counts as a try on that market. | Lead |
-| What System 1 is, and what earns a System 2 | A unit with pooled settings; a market's own settings earned from its record there, shrunk toward pooled, live by his click; a gold-only source enters as a unit whose markets list is gold. | Decision 4; provisional (24, 25) |
-| Bounded and live expansion | Bounded: a pass verdict starts the expansion matrix with counted tries and a stop number. Live: the finder proposes inside his ticked list; outside it, a card. The fail branch stays with every context counted. | Lead |
-| Correlation jobs | The control is the risk session's. The MIS publishes dispersion, herding counts, same-idea groups and dated pair readings; the trade path leaves one hook point before the order for a cross-unit check. | Risk session |
-| What runs on the trading node and what on the PC | Fast readings where the feed lands, slow ones on the PC; a unit uses the board while it is fresh, else its own readings; every guard level on the trading machine; one finder per machine. | Lead |
-| What QMX records live | Bars and broker costs for everything subscribed; ticks for traded markets on the trading machine. | Decision 6 |
-| Which instruments and doors come first | cTrader forex, gold and index CFDs first; Hyperliquid second. | Decision 5; provisional (28, 32, 38) |
-| Where default numbers come from | Published practice and old QMX numbers, each with its origin, editable; QMB shows per unit the trade count its own variance needs; backtest foundations first, then paper. | Lead; provisional (26) |
-| Which analyst workflows come first | Market analysis at session closes with scored calls first (it needs only the data door); unit analysis once journals exist; specialist desks later as subworkflows. | Lead; provisional (30) |
-| Proof that cannot be cheated | Receipts, typed claims, a forecast ledger scored later by script, a recompute grader, landmarks. | Lead; provisional (29) |
-| What QMX does first | No build fork; his click picks the first live units. | Lead; provisional (28) |
-| The risk socket | Exit set, sizer and halts slots at position, unit and account scope; readable inputs as `RISK-SIZING-PACK.md` §4 lists; an empty slot runs a labelled placeholder in backtests and blocks paper and live. | Risk session fills it |
-| Prototype: the steps before one trade | Data fresh, then the unit's own readings and conditions, signal, the market's state is live, local guards (news window, spread against the unit's cost target, kill-switch level), sizer slot, exit set attached, the cross-unit hook, journal, order with its stop at the broker, fill journalled. Each step runs on the trading machine; with the finder, PC or Library down, every step still runs. | Sketch in the architecture step |
-| Prototype: one unit configuring itself | Numbers with declared motion move inside their ranges from the journal on the slow clock; a range edge raises a card; the sizer's maths is the risk session's. | Risk session walkthrough |
-| Prototype: one unit's records | Built from F1, F3 and F4 in the architecture step. | Architecture step |
+| What sits inside a unit, and what sits outside | Inside: logic slots, exits, sizer and halts slots, context and data needs, session profile, numbers with motion, market settings, exam baseline, journal. Outside: the finder, the feed keeper, the guards (run locally on the trading machine), the shared budget and pod (risk session). The smallest declaration is F3. | §2 F3 |
+| Words to settle before architecture | Retire System 1, System 2, terrain, specialist and bare "timeframe" (bar construction) internally; use unit, logic, version, family, child, market settings, market version, reading, finder, trading server. | decision 8 |
+| What makes two units the same unit | The edit-type table in §3.1; timeframe is a coordinate; risk numbers are the risk session's. | decision 3 |
+| What his click admits, and every state a unit can be in | A unit plus his ticked markets and broker account; the transition table in §3.1. | decision 2 |
+| Trading style | A tag that picks clock tiers, default exit and sizer templates and data needs; changing style is a new version; scalpers first is build order only (research 35 §6 item 5: style changes holding time, costs, data and exits, not the logic family). | |
+| QML as the unit library, and the dictionary's scope | Upgrade QML in place; the dictionary rebuild of §3.2 (his words settle it); scalper types are defaults, never a cage (his 27 Oct answer). | §3.2 |
+| The pod, the account guard and one shared budget | Not designed here. The unit leaves a sizer slot that reads a budget-share input and a halts slot at account scope. | risk session |
+| Do units read the MIS | Placement from the finder's match list; rule inputs and vetoes computed by the unit itself with the same code. Provisional (22, 23, 37). | §3.3 |
+| How the MIS is organised | Clock tiers by data level, class packs, one word set over per-class sensors; one live version per reading, new versions in shadow; live only with his yes. Provisional (22, 23, 37). | §3.3 |
+| How a unit finds its markets | No separate router part: the finder's match list inside his ticked markets, the unit picking by its own record; "the router only routes" is the finder pointing. Agent shortlists stay advisory and are scored like a reading; they never bind a unit, because steering where money goes would otherwise become agents touching money. A market he attaches by hand is a tick on the list and counts as a try on that market. | decision 2 |
+| What System 1 is, and what earns a System 2 | System 1: a unit with pooled settings over its ticked markets. System 2: a market's own settings or a market's own version, each earned from the unit's record there (Path A), live by his click; a gold-only source enters as a unit whose markets list is gold; a sniping window is a calendar coordinate inside either. Provisional (24, 25). | decision 3 |
+| Bounded and live expansion | Bounded: a pass verdict starts the expansion matrix with counted tries and a stop number. Live: the finder proposes inside his ticked list; outside it, a card. The fail branch stays, with every context counted (his seed, kept in `seeds.md`; the lead asked about it on 28 Oct, `workflows-field.md` Q24). | |
+| Correlation jobs | The control is the risk session's. The MIS publishes dispersion, herding counts, same-idea groups and dated pair readings; the trade path leaves one hook point before the order for a cross-unit check. | risk session |
+| What runs on the trading node and what on the PC | Fast readings where the feed lands, slow ones on the PC; a unit's rule inputs are always its own readings, and the board only feeds placement; every guard level on the trading machine; one finder per machine. | §3.3 |
+| What QMX records live | Bars and broker costs for everything subscribed; ticks for traded markets on the trading machine. | decision 5 |
+| Which instruments and doors come first | cTrader forex, gold and index CFDs first; Hyperliquid second. Provisional (28, 32, 38). | decision 4 |
+| Where default numbers come from | The shipped template values as defaults, old QMX numbers as a preset, each with its origin, editable; QMB shows per unit the trade count its own variance needs; backtest foundations first, then paper. Provisional (26). | §5 |
+| Which analyst workflows come first | Market analysis at session closes with scored calls first (it needs only the data door); unit analysis once journals exist; analyst desks by trading style later as subworkflows. Provisional (30). | §3.7 |
+| Proof that cannot be cheated | His "can't be cheated" read as "the agent cannot steer the outcome": every number cites a tool-call receipt the engine records; claims are typed with evidence and a superseded link; market calls are dated and scored later by a script, so the market is the comparer ("Who's comparing?", funnel3 CIS knot (b), CHECKED); a recompute grader reruns cited receipts; every analysis names its window and what it did not see. Provisional (29). | §3.7 |
+| What QMX does first | No build fork between "$300 with one or two units" and breadth: the same parts serve both, and his promotion click picks the first live units. Provisional (28). | |
+| The risk socket | Exit set, sizer and halts slots at position, unit and account scope; the readable inputs `RISK-SIZING-PACK.md` §4 lists; in backtests an empty slot runs a labelled placeholder; on demo a labelled stub (minimum lot, one declared exit) lets the reference unit run, and the risk session replaces it before anything goes live. | risk session |
+| Prototype: the steps before one trade | Data fresh; the unit's own readings and conditions; signal; the market's state is live; local guards (news window, spread against the unit's cost target, kill-switch level); sizer slot; exit set attached; the cross-unit hook; journal; order sent with whatever protection the exit set declares; fill journalled. Every step runs on the trading machine, so with the finder, PC or Library down every step still runs. | architecture step |
+| Prototype: one unit configuring itself | The smallest demo (his "what he needs most", STATE 27 Oct): one reference unit on demo whose ATR-scaled distances and threshold percentiles move nightly inside their ranges, shown as a dial with when and why it moved; a range edge raises a card. Built in the architecture step from QML's numbers; the sizer's maths waits for the risk session. | architecture step, then risk session |
+| Prototype: one unit's records | Built from F1, F3 and F4 in the architecture step. | architecture step |
 
-**Research tickets and what they can move.** 22, 23, 37: the MIS tier contents. 24, 25: market settings. 26: judge numbers and order. 27: what the MIS publishes for the risk session. 28: first markets for a small account. 29: the order of proof tools. 30: analyst rhythms. 31: the Linux layer, the walled key, time per step. 32: instrument-record fields. 33: what history may be kept, crypto replay. 38: doors, futures, dead man's switches, trade-only keys.
+**Seeds and questions the first draft dropped** (review A24), each with a recommended answer, open for him where it is his:
+
+| Seed or question | Recommended answer | Whose |
+| --- | --- | --- |
+| How he hears that a unit tuned itself (`qml-field.md` Q80) | Nothing unless a range edge is hit; one line per unit a week on the morning card: which numbers moved and why. | his |
+| Paper sequence (funnel round 2 Q5) | Paper on a demo account starts automatically once a passing verdict lands, since it holds no money; live only by his click. | his |
+| His and the copilot's weekly labels (`mis-field.md` QO04) | Stored dated, with what was visible; they may train a shadow version only. | his |
+| "The MIS is a constant" (`mis-field.md` QO09) | One live version per reading at a time; new versions in shadow. | his, to confirm his August meaning |
+| Is populating the library still a goal (`qml-field.md` Q39) | Yes, through the shipped intake templates; agents populate, governed items wait for his yes. | lead |
+| Fundamentals entries (`qml-field.md` Q79) | Yes, as slow context entries with release time and vintage, used when a source uses them. | lead |
+| The old special ("radioactive") sizing when judging (`STATE.md:89`) | The judge shows every result with the unit's sizer and with a fixed-size baseline; replaying the old sizing is the risk session's. | lead, then risk session |
+| What of QMN's admission, seats and Book door survives (research 42 Q3) | Party mode, §7 high level 2. | architecture step |
+
+**Research tickets and what they can move.** 22, 23, 37: the MIS tier contents. 24, 25: market settings and market versions. 26: judge numbers and order. 27: what the MIS publishes for the risk session. 28: first markets for a small account. 29: the order of proof tools. 30: analyst rhythms. 31: the Linux layer, the walled key, the live-path stack, time per step. 32: instrument-record fields. 33: what history may be kept, crypto replay. 38: doors, futures, cancel on disconnect, trade-only keys, read-only live grants, duplicate order ids.
 
 **Parked (kept, not dropped).**
 
 | Item | Why parked |
 | --- | --- |
-| Risk and sizing maths, exits, house money, Kelly, size growing back, the floor ratchet, the account guard and pod, correlation control, the Intent Aggregator | The risk-and-sizing session |
-| Funding modelling for perps beyond the instrument record | His "a bit out of scope for now" |
-| News units | Decision 10 |
+| Risk and sizing maths, exits, stop or no stop, house money, Kelly, size growing back, the floor ratchet, the account guard and pod, correlation control, the Intent Aggregator, whether the Book path is ever deleted | The risk-and-sizing session |
+| "The funding" in his sense: the money part of a unit, the risk management and position sizing system ("Maybe the thing I may have a lot of control on is just the funding. In other words, the money part of a unit, the risk management and position sizing system", `T2:135`, CHECKED; his "finding [...] is a bit out of scope for now" at `T2:219` points back to it) | The risk-and-sizing session (pack §2.9). Perps funding **rates** are not parked: they are a carry cost on the instrument record and in QMB (F6, §3.4) |
+| News units | Decision 9 |
 | Paid data (Databento, Tardis) | Only when a unit needs it |
 | Router offers, expiry and load-balancer mappings | He found them over-built |
 | Automatic promotion of anything | Only he promotes |
 | Agents or LLM blocks in the live trade path; RL units live | Agents never touch money |
-| Specialist desks, crossover across families, rebuild with a newer model, template health | Later families, after the core |
+| Analyst desks by trading style, crossover across families, rebuild with a newer model, template health | Later families, after the core |
 | Vision-model chart readers, twin search, market recommendation feeds | Wildcards, after the stamped history exists |
 | Commodity futures pack, stocks pack, options as context | After the first doors |
 | Prop-firm accounts, swing units beyond "barely", the spot-only shift | His earlier parking |
-| The `human_gate` node kind | Engine work; his publish click does the job today |
+| The `human_gate` node kind; the unused `library` node kind | Engine work outside the unit build; his publish click does the gate's job today |
 | A Fable advisor for the architecture party | Only on his explicit go |
 | Hardware or home-appliance key holders, broker free VPS, hourly rental, ARM boards | Fail the power-cut reason or wait on research 31 and 38 |
 
@@ -576,7 +613,7 @@ These are implementation shapes still genuinely open. Each names what would sepa
 
 ## Appendix A. Affinity clusters (convergence move 1)
 
-Every field's ideas and questions were sorted into themes. Counts are the rows each field contributed (INFERRED by reading, not by script). The through-line: **honest records, a unit written down as data, and one code path in test and live.**
+Every field's ideas and questions were sorted into themes. Counts were not scripted; sources are named. The through-line: **honest records, a unit written down as data, and one code path in test and live.**
 
 | Cluster | Main sources | Through-line |
 | --- | --- | --- |
@@ -589,43 +626,60 @@ Every field's ideas and questions were sorted into themes. Counts are the rows e
 | Judging and tries | PF L08; WF family C; QF T11 | Count at the door |
 | Agents as analysts and their proof | PF L11, L12; WF H, I, J; MIS §2.5 | The market scores the call |
 | The funnel as workflows | WF A, B, D, E, F, G, K | Enhance the shipped drafts, add the chain |
-| Live node, PC first, keys | live §2.1, §2.2, §2.9, §3 | Same image, two places |
+| Live node, PC first, keys, stack | live §2.1, §2.2, §2.9, §3; PF L16 | Same image, two places |
 | Data and execution routes, feeds, recording | live §2.4, §2.5; PF L05, L09 | Data and execution are separate roles |
 | Journals and what agents read | live §2.6, §2.7; PF L09 | One row shape, one writer |
 | Room for risk | QF T10; PF L06, L07; MIS §2.6 | Slots and inputs, no maths |
-| His view | PF L17, L19; QF T9; MIS §2.9; live §2.8 | Plain words, preview then detail |
+| His view and his day | PF L17, L19; QF T9; MIS §2.9; live §2.8; T2:858 | Plain words, preview then detail |
 | Wildcards kept | MIS §2.11; QF T12; live §2.10 | Parked, not dropped |
 
 ## Appendix B. Build scope (convergence move 2, MoSCoW)
 
+The Must column reaches its own first demo unit: live prices come from the feed keeper, and the risk socket is filled on demo by a labelled stub that the risk session replaces before anything goes live (lead ruling 8; review A15, A16).
+
 | Must (first build) | Should | Could | Won't this time |
 | --- | --- | --- | --- |
-| F1-F6; QMB windowed reader, unit runner, R and receipts, door-side tries; unit spec, compiler and catalogue v1 (the six running indicators plus what the reference unit needs); journal kind and door; instrument records for cTrader forex, gold, index CFDs; MIS v1 (fast seasonal ratios, session and day buckets, stamped history); the judge block; the trading image on his PC with demo and shadow; the trading-server kind; broker-side stops, reconcile, outbox; one reference unit on the cTrader demo; risk socket slots with a test placeholder | The conveyor and the builder template; death certificates; the forecast ledger and session-close analysis; the traded-skipped-missed review; the decay check; the dictionary review workflow over the 239 plus census appends; the agent journal digest; dispersion and herding publishing; market-journal costs feeding QMB | Perps pack and Hyperliquid door (after research 38); futures; specialist desks; crossover; sensor scout; vision chart reader; twin search; passive second server; rebuild with a newer model; template health | Router offers and expiry; automatic promotion; agents in the trade path; RL or LLM blocks live; news units (decision 10); paid data before a unit needs it; large agent simulations; options trading; prop-firm rules; `human_gate` |
+| F1-F6; QMB's rebuilt reader, unit runner, agent door, R and receipts, door-side tries; unit spec, compiler and catalogue v1 (the six running indicators plus what the reference unit needs); journal kind and door, with the trading server's journal queue; the **feed keeper** (WU10 finished or QMN's recording loop reused) and the market-journal minute writer; instrument records for cTrader forex, gold, index CFDs; MIS v1 (fast seasonal ratios, session and day buckets, stamped history); the judge block with the short default chain; the trading image on his PC on demo; the trading-server kind; protection at the broker as the exit set declares, safe resend, reconcile; a **demo socket stub** (minimum lot, one declared exit), labelled; one reference unit on the cTrader demo | The conveyor and the builder template; death certificates; the forecast ledger and session-close analysis; the traded-skipped-missed review; the decay check; the dictionary rebuild workflow over the 239 plus census appends; the agent journal digest; dispersion and herding publishing; market-journal costs feeding QMB; the self-configuration demo (§8) | Perps pack, funding cost port and Hyperliquid door (after research 38); futures; analyst desks by trading style; crossover; sensor scout; vision chart reader; twin search; passive second server; rebuild with a newer model; template health; a faster hot-path runtime if party mode chooses one | Router offers and expiry; automatic promotion; agents in the trade path; RL or LLM blocks live; news units (decision 9); paid data before a unit needs it; large agent simulations; options trading; prop-firm rules; `human_gate` |
 
 ## Appendix C. Forge attacks (attack mode, two voices each)
 
 Voices: one installed BMad persona (Winston the architect, Murat the test architect, Mary the analyst, Amelia the developer, John the product manager), voiced by the lead since the roster script was not run, and one generated outsider. In attack mode nothing was agreed until it survived.
 
-**C1. The stamped trade (F1).** *Murat:* "R needs an initial risk. Grid units and time-exit units have no stop, so they have no 1R." **Cracked.** Changed: R comes from the declared invalidation or initial risk at entry; where a unit declares none, R is a typed "undefined" and money still shows. *Dee, a prop-firm scalper:* "Entry context isn't enough; I lose trades on what happened while I was in." **Cracked.** Changed: the receipt is stamped at entry and at exit, with excursions in R. *Both:* "Stamping state on every trade copies the MIS log." **Held**: the receipt holds references and a few compact values.
+**C1. The stamped trade (F1).** *Murat:* "R needs an initial risk. Grid units, time-exit units and fast-invalidation units have no price stop, so they have no 1R." **Cracked.** Changed: R is a typed "undefined" there, money is judged with a flag, and the risk session is asked about an invalidation distance. *Dee, a prop-firm scalper:* "Entry context isn't enough; I lose trades on what happened while I was in." **Cracked.** Changed: the receipt is stamped at entry and at exit. *Both:* "Stamping state on every trade copies the MIS log." **Held**: references and a few compact values only.
 
-**C2. Readings stored with the moment they were made (F2).** *Winston:* "A hundred markets times twenty readings per minute is a storage bill." **Held, narrowed**: the fast tier is stored as minute summaries; tick-level values live only in a trade's receipt. *Grace, an on-call engineer:* "Two machines disagree on the time." **Cracked.** Changed: venue time and receive time on every value. *Okafor, a quant:* "Backfilled values will be mistaken for live ones." Changed: backfill flag.
+**C2. Readings stored with the moment they were made (F2).** *Winston:* "A hundred markets times twenty readings per minute is a storage bill." **Held, narrowed**: the fast tier is stored as minute summaries. *Grace, an on-call engineer:* "Two machines disagree on the time." **Cracked.** Changed: venue time and receive time on every value. *Okafor, a quant:* "Backfilled values will be mistaken for live ones." Changed: backfill flag.
 
-**C3. Declared skeleton, coded blocks.** *Dee:* "My scalper is a state machine: armed, cooldown, re-entry. Your slots can't hold it." **Cracked.** Changed: the lifecycle operators joined the combiner. *Amelia:* "Two languages; cheap agents will write Python anyway." **Held**: agents write only the document; a missing block becomes a tagged Python block and an append request, and the red-team builder looks for empty units that pass. *Winston:* "Interpreting per quote is slow." **Held**: compiled once into a closure.
+**C3. Declared skeleton, coded blocks.** *Dee:* "My scalper is a state machine: armed, cooldown, re-entry." **Cracked.** Changed: the lifecycle operators joined the combiner. *Amelia:* "Cheap agents will write Python anyway." **Held**: agents write only the document; a missing block becomes a tagged Python block and an append request. *Winston:* "Interpreting per quote is slow." **Held**: compiled once; the stack question stays open for party mode.
 
-**C4. Identity by edit type and market settings.** *Okafor:* "Fitting settings per market is a hidden search; 'it wins on gold' is selection bias." **Cracked.** Changed: a market's own settings come only from the unit's record there, shrink toward pooled values, count as tries, and go live by his click. *John:* "He said yes to sibling units on 27 October." **Held as a decision**, not settled for him (decision 4). *Mary:* "A 1m rewrite of a 5m logic?" **Held**: a rewrite is a structure change, so a child.
+**C4. Identity by edit type and the two halves of System 2.** *Okafor:* "Fitting settings per market is a hidden search; 'it wins on gold' is selection bias." **Cracked.** Changed: a market's own settings come only from the unit's record there, shrink toward pooled values, count as tries, and go live by his click. *John:* "His System 2 also changes the logic per market, and he called it the end goal." **Cracked in the first draft, fixed here**: both halves are kept and put to him (decision 3). *Mary:* "A 1m rewrite of a 5m logic?" **Held**: a rewrite is a structure change, so a child.
 
-**C5. The MIS as a telescope.** *Grace:* "When the finder is stale, where does a list-reading unit trade?" **Cracked.** Changed: home markets are required, and a stale list falls back to them. *Okafor:* "Twenty matches can be one bet." Changed: dispersion and herding counts are must-publish, for the risk session. *Dee:* "At 1m you can't see a trend in time." **Held**: direction lives on session and day tiers; the fast tier is cost and activity.
+**C5. The MIS as a telescope.** *Grace:* "When the finder is stale, where does a list-reading unit trade?" **Cracked.** Changed: the fallback is his choice (decision 2), recommended as the whole ticked list on the unit's own conditions, following his 27 Oct words. *Okafor:* "Twenty matches can be one bet." Changed: dispersion and herding counts are must-publish, for the risk session. *Dee:* "At 1m you can't see a trend in time." **Held**: direction lives on session and day tiers.
 
-**C6. Journals.** *Murat:* "A 1m scalper on a hundred markets floods seen-not-taken rows." **Cracked.** Changed: events by default, closed reason list, per-bar logging opt-in and time-boxed. *Winston:* "One Library item per row won't scale." **Held**: Parquet partitions with Library cards. *Grace:* "A server offline for a week." **Held**: journal before send, outbox sync.
+**C6. Journals.** *Murat:* "A 1m scalper on a hundred markets floods seen-not-taken rows." **Cracked.** Changed: events by default, closed reason list, per-bar logging opt-in and time-boxed. *Winston:* "One Library item per row won't scale." **Held**: Parquet partitions with Library cards. *Grace:* "A demo twin and a live copy write one stream." **Cracked.** Changed: the partition key includes world and machine.
 
-**C7. The try ledger and the judge.** *Okafor:* "No one knows how to count a change of exit family as a fraction of a try." **Cracked, bounded**: each tested variant counts as one whole try per family, the conservative choice; provisional (26). *John:* "He doesn't trust numbers he never asked for." Changed: every gate shows its origin and is editable; the judge reports, he decides. *Murat:* "Agents rerun until green." **Held**: the door counts, not the agent.
+**C7. The try ledger and the judge.** *Okafor:* "No one knows how to count a change of exit family as a fraction of a try." **Cracked, bounded**: each tested variant counts as one whole try per family; provisional (26). *John:* "He doesn't trust numbers he never asked for, and he said don't be too strict." Changed: the shipped preset is the default, the old QMX preset sits beside it, and the default chain is short with the rest opt-in. *Murat:* "Agents rerun until green, or score in a script outside the door." **Cracked.** Changed: results need a door-issued run id.
 
-**C8. Live keys: same image, key on the server.** *Grace:* "The server dies at 3 a.m.; who stands in?" **Cracked, not fully fixed**: nothing stands in under ruling 135 as written; broker-held stops, a venue dead man's switch and a passive second server cut the harm; the rest is decision 1. *Viktor, a broker's risk officer:* "Demo hosts differ from live hosts; rehearsal proves code, not the venue." Changed: shadow on live prices, a five-day twin run, and the first live trade at minimum size by his click. *Amelia:* "QMN is Linux-only." Changed: a Linux layer on the PC, provisional (31). Added: no shared SSH key between the PC and the trading server; a trade-only key is a live key.
+**C8. Live keys: same image, key on the server.** *Grace:* "The server dies at 3 a.m.; who stands in?" **Cracked, not fully fixed**: nothing stands in under ruling 135 as written; the rest is decision 1. *Viktor, a broker's risk officer:* "Demo hosts differ from live hosts; rehearsal proves code, not the venue." Changed: a twin run and the first live trade at minimum size by his click; the image digest in the passport. *Amelia:* "QMN is Linux-only." Changed: a Linux layer on the PC, provisional (31). Added: no shared SSH key between the PC and the trading server.
 
-**C9. The dictionary: review the ideas, rebuild the form.** *Amelia:* "Blocking builds below 'implemented' blocks 85% of sources." **Cracked.** Changed: no block; the part is tagged. *Mary:* "A rebuild loses August intent." **Held**: every concept is kept; only the form changes; the reviewer's brief holds no verdict (research 41 lesson). *Lena, a cheap model with a small context:* "Four hundred entries won't fit in my context." **Held**: one-line index, entries on demand.
+**C9. The dictionary rebuild.** *Amelia:* "Blocking builds below 'implemented' blocks 85% of sources." **Cracked.** Changed: no block; the part is tagged. *Mary:* "A rebuild loses August intent." **Held**: every entry is carried in as a seed; the reviewer's brief holds no verdict. *Lena, a cheap model with a small context:* "Four hundred entries won't fit in my context." **Held**: one-line index, entries on demand.
 
-**C10. Templates: build the core, draft the rest.** *John:* "You can't test a core whose doors don't exist." **Cracked, bounded**: the judge, ledgers, verdict grid, conveyor and lineage writer test on synthetic results now. *Murat:* "Event triggers loop." Changed: the loop guard. *Okafor:* "Workflows can't declare hooks, so the 'judging skill with hooks' is fiction." **Held, reworded**: graders and script nodes the agent cannot skip are the hooks.
+**C10. Templates: build the core, draft the rest.** *John:* "You can't test a core whose doors don't exist." **Cracked, bounded**: the judge, ledgers, verdict grid, conveyor and lineage writer test on synthetic results now. *Murat:* "Event triggers loop." Changed: the loop guard. *Okafor:* "Workflows can't declare hooks." **Held, reworded**: graders and script nodes the agent cannot skip are the hooks.
 
 **What the forge killed.** Builds blocked by entry status; per-row Library items for journals; a separate guard stream; a pure data-first rule interpreter; the dual-path intent flag; a separate router part.
 
-**What survived as weak points.** The stand-in gap under ruling 135 (decision 1); the try count for structure changes (research 26); whether one word set holds across asset classes (research 23 and 37); the Linux layer's faithfulness on his PC (research 31).
+**What survived as weak points.** The stand-in gap under ruling 135 (decision 1); the try count for structure changes (research 26); whether one word set holds across asset classes (research 23 and 37); the Linux layer's faithfulness and the live-path stack (research 31); whether a read-only live grant exists for shadow runs (research 38).
+
+---
+
+## Review response
+
+The independent review (`research/44-review-of-convergence.md`, 49 findings) and the lead's ten rulings were applied in this revision. Every must-fix item is fixed. Findings applied in a different form from the one the review proposed:
+
+- **A11** (list the grilling answers in §6). Applied per lead ruling 7 instead: no ticket is marked answered; each keeps a recommended answer in §8, open for him, so §6 stays at decisions only and under the twelve-decision limit.
+- **A20** (give a reason for the judge numbers that override the shipped `b` defaults). Applied by not overriding: the shipped values are the default preset and old QMX's numbers are a second preset. The one override that remains, the cheap builder tier, says so in §5.
+- **A23** (put N-02, S-05 and the second server's cost into decision 1). Applied, with my answers given as suggestions inside the decision rather than settled as lead calls.
+- **E04** (netting accounts). The account mode goes on the account record and per-unit virtual positions go to party mode; who wins a conflict between two units on one symbol stays with the risk session, as the Intent Aggregator does.
+- **E06** (a declared at-expiry action). The instrument record holds the expiry and QMB replays whatever happens at it, but the action itself is an exit, so the risk session decides it.
+- **A04** (unpark perps funding). Done; the money sense of "funding" goes to the risk session per lead ruling 4.
+
+Rejected: none. Every finding was accepted in substance.
