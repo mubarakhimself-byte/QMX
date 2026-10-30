@@ -147,6 +147,7 @@ Every brief carries `STANDING-ORDERS.md` verbatim. Opus `poteto-agent`s, at most
 - **Deep modules is the reason QML looks the way it does** (his 25 Oct explanation in the first transcript). Designing for agents means designing out ambiguity.
 - **The dictionary must expand far beyond FX** (indices were added yesterday); how it expands is code to plan.
 - **The gold mine session must be read start to finish.** It is the GPT-built session that carried most of the dictionary (role-neutral entries, hybrids such as an exit used as a trigger). He supplied two Hermes review sessions from Downloads as a paper trail.
+- **The gold mine and paper-trail findings are seeds too:** read them, then expand them and propose new things on top. The QML expansion round takes research 34-36 and 39-40 as seeds, never as a spec.
 - **Data versus execution:** who provides order flow and other data is a separate question from which broker executes. cTrader gives depth but no public trade tape (research 21); CCXT covers crypto execution.
 
 **No rush (his word, 2026-10-30):** planning, brainstorming and architecture may take three to four days. QML takes priority. Use as many agents as the work needs. The trading lens was weak in the run (questions any trader already knows the answer to were asked as open): every QML step now carries a trader's view, from practitioner sources and the MQL5 corpus.
