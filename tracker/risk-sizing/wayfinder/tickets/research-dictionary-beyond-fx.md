@@ -2,7 +2,7 @@
 title: "Research: the trader's vocabulary beyond FX, per asset class and data level"
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -41,3 +41,7 @@ A table of concepts not in the dictionary today, each with its family, data leve
 - Label every claim CHECKED (path:line, command or URL) or INFERRED. Never read, print or copy keys, tokens or passwords.
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute.
+
+## Resolution (2026-10-30)
+
+About 150 missing concepts with family, data level, classes and source; 12 words that differ across markets; three build-order options for class packs; the data ladder needs three splits (research 45).

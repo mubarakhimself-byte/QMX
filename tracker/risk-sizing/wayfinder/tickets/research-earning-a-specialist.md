@@ -2,7 +2,7 @@
 title: Research: earning a market's own version of a unit without luck, and noticing when that market changes
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -46,3 +46,7 @@ Options per question, each with the guard against luck it needs. A list of which
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+Path A's remaining luck trap is picking the best-looking market; judge every market by one rule and shrink toward the unit's pooled result. A week of own data checks costs and replay fidelity, never an edge (research 24, sims in `research/24-study/`).

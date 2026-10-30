@@ -2,7 +2,7 @@
 title: Research: how quant desks judge and iterate without overfitting
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -45,3 +45,7 @@ A sequence of judging steps with what each one catches and what it costs, option
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+An 8-step judging order, cheapest first; exit and block changes counted as tries by how much they change the trades; correlated variants counted by clusters; What-If split into views and counted reruns (research 26).
