@@ -133,6 +133,13 @@ Every brief carries `STANDING-ORDERS.md` verbatim. Opus `poteto-agent`s, at most
 
 **Missed by the run (his correction, 2026-10-30): QML and the dictionary.** QML is what a unit is made of, and it was not given its own grounding or expansion. It gets one now: why the dictionary was built the way it was (a cross-trader vocabulary so building agents are never confused, broad in entries, exits and context, with room to append), what QML is in code, and the first-principles question "a bot is a set of if-else rules: how do those rules tune themselves, and what exactly tunes?". Also his corrections: System 1 / System 2, "terrain" and similar were brainstorming names, never QMX terms; market context is the trader's sense (price action, technical analysis, fundamentals when used); nothing about the MIS or standing alone is set in stone before the angles are exhausted.
 
+**Seeds, 2026-10-30 (later the same day):**
+- **"Multiple experiences" = his user experience:** how he, as the user, uses units to trade and make money, and why the whole system (agents, the MIS, self-configuring) gives a bigger advantage than a person running a simple bot.
+- **Research is two things:** the MT5 articles, and academic research on the MIS variants. The academic side was missing from the queue; added as the group B ticket "what academic work says about market-state systems" (research 37).
+- **The 28 Oct discussion after the second explainer site is key** to the MIS work right now.
+- **External connection and the node:** live market access, not just stored data. How does he trade real futures (can cTrader do it, with order flow?), Hyperliquid, and what does the trading node hold. Added as the group F ticket "which platforms and brokers give which markets and data" (research 38).
+- **Move slowly.** Keep track of every seed; no need to do it all at once.
+
 **No rush (his word, 2026-10-30):** planning, brainstorming and architecture may take three to four days. QML takes priority. Use as many agents as the work needs. The trading lens was weak in the run (questions any trader already knows the answer to were asked as open): every QML step now carries a trader's view, from practitioner sources and the MQL5 corpus.
 
 **His proposal for the architecture step (2026-10-30, a seed):** before `bmad-architecture` folds anything, run party mode on how to build it: high level and low level, the lean shape against the shapes with more variants, so implementation issues show up while it is still cheap. A Fable advisor is on the table (he is curious; run it only on his explicit go).

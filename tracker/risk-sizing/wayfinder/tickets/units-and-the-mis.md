@@ -3,7 +3,7 @@ title: Do units read the MIS, and what does a unit do without it
 type: grilling
 mode: HITL
 status: open
-blocked_by: [research-mis-sensor-speed, research-mis-organisation]
+blocked_by: [research-mis-sensor-speed, research-mis-organisation, research-mis-academic]
 claimed_by: ""
 created: 2026-10-30
 covers: [C1, Q1, C24, L03-01, L03-13]

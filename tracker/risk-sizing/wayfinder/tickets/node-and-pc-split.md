@@ -3,7 +3,7 @@ title: What runs on the trading node, and what on the PC
 type: grilling
 mode: HITL
 status: open
-blocked_by: [research-live-path, units-and-the-mis]
+blocked_by: [research-live-path, units-and-the-mis, research-venue-connectivity]
 claimed_by: ""
 created: 2026-10-30
 covers: [C5, Q14, Q15, L03-17, L14-02, L14-04]

@@ -10,6 +10,8 @@ Give Codex this, with the group letter filled in:
 
 When a file lands, the lead reads it, closes the ticket with a one-line resolution and a pointer, and adds it to the map's Decisions so far. Codex does not close tickets.
 
+Group A is done (research 20 and 21, 30 Oct). Two tickets were added on 30 Oct at his ask: the academic MIS survey (group B) and venue connectivity (group F).
+
 ## Order and groups
 
 Suggested order: A to F. A is small and feeds the walkthrough he wants most. B unblocks the most grilling tickets. The rest follow by how much each unblocks.
@@ -27,6 +29,7 @@ Suggested order: A to F. A is small and feeds the walkthrough he wants most. B u
 | --- | --- | --- |
 | [Research: which market states a 1m or 5m scalper can use in time](tickets/research-mis-sensor-speed.md) | `research/22-mis-sensor-speed.md` | units and the MIS; how the MIS is organised |
 | [Research: how market-state systems are organised, and the shared-indicator question](tickets/research-mis-organisation.md) | `research/23-mis-organisation.md` | the same two, plus the QML and dictionary ticket |
+| [Research: what academic work says about market-state systems, per style, timeframe, data and asset class](tickets/research-mis-academic.md) | `research/37-mis-academic.md` | units and the MIS; how the MIS is organised; the QML and dictionary ticket |
 
 Through "units and the MIS", group B also opens the placement ticket and the node and PC split.
 
@@ -61,6 +64,7 @@ Group E's failure-mode study runs model calls. Use the cheapest model that can d
 | [Research: the live path (node gaps, feed fan-out, time per step, first paper unit)](tickets/research-live-path.md) | `research/31-live-path.md` | the node and PC split; where default numbers come from |
 | [Research: the slow broker and instrument facts a unit must have checked](tickets/research-terrain-and-venues.md) | `research/32-terrain-and-venues.md` | which instruments come first, then data recording |
 | [Research: data depth per class, quality checks, and keeping downloaded history](tickets/research-data-depth-and-terms.md) | `research/33-data-depth-and-terms.md` | data recording |
+| [Research: which platforms and brokers give which markets and data, and how QMX connects to them](tickets/research-venue-connectivity.md) | `research/38-venue-connectivity.md` | the node and PC split; which instruments come first |
 
 ## Two things every run needs to know
 

@@ -3,7 +3,7 @@ title: How the MIS is organised: by style, timeframe, data or asset class
 type: grilling
 mode: HITL
 status: open
-blocked_by: [research-mis-organisation, research-mis-sensor-speed]
+blocked_by: [research-mis-organisation, research-mis-sensor-speed, research-mis-academic]
 claimed_by: ""
 created: 2026-10-30
 covers: [C19, Q39, C18, Q37, Q38, C35, Q49, L03-10, Q48, L04-01]
