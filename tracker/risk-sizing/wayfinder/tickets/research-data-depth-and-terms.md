@@ -2,7 +2,7 @@
 title: Research: data depth per class, quality checks, and keeping downloaded history
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -39,3 +39,7 @@ A depth table per class and source, a list of quality checks, and a plain statem
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+History depth per class; Binance Vision's new non-commercial terms (26 Aug 2026) allow personal backtesting, not live trading; Dukascopy forbids databases and bots and now returns 403s (research 33).

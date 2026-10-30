@@ -2,7 +2,7 @@
 title: Research: the broker and instrument facts a unit must have checked
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -42,3 +42,7 @@ A field list per instrument class with where each fact comes from (broker API, d
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+Field list per instrument class and venue, including minimum lot, lot step, money per point and margin, expiries and rolls, rationed order actions (research 32).

@@ -2,7 +2,7 @@
 title: Research: the live path (node gaps, feed fan-out, time per step, first paper unit)
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -43,3 +43,7 @@ A gap list per node part, a time budget per step with measured or published numb
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30)
+
+His PC already runs WSL2 Ubuntu 24.04 with systemd, so the node stack can run on it (catches: clock, idle shutdown, C: space). Time per step is set by the network (about 160 ms to cTrader), not Python. The first paper unit is blocked first by a unit that can be named and run as data (research 31).

@@ -2,7 +2,7 @@
 title: Research: which platforms and brokers give which markets and data, and how QMX connects to them
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -42,3 +42,7 @@ A table: market type × route, with what can be traded, live data given, history
 - Label every claim CHECKED (URL) or INFERRED. Never read, print or copy keys, tokens or passwords; never sign in anywhere.
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute.
+
+## Resolution (2026-10-30)
+
+cTrader cannot trade real futures; real futures with order flow need a futures broker, each with catches (Tradovate data licence, TopstepX bans server orders, IBKR manual login). Eligibility depends on his country, an open question (research 38).
