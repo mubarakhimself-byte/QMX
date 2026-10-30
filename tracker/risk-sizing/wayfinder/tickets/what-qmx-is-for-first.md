@@ -3,7 +3,7 @@ title: What QMX does first: one or two units on $300, or breadth
 type: grilling
 mode: HITL
 status: open
-blocked_by: [research-small-account-universe]
+blocked_by: [research-terrain-and-venues, research-venue-connectivity]
 claimed_by: ""
 created: 2026-10-30
 covers: [L18-01, L18-03, C36, Q79, L02-06, C28, C33, L17-09]

@@ -3,7 +3,7 @@ title: What System 1 is, and what earns a System 2
 type: grilling
 mode: HITL
 status: open
-blocked_by: [identity-rule, research-earning-a-specialist, research-specialist-drift]
+blocked_by: [identity-rule, research-earning-a-specialist]
 claimed_by: ""
 created: 2026-10-30
 covers: [L02-01, L02-05, L02-10, L02-13, L02-14, L02-17, C10, C29, Q23, Q50]

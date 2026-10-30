@@ -1,26 +1,29 @@
 ---
-title: Research: the slow broker and instrument facts a unit must have checked
+title: Research: the broker and instrument facts a unit must have checked
 type: research
 mode: AFK
 status: open
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
-covers: [L05-01, L05-05, L05-12]
+covers: [L05-01, L05-05, L05-12, L05-07, Q80]
 ---
 
 ## Question
 
 Which slow facts per broker, account type and instrument must a unit have checked: tick and lot size, trading hours, spread and commission by hour, swap or funding, expiry and roll, rationed order actions, data available? How do early CFD expiries and rolls reach a unit that holds a position through them? How does a unit learn it is on a venue that rations order actions?
 
+The domain widened on 30 Oct: cover FX, gold and metals, index CFDs, real futures, stocks and stock CFDs, crypto spot and perps. Taken over from the closed small-account ticket: per instrument and venue, the minimum lot, lot step, money per point and margin, so the risk session can work out what a small account can trade. Give the facts only; no risk percentages or account sizes (those are the risk session's). ("Terrain" was a brainstorming name, not a QMX word.)
+
 ## Why it matters
 
-Terrain is half the model and has no home (research 16). Contract specs are MISSING in code (research 18 §8). Feeds the instruments ticket and the journey prototype.
+These facts are half the model and have no home (research 16). Research 43 proposes one record per instrument per broker (foundation F6); this ticket fills its field list. Contract specs are MISSING in code (research 18 §8). Feeds the instruments ticket and the journey prototype.
 
 ## Start from
 
 - `research/02-instruments-and-traders.md`, `research/16-fable-advice-system1-context.md` §2, `research/12-data-feeds-lookback.md` (market journal), `research/18-grounding-today.md` §8.
-- IC Markets contract specifications; Hyperliquid docs.
+- `research/43-convergence.md` foundation F6.
+- IC Markets contract specifications; Hyperliquid docs; CME and other exchange contract specs for the futures in scope. Keep apart from research 38 (who gives which data and how QMX connects) and 33 (history depth).
 
 ## What would settle it
 

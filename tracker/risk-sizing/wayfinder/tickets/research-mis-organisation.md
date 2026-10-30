@@ -22,6 +22,8 @@ His seed: the MIS is shaped by trading style, then timeframe, then the data a ma
 - `research/16-fable-advice-system1-context.md` §2, §3, §7.7; `research/19-grounding-old-system.md` §2 (STRATS `requires: mis.*.vN`, the single-computation rule), §6.
 - `research/funnel3/cis/glossary-draft.md` entries "context", "market state", "instrument class".
 - `research/18-grounding-today.md` §4 (six labelers, the regime pipeline); `C:/Users/Mubarak/Desktop/QMX/docs/glossary.md:556-558`.
+- Seeds since this ticket was written: `research/funnel5-mis/party-brainstorm/mis-field.md` (three labels per reading: its alarm clock, time base and data level; look-back history; fallback steps; dispersion; the shuffled-readings test) and `research/43-convergence.md` (the MIS only points units at markets and is never needed to trade, a lead call, not a ruling). Treat both as seeds to test, not answers.
+- `research/34-grounding-qml-and-dictionary.md` and `research/funnel4-qml/` (the dictionary is being rebuilt, role-neutral, far beyond FX; a reading is one more role).
 - How quant shops share features across strategies (feature stores, factor libraries); regime-model practice.
 
 ## What would settle it

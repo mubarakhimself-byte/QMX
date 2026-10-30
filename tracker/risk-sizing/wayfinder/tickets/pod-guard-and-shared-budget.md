@@ -2,7 +2,7 @@
 title: The pod, the account guard and one shared budget
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [unit-structure]
 claimed_by: ""
 created: 2026-10-30
@@ -26,3 +26,7 @@ C20. Round-2 question 1 in STATE is still open. The risk socket waits on where t
 With him, live, using the `grilling` and `domain-modeling` skills. Before the session the lead converges this ticket's research into options and an explainer page (STATE planning run, step 4). Never answer for him.
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30, scope revision)
+
+Moved to the risk-and-sizing session (his 30 Oct ruling: the book, the BMS and the account guard belong there). Questions carried in `RISK-SIZING-PACK.md` §6; the pack's §4 already lists the guard and pod shape as something this run expects back.

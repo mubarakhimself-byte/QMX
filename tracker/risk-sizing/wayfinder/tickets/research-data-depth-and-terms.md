@@ -11,7 +11,7 @@ covers: [L08-15, L09-07, L09-10]
 
 ## Question
 
-How deep does free and paid history go per instrument class, so "no lookback cap" is real? How is data quality checked for each feed? Do Dukascopy's terms allow QMX to keep the history it downloads for personal use?
+How deep does free and paid history go per instrument class (FX, metals, indices, real futures, stocks, crypto spot, perps, plus order flow, open interest and funding where they exist), so "no lookback cap" is real? How is data quality checked for each feed? Do Dukascopy's terms allow QMX to keep the history it downloads for personal use? When QMX records its own data (live quotes, depth, ticks), what does each class cost in disk per month, and what fits on his PC (D: had about 57.7 GB free on 30 Oct)? This feeds his decision on recording data and disk (research 43, decision 5).
 
 ## Why it matters
 

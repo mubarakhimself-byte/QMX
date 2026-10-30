@@ -21,6 +21,7 @@ The MIS was designed in conversation, then judged slow by Fable and party mode. 
 
 - `operator/transcript-2026-10-20-to-28.md` from his 28 Oct dictations (after the second explainer site) to the end, and `operator/transcript-2026-10-29-to-30.md`: his words on the MIS, the style, timeframe and data ordering, and the "models vs indicators" question.
 - `research/05-academic.md` (detection limits), `research/11-papers-llm-quant.md`, `research/16-fable-advice-system1-context.md` §1.2.
+- Seeds since this ticket was written: `research/funnel5-mis/party-brainstorm/mis-field.md` (three labels per reading: its alarm clock, time base and data level; look-back history; fallback steps; dispersion; the shuffled-readings test) and `research/43-convergence.md` (the MIS only points units at markets and is never needed to trade, a lead call, not a ruling). Treat both as seeds to test, not answers.
 - `research/19-grounding-old-system.md` §2 (the old HMM, BOCPD, MS-GARCH ensembler and market physics).
 
 ## What would settle it
@@ -36,6 +37,7 @@ A matrix: rows = style × bar type, columns = data class × asset class, each ce
 - Run cold with the `research` skill. Read `STANDING-ORDERS.md` and `STATE.md` first; his rulings there outrank every source.
 - Read his words in the verbatim transcripts, never a summary.
 - Options and evidence, not a design. Any threshold is a number: name it and give a starting default, do not settle it.
+- Papers: read the paper itself (arXiv abstract and PDF pages through Exa), not a blog about it. Search in several framings; a single query misses most of the field.
 - Label every claim CHECKED (URL) or INFERRED; take each paper's results as that paper's claim, note costs, sample and look-ahead risks.
 - Never read, print or copy keys, tokens or passwords.
 

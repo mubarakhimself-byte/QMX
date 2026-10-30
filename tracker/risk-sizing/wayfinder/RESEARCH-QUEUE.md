@@ -1,72 +1,53 @@
-# Research queue for Codex
+# Research queue
 
-Written 2026-10-30 with the map's re-chart. Fourteen open research tickets in six groups. One Codex run takes one group. He starts each run himself; nothing here runs on its own.
+Revised 2026-10-30 (afternoon). He paused the Codex run before it wrote anything and handed the research to the lead's Claude agents. Twelve open research tickets, run in three waves. One Opus `poteto-agent` per ticket, one output file each. The lead reads each file, closes the ticket with a one-line resolution, and updates the map and `STATE.md`. Agents do not close tickets.
 
-## How to start a run
+## What changed in the scope revision
 
-Give Codex this, with the group letter filled in:
+- **Moved to the risk-and-sizing session** (his 30 Oct ruling: the book, correlation control, the pod and the account guard live there): the correlation research, the correlation-control and pod/guard grilling tickets, the sizing half of the $300 ticket, and replaying the old sizing in judging. Their questions are in `RISK-SIZING-PACK.md` §6.
+- **Folded:** the broker facts half of the $300 ticket (minimum lot, money per point, margin) into research 32. The drift ticket into research 24 (one clock for earning and expiring).
+- **Widened to his later 30 Oct seeds:** every class now in scope (metals, indices, real futures, stocks, crypto spot, perps); the node must first run on his PC; his own day-to-day experience ("multiple experiences"); the dictionary rebuild; counting exit and block changes as tries; the seeds from the MIS, QML, live and workflow expansion rounds.
+- **New:** research 45, the trader's vocabulary beyond FX (QML has priority).
+- **Words:** "System 1/2" and "terrain" were explanation names; tickets say what they mean instead.
 
-> Work group X of `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/wayfinder/RESEARCH-QUEUE.md`. Read `STANDING-ORDERS.md` and `STATE.md` in that folder first. For each ticket in the group, read the ticket file in `wayfinder/tickets/` in full and follow its "How to run it" section. Write only the output file each ticket names. Do not edit the tickets, the map or any code. Do not commit.
+## Waves
 
-When a file lands, the lead reads it, closes the ticket with a one-line resolution and a pointer, and adds it to the map's Decisions so far. Codex does not close tickets.
+QML and the MIS first, then what earns a version and how it is judged, then the live path and the rest.
 
-Group A is done (research 20 and 21, 30 Oct). Two tickets were added on 30 Oct at his ask: the academic MIS survey (group B) and venue connectivity (group F).
+### Wave 1. QML and the MIS
 
-## Order and groups
+| Ticket | Output |
+| --- | --- |
+| [The trader's vocabulary beyond FX](tickets/research-dictionary-beyond-fx.md) | `research/45-dictionary-beyond-fx.md` |
+| [What academic work says about market-state systems](tickets/research-mis-academic.md) | `research/37-mis-academic.md` |
+| [Which market states a 1m or 5m scalper can use in time](tickets/research-mis-sensor-speed.md) | `research/22-mis-sensor-speed.md` |
+| [How market-state systems are organised](tickets/research-mis-organisation.md) | `research/23-mis-organisation.md` |
+| [Which platforms and brokers give which markets and data](tickets/research-venue-connectivity.md) | `research/38-venue-connectivity.md` |
 
-Suggested order: A to F. A is small and feeds the walkthrough he wants most. B unblocks the most grilling tickets. The rest follow by how much each unblocks.
+### Wave 2. Earning, judging, live
 
-### Group A. Inside a unit (small)
+| Ticket | Output |
+| --- | --- |
+| [Earning a market's own version of a unit, and drift](tickets/research-earning-a-specialist.md) | `research/24-earning-a-specialist.md` |
+| [How quant desks judge and iterate without overfitting](tickets/research-quant-judging.md) | `research/26-quant-judging.md` |
+| [The live path](tickets/research-live-path.md) | `research/31-live-path.md` |
+| [The broker and instrument facts a unit must have checked](tickets/research-terrain-and-venues.md) | `research/32-terrain-and-venues.md` |
 
-| Ticket | Output | Unblocks |
-| --- | --- | --- |
-| [Research: what self-configuring trading systems read and change](tickets/research-self-configuring-systems.md) | `research/20-self-configuring-systems.md` | the self-configuration prototype, then the risk socket |
-| [Research: old-system loose ends (WF4, the pillars, the tick-data fix)](tickets/research-old-system-loose-ends.md) | `research/21-old-system-loose-ends.md` | the QML and dictionary ticket |
+### Wave 3. Agents and data
 
-### Group B. The MIS
+| Ticket | Output |
+| --- | --- |
+| [How analysis agents are confidently wrong](tickets/research-agent-failure-modes.md) | `research/29-agent-failure-modes.md` |
+| [How desks analyse, and his day-to-day experience](tickets/research-desk-analysis.md) | `research/30-desk-analysis.md` |
+| [Data depth per class, quality checks, keeping history](tickets/research-data-depth-and-terms.md) | `research/33-data-depth-and-terms.md` |
 
-| Ticket | Output | Unblocks |
-| --- | --- | --- |
-| [Research: which market states a 1m or 5m scalper can use in time](tickets/research-mis-sensor-speed.md) | `research/22-mis-sensor-speed.md` | units and the MIS; how the MIS is organised |
-| [Research: how market-state systems are organised, and the shared-indicator question](tickets/research-mis-organisation.md) | `research/23-mis-organisation.md` | the same two, plus the QML and dictionary ticket |
-| [Research: what academic work says about market-state systems, per style, timeframe, data and asset class](tickets/research-mis-academic.md) | `research/37-mis-academic.md` | units and the MIS; how the MIS is organised; the QML and dictionary ticket |
+Numbers 25, 27 and 28 are retired (merged or moved).
 
-Through "units and the MIS", group B also opens the placement ticket and the node and PC split.
+## Tools every run uses
 
-### Group C. Specialists and judging
-
-| Ticket | Output | Unblocks |
-| --- | --- | --- |
-| [Research: earning a per-market specialist without luck](tickets/research-earning-a-specialist.md) | `research/24-earning-a-specialist.md` | System 1 and System 2, then expansion |
-| [Research: when an earned specialist's market changes](tickets/research-specialist-drift.md) | `research/25-specialist-drift.md` | System 1 and System 2 |
-| [Research: how quant desks judge and iterate without overfitting](tickets/research-quant-judging.md) | `research/26-quant-judging.md` | where default numbers come from |
-
-### Group D. Money across units
-
-| Ticket | Output | Unblocks |
-| --- | --- | --- |
-| [Research: how many independent bets a set of units really holds](tickets/research-correlation-and-bets.md) | `research/27-correlation-and-bets.md` | the correlation control |
-| [Research: what a $300 account can trade, and whether breadth amplifies a weak edge](tickets/research-small-account-universe.md) | `research/28-small-account-universe.md` | what QMX does first; which instruments come first |
-
-### Group E. Agents as analysts
-
-| Ticket | Output | Unblocks |
-| --- | --- | --- |
-| [Research: how analysis agents are confidently wrong, and which checks catch it](tickets/research-agent-failure-modes.md) | `research/29-agent-failure-modes.md` | agent proof |
-| [Research: how trading desks analyse markets and strategies, by style and rhythm](tickets/research-desk-analysis.md) | `research/30-desk-analysis.md` | which analyst workflows come first |
-
-Group E's failure-mode study runs model calls. Use the cheapest model that can do the task.
-
-### Group F. Live path, venues, data
-
-| Ticket | Output | Unblocks |
-| --- | --- | --- |
-| [Research: the live path (node gaps, feed fan-out, time per step, first paper unit)](tickets/research-live-path.md) | `research/31-live-path.md` | the node and PC split; where default numbers come from |
-| [Research: the slow broker and instrument facts a unit must have checked](tickets/research-terrain-and-venues.md) | `research/32-terrain-and-venues.md` | which instruments come first, then data recording |
-| [Research: data depth per class, quality checks, and keeping downloaded history](tickets/research-data-depth-and-terms.md) | `research/33-data-depth-and-terms.md` | data recording |
-| [Research: which platforms and brokers give which markets and data, and how QMX connects to them](tickets/research-venue-connectivity.md) | `research/38-venue-connectivity.md` | the node and PC split; which instruments come first |
-
-## Two things every run needs to know
-
-- Price data: the Library's partitions or Binance Vision. Dukascopy downloads need his go first (its site terms forbid bots and databases; STATE "For his awareness").
-- Old Hermes logs and the old vault can contain credentials. Never print or copy them.
+- **Web:** Exa search and fetch (load them with ToolSearch, query `exa`). Read the primary page or paper, not a summary of it. Never the built-in browser or Chrome. No paid Exa agent runs. Firecrawl has almost no credits left: do not use it.
+- **Papers:** arXiv abstract and PDF pages through Exa fetch. If an alphaXiv tool is present in the session, prefer it for paper search and page-level quotes.
+- **Local:** the repo, the verbatim transcripts, `Desktop\Stats`, the MQL5 corpus.
+- **Quotes:** under 15 words each from any outside source; summarise the rest.
+- **Price data:** the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms forbid bots and databases).
+- **Credentials:** old Hermes logs and the old vault can contain credentials. Never print or copy them; never sign in anywhere.

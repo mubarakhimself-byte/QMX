@@ -13,6 +13,8 @@ covers: [L15-01, L03-15, L20-06, L03-20, L11-02]
 
 How do human and quant desks analyse markets and strategies day by day, and how does the rhythm differ for scalpers, intraday and swing traders (when they review, recalibrate, pick markets)? Is a daily review done from numbers, chart images, or both? Is weekly market selection backed by evidence, and how? Are session habits (gold at the New York open) an honest almanac or look-ahead? Do fundamentals enter, through what, and with what proof?
 
+Second part, his "multiple experiences" (30 Oct: his own user experience): how does a retail algo trader use today's tools day to day (MT5 with its Strategy Tester and Wizard, cTrader Automate, TradingView, QuantConnect, StrategyQuant, NinjaTrader), from idea to backtest to live to review? Where does each break or stall? Which of those steps would units, QMX workflows, the MIS and self-configuring change, and which would they not? Evidence from user forums, docs and reviews, not marketing pages.
+
 ## Why it matters
 
 QMX agents as analysts is a seed to expand (STATE 10-29/30). He: "A human trader who's a scalper will not wake up at the same time to look at charts as a person who day trades" (T2:132). Feeds the analyst-workflows ticket.
@@ -20,6 +22,7 @@ QMX agents as analysts is a seed to expand (STATE 10-29/30). He: "A human trader
 ## Start from
 
 - `research/19-grounding-old-system.md` §8 (Cartographer Week-Map, Coroner, Crowd Watcher) and §2 (weekly pair selection on evidence).
+- `research/42-grounding-shipped-code.md` (45 templates at the stack tip; 22 run, 23 are drafts) and `research/funnel7-workflows/party-brainstorm/workflows-field.md` (57 candidate templates, the Hermes workflows to take and enhance).
 - `research/18-grounding-today.md` §1.5 (46 templates: `morning-market-brief`, `morning-digest`, `weekly-review`, `trade-journal-in-risk-units`).
 - `research/11-papers-llm-quant.md` (news sentiment, the units-agree study).
 - Trader journaling practice; prop-desk morning and end-of-day routines.

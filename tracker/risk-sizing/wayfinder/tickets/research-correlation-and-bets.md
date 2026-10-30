@@ -2,7 +2,7 @@
 title: Research: how many independent bets a set of units really holds
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -41,3 +41,7 @@ A replay of one or more past days with many matching markets, bets counted three
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30, scope revision)
+
+Moved to the risk-and-sizing session. His 30 Oct ruling put the book and correlation control there (`STATE.md`, corrections 30 Oct evening). The questions are carried in `RISK-SIZING-PACK.md` §6. This run keeps only what the unit records for that session: the readings stamped at entry and exit (research 43, foundation F1).

@@ -2,7 +2,7 @@
 title: Which correlation jobs QMX needs, and where each one runs
 type: grilling
 mode: HITL
-status: open
+status: closed
 blocked_by: [research-correlation-and-bets]
 claimed_by: ""
 created: 2026-10-30
@@ -26,3 +26,7 @@ C4. Twenty units on twenty matching markets can be one bet (research 16, break 3
 With him, live, using the `grilling` and `domain-modeling` skills. Before the session the lead converges this ticket's research into options and an explainer page (STATE planning run, step 4). Never answer for him.
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30, scope revision)
+
+Moved to the risk-and-sizing session (his 30 Oct ruling: the book and correlation control belong there). Questions carried in `RISK-SIZING-PACK.md` §6. The risk socket ticket keeps what the unit must expose.

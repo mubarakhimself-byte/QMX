@@ -11,7 +11,9 @@ covers: [L08-05, L08-06, L08-09, L07-05]
 
 ## Question
 
-How do professional quant desks iterate a strategy without overfitting, and which habits fit agents? In what order should historical and paper judging run? How can QMB's What-If scenarios improve? How is the old "radioactive" sizing (enhanced Kelly with house money) replayed when judging a unit?
+How do professional quant desks iterate a strategy without overfitting, and which habits fit agents? In what order should historical and paper judging run? How can QMB's What-If scenarios improve? How is a change to an exit or a block (not just a number) counted as a try, so the tries ledger at QMB's door stays honest (the open weak point in research 43)? How do desks judge when the unit owns its exits, so an exit change and an entry change are judged the same way?
+
+Out of scope here: replaying the old sizing (enhanced Kelly, house money). That belongs to the risk session (`RISK-SIZING-PACK.md` §6); this ticket only notes what QMB must record so that session's sizing can be replayed later.
 
 ## Why it matters
 
@@ -22,6 +24,8 @@ STATE says judging is the product, should use history and paper both, and must a
 - `STATE.md` sections "Judging" and "QMB (testing)".
 - `research/03-strategyquant.md`, `research/08-old-qmx-testing-and-decay.md`, `research/11-papers-llm-quant.md`, `research/14-design-idea-studies.md` §9.3.
 - `research/18-grounding-today.md` §2 (What-If projection, robustness, sweeps); `research/19-grounding-old-system.md` §5.
+- QMB was mostly settled in the 20-28 Oct session: start from `research/08`, `research/12`, `research/14` and the backtest-door section of `STATE.md`, and do not redo them. Holdouts are his choice per study, off by default (rulings 136-137).
+- `research/43-convergence.md` (the try ledger at QMB's door, foundation F5).
 - QuantConnect LEAN and Jesse docs (current).
 
 ## What would settle it

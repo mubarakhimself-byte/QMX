@@ -20,7 +20,7 @@ Architecture-ready decisions for every part QMX must build so a unit can live in
 - **Inputs, in rank order.** His words in the verbatim transcripts (`../operator/transcript-*.md`). His rulings in `../STATE.md`. `../STANDING-ORDERS.md`. The expansion files. Research 01 to 19.
 - **Rulings every ticket obeys** (detail in `../STATE.md`). A unit is one complete algorithm. The router only routes. Units stand alone with the router, MIS, PC link or Library down. Only he promotes; the only automatic transition is a risk rule stopping a unit. Local first. Nothing capped. Code first, numbers later. Agents never touch money. Everything he says is a seed unless STATE records it as a ruling.
 - **Who works which ticket.**
-  - Research tickets run on Codex, which he starts himself. Order and groups: `RESEARCH-QUEUE.md`.
+  - Research tickets run on the lead's Opus agents since 30 Oct afternoon (he paused Codex). Waves: `RESEARCH-QUEUE.md`.
   - Grilling and prototype tickets wait for him, live. Before each one, the lead converges that ticket's research into options and an explainer page (STATE planning run, step 4). Never answer for him.
 - **Skills.** `research` for research tickets. `grilling` and `domain-modeling` for grilling tickets. `prototype` for prototypes. Plain short words for him; claims labelled CHECKED or INFERRED.
 - **Coverage.** All 339 expansion questions land on this map: 264 in tickets (81 research, 155 grilling, 28 prototype), 2 in the fog, 11 out of scope, 62 in the lead calls below.
@@ -53,6 +53,12 @@ Architecture-ready decisions for every part QMX must build so a unit can live in
 - [Research: what self-configuring trading systems read and change](tickets/research-self-configuring-systems.md). Three meanings of self-configuring; nobody ships policy change without a human (research 20).
 - [Research: old-system loose ends (WF4, the pillars, the tick-data fix)](tickets/research-old-system-loose-ends.md). Four pillars in the Stats lock; cTrader has no public trade tape (research 21).
 
+Scope revision, 30 Oct afternoon (detail in `RESEARCH-QUEUE.md`):
+
+- [Research: when an earned specialist's market changes](tickets/research-specialist-drift.md). Merged into research 24.
+- [Research: what a $300 account can trade](tickets/research-small-account-universe.md). Split: broker facts into research 32, sizing to the risk session.
+- New ticket: [Research: the trader's vocabulary beyond FX](tickets/research-dictionary-beyond-fx.md) (research 45); the QML ticket now waits on it.
+
 ## Not yet specified
 
 In scope, not sharp enough to ticket yet.
@@ -70,6 +76,7 @@ Beyond this map's destination. Closed, never graduates.
 
 - [Money-path edge-case and resilience review](tickets/edge-case-review.md). Runs after architecture; its case list carries over.
 - [Architecture spine for the unit system](tickets/architecture.md). The hand-off after this map; waits for him.
+- **Moved to the risk session on 30 Oct** (his ruling: the book and correlation control live there): [the correlation research](tickets/research-correlation-and-bets.md), [the correlation jobs](tickets/correlation-control.md), [the pod, guard and shared budget](tickets/pod-guard-and-shared-budget.md). Questions in `../RISK-SIZING-PACK.md` §6. The risk socket stays on this map.
 - **Risk and sizing maths and money policy.** House money per unit, slot or account (L07-06); when "tighten, never loosen" is explained to him (L07-08); compound or reset between cycles (L20-02, C32); the pain floor, a percentage of what (C22, Q42). These belong to the risk session (`../HANDOFF-RISK-SIZING.md`). The socket they plug into is on this map.
 - **Who owns the unit idea** (C21). Concept against word; no design effect.
 - **The planning method itself** (C14, Q30, C16, Q34). Settled for this run by his 29 and 30 Oct rulings (broaden first, code first) and the planning-run order in STATE. This chart's coverage line answers Q34.

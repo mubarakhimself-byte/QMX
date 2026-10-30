@@ -358,3 +358,37 @@ Line numbers refer to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/HANDOFF-RI
 12. **The explainer page as a done condition (lines 20, 52).** On 30 Oct he said "No need for an explainer site. No need. Okay. Let's keep everything in chat for now." (T2:602). That was said about the planning run; whether it holds for this session is his call.
 13. **Missing guidance on wording.** It does not carry his warning about reworded words (T2:1208) or point to this pack as the source of his words.
 14. **Still current.** The Kelly kill-line figures (line 33), "design for complexity, never a complex system", "agents never touch money", "only he promotes", "local first" and "nothing limited by default" (lines 39-43) all still match `STATE.md`.
+
+---
+
+## 6. Questions moved here from the unit planning (2026-10-30, scope revision)
+
+His 30 Oct ruling put the book, correlation control, the pod and the account guard in this session. The unit planning had research and grilling tickets on them, written before that ruling. They are closed there and carried here as open questions, word for word from the tickets. The unit planning keeps only the socket (§4) and what a unit records for this session (readings stamped at entry and exit, results in R).
+
+**From the correlation research ticket** (`wayfinder/tickets/research-correlation-and-bets.md`):
+- What should a correlation control measure: currency legs, return correlation, a shared context label, dated by method and horizon?
+- On a day when 20 markets match one unit's context, how many independent bets are there by pairwise correlation, by effective number of bets, and by shared label, and do they agree?
+- Is a simple bet counter (units entering on the same label within some minutes count as one) as safe?
+- Which of the correlation controls he remembers existed, and in what form? Start from `research/funnel3/cis/problem-solving.md` knot (c) (six eras, ten options), `research/19-grounding-old-system.md` §2 (the Intent Aggregator) and §4, the draft `rk2-correlation-drift` template and `qmf-risk` `door.py:315-347` on `origin/engine/base`.
+- Settled on 30 Oct, not open: the same unit on 1m and 5m of one pair is one correlated idea, not two bets.
+
+**From the correlation-control grilling ticket** (`wayfinder/tickets/correlation-control.md`):
+- Which correlation jobs QMX needs now: a funding gate, a sizing multiplier, a per-tick conflict resolver, an exposure ledger, a dated pair record, cohort correlation in judging?
+- Where each runs so it works with the router and MIS down and never stops a unit only because they are down.
+- Does the name "correlation ledger" keep the docs' meaning (order lineage) or his?
+
+**From the pod, guard and shared budget grilling ticket** (`wayfinder/tickets/pod-guard-and-shared-budget.md`):
+- Combine the account guard and the pod, or keep them apart? What is the "ideal BMS" he means, as opposed to today's?
+- Is the book per account, per broker, or across every account?
+- The unit sizes itself, yet two units on $300 "should be able to use all the 300" (T2:216): does a unit size inside a share a central part allocates, negotiate its share, or own all sizing with the guard only stopping it?
+- When units compete for one budget: first setup wins, or a ranking?
+- Which stops belong to the unit and which are central (kill line, daily loss, account floor)?
+- Does the news kill switch sit in the MIS, in the ideal BMS, or beside both as its own guard?
+
+**From the $300 research ticket, sizing half** (`wayfinder/tickets/research-small-account-universe.md`; the broker facts half moved to research 32, which this session can read for minimum lots, money per point and margin):
+- With $300, which instruments can a unit trade at safe risk at the minimum lot, per venue?
+- Can one unit hold more than two or three markets at once at safe risk?
+- Does trading breadth amplify a weak edge, as he says, and how would that be shown (the fundamental law of active management; Kelly with many simultaneous bets)? Contradiction C36: grow $300 with one or two units, or compound across breadth.
+
+**From the judging research ticket** (`wayfinder/tickets/research-quant-judging.md`):
+- How is the old "radioactive" sizing (enhanced Kelly with house money) replayed when judging a unit? The unit planning's research 26 notes only what QMB must record so this replay is possible later.

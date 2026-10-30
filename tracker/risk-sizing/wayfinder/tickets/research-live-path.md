@@ -13,6 +13,8 @@ covers: [L14-01, L14-05, L16-04, L16-01, L13-03, Q29]
 
 What does the trading node need beyond the never-deployed QMN code? How does one feed pool serve 200 or more units across brokers and machines? How much time may each step between a signal and an order take for a 1m scalper? Is Python right for the whole live path or only parts of it? What blocks the first paper unit first: a QMB runner that trades, or a node that runs?
 
+Added 30 Oct: the node needs Linux and systemd (research 42), and anything that runs on external compute must first run on his PC (his rule). What does it take to run the same node stack on his Windows PC (WSL2, a container, a VM), against demo and paper accounts, and how close is that to the server? What would "set up a node as simply as renting a server" (a wizard or one click) need, given what the shipped connect-a-server path does and does not do? Facts and options on ruling 135 (live-money keys never where agents work) only; the choice is his.
+
 ## Why it matters
 
 The node's part and the journey before a trade are in this map's destination. Contradiction C13 (live first or backtest first).
@@ -21,7 +23,8 @@ The node's part and the journey before a trade are in this map's destination. Co
 
 - `research/18-grounding-today.md` §2, §7, §8; `research/12-data-feeds-lookback.md` (feed keeper, cTrader rate limits); `research/09-router-architecture.md`; `research/14-design-idea-studies.md` (independence, the token-refresh danger).
 - QMN code under `qmn/src/qmn/` on `origin/engine/base`; `D:/QMX-worktrees/unit-plan/tracker/qma-v2/QMB-BACKTEST-DOOR-HANDOFF.md`.
-- cTrader Open API docs.
+- `research/42-grounding-shipped-code.md` (PR 232's connect-a-server path, ruling 135 in code, the 30-PR stack) and `research/funnel6-live/party-brainstorm/live-field.md` (the eight ruling-135 options, the brain and arm split, one Linux image the PC also runs).
+- cTrader Open API docs; WSL2 and systemd docs (current).
 
 ## What would settle it
 

@@ -37,6 +37,7 @@ A table: market type × route, with what can be traded, live data given, history
 
 - Run cold with the `research` skill. Read `STANDING-ORDERS.md` and `STATE.md` first; his rulings there outrank every source.
 - Vendor facts come from vendor docs read live, never from old repo notes.
+- Keep apart from research 32 (contract facts per instrument) and 33 (history depth); point to them instead of repeating.
 - Options and evidence, not a design. Prices and limits are the vendor's, not QMX caps.
 - Label every claim CHECKED (URL) or INFERRED. Never read, print or copy keys, tokens or passwords; never sign in anywhere.
 

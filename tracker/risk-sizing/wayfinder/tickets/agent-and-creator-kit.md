@@ -3,7 +3,7 @@ title: QML as the unit library: upgrade or rebuild, and the dictionary's new sco
 type: grilling
 mode: HITL
 status: open
-blocked_by: [unit-structure, research-mis-organisation, research-old-system-loose-ends]
+blocked_by: [unit-structure, research-mis-organisation, research-old-system-loose-ends, research-dictionary-beyond-fx]
 claimed_by: ""
 created: 2026-10-24
 updated: 2026-10-30

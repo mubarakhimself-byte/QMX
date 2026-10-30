@@ -16,4 +16,5 @@ Pasted verbatim into every brief. One rule per line. The operator's rulings in `
 12. Never read, print or copy keys, tokens or passwords. Old Hermes logs contain credentials.
 13. Write only the files your brief names. No commits, no pushes, no branch or worktree changes.
 14. Words for the operator: plain, short sentences, no codenames or internal ids. He is non-technical and dictates ("potato mode" = poteto-mode, "Febble" = Fable, "KMX" = QMX, "MTFA" = MT5 articles, "BMAD" = BMad).
-15. Finish with a final message of at most 10 lines: what you wrote, where, and the few findings that matter most.
+15. Web research: Exa search and fetch (load with ToolSearch, query `exa`); read the primary page or paper itself. Never the built-in browser or Chrome, no paid Exa agent runs, no Firecrawl (no credits). Quotes from outside sources stay under 15 words each.
+16. Finish with a final message of at most 10 lines: what you wrote, where, and the few findings that matter most.

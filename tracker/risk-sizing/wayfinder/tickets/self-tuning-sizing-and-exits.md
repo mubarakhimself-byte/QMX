@@ -3,7 +3,7 @@ title: The risk socket: what a unit plugs in now, what the risk session wires la
 type: grilling
 mode: HITL
 status: open
-blocked_by: [pod-guard-and-shared-budget, prototype-self-configuration]
+blocked_by: [prototype-self-configuration]
 claimed_by: ""
 created: 2026-10-24
 updated: 2026-10-30

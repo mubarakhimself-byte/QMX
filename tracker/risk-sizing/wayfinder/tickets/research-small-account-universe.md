@@ -2,7 +2,7 @@
 title: Research: what a $300 account can trade, and whether breadth amplifies a weak edge
 type: research
 mode: AFK
-status: open
+status: closed
 blocked_by: []
 claimed_by: ""
 created: 2026-10-30
@@ -40,3 +40,7 @@ A table per instrument: minimum lot, money per point, risk at the minimum lot as
 - Price data: use the Library's partitions or Binance Vision. Dukascopy downloads need his go (its site terms, STATE "For his awareness").
 
 Paths are relative to `D:/QMX-worktrees/unit-plan/tracker/risk-sizing/` unless absolute. Question ids (L01-01, C1, Q1) are rows in `research/funnel3/party-brainstorm/playing-field.md` (L and C ids) and `research/funnel3/cis/cis-questions.md` (Q ids).
+
+## Resolution (2026-10-30, scope revision)
+
+Split. The broker facts half (minimum lot, money per point, margin per instrument and venue) moved into `research-terrain-and-venues` (research 32). The sizing half (safe risk at the minimum lot, how many markets at once, whether breadth amplifies a weak edge, Kelly across many bets) moved to the risk-and-sizing session, carried in `RISK-SIZING-PACK.md` §6.

@@ -23,6 +23,7 @@ Research 15 and 16 found a trend or mean-reversion state takes about 8 hours to 
 - `research/16-fable-advice-system1-context.md` §1.2, §7.1, §7.10; `research/15-party-system1-context.md`; `research/05-academic.md` (information per bar).
 - `research/02-instruments-and-traders.md` (which venues have depth or a tape).
 - Stats context entries: `C:/Users/Mubarak/Desktop/Stats/dictionary/context-regime-and-intermarket/context-filters-confirmations.md`.
+- Seeds since this ticket was written: `research/funnel5-mis/party-brainstorm/mis-field.md` (three labels per reading: its alarm clock, time base and data level; look-back history; fallback steps; dispersion; the shuffled-readings test) and `research/43-convergence.md` (the MIS only points units at markets and is never needed to trade, a lead call, not a ruling). Treat both as seeds to test, not answers.
 - Literature on change-point detection, variance ratio, Hurst, efficiency ratio, order-flow imbalance, tick and volume bars.
 
 ## What would settle it

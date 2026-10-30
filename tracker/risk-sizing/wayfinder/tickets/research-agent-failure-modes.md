@@ -21,11 +21,12 @@ He: "We also need to know in which ways they can be wrong before we define the t
 
 - `research/funnel3/cis/problem-solving.md` knot (b) (F1 to F15 and 14 options).
 - `research/19-grounding-old-system.md` §8 (opinion nodes, the Cartographer judged on calibration, the Coroner); `research/11-papers-llm-quant.md` (training-memory look-ahead).
+- `research/42-grounding-shipped-code.md` and `research/funnel7-workflows/party-brainstorm/workflows-field.md` (the agentic side is already built in QMA v2; checks become judge steps and scripts in workflow templates, not new agents).
 - `research/18-grounding-today.md` §1.1 and §1.4 (the engine ledger and run zones already record what a run did); `C:/Users/Mubarak/Desktop/QMX/docs/glossary.md:570`.
 
 ## What would settle it
 
-A small replay study: two agents on the same recorded day, one required to cite receipts and typed claims, one not; failures counted by a script, not by eye. Run on the cheapest model that can do the task.
+A small replay study: two agents on the same recorded day, one required to cite receipts and typed claims, one not; failures counted by a script, not by eye. Run on the cheapest model that can do the task: the test agents are headless `claude -p --model haiku` calls on his plan login (no API keys, never read or print a key). These calls are the study's subjects, not helpers: you still do not spawn sub-agents for your own work.
 
 ## Output
 

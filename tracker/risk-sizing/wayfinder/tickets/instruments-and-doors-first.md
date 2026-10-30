@@ -3,7 +3,7 @@ title: Which instruments, venues and platform doors come first
 type: grilling
 mode: HITL
 status: open
-blocked_by: [research-terrain-and-venues, research-small-account-universe, research-venue-connectivity]
+blocked_by: [research-terrain-and-venues, research-venue-connectivity, research-data-depth-and-terms]
 claimed_by: ""
 created: 2026-10-30
 covers: [L05-04, L05-06, L05-09, C37, C34, L20-01, C12, Q28]
