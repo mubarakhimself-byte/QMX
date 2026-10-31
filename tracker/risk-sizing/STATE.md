@@ -68,6 +68,10 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 29. **Futures:** he will likely use CME through a broker. Design for futures accounts and every instrument now, so he is "spoiled for choice" later; no decision from him needed now.
 30. **Grounding claims he disputes, to check in code:** "nothing merged has run on his PC" (he codes on this laptop, pushes and merges); "workflow agent steps cannot write files" (about 20 workflow templates were tested); "no working way for agents to run a backtest".
 
+31. **No generative step while grounding is still running.** He stopped the experience pass and the edge-case catalogue: "do you really need to run it while you are still grounding?" Context collection finishes first; the funnel starts after.
+32. **Surgical, not frozen.** Ruling 24 does not freeze legacy code: "if you figure out that something needs to change or something is necessary, we shall add it." The lead lacks that code's history, so it changes what is necessary, surgically, with the reason in one line, after grounding.
+33. **Work the way "QMA V2 Workflow System Design 2" worked.** He called it "a perfect session": how it ran and how it responded. The lead adopts its method (studied by the G4b agent into `architecture/00-how-the-best-session-worked.md`). The "QMX wrap-up coordination" session ran four days and left "a very solid foundation to build on already".
+
 **The lead's answer to ruling 13:** the dictionary's form (schema, checks, authoring tools) is built by the orchestrator's builders as code. Its first content wave (porting the 239 entries into the new form, then new families beyond forex) is a packet in the same build, done by builders with a grounding brief and no cap. Later growth goes through the same authoring door that the copilot and QMA agents use, checked by the same scripts.
 
 **The midday program (lead):**

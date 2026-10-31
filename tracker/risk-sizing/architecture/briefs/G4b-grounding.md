@@ -42,10 +42,14 @@ He read the first grounding's findings and disputed several (STATE.md "Operator 
 5. Mini apps: is any mini app designed or shipped; what the mini-app core is (manifest, runtime, server of its own, limits and why they exist: he says logging and monitoring); what a mini-app template holding a unit would need, using only what exists.
 6. Where the MIS's logs would live for workflow templates to read, given what exists.
 
+## A second job: how this session worked
+He called this session "a perfect session, literally. The way it ran, the way it was responding, it was perfect", and wants the lead to adopt its method. From the dialogue, describe how it worked: how it planned and sequenced steps (grounding before generating, which skills and agents at which step, how many agents at once), how it answered him (length, tone, structure, what it asked and what it decided alone, how it filtered agent questions), how it handled his nudges and corrections, how it recorded rulings and files, and what made him trust it. Quote him on what he liked (his words only, with line refs). End with a short list of habits the lead should copy, each one line.
+
 ## Output
 `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\grounding\G4b-qma-v2-session-agents-workflows.md`:
 1. What the session designed and decided that matters to units, QML, QMB, the node, journals, the MIS, agents, workflows and mini apps, each with its status in code: BUILT (merged on engine/base), STACKED (branch or open PR), DESIGNED (file or chat only), DROPPED.
 2. Answers to the questions above.
 3. Corrections to the first grounding: each wrong or misleading claim, what is true, the evidence.
 4. What the unit design must use as it is (surgical), and the few places where a change is unavoidable, with why.
+5. A second file, `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\00-how-the-best-session-worked.md`, for the second job.
 Final message at most 10 lines.
