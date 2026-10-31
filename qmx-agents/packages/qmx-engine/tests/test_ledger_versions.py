@@ -42,7 +42,7 @@ def test_a_ledger_one_version_newer_opens_and_keeps_what_the_newer_release_added
     tmp_path: Path,
 ) -> None:
     home = home_of(tmp_path)
-    path = written_by_a_newer_release(home, version=5, min_reader=4)
+    path = written_by_a_newer_release(home, version=6, min_reader=5)
 
     with Ledger.open(home) as ledger:
         applied = ledger.applied
@@ -54,14 +54,14 @@ def test_a_ledger_one_version_newer_opens_and_keeps_what_the_newer_release_added
         marks = db.execute("SELECT key, value FROM meta WHERE key != 'sqlite_version'").fetchall()
 
     assert (applied, kinds, kept) == ([], ["run_created", "run_finished"], [("run-0",)])
-    assert sorted(marks) == [("min_reader", "4"), ("schema_version", "5")]
+    assert sorted(marks) == [("min_reader", "5"), ("schema_version", "6")]
 
 
 def test_a_ledger_whose_min_reader_is_raised_is_refused_by_name_and_left_as_it_was(
     tmp_path: Path,
 ) -> None:
     home = home_of(tmp_path)
-    path = written_by_a_newer_release(home, version=7, min_reader=5)
+    path = written_by_a_newer_release(home, version=7, min_reader=6)
     before = path.read_bytes()
 
     with pytest.raises(StoreRefused) as writer:
@@ -72,7 +72,7 @@ def test_a_ledger_whose_min_reader_is_raised_is_refused_by_name_and_left_as_it_w
     assert str(writer.value) == str(reader.value)
     assert str(writer.value) == (
         "This QMX folder's run ledger was written by QMX 0.1.0 as run ledger version 7. This "
-        "QMX reads run ledger version 4, and this one needs a QMX that reads version 5 or "
+        "QMX reads run ledger version 5, and this one needs a QMX that reads version 6 or "
         f"newer. Install that QMX, or restore the copy taken before the upgrade from "
         f"{home.parent / 'backups'}."
     )
@@ -90,13 +90,13 @@ def test_a_version_2_ledger_is_copied_into_backups_before_its_steps(tmp_path: Pa
 
     with Ledger.open(home) as ledger:
         applied = ledger.applied
-    (copy,) = (home.parent / "backups").glob("pre-engine-2-4-*")
+    (copy,) = (home.parent / "backups").glob("pre-engine-2-5-*")
     with closing(sqlite3.connect(copy / "data" / "engine" / "engine.sqlite")) as kept:
         before = kept.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
     with Reader.open(home) as reader:
         after = reader.stats().schema_version
 
-    assert (applied, before, after) == ([3, 4], ("2",), 4)
+    assert (applied, before, after) == ([3, 4, 5], ("2",), 5)
 
 
 def test_an_inbox_that_is_not_qmxs_is_refused_and_left_as_it_was(tmp_path: Path) -> None:
@@ -118,7 +118,7 @@ def test_the_engine_command_line_shows_a_refused_ledger_as_its_one_line(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     home = home_of(tmp_path)
-    written_by_a_newer_release(home, version=7, min_reader=5)
+    written_by_a_newer_release(home, version=7, min_reader=6)
 
     code = main(["ledger", "stats", "--home", str(home.parent)])
 
@@ -126,7 +126,7 @@ def test_the_engine_command_line_shows_a_refused_ledger_as_its_one_line(
     assert (code, printed.out) == (1, "")
     assert printed.err == (
         "This QMX folder's run ledger was written by QMX 0.1.0 as run ledger version 7. This "
-        "QMX reads run ledger version 4, and this one needs a QMX that reads version 5 or "
+        "QMX reads run ledger version 5, and this one needs a QMX that reads version 6 or "
         f"newer. Install that QMX, or restore the copy taken before the upgrade from "
         f"{home.parent / 'backups'}.\n"
     )

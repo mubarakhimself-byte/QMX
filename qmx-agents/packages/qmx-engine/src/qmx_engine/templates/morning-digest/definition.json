@@ -5,7 +5,7 @@
   "inputs": {
     "type": "object",
     "properties": {
-      "fixture": {"type": "string", "description": "replay the recorded digest"}
+      "fixture": {"type": "boolean", "description": "replay the recorded digest"}
     }
   },
   "outputs": {"type": "object", "description": "what ran, what landed and what needs him, since his last look"},

@@ -244,7 +244,7 @@ def test_the_old_folder_is_copied_switched_and_left_exactly_as_it_was(pc: Path) 
     assert pointer is not None
     assert f"home = {json.dumps(str(new))}" in pointer.read_text(encoding="utf-8")
     assert sorted(p.name for p in pointer.parent.iterdir()) == ["home.toml"]
-    (copy,) = (new / "backups").glob("pre-engine-3-4-*")
+    (copy,) = (new / "backups").glob("pre-engine-3-5-*")
     assert (copy / "data" / "engine" / "engine.sqlite").is_file()
     with Ledger.open(new / "data") as ledger:
         assert ledger.applied == []
@@ -252,7 +252,7 @@ def test_the_old_folder_is_copied_switched_and_left_exactly_as_it_was(pc: Path) 
     with closing(sqlite3.connect(uri, uri=True)) as db:
         marks = db.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
         events = db.execute("SELECT run_id FROM events").fetchall()
-    assert (marks, events) == (("4",), [("run-1",)])
+    assert (marks, events) == (("5",), [("run-1",)])
 
 
 def test_a_store_the_new_folder_would_refuse_fails_the_bring_in_by_name(pc: Path) -> None:

@@ -54,7 +54,7 @@ STORES: Final = {
             "engine",
             "run ledger",
             "sqlite",
-            Version(4, 3),
+            Version(5, 3),
             "engine/engine.sqlite",
             ("events", "memos", "spans"),
             meta="meta",

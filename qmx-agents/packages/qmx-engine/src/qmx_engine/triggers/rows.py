@@ -18,6 +18,7 @@ fire's priority rises towards `HIGH` (`priority_at`).
 
 `role_pins` and `effort_pin` override role resolution for the runs a trigger fires (B-60).
 `source` is stored as 4.1 names it; nothing reads it yet. `incident_id` names the open incident.
+`inputs` are what each run it fires starts from, set at create and replaced by `set_inputs`.
 """
 
 from __future__ import annotations
@@ -74,6 +75,9 @@ ENDINGS: Final = ("ok", "silent", "blocked_config", "failed", "unknown", "cancel
 """Fire statuses a fire never leaves."""
 HIGH: Final = 10
 """The spine's `high` priority, and the most `ready_by` adds."""
+NO_PAYLOAD: Final = frozenset({"cron", "interval", "manual"})
+"""The kinds whose fire brings no data of its own, so their stored inputs must hold every input
+the workflow requires. The other kinds' data arrives with each fire."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +139,8 @@ class Trigger:
     priority: int = 0
     ready_by: str | None = None
     """A local `HH:MM` in `zone`."""
+    inputs: JsonObject = field(default_factory=dict[str, JsonValue])
+    """What each run it fires starts from, under that fire's payload and the engine's own keys."""
     blocked: str | None = None
     """Why it cannot fire, read against the place list by `standing`; never stored."""
     place: str | None = None
@@ -193,7 +199,7 @@ COLUMNS: Final = (
     "id, workflow_item, pinned_object, follow_champion, home_engine, kind, spec, enabled,"
     " precheck_ref, role_pins, effort_pin, delivery, continuity, catch_up, max_concurrent, source,"
     " created_by, created_at, next_fire_at, last_status, failure_streak, quota_hold_until,"
-    " incident_id, last_outputs, priority, ready_by"
+    " incident_id, last_outputs, priority, ready_by, inputs"
 )
 FIRE_COLUMNS: Final = (
     "id, trigger_id, occurrence_at, status, claimed_by, lease_until, detail, run_id, merged_into,"
@@ -263,6 +269,7 @@ def trigger_of(row: tuple[object, ...]) -> Trigger:
         outputs,
         priority,
         ready_by,
+        inputs,
     ) = row
     return Trigger(
         id=str(id_),
@@ -290,6 +297,7 @@ def trigger_of(row: tuple[object, ...]) -> Trigger:
         last_outputs=None if outputs is None else json.loads(str(outputs)),
         priority=cast(int, priority),
         ready_by=cast(str | None, ready_by),
+        inputs=json.loads(str(inputs)),
     )
 
 
@@ -358,6 +366,7 @@ def create(
     priority: int = 0,
     ready_by: str | None = None,
     places: Mapping[str, str] = ONLY_PC,
+    inputs: JsonObject | None = None,
 ) -> Trigger:
     """A new trigger, created by a user or an agent. A run never creates one (SOLUTION-DESIGN
     4.2 step 7). `place` is its home by name, which must be in the place list `places`
@@ -386,6 +395,7 @@ def create(
         next_fire_at=first_fire(spec, now),
         priority=priority,
         ready_by=ready_by,
+        inputs=dict(inputs or {}),
     )
     ledger.write(insert(trigger))
     return trigger
@@ -394,7 +404,7 @@ def create(
 def insert(trigger: Trigger) -> Operation[None]:
     def operation(txn: Transaction) -> None:
         txn.connection.execute(
-            f"INSERT INTO triggers ({COLUMNS}) VALUES ({', '.join('?' * 26)})",  # noqa: S608
+            f"INSERT INTO triggers ({COLUMNS}) VALUES ({', '.join('?' * 27)})",  # noqa: S608
             (
                 trigger.id,
                 trigger.workflow_item,
@@ -422,7 +432,19 @@ def insert(trigger: Trigger) -> Operation[None]:
                 None if trigger.last_outputs is None else json.dumps(trigger.last_outputs),
                 trigger.priority,
                 trigger.ready_by,
+                json.dumps(trigger.inputs),
             ),
+        )
+
+    return operation
+
+
+def set_inputs(trigger_id: str, inputs: JsonObject) -> Operation[None]:
+    """Replace the inputs a trigger stores; its next fire reads them."""
+
+    def operation(txn: Transaction) -> None:
+        txn.connection.execute(
+            "UPDATE triggers SET inputs = ? WHERE id = ?", (json.dumps(inputs), trigger_id)
         )
 
     return operation
