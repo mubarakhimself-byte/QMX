@@ -4,7 +4,8 @@ A credential is `read` only when its probe proves it cannot trade; it is then st
 `qmx/read/<connection>` and replicates like a declared tool key. A data-provider key is filed
 under `qmx/data/<connection>`. A key whose probe finds a live account it can trade is stored
 nowhere: the row reads `needs_you` and the key belongs on a trading server (AD-28, AD-67,
-ruling 135).
+ruling 135). An OAuth pair is never a vault entry: its home writes it into its own key store,
+which on This PC is Credential Manager.
 """
 
 import json
@@ -23,12 +24,52 @@ CTRADER_CLIENT_ID = "qmx/ctrader-client-id"
 CTRADER_CLIENT_SECRET = "qmx/ctrader-client-secret"  # noqa: S105 - an entry name, not a secret
 CTRADER_APP = "qmx/read/ctrader-app"
 """The read app's id and secret as one static entry, which the vault seals for the server."""
+THIS_PC = "pc"
+"""This PC's place name, and a connection's home when he names no other (engine AD-67, AD-72)."""
+CTRADER_TOKENS = "qmx/token/ctrader-app"
+"""The grant's pair, only in its home's own key store. The vault refuses any name with `token`."""
 
 
 class SecretStore(Protocol):
     def get_password(self, service: str, username: str) -> str | None: ...
     def set_password(self, service: str, username: str, password: str) -> None: ...
     def delete_password(self, service: str, username: str) -> None: ...
+
+
+class KeyStore(Protocol):
+    """A home's own store for secrets that never replicate, read and written by name."""
+
+    def read(self, name: str) -> str | None: ...
+    def replace(self, name: str, value: str) -> None: ...
+    def delete(self, name: str) -> None: ...
+
+
+class CredentialManager:
+    """This PC's key store: Windows Credential Manager through keyring, each entry under its
+    `qmx/*` name with the name minus `qmx/` as its user name. No value is printed or logged.
+
+    keyring's Windows backend re-saves an overwritten value under `<user>@<name>` before writing
+    the new one, so every write and delete also removes that companion: no stale copy stays."""
+
+    def __init__(self, store: SecretStore | None = None) -> None:
+        self._store = store
+
+    def read(self, name: str) -> str | None:
+        return _store(self._store).get_password(name, name.removeprefix("qmx/"))
+
+    def replace(self, name: str, value: str) -> None:
+        user = name.removeprefix("qmx/")
+        _store(self._store).set_password(name, user, value)
+        self._forget(f"{user}@{name}", user)
+
+    def delete(self, name: str) -> None:
+        user = name.removeprefix("qmx/")
+        self._forget(name, user)
+        self._forget(f"{user}@{name}", user)
+
+    def _forget(self, target: str, user: str) -> None:
+        with suppress(PasswordDeleteError):
+            _store(self._store).delete_password(target, user)
 
 
 class Held(Protocol):
