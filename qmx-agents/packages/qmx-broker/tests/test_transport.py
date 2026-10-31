@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from typing import Any, cast
 
 import pytest
@@ -9,11 +8,12 @@ from qmf.core import is_refusal
 from qmf.venue.proto import CompiledProto, compile_descriptor_set
 
 from qmx_broker.ctrader_transport import CTraderTransport
+from qmx_broker.service import PROTOCOL_SET
 
 
 def protocol() -> CompiledProto:
     result = compile_descriptor_set(
-        (Path(__file__).parent / "fixtures/tag91.pb").read_bytes(),
+        PROTOCOL_SET.read_bytes(),
         package_name="openapi-proto-messages",
         release_tag=91,
     )

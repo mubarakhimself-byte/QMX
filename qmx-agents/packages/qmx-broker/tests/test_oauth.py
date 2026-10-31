@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from keyring.errors import PasswordDeleteError
 from pydantic import ValidationError
 
 from qmx_broker.credentials import (
@@ -123,10 +124,7 @@ def test_a_refused_exchange_names_cTraders_code_and_never_the_request() -> None:
     aim = Redirect.parse("http://127.0.0.1:47613/ctrader/callback")
     with pytest.raises(OAuthRefused) as refused:
         exchange_code(APP, "c0de", aim, token_url="http://fake/apps/token", fetch=endpoint)
-    assert (refused.value.code, str(refused.value)) == (
-        "ACCESS_DENIED",
-        "ACCESS_DENIED: code expired",
-    )
+    assert (refused.value.code, str(refused.value)) == ("ACCESS_DENIED", "ACCESS_DENIED")
 
 
 @dataclass
@@ -152,7 +150,8 @@ class Keyring:
         self.entries[service] = (username, password)
 
     def delete_password(self, service: str, username: str) -> None:
-        del self.entries[service]
+        if self.entries.pop(service, None) is None:
+            raise PasswordDeleteError(service)
 
 
 def test_the_app_copy_joins_his_two_entries_once_and_keeps_them() -> None:

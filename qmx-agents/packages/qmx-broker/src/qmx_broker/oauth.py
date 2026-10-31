@@ -12,8 +12,10 @@ guard [retrieved: help.ctrader.com/open-api/account-authentication].
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
+import re
 import socket
 import time
 import urllib.error
@@ -32,6 +34,8 @@ DEFAULT_REDIRECT: Final = "http://127.0.0.1:47613/ctrader/callback"
 """Used until Settings names the redirect registered on his app (`[ctrader] redirect`)."""
 LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "localhost", "::1"})
 CALL_TIMEOUT_S: Final = 20.0
+CLOSED_WORD: Final = re.compile(r"[A-Z][A-Z0-9_]{0,39}")
+"""The shape of cTrader's own error codes, such as ACCESS_DENIED."""
 
 
 class OAuthRefused(Exception):
@@ -92,11 +96,15 @@ class AppCredential:
 
 @dataclass(frozen=True, slots=True)
 class Tokens:
-    """One grant's pair. A refresh rotates both and kills the old pair."""
+    """One grant's pair. A refresh rotates both and kills the old pair. `expires_at` is 0 when
+    cTrader named no lifetime, and such a pair is never due on time alone."""
 
     access_token: str = field(repr=False)
     refresh_token: str = field(repr=False)
     expires_at: float
+
+    def due(self, now: float) -> bool:
+        return 0 < self.expires_at <= now
 
     def document(self) -> str:
         return json.dumps(
@@ -123,16 +131,27 @@ type Fetch = Callable[[str, str], tuple[int, bytes]]
 
 
 def urllib_fetch(method: str, url: str) -> tuple[int, bytes]:
-    request = urllib.request.Request(  # noqa: S310 - the token endpoint Settings names
-        url, method=method, headers={"Accept": "application/json"}
+    """One call to the token endpoint. A URL that is not http or https with a host is refused as
+    `token_url_invalid` before anything is sent; urllib's own errors would quote the URL, whose
+    query holds the client secret and the refresh token."""
+    invalid = OAuthRefused(
+        "token_url_invalid", "the [ctrader] token_url in Settings is not a web address"
     )
     try:
+        parts = urlsplit(url)
+        if parts.scheme not in {"http", "https"} or not parts.hostname:
+            raise invalid
+        request = urllib.request.Request(  # noqa: S310 - the token endpoint Settings names
+            url, method=method, headers={"Accept": "application/json"}
+        )
         with urllib.request.urlopen(request, timeout=CALL_TIMEOUT_S) as answer:  # noqa: S310
             return int(answer.status), answer.read()
     except urllib.error.HTTPError as error:
         return int(error.code), error.read()
-    except OSError as error:
+    except (OSError, http.client.HTTPException) as error:
         raise OAuthRefused("token_endpoint_unreachable", type(error).__name__) from None
+    except ValueError:
+        raise invalid from None
 
 
 def consent_url(app: AppCredential, redirect: Redirect, *, base: str = CONSENT_URL) -> str:
@@ -146,19 +165,31 @@ def consent_url(app: AppCredential, redirect: Redirect, *, base: str = CONSENT_U
 def _token_call(
     params: dict[str, str], method: str, token_url: str, fetch: Fetch, now: float
 ) -> Tokens:
+    """A server error or a rate limit (429) is `bad_token_answer` before its body is read, so
+    neither reads as a refused grant. A refusal keeps cTrader's errorCode only when it is a short
+    closed word, and never its description: an endpoint that echoes the request would put the
+    secret in either."""
     status, body = fetch(method, f"{token_url}?{urlencode(params)}")
+    if status >= 500 or status == 429:
+        raise OAuthRefused("bad_token_answer", f"HTTP {status}")
     try:
-        answer = cast("dict[str, object]", json.loads(body or b"{}"))
+        parsed: object = json.loads(body or b"{}")
     except ValueError:
-        raise OAuthRefused("bad_token_answer", f"HTTP {status}, not JSON") from None
+        raise OAuthRefused("unreadable_token_answer", f"HTTP {status}, not JSON") from None
+    if not isinstance(parsed, dict):
+        raise OAuthRefused("unreadable_token_answer", f"HTTP {status}, not a JSON object")
+    answer = cast("dict[str, object]", parsed)
     error = answer.get("errorCode")
     if error:
-        raise OAuthRefused(str(error), str(answer.get("description") or ""))
+        word = str(error)
+        raise OAuthRefused(word if CLOSED_WORD.fullmatch(word) else "token_refused")
     access, refresh = answer.get("accessToken"), answer.get("refreshToken")
     if status != 200 or not isinstance(access, str) or not isinstance(refresh, str):
-        raise OAuthRefused("bad_token_answer", f"HTTP {status} without a token pair")
+        raise OAuthRefused("unreadable_token_answer", f"HTTP {status} without a token pair")
     expires = answer.get("expiresIn")
-    return Tokens(access, refresh, now + float(expires if isinstance(expires, int) else 0))
+    if isinstance(expires, bool) or not isinstance(expires, int) or expires <= 0:
+        return Tokens(access, refresh, 0.0)
+    return Tokens(access, refresh, now + expires)
 
 
 def exchange_code(
