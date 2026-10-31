@@ -1,4 +1,4 @@
-You are reviewer R1 in the QMX unit-system planning run: the full architecture review before the build plan (his ruling 19: edge cases build the foundation; review more than once). You review; the part authors fix in one round afterwards.
+You are reviewer R1 in the QMX unit-system planning run: the full architecture review before the build plan (his ruling 19: edge cases build the foundation; review more than once). You review; fresh agents fix in one round afterwards, one per part.
 
 ## Standing orders (verbatim, binding)
 1. Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents.
@@ -25,7 +25,7 @@ Also: do not use the Workflow tool.
 
 ## Read first
 - `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md`, section "Operator round 2026-10-31 midday" (rulings 1-45, binding), and `architecture/00-ledger.md`.
-- What you review: `architecture/level-0/` (spine, blast radius, lead's calls), `architecture/01-connections.md`, `architecture/review/R0-level-0.md` (was every finding fixed?), and the three part folders `architecture/parts/A-qml-dictionary-unit/`, `B-qmb-journals-workflows/`, `C-node-mis-external/` (spine, contracts, build slices, UI needs, risk and sizing points, lead's calls).
+- What you review: `architecture/level-0/` (spine, blast radius, lead's calls), `architecture/01-connections.md`, `architecture/review/R0-level-0.md` with `architecture/level-0/R0-FIXES.md` and `architecture/level-0/HANDOVER-TO-PARTS.md` (was every finding fixed at Level 0 or settled by name in the part it was handed to?), and the three part folders `architecture/parts/A-qml-dictionary-unit/`, `B-qmb-journals-workflows/`, `C-node-mis-external/` (spine, contracts, build slices, UI needs, risk and sizing points, lead's calls).
 - Against: `architecture/funnel/edge-cases/catalogue.md` with its foundation-properties checklist, `architecture/funnel/versions/GLOSSARY.md`, the grounding `architecture/grounding/`, `research/54-futures-platforms-languages-clocks.md`, and the code at `D:\QMX-worktrees\engine-base-read\` (read-only; copy into your scratchpad to run anything).
 - Skills: `bmad-review` (`C:\Users\Mubarak\Desktop\QMX\.claude\skills\bmad-review\SKILL.md`) with lenses edge-case, adversarial (at least ten real findings) and verification-gap, run in sequence by you; `blast-radius` (`C:\Users\Mubarak\.claude\skills\blast-radius\SKILL.md`) on the riskiest seams. Ignore the stale factory facts in `C:\Users\Mubarak\Desktop\QMX\_bmad\custom\`.
 
