@@ -51,6 +51,11 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 15. **Write down** what the UI needs, and every risk and sizing point, in the files that exist for them.
 16. **No more Fable agents** until he asks.
 
+17. **Running agents and new information** (his rule, 31 Oct): when a nudge or a finding changes what a running agent should do, prefer cutting it and restarting a fresh one with the new information over waiting. (Applied at once: the node and external agent was cut and restarted with the earlier platform work as its first reading.)
+18. **The earlier work already holds much:** the 20-28 Oct transcript (with links; it looked at many platforms), the Hermes gold mine, yesterday's funnels, this session's files and agents' outputs. Harvest before generating.
+19. **Edge cases build the foundation.** Catalogue the edge cases before the architecture, judge the architecture versions against them, and review more than once, so the simplest version that handles them wins. His picture: white-label software, Shopify or Wix: a solid core that others build their own things on. Learn from how such platforms keep their core small and their extension points stable.
+20. **Questions to him go through the question tool** (it pops up where he sees it); otherwise he is watching, not steering.
+
 **The lead's answer to ruling 13:** the dictionary's form (schema, checks, authoring tools) is built by the orchestrator's builders as code. Its first content wave (porting the 239 entries into the new form, then new families beyond forex) is a packet in the same build, done by builders with a grounding brief and no cap. Later growth goes through the same authoring door that the copilot and QMA agents use, checked by the same scripts.
 
 **The midday program (lead):**
@@ -60,6 +65,7 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 4. bmad-architecture per part, four grouped agents.
 5. One review (bmad-review lenses, blast radius) and one fix round.
 6. The build plan (checked), the orchestrator prompt and the builder prompt. Folder: `architecture/`.
+Amended after rulings 17-19: an edge-case catalogue runs beside the funnel (step 2); the versions in step 3 are judged against it; a quick review of the Level 0 spine runs before step 4; the full review in step 5 checks every part against the catalogue.
 
 ## Operator round 2026-10-31 morning: the run was sloppy in the technical lens; layer the architecture (binding; outranks the 43 convergence)
 
