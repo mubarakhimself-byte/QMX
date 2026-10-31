@@ -403,13 +403,16 @@ class Engine:
         priority: int = 0,
         pins: JsonObject | None = None,
         workflow_item: str | None = None,
+        object_id: str | None = None,
+        started_by: str | None = None,
     ) -> Outcome:
         """`fake` is the per-run switch that answers model nodes with the fake provider.
         `priority` orders the run's waiting work against other runs', higher first (AD-58).
         `pins` are a trigger's `{"roles": {role: row}, "effort": ...}`, which override role
         resolution for this run and are recorded on `run_created` (B-60). `workflow_item` is the
-        Library item the run is of, recorded on `run_created`; a folder run has none and goes by
-        its definition id."""
+        Library item the run is of, `object_id` the version or draft it runs and `started_by` who
+        started it, all recorded on `run_created`, so a run that dies before its first summary
+        can still be summarized; a folder run and a child run have none."""
         if not self.claiming:
             raise Refused("the engine stopped claiming work after a ledger write error")
         run_id = run_id or new_run_id(self.wall())
@@ -428,7 +431,7 @@ class Engine:
             pins=pins or {},
             workflow_item=workflow_item,
         )
-        run.create(inputs)
+        run.create(inputs, object_id, started_by)
         return await run.drive()
 
     async def resume(
@@ -813,7 +816,7 @@ class Run:
         if kind == "node_finished":
             self.engine.mirror(self)
 
-    def create(self, inputs: JsonValue) -> None:
+    def create(self, inputs: JsonValue, object_id: str | None, started_by: str | None) -> None:
         self.ticked = self.engine.wall()
         self.now = utc_text(self.ticked)
         self.write(
@@ -825,6 +828,8 @@ class Run:
                 "limits": recorded_limits(self.definition),
                 "workflow_id": self.definition.id,
                 "workflow_item": self.workflow_item,
+                "object_id": object_id,
+                "started_by": started_by,
                 "folder": str(self.root),
                 "content_hash": content_hash(load(self.root)),
                 "parent_run_id": self.parent_run_id,
