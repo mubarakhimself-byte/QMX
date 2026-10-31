@@ -26,6 +26,7 @@ from fastmcp.exceptions import ToolError
 from keyring.backends import fail, null
 from qmx_apps.errors import AppError
 from qmx_home import Layout, resolve
+from qmx_home.versions import check_open
 from qmx_library.client import HubClient
 from qmx_library.port import LibraryRefused
 from qmx_remote.models import RemoteError
@@ -383,6 +384,15 @@ def _mcp_method(method: Callable[..., Any]) -> Callable[..., Any]:
     return call
 
 
+def read_only(home: Path) -> list[dict[str, str]]:
+    """Each store of the folder this release opens read-only, by name, with its one line."""
+    try:
+        verdicts = check_open(Layout.from_home(home)).verdicts
+    except OSError, ValueError:
+        return []
+    return [{"store": v.store, "line": v.line} for v in verdicts if v.action == "read-only"]
+
+
 def create_app(
     service: ControlService,
     token: str | None = None,
@@ -455,9 +465,15 @@ def create_app(
         async for event in service.stream(topic, max(after, last_event_id), subject, max_events):
             yield ServerSentEvent(data=event["data"], event=topic, id=str(event["id"]))
 
+    opened: list[list[dict[str, str]]] = []
+
     @app.get("/api/health", dependencies=[Depends(authenticate)])
-    def health() -> dict[str, str | int]:
-        return {"status": "ok", "pid": os.getpid()}
+    def health() -> dict[str, object]:
+        """Up, with every store this process opened read-only named before any write is refused.
+        A store's mode is set when it opens, so it is read once."""
+        if not opened:
+            opened.append(read_only(service.home))
+        return {"status": "ok", "pid": os.getpid(), "read_only": opened[0]}
 
     for extra in extra_routers:
         app.include_router(extra, dependencies=[Depends(authenticate)])

@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import threading
 import time as clock
 import uuid
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -68,7 +69,7 @@ from qmx_home.backup.snapshot import only as part_for
 from qmx_home.classes import SENT, Class, class_of
 from qmx_home.files import GIB, Busy, floor_of, hold, long_path, plain
 from qmx_home.rclone import Rclone
-from qmx_home.versions import log_line, log_lines
+from qmx_home.versions import UPGRADE_COPIES, log_line, log_lines
 
 LOCK: Final = "backups.lock"
 QUICK: Final = "quick"
@@ -285,6 +286,97 @@ def quick(
     return report
 
 
+@dataclass(frozen=True, slots=True)
+class Synced:
+    """What `sync_now` did: This PC's copy, each send that ended within the wait, and the
+    storages whose send had not ended by then (it goes on, and QMX goes on without it)."""
+
+    report: RoundReport
+    sent: tuple[Placed, ...]
+    late: tuple[Storage, ...]
+    wait: str
+
+    @property
+    def copied(self) -> bool:
+        """This PC holds the copy."""
+        return any(p.key == QUICK and p.result == "copied" for p in self.report.places)
+
+    @property
+    def missed(self) -> tuple[str, ...]:
+        """One line for each storage the copy did not reach: it refused, or did not answer."""
+        refused = [
+            f"the sync to {p.where} did not finish: {p.line.rstrip('.')}"
+            for p in self.sent
+            if p.result not in ("copied", "unchanged")
+        ]
+        late = [
+            f"the sync to {s.shown} did not end within {self.wait}; it goes on by itself"
+            for s in self.late
+        ]
+        return (*refused, *late)
+
+
+def sync_now(
+    layout: Layout,
+    plan: Plan,
+    why: str,
+    *,
+    wait: float | None = None,
+    runner: Rclone | None = None,
+    now: datetime | None = None,
+    road_lease: RoadLease | None = None,
+) -> Synced:
+    """One copy tagged `why` into This PC's copies, sent to every storage that is on (with the
+    main switch on), waiting at most `wait` seconds (`[backup.upkeep] before_update_wait` when
+    None) for the sends. It needs only the folder and its plan: no host. A send still running
+    after the wait goes on in the background and removes the staging when the last one ends.
+    Raises Busy while a round holds the folder."""
+    free = shutil.disk_usage(long_path(layout.root)).free
+    floor = floor_of(plan.floor_gb, free)
+    report, pinned = copy_round(
+        layout,
+        plan,
+        now=now or datetime.now(UTC),
+        floor=floor,
+        why=why,
+        force=True,
+        road_lease=road_lease,
+        every=True,
+    )
+    budget = span(plan.upkeep.before_update_wait).total_seconds() if wait is None else wait
+    shown = _seconds(budget)
+    if pinned is None:
+        return Synced(report, (), (), shown)
+    sent: dict[str, Placed] = {}
+
+    def one(place_id: str) -> None:
+        try:
+            placed = send(layout, plan, place_id, pinned.stamp, rclone=runner, floor=floor, why=why)
+            sent[place_id] = placed.places[0]
+        except (Busy, PlanRefused) as refused:
+            sent[place_id] = _busy_place(layout, plan, place_id, str(refused))
+        except Exception as error:  # a send that broke is a storage the copy did not reach
+            sent[place_id] = _busy_place(layout, plan, place_id, f"it stopped: {error}")
+
+    threads = [
+        threading.Thread(target=one, args=(p,), name=f"sync-{p}", daemon=True) for p in pinned.due
+    ]
+    for thread in threads:
+        thread.start()
+
+    def unstaged() -> None:
+        for thread in threads:
+            thread.join()
+        unstage(layout, pinned.stamp)
+
+    last = threading.Thread(target=unstaged, name="sync-unstage", daemon=True)
+    last.start()
+    last.join(budget)
+    ended = dict(sent)
+    late = tuple(s for s in plan.sending if s.id in pinned.due and s.id not in ended)
+    return Synced(report, tuple(ended[p] for p in pinned.due if p in ended), late, shown)
+
+
 def carry_on(layout: Layout, storage: Storage, *, rclone: Rclone | None = None) -> str:
     """His choice to keep sending to a storage the fork guard refused: the storage's newest copy
     is taken as this folder's own from now on. The line to show."""
@@ -349,10 +441,12 @@ def copy_round(
     progress: Callable[[str], None] | None = None,
     road_lease: RoadLease | None = None,
     held: Collection[str] = (),
+    every: bool = False,
 ) -> tuple[RoundReport, Pinned | None]:
     """This PC's part of a round: the copy made, This PC's copies written, and the copy pinned
-    for each due storage's send. `held` names the stamps sends still read, which the round's
-    thinning keeps. The report is logged; the pinned copy is None when no storage is due."""
+    for each due storage's send (`every` storage that is on, due or not, with the main switch
+    on). `held` names the stamps sends still read, which the round's thinning keeps. The report
+    is logged; the pinned copy is None when no storage is due."""
     started = clock.monotonic()
     told = progress or _quiet
     busy = f"a backup round is already running for {layout.root}; it ends by itself"
@@ -390,6 +484,7 @@ def copy_round(
             storage
             for storage in plan.sending
             if (storage.id == only)
+            or (every and plan.on and storage.policy.on)
             or (
                 only is None
                 and storage.policy.on
@@ -1119,7 +1214,7 @@ def _thin_quick(
     readable, held = _readable(repo)
     held |= set(pinned)
     for stamp, manifest in readable.items():
-        if manifest.header.get("why") == "before-upgrade" and not released(when(stamp), elsewhere):
+        if manifest.header.get("why") in UPGRADE_COPIES and not released(when(stamp), elsewhere):
             held.add(stamp)
     keep = kept(list(readable), plan.pc.keep, drilled=_drilled(log, QUICK), held=held)
     for stamp in readable:
@@ -1218,6 +1313,14 @@ def _steps(told: Callable[[str], None]) -> Callable[..., None]:
 def _logged(layout: Layout, report: RoundReport) -> RoundReport:
     log_line(layout, report.document())
     return report
+
+
+def _seconds(count: float) -> str:
+    if count < 60:
+        return f"{count:g} s"
+    if count < 3600:
+        return f"{count / 60:g} min"
+    return f"{count / 3600:g} h"
 
 
 def _count(count: int, word: str) -> str:

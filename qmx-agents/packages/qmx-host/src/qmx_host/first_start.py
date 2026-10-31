@@ -37,16 +37,19 @@ import threading
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path, PureWindowsPath
 from typing import Any, Final, cast
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.library import UNFINISHED, old_library
+from qmx_control.service import ControlService, kept_word_for_word
 from qmx_home import (
     LABEL,
     RESTORE_UNFINISHED,
@@ -59,7 +62,15 @@ from qmx_home import (
     pointer_file,
     resolve,
 )
-from qmx_home.backup.plan import NO_SECOND_DRIVE, PlanRefused, proposal, source_of
+from qmx_home.backup.plan import (
+    FOLDER,
+    NO_SECOND_DRIVE,
+    PlanRefused,
+    can_of,
+    proposal,
+    source_of,
+)
+from qmx_home.backup.plan import parse as parse_plan
 from qmx_home.backup.repository import Repository
 from qmx_home.backup.restore import (
     JOURNAL,
@@ -73,7 +84,9 @@ from qmx_home.backup.restore import (
     newer_than,
     stage,
 )
-from qmx_home.files import Busy, Held, copy_file, hold
+from qmx_home.backup.round import run_round
+from qmx_home.classes import PER_MACHINE_KEYS
+from qmx_home.files import Busy, Held, copy_file, hold, local_floor
 from qmx_home.rclone import Rclone
 from qmx_home.versions import check_open
 
@@ -89,10 +102,12 @@ from qmx_host.bring_in import (
     refusal_before_copy,
     unfinished_facts,
 )
-from qmx_host.connect import KINDS, PLACE_NAME, Kind, Run, World, run_kind
+from qmx_host.connect import KINDS, PLACE_NAME, Kind, Run, World, run_kind, same_folder
 from qmx_host.connect import Refused as ConnectRefused
 from qmx_host.connect import document as connect_document
+from qmx_host.connect_storage import LOOPS, mint
 from qmx_host.jobs import Job, Jobs, Progress, Stopped
+from qmx_host.keys import refusal as key_refusal
 from qmx_host.process_record import recorded_host
 
 OLD_FOLDER: Final = ".qmx"
@@ -109,7 +124,28 @@ NOTHING_CHOSEN: Final = (
     "data in first"
 )
 RESTORE: Final = "restore"
+RESTORE_STORAGE: Final = "restore-storage"
+"""The card's choice that connects his storage on the card and restores a copy from it."""
 CONNECT: Final = "connect"
+KEEP: Final = "keep"
+KEPT_LINE: Final = "Your work is kept on this PC"
+KEEP_CARD: Final = "Keep your work in another storage too"
+CONSOLE: Final = "https://console.cloud.google.com/apis/credentials"
+DRIVE_RESTORE: Final = (
+    "To read your copies on Google Drive, QMX needs the same Google Cloud client they were made "
+    "with, until QMX ships its own. Its client id and secret are on the Credentials page of your "
+    f"Google Cloud console, {CONSOLE}, under OAuth 2.0 Client IDs, in the project you made it in. "
+    "Paste both here."
+)
+RESTORING_LIST: Final = "restore-unfinished.txt"
+"""Beside the pointer: each folder a restore made and has not finished, so a fresh card offers
+it again wherever it is."""
+LATER: Final = frozenset({"sftp"})
+"""Storage kinds the keep-your-work card leaves for later: his server keeps copies only once it
+is connected as a machine, which never happens in the first start (design 06 sections 9 and 10)."""
+FILL_RECORD: Final = "keys-to-fill.json"
+"""In `backups/`: the restored copy and the `settings.toml` paths it left out, with the ones
+filled since."""
 NOT_CONFIRMED: Final = (
     "a restore needs confirmed: true, after you saw what it replaces; nothing was changed"
 )
@@ -351,6 +387,7 @@ class Offer:
             f"  Make a new QMX folder: python -m qmx_host new --home {self.default}",
             "  Open an existing QMX folder: python -m qmx_host open --home <folder>",
             f"  Restore from a backup: {_restore_command(self.default, create=True)}",
+            "  Restore from my storage: python -m qmx_host first-start --serve, then choose it",
             "Free space: " + ", ".join(f"{d} {free / (1 << 30):.1f} GB" for d, free in self.drives),
             f"Second copy: {self.second_line}",
         ]
@@ -405,16 +442,26 @@ def offer(old: Path, places: Places, drives: Sequence[Path] | None = None) -> Of
             refused = {"folder": str(layout.root), "line": unfit}
     room = tuple((str(drive), _free(drive)) for drive in fixed)
     seen = str(old) if old_refusal(old.resolve()) is None else None
+    if found is None and refused is None and restoring is None and unfinished is None:
+        restoring = _restore_elsewhere()
     if found is not None:
         choices: tuple[str, ...] = ("open",)
     elif refused is not None:
-        choices = ("open", "restore")
+        choices = ("open", RESTORE_STORAGE, RESTORE)
     elif restoring is not None:
-        choices = ("restore", "open")
+        choices = (RESTORE, RESTORE_STORAGE, "open")
     elif unfinished is not None:
-        choices = ("bring-in", "open", "restore") if seen else ("open", "restore")
+        choices = (
+            ("bring-in", "open", RESTORE_STORAGE, RESTORE)
+            if seen
+            else ("open", RESTORE_STORAGE, RESTORE)
+        )
     else:
-        choices = ("bring-in", "new", "open", "restore") if seen else ("new", "open", "restore")
+        choices = (
+            ("bring-in", "new", "open", RESTORE_STORAGE, RESTORE)
+            if seen
+            else ("new", "open", RESTORE_STORAGE, RESTORE)
+        )
     warning = places.warning(default)
     second = proposal(Layout(near), fixed)
     return Offer(
@@ -430,6 +477,50 @@ def offer(old: Path, places: Places, drives: Sequence[Path] | None = None) -> Of
         None if second is None else str(second.path),
         NO_SECOND_DRIVE if second is None else second.line,
     )
+
+
+def _restore_elsewhere() -> dict[str, str] | None:
+    """The newest folder a restore made and did not finish, wherever it is, or None. Folders
+    finished or gone since leave the list."""
+    named = _restoring()
+    alive = [p for p in named if (Layout(p).data / RESTORE_UNFINISHED).is_file()]
+    if alive != named:
+        _write_restoring(alive)
+    return None if not alive else {"folder": str(alive[-1]), "line": _restoring_line(alive[-1])}
+
+
+def _restoring_list() -> Path | None:
+    pointer = pointer_file()
+    return None if pointer is None else pointer.with_name(RESTORING_LIST)
+
+
+def _restoring() -> list[Path]:
+    listed = _restoring_list()
+    try:
+        text = listed.read_text(encoding="utf-8") if listed is not None else ""
+    except OSError:
+        text = ""
+    return [Path(line) for line in text.splitlines() if line]
+
+
+def _write_restoring(folders: Sequence[Path]) -> None:
+    listed = _restoring_list()
+    if listed is None:
+        return
+    if not folders:
+        listed.unlink(missing_ok=True)
+        return
+    listed.parent.mkdir(parents=True, exist_ok=True)
+    staged = listed.with_name(f"{listed.name}.new")
+    staged.write_text("".join(f"{p}\n" for p in folders), encoding="utf-8")
+    staged.replace(listed)
+
+
+def _restoring_change(root: Path, *, made: bool) -> None:
+    """`root` joins the list of folders a restore made (`made`), or leaves it."""
+    kept = [p for p in _restoring() if p != root]
+    if made or len(kept) != len(_restoring()):
+        _write_restoring([*kept, root] if made else kept)
 
 
 def _refused_store(layout: Layout) -> str | None:
@@ -600,6 +691,7 @@ def restore_into(folder: Path, places: Places, *, make: bool) -> Into:
             "the restore again\n",
             encoding="utf-8",
         )
+        _restoring_change(layout.root, made=True)
         return Into(layout, new=True)
     return Into(layout, new=(layout.data / RESTORE_UNFINISHED).is_file())
 
@@ -611,11 +703,18 @@ def _newer_label(root: Path) -> bool:
         return False
 
 
-def backup_source(document: Mapping[str, object]) -> Repository:
-    """The backup place a card's `source` or the command's `--from` names. Raises RestoreRefused
-    naming what is missing."""
+def backup_source(document: Mapping[str, object], keys: KeyStore | None = None) -> Repository:
+    """The backup place a card's `source` or the command's `--from` names: a folder, or a storage
+    the card connected (`{"kind": "rclone", "remote", "path", "folder"}`), read through the
+    remote in that folder's own `data/rclone.conf` with `keys`. Raises RestoreRefused naming what
+    is missing."""
+    folder = document.get("folder")
     try:
-        return source_of(document)
+        if document.get("kind") != "rclone" or not isinstance(folder, str) or not folder:
+            return source_of(document)
+        layout = Layout(Path(folder).absolute())
+        store = CredentialManager() if keys is None else keys
+        return source_of(document, layout, Rclone(layout, keys=store))
     except PlanRefused as refused:
         raise RestoreRefused(str(refused)) from None
 
@@ -726,23 +825,178 @@ def restore_copy(
     copy: Copy,
     *,
     replace: bool,
-    progress: Callable[[str], None] | None = None,
+    progress: Callable[..., None] | None = None,
+    storage: Connected | None = None,
 ) -> Restored:
-    """Stage `copy` into the folder, finish it, and only then point this user at the folder.
+    """Stage `copy` into the folder, finish it, settle the restored settings for this machine
+    (`settled`, with `storage` the one the card connected and restored from), record the keys
+    the copy left out, and only then point this user at the folder.
     Raises RestoreRefused (HostServes while a host serves the folder) and Busy while a backup
     round or another restore holds the folder; a refusal before the finish leaves the folder as
     it was, and a folder made for the restore keeps its mark."""
     layout = into.layout
     if into.new and (layout.backups / JOURNAL).is_file():
         cancel(layout)
+    left_out = keys_left_out(repository, copy.stamp)
     stage(layout, repository, copy.stamp, replace=replace or into.new, progress=progress)
     done = finish(layout, running=recorded_host)
     if done is None:
         raise RestoreRefused(
             f"the restore of the copy {copy.stamp} into {layout.root} was cancelled while it ran"
         )
+    keep_fill_record(layout, copy.stamp, left_out)
+    settled(layout, done.aside, storage)
     write_pointer(layout.root)
     return Restored(layout.root, done, copy.why)
+
+
+@dataclass(frozen=True, slots=True)
+class Connected:
+    """The storage a card connected, as its place row would read: what a restore from it puts
+    back into the restored settings, under the copy's own row for that storage."""
+
+    place: str
+    row: Mapping[str, object]
+
+
+def keys_left_out(repository: Repository, stamp: str) -> list[str]:
+    """The `settings.toml` paths the copy left out, as its header names them."""
+    try:
+        head: Mapping[str, object] = repository.manifest(stamp).header
+    except Exception:
+        return []
+    named = head.get("keys_to_fill")
+    return [str(p) for p in cast("list[object]", named)] if isinstance(named, list) else []
+
+
+def keep_fill_record(
+    layout: Layout, stamp: str, paths: Sequence[str], *, filled: Sequence[str] = ()
+) -> None:
+    """Record the restored copy's left-out `settings.toml` paths, and those `filled` since, for
+    `GET /api/backups/keys-to-fill`; paths only, never a value."""
+    record = {"copy": stamp, "settings": sorted(set(paths)), "filled": sorted(set(filled))}
+    target = layout.backups / FILL_RECORD
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staged = target.with_name(f"{target.name}.new")
+    staged.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    staged.replace(target)
+
+
+def settled(layout: Layout, aside: Path, storage: Connected | None) -> str | None:
+    """After a restore: the keys that belong to this machine (`PER_MACHINE_KEYS`) are taken back
+    from the settings the restore set aside in `aside`, or removed when this machine had none,
+    and the storage restored from is connected again: its fields go into the copy's row for the
+    same storage (matched by `via` and where it points), which keeps its `id`, so its policy
+    holds. Every other storage row stays as the copy holds it. Returns the id that storage's row
+    holds now, or None."""
+    path = layout.home / "settings.toml"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    stored: dict[str, Any] = tomllib.loads(text) if text else {}
+    settings, ident = restored_settings(stored, machine_settings(aside), storage)
+    if settings != stored:
+        staged = path.with_name(f"{path.name}.new")
+        staged.write_text(kept_word_for_word(text, stored, settings), encoding="utf-8")
+        staged.replace(path)
+    return ident
+
+
+def machine_settings(aside: Path) -> dict[str, Any]:
+    """The settings a restore set aside in `aside`: this machine's own, before the restore."""
+    earlier = Path(aside) / "data" / "settings.toml"
+    try:
+        return tomllib.loads(earlier.read_text(encoding="utf-8")) if earlier.is_file() else {}
+    except OSError, ValueError:
+        return {}
+
+
+def restored_settings(
+    stored: Mapping[str, Any], machine: Mapping[str, Any], storage: Connected | None
+) -> tuple[dict[str, Any], str | None]:
+    """`settled`'s change, read only: the restored settings with this machine's keys and the
+    storage restored from, and the id that storage's row holds."""
+    settings = deepcopy(dict(stored))
+    for key in PER_MACHINE_KEYS:
+        _machine_key(settings, machine, key)
+    return settings, None if storage is None else _storage_back(settings, storage)
+
+
+def _machine_key(settings: dict[str, Any], machine: Mapping[str, Any], dotted: str) -> None:
+    section, _, rest = dotted.partition(".")
+    ours = settings.get(section)
+    theirs = machine.get(section)
+    table = cast("dict[str, Any]", ours) if isinstance(ours, dict) else {}
+    table.pop(rest, None)
+    _drop_path(table, rest.split("."))
+    held: dict[str, Any] = cast("dict[str, Any]", theirs) if isinstance(theirs, dict) else {}
+    if rest in held:
+        table[rest] = held[rest]
+    else:
+        found = _at_path(held, rest.split("."))
+        if found is not None:
+            _put_path(table, rest.split("."), found)
+    if table:
+        settings[section] = table
+    else:
+        settings.pop(section, None)
+
+
+def _at_path(table: Mapping[str, Any], parts: Sequence[str]) -> object | None:
+    found: Any = table
+    for part in parts:
+        if not isinstance(found, dict) or part not in found:
+            return None
+        found = cast("dict[str, Any]", found)[part]
+    return cast("object", found)
+
+
+def _put_path(table: dict[str, Any], parts: Sequence[str], value: object) -> None:
+    for part in parts[:-1]:
+        inner = table.get(part)
+        table[part] = inner if isinstance(inner, dict) else {}
+        table = cast("dict[str, Any]", table[part])
+    table[parts[-1]] = value
+
+
+def _drop_path(table: dict[str, Any], parts: Sequence[str]) -> None:
+    inner = table.get(parts[0])
+    if len(parts) == 1:
+        table.pop(parts[0], None)
+    elif isinstance(inner, dict):
+        _drop_path(cast("dict[str, Any]", inner), parts[1:])
+        if not inner:
+            table.pop(parts[0], None)
+
+
+def _storage_back(settings: dict[str, Any], storage: Connected) -> str:
+    engine = cast("dict[str, Any]", settings.setdefault("engine", {}))
+    rows = cast("dict[str, object]", engine.setdefault("placement", {}))
+    for name, found in rows.items():
+        held = cast("dict[str, object]", found) if isinstance(found, dict) else None
+        if held is not None and "keep" in can_of(held) and _same_target(held, storage.row):
+            ident = str(held.get("id") or name)
+            can = [*can_of(held), *(c for c in can_of(storage.row) if c not in can_of(held))]
+            rows[name] = {**held, **storage.row, "id": ident, "can": can}
+            return ident
+    name = storage.place
+    while name in rows:
+        name = f"{name}-restored"
+    ident = str(storage.row.get("id") or mint())
+    rows[name] = {**storage.row, "id": ident}
+    return ident
+
+
+def _same_target(row: Mapping[str, object], other: Mapping[str, object]) -> bool:
+    if row.get("via", "folder") != other.get("via", "folder"):
+        return False
+    if other.get("via") == "rclone":
+        return row.get("type") == other.get("type") and _root(row) == _root(other)
+    here, there = row.get("path"), other.get("path")
+    return isinstance(here, str) and isinstance(there, str) and same_folder(Path(here), Path(there))
+
+
+def _root(row: Mapping[str, object]) -> str:
+    """Where an rclone row points inside its storage, a trailing slash or none read alike."""
+    return str(row.get("root") or FOLDER).rstrip("/\\")
 
 
 def write_pointer(root: Path) -> None:
@@ -750,6 +1004,7 @@ def write_pointer(root: Path) -> None:
     pointer = pointer_file()
     if pointer is None:
         return
+    _restoring_change(root, made=False)
     recent = [str(root)]
     try:
         kept: object = tomllib.loads(pointer.read_text(encoding="utf-8-sig")).get("recent", [])
@@ -884,10 +1139,18 @@ def first_start_router(
     cancels: dict[str, threading.Event] = {}
     """What the connect dialog keeps between the card's reruns, for every folder it names."""
 
+    connected: dict[str, Connected] = {}
+    """Each storage the card connected, by its `source` remote or folder path."""
+    kept: list[Path] = []
+    """The folder this card made new, once there is one: the keep-your-work card is for it."""
+
+    def keys() -> KeyStore:
+        return CredentialManager() if key_store is None else key_store
+
     def world_of(layout: Layout) -> World:
-        keys = CredentialManager() if key_store is None else key_store
+        store = keys()
         return World(
-            layout, keys, Rclone(layout, keys=keys), jobs, remembered=remembered, cancels=cancels
+            layout, store, Rclone(layout, keys=store), jobs, remembered=remembered, cancels=cancels
         )
 
     def finished(root: Path) -> None:
@@ -917,12 +1180,19 @@ def first_start_router(
             again = cast("dict[str, str] | None", shown[name])
             if folder is not None and again is not None and again["folder"] == folder:
                 shown[name] = None
-        return {**shown, "running": folder, "job": None if job is None else job.document()}
+        made = kept[0] if kept and chosen and chosen[0] == kept[0] else None
+        return {
+            **shown,
+            "running": folder,
+            "job": None if job is None else job.document(),
+            "kept": None if made is None else _kept(made),
+        }
 
     def new(choice: Chosen) -> dict[str, object]:
         root = _answer(lambda: make_new(Path(choice.folder), places)).root
         finished(root)
-        return {"folder": str(root), "warning": places.warning(root)}
+        kept[:] = [root]
+        return {"folder": str(root), "warning": places.warning(root), "kept": _kept(root)}
 
     def existing(choice: Chosen) -> dict[str, object]:
         root = _answer(lambda: open_existing(Path(choice.folder), places)).root
@@ -930,7 +1200,7 @@ def first_start_router(
         return {"folder": str(root), "warning": places.warning(root)}
 
     def listed(place: Place) -> dict[str, object]:
-        repository = _answer(lambda: backup_source(place.source))
+        repository = _answer(lambda: backup_source(place.source, keys()))
         return {
             "where": repository.where,
             "copies": [{**asdict(copy), "lacks": list(copy.lacks)} for copy in copies(repository)],
@@ -939,7 +1209,7 @@ def first_start_router(
     def checked(asked: Checking) -> dict[str, object]:
         def check() -> dict[str, object]:
             into = restore_into(Path(asked.folder), places, make=False)
-            return check_restore(into, picked(backup_source(asked.source), asked.stamp))
+            return check_restore(into, picked(backup_source(asked.source, keys()), asked.stamp))
 
         return _answer(check)
 
@@ -953,7 +1223,7 @@ def first_start_router(
 
                 def ready() -> tuple[Into, Repository, Copy]:
                     into = restore_into(Path(asked.folder), places, make=False)
-                    repository = backup_source(asked.source)
+                    repository = backup_source(asked.source, keys())
                     copy = picked(repository, asked.stamp)
                     refuse_restore(into, repository, copy, replace=asked.replace)
                     if into.new:
@@ -965,6 +1235,7 @@ def first_start_router(
                 held.release()
                 raise
             chosen.clear()
+            storage = connected.get(_source_key(asked.source))
 
             def work(progress: Progress) -> dict[str, object]:
                 try:
@@ -974,6 +1245,7 @@ def first_start_router(
                         copy,
                         replace=asked.replace,
                         progress=progress,
+                        storage=storage,
                     )
                 except (Busy, RestoreRefused) as refused:
                     raise Stopped(str(refused)) from None
@@ -1032,14 +1304,79 @@ def first_start_router(
                 raise HTTPException(refused.status, str(refused)) from None
 
             def work(progress: Progress) -> dict[str, object]:
-                return dict(
+                found = dict(
                     run_kind(
                         kind, asked.place, asked.answer, report=progress, world=world, card=True
                     )
                 )
+                return _restore_card(found, kind, asked.place, world, remembered, connected)
 
             job = started(CONNECT, work, world.layout.root)
         return JSONResponse(connect_document(job), status_code=202)
+
+    def keep(asked: Connecting) -> JSONResponse:
+        """The keep-your-work card: a storage kind run on the folder this card made new, with its
+        place row and its first sync."""
+        with starting:
+            _one_job(running())
+            folder = Path(asked.folder).absolute()
+            if not kept or not chosen or chosen[0] != kept[0] or not same_folder(folder, kept[0]):
+                raise HTTPException(
+                    409,
+                    detail="keeping your work in another storage is offered for the folder this "
+                    "first start made new; make it first, or connect a storage in Settings",
+                )
+            kind = KINDS.get(asked.kind)
+            if kind is None or "keep" not in kind.can:
+                storages = ", ".join(k.id for k in KINDS.values() if k.source is not None)
+                raise HTTPException(
+                    400, detail=f"there is no storage kind {asked.kind!r}; {storages}"
+                )
+            world = _keeping_world(Layout(kept[0]), keys(), jobs, remembered, cancels)
+            if kind.refusal is not None:
+                refused = kind.refusal(Run(kind, asked.place, asked.answer, world))
+                if refused is not None:
+                    raise HTTPException(409, detail=refused)
+
+            def work(progress: Progress) -> dict[str, object]:
+                return dict(run_kind(kind, asked.place, asked.answer, report=progress, world=world))
+
+            job = started(KEEP, work, kept[0])
+        return JSONResponse(connect_document(job), status_code=202)
+
+    def put_key(name: str, body: KeyValue) -> Response:
+        """The key the waiting secret card asks for, written to Credential Manager under its
+        `qmx/` name, never read back; any other name is refused."""
+        refused = key_refusal(name)
+        if refused is not None:
+            raise HTTPException(400, detail=refused)
+        job = latest()
+        needs = None if job is None else (job.result or {}).get("needs")
+        card = cast("dict[str, object]", needs) if isinstance(needs, dict) else {}
+        asked = card.get("key") if card.get("card") == "secret" else None
+        if name != asked:
+            raise HTTPException(
+                409,
+                detail=f"no card in this first start waits for a key, so {name} was not written"
+                if asked is None
+                else f"the card waiting in this first start asks for {asked}, not {name}; "
+                "nothing was written",
+            )
+        keys().replace(name, body.value)
+        return Response(status_code=204)
+
+    def cancel_job(job_id: str) -> dict[str, object]:
+        """Stop the sign-in a connect job's card waits on."""
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, detail=f"no job {job_id} in this first start")
+        needs = (job.result or {}).get("needs")
+        waits = cast("dict[str, object]", needs).get("job") if isinstance(needs, dict) else None
+        stop = cancels.get(str(waits)) or cancels.get(job_id)
+        if stop is None:
+            raise HTTPException(409, detail=f"job {job_id} holds nothing that runs on")
+        stop.set()
+        return {"line": f"job {job_id}: stopping; nothing was connected"}
 
     def read_job(job_id: str) -> dict[str, object]:
         job = jobs.get(job_id)
@@ -1049,7 +1386,7 @@ def first_start_router(
                 detail=f"no job {job_id} in this first start; the card started again since, so "
                 "read GET /api/first-start for the latest one",
             )
-        return connect_document(job) if job.kind == CONNECT else job.document()
+        return connect_document(job) if job.kind in (CONNECT, KEEP) else job.document()
 
     def handover() -> dict[str, object]:
         with starting:
@@ -1078,9 +1415,111 @@ def first_start_router(
     router.add_api_route("/restore", restore, methods=["POST"], status_code=202)
     router.add_api_route("/bring-in", bring, methods=["POST"], status_code=202)
     router.add_api_route("/connect", connect, methods=["POST"], status_code=202)
+    router.add_api_route("/keep", keep, methods=["POST"], status_code=202)
+    router.add_api_route("/keys/{name:path}", put_key, methods=["PUT"], status_code=204)
     router.add_api_route("/jobs/{job_id}", read_job, methods=["GET"])
+    router.add_api_route("/jobs/{job_id}/cancel", cancel_job, methods=["POST"])
     router.add_api_route("/handover", handover, methods=["POST"])
     return router
+
+
+class KeyValue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    value: str = Field(min_length=1)
+
+
+def _kept(root: Path) -> dict[str, object]:
+    """What the card shows once a new folder is made: his work is on this PC, and one optional
+    card that keeps it in another storage too (`POST /api/first-start/keep`)."""
+    return {
+        "line": KEPT_LINE,
+        "card": KEEP_CARD,
+        "folder": str(root),
+        "optional": True,
+        "kinds": [
+            k.document() for k in KINDS.values() if k.source is not None and k.id not in LATER
+        ],
+    }
+
+
+def _source_key(source: Mapping[str, object]) -> str:
+    named = source.get("remote") if source.get("kind") == "rclone" else source.get("path")
+    return str(named or "")
+
+
+def _restore_card(
+    found: dict[str, object],
+    kind: Kind,
+    place: str,
+    world: World,
+    remembered: Mapping[str, Mapping[str, Any]],
+    connected: dict[str, Connected],
+) -> dict[str, object]:
+    """A card connect job's answer: a Drive restore stopped at the client card names where the
+    copy's client is, and a finished one remembers the storage as its row would read, so the
+    restore connects it again under the copy's row."""
+    needs = found.get("needs")
+    if kind.id == "drive" and isinstance(needs, dict):
+        asked = cast("dict[str, object]", needs)
+        if asked.get("card") == "fields":
+            found["needs"] = {**asked, "line": f"{place}: {DRIVE_RESTORE}"}
+        return found
+    source = found.get("source")
+    if not isinstance(source, dict):
+        return found
+    given = cast("dict[str, object]", source)
+    given["folder"] = str(world.layout.root)
+    if given.get("kind") == "rclone":
+        loop = LOOPS[kind.id]
+        fields = cast("dict[str, str]", dict(remembered.get(place, {}).get("fields", {})))
+        row: dict[str, object] = {
+            "via": "rclone",
+            "can": ["keep"],
+            "remote": given["remote"],
+            "type": loop.type_of(fields),
+            "root": fields.get("root") or FOLDER,
+            **loop.row(fields),
+        }
+        reference = loop.reference(place)
+        if reference is not None:
+            row["credential_ref"] = reference
+    else:
+        row = {"via": "folder", "can": ["keep"], "path": str(given.get("path"))}
+    connected[_source_key(given)] = Connected(place, row)
+    return found
+
+
+def _keeping_world(
+    layout: Layout,
+    keys: KeyStore,
+    jobs: Jobs,
+    remembered: dict[str, dict[str, Any]],
+    cancels: dict[str, threading.Event],
+) -> World:
+    """The dialog on a folder no host serves yet: it writes the place row into the folder's own
+    settings and runs the first sync in the job itself."""
+    control = ControlService(layout.home, secret_getter=lambda _service, _name: None)
+    rclone = Rclone(layout, keys=keys)
+
+    def first_sync(place_id: str) -> str:
+        settings = tomllib.loads((layout.home / "settings.toml").read_text(encoding="utf-8"))
+        try:
+            plan = parse_plan(settings.get("backup", {}), layout, settings.get("engine", {}))
+            report = run_round(
+                layout,
+                plan,
+                now=datetime.now().astimezone(),
+                floor=local_floor(settings.get("engine", {}), shutil.disk_usage(layout.root).free),
+                only=place_id,
+                asked=True,
+                rclone=rclone,
+            )
+        except (Busy, PlanRefused) as refused:
+            return f"the first sync did not run: {refused}"
+        return "the first sync: " + "; ".join(report.lines)
+
+    return World(layout, keys, rclone, jobs, control, first_sync, remembered, cancels)
 
 
 def _bring_in_refusal(
@@ -1135,5 +1574,7 @@ def first_start_app(
     app = FastAPI(title="QMX first start")
     app.include_router(first_start_router(places, old, port=port, on_handover=on_handover))
     if ui_origin:
-        app.add_middleware(CORSMiddleware, allow_origins=[ui_origin], allow_methods=["GET", "POST"])
+        app.add_middleware(
+            CORSMiddleware, allow_origins=[ui_origin], allow_methods=["GET", "POST", "PUT"]
+        )
     return app

@@ -237,7 +237,7 @@ def test_a_store_that_upgrades_gets_a_copy_of_the_folder_first_and_a_failed_copy
     with closing(sqlite3.connect(held)) as db:
         copied_at = db.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
     assert (first, second, served) == (0, 0, [0, 0])
-    assert (manifest.header["why"], copied_at) == ("before-upgrade", ("2",))
+    assert (manifest.header["why"], copied_at) == ("before-update", ("2",))
     assert copied.splitlines()[-1].startswith("before the upgrade: copied ")
     assert not (tight.backups / "quick" / "snapshots").exists() or not any(
         (tight.backups / "quick" / "snapshots").iterdir()

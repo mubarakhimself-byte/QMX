@@ -40,6 +40,7 @@ import sqlite3
 import sys
 import threading
 import time as monotonic
+import tomllib
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager, suppress
 from dataclasses import dataclass
@@ -48,12 +49,12 @@ from pathlib import Path
 from typing import Any, Final, Literal, cast
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, JsonValue
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from qma.harness.home import DoctorLine
 from qmx_apps.errors import AppError
 from qmx_apps.volume import VolumeLease
-from qmx_control.models import Document
+from qmx_control.models import ControlError, Document
 from qmx_control.service import ControlService
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.store import Reader
@@ -113,6 +114,7 @@ from qmx_home.backup.round import (
 )
 from qmx_home.backup.snapshot import RoadLease
 from qmx_home.backup.upkeep import check, repack
+from qmx_home.classes import PER_MACHINE_KEYS
 from qmx_home.files import Busy, hold, plain
 from qmx_home.rclone import Keys, Rclone
 from qmx_home.versions import log_line, log_lines
@@ -120,7 +122,18 @@ from qmx_library.port import LibraryRefused
 from qmx_library.principal import Principal
 from qmx_library.store import Store
 
-from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped
+from qmx_host.first_start import (
+    FILL_RECORD,
+    Connected,
+    keep_fill_record,
+    keys_left_out,
+    machine_settings,
+    restored_settings,
+)
+from qmx_host.jobs import Job, Jobs, Progress, Started, Stopped, Work
+from qmx_host.keys import NAME as KEY_NAME
+from qmx_host.keys import refusal as key_refusal
+from qmx_host.maintenance import landed
 
 KIND: Final = "backup"
 RESTORE: Final = "restore"
@@ -138,6 +151,9 @@ RETRY: Final = timedelta(hours=1)
 """A drill that did not start is tried again an hour later."""
 AWAY: Final = 7
 """Intervals with no copy before a place that is not there opens its incident."""
+EARLIER: Final = "earlier"
+"""The keys-to-fill record a staged restore replaced, kept in the new one so its cancel puts the
+earlier list back. The record a fill rewrites drops it: a fill waits until no restore is staged."""
 DRILL_INCIDENT: Final = "backup-drill:"
 """A failed drill's incident, per place. Not `backup:`, whose incidents follow the rounds."""
 DOWNLOADS: Final = frozenset({"rclone"})
@@ -302,8 +318,11 @@ class Backups:
         floor: int,
         road_lease: RoadLease | None = None,
         keys: Keys | None = None,
+        store: Store | None = None,
     ) -> None:
         self.layout = layout
+        self.store = store
+        """The Library each host job lands its `maintenance-result` in; none lands without it."""
         self.control = control
         self.clock = clock
         self.floor = floor
@@ -407,7 +426,9 @@ class Backups:
                 raise Refusal(self.busy_line(other))
             if other is None:
                 self._unheld()
-            started = self.jobs.start(KIND, lambda progress: self._round(only, progress, asked))
+            started = self.jobs.start(
+                KIND, self._landing("sync", lambda progress: self._round(only, progress, asked))
+            )
         if started.new:
             self._asked[started.job.id] = asked
         return started
@@ -498,7 +519,7 @@ class Backups:
             def work(progress: Progress, place_id: str = place_id) -> Mapping[str, object]:
                 return self._send(plan, place_id, stamp, progress)
 
-            job = self.jobs.start(f"{SEND}{place_id}", work)
+            job = self.jobs.start(f"{SEND}{place_id}", self._landing("sync", work))
             if job.new:
                 started[place_id] = job.job.id
             else:
@@ -526,6 +547,29 @@ class Backups:
             self._settle()
         self._torn(plan, report.places[0])
         return report.document()
+
+    def _landing(self, job: str, work: Work) -> Work:
+        """`work` that lands one `maintenance-result` artifact when it ends, however it ends."""
+
+        def landing(progress: Progress) -> Mapping[str, object]:
+            state, line = "stopped", ""
+            try:
+                found = work(progress)
+            except Stopped as stopped:
+                line = stopped.line
+                raise
+            except Exception as error:
+                line = f"{type(error).__name__}: {error}"
+                raise
+            else:
+                state = "finished"
+                line = str(found.get("line") or "; ".join(_lines_of(found)))
+                return found
+            finally:
+                if self.store is not None:
+                    landed(self.store, job, state, line)
+
+        return landing
 
     def _unpin(self, stamp: str, place_id: str) -> None:
         with self._pinning:
@@ -722,7 +766,8 @@ class Backups:
             return None
         _, place_id = min(due_now)
         started = self.jobs.start(
-            f"{UPKEEP}{place_id}", lambda progress: self._upkeep(place_id, progress)
+            f"{UPKEEP}{place_id}",
+            self._landing("upkeep", lambda progress: self._upkeep(place_id, progress)),
         )
         return started.job
 
@@ -1128,6 +1173,16 @@ class Backups:
             raise Stopped(f"{refused}; the restore did not start") from None
         except (RestoreRefused, Busy) as refused:
             raise Stopped(str(refused)) from None
+        earlier = {k: v for k, v in _fill_record(self.layout).items() if k != EARLIER}
+        _put_fill_record(
+            self.layout,
+            {
+                "copy": stamp,
+                "settings": sorted(set(keys_left_out(repo, stamp))),
+                "filled": [],
+                **({EARLIER: earlier} if earlier else {}),
+            },
+        )
         record = _read_journal(self.layout)
         aside = f"backups/{ASIDE}{'' if record is None else record.id}"
         return {
@@ -1154,7 +1209,13 @@ class Backups:
                 )
             if _read_journal(self.layout) is None:
                 raise Refusal(f"no restore is staged for {self.layout.root}", 404)
-            return restore.cancel(self.layout)
+            line = restore.cancel(self.layout)
+            earlier = _fill_record(self.layout).get(EARLIER)
+            if isinstance(earlier, dict):
+                _put_fill_record(self.layout, cast("dict[str, object]", earlier))
+            else:
+                (self.layout.backups / FILL_RECORD).unlink(missing_ok=True)
+            return line
 
     def hold_after_restore(self, store: Store) -> AfterRestore | None:
         """At a start, before the engine opens: while a finished restore waits for his carry-on,
@@ -1208,6 +1269,7 @@ class Backups:
                 return {**rest, "autonomy": autonomy} if autonomy else rest
 
             self.control.settings_update(ENGINE, given_back)
+        self._settle_restored(found)
         restore.carried_on(self.layout)
         self.after = None
         self._interrupted = []
@@ -1218,6 +1280,98 @@ class Backups:
             f"server sync and fires run again in {self.layout.root}; each clocked trigger fires "
             "once for the time it missed, and the runs the copy held carry on"
         )
+
+    def _settle_restored(self, found: AfterRestore) -> None:
+        """At his carry-on after a restore from Settings: this machine's keys come back from the
+        settings the restore set aside, and the storage it restored from keeps its row under the
+        copy's row id, as the card does after its restore."""
+        aside = self.layout.root / found.aside
+        machine = machine_settings(aside)
+        key = next(
+            (
+                str(line.get("key"))
+                for line in reversed(log_lines(self.layout))
+                if line.get("kind") == "restored" and line.get("id") == found.id
+            ),
+            "",
+        )
+        storage = None
+        try:
+            earlier = parse({}, self.layout, _table(machine.get("engine")))
+        except PlanRefused:
+            earlier = Plan()
+        home_id = self._home_id()
+        rows = _table(_table(machine.get("engine")).get("placement"))
+        for one in earlier.sending:
+            row = rows.get(one.name)
+            if storage_key(one, home_id) == key and isinstance(row, dict):
+                storage = Connected(one.name, cast("dict[str, object]", row))
+        for section in sorted({key.partition(".")[0] for key in PER_MACHINE_KEYS} | {"engine"}):
+
+            def settle(current: Document, section: str = section) -> Document:
+                ours = storage if section == "engine" else None
+                settings, _ = restored_settings({section: current}, machine, ours)
+                return cast("Document", settings.get(section, {}))
+
+            self.control.settings_update(cast("Any", section), settle)
+
+    def keys_to_fill(self) -> dict[str, object]:
+        """`GET /api/backups/keys-to-fill`: the key names the restored settings refer to that
+        this machine's key store lacks, and the `settings.toml` paths the restored copy left out
+        that are not filled yet. Names and paths only, never a value."""
+        record = _fill_record(self.layout)
+        store = self._keys()
+        path = self.layout.home / "settings.toml"
+        try:
+            settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except ValueError:
+            settings = {}
+        names = sorted(n for n in _referred(settings) if store.read(n) is None)
+        filled = set(cast("list[str]", record.get("filled", [])))
+        paths = [p for p in cast("list[str]", record.get("settings", [])) if p not in filled]
+        return {"copy": record.get("copy"), "keys": names, "settings": paths}
+
+    def fill(self, path: str, value: str) -> None:
+        """One `settings.toml` value the restored copy left out, written back at its path.
+        Raises Refusal for a path the list does not name, for an array entry past its list, and
+        while a restore is being staged or waits for the next start: its finish sets this
+        folder's `settings.toml` aside, so the key would not reach the restored one."""
+        with self._starting:
+            if path not in cast("list[str]", self.keys_to_fill()["settings"]):
+                raise Refusal(
+                    f"{path!r} is not a settings.toml key this restore left out; fill one of "
+                    "GET /api/backups/keys-to-fill, or change other settings in Settings"
+                )
+            staging = self.jobs.latest(RESTORE)
+            if staging is not None and staging.state == "running":
+                raise Refusal(
+                    f"a restore is being staged (job {staging.id}); wait for it to end, then "
+                    f"fill {path!r}"
+                )
+            waiting = _read_journal(self.layout)
+            if waiting is not None and waiting.step != "staging":
+                raise Refusal(
+                    f"a restore is staged: restart QMX to finish it, then fill {path!r}; a key "
+                    "written now would be set aside with the work the restore replaces"
+                )
+            try:
+                self.control.fill_setting(path, value)
+            except ControlError as refused:
+                raise Refusal(str(refused)) from None
+            record = _fill_record(self.layout)
+            keep_fill_record(
+                self.layout,
+                str(record.get("copy", "")),
+                cast("list[str]", record.get("settings", [])),
+                filled=[*cast("list[str]", record.get("filled", [])), path],
+            )
+
+    def _keys(self) -> Keys:
+        if self.keys is not None:
+            return self.keys
+        from qmx_broker.credentials import CredentialManager  # noqa: PLC0415
+
+        return CredentialManager()
 
     def reindex(self, rebuild: Callable[[], object], *, hindsight: bool) -> threading.Thread | None:
         """After a finished restore whose indexes were not rebuilt: `rebuild` on its own thread,
@@ -1276,7 +1430,10 @@ class Backups:
                 return None
             self._drill_tried = now
             started = self.jobs.start(
-                DRILL, lambda _progress: self._drill(place_id, repo, plan.upkeep.drill_sample)
+                DRILL,
+                self._landing(
+                    "drill", lambda _progress: self._drill(place_id, repo, plan.upkeep.drill_sample)
+                ),
             )
         return started.job
 
@@ -1377,6 +1534,12 @@ class RunBody(BaseModel):
     target: str | None = None
 
 
+class FillBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+
+
 def backups_router(backups: Backups) -> APIRouter:
     """`/api/backups`: the view, a place's copies, a round asked for, its job, his carry-on, his
     yes to the proposed second drive, and a restore checked, staged, cancelled and carried on
@@ -1442,7 +1605,17 @@ def backups_router(backups: Backups) -> APIRouter:
     def carry_on_restore() -> dict[str, object]:
         return {"line": answered(backups.carry_on_restore)}
 
+    @router.get("/api/backups/keys-to-fill")
+    def keys_to_fill() -> dict[str, object]:
+        return backups.keys_to_fill()
+
+    @router.put("/api/backups/keys-to-fill", status_code=204)
+    def fill(body: FillBody) -> Response:
+        answered(lambda: backups.fill(body.path, body.value))
+        return Response(status_code=204)
+
     _ = view, copies, run, job, accept, carry, check, stage, cancel, carry_on_restore
+    _ = keys_to_fill, fill
     return router
 
 
@@ -1528,6 +1701,44 @@ async def _json(request: Request) -> object:
         return json.loads(await request.body() or b"null")
     except ValueError:
         return None
+
+
+def _lines_of(found: Mapping[str, object]) -> list[str]:
+    places = found.get("places")
+    if not isinstance(places, list):
+        return []
+    return [
+        str(cast("dict[str, object]", p).get("line"))
+        for p in cast("list[object]", places)
+        if isinstance(p, dict)
+    ]
+
+
+def _put_fill_record(layout: Layout, record: Mapping[str, object]) -> None:
+    target = layout.backups / FILL_RECORD
+    staged = target.with_name(f"{target.name}.new")
+    staged.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    staged.replace(target)
+
+
+def _fill_record(layout: Layout) -> dict[str, object]:
+    try:
+        found = json.loads((layout.backups / FILL_RECORD).read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    return cast("dict[str, object]", found) if isinstance(found, dict) else {}
+
+
+def _referred(settings: object) -> set[str]:
+    """Every `qmx/` key name a value of `settings` refers to, such as a row's `credential_ref`,
+    less the names QMX makes and keeps itself."""
+    if isinstance(settings, dict):
+        return {n for v in cast("dict[str, object]", settings).values() for n in _referred(v)}
+    if isinstance(settings, list):
+        return {n for v in cast("list[object]", settings) for n in _referred(v)}
+    if isinstance(settings, str) and KEY_NAME.fullmatch(settings) and key_refusal(settings) is None:
+        return {settings}
+    return set()
 
 
 def _restore_body(body: object, *, confirm: bool) -> tuple[str, str]:

@@ -607,6 +607,44 @@ def _top_key(header: re.Match[str]) -> str | None:
     return next(iter(parsed), None)
 
 
+_KEY_PATH = re.compile(r"[^.\[\]]+(?:\.[^.\[\]]+|\[\d+\])*")
+_KEY_PART = re.compile(r"([^.\[\]]+)|\[(\d+)\]")
+
+
+def _key_path(path: str) -> list[str | int]:
+    """`providers[2].api_key` as `["providers", 2, "api_key"]`. Raises ControlError for any
+    other text."""
+    if not _KEY_PATH.fullmatch(path):
+        raise ControlError("invalid_settings", f"{path!r} is not a settings.toml key path.")
+    return [
+        found.group(1) if found.group(1) is not None else int(found.group(2))
+        for found in _KEY_PART.finditer(path)
+    ]
+
+
+def _placed(value: object, parts: Sequence[str | int], filled: str, path: str) -> Any:
+    """`value` with `filled` at `parts`: a missing table is made, and an array entry by index is
+    put back in its place. Raises ControlError for an index past the list: a left-out entry
+    goes back among the entries the copy kept, at most one past the last."""
+    head, rest = parts[0], parts[1:]
+    if isinstance(head, int):
+        items = list(cast("list[object]", value)) if isinstance(value, list) else []
+        if head > len(items) or (rest and head == len(items)):
+            raise ControlError(
+                "invalid_settings",
+                f"{path!r} names entry {head} of a list that holds {len(items)}; nothing was "
+                "written.",
+            )
+        if not rest:
+            items.insert(head, filled)
+        else:
+            items[head] = _placed(items[head], rest, filled, path)
+        return items
+    table = dict(cast("dict[str, object]", value)) if isinstance(value, dict) else {}
+    table[head] = filled if not rest else _placed(table.get(head), rest, filled, path)
+    return table
+
+
 def kept_word_for_word(text: str, stored: Document, settings: Document) -> str:
     """`settings.toml` rewritten to hold `settings`, keeping every section that did not change
     as its own lines, comments and all (design 62 B2 rule 3): an older release never drops or
@@ -857,6 +895,22 @@ class ControlService:
             with path.open("rb") as file:
                 found = tomllib.load(file).get(section, {})
             return cast(Document, found) if isinstance(found, dict) else {}
+
+    def fill_setting(self, path: str, value: str) -> None:
+        """Write `value` back at one `settings.toml` key path, as a copy's `keys_to_fill` names
+        it (`providers.kimi.api_key`, an array entry by index such as `providers[2].api_key`),
+        under the settings lock, keeping every other line. Only the restore's keys-to-fill route
+        calls it, for a path its list names, so a key he pasted into `settings.toml` before the
+        copy goes back where it was; every other writer still refuses a key-named value."""
+        parts = _key_path(path)
+        with self._lock:
+            target = self.home / "settings.toml"
+            text = target.read_text(encoding="utf-8") if target.exists() else ""
+            stored = cast(Document, tomllib.loads(text))
+            settings = _placed(stored, parts, value, path)
+            temporary = target.with_suffix(".tmp")
+            temporary.write_text(kept_word_for_word(text, stored, settings), encoding="utf-8")
+            temporary.replace(target)
 
     def settings_update(
         self, section: SettingsSection, change: Callable[[Document], Document]
@@ -1806,8 +1860,23 @@ class ControlService:
 
     @operation("workflows", "runs_get", "read", rest=("GET", "/api/workflow-runs/{run_id}"))
     def workflow_runs_get(self, run_id: str) -> Document:
-        """Read one workflow run and its node states."""
-        return self._engine("workflow_runs.get").workflow_runs_get(run_id)
+        """Read one workflow run and its node states, with `placement`: where it ran, from the
+        run's Library object (None while it runs, before its summary lands)."""
+        found = self._engine("workflow_runs.get").workflow_runs_get(run_id)
+        return {**found, "placement": self._placement_of(run_id)}
+
+    def _placement_of(self, run_id: str) -> JsonValue:
+        """The newest `workflow-run` summary's `placement` for `run_id`, or None."""
+        try:
+            store = self.library.store
+            placed = store.placed(run_id, "workflow-run", None)
+            if not placed:
+                return None
+            fields = store.get(store.engine, placed[-1][0]).fields
+        except LibraryRefused, ControlError, OSError, sqlite3.Error:
+            return None
+        found = fields.get("placement")
+        return cast("JsonValue", found) if isinstance(found, dict) else None
 
     @operation(
         "workflows", "runs_explain", "read", rest=("GET", "/api/workflow-runs/{run_id}/explain")
@@ -1949,13 +2018,49 @@ class ControlService:
 
     @operation("workflows", "inbox_list", "read", rest=("GET", "/api/inbox"))
     def workflow_inbox_list(self) -> list[Document]:
-        """List open workflow inbox items, then the diagnoses outside agents left."""
-        return [*self._notes(), *self._engine("workflow_inbox.list").workflow_inbox_list()]
+        """List the diagnoses outside agents left, every open incident (a storage that refused,
+        a failed drill, a trigger that keeps failing), then the open workflow inbox items."""
+        items = self._engine("workflow_inbox.list").workflow_inbox_list()
+        return [*self._notes(), *open_incidents(self.home), *items]
 
     @operation("apps_admin", "archive", "manage", rest=("POST", "/api/apps/{app_id}/archive"))
     def apps_archive(self, app_id: str) -> Document:
         """Archive a mini app."""
         return self._unavailable("apps.archive", ENGINE)
+
+
+INCIDENTS: Final = (
+    "SELECT id, trigger_id, signature, title, cause, count, first_seen, last_seen, "
+    "acknowledged_at FROM incidents WHERE resolved_at IS NULL ORDER BY last_seen DESC, id"
+)
+
+
+def open_incidents(home: Path) -> list[Document]:
+    """Every open incident in the engine's inbox (`engine/inbox.sqlite`), newest first, read
+    without writing; none when the inbox is not there yet."""
+    path = home / "engine" / "inbox.sqlite"
+    if not path.is_file():
+        return []
+    try:
+        with closing(sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)) as db:
+            found = db.execute(INCIDENTS).fetchall()
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "kind": "incident",
+            "id": row[0],
+            "trigger_id": row[1],
+            "signature": row[2],
+            "title": row[3],
+            "cause": row[4],
+            "count": row[5],
+            "first_seen": row[6],
+            "last_seen": row[7],
+            "acknowledged": row[8] is not None,
+        }
+        for row in found
+    ]
 
 
 def _json_file(path: Path) -> object | None:

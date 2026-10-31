@@ -43,6 +43,11 @@ FLOOR_BYTES: Final = MIN_FLOOR
 never below it. A safety floor for the disk, not a limit on what he keeps."""
 LOG: Final = "backups.jsonl"
 """The backup log in `backups/`: one line per pre-change copy and per failed upgrade step."""
+UPGRADE_COPIES: Final = frozenset({"before-upgrade", "before-update"})
+"""What a copy of the whole folder taken just before its stores upgrade says it was made for:
+the local copy `serve` takes, and the sync before an update (design 06 section 7)."""
+QUICK: Final = "quick"
+"""This PC's copies, in `backups/`."""
 SQLITE_HEADER: Final = b"SQLite format 3\x00"
 BUSY_TIMEOUT_S: Final = 30.0
 
@@ -250,13 +255,30 @@ def snapshot(
     beside a store about to move. Refuses before it starts when the copy would leave its drive
     below the local floor (`local_floor` of `[engine]`), and removes a copy that fails part way
     (a full disk included). Writes nothing outside `backups/`, and logs the copy's bytes and
-    seconds in `backups/backups.jsonl`."""
+    seconds in `backups/backups.jsonl`.
+
+    One copy per upgrade (design 06 section 7): when this start already copied the whole folder
+    for its upgrade (`upgrade_copied`) and that copy holds every file, no pre-change copy is made,
+    the release is logged, and that copy's own folder among This PC's copies is returned."""
     started = time.monotonic()
     named = [*files, *(f.with_name(f"{f.name}-wal") for f in files)] if closed else files
     present = [file for file in named if file.is_file()]
     outside = [file for file in present if not file.resolve().is_relative_to(layout.root)]
     if outside:
         raise SnapshotFailed(f"{outside[0]} is outside the QMX folder {layout.root}")
+    covering = None if closed else _upgrade_copy(layout, present)
+    if covering is not None:
+        log_line(
+            layout,
+            {
+                "kind": "pre-change-released",
+                "what": what,
+                "from": before,
+                "to": after,
+                "copy": covering,
+            },
+        )
+        return layout.backups / QUICK / "snapshots" / covering
     needed = sum(_bytes(file) for file in present)
     try:
         free = shutil.disk_usage(layout.root).free
@@ -303,6 +325,40 @@ def snapshot(
         },
     )
     return target
+
+
+_UPGRADE_MOMENT: Final[dict[str, str]] = {}
+"""This start's copy of each folder taken for its upgrade, by the folder: from the sync before an
+update until the host serves. Only this process's start counts as the same moment."""
+
+
+def _moment_key(layout: Layout) -> str:
+    return os.path.normcase(os.path.abspath(layout.root.resolve()))
+
+
+def upgrade_copied(layout: Layout, stamp: str) -> None:
+    """This PC's copies hold `stamp`, the whole folder copied for the upgrade this start makes."""
+    _UPGRADE_MOMENT[_moment_key(layout)] = stamp
+
+
+def upgrade_moment_ended(layout: Layout) -> None:
+    """The start's upgrades are done: a store that upgrades from now on copies itself first."""
+    _UPGRADE_MOMENT.pop(_moment_key(layout), None)
+
+
+def _upgrade_copy(layout: Layout, files: Sequence[Path]) -> str | None:
+    """This start's upgrade copy of the folder, when it holds each of `files`; None otherwise."""
+    from qmx_home.backup.repository import FolderRepository, Unreadable  # noqa: PLC0415
+
+    stamp = _UPGRADE_MOMENT.get(_moment_key(layout))
+    if stamp is None:
+        return None
+    try:
+        held = {e.path for e in FolderRepository(layout.backups / QUICK).manifest(stamp).entries}
+        inside = {file.resolve().relative_to(layout.data.resolve()).as_posix() for file in files}
+    except ValueError, OSError, Unreadable:
+        return None
+    return stamp if inside <= held else None
 
 
 def completed_copies(layout: Layout, what: str) -> list[Path]:

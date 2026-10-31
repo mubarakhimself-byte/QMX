@@ -27,5 +27,5 @@
     "Every five minutes": {"main": [[{"node": "Read every connection", "port": "in",
                                       "map": "one"}]]}
   },
-  "meta": {"template": "connections-health"}
+  "meta": {"template": "connections-health", "kind": "maintenance"}
 }

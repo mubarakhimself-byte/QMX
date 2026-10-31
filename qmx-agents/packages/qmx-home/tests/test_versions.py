@@ -15,8 +15,17 @@ from types import SimpleNamespace
 import pytest
 
 from qmx_home import Label, Layout, NoQmxFolder, resolve
+from qmx_home.backup.round import quick
 from qmx_home.stores import APPLICATION_ID, STORES, Store, Version
-from qmx_home.versions import Opened, StoreRefused, check_open, open_sqlite, too_new
+from qmx_home.versions import (
+    Opened,
+    StoreRefused,
+    check_open,
+    open_sqlite,
+    too_new,
+    upgrade_copied,
+    upgrade_moment_ended,
+)
 
 DEMO = Store("demo", "demo ledger", "sqlite", Version(3, 2), "demo.sqlite", ("rows",))
 STEPS = (
@@ -142,6 +151,26 @@ def test_a_step_that_fails_leaves_the_store_at_its_last_good_version_with_an_inc
         (folder.backups / "backups.jsonl").read_text(encoding="utf-8").splitlines()[-1]
     )
     assert (incident["kind"], incident["step"], incident["stays_at"]) == ("upgrade-failed", 3, 2)
+
+
+def test_a_failed_step_after_this_starts_upgrade_copy_names_that_copy(folder: Layout) -> None:
+    path = made(folder.data / "demo.sqlite", version=1)
+    broken = (STEPS[0], STEPS[1], ("CREATE TABLE rows (id INTEGER)",))
+    stamp = quick(folder, "before-update", floor=0).stamp
+    assert stamp is not None
+    upgrade_copied(folder, stamp)
+    try:
+        with closing(connect(path)) as db, pytest.raises(StoreRefused) as refused:
+            open_sqlite(db, "demo", broken)
+    finally:
+        upgrade_moment_ended(folder)
+
+    named = folder.backups / "quick" / "snapshots" / stamp
+    assert str(refused.value) == (
+        "The demo ledger could not be upgraded: step 3 (version 2 to 3) failed (SQLITE_ERROR). "
+        f"It stays at version 2, as it was, and the copy taken first is in {named}."
+    )
+    assert (named / "manifest.jsonl").is_file()
 
 
 def test_an_upgrade_whose_copy_would_fill_the_disk_changes_nothing(
