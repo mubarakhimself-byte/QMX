@@ -6,6 +6,8 @@ Agent A0, 31 Oct 2026, skill `blast-radius`. For each shipped seam the spine cha
 
 Scratchpad: `C:\Users\Mubarak\AppData\Local\Temp\claude\C--Users-Mubarak-Desktop-QMX\ed09cf0c-69f1-44ab-8c6b-76992918774a\scratchpad\a0\br\`.
 
+**Amended 2026-10-31 evening by agent X0** after review R0: items 10 to 14 added for the seams the R0 fixes change (the host route, `app_op`'s placements, the node's own trading grant, the Library kinds R0-17 named, the supervisor's call timeout), and items 3 and 5 extended. X0's scripts live in `...\scratchpad\x0\` and run as `python -I <script> <args>` with the export's agents environment (`eb/qmx-agents/.venv`); the export's `door.py`, `venue_session.py`, `app_op.py`, `forward.py` and `control_door.py` were compared with the read-only checkout ignoring line endings: identical.
+
 ## Summary
 
 | # | Seam the spine changes | The one fact it is safe because of | Proven to step |
@@ -19,6 +21,11 @@ Scratchpad: `C:\Users\Mubarak\AppData\Local\Temp\claude\C--Users-Mubarak-Desktop
 | 7 | The money app gate for the trading node (AD-33) | publishing a `money` app needs his bound signature; a restart of the active signed version needs none | 4 (publish), 3 (restart) |
 | 8 | CCXT reads opened to contract markets on the PC (AD-41) | no QMX host source contains an order call; opening reads cannot place an order | 4 |
 | 9 | Hyperliquid through the pinned CCXT (AD-41) | CCXT 4.5.85's `hyperliquid` class declares orders, positions, funding, open interest, books, trigger and reduce-only orders and a sandbox | 4 offline; venue behaviour unproven |
+| 10 | One more host-pass route on every host (AD-46) | the door admits a host pass only on a closed route set, and every admitted route verifies the pass itself; one added entry changes no other route's answer | 4 |
+| 11 | `app_op` composed with its `Placements` (AD-46) | for an app homed on the asking machine the routed path is the same local run as today; only an app homed elsewhere goes `remote`, or waits `placement` when unreachable | 4 |
+| 12 | The node keeps its own trading grant (AD-37, ruling 135 row) | the host's cTrader paths read, replace and delete only `qmx/token/ctrader-app` and read only `qmx/read/ctrader-app`, so a grant the node keeps under another name in its own store never meets the host's refusal, and the refusal's tests stay unchanged | 4 (scan) |
+| 13 | R0-17's retirement of `bot` and `strategy` (rejected) | a save of a retired kind is refused, and shipped tests and the registry migration save those kinds, so retiring them breaks shipped tests | 3 |
+| 14 | Node operations reached by `apps.ask` (AD-33, X1) | the supervisor stops an app whose tool call passes 30 s, so a node operation must answer fast and do slow work after the answer | 2 |
 
 ## 1. Sizing: CT-23 format 3, never a new key
 
@@ -82,6 +89,8 @@ differing second run on the recorded slice: fail golden_slice_determinism
 
 **Cleared.** The six checks and their verdict need no change; only a collector that drives real bars is new (`collect_layer2_observations` generates the golden slice internally at `layer2.py:312`).
 
+**What the verdict cannot prove (R0-03, added by X0).** The verdict's checks are imports, isolation, no book, permitted intent kinds, determinism, state restore and the source manifest (`qml/src/qml/conformance/layer2.py:215-298`). None looks at trades, so a unit that is always long, whose exit never fires, or whose signal is constant passes on recorded bars exactly as it passes on three instants. AD-17 adds the behaviour report beside the verdict (trade count, exits fired, signal not constant, a shuffled-day control), all warnings. **Before merge:** the dummy unit and three broken twins (always long, an exit that cannot fire, a constant signal) through layer G; the verdict passes all four and the report names each twin's fault.
+
 ## 4. A runner that trades a unit
 
 **What changes.** PR 204's only runner is `silent`. The spine needs a runner that trades a compiled unit on Library data.
@@ -125,6 +134,8 @@ kept organ imports replaced part: qmn.mis -> qmn.promotion ['qmn/src/qmn/mis/reg
 **Risks.** The kill line routes a breach through the Book paper's demotion: deleting `qmn.paper` without moving that call would break the kill line (cost: protection lost; odds: certain if missed). The scan names it. The four `host` modules G4a could not classify (`runtime_risk_gate`, `fencing`, `lineage_persist`, `registry_mint`) are inside `qmn.host` and leave with it; that only one of them is re-exported for a kept organ was not found by this scan (cleared at step 4 for outside importers, step 2 inside).
 
 **Before merge.** A test that every order the node places carries its stop at the broker, run before and after the deletion (catalogue TN-34); the scan rerun on the PR's head with an empty outside-importer list.
+
+**Added by X0 (R0-09, R0-10).** Two modules of the otherwise replaced `qmn.observability` package stay as organs: `liveness.py` (the outbound alive-ping) and `alerts.py` (the closed push list and its `NotificationChannel` port). The scan must treat them as kept, so its outside-importer check covers only the rest of the package. The kill line is per binding (`qmn/capital/kill_line.py:1-9`); after its call into `qmn.paper.demotion` is moved, a breach acts through the labelled placeholder of AD-36 (no new entries for that binding, a risk stop). **Before merge:** a test that a breach stops new entries for that binding and leaves its exits and broker stop in place, before and after the deletion.
 
 ## 6. The Library's kind check
 
@@ -177,8 +188,93 @@ pro streaming class present: True
 
 **Unproven.** Whether the venue keeps a reduce-only trigger order as a resting stop that survives the node's death, and how it behaves after `scheduleCancel`. The streaming methods live on the `ccxt.pro` class (present). A testnet probe in Level 1 C decides; until then catalogue TN-09 stays below full marks.
 
+## 10. One more host-pass route (AD-46)
+
+**What changes.** Every host serves `POST /api/host/forward`, and the door's `host_pass_call` admits a host pass on it. The route verifies the pass against its own host name, applies the claimed principal, and answers a closed verb set (`apps.ask`, `apps.job`, `heartbeats`, `data.list`, `data.fetch`).
+
+**The one fact.** The door admits a host pass only on the routes in its set, and each admitted route checks the pass itself (`qmx_host/door.py:166-179`; the begin and code routes check at `qmx_host/venue_session.py:240-243`; the forward route at `qmx_engine/service/forward.py:378-384`). Adding one entry leaves every other route's answer as it is.
+
+**Proof (step 4).** `br10_host_pass_routes.py` imports the shipped door and asks `host_pass_call` about seven routes, with and without the pass header:
+
+```text
+host-pass route set: [('GET', '/api/engine/forward/stream'), ('POST', '/api/engine/forward'), ('POST', '/api/venue/ctrader/begin'), ('POST', '/api/venue/ctrader/code')]
+run-pass route: ('POST', '/api/data/read')
+POST /api/venue/ctrader/begin           pass admitted=True  no pass=False
+POST /api/venue/ctrader/code            pass admitted=True  no pass=False
+POST /api/engine/forward                pass admitted=True  no pass=False
+GET  /api/engine/forward/stream         pass admitted=True  no pass=False
+POST /api/data/read                     pass admitted=False  no pass=False
+POST /api/apps/trading-node/call        pass admitted=False  no pass=False
+POST /api/host/forward                  pass admitted=False  no pass=False
+```
+
+This is also R0-01's evidence run: no route carries a host pass to data or to an app operation today.
+
+**Risks.** (1) A host pass carries the caller's claimed principal, so any host holding the pairing key can claim `user`. That is the same trust the engine's forward route already gives `inbox.resolve` (`qmx_engine/service/api.py:165-166`); cost: a stolen pairing key could pause or flatten a node; odds: low; the pairing key never leaves the two machines (engine AD-12). (2) A builder who lets the route answer any app tool, not only declared operations, widens it past the catalog. The catalog builds a row only from declared operations (`qmx_apps/manifest.py:130-133`), and `apps.ask` must go through the same declaration.
+
+**Before merge.** `br10` rerun showing exactly five admitted routes; a test that an agent principal's pass is refused on a `manage` operation; a test that a pass minted for another host's name is refused (`wrong_engine`, `qmx_engine/service/forward.py:128-129`).
+
+## 11. `app_op` with its placements (AD-46)
+
+**What changes.** `qmx_engine/control_door.py:308` composes `AppOp` with no `Placements`, so every `app_op` runs locally and a node homed on a server is refused `not_home` by that machine's supervisor (`qmx_apps/supervisor.py:527-532`). The fix composes it with its `Placements`, whose `remote` asks the home through AD-46's `apps.job`.
+
+**The one fact.** For an app homed on the asking machine, `AppOp._route` with `Placements` takes the same local path as without them; only an app homed elsewhere goes `remote`, or waits `placement` when the home is unreachable (`qmx_engine/nodes/app_op.py:121-145`).
+
+**Proof (step 4).** `br11_app_op_remote.py` drives the shipped `AppOp._route` with a fake runner and fake placements:
+
+```text
+no placements (as composed today): {'ran': 'local', 'app': 'trading-node', 'job': 'status'}
+homed here: {'ran': 'local', 'app': 'trading-node', 'job': 'status'}
+homed on a server: {'ran': 'remote', 'home': 'ldn-1'}
+server unreachable waits: True placement
+no remote door: placement_unreachable
+calls: [('local', 'trading-node', 'status'), ('local', 'trading-node', 'status'), ('remote', 'ldn-1', 'trading-node', 'status')]
+```
+
+**Cleared.** An app that never moved reads its home as this machine (`qmx_apps/supervisor.py:1050-1055`), so every app on This PC keeps today's path.
+
+**Before merge.** `br11`'s cases as a test in the engine package; the engine's shipped `app_op` tests green.
+
+## 12. The node keeps its own trading grant (AD-37)
+
+**What changes.** The node app exchanges its own sign-in code with its machine's trading registration and keeps the pair in its own store. The host's refusal of live-capable grants, its token name and its tests stay as built.
+
+**The one fact.** The host's cTrader read and sign-in paths touch only two key names: `qmx/token/ctrader-app` (read, replace, delete) and `qmx/read/ctrader-app` (read). A pair the node keeps under another name never meets the refusal.
+
+**Proof (step 4, a scan of the shipped source).** `br12_token_names.py`:
+
+```text
+service.py {'CTRADER_TOKENS': ['delete:248', 'read:253', 'read:271', 'read:282', 'delete:326', 'read:343', 'delete:344', 'replace:351', 'read:352']}
+venue_session.py {'CTRADER_APP': ['read:193'], 'TOKEN_NAME': ['replace:289', 'delete:453']}
+CTRADER_TOKENS = "qmx/token/ctrader-app"
+```
+
+(`TOKEN_NAME` is `CTRADER_TOKENS`, `qmx_host/venue_session.py:81`.)
+
+**Risks confirmed.** (1) A practice node that kept its demo-trade grant under `qmx/token/ctrader-app` would share the host's slot: the host's next sign-in or refresh replaces or deletes it (`service.py:248`, `:351`). Cost: the practice node loses its session; odds: high if a builder reuses the name. Closed by AD-37's naming rule. (2) A `connections` row whose `credential_ref` named the node's entry would route the host's reads through the node's grant (`qmx_broker/service.py:176`). Closed by "no `connections` row references it".
+
+**Before merge.** A test that the host's connection list refuses a `credential_ref` naming a `trading-node` grant; the shipped refusal tests (`qmx-broker/tests/test_pc_home.py`, `test_refresh.py`; `qmx-host/tests/test_pc_home.py`, `test_refresh.py`) green and unchanged.
+
+## 13. Retiring `bot` and `strategy` (R0-17, rejected)
+
+**What R0 proposed.** Set `retired` on the `bot` and `strategy` kind files.
+
+**The fact that stops it (step 3).** A save of a retired kind is refused with `unknown_kind` (`qmx_library/store.py:966-967`, `kinds/__init__.py:47-48`). Shipped tests save `strategy` items (`qmx-control/tests/test_library_store.py:26`, `test_library_runs_cache.py:32`, `:41`, `:55`, `test_control.py:407`), and the registry migration maps bots and strategy families into those kinds (`qmx_library/migrate/from_registry.py:32-33`). Retiring them would break those tests (ruling 52). Not run: walked from the refusal line to each save.
+
+**Cleared instead.** The unit path never writes `bot` or `strategy`, pinned by a test (AD-29); retirement waits for the PR that moves the migration and those tests.
+
+## 14. Node operations under the supervisor's call timeout (AD-33)
+
+**The fact (step 2).** The supervisor's `call` waits 30 s and then stops the app (`qmx_apps/supervisor.py:957-963`).
+
+**Risk confirmed.** A `deploy` that compiled the unit and verified its snapshots inside the call could pass 30 s and stop the trading node. Cost: the node is down until it heals; odds: medium on a slow server. Closed by AD-33: a deploy is accepted as desired state and compiled after the answer.
+
+**Before merge.** A test that `deploy` answers before it compiles, with a compile that sleeps past 30 s in the test.
+
 ## Not proven here
 
 - Plugin hooks firing under the Agent SDK in QMX's launch path (needs a running chat).
 - The run-pass failure at a server's door after the merged stack (needs two hosts).
+- AD-46's route end to end between two hosts, and This PC reaching a server's OpenObserve over the tailnet (need two hosts).
+- cTrader's `label` surviving onto the position, its length limit, and Hyperliquid's `cloid` on every order kind (need demo and testnet sign-ins).
 - Any order against cTrader or Hyperliquid (needs his sign-in; nothing in the build waits on it, ruling 37).

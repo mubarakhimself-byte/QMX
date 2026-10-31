@@ -25,12 +25,16 @@ companions:
   - architecture/01-connections.md
   - architecture/level-0/blast-radius.md
   - architecture/level-0/LEAD-CALLS.md
+  - architecture/level-0/HANDOVER-TO-PARTS.md
+  - architecture/level-0/R0-FIXES.md
   - architecture/funnel/versions/GLOSSARY.md
 ---
 
 # Architecture Spine: QMX unit system, Level 0
 
 Code truth: `origin/engine/base` at `c93407ca`. Words: `architecture/funnel/versions/GLOSSARY.md`. Every connection's detail: `architecture/01-connections.md` (the master every part's contracts must match). Proofs by running code: `level-0/blast-radius.md`. Calls the ledger did not settle: `level-0/LEAD-CALLS.md`. Rulings are STATE.md's; where this spine and STATE.md differ, STATE.md wins.
+
+Amended 2026-10-31 (evening) by agent X0 after the quick review R0 (`architecture/review/R0-level-0.md`, 19 findings and Appendix A). AD ids are stable: AD-2, AD-4 to AD-6, AD-8, AD-12, AD-13, AD-17, AD-19, AD-23, AD-24, AD-26 to AD-29, AD-31, AD-33, AD-36 to AD-39, AD-42, AD-44 and AD-45 amended in place; AD-46 (the PC reaches a node through one host-pass route) and AD-47 (one block loader) added. What changed per finding: `level-0/R0-FIXES.md`. What each Level 1 part must settle by id: `level-0/HANDOVER-TO-PARTS.md`.
 
 ## Design Paradigm
 
@@ -53,7 +57,7 @@ Read-only here; Level 1 spines inherit them too. QMA v2 decision ids are the spi
 | --- | --- | --- |
 | AD-1 pure orchestrator; AD-2 one definition format; AD-23 one writer per store | workflow-engine spine | templates are content on the one engine; nothing here adds a scheduler |
 | AD-19 a mini app is a pack; AD-64 ask an operation or leave a result, one home per app instance | workflow-engine spine | QMB, the node and the MIS talk only through operations and landed results |
-| AD-52 one composition root `qmx_host` | workflow-engine spine | the trading profile (AD-45) is a profile of the same host, not a second program |
+| AD-52 one composition root `qmx_host` | workflow-engine spine | the trading profile (AD-45) is a derived state of the same host, not a second program or a third role |
 | AD-60 engine agents work inside their attempt overlay | workflow-engine spine | built as designed (AD-32); its skip after probe P-PERM is a build gap, not a design change |
 | AD-61 one operation catalog; toolsets are the unit of scope | workflow-engine spine | every unit door is a catalog row (AD-31) |
 | AD-65 one heartbeat per host; AD-69 two monitoring layers from one event source | workflow-engine spine | node heartbeats carry clock evidence (AD-42) |
@@ -107,7 +111,7 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P1, P2, P12, P13, P14, every connection
 - **Prevents:** a router, the MIS, the Library, the PC or any cross-machine link stopping a unit from trading
-- **Rule:** the trading path (feed, unit, local guards, order, protection at the broker, journal) runs on one machine with only what is on that machine: the feed keeper, the compiled unit and its calibrated values, the instrument snapshots, the deployment record and the journal tail. Every other input is an optional read surface with `stale_after` and a declared fallback; QML's compiler refuses a rule input that is not local to the trading machine. Ledger CC-12; standing order 10.
+- **Rule:** the trading path (feed, unit, local guards, order, protection at the broker, journal) runs on one machine with only what is on that machine: the feed keeper, the compiled unit and its calibrated values, the instrument snapshots, the deployment record and the journal tail, plus that machine's host process and its apps supervisor, which own the node app's process (on This PC the app's Job object kills it when the host dies, `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, `qmx_apps/windows_job.py:35`; on a server the host is a systemd service that always restarts, LC-A0-06). Every other input is an optional read surface with `stale_after` and a declared fallback; QML's compiler refuses a rule input that is not local to the trading machine, and refuses a read of another unit's live output, because composition between units happens at build time into one unit (QML-22). Ledger CC-12; standing order 10.
 
 ### AD-3. Only the node sends orders; only he promotes; one automatic stop [ADOPTED]
 
@@ -119,19 +123,19 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** all parts
 - **Prevents:** a feature that only a server has; a Linux-only design on his PC
-- **Rule:** every part runs on This PC alone, natively on Windows (Job objects, Credential Manager, the `tzdata` package). A server runs the same code in a named host profile (AD-45); it stands in or extends, never replaces. Linux is required only for a server's supervision (systemd) and its time service (chrony); WSL is the fallback for the node only. Ledger CC-06, CC-14, N-03.
+- **Rule:** every part runs on This PC alone, natively on Windows (Job objects, Credential Manager, the `tzdata` package). A server runs the same code in the host's `server` role (AD-45); it stands in or extends, never replaces. Linux is required only for a server's supervision (systemd) and its time service (chrony); WSL is the fallback for the node only. Ledger CC-06, CC-14, N-03.
 
 ### AD-5. Same code in research and live
 
 - **Binds:** P1, P2, P11, P12, P13
 - **Prevents:** backtest and live disagreeing by construction
-- **Rule:** the compiled unit callback, its motion engine, its reading blocks and its local guards run identically in QMB's replay and in the node; the node's loop keeps driving QMB's `run_slice` unforked (`qmn/src/qmn/loop/driver.py`). The named differences belong to the host that drives the unit: the clock source, the data source and the fill model. A nightly replay of each live day through QMB compares decisions per unit.
+- **Rule:** the compiled unit callback, its motion engine, its reading blocks and its local guards run identically in QMB's replay and in the node; the node's loop keeps driving QMB's `run_slice` unforked (`qmn/src/qmn/loop/driver.py`). The named differences belong to the host that drives the unit: the clock source, the data source and the fill model. Both hosts hand a unit only closed bars unless it declares tick input, and a higher-timeframe value only once its bar has closed in the venue's own day boundary (QML-19, QML-20, QB-21). A nightly replay of each live day through QMB compares decisions per unit, fed by the quotes and bars the node's feed keeper recorded, pulled home with the journals (AD-28, QB-23).
 
 ### AD-6. Versioned contracts, addable never redefined
 
 - **Binds:** P7 and every shape crossing a part or a machine
 - **Prevents:** silent breakage after a one-sided update
-- **Rule:** every crossing shape is JSON Schema 2020-12 with a `schema_version`; fields and kinds may be added, meanings never change; a breaking change is a new version plus an upgrade script; readers read every version they support. Every cross-machine connect states both sides' contract versions; on a mismatch the node keeps trading what it has and refuses new deployments until they match.
+- **Rule:** every crossing shape is JSON Schema 2020-12 with a `schema_version`; fields and kinds may be added, meanings never change; a breaking change is a new version plus an upgrade script; readers read every version they support, and keep reading an old version for an overlap window after its successor ships (a setting, default 90 days), answering a write in an old version with a deprecation notice that names the newer one (F1). Every cross-machine connect states both sides' contract versions; on a mismatch the node keeps trading what it has and refuses new deployments until they match. REST routes are internal to one host build and stay unversioned; every cross-machine ask rides AD-46's verbs, whose arguments and answers carry `schema_version`, so the connect handshake covers them.
 
 ### AD-7. Immutable records, pinned versions
 
@@ -143,7 +147,7 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P5, P12, P13, P14
 - **Prevents:** two writers on one journal; two nodes on one account; a token refresh logging out another machine
-- **Rule:** one writer per journal partition (the key includes the writing machine); one feed keeper per venue and environment per machine; one refresher per credential and one cTrader app per trading machine; a deployment names exactly one machine identity and a node refuses any deployment naming another; every client order id carries the node's id, so the start-up reconcile treats orders or positions from another node as a foreign claimant and refuses that account with an alert. No lease service on a third machine.
+- **Rule:** one writer per journal partition (the key includes the writing machine); one feed keeper per venue and environment per machine; one refresher per credential and one cTrader app per trading machine; a deployment names exactly one node identity (AD-38) and a node refuses any deployment naming another; one node per account (per subaccount on Hyperliquid), recorded on the account record (AD-26). Every order the node sends carries the node's tag: in its client order id; on cTrader also in the order's `label`, which the venue keeps on the position's trade data, because a position carries no client order id (`ProtoOAPosition` has none, `ProtoOATradeData` has `label` and `comment`; `qmx_broker/protocol/openapi-91.pb`, CHECKED by R0 and rerun by X0); on Hyperliquid in the order's `cloid`, while its positions net per coin with no tag, so there the account record is the only owner proof. The start-up reconcile treats a tagged order or position from another node as a foreign claimant and refuses that account with an alert. This per-order attribution is new code: the kept reconcile organ compares the ledger with read-back quantities per account (`qmn/src/qmn/venue/live.py:1055-1094`). No lease service on a third machine.
 
 ### AD-9. Typed market facts and units of measure
 
@@ -167,13 +171,13 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P12, P13, P14, P15
 - **Prevents:** protection that waits on something that can be down
-- **Rule:** on any fault (stale feed, clock past the halt band, journal unwritable, disk alarm, venue not ready) new entries stop while exits, broker-side stops and the kill switch keep working; nothing on that path waits on the PC, the MIS, telemetry, the Library or an agent. The node's journal-before-dispatch gate is kept (`qmn/src/qmn/journal_dispatch.py`).
+- **Rule:** on any fault (stale feed, clock past the halt band, journal unwritable, disk alarm, venue not ready) new entries stop while exits, broker-side stops and the kill switch keep working; nothing on that path waits on the PC, the MIS, telemetry, the Library or an agent. The node's journal-before-dispatch gate is kept (`qmn/src/qmn/journal_dispatch.py`); its write is the node's own append store, in process, so the host is never a step before a send (AD-27).
 
 ### AD-13. Unknown is a state; ids everywhere; operations converge
 
 - **Binds:** P5, P12, P14, P9, every connection
 - **Prevents:** a resend that opens a position twice; a retry that lands a record twice; a setup that breaks if run again
-- **Rule:** an order outcome may be UNKNOWN and is never resent blind (CT-19 law kept): before any resend the node reads open orders and positions by client order id. Every event, fill, saved item and shipped partition has an id; receiving it twice changes nothing. Setup steps, deployments and shipping are idempotent and converge to a desired state.
+- **Rule:** an order outcome may be UNKNOWN and is never resent blind (CT-19 law kept): before any resend the node reads open orders by client order id and positions by the node's tag (AD-8). Every event, fill, saved item and shipped partition has an id; receiving it twice changes nothing. Setup steps, deployments and shipping are idempotent and converge to a desired state.
 
 ### AD-14. Numbers are named settings; no invented caps
 
@@ -197,7 +201,15 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P1, P2, P6, P8, P9, P11
 - **Prevents:** a unit that passes on three instants valued 1, 2, 3 and trades nonsense; a check only the editor sees
-- **Rule:** the checker runs layers in order and returns every problem: A schema, B references, C numbers and units of measure, D data levels against the instrument records, E completeness (placeholders warn), F code safety (the scan, widened for agent-written blocks to `importlib`, `__import__`, `eval`, `exec` and unseeded random; warnings only for human plain Python), G behaviour on a recorded slice of at least the derived warm-up plus a margin, in QMB's sandbox, fed to QML's unchanged `evaluate_layer2` verdict (CHECKED: the verdict is a pure function of observations, `blast-radius.md` item 3). The in-process `loaded_in_isolation` stamp never counts as proof. One function is reached by the `unit_check` catalog row, the Library save of a `unit` (AD-29), the unit-check step of templates, and, after a probe, a core-plugin hook calling `python -m qmx_tools.unit_check`.
+- **Rule:** the checker runs layers in order and returns every problem: A schema, B references, C numbers and units of measure, D data levels against the instrument records, E completeness (placeholders warn), F code safety (the scan, widened for agent-written blocks to `importlib`, `__import__`, `eval`, `exec` and unseeded random; warnings only for human plain Python), G behaviour on a recorded slice of at least the derived warm-up plus a margin, run in QMB's sandbox. G has two halves. Its safety half is QML's unchanged `evaluate_layer2` verdict (CHECKED: a pure function of observations, `blast-radius.md` item 3), whose checks are imports, isolation, no book, permitted intent kinds, determinism, state restore and the source manifest (`qml/src/qml/conformance/layer2.py:215-298`): it proves a unit is safe, not that it trades. Its behaviour half is a report beside the verdict, all warnings: the trade count (or the unit's declared "may not trade on this slice"), each exit kind fired or reported unfired, whether the signal is constant, and a shuffled-day control that should find nothing (UT-01). The in-process `loaded_in_isolation` stamp never counts as proof. One function serves every door; each door runs the layers it can:
+
+| Door | Layers it runs | Why |
+| --- | --- | --- |
+| the `unit_check` catalog row, the unit-check step of templates, and, after a probe, a core-plugin hook calling `python -m qmx_tools.unit_check` | A to F | pure and fast; fits the hook's 8 s (connections C4) |
+| the Library save of a `unit` (AD-29) | A to F | every save path is checked |
+| a QMB run and a node deploy | require a recorded G verdict and report for the exact compiled fingerprint, stored with the unit; QMB runs G itself when none is recorded; a node deploy without one is refused | G needs QMB's sandbox and recorded data (AG-03, LD-06) |
+
+What deterministic checks can and cannot catch about a unit that trades nonsense: they catch a unit that cannot trade as written (no trades, an exit that never fires, a constant signal, a look-ahead read, a unit-of-measure mismatch, unsafe code, a run that differs on rerun). They cannot catch a unit whose trades are legal and simply have no edge. That is caught after the checker, in order: QMB's judge (the signal against random entries, cost stress, walk-forward and the try-corrected verdict, AD-25), then the unit's paper lane on a demo account, then his click.
 
 ### AD-18. A unit's size travels as CT-23 format version 3
 
@@ -209,7 +221,7 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P1, P13, P4, P8, P9
 - **Prevents:** agents citing words with no meaning; a concept lost in an old folder; a word meaning two things across classes
-- **Rule:** every concept is one Library item of the `component` kind, extended (component types gain trigger, exit, sizer, motion, reading, combiner, calendar, context), with three faces: trader words, machine spec (inputs with data level and fallback, output type, parameters as number specs), implementation (code reference, fingerprint, golden, no-future and warm-up tests). Status is computed by script, never typed. Entries are role-neutral; a multi-meaning word carries a per-class meaning table. A catalogue snapshot ships as QML package data so the node never needs the Library. All 239 entries are ported, never lost; growth goes through the authoring door with no cap.
+- **Rule:** every concept is one Library item of the `component` kind, extended (component types gain trigger, exit, sizer, motion, reading, combiner, calendar, context), with three faces: trader words, machine spec (inputs with data level and fallback, output type, parameters as number specs), implementation (code reference, fingerprint, golden, no-future and warm-up tests). Status is computed by script, never typed. Entries are role-neutral; a multi-meaning word carries a per-class meaning table. QML's package data holds only the blocks shipped with QML itself; every other block is a Library item with its source and fingerprint, loaded by AD-47's loader, and a deployment carries its pinned blocks, so the node never needs the Library. All 239 entries are ported, never lost; growth goes through the authoring door with no cap.
 
 ### AD-20. Old law lifted for units, subtracted from the surface
 
@@ -233,13 +245,13 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P2, P3, P9, P12, the Lab
 - **Prevents:** two tables deciding "is this a new unit"; two versions trading one market; an open trade's exits changed by a new version
-- **Rule:** the type of edit decides new version or new unit by one table: the Lab's `settings.lab.identity_rule` (Lab AD-16), extended with the unit edit labels, read by QML, the judge and the Lab. Each unit has one lifecycle state machine with a state per market (draft, tested, parked, paper, live, stopped, retired); only he moves toward live; only a risk rule moves to stopped. One admitted version per unit and market at a time. A position belongs to the version that opened it until flat. On one instant exits run before entries; a unit holds one position per instrument unless it declares more.
+- **Rule:** the type of edit decides new version or new unit by one table: a core setting (NEW; the Lab's AD-16 table is designed, not built, and no `identity_rule` exists in code, R0-18) holding Lab AD-16's rows extended with the unit edit labels. Each host hands the table to QML as data, because QML imports no host; the judge and the Lab read the same setting. Each unit has one lifecycle state machine with a state per market (draft, tested, parked, paper, live, stopped, retired); only he moves toward live, and moving a unit from tested to paper is his click by default (lead's review, LC-37); only a risk rule moves to stopped. One admitted version per unit and market at a time. A position belongs to the version that opened it until flat. On one instant exits run before entries; a unit holds one position per instrument unless it declares more.
 
 ### AD-24. The risk socket
 
 - **Binds:** P2, P12, P11, the risk session
 - **Prevents:** the risk session's design forcing a rework of the unit or the node
-- **Rule:** a unit has an exit set and halts at position, unit and account scope, one sizer, and the host that drives the unit (the node live, QMB in replay, by AD-5) calls a cross-unit hook before every order; each slot is a typed contract that today's placeholder blocks already implement. The slots read only local inputs: entry and stop, instrument facts, account facts, the unit's own journal in R, market statistics, his limits. Exit and sizing maths, the kill-switch effect values and the hook's content are the risk session's (ledger R-01, R-04).
+- **Rule:** a unit has an exit set and halts at position, unit and account scope, one sizer, and the host that drives the unit (the node live, QMB in replay, by AD-5) calls a cross-unit hook before every order; each slot is a typed contract that today's placeholder blocks already implement. The slots read local inputs (entry and stop, instrument facts, account facts, the unit's own journal in R, market statistics, his limits) plus the optional read surfaces AD-2 allows, each with its fallback, so the socket does not presume where risk and sizing live (ledger contradiction 34, `00-ledger.md:422`). Exit and sizing maths, the kill-switch effect values and the hook's content are the risk session's (ledger R-01, R-04).
 
 ### AD-25. The referee stays home
 
@@ -251,25 +263,25 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P4, P1, P11, P12, P13, P14
 - **Prevents:** a sizer reading a raw venue document live; a replay using today's facts for a past date
-- **Rule:** one `instrument` item per (venue, symbol), a `venue` item (rate limits, rationed actions, cancel-on-disconnect, trigger basis) and an `account` item (broker, demo or live, netting or hedging, futures type), versioned, refreshed from the venue (API facts daily and on every change event, broker documents weekly, exchange documents monthly). Each carries the data-level table with its three splits and licence, and versioned calendars in the market's zone. Every trading machine holds a snapshot of the records its deployments use. Futures records exist now as `specified`.
+- **Rule:** one `instrument` item per (venue, symbol), a `venue` item (rate limits, rationed actions, cancel-on-disconnect, trigger basis) and an `account` item (broker, demo or live, netting or hedging, futures type), versioned, refreshed from the venue (API facts daily and on every change event, broker documents weekly, exchange documents monthly). Each carries the data-level table with its three splits and licence, and versioned calendars in the market's zone. Each instrument record also names a QMX market id, so one market at two venues (gold at two CFD brokers; a CME future and the CFD on it) is two instrument records sharing one market id; comparisons across venues and the cross-source offset check key on it (EX-06, LD-12). A broker's change to a symbol's lot step, margin, digits, leverage or trading mode is an event and a new record version (TN-25, TN-26, RS-18); AD-38 says what clears the pause it causes. Every trading machine holds a snapshot of the records its deployments use. Futures records exist now as `specified`.
 
 ### AD-27. Journals: one envelope, typed kinds, one writer
 
 - **Binds:** P5, P11, P12, P13, P8, P9
 - **Prevents:** one thin row shape for everything; market facts copied into every unit journal; a world mislabelled
-- **Rule:** every record carries one envelope (ids, writer and sequence, venue, receive and write times, `clock_ok`, world, unit and version, market, account, platform, machine, run, trace id, build, links) over CT-13's vocabulary, with typed kinds per stream: the unit journal (the node writes paper, demo and live; for backtest and stress QMB writes the same kinds into the `backtest-result`'s own blobs, so a run's journal is one record), the market journal (the feed keeper), the node journal, reading history (`source = node` for the node's guards, `source = mis` for the MIS app), notes (agents only). QMB and the node write only through P5's writer library, which owns the mapping onto the Library's existing partition key and commits through the machine's market-data door (its single writer, Library AD-28). The Library `trade` item is the round-trip record for paper, demo, live and imported fills (Library AD-31). Every decision is a row, taken or not; world is stamped by the venue reader.
+- **Rule:** every record carries one envelope (ids, writer and sequence, venue, receive and write times, `clock_ok`, a `backfilled` mark (JR-08), world, unit and version, market, account, platform, machine, run, trace id, build, links) over CT-13's vocabulary, with typed kinds per stream: the unit journal (the node writes paper, demo and live; for backtest and stress QMB writes the same kinds into the `backtest-result`'s own blobs, so a run's journal is one record), the market journal (the feed keeper), the node journal, reading history (`source = node` for the node's guards, `source = mis` for the MIS app), notes (agents only; records of the existing `note` kind, extended additively, AD-29). QMB and the node write only through P5's writer library, which owns the mapping onto the Library's existing partition key. The node's before-dispatch write is its own append store on its volume, in process, as built (`qmn/src/qmn/data/observation_sink.py:189-196`); only closed partitions pass the machine's market-data door (its single writer, Library AD-28), after the fact, so the host is never a step before a send. The Library `trade` item is the round-trip record for paper, demo, live and imported fills (Library AD-31). Every decision is a row, taken or not, carrying the value, source and version of every reading the unit computed or read (MIS-10). World is stamped from the account the venue reader proved (demo or live) and the deployment's lane: `paper` for a unit's paper lane on a demo account, `demo` for other demo-account work such as setup self-tests and the demo pass mark.
 
 ### AD-28. Results come home by pull
 
 - **Binds:** P5, P12, P13, P0, connections X3
 - **Prevents:** a node that needs the PC to trade; journals lost while the PC is away
-- **Rule:** the node always writes locally first. A job on This PC pulls each reachable node's closed partitions and live tail (journals and the node's reading history), idempotent by writer id and sequence, verifies them and commits through the PC's market-data door; the node keeps every partition until the PC confirms a verified copy, under a disk guard where tick recording stops first. The pull uses a host pass; the known run-pass failure at a server's door (G2 §6) is fixed before any PC-minted run relies on a server.
+- **Rule:** the node always writes locally first. A job on This PC pulls from each reachable node through AD-46's route: closed partitions by `data.list` and `data.fetch` (journals, the node's reading history, and the quotes and bars its feed keeper recorded for the markets its live units trade, AD-5), and the live tail by the node's `journal_tail` operation; idempotent by writer id and sequence; verified, then committed through the PC's market-data door. The node keeps every partition until the PC confirms a verified copy, under a disk guard where tick recording stops first. Nothing pushes into This PC (AD-44). The known run-pass failure at a server's door (G2 §6) belongs to remote workflow steps (connections X6), not to this pull, and is rechecked in the same packet as AD-46.
 
 ### AD-29. The Library changes only by addition
 
 - **Binds:** P6, P1, P2, P3, P4, P5
 - **Prevents:** damage to the store everything rests on (ruling 51)
-- **Rule:** additions only: the real `unit` schema; the extended `component` kind; new kinds (`instrument`, `venue`, `account`, `study-spec`, `verdict`, `baseline-card`, `proposal-card`, `death-certificate`, `forecast`); the kind check returns every problem while keeping the first as its message head (28 shipped test lines compare message text, `blast-radius.md` item 6); a kind file may name a registered checker that the save runs (an additive amendment of Library AD-3: the roster stays data). Kept as built: one writer, archive never delete, governed drafts, refs and edges, the market-data door.
+- **Rule:** additions only: the real `unit` schema; the extended `component` kind; the existing `note` kind (agents' notes) and `paper-run` kind (a unit's paper lane per market) extended additively rather than duplicated; new kinds (`instrument`, `venue`, `account`, `study-spec`, `verdict`, `baseline-card`, `proposal-card`, `death-certificate`, `forecast`); `bot` and `strategy` stay live kinds for now, because the registry migration maps into them (`qmx_library/migrate/from_registry.py:32-33`) and shipped tests save `strategy` items (`qmx-control/tests/test_library_store.py:26`, `test_library_runs_cache.py:32`), so retiring them would break shipped tests (`blast-radius.md` item 13); the unit path never writes them, pinned by a test (QML-24); the kind check returns every problem while keeping the first as its message head (28 shipped test lines compare message text, `blast-radius.md` item 6); a kind file may name a registered checker that the save runs (an additive amendment of Library AD-3: the roster stays data). Kept as built: one writer, archive never delete, governed drafts, refs and edges, the market-data door.
 
 ### AD-30. New shapes ride doors that exist
 
@@ -281,7 +293,7 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P8, P11, P12, P13
 - **Prevents:** a unit tool the copilot cannot see; agents in the fast lane; agent judgement deciding
-- **Rule:** the unit doors are rows in a core toolset (`unit_new`, `unit_check`, `unit_explain`, `blocks_find`, `journal_query`, `readings_query`, `instrument_get`); the existing `backtest` rows forward to the QMB app through the core landing; the node's read operations are reachable as rows; the default copilot home lists `app:qmb`, `app:trading-node` and `app:mis` (a shipped setting, no code). Skills `build-unit`, judging and `build-mini-app` are filled; a test pins that every agent-visible core row is on the default copilot surface. Agents work only in the slow lane, write only notes and drafts, never edit QMB, the study spec after results, the try ledger or his holdout choice. Ruling 24: no other change to the agent system.
+- **Rule:** the unit doors are rows in a core toolset (`unit_new`, `unit_check`, `unit_explain`, `blocks_find`, `journal_query`, `readings_query`, `instrument_get`); the existing `backtest` rows forward to the QMB app through the core landing; the node's read operations are reachable as rows, through AD-46 when the node's home is a server; the default copilot home lists `app:qmb`, `app:trading-node` and `app:mis` (a shipped setting, no code). Skills `build-unit`, judging and `build-mini-app` are filled; a test pins that every agent-visible core row is on the default copilot surface. Agents work only in the slow lane, write only notes and drafts, never edit QMB, the study spec after results, the try ledger or his holdout choice. Ruling 24: no other change to the agent system.
 
 ### AD-32. Workflows are content; the engine changes only with a core reason
 
@@ -293,7 +305,7 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P10, P11, P12, P13
 - **Prevents:** rebuilding what the core gives; a mini app other than the node holding an order path
-- **Rule:** QMB, the trading node and the MIS ship as first-party apps in `qmx-agents/apps/`, installed and enabled by one click on the first-start card. The money gate stays as built: publishing each node version needs his bound signature; a restart of the active signed version needs none (`qmx_apps/supervisor.py:542-547`). Only the `trading-node` app id may hold an order-capable venue client, enforced at install. A mini app may hold a unit's logic for research, backtests and paper and publish it as a unit item, never trade it (a template, a Should). Breaker defaults stay; the node app sets its own values in its manifest. One fix where the core truly blocks (ruling 46): the supervisor has a `restart` operation but no automatic restart after a breaker trip, so a manifest gains an opt-in restart with back-off (off by default, on for `trading-node`); every trip and restart stays logged.
+- **Rule:** QMB, the trading node and the MIS ship as first-party apps in `qmx-agents/apps/`, installed and enabled by one click on the first-start card. The money gate stays as built: publishing each node version needs his bound signature; a restart of the active signed version needs none (`qmx_apps/supervisor.py:542-547`). The core cannot see order code inside an app, but it can enforce the secret map: only the `trading-node` manifest may name the venue trading-grant secrets (`capabilities.secrets`, `qmx_apps/manifest.py:77`, validated as `qmx/*` names at `:311-317`), install refuses any other app that names them, and where the Docker tier runs, an app's network allow-list names only its own venues (R0-13). A node operation answers inside the supervisor's 30 s call timeout, because a timeout stops the app (`qmx_apps/supervisor.py:957-963`): a deploy is accepted as desired state and compiled after the answer. A mini app may hold a unit's logic for research, backtests and paper and publish it as a unit item, never trade it (a template, a Should). Breaker defaults stay; the node app sets its own values in its manifest. One fix where the core truly blocks (ruling 46): the supervisor has a `restart` operation but no automatic restart after a breaker trip, so a manifest gains an opt-in restart with back-off (off by default, on for `trading-node`); every trip and restart stays logged.
 
 ### AD-34. QMB is a mini app with a contract
 
@@ -311,25 +323,37 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P12
 - **Prevents:** 98,000 lines of a never-run node carried into the first live trade; a compatibility layer between the old shell and the new
-- **Rule:** the node is the `trading-node` app (risk `money`). Its organs stay as libraries: the venue laws, the cTrader client with reconnect and gap replay, the capability check, the order pacer and UNKNOWN per stream, reconcile, protection (kill switch, windows, dead zones), the kill line, clock bands, the loop over `run_slice`, the virtual ledger rekeyed per unit, the one-refresher rule, the liveness heartbeat, live intake and history bootstrap. Its shell (host, seats, promotion, Book paper, doors, deploy recipes, bench, the proof campaigns, the Grafana stack) is replaced and deleted in the same wave once the new shell trades on demo, moving the three outside callers found by scan (`blast-radius.md` item 5). A live host profile is new: the only registered profile today is offline replay.
+- **Rule:** the node is the `trading-node` app (risk `money`). Its organs stay as libraries: the venue laws, the cTrader client with reconnect and gap replay, the capability check, the order pacer and UNKNOWN per stream, reconcile, protection (kill switch, windows, dead zones), the kill line, clock bands, the loop over `run_slice`, the virtual ledger rekeyed per unit, the one-refresher rule, the liveness heartbeat (`qmn/src/qmn/observability/liveness.py`), the alert publisher with its closed push list (`qmn/src/qmn/observability/alerts.py`; both kept from the otherwise replaced `observability` package, AD-42), live intake and history bootstrap. Its shell (host, seats, promotion, Book paper, doors, deploy recipes, bench, the proof campaigns, the Grafana stack) is replaced and deleted in the same wave once the new shell trades on demo, moving every caller the scan found (`blast-radius.md` item 5): outside `qmn`, the agent's node-state tool (`qmx_tools/functions.py:10`, `service.py:17`); inside it, the kept kill line and the bench fold, which import Book paper's demotion (`qmn/capital/kill_line.py:38`, `bench_fold.py:32`), and the MIS register, which imports the promotion hub (`qmn/mis/regime_register.py:60-61`). After the cut the kill line's breach (it is per binding, over that binding's marked virtual equity, `qmn/capital/kill_line.py:1-9`) acts through a labelled placeholder until the risk session picks its verb: no new entries for that binding, exits and broker stops untouched, logged as a risk stop that waits for his resume; the test that every order carries its stop at the broker runs before and after the deletion (TN-34). A live runtime profile inside the node is new: the only registered node profile today is offline replay (`qmn/src/qmn/host/configured_live_resources.py:38-58`).
 
 ### AD-37. Node placements and keys
 
 - **Binds:** P12, P14, P0
 - **Prevents:** a live key where agents work; one grant on two machines
-- **Rule:** practice: the node app on This PC, Windows native under the apps supervisor, trading demo accounts with a demo-only grant (allowed on the PC today), plus the PC's view-only live grant for shadow runs. Live: the node app on a server in the trading profile (AD-45), the live grant stored only by the node app in that machine's own store; every other QMX host keeps refusing live-capable grants. WSL only as the fallback. Each trading machine registers its own cTrader app; Hyperliquid trading uses one agent wallet per trading process with its expiry on the passport.
+- **Rule:** practice: the node app on This PC, Windows native under the apps supervisor, trading demo accounts. Live: the node app on a server in the trading profile (AD-45). WSL only as the fallback. Each trading machine, This PC included, registers its own cTrader trading app beside QMX's one read app (engine AD-67). This PC holds two cTrader grants, each with one refresher: the host's view-only grant over live and demo accounts, under the read app (`qmx/token/ctrader-app`, refreshed by the host as built), for reads and shadow runs; and the practice node's trade-scope grant over demo accounts only, under the PC's trading app, held and refreshed by the node app. A grant that can trade live money is held only by a node app on a host in the trading profile, in that node's own store (Credential Manager entries only the node writes on Windows; QMN's node secret store, `qmn/src/qmn/secrets/`, on Linux), under names no `connections` row references, because the host deletes a live-capable pair it finds under its own token name (`qmx_broker/service.py:248`, `:343-344`). The sign-in is the venue's own page; This PC's loopback receiver relays only the one-time code to the node app, which exchanges it with its own registration; every QMX host keeps refusing live-capable grants in its own store, as built (`qmx_broker/adapters.py:103-146`; the change is listed under Amended decisions, ruling 135). Hyperliquid trading uses one agent wallet per trading process with its expiry on the passport; he approves the wallet in Hyperliquid's own page and its key enters on the trading machine at setup, never through This PC's store (connections E8).
 
 ### AD-38. The node keeps returning to what he asked for
 
 - **Binds:** P12, P15
 - **Prevents:** a crash leaving an orphan or doubled position; a heal undoing a risk stop
-- **Rule:** a deployment carries the pinned unit document, every pinned block's code and fingerprint, the calibrated values and the instrument snapshots; the node compiles the unit itself and refuses to trade it if the compiled fingerprint differs from the one QMB tested. The node's volume holds the desired state (deployments, accounts, modes, snapshots, unshipped journals); a restored backup lands units as drafts and never cuts over into a running node. On every start the node reconciles with the broker first (broker wins; a position with no owner is protected and flagged, never adopted), rebuilds positions, restores calibration, re-places missing protection, warms up from its own recording without trading, then allows entries. Technical faults heal with back-off (the inner supervisor for the loop, the supervisor's opt-in restart for the app process, AD-33); a repeated fault stands down entries alive; a risk stop survives restarts and waits for his resume. A health stop and a risk stop are different words on every screen. Units are added and removed one at a time; a node restart is only for node code.
+- **Rule:** a deployment carries the pinned unit document, a folder of every pinned block's source and fingerprint (AD-47), the calibrated values and the instrument snapshots; the node compiles the unit itself and refuses to trade it if the compiled fingerprint differs from the one QMB tested. A node's identity is its machine id plus an install id minted at its first start and kept on its volume; a node whose install id does not match its deployments refuses to trade until he confirms on its card that it is the same node, so a copied disk or a restored server image cannot trade beside the original (TN-04). The node's volume holds the desired state (deployments, accounts, modes, snapshots, unshipped journals); a restored backup lands units as drafts and never cuts over into a running node. On every start, and on wake after This PC slept (logged as a gap, TN-15), the node reconciles with the broker first (broker wins; a position with no owner is protected and flagged, never adopted), rebuilds positions, restores calibration, re-places missing protection, warms up from its own recording without trading, then allows entries. Replacing a dead node is his take-over click: once he confirms the old node is gone (its heartbeat absent and his word), the new node adopts the positions and orders tagged with the old node's id, under protection, and the account record names the new owner (MA-02). Technical faults heal with back-off (the inner supervisor for the loop, the supervisor's opt-in restart for the app process, AD-33); a risk stop survives restarts and waits for his resume. A health stop and a risk stop are different words on every screen. Units are added and removed one at a time; a node restart is only for node code. Every automatic stand-down keeps exits, broker stops and the kill switch working; what clears each (every number a named setting with a starting default, AD-14):
+
+| Stand-down | Entries stop when | What clears it | Starting default |
+| --- | --- | --- | --- |
+| stale feed | a market's feed is older than its `stale_after` | itself, once the feed is fresh again for a named time | 60 s fresh |
+| clock band | the offset passes the no-new-entries band | itself, once the offset is back inside the warn band for a named time | 5 minutes inside |
+| disk | free space falls below the journal guard | itself, once free space is back above the guard | the guard plus a named margin |
+| venue not ready | the session drops or its capabilities fail re-verification | itself, once authenticated, subscribed and re-verified (connections E1) | as built |
+| repeated fault | the same technical fault repeats past the crash-loop fold | his resume (catalogue lead's call 2) | 5 restarts in 10 minutes (`funnel/solutions/node.md` §10) |
+| spec change | the broker changes a symbol's lot step, margin, digits, leverage or trading mode (TN-25, TN-26) | his click on the change card, which shows the old and new record and the checker's rerun | his click |
+| risk stop, a kill-line breach | a risk rule fires | his resume (AD-3) | his resume |
+
+Two soak settings are shown, never enforced as gates: 24 hours on This PC before a node release, and one week on demo before a live binding (lead's review, LC-24); the release and binding cards show the time done against each, and his click decides.
 
 ### AD-39. The order path and protection
 
 - **Binds:** P12, P14, P2
 - **Prevents:** an unprotected position when the node dies; Book-level paper standing in for a unit's own paper
-- **Rule:** unit intent (CT-23 format 3), then local guards (kill-switch level, clock band, feed freshness, spread against the unit's cost target, windows), then the cross-unit hook (placeholder), then a CT-19 command whose client order id is the trade's trace id tagged with the node id, then the venue client, then CT-20 events recorded before they are interpreted, then reconcile, then the journal. Protection is placed with the order where the venue allows, and re-placed after any venue cancel where it does not (the venue's protection rule, AD-41). Each unit has its own paper lane per market on demo accounts; DEC-0261's "no per-bot paper" is lifted for units.
+- **Rule:** unit intent (CT-23 format 3), then local guards (kill-switch level, clock band, feed freshness, spread against the unit's cost target, windows), then the cross-unit hook (placeholder), then a CT-19 command whose client order id is the trade's trace id tagged with the node id (with the node's tag also in cTrader's `label` and as Hyperliquid's `cloid`, AD-8), then the venue client, then CT-20 events recorded before they are interpreted, then reconcile, then the journal. Protection is placed with the order where the venue allows, and re-placed after any venue cancel where it does not (the venue's protection rule, AD-41). Each unit has its own paper lane per market on demo accounts, recorded as a `paper-run` item (the existing kind, extended additively, AD-29); DEC-0261's "no per-bot paper" is lifted for units. Protection follows the filled quantity, so a partial fill re-sizes the stop to what filled and the unit sees the real position (TN-23).
 
 ### AD-40. The MIS reads and publishes; no unit needs it
 
@@ -347,7 +371,7 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** P15, P12, P13, P11
 - **Prevents:** two monitoring stacks; "process up" read as healthy; a log flood starving the journal
-- **Rule:** every process sends OpenTelemetry through the one telemetry switch; OpenObserve on This PC is the home; a server runs a collector with a disk queue that ships to the PC when reachable and may run its own OpenObserve as a stand-in; QMN's Grafana, Loki and Prometheus stack is deleted. Health is progress: the last decision per unit, the last quote per symbol, the last journal write. Heartbeats carry state, reason, clock evidence (AD-10), version and last broker contact; alarms fire only inside open calendars and wake him for a short named list; telemetry off shows as off. Logs and journals have separate disk budgets; logs are rate-limited with a dropped count.
+- **Rule:** every process sends OpenTelemetry through the one telemetry switch, and each machine's OpenObserve is the home for that machine's telemetry, as built (engine AD-69): This PC's on loopback with no collector; a server's collector with its disk queue and its own OpenObserve. This PC never receives telemetry from another machine (AD-44): his screens read a server's health rows through AD-46's `heartbeats` verb and open the server's deep view over the tailnet (INFERRED reachable behind the server firewall's `tailscale0` rule, engine AD-71; Part C confirms). QMN's Grafana, Loki and Prometheus stack is deleted. Health is progress: the last decision per unit, the last quote per symbol, the last journal write. Heartbeats carry state, reason, clock evidence (AD-10), version and last broker contact; alarms fire only inside open calendars; telemetry off shows as off. A short named list wakes him through the trading machine's own outbound senders, which work while This PC is off: the kept alert publisher with its closed push list (money boundary, protection escalation, silent degradation; `qmn/src/qmn/observability/alerts.py:45-49`, its `NotificationChannel` port at `:174-179`) delivers to a push service he names, its key in that machine's store; and the kept liveness ping (`qmn/src/qmn/observability/liveness.py:1-8`) goes to an outside watcher he names, which alarms him when pings stop (connections E11, E12). Both are on once he names a destination at setup; their failure never touches trading. Logs and journals have separate disk budgets; logs are rate-limited with a dropped count.
 
 ### AD-43. Clocks on every machine, calendars for every market
 
@@ -359,25 +383,39 @@ Arrows mean "may import or call". Nothing points up: QML imports no host, app, v
 
 - **Binds:** every cross-machine connection in `01-connections.md`, P0, P12, P15
 - **Prevents:** a network link on the order path; a dropped link losing data; a node placed far from its broker
-- **Rule:** nothing that crosses machines is on the order path, except the node's own link to its venue. Every cross-machine link rides a transport that exists: REST and SSE (with `Last-Event-ID` resume) and MCP over streamable HTTP on the host's one port behind one bearer; the PC host on loopback and server hosts bound to their Tailscale address only; one held stream per reachable owned node into the PC's merged inbox; host-to-host passes and `POST /api/data/read` for data; the Library hub's replication; OpenTelemetry over the tailnet with a disk-backed queue. Every link tolerates loss: control calls to an unreachable node wait as desired state, never fail; streams resume; data is backfilled by id. A trading node is placed near its broker's servers (the PC's measured TCP handshake to cTrader is about 160 ms, against about 0.5 ms for in-process fan-out, research 31).
+- **Rule:** nothing that crosses machines is on the order path, except the node's own link to its venue. **Direction:** every cross-machine link is opened by This PC, or ends on a server or outside QMX; nothing connects into This PC, whose host and OpenObserve bind loopback only (`qmx_host/host.py:254`, `qmx_host/connect_logs.py:186-188`). **Transports, as built or as AD-46 adds:** REST and MCP over streamable HTTP on the host's one port behind one bearer, server hosts bound to their Tailscale address only; the engine's forwarding route and its held stream per reachable owned node, which carry engine runs and inbox items only (`qmx_engine/service/forward.py:50-63`, `:360-369`; a dropped stream re-reads the open items every 5 s with no event replay, `qmx_host/streams.py:24`); run passes on `POST /api/data/read` for remote workflow steps; the Library hub's replication, opened by This PC with the pairing key; AD-46's host route for everything This PC asks a node (control, state, journals, node reads); OpenTelemetry to each machine's own collector. **Loss:** control calls to an unreachable node wait as desired state, never fail; state crosses as latest values only; events and data are backfilled by id through the pull (AD-28). A trading node is placed near its broker's servers (the PC's measured TCP handshake to cTrader is about 160 ms, against about 0.5 ms for in-process fan-out, research 31).
 
-### AD-45. Host profiles
+### AD-45. Host roles and the trading rule
 
 - **Binds:** P0, P12, P10
-- **Prevents:** agents working where a live key lives; a special "trading server" machine kind on his screens
-- **Rule:** one `qmx_host` program per machine in a profile: `pc` (everything; the default), `server` (workflow worker and Library server, as built by PR 232), and `trading` (the apps supervisor, the trading node app, the MIS instance, the market-data store and journal store, telemetry; no chats, no agent workflow steps). A server enters the trading profile when he binds a live account to the trading node app on it; no machine kind is named on his screens; in his words, "A server can be a server." (T3:1102). The connect dialog gains a "Trading node" choice on the shipped step runner: practice on This PC first, then the same checked steps on a server.
+- **Prevents:** agents working where a live key lives; a special "trading server" machine kind on his screens; a third host profile the code does not have
+- **Rule:** one `qmx_host` program per machine, in one of the code's two roles: This PC (the default, bound to loopback) or `server` (bound to its Tailscale address; workflow worker and Library server as built by PR 232; `qmx_host/host.py:254`). The trading profile (the glossary's word) is not a third role but one derived rule: a host that is home to a `trading-node` instance holding a grant that can trade live money serves no chats and places no agent workflow steps, and a node app accepts such a grant only on a host already in that state. A server enters it when he binds a live account to the node app on it, after the same setup step turns its chats and agent steps off, and leaves it when he unbinds. This PC never enters it, because chats run there. No machine kind is named on his screens; in his words, "A server can be a server." (T3:1102). The connect dialog gains a "Trading node" choice on the shipped step runner: practice on This PC first, then the same checked steps on a server.
+
+### AD-46. The PC reaches a node through one host-pass route
+
+- **Binds:** P0, P5, P12, P13, P15, connections X1, X2, X3, X7, X10
+- **Prevents:** control, state and journal links riding routes the code does not have; a second door beside the built host pass; an agent changing trading on a node
+- **Rule:** every host serves one more host-pass route, `POST /api/host/forward`, beside the four that exist (cTrader begin and code, the engine's forward route and its stream; `qmx_host/door.py:166-179`, CHECKED by running `host_pass_call`, `blast-radius.md` item 10). It is the engine's forwarding pattern applied to the host: a pass minted per call by the caller with the pairing key (`mint_host_pass`, a 30 s life, `qmx_engine/service/forward.py:43`, `:90-111`), verified by the route itself against this host's name, carrying the caller's principal; the door's change is one entry in the set `host_pass_call` admits. Its verbs are a closed set: `apps.ask` (an operation of an app homed here, through the supervisor's `call` with its pin revalidated); `apps.job` (an app job: the `remote` path `app_op` already declares, `qmx_engine/nodes/app_op.py:63`, `:121-141`, wired by composing the executor with its `Placements` at `qmx_engine/control_door.py:308`); `heartbeats` (this host's newest heartbeat rows per subject, the `ops_heartbeats` read, `qmx_host/host.py:1311-1327`); `data.list` and `data.fetch` (closed partitions in this machine's market-data store after a watermark, then one file by fingerprint). An operation whose manifest approval is `manage` answers only to the principal `user`, his click on This PC; an agent's principal reaches the other approvals and the read verbs only. A new verb is a spine amendment. When an app's home is another machine, This PC's catalog rows and `app_op` ask through this route; for an app homed on the asking machine nothing changes (CHECKED by running `AppOp._route`, `blast-radius.md` item 11). The run-pass failure at a server's door (G2 §6) is a different route (connections X6) and is rechecked in the same packet.
+
+### AD-47. One block loader
+
+- **Binds:** P1, P11, P12, P13, checker layer F
+- **Prevents:** two paths for block code (package data against a deployment's blocks); an agent-written block that cannot load at run time; a loader hidden in agent code that the scan would have to allow
+- **Rule:** block source is a Library item (the extended `component` kind, AD-19) with its fingerprint. One QML loader is the only code that turns block source into callables: it checks each pinned source against its fingerprint and then compiles it, the same in QMB's sandbox, the trading node and the MIS app. The scan keeps banning `importlib`, `__import__`, `eval` and `exec` in agent-written blocks, because only the loader uses them. QMB reads pinned sources from the Library; a deployment carries a folder of its pinned blocks (AD-38); QML's package data holds only the blocks shipped with QML itself. A learned block's weights arrive the same way, as a pinned file with a fingerprint through a declared read surface, and a retrain inside the block's declared bounds is a calibration, not a new version (QML-13). Part A designs the loader.
 
 ## The parts
 
-Each part names its verdict, whether it exists, what it owns and must never own, its rules (AD ids above), its language and runtime, Windows and Linux, local first, the seam through which later growth plugs in, and the catalogue cases it owns (every one of the 267 cases and 18 risk rows is owned exactly once; CHECKED by `score.py`).
+Each part names its verdict, whether it exists, what it owns and must never own, its rules (AD ids above), its language and runtime, Windows and Linux, local first, the seam through which later growth plugs in, and the catalogue cases it owns (every one of the 267 cases and 18 risk rows is owned exactly once; CHECKED by `score.py`, and again by R0's `owners.py`).
+
+The versions' score (567 of 570, `funnel/versions/versions.md` §4 to §6) proves the properties, not the cases: a case scores the lowest of the properties the catalogue names for it (R0-11). Ownership is not handling. Each Level 1 file therefore carries a table of its owned cases (id, the handling, the AD or section that holds it), and R1 checks by script that every owned id is present with a non-empty handling; the cases R0 found with no handling line are settled in the ADs above or handed to their part by id in `level-0/HANDOVER-TO-PARTS.md`.
 
 ### P0 The host
 
-- **Verdict:** core. **EXISTS:** `qmx-agents/packages/qmx-host` (one process per QMX folder, `HO/host.py:1-20`); trading profile NEW.
-- **Owns:** composing every part on a machine; profiles (AD-45); the first-start card (adds one click for the three apps); the connect dialog's step runner (adds the "Trading node" choice); the doctor (adds a clock line).
-- **Never owns:** trading logic, orders, unit logic.
-- **Rules:** AD-4, AD-44, AD-45. **Language:** Python. **Windows and Linux:** both, first-class on Windows (CI on `windows-2025`). **Local first:** `pc` is the default profile.
-- **Growth seam:** a new profile is a setting; a new connect choice is a step-runner kind.
+- **Verdict:** core. **EXISTS:** `qmx-agents/packages/qmx-host` (one process per QMX folder, `HO/host.py:1-20`; roles This PC and `server`, `HO/host.py:254`); the trading rule and the host route NEW.
+- **Owns:** composing every part on a machine; roles and the trading rule (AD-45); the host route and its verbs (AD-46); the first-start card (adds one click for the three apps); the connect dialog's step runner (adds the "Trading node" choice); the doctor (adds a clock line).
+- **Never owns:** trading logic, orders, unit logic, a trading grant.
+- **Rules:** AD-4, AD-44, AD-45, AD-46. **Language:** Python. **Windows and Linux:** both, first-class on Windows (CI on `windows-2025`). **Local first:** This PC is the default role.
+- **Growth seam:** a new connect choice is a step-runner kind; a new cross-machine verb is a spine amendment of AD-46.
 - **Cases:** OP-01, OP-02, OP-04, OP-06, OP-07, OP-08, OP-09, OP-11.
 
 ### P1 QML with the dictionary
@@ -385,7 +423,7 @@ Each part names its verdict, whether it exists, what it owns and must never own,
 - **Verdict:** core. **EXISTS:** `qml/` (48 files, 385 tests pass on Windows, G1 §1.1); the 239 entries outside the repo in `Desktop\Stats\dictionary`; the five verbs, the compiler, layers A to G, the extended catalogue NEW.
 - **Owns:** the runtime seam (factory, callback, intents, evidence with `knowable_at`, state); the compiler; the checker; the catalogue and the dictionary entries; the five-verb door; the motion engine inside the compiled callback; units of measure.
 - **Never owns:** backtests, orders, storage, judging, promotion, market facts, publishing readings.
-- **Rules:** AD-5, AD-9, AD-11, AD-16, AD-17, AD-18, AD-19, AD-20, AD-22. **Language and runtime:** Python 3.14, in process of whatever hosts it, because every venue speaks a wire protocol and the network, not Python, is the floor (research 54 §2, research 31). **Windows and Linux:** both. **Local first:** runs anywhere; the node uses its package-data snapshot.
+- **Rules:** AD-5, AD-9, AD-11, AD-16, AD-17, AD-18, AD-19, AD-20, AD-22, AD-47. **Language and runtime:** Python 3.14, in process of whatever hosts it, because every venue speaks a wire protocol and the network, not Python, is the floor (research 54 §2, research 31). **Windows and Linux:** both. **Local first:** runs anywhere; the node loads its deployment's pinned blocks through the one loader (AD-47).
 - **Growth seam:** a block, reading, motion mode or number kind is catalogue data plus code with golden tests; QML's code does not change.
 - **Cases:** QML-01, QML-02, QML-03, QML-04, QML-05, QML-07, QML-08, QML-09, QML-10, QML-11, QML-12, QML-13, QML-14, QML-15, QML-16, QML-17, QML-18, QML-19, QML-20, QML-21, QML-22, QML-23, QML-24, QML-25, QML-26.
 
@@ -480,11 +518,11 @@ Each part names its verdict, whether it exists, what it owns and must never own,
 
 ### P12 The trading node
 
-- **Verdict:** **mini app** (`trading-node`, risk `money`), installed by default for practice. **EXISTS:** the organs in `qmn/src/qmn/` and `packages/qmf-venue` (never run against a broker, G3 §1.1); **NEW:** the shell (app, inner supervisor, desired state, live profile, per-unit paper, feed keeper as the app's lifeline), the passport, the trading profile.
-- **Owns:** the only order path; deployments; feed keepers; the unit runtime; local guards and execution-health readings; protection; reconcile; the kill switch and kill line; clock bands; healing; local journals; the heartbeat.
+- **Verdict:** **mini app** (`trading-node`, risk `money`), installed by default for practice. **EXISTS:** the organs in `qmn/src/qmn/` and `packages/qmf-venue` (never run against a broker, G3 §1.1); **NEW:** the shell (app, inner supervisor, desired state, live profile, per-unit paper, feed keeper as the app's lifeline), the passport, the node identity and the take-over step, the node's own sign-in for its trading grant, the operations AD-46 reaches.
+- **Owns:** the only order path; deployments; feed keepers; the unit runtime; local guards and execution-health readings; protection; reconcile with per-order attribution; the kill switch and kill line; clock bands; healing and the stand-down table; local journals; the heartbeat; the outbound alarm and liveness senders; its own trading grant and its refresh.
 - **Never owns:** research; chats or agent steps on its machine in the trading profile; any key but its own machine's.
-- **Rules:** AD-2, AD-3, AD-8, AD-12, AD-13, AD-36, AD-37, AD-38, AD-39. **Language:** Python (the organs are Python; the network is the floor). **Windows and Linux:** practice native on Windows; live on Linux servers under systemd; WSL fallback. **Local first:** practice on This PC first, then the same app on a server.
-- **Growth seam:** a new venue is a venue-client adapter; a new placement is a profile; risk content plugs into the socket.
+- **Rules:** AD-2, AD-3, AD-8, AD-12, AD-13, AD-36, AD-37, AD-38, AD-39, AD-46. **Language:** Python (the organs are Python; the network is the floor). **Windows and Linux:** practice native on Windows; live on Linux servers under systemd; WSL fallback. **Local first:** practice on This PC first, then the same app on a server.
+- **Growth seam:** a new venue is a venue-client adapter; a new placement is a new home for the same app; risk content plugs into the socket.
 - **Cases:** UT-10, UT-14, UT-22, TN-01, TN-02, TN-03, TN-04, TN-05, TN-06, TN-07, TN-08, TN-09, TN-10, TN-11, TN-12, TN-13, TN-14, TN-15, TN-16, TN-17, TN-18, TN-19, TN-20, TN-21, TN-22, TN-23, TN-24, TN-27, TN-28, TN-29, TN-30, TN-31, TN-32, TN-33, TN-34, OP-10.
 
 ### P13 The MIS
@@ -517,30 +555,36 @@ Each part names its verdict, whether it exists, what it owns and must never own,
 
 ## Networking between machines
 
-The master table is `01-connections.md` §3 (transport, latency it tolerates, how often and how much crosses, on the order path or not, reconnect and backfill, placement). The rules are AD-44. In short:
+The master table is `01-connections.md` §3 and §4 (transport, latency it tolerates, how often and how much crosses, on the order path or not, reconnect and backfill, placement). The rules are AD-44 and AD-46. Every cross-machine link is opened by This PC or ends on a server or outside QMX; none connects into This PC. In short, with the route each link has once the build lands:
 
-| Link | Transport (EXISTS unless marked) | On the order path | When it is down |
+| Link | Who opens it, and the route (EXISTS unless marked) | On the order path | When it is down |
 | --- | --- | --- | --- |
-| Node to its venue | cTrader: TLS protobuf on 5035, one long-lived session per environment per machine; CCXT: REST and WebSocket (NEW) | yes, the only one | no new entries; protection already at the broker; reconnect with back-off, gap replay, capabilities re-verified before entries |
-| His click on the PC to the node (deploy, pause, resume, kill, flatten, mode) | app operation at the node's home over the host's port on Tailscale, host pass | no | waits as desired state; the kill also has the node's own screen and the broker's app |
-| Node to the PC inbox (heartbeat, state, guard events) | held stream per reachable node, SSE with resume | no | PC shows "unreachable since" with the last values |
-| PC pulls journals and reading history from the node | host-to-host data read with a host pass (NEW job) | no | node keeps everything until a verified copy lands |
-| Telemetry | OTLP over the tailnet, collector with a disk queue | no | dropped lines counted; trading unaffected |
-| PC and a QMX server Library | the Library hub's replication | no | offline is normal (Library AD-14) |
-| Remote workflow steps | run passes and `POST /api/data/read` | no | known gap: a pass minted on the PC fails at a server's door; fixed before use |
+| E1, E3, E4: node to its venue | the node; cTrader TLS protobuf on 5035, one long-lived session per environment per machine; CCXT REST and WebSocket (NEW) | yes, the only one | no new entries; protection already at the broker; reconnect with back-off, gap replay, capabilities re-verified before entries |
+| X1: his click on This PC to the node (deploy, pause, resume, kill, flatten, mode, take over) | This PC; AD-46 `apps.ask` on the server host's route (NEW route; the supervisor's `call` there EXISTS); `manage` operations answer only to his principal | no | waits as desired state; the kill also has the node's own screen and the broker's app |
+| X2: node state (heartbeat, state, unit summary, clock evidence) | This PC reads; AD-46 `heartbeats` and `apps.ask status` every heartbeat interval (NEW route); latest values only | no | This PC shows "unreachable since" with the last values; events arrive later by X3 |
+| X3: journals, reading history and the recorded feed | This PC pulls; AD-46 `data.list`, `data.fetch` and `apps.ask journal_tail` (NEW route, NEW job) | no | the node keeps everything until a verified copy lands |
+| X4: a server's deep logs | This PC opens the server's own OpenObserve over the tailnet (EXISTS on the server; reach from the PC INFERRED) | no | the server keeps its window; trading unaffected |
+| X5: This PC and a server Library | This PC; the Library hub's replication with the pairing key | no | offline is normal (Library AD-14) |
+| X6: remote workflow steps | This PC; run passes on `POST /api/data/read` | no | known gap: a pass minted on This PC fails at a server's door; rechecked with AD-46's packet |
+| X7: agents and the node watcher reading a node | This PC; AD-46 `apps.ask` read operations (NEW route) | no | answered from the last values and the view-only broker read |
+| X8: setting up a server | This PC; SSH and Tailscale through the shipped step runner (trading-node choice NEW) | no | every step reruns; the failed step is named |
+| X10: updates to a server (host build, node and MIS versions, shadow models) | This PC; the step runner for host builds; the Library hub for app versions and models (NEW use, INFERRED fit) | no | the node keeps trading what it has; mismatched versions refuse new deployments (V-H) |
+| E11, E12: alarms and liveness while This PC is off | the node; its push sender to a service he names, its liveness ping to a watcher he names (organs EXIST, wiring NEW) | no | a failed send is counted; trading unaffected |
+| none: This PC's readings to a node | nothing crosses; a unit reads only its own machine's readings (AD-2) | no | n/a |
 
 ## Consistency Conventions
 
 | Concern | Convention |
 | --- | --- |
 | Names | the glossary's words; code keeps QMB's banned words out (`engine`, `kernel`, `exam`, `plugin`, `snapshot` in QMB source); app ids `qmb`, `trading-node`, `mis`; catalog rows `<toolset>_<op>` |
-| Ids | content fingerprints `fp1:sha256:...`; pins `id@version`; trace id from source to trade, equal to the client order id tagged with the node id |
+| Ids | content fingerprints `fp1:sha256:...`; pins `id@version`; trace id from source to trade, equal to the client order id tagged with the node id; the node's tag also in cTrader's `label` and Hyperliquid's `cloid`; a node identity is machine id plus install id |
 | Times | UTC nanoseconds or ISO-8601 UTC text; venue and receive time on market events; zones named (IANA) |
 | Numbers | exact types with a unit kind; no binary float for money or prices past the venue boundary |
 | Errors | the shipped shape `error: code, message` (tools add `next_step`); checks return every problem as kind, where (JSON pointer), message, hint, with the checker version |
 | Records | envelope plus kind; one writer per partition; append only; archive, never delete |
 | Settings | every number a named, UI-editable setting with a starting default and its origin |
-| Secrets | keys only in each machine's own store (Credential Manager on This PC, an owner-only vault file on a server); never in the Library, journals, logs or a deployment; one redaction seam on every write (engine AD-37); the secret scan on every commit |
+| Secrets | keys only in each machine's own store (Credential Manager on This PC, an owner-only vault file on a server); a node's trading grant only in that node's own store, under names no `connections` row references (AD-37); never in the Library, journals, logs or a deployment; one redaction seam on every write (engine AD-37); the secret scan on every commit |
+| Words this spine adds | **passport**: the record a node's self-test lands (broker connection, feed freshness, a demo test trade with its stop, kill-switch latency, clock skew, disk, the image digest; `funnel/solutions/node.md` §6), plus its identity and its grants' expiry; **kill line**: a loss floor per binding over its marked virtual equity, a kept organ whose verb the risk session picks (`qmn/capital/kill_line.py:1-9`); **desired state**: what he asked a node to run, kept on its volume, which the node returns to after any fault; **install id**: minted at a node's first start, with the machine id its identity; **take-over click**: his click that lets a new node adopt a dead node's tagged positions; **trading profile**: the derived state of AD-45, not a role; **world `paper`** against **world `demo`**: both on demo accounts, `paper` for a unit's paper lane and `demo` for other demo work (AD-27). The glossary takes these in its next fold. |
 | Ownership of shared shapes | CT-23 format 3, the unit document, the catalogue entry and the reading card schema are defined by Level 1 A; the QMB contract, journal kinds and the judge's records by Level 1 B; node operations, deployments and the instrument, venue and account records by Level 1 C; the others consume and propose changes |
 | Placeholders | `origin: placeholder` on the block's card, shown on unit cards, promotion cards and trades |
 | Tests | every PR keeps the shipped tests green (`just ci` on Windows and the Linux lanes); the checker's known-good corpus gate |
@@ -571,32 +615,34 @@ Versions read from the lockfiles at `c93407ca` (CHECKED) and against the vendors
 
 ```mermaid
 flowchart LR
-  subgraph PC["This PC (Windows, profile pc)"]
+  subgraph PC["This PC (Windows, loopback only)"]
     PCH["qmx_host: chats, engine, Library, catalog"]
     PCQMB["QMB app"]
     PCMIS["MIS app, PC instance"]
     PCNODE["Trading node app, practice"]
-    PCO2["OpenObserve"]
+    PCO2["OpenObserve for This PC"]
   end
-  subgraph TS["A server (Linux, profile trading)"]
-    TSH["qmx_host: apps supervisor, stores, telemetry"]
+  subgraph TS["A server (Linux, role server, trading profile)"]
+    TSH["qmx_host: apps supervisor, stores, host route"]
     TSNODE["Trading node app, live"]
     TSMIS["MIS app, node instance"]
+    TSO2["collector and OpenObserve for this server"]
   end
-  subgraph QS["A server (Linux, profile server, optional)"]
+  subgraph QS["A server (Linux, role server, optional)"]
     QSH["qmx_host: workflow worker, Library server"]
   end
   CT["cTrader Open API"]
   HL["Hyperliquid and other CCXT venues"]
+  PUSH["Push service and liveness watcher he names"]
   PCNODE -->|"demo orders"| CT
   TSNODE -->|"live orders"| CT
   TSNODE -->|"orders"| HL
-  PCH -->|"deploy, kill (Tailscale)"| TSH
-  TSH -->|"held stream: heartbeat, state"| PCH
-  PCH -->|"pull journals, reading history"| TSH
-  TSH -->|"OTLP with disk queue"| PCO2
-  PCH <-->|"Library hub"| QSH
-  PCH -->|"view-only and demo reads"| CT
+  PCH -->|"host route: control, state, pull (Tailscale)"| TSH
+  PCH -->|"deep logs view"| TSO2
+  TSNODE -->|"OTLP"| TSO2
+  TSNODE -->|"alarms, liveness"| PUSH
+  PCH -->|"Library hub"| QSH
+  PCH -->|"view-only reads"| CT
 ```
 
 ### Source tree (new and touched)
@@ -614,8 +660,8 @@ qmx-agents/apps/mis/                  # app.toml + server over qmf-readings (NEW
 qmx-agents/packages/qmx-judge/        # P3 (NEW)
 qmx-agents/packages/qmx-library/      # kinds added; validator returns every problem
 qmx-agents/packages/qmx-control/      # catalog rows added
-qmx-agents/packages/qmx-engine/       # shared template pieces; AGW; library node kind
-qmx-agents/packages/qmx-host/         # trading profile; connect choice; doctor clock line
+qmx-agents/packages/qmx-engine/       # shared template pieces; AGW; library node kind; app_op Placements wired
+qmx-agents/packages/qmx-host/         # host route (AD-46); trading rule; connect choice; doctor clock line
 qmx-agents/packages/qmx-broker/       # CCXT contract reads
 qmx-agents/plugin/                    # skills; hook after a probe
 ```
@@ -626,6 +672,8 @@ qmx-agents/plugin/                    # skills; hook after a probe
 | --- | --- | --- | --- |
 | BotFactory (QML runtime) | `construct(declaration, assignment, read_surfaces)` returning a callback | compiled units; plain-Python units; callers QMB and the node | real (two callers, structural, CHECKED) |
 | The checker | `check(document)` returning every problem | one function reached four ways | one module; the entry points are not adapters |
+| The block loader (AD-47) | `load(pinned sources)` returning callables after a fingerprint check | QMB's sandbox, the node, the MIS app | one module, three callers |
+| The host route (AD-46) | one route, a closed verb set, a host pass per call | This PC's catalog rows and `app_op` asking a server; every host answering | real once built; mirrors the engine's forward route |
 | The QMB contract | the app's operations and result shape | today's QMB; any variant; the conformance pack as test adapter | real |
 | Venue-client port | sessions, submit, observations, reconcile, capabilities | `ctrader`; `ccxt`; replay and conformance kinds | real; futures clients hypothetical (declared, not code) |
 | Data-route port | levels, subscribe, history | cTrader, CCXT venues, Dukascopy, Binance Vision | real; Databento hypothetical |
@@ -645,7 +693,9 @@ Every place risk and sizing plugs in, with today's placeholder. The pack is `RIS
 | The cross-unit hook before every order | node order path (AD-39) | passes every order; the MIS publishes dispersion and herding counts for it |
 | Budget share the sizer reads | socket inputs | the account's equity |
 | Kill-switch effect values per level | node protection (kept organ) | labelled placeholder defaults (blank in code today, GAP-0050) |
-| The kill line's verb (flatten or stop) | node capital (kept organ) | code kept, unused until the risk session picks the verb |
+| The kill line's verb (flatten or stop) | node capital (kept organ) | code kept; after the shell cut a breach acts through a labelled placeholder: no new entries for that binding, exits and stops untouched, a risk stop waiting for his resume (AD-36) |
+| A gap through the stop: a loss bigger than 1R (RS-13) | QMB fills (QB-07) and the node's journal | fills at the first tradable price; the loss is recorded in R as it fell, never capped at 1R; how the sizer treats gap risk is the risk session's |
+| Leverage and margin changes at a venue (RS-18) | instrument and account records (AD-26), the spec-change stand-down (AD-38) | leverage and margin are versioned record fields; a change pauses the units on that symbol until his click |
 | Which risk rules count as the one automatic stop; the action after a decay alarm | lifecycle (AD-23), decay check (AD-32) | the decay check informs only; nothing moves a unit by itself except an explicit risk stop |
 | Paper after a risk stop (direct, or his click) | lifecycle | his click |
 | A broker stop on every live order | venue protection rule (AD-41) | every placeholder exit set places its stop with the order |
@@ -666,7 +716,10 @@ Each change to an inherited decision, with its reason in one line. Everything no
 | Lab AD-5 (QmbPort default adapter `app_op qmb_backtest` on the `qmb` placement) | lab-and-pods spine | the default adapter is `app_op` to the QMB app | as above |
 | Lab AD-17 (labelers reach the node as candidates through `NodePort`) | lab-and-pods spine | labelers are reading blocks; going live is his yes in the MIS app | readings are one code in QMB and live (AD-40) |
 | Library AD-3 (kinds added by schema file, never by code) | library-and-data spine | additive: a kind file may name a registered checker | the unit save must run QML's checker, and the roster stays data |
-| engine AD-69 (OpenObserve and the collector on the server) | workflow-engine spine | OpenObserve's home is This PC; a server's collector ships to it with a disk queue and may run a stand-in | the PC is home (ruling 136) |
+| engine AD-65 (a host pass reaches the forwarding and venue routes only) | workflow-engine spine; `qmx_host/door.py:166-179` | one more host-pass route, `POST /api/host/forward`, with a closed verb set (AD-46) | This PC must control, read and pull from a node, and no route carries that today (R0-01) |
+| engine AD-64 (an `instance` operation homed elsewhere is asked through `remote`) | code: `qmx_engine/control_door.py:308` composes `AppOp` with no `Placements` | the executor is composed with its `Placements`, whose `remote` asks through AD-46 | the engine's own design carries the seam; nothing set it (R0-01; rulings 49, 53) |
+| engine AD-70 (a trading server sends journals, fills, decisions, heartbeats and kill events to the Library server within seconds; contract only) | workflow-engine spine | This PC pulls them from the node through AD-46 (AD-28); nothing is pushed to This PC or to a Library server | units stand alone and nothing connects into This PC (AD-44); AD-70 left this design to the trading-node session, which this is |
+| ruling 135 in code (every QMX host refuses a live-capable grant, `qmx_broker/adapters.py:103-113`; the sign-in writes only `qmx/token/ctrader-app`, `qmx_host/venue_session.py:1-16`, `:287-289`) | code | the host's refusal and its tests stay as built; the sign-in flow gains one target, the node app, to which This PC's loopback receiver relays only the one-time code; the node app exchanges it with its machine's own trading registration and keeps the grant in its own store, accepting a live-capable grant only on a host in the trading profile (AD-37, AD-45); the `LiveGrant` docstring is reworded, its message text stays (shipped tests compare it, `qmx-broker/tests/test_pc_home.py:153`) | binding a live account is what puts a server into the trading profile, and no path for it exists today (R0-04) |
 | DEC-0147, DEC-0154 ("the bot may not size") | `docs/decisions` | for units, CT-23 format 3 carries the size; the Book path stays | the unit owns its sizing (STATE correction 2) |
 | DEC-0148 (no partial close) | `docs/decisions` | exit kinds are addable for units | the unit owns its exits (R-04) |
 | DEC-0175 (no conditions in declarations) | `docs/decisions` | composition is data in unit documents; leaf conditions stay code | QML Shape A |
@@ -677,6 +730,8 @@ Each change to an inherited decision, with its reason in one line. Everything no
 | QML seat rule "a tuned set mints a new bot" (`bot.py:618-628`) | code | numbers move inside declared ranges by declared motion | AD-22 |
 | QMN "MIS publishes to the Book door and kill switch, never bots" (`signal_snapshot.py:1-4`) | code | readings are catalogue blocks units may compute and read | M-01 |
 | Mini-app supervisor: a breaker trip stays down until someone calls `restart` (`qmx_apps/supervisor.py:828`, `:863`) | code | an opt-in restart with back-off per manifest, off by default, on for the node | the node must heal itself (ruling 35); a fix where the core truly blocks (ruling 46) |
+| QMN's `observability` package (replaced with the shell, `blast-radius.md` item 5) | code | `liveness.py` and `alerts.py` are kept as organs | the only paths that reach him while This PC is off (R0-09) |
+| Kept as built, reversing this spine's first draft: engine AD-69 (each server keeps its own collector and OpenObserve) | workflow-engine spine | none; the draft's "OpenObserve's home is This PC" row is withdrawn | nothing may connect into This PC, and the built shape needs no new port on his PC (R0-02) |
 
 ## Deferred
 
@@ -688,7 +743,10 @@ Each change to an inherited decision, with its reason in one line. Everything no
 | Journal kind schemas and the closed, appendable reason-code list | the envelope is fixed here | Level 1 B |
 | Which shipped templates are built first and which stay drafts | content | Level 1 B |
 | The node's inner supervisor (reuse QMN's crash-loop fold or not), the safe-to-restart test, which four ambiguous `host` modules are dead | inside the node | Level 1 C, with a blast-radius run |
-| The Hyperliquid testnet probe's pass marks; duplicate client-order-id behaviour per venue | facts to prove | Level 1 C |
+| The Hyperliquid testnet probe's pass marks; duplicate client-order-id behaviour per venue; cTrader's `label` length and that it survives onto the position; Hyperliquid's `cloid` on every order kind the node sends | facts to prove on demo and testnet | Level 1 C |
+| AD-46's verbs, field by field, and the node operations' approvals (the manifest refuses an `instance` operation declared `read`, `qmx_apps/manifest.py:324-327`) | the route and its principal rule are fixed here | Level 1 C |
+| The block loader's interface and the deployment's block folder layout | AD-47 fixes the one-loader rule | Level 1 A |
+| Which push service and which liveness watcher are the defaults | AD-42 fixes the senders and the short list | Level 1 C |
 | A provider and region study for trading servers by distance to the broker | placement numbers | Level 1 C |
 | Whether the MIS PC and node instances share one version pin | an app-version policy | Level 1 C |
 | Data-route port and feed keeper sharing one interface | inside the edge | Level 1 C |
