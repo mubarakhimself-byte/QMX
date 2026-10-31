@@ -35,7 +35,8 @@ The merged code is checked out read-only at `D:\QMX-worktrees\engine-base-read\`
 - The "QMX wrap-up coordination" session left a very solid foundation: build on it.
 
 ## Read first
-- `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md` in full; "Operator round 2026-10-31 midday" (with rulings 17-20) is newest and binding.
+- FIRST: `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\00-frame-after-grounding.md` (what exists, the shape his rulings 24-45 give, the hurdles in order of care). Then the rest below.
+- `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md` in full; "Operator round 2026-10-31 midday" (rulings 1-45) is newest and binding.
 - `architecture/00-ledger.md`; the grounding `architecture/grounding/G1-algo-side.md`, `G2-agent-and-platform.md`, `G3-node-and-external.md`, `research/54-futures-platforms-languages-clocks.md`, and `architecture/grounding/G4a-wrapup-session-node-library.md` and `architecture/grounding/G4b-qma-v2-session-agents-workflows.md` (the second grounding; where it corrects the first, it wins).
 - Skills: `bmad-review` with its edge-case lens, then `bmad-advanced-elicitation` with the pre-mortem and red-team methods on "how does this foundation fail in six months of daily use?"; and `bmad-review` (and its adversarial and verification-gap lenses where they help); find its SKILL.md under `C:\Users\Mubarak\Desktop\QMX\.claude\skills\` or `_bmad/`.
 
