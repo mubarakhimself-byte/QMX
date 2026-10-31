@@ -268,6 +268,10 @@ def test_ccxt_sandbox_is_first_and_account_vault_is_selected(
         calls.append(reference)
         return {"apiKey": "fixture", "secret": "fixture"}
 
+    def has_demo_mode(_exchange: str) -> None:
+        return None
+
+    monkeypatch.setattr("qmx_broker.service.demo_refusal", has_demo_mode)
     monkeypatch.setattr("qmx_broker.service.credentials", vault)
     monkeypatch.setattr(ccxt, "binance", Exchange)
     broker = settings().brokers[1]

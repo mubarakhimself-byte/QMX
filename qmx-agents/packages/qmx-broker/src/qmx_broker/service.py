@@ -54,6 +54,7 @@ from qmx_broker.oauth import (
     refresh_tokens,
     urllib_fetch,
 )
+from qmx_broker.sandbox import demo_refusal
 
 type AdapterFactory = Callable[
     [Broker, Connection, Account], AbstractAsyncContextManager[ReadAdapter]
@@ -181,6 +182,8 @@ async def open_adapter(
                 "unknown_exchange",
                 f"CCXT knows no exchange {broker.exchange}; check {broker.name} in Settings",
             )
+        if connection.environment == "demo" and (no_demo := demo_refusal(broker.exchange)):
+            raise ReadRefused("no_demo_mode", no_demo)
         secret = _secret(reference)
         if not {"apiKey", "secret"} <= secret.keys():
             raise ReadRefused("credential_unusable", f"{reference} needs apiKey and secret")

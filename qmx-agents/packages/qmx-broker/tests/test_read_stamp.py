@@ -92,6 +92,11 @@ def exchange(monkeypatch: pytest.MonkeyPatch) -> list[SandboxedExchange]:
         return {"apiKey": "fixture", "secret": "fixture"}
 
     SandboxedExchange.built = []
+
+    def has_demo_mode(_exchange: str) -> None:
+        return None
+
+    monkeypatch.setattr("qmx_broker.service.demo_refusal", has_demo_mode)
     monkeypatch.setattr("qmx_broker.service.credentials", fake_vault)
     monkeypatch.setattr(ccxt, "binance", SandboxedExchange)
     return SandboxedExchange.built
