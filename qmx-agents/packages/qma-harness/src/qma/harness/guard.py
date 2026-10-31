@@ -194,12 +194,13 @@ class GuardRules:
     mandatory_asks: frozenset[str]
     """QMX tools that always ask (MANAGE and `propose_order`), derived from their Effect."""
     protected_paths: tuple[str, ...]
-    """QMX stores: both Claude homes, chats, procs, state, the engine folder, the databases,
-    settings.toml and the plugin folder. No file-tool write, and no shell command names them."""
+    """QMX stores: both Claude homes, chats, the engine folder, the databases, settings.toml,
+    the shipped plugin folder, and beside the home the folder's `keys/`, `cache/run/` and
+    `cache/plugins/`. No file-tool write, and no shell command names them."""
     qmx_homes: tuple[str, ...]
-    """The QMX home. No writes anywhere in it outside `writable_paths`."""
+    """The whole QMX folder. No writes anywhere in it outside `writable_paths`."""
     writable_paths: tuple[str, ...]
-    """`workspaces/` and `agent-memory/` in the QMX home."""
+    """`workspaces/` and `agent-memory/` in the home, and the run zones in `cache/zones/`."""
     install_paths: tuple[str, ...]
     """The Python environment QMX runs from. No file-tool write. Shell text may name it, since
     every command that runs its Python does."""
@@ -435,7 +436,11 @@ def _forms(raw: str, *, cwd: str, rules: GuardRules, folded: _Folded) -> tuple[s
 
 
 def _secret(path: str, folded: _Folded) -> bool:
-    return path in folded.secrets or posixpath.basename(path).casefold() == LOGIN_NAME
+    """A secret file, a file inside a secret folder such as `keys/`, or a login file anywhere."""
+    return (
+        any(within(path, secret) for secret in folded.secrets)
+        or posixpath.basename(path).casefold() == LOGIN_NAME
+    )
 
 
 def _read_target(path: str, folded: _Folded, *, folder: bool) -> Deny | None:

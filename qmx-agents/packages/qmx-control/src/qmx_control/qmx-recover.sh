@@ -2,13 +2,16 @@
 # qmx-recover: the operator's way back into a QMX server without an agent (engine AD-71,
 # ruling 139). `qmx node setup` installs it at /usr/local/sbin/qmx-recover, outside the version
 # folders, with its settings in /etc/qmx-recover.conf. It needs only what the machine has without
-# QMX, runs QMX's own Python only for `doctor` and `reinstall`, and never prints a key, a token or
-# a vault value: it reads the token and key files only to test that they exist and their modes.
+# QMX, runs QMX's own Python only for `doctor`, `reinstall` and the layout step of `repair`, and
+# never prints a key, a token or a vault value: it reads the token and key files only to test that
+# they exist and their modes.
 set -u
 umask 077
 
 HOST_UNIT=qmx-host
-QMX_HOME=/srv/qmx/home/.qmx
+QMX_FOLDER=/srv/qmx/home/.qmx
+QMX_HOME=/srv/qmx/home/.qmx/data
+QMX_KEYS=/srv/qmx/home/.qmx/keys
 LIBRARY=/srv/qmx/library
 PORT=8766
 PROJECT=/opt/qmx/qmx-agents
@@ -51,7 +54,8 @@ Run it as: sudo qmx-recover <what>
   start [part]      Start a part, or all of QMX.
   stop [part]       Stop a part, or all of QMX.
   restart [part]    Stop and start again.
-  repair            Fix what can be fixed without a reset, then start QMX and check it answers.
+  repair            Fix what can be fixed without a reset, move an old home into the folder
+                    tree, then start QMX and check it answers.
   reinstall         Put QMX's program files back at the version in use.
   rollback          Go back to the version before the last update.
   pair              Make a fresh pairing code here. Then run "qmx-recover pair" on your PC.
@@ -85,8 +89,8 @@ load_conf() {
   fi
   while IFS='=' read -r key value || [[ -n "$key" ]]; do
     case "$key" in
-      HOST_UNIT | QMX_HOME | LIBRARY | PORT | PROJECT | VENV | VERSIONS | CURRENT | QMX_USER | \
-        OLD_VAULT | UNIT_DIR | UNIT_COPY | UFW_DEFAULTS | SHIPPING_UNIT | MONITORING_UNITS | \
+      HOST_UNIT | QMX_FOLDER | QMX_HOME | QMX_KEYS | LIBRARY | PORT | PROJECT | VENV | \
+        VERSIONS | CURRENT | QMX_USER | OLD_VAULT | UNIT_DIR | UNIT_COPY | UFW_DEFAULTS | SHIPPING_UNIT | MONITORING_UNITS | \
         PC_NAME | WAIT_S | FIREWALL_STATUS)
         printf -v "$key" '%s' "$value"
         ;;
@@ -174,9 +178,14 @@ status() {
     fi
   fi
   firewall_line
-  free_kb="$(df -Pk "$QMX_HOME" 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  if grep -qsx 'format_version = 2' "$QMX_FOLDER/qmx-home.toml"; then
+    line folder "$QMX_FOLDER is in the folder tree" PASS
+  else
+    line folder "$QMX_FOLDER is not in the folder tree; run: sudo qmx-recover repair" FAIL
+  fi
+  free_kb="$(df -Pk "$QMX_FOLDER" 2>/dev/null | awk 'NR == 2 { print $4 }')"
   if [[ -z "$free_kb" ]]; then
-    line disk "cannot read the free space under $QMX_HOME" FAIL
+    line disk "cannot read the free space under $QMX_FOLDER" FAIL
   elif ((free_kb < 2 * 1024 * 1024)); then
     line disk "$((free_kb / 1024 / 1024)) GB free, under 2 GB" FAIL
   else
@@ -200,13 +209,13 @@ status() {
   else
     line library "there is no Library at $LIBRARY" FAIL
   fi
-  vault_mode="$(mode_of "$QMX_HOME/vault")"
+  vault_mode="$(mode_of "$QMX_KEYS")"
   if [[ "$vault_mode" == 700 ]]; then
     line vault "the key folder is private" PASS
   else
     line vault "the key folder is ${vault_mode:-missing}, not 700; run: sudo qmx-recover repair" FAIL
   fi
-  token_mode="$(mode_of "$QMX_HOME/vault/control-token")"
+  token_mode="$(mode_of "$QMX_KEYS/control-token")"
   key_mode="$(mode_of "$QMX_HOME/vault/pairing-key")"
   if [[ "$key_mode" == 600 ]]; then
     line pairing "the pairing code is in place and private" PASS
@@ -260,51 +269,66 @@ logs() {
 
 # --- repair -----------------------------------------------------------------------------------
 
-# Only the home and the store root from the settings, and never a short path such as / or /srv,
-# so a wrong setting cannot change the owner of the raw tick copy or the system.
+# Only the QMX folder and the store root from the settings, and never a short path such as / or
+# /srv, so a wrong setting cannot change the owner of the raw tick copy or the system.
 own_path() {
   local path="$1"
-  if [[ "$path" != "$QMX_HOME" && "$path" != "$LIBRARY" ]] ||
+  if [[ "$path" != "$QMX_FOLDER" && "$path" != "$LIBRARY" ]] ||
     [[ "$path" != /*/*/* || "$path" == */ || "$path" == *..* ]]; then
-    say "Not touching $path: it is not QMX's home or Library in $CONF."
+    say "Not touching $path: it is not QMX's folder or Library in $CONF."
     return 1
   fi
   [[ -d "$path" ]] || install -d -o "$QMX_USER" -g "$QMX_USER" -m 750 "$path"
   chown -hR "$QMX_USER:$QMX_USER" "$path"
 }
 
+# qmx-home's layout step (design 62 guard 4): a flat home from an earlier setup moves into the
+# folder tree and nothing is taken away; a folder already in the tree is left as it is.
+layout_step() {
+  if ! runuser -u "$QMX_USER" -- "$VENV/bin/python" -m qmx_home layout "$QMX_FOLDER"; then
+    say "QMX's folder did not move into the folder tree, and nothing was taken away."
+    return 1
+  fi
+}
+
 move_old_keys() {
-  local name
+  local name folder
   for name in pairing-key control-token; do
-    if [[ -s "$QMX_HOME/vault/$name" ]]; then
+    folder="$QMX_KEYS"
+    [[ "$name" == pairing-key ]] && folder="$QMX_HOME/vault"
+    if [[ -s "$folder/$name" ]]; then
       rm -f "$OLD_VAULT/$name"
     elif [[ -s "$OLD_VAULT/$name" ]]; then
-      mv "$OLD_VAULT/$name" "$QMX_HOME/vault/$name"
-      say "Moved the old $name into QMX's home."
+      mv "$OLD_VAULT/$name" "$folder/$name"
+      say "Moved the old $name into QMX's folder."
     fi
   done
 }
 
 repair() {
+  local folder
   say "Stopping the host."
   systemctl stop "$HOST_UNIT" 2>/dev/null
-  say "Setting owners and modes on QMX's home and Library."
-  own_path "$QMX_HOME" || return 1
-  own_path "$LIBRARY" || return 1
-  install -d -o "$QMX_USER" -g "$QMX_USER" -m 700 "$QMX_HOME/vault"
-  move_old_keys
-  chmod 750 "$QMX_HOME"
-  chmod 700 "$QMX_HOME/vault"
-  find "$QMX_HOME/vault" -maxdepth 1 -type f -exec chown "$QMX_USER:$QMX_USER" {} + -exec chmod 600 {} +
-  if [[ -f "$UNIT_COPY" ]] && ! cmp -s "$UNIT_COPY" "$UNIT_DIR/$HOST_UNIT.service"; then
-    say "Putting the host's service file back."
-    install -m 644 "$UNIT_COPY" "$UNIT_DIR/$HOST_UNIT.service"
-    systemctl daemon-reload
-  fi
   say "Checking QMX's program files."
   if ! "$VENV/bin/python" -c 'import qmx_host.host' >/dev/null 2>&1; then
     say "QMX's program files are broken; putting them back."
     reinstall || return 1
+  fi
+  say "Setting owners and modes on QMX's folder and Library."
+  own_path "$QMX_FOLDER" || return 1
+  own_path "$LIBRARY" || return 1
+  layout_step || return 1
+  install -d -o "$QMX_USER" -g "$QMX_USER" -m 700 "$QMX_KEYS" "$QMX_HOME/vault"
+  move_old_keys
+  chmod 750 "$QMX_FOLDER"
+  for folder in "$QMX_KEYS" "$QMX_HOME/vault"; do
+    chmod 700 "$folder"
+    find "$folder" -maxdepth 1 -type f -exec chown "$QMX_USER:$QMX_USER" {} + -exec chmod 600 {} +
+  done
+  if [[ -f "$UNIT_COPY" ]] && ! cmp -s "$UNIT_COPY" "$UNIT_DIR/$HOST_UNIT.service"; then
+    say "Putting the host's service file back."
+    install -m 644 "$UNIT_COPY" "$UNIT_DIR/$HOST_UNIT.service"
+    systemctl daemon-reload
   fi
   say "Starting the host."
   systemctl start "$HOST_UNIT"
@@ -376,7 +400,7 @@ doctor() {
     say "QMX's program files are broken, so its own check cannot run. Try: sudo qmx-recover repair"
     return 1
   fi
-  "$VENV/bin/qmx" node verify --home "$QMX_HOME"
+  "$VENV/bin/qmx" node verify --home "$QMX_HOME" --vault "$QMX_KEYS"
 }
 
 # --- pair -------------------------------------------------------------------------------------

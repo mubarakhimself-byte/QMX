@@ -24,7 +24,7 @@ def profile(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return user
 
 
-def folder(path: Path, *, labelled: bool = False) -> Path:
+def folder(path: Path, *, labelled: bool = True) -> Path:
     path.mkdir(parents=True)
     if labelled:
         (path / LABEL).write_text(Label.mint().dump(), encoding="utf-8")
@@ -59,14 +59,14 @@ def test_qmx_home_wins_over_the_pointer(
     monkeypatch.setenv("QMX_HOME", str(named))
     point_at(pointed)
 
-    assert resolve(drives=[]).home == named
+    assert resolve(drives=[]).root == named
 
 
-def test_the_pointer_names_the_folder_without_a_label(profile: Path, tmp_path: Path) -> None:
-    pointed = folder(tmp_path / "flat-home")
+def test_the_pointer_names_the_folder_and_its_home_is_data(profile: Path, tmp_path: Path) -> None:
+    pointed = folder(tmp_path / "QMX")
     point_at(pointed)
 
-    assert resolve(drives=[]).home == pointed
+    assert resolve(drives=[]).home == pointed / "data"
 
 
 def test_a_lost_pointer_falls_through_to_the_drive_scan(profile: Path, tmp_path: Path) -> None:
@@ -80,8 +80,8 @@ def test_a_lost_pointer_falls_through_to_the_drive_scan(profile: Path, tmp_path:
 def test_the_scan_passes_over_a_qmx_folder_without_a_real_label(
     profile: Path, tmp_path: Path
 ) -> None:
-    folder(tmp_path / "drive-d" / "QMX")
-    junk = folder(tmp_path / "drive-e" / "QMX")
+    folder(tmp_path / "drive-d" / "QMX", labelled=False)
+    junk = folder(tmp_path / "drive-e" / "QMX", labelled=False)
     (junk / LABEL).write_text('format = "something-else"\n', encoding="utf-8")
     found = folder(tmp_path / "drive-f" / "QMX", labelled=True)
 
@@ -124,22 +124,88 @@ def test_a_flag_naming_a_missing_folder_refuses_without_create(
     assert not missing.exists()
 
 
-def test_create_makes_the_flags_folder_with_a_format_1_label(profile: Path, tmp_path: Path) -> None:
-    made = resolve(tmp_path / "lane" / "home", create=True, drives=[])
+def test_create_makes_exactly_the_label_and_the_five_parts(profile: Path, tmp_path: Path) -> None:
+    made = resolve(tmp_path / "lane" / "QMX", create=True, drives=[])
 
     label = Label.parse(made.label.read_text(encoding="utf-8"))
-    assert (made.root, tree(made.root)) == ((tmp_path / "lane" / "home").resolve(), [LABEL])
-    assert (label.format_version, label.created_by) == (1, "0.1.0")
+    assert made.root == (tmp_path / "lane" / "QMX").resolve()
+    assert tree(made.root) == ["backups", "cache", "data", "keys", "logs", LABEL]
+    assert made.home == made.root / "data"
+    assert (label.format_version, label.created_by) == (2, "0.1.0")
     assert resolve(made.root, create=True, drives=[]) == made
     assert Label.parse(made.label.read_text(encoding="utf-8")) == label
 
 
-def test_create_leaves_an_existing_home_without_a_label(profile: Path, tmp_path: Path) -> None:
-    home = folder(tmp_path / "flat-home")
-    (home / "settings.toml").write_text("", encoding="utf-8")
+def test_a_flat_home_is_refused_with_the_layout_command_and_left_alone(
+    profile: Path, tmp_path: Path
+) -> None:
+    home = folder(tmp_path / "flat-home", labelled=False)
+    (home / "control.db").write_text("", encoding="utf-8")
 
-    assert resolve(home, create=True, drives=[]).home == home
-    assert tree(home) == ["settings.toml"]
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(home, create=True, drives=[])
+
+    assert str(refused.value) == (
+        f"{home} is a QMX home in the old flat layout: move it into the folder tree with "
+        f"python -m qmx_home layout {home}"
+    )
+    assert tree(home) == ["control.db"]
+
+
+def test_a_folder_that_is_not_a_qmx_home_is_refused_without_the_layout_command(
+    profile: Path, tmp_path: Path
+) -> None:
+    documents = folder(tmp_path / "Documents", labelled=False)
+    (documents / "cv.docx").write_text("cv", encoding="utf-8")
+    (documents / "taxes").mkdir()
+    (documents / "taxes" / "2025.pdf").write_text("pdf", encoding="utf-8")
+
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(documents, create=True, drives=[])
+
+    assert str(refused.value) == (
+        f"{documents} is not a QMX folder: it has no qmx-home.toml and none of a QMX home's own "
+        "files; pass the folder QMX made, or --create with an empty one"
+    )
+    assert tree(documents) == ["cv.docx", "taxes", "taxes/2025.pdf"]
+
+
+def test_an_empty_folder_needs_create(profile: Path, tmp_path: Path) -> None:
+    empty = folder(tmp_path / "empty", labelled=False)
+
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(empty, drives=[])
+
+    assert str(refused.value) == (
+        f"no QMX folder at {empty}: it has no qmx-home.toml (pass --create to make one)"
+    )
+    assert tree(empty) == []
+
+
+def test_a_pointer_with_a_bom_and_a_double_quoted_windows_path_is_read(
+    profile: Path, tmp_path: Path
+) -> None:
+    pointed = folder(tmp_path / "new" / "QMX")
+    pointer = pointer_file()
+    assert pointer is not None
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text(f'home = "{pointed}"\n', encoding="utf-8-sig")
+
+    assert resolve(drives=[]).root == pointed
+
+
+def test_a_utf16_pointer_is_refused_by_name(profile: Path, tmp_path: Path) -> None:
+    pointed = folder(tmp_path / "QMX")
+    pointer = pointer_file()
+    assert pointer is not None
+    pointer.parent.mkdir(parents=True)
+    pointer.write_text(f"home = '{pointed}'\n", encoding="utf-16")
+
+    with pytest.raises(NoQmxFolder) as refused:
+        resolve(drives=[])
+
+    assert str(refused.value).startswith(f"the pointer {pointer} cannot be read (")
+    assert str(refused.value).endswith("): write it again as UTF-8, or pass --home")
 
 
 def test_create_needs_the_flag(profile: Path) -> None:
@@ -164,7 +230,7 @@ def test_qmx_home_naming_a_missing_folder_refuses(
 
 
 def test_a_label_reads_back_what_it_wrote() -> None:
-    label = Label("0193aaaa-0000-7000-8000-000000000000", 1, "0.1.0", "0.2.0")
+    label = Label("0193aaaa-0000-7000-8000-000000000000", 2, "0.1.0", "0.2.0")
 
     assert Label.parse(label.dump()) == label
     with pytest.raises(ValueError, match="not a qmx-home label"):

@@ -40,7 +40,8 @@ def create_server(name: str, ctx: DomainContext) -> FastMCP:
 
 
 def from_environment() -> DomainContext:
-    """The bare context a stdio door starts with: this host's volume, and no door of its own."""
+    """The bare context a stdio door starts with: this host's volume, and no door of its own.
+    `QMX_TOOLS_ROOT` names the QMX folder, as `--home` does, never its `data/`."""
     named = os.environ.get("QMX_TOOLS_ROOT")
     try:
         root = resolve(Path(named) if named else None).home

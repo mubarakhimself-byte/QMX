@@ -269,16 +269,17 @@ def os_keyring(backend: KeyringBackend) -> Generator[None]:
 def test_local_token_uses_the_home_file_without_a_keyring(
     tmp_path: Path, missing: type[KeyringBackend]
 ) -> None:
-    token = tmp_path / "vault" / "control-token"
+    home = tmp_path / "QMX" / "data"
+    token = tmp_path / "QMX" / "keys" / "control-token"
     with os_keyring(missing()):
-        made = local_token(tmp_path, create=True)
-        again = local_token(tmp_path)
+        made = local_token(home, create=True)
+        again = local_token(home)
         with pytest.raises(RuntimeError, match=r"^No control token at .*elsewhere"):
-            local_token(tmp_path / "elsewhere")
+            local_token(tmp_path / "elsewhere" / "data")
         mode = token.stat().st_mode & 0o777
         token.chmod(0o640)
         with pytest.raises(PermissionError, match="can be read by other users"):
-            local_token(tmp_path)
+            local_token(home)
 
     assert (again, mode, len(made)) == (made, 0o600, 43)
     assert not (tmp_path / "elsewhere").exists()

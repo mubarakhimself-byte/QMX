@@ -25,7 +25,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from keyring.backends import fail, null
 from qmx_apps.errors import AppError
-from qmx_home import resolve
+from qmx_home import Layout, resolve
 from qmx_library.client import HubClient
 from qmx_library.port import LibraryRefused
 from qmx_remote.models import RemoteError
@@ -45,15 +45,16 @@ COPIES_REQUIRED: Final = 2
 UPLOAD_ID: Final = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
-CONTROL_TOKEN: Final = "vault/control-token"  # noqa: S105 - a file name, not a token
-"""The host's bearer on a machine whose OS has no keyring, beside its pairing key (engine AD-52)."""
+CONTROL_TOKEN: Final = "control-token"  # noqa: S105 - a file name, not a token
+"""The host's bearer on a machine whose OS has no keyring, in the QMX folder's `keys/`
+(engine AD-52, design 62 A3)."""
 
 
 def local_token(home: Path | None = None, *, create: bool = False) -> str:
     """The host's bearer: the OS keyring wherever it has a backend, created there when missing.
 
     A headless Linux server has none (the keyring library's `fail` backend, or `null`, which
-    stores nothing), so the token lives in `<home>/vault/control-token`, owner-only. Only the
+    stores nothing), so the token lives in `<QMX>/keys/control-token`, owner-only. Only the
     host's `serve` passes `create`; every other reader of a missing file gets a plain error naming
     the home, so a wrong home never mints a second token. Windows always has Credential Manager,
     so a missing backend there is refused rather than quietly moved to a file the console and the
@@ -70,7 +71,7 @@ def local_token(home: Path | None = None, *, create: bool = False) -> str:
         raise RuntimeError(
             "Windows Credential Manager is not answering, so QMX cannot read its control token."
         )
-    return _file_token((home or default_home()) / CONTROL_TOKEN, create=create)
+    return _file_token(Layout.from_home(home or default_home()).keys / CONTROL_TOKEN, create=create)
 
 
 def _file_token(path: Path, *, create: bool) -> str:

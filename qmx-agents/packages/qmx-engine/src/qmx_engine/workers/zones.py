@@ -1,6 +1,7 @@
 """Attempt overlays and staged commits (AD-51, AD-24 zones, AD-49 retention).
 
-A run's zone is `<zones_root>/<run_id>`, outside the QMX home:
+A run's zone is `<zones_root>/<run_id>`, in the QMX folder's `cache/zones/` and outside its home
+`data/` (design 62 A3):
 
 - `code/` is a read-only copy of the workflow folder, hashed into `code.json`; a script runs
   from it only while its hash still matches.
@@ -33,12 +34,14 @@ from pathlib import Path, PurePosixPath
 from typing import Final, cast
 
 from pydantic import JsonValue
+from qmx_home import Layout, NoQmxFolder, resolve
 
 from qmx_engine.definition.model import OutputFile
 from qmx_engine.definition.validate import STAGING, leaves_work
 from qmx_engine.nodes.base import NodeJob
 
-ZONES_SUFFIX: Final = ".zones"
+ZONES: Final = "zones"
+"""The run zones' folder in the QMX folder's `cache/`, which may be deleted with QMX closed."""
 PLAN: Final = "plan.json"
 CODE_MANIFEST: Final = "code.json"
 PARTITION: Final = "<partition>"
@@ -80,20 +83,24 @@ class Overlay:
 
 
 def zones_root(home: Path) -> Path:
-    """Claude's default: `<home>.zones`, beside the home, so a stray relative path never lands
-    in a store and each home keeps its own zones."""
+    """`<QMX>/cache/zones` for the home `<QMX>/data`: beside the home, so a stray relative path
+    never lands in a store, and inside the folder, so each folder keeps its own zones."""
     home = home.resolve()
-    root = home.with_name(home.name + ZONES_SUFFIX)
+    root = Layout.from_home(home).cache / ZONES
     if root == home or root.is_relative_to(home) or home.is_relative_to(root):
         raise ValueError(f"the zones root {root} is the home, inside it or above it")
     return root
 
 
 def home_of(shared: Path) -> Path:
-    """The home whose run owns this `work/` folder (`QMX_WORK_SHARED`). The two templates that
-    read the engine's own ledger use it until a `library` node serves them `engine_view`."""
-    zones = shared.resolve().parents[1]
-    return zones.with_name(zones.name.removesuffix(ZONES_SUFFIX))
+    """The home whose run owns this `work/` folder (`QMX_WORK_SHARED`): the `data/` of the QMX
+    folder whose `cache/zones/<run>/work` it is. The templates that read the engine's own ledger
+    use it until a `library` node serves them `engine_view`. Raises NoQmxFolder when that folder
+    holds no tree label, so a template never reads a ledger beside some other folder."""
+    parents = shared.resolve().parents
+    if len(parents) < 4:
+        raise NoQmxFolder(f"{shared} is not a run's work folder inside a QMX folder")
+    return resolve(parents[3]).home
 
 
 def slot_name(job: NodeJob) -> str:

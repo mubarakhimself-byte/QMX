@@ -15,11 +15,13 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
+from qmx_home import resolve
 from qmx_router.vault import MemorySource, VaultKey, VaultStore, as_text
 
 from qmx_control.node import (
     SessionLost,
     host_unit,
+    layout_script,
     main,
     move_key_script,
     pair,
@@ -129,17 +131,24 @@ def test_setup_keeps_the_firewall_after_a_fresh_login_says_on_then_starts_the_ho
         "systemctl daemon-reload",
         "systemctl stop qmx-host || true",
         "systemctl disable --now qmx-hub qmx-node",
+        "systemctl stop qmx-host || true",
         "systemctl enable --now qmx-host",
     ]
     assert any("node import --home /var/lib/qmx --root /srv/qmx/library" in s for s in server.sent)
+    assert any("-m qmx_home layout /srv/qmx/home/.qmx\n" in s for s in server.sent), (
+        "the server's folder is laid out as the tree"
+    )
+    assert "sudo cat /srv/qmx/home/.qmx/data/vault/pairing-key" in server.sent
     with (tmp_path / "settings.toml").open("rb") as handle:
         assert tomllib.load(handle) == {"library": {"hub_url": "http://100.64.0.9:8766"}}
     assert (tmp_path / "vault" / "pairing-key").read_text(encoding="utf-8") == "pairing-code\n"
     twin = (tmp_path / "bin" / "qmx-recover.conf").read_text(encoding="utf-8").splitlines()
-    assert twin[:3] == [
+    assert twin[:5] == [
         "TARGET=qmx-server",
         "SERVER_TAILNET=100.64.0.9",
-        "SERVER_HOME=/srv/qmx/home/.qmx",
+        "SERVER_HOME=/srv/qmx/home/.qmx/data",
+        f"QMX_FOLDER={tmp_path.resolve().parent}",
+        f"QMX_HOME={tmp_path.resolve()}",
     ]
     assert (
         (tmp_path / "bin" / "qmx-recover.ps1")
@@ -262,9 +271,10 @@ def test_a_dry_run_prints_the_order_and_writes_nothing(tmp_path: Path) -> None:
         "step 3: close the firewall",
         "step 4: install the host",
         "step 5: stop and disable the standalone Hub",
-        "step 6: move the pairing key and the control token",
-        "step 7: import as qmx",
-        "step 8: start the host",
+        "step 6: lay out the QMX folder",
+        "step 7: move the pairing key and the control token",
+        "step 8: import as qmx",
+        "step 9: start the host",
     ]
     assert list(tmp_path.iterdir()) == []
 
@@ -278,44 +288,160 @@ def git_bash() -> str | None:
     return next((str(f / "bin/bash.exe") for f in folders if (f / "bin/bash.exe").is_file()), None)
 
 
-def test_the_move_keeps_the_token_the_running_host_uses_and_takes_a_first_key(
-    tmp_path: Path,
-) -> None:
-    bash = git_bash()
-    if bash is None:
-        pytest.skip("no bash on this machine")
-    home, old, stubs = tmp_path / "home", tmp_path / "etc", tmp_path / "bin"
-    for folder in (home / "vault", old, stubs):
-        folder.mkdir(parents=True)
-    (stubs / "chown").write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-    (stubs / "chown").chmod(0o755)
-    (home / "vault" / "control-token").write_text("in-use\n", encoding="utf-8")
-    (old / "control-token").write_text("rerun\n", encoding="utf-8")
-    (old / "pairing-key").write_text("first-key\n", encoding="utf-8")
+BASH = git_bash()
+needs_bash = pytest.mark.skipif(BASH is None, reason="no bash on this machine")
 
-    def posix(path: Path) -> str:
-        shown = subprocess.run(
-            [bash, "-c", 'cygpath -u "$0" 2>/dev/null || echo "$0"', path.as_posix()],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return shown.stdout.strip()
 
-    (tmp_path / "move.sh").write_text(
-        move_key_script(posix(home), posix(old)), encoding="utf-8", newline="\n"
-    )
-    done = subprocess.run(
-        [bash, "-c", 'PATH="$PWD/bin:$PATH" exec bash move.sh'],
-        cwd=tmp_path,
+def posix(path: Path) -> str:
+    """The path as bash names it (Git Bash's `/d/...` on Windows)."""
+    assert BASH is not None
+    shown = subprocess.run(
+        [BASH, "-c", 'cygpath -u "$0" 2>/dev/null || echo "$0"', path.as_posix()],
         capture_output=True,
+        text=True,
+        check=True,
+    )
+    return shown.stdout.strip()
+
+
+def run_as_root(
+    folder: Path, script: str, stubs: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    """`script` under bash in `folder`, with each of `stubs` standing in for a system tool."""
+    assert BASH is not None
+    (folder / "bin").mkdir(exist_ok=True)
+    for name, body in stubs.items():
+        tool = folder / "bin" / name
+        tool.parent.mkdir(parents=True, exist_ok=True)
+        tool.write_text(f"#!/usr/bin/env bash\n{body.strip()}\n", encoding="utf-8", newline="\n")
+        tool.chmod(0o755)
+    (folder / "step.sh").write_text(script, encoding="utf-8", newline="\n")
+    return subprocess.run(
+        [BASH, "-c", 'PATH="$PWD/bin:$PATH" exec bash step.sh'],
+        cwd=folder,
+        capture_output=True,
+        text=True,
         check=False,
     )
 
+
+@needs_bash
+def test_the_move_keeps_the_token_the_running_host_uses_and_takes_a_first_key(
+    tmp_path: Path,
+) -> None:
+    home, keys, old = tmp_path / "QMX" / "data", tmp_path / "QMX" / "keys", tmp_path / "etc"
+    for folder in (home / "vault", keys, old):
+        folder.mkdir(parents=True)
+    (keys / "control-token").write_text("in-use\n", encoding="utf-8")
+    (old / "control-token").write_text("rerun\n", encoding="utf-8")
+    (old / "pairing-key").write_text("first-key\n", encoding="utf-8")
+
+    done = run_as_root(
+        tmp_path, move_key_script(posix(home), posix(keys), posix(old)), {"chown": "exit 0"}
+    )
+
     assert done.returncode == 0, done.stderr
-    assert (home / "vault" / "control-token").read_text(encoding="utf-8") == "in-use\n"
+    assert (keys / "control-token").read_text(encoding="utf-8") == "in-use\n"
     assert (home / "vault" / "pairing-key").read_text(encoding="utf-8") == "first-key\n"
     assert list(old.iterdir()) == []
+
+
+FLAT_SERVER_HOME = {
+    "settings.toml": "[library]\n",
+    "vault/pairing-key": "planted-pairing\n",
+    "vault/control-token": "planted-token\n",
+    "vault-store.json": "{}",
+    ".qmx/vault.key": "planted-vault-key",
+}
+LAID_OUT = {
+    "data/settings.toml": "[library]\n",
+    "data/vault/pairing-key": "planted-pairing\n",
+    "keys/control-token": "planted-token\n",
+    "data/vault-store.json": "{}",
+    "keys/vault.key": "planted-vault-key",
+}
+SERVER_TOOLS = {
+    "systemctl": """
+echo "systemctl $*" >> "$PWD/calls.log"
+[[ "$1" == is-active ]] && { cat "$PWD/host-state" 2>/dev/null || echo active; }
+exit 0
+""",
+    "runuser": 'while [[ "$1" != -- ]]; do shift; done; shift; exec "$@"',
+    "install": """
+folder=0; paths=()
+while (($#)); do
+  case "$1" in -d) folder=1 ;; -o | -g | -m) shift ;; *) paths+=("$1") ;; esac
+  shift
+done
+((folder)) && mkdir -p "${paths[@]}"
+""",
+}
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("before", "after"), [({}, {}), (FLAT_SERVER_HOME, LAID_OUT)], ids=["fresh", "flat"]
+)
+def test_the_layout_step_makes_the_servers_folder_the_tree_and_starts_a_running_host_again(
+    tmp_path: Path, before: dict[str, str], after: dict[str, str]
+) -> None:
+    folder = tmp_path / "srv" / ".qmx"
+    for name, text in before.items():
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_text(text, encoding="utf-8")
+    venv = tmp_path / "venv"
+    python = {"venv/bin/python": f'exec "{posix(Path(sys.executable))}" "$@"'}
+    stubs = {**SERVER_TOOLS, **{f"../{name}": body for name, body in python.items()}}
+
+    done = run_as_root(tmp_path, layout_script(posix(folder), posix(venv)), stubs)
+
+    assert done.returncode == 0, done.stderr
+    assert sorted(entry.name for entry in folder.iterdir()) == [
+        "backups",
+        "cache",
+        "data",
+        "keys",
+        "logs",
+        "qmx-home.toml",
+    ]
+    assert resolve(folder).home == folder.resolve() / "data"
+    found = {
+        path.relative_to(folder).as_posix(): path.read_text(encoding="utf-8")
+        for path in folder.rglob("*")
+        if path.is_file() and path.parent != folder
+    }
+    assert found == after
+    assert (tmp_path / "calls.log").read_text(encoding="utf-8").splitlines() == [
+        "systemctl is-active qmx-host",
+        "systemctl stop qmx-host",
+        "systemctl start qmx-host",
+    ]
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("state", "started"), [("failed", True), ("activating", True), ("inactive", False)]
+)
+def test_after_an_update_a_host_that_refused_the_flat_folder_runs_on_the_laid_out_one(
+    tmp_path: Path, state: str, started: bool
+) -> None:
+    folder = tmp_path / "srv" / ".qmx"
+    for name, text in FLAT_SERVER_HOME.items():
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).write_text(text, encoding="utf-8")
+    (tmp_path / "host-state").write_text(f"{state}\n", encoding="utf-8")
+    python = f'exec "{posix(Path(sys.executable))}" "$@"'
+    stubs = {**SERVER_TOOLS, "../venv/bin/python": python}
+
+    done = run_as_root(tmp_path, layout_script(posix(folder), posix(tmp_path / "venv")), stubs)
+
+    assert done.returncode == 0, done.stderr
+    assert resolve(folder).home == folder.resolve() / "data"
+    assert (tmp_path / "calls.log").read_text(encoding="utf-8").splitlines() == [
+        "systemctl is-active qmx-host",
+        "systemctl stop qmx-host",
+        *(["systemctl start qmx-host"] if started else []),
+    ]
 
 
 def test_the_source_archive_ships_shell_scripts_with_lf_from_an_autocrlf_checkout(
@@ -366,11 +492,12 @@ def test_pair_hands_the_new_code_to_the_servers_recovery_script_on_stdin(
         return "ssh"
 
     monkeypatch.setattr("qmx_control.node.shutil.which", which)
-    argv = ["qmx", "node", "pair", "--home", str(tmp_path), "--ssh-host", "qmx-server"]
+    layout = resolve(tmp_path / "QMX", create=True, drives=[])
+    argv = ["qmx", "node", "pair", "--home", str(layout.root), "--ssh-host", "qmx-server"]
     monkeypatch.setattr(sys, "argv", argv)
 
     assert main() == 0
-    code = (tmp_path / "vault" / "pairing-key").read_text(encoding="utf-8").strip()
+    code = (layout.home / "vault" / "pairing-key").read_text(encoding="utf-8").strip()
     assert sent == [(["ssh", "qmx-server", f"sudo {RECOVER} pair --from-stdin"], code)]
 
 

@@ -18,20 +18,33 @@ host's relay grant: a base URL on the router's key lane and a grant secret minte
 Hindsight traces only where `[telemetry] send_to` names a target (AD-69, design 62 E1): its OTel
 switch and OTLP endpoint are set in `_isolate`, before its configuration is built, so its retain
 and reflect spans join the run they serve.
+
+Its files sit in the QMX folder (design 62 A3): QMX starts pg0 itself, with its database in
+`data/memory/hindsight/pg`, because Hindsight's own pg0 start names no data folder and would use
+`~/.pg0/instances/hindsight/data`. The embedder's downloads go to `cache/models/huggingface` and
+Hindsight's log to `logs/hindsight`. pg0 keeps its unpacked PostgreSQL and its list of instances
+in its user home: on Linux that is `HOME`, set to `cache/pg0`; on Windows pg0 asks the OS for the
+profile folder and ignores `USERPROFILE`, so both stay in `~/.pg0` there. Each folder's instance
+has its own name, so one folder never takes over another's entry in that list.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import importlib.util
 import json
 import os
+import subprocess
+import tempfile
 import threading
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Protocol, cast
+
+from qmx_home import Layout
 
 from qmx_memory.rows import MemoryRow
 
@@ -59,6 +72,12 @@ OTEL_SERVICE: Final = "HINDSIGHT_API_OTEL_SERVICE_NAME"
 """Hindsight reads its tracing switch and its OTLP target from these names, never from the
 standard `OTEL_*` ones (`hindsight_api.config`)."""
 SERVICE: Final = "qmx-memory"
+PG0: Final = "pg0"
+"""`db_url` for the embedded database QMX starts in the QMX folder."""
+INSTANCE: Final = "hindsight"
+"""The database's user, password and name, Hindsight's own defaults. The server listens on this
+machine only."""
+DAEMON_LOG: Final = "HINDSIGHT_API_DAEMON_LOG"
 
 
 def bank_of(scope: str) -> str:
@@ -72,10 +91,12 @@ def bank_of(scope: str) -> str:
 class HindsightConfig:
     """Where the engine keeps its own folders, and how it reaches a model when it needs one."""
 
-    home: Path
+    layout: Layout
+    """The QMX folder whose parts Hindsight keeps its files in."""
     url: str = ""
     """An already-running server. Empty starts one in this process on `db_url`."""
-    db_url: str = "pg0"
+    db_url: str = PG0
+    """`pg0` starts the embedded database in `database`; anything else is a database address."""
     base_url: str = ""
     """The router's key lane, as an OpenAI-compatible root. Empty means no model call."""
     grant: str = field(default="", repr=False)
@@ -86,6 +107,82 @@ class HindsightConfig:
     Empty traces nothing."""
     timeout_s: float = 120.0
     start_timeout_s: float = 600.0
+
+    @property
+    def home(self) -> Path:
+        return self.layout.home / "memory" / "hindsight"
+
+    @property
+    def database(self) -> Path:
+        return self.home / "pg"
+
+    @property
+    def models(self) -> Path:
+        return self.layout.cache / "models" / "huggingface"
+
+    @property
+    def instance(self) -> str:
+        """The pg0 instance of this folder's database, named by its path."""
+        key = self.database.resolve().as_posix().casefold().encode()
+        return f"qmx-{hashlib.sha256(key).hexdigest()[:12]}"
+
+    @property
+    def pg0_home(self) -> Path:
+        """pg0's user home where it honours `HOME` (Linux and macOS)."""
+        return self.layout.cache / "pg0"
+
+    @property
+    def logs(self) -> Path:
+        return self.layout.logs / "hindsight"
+
+
+def pg0(config: HindsightConfig, *args: str) -> str:
+    """Run pg0's bundled binary, with `HOME` in the QMX folder; its stdout, or RuntimeError.
+    On Windows its output goes through files: PostgreSQL inherits pg0's handles and keeps them
+    open, so a pipe would never close."""
+    import pg0 as package  # noqa: PLC0415
+
+    binary = Path(package.__file__).with_name("bin") / ("pg0.exe" if os.name == "nt" else "pg0")
+    config.pg0_home.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "HOME": str(config.pg0_home)}
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        code = subprocess.call(
+            [str(binary), *args],
+            stdout=out,
+            stderr=err,
+            env=env,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        out.seek(0)
+        err.seek(0)
+        stdout, stderr = (handle.read().decode("utf-8", errors="replace") for handle in (out, err))
+    if code:
+        raise RuntimeError(f"pg0 {args[0]} failed: {stderr.strip() or code}")
+    return stdout
+
+
+def start_database(config: HindsightConfig) -> str:
+    """Start pg0 on the folder's database, or find it running; its address."""
+    config.database.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        pg0(
+            config, "start", "--name", config.instance, "--username", INSTANCE,
+            "--password", INSTANCE,
+            "--database", INSTANCE, "--data-dir", str(config.database),
+        )  # fmt: skip
+    except RuntimeError as error:
+        if "already running" not in str(error).lower():
+            raise
+    info: object = json.loads(pg0(config, "info", "--name", config.instance, "-o", "json"))
+    uri = cast("dict[str, object]", info).get("uri") if isinstance(info, dict) else None
+    if not isinstance(uri, str) or not uri:
+        raise RuntimeError("pg0 started but reported no address")
+    return uri
+
+
+def stop_database(config: HindsightConfig) -> None:
+    with suppress(RuntimeError, OSError):
+        pg0(config, "stop", "--name", config.instance)
 
 
 def importable() -> bool:
@@ -181,6 +278,7 @@ class HindsightIndex:
         self.loops = Loops()
         self.closed = False
         self._banks: set[str] = set()
+        self._database = False
 
     def start(self) -> None:
         """Start the server (or take the URL it was given) and make the three banks."""
@@ -191,10 +289,14 @@ class HindsightIndex:
         url = self.config.url
         if not url:
             self._isolate()
+            db_url = self.config.db_url
+            if db_url == PG0:
+                db_url = start_database(self.config)
+                self._database = True
             server = cast(
                 "Server",
                 HindsightServer(
-                    db_url=self.config.db_url,
+                    db_url=db_url,
                     llm_provider="openai",
                     llm_api_key=self.config.grant or "none",
                     llm_model=self.config.model or "none",
@@ -209,16 +311,17 @@ class HindsightIndex:
             self.bank(bank)
 
     def _isolate(self) -> None:
-        """Hindsight's own folders and its embedder's downloads, under the memory home on `D:`.
+        """Hindsight's own folders and its embedder's downloads, in the QMX folder's parts.
 
         Tracing is on only when `telemetry` names a target. Its names are `setdefault`, so a lane
         that starts an embedded server can name its own collector first; the host scrubs the
         environment, so production takes the setting.
         """
-        home = self.config.home
-        home.mkdir(parents=True, exist_ok=True)
+        self.config.home.mkdir(parents=True, exist_ok=True)
+        self.config.logs.mkdir(parents=True, exist_ok=True)
         for name in ("HF_HOME", "SENTENCE_TRANSFORMERS_HOME"):
-            os.environ.setdefault(name, str(home / "hf"))
+            os.environ.setdefault(name, str(self.config.models))
+        os.environ.setdefault(DAEMON_LOG, str(self.config.logs / "daemon.log"))
         os.environ["HINDSIGHT_API_EMBEDDINGS_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_RERANKER_PROVIDER"] = "local"
         os.environ["HINDSIGHT_API_ENABLE_OBSERVATIONS"] = "false"
@@ -258,6 +361,9 @@ class HindsightIndex:
         if server is not None:
             with suppress(Exception):
                 server.stop()
+        if self._database:
+            self._database = False
+            stop_database(self.config)
 
     # -- the index interface ------------------------------------------------------------
 
@@ -411,7 +517,7 @@ def config_document(config: HindsightConfig) -> str:
     return json.dumps(
         {
             "home": config.home.as_posix(),
-            "db_url": config.db_url,
+            "database": config.database.as_posix() if config.db_url == PG0 else "external",
             "url": config.url or "in process",
             "base_url": config.base_url or "none",
             "model": config.model or "none",

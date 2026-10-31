@@ -12,6 +12,7 @@ dependencies = [
     "pywin32==312; sys_platform == 'win32'",
     "duckdb==1.5.5",
     "cachetools==7.2.1",
+    "qmx-home",
     "qmx-ledger",
 ]
 
@@ -20,6 +21,7 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
+qmx-home = { workspace = true }
 qmx-ledger = { workspace = true }
 
 [dependency-groups]

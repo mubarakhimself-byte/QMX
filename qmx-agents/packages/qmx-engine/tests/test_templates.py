@@ -19,6 +19,7 @@ from typing import Any, cast
 
 import pytest
 from fake_port import TOKENS, FakePort
+from qmx_home import resolve
 from qmx_library.store import Store
 
 from qmx_engine.__main__ import main
@@ -227,6 +228,16 @@ def answers(
     return FakePort(*[answer] * 80)
 
 
+def qmx_folder(at: Path) -> Path:
+    """A QMX folder made at `at` the way `--create` makes one, and its home `data/`."""
+    return resolve(at, create=True, drives=[]).home
+
+
+@pytest.fixture
+def home(tmp_path: Path) -> Path:
+    return qmx_folder(tmp_path / "QMX")
+
+
 def try_template(home: Path, folder: Path, inputs: Any, port: FakePort | None = None) -> Any:
     """`folder` saved as a draft and test-run with `inputs`: the report and what Deliver gave."""
     with EngineService.open(home, harness=port or answers()) as svc:
@@ -362,16 +373,16 @@ def test_each_template_carries_an_identical_copy_of_every_block_file_it_uses() -
             assert (PACK / copy).read_bytes() == (SHARED / shared).read_bytes(), copy
 
 
-def test_rs0_records_every_unanswered_question_as_an_assumption(tmp_path: Path) -> None:
-    report, sheet = try_template(tmp_path, RS0, {"fixture": True})
+def test_rs0_records_every_unanswered_question_as_an_assumption(home: Path) -> None:
+    report, sheet = try_template(home, RS0, {"fixture": True})
 
     assert report.status == "passed"
     assert len(sheet["assumptions"]) == 5
     assert sheet["dead_end_warning"].startswith("The Library holds a dead end")
 
 
-def test_rs2_keeps_the_holes_the_paper_leaves(tmp_path: Path) -> None:
-    report, card = try_template(tmp_path, RS2, {"fixture": True})
+def test_rs2_keeps_the_holes_the_paper_leaves(home: Path) -> None:
+    report, card = try_template(home, RS2, {"fixture": True})
 
     assert report.status == "passed"
     assert card["holes"] == ["warm_up", "parameter threshold"]
@@ -383,9 +394,9 @@ def test_rs2_keeps_the_holes_the_paper_leaves(tmp_path: Path) -> None:
     ]
 
 
-def test_rs4_splits_its_sources_into_chunks_by_the_setting_and_drops_none(tmp_path: Path) -> None:
-    report, review = try_template(tmp_path, RS4, {"fixture": True})
-    with Reader.open(tmp_path) as reader:
+def test_rs4_splits_its_sources_into_chunks_by_the_setting_and_drops_none(home: Path) -> None:
+    report, review = try_template(home, RS4, {"fixture": True})
+    with Reader.open(home) as reader:
         chunks = [
             cast(dict[str, Any], e.data["plan"])["chunk"]["items"]
             for e in reader.events(report.run_id)
@@ -398,11 +409,11 @@ def test_rs4_splits_its_sources_into_chunks_by_the_setting_and_drops_none(tmp_pa
     assert [m["confidence"] for m in review["methods"]][:2] == ["high", "high"]
 
 
-def test_rs4_fails_when_the_synthesis_invents_a_quote(tmp_path: Path) -> None:
+def test_rs4_fails_when_the_synthesis_invents_a_quote(home: Path) -> None:
     synthesis = json.loads(recorded(RS4, "synthesis.json"))
     synthesis["claims"][0]["quote"] = "shrinkage doubled the Sharpe ratio of every book"
     port = answers(synthesis=json.dumps(synthesis))
-    report, review = try_template(tmp_path, RS4, {"fixture": True}, port)
+    report, review = try_template(home, RS4, {"fixture": True}, port)
 
     assert (report.status, review) == ("failed", None)
 
@@ -434,9 +445,9 @@ def plant(folder: Path, name: str, path: list[str | int], text: str) -> str:
     ids=["rs0-capacity", "rs2-claimed-effect", "a-card-summary", "db-summary", "t4-line"],
 )  # fmt: skip
 def test_an_output_with_a_number_its_sources_never_gave_fails_the_test_run(
-    tmp_path: Path, folder: Path, inputs: Any, prompt: str, planted: str
+    home: Path, folder: Path, inputs: Any, prompt: str, planted: str
 ) -> None:
-    report, delivered = try_template(tmp_path, folder, inputs, answers(planted={prompt: planted}))
+    report, delivered = try_template(home, folder, inputs, answers(planted={prompt: planted}))
 
     assert (report.status, delivered) == ("failed", None)
 
@@ -456,8 +467,8 @@ def produced_files(home: Path, run_id: str) -> list[str]:
     )
 
 
-def test_a_lands_its_cards_as_run_artifacts_produced_by_the_run(tmp_path: Path) -> None:
-    report, entry = try_template(tmp_path, A, {"fixture": "one-video"})
+def test_a_lands_its_cards_as_run_artifacts_produced_by_the_run(home: Path) -> None:
+    report, entry = try_template(home, A, {"fixture": "one-video"})
 
     assert report.status == "passed"
     assert [(c["kind"], c["status"], c["exit"], c["audit"]["verdict"]) for c in entry["cards"]] == [
@@ -468,7 +479,7 @@ def test_a_lands_its_cards_as_run_artifacts_produced_by_the_run(tmp_path: Path) 
         "https://www.youtube.com/watch?v=qmxFixture01&si=share",
         "https://youtu.be/qmxFixture01",
     ]
-    assert produced_files(tmp_path, report.run_id) == sorted(
+    assert produced_files(home, report.run_id) == sorted(
         [f"library/cards/{c['library_id']}.json" for c in entry["cards"]]
         + [f"library/sources/{s['library_id']}.json" for s in entry["sources"]]
         + [
@@ -479,9 +490,9 @@ def test_a_lands_its_cards_as_run_artifacts_produced_by_the_run(tmp_path: Path) 
     )
 
 
-def test_a_video_with_no_captions_is_recorded_and_the_run_goes_on(tmp_path: Path) -> None:
+def test_a_video_with_no_captions_is_recorded_and_the_run_goes_on(home: Path) -> None:
     port = answers()
-    report, entry = try_template(tmp_path, A, {"fixture": "no-captions"}, port)
+    report, entry = try_template(home, A, {"fixture": "no-captions"}, port)
 
     assert report.status == "passed"
     assert port.chats == []
@@ -491,12 +502,12 @@ def test_a_video_with_no_captions_is_recorded_and_the_run_goes_on(tmp_path: Path
     ]
 
 
-def test_rv_names_the_runs_and_parked_items_of_its_own_home(tmp_path: Path) -> None:
-    try_template(tmp_path, RS0, {"fixture": True})
+def test_rv_names_the_runs_and_parked_items_of_its_own_home(home: Path) -> None:
+    try_template(home, RS0, {"fixture": True})
     note = json.loads(recorded(RS1, "note.json"))
     plant_number(note)
-    parked, _ = try_template(tmp_path, RS1, {"fixture": True}, answers(json.dumps(note)))
-    report, card = try_template(tmp_path, RV, None)
+    parked, _ = try_template(home, RS1, {"fixture": True}, answers(json.dumps(note)))
+    report, card = try_template(home, RV, None)
 
     assert report.status == "passed"
     assert [(r["workflow"], r["status"]) for r in card["runs"]] == [
@@ -534,9 +545,9 @@ def test_the_confidence_rule_needs_a_source_and_full_agreement() -> None:
     ]
 
 
-def test_a_quiet_calendar_day_makes_no_model_call(tmp_path: Path) -> None:
+def test_a_quiet_calendar_day_makes_no_model_call(home: Path) -> None:
     port = answers()
-    report, strip = try_template(tmp_path, T3, {"fixture": "quiet"}, port)
+    report, strip = try_template(home, T3, {"fixture": "quiet"}, port)
 
     assert report.status == "passed"
     assert port.chats == []
@@ -558,11 +569,11 @@ def plant_quote(note: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("plant", [plant_number, plant_quote], ids=["number", "quote"])
 def test_a_note_with_an_invented_number_or_quote_fails_the_test_run(
-    tmp_path: Path, plant: Callable[[dict[str, Any]], None]
+    home: Path, plant: Callable[[dict[str, Any]], None]
 ) -> None:
     note = json.loads(recorded(RS1, "note.json"))
     plant(note)
-    with EngineService.open(tmp_path, harness=answers(json.dumps(note))) as svc:
+    with EngineService.open(home, harness=answers(json.dumps(note))) as svc:
         item = svc.drafts.put("rs1-paper-scout", Bundle.read(RS1), 0, caller=OPERATOR).item
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={"fixture": True}))
         state = svc.drafts.state(item)
@@ -594,15 +605,15 @@ def test_a_template_with_needs_validates_but_its_test_run_is_refused(tmp_path: P
 
 
 def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_changes_nothing(
-    tmp_path: Path,
+    home: Path,
 ) -> None:
-    with EngineService.open(tmp_path, harness=answers()) as svc:
+    with EngineService.open(home, harness=answers()) as svc:
         first = asyncio.run(install(svc))
         seen = len(svc.ctx.library.events())
         second = asyncio.run(install(svc))
         status = {row.template.id: (row.status, row.version) for row in listing(svc)}
         library_after = len(svc.ctx.library.events())
-    with Reader.open(tmp_path) as reader:
+    with Reader.open(home) as reader:
         triggers = rows.triggers(reader.connection)
 
     built = [template.id for template in CATALOG if not template.needs]
@@ -640,8 +651,8 @@ def test_install_publishes_23_disabled_saves_23_drafts_and_a_second_install_chan
     ]
 
 
-def test_installing_by_an_old_id_installs_the_renamed_template(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path, harness=answers()) as svc:
+def test_installing_by_an_old_id_installs_the_renamed_template(home: Path) -> None:
+    with EngineService.open(home, harness=answers()) as svc:
         done = asyncio.run(install(svc, [find("B")]))
         found = listing(svc, [find("b-build-and-prove")])
         drafted = svc.drafts.get("b-build-and-prove")
@@ -657,10 +668,10 @@ def test_installing_by_an_old_id_installs_the_renamed_template(tmp_path: Path) -
     assert drafted.item == "b-build-and-prove"
 
 
-def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(tmp_path: Path) -> None:
+def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(home: Path) -> None:
     """Fourteen kept claims: their ids sit in the graded prose, so they must carry no digits."""
-    report, brief = try_template(tmp_path, T4, {"fixture": True})
-    with Reader.open(tmp_path) as reader:
+    report, brief = try_template(home, T4, {"fixture": True})
+    with Reader.open(home) as reader:
         chunks = [
             cast(dict[str, Any], e.data["plan"])["chunk"]["items"]
             for e in reader.events(report.run_id)
@@ -685,7 +696,7 @@ def test_t4_runs_one_analyst_per_chunk_cuts_by_rule_and_cites_every_line(tmp_pat
     assert [h["instrument"] for h in brief["hint_cards"]] == ["EURUSD", "USDJPY"]
 
 
-def test_t4_fails_when_the_coordinator_writes_a_line_no_kept_claim_backs(tmp_path: Path) -> None:
+def test_t4_fails_when_the_coordinator_writes_a_line_no_kept_claim_backs(home: Path) -> None:
     lines = json.loads(recorded(T4, "lines.json"))
     lines["lines"].append(
         {
@@ -696,7 +707,7 @@ def test_t4_fails_when_the_coordinator_writes_a_line_no_kept_claim_backs(tmp_pat
         }
     )
     port = answers(planted={"You are the coordinator of QMX's overnight": json.dumps(lines)})
-    report, brief = try_template(tmp_path, T4, {"fixture": True}, port)
+    report, brief = try_template(home, T4, {"fixture": True}, port)
 
     assert (report.status, brief) == ("failed", None)
 
@@ -704,9 +715,9 @@ def test_t4_fails_when_the_coordinator_writes_a_line_no_kept_claim_backs(tmp_pat
 def test_db_reads_every_node_fact_as_could_not_check_and_a_quiet_day_costs_nothing(
     tmp_path: Path,
 ) -> None:
-    busy, card = try_template(tmp_path / "busy", DB, {"fixture": "busy"})
+    busy, card = try_template(qmx_folder(tmp_path / "busy"), DB, {"fixture": "busy"})
     port = answers()
-    quiet, still = try_template(tmp_path / "quiet", DB, {"fixture": "quiet"}, port)
+    quiet, still = try_template(qmx_folder(tmp_path / "quiet"), DB, {"fixture": "quiet"}, port)
 
     assert busy.status == "passed"
     assert set(card["node_facts"].values()) == {"could not check: trading node"}
@@ -720,10 +731,10 @@ def test_db_reads_every_node_fact_as_could_not_check_and_a_quiet_day_costs_nothi
 
 @pytest.mark.parametrize("folder", DRAFTS, ids=lambda path: path.name)
 def test_a_draft_validates_and_its_test_and_its_enable_are_refused_with_its_need(
-    tmp_path: Path, folder: Path
+    home: Path, folder: Path
 ) -> None:
     need = f"needs: {', '.join(next(t.needs for t in CATALOG if t.folder == folder.name))}"
-    with EngineService.open(tmp_path) as svc:
+    with EngineService.open(home) as svc:
         item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
         state = svc.drafts.state(item)
         with pytest.raises(Refused) as tested:
@@ -751,13 +762,13 @@ def test_no_template_holds_a_credential_or_a_broker_ref(folder: Path) -> None:
 
 
 def test_revolution_loop_runs_a_child_that_holds_its_own_loop_and_keeps_the_negatives(
-    tmp_path: Path,
+    home: Path,
 ) -> None:
     candidate = json.loads(recorded(REVOLUTION / "revolution", "candidate.json"))
     candidate["evidence"] = "a source nobody gave it"
     port = answers(planted={"You draft one testable candidate": json.dumps(candidate)})
-    report, card = try_template(tmp_path, REVOLUTION, {"fixture": "plateau"}, port)
-    with Reader.open(tmp_path) as reader:
+    report, card = try_template(home, REVOLUTION, {"fixture": "plateau"}, port)
+    with Reader.open(home) as reader:
         runs = {row[0] for row in reader.connection.execute("SELECT DISTINCT run_id FROM events")}
 
     assert report.status == "passed"
@@ -783,7 +794,7 @@ def test_the_panel_marks_an_absent_seat_and_labels_a_judge_of_the_same_family(
         if edge["node"] != "Sentiment member"
     ]
     (folder / "definition.json").write_text(json.dumps(definition), "utf-8")
-    report, card = try_template(tmp_path / "run", folder, {"fixture": "recorded"})
+    report, card = try_template(qmx_folder(tmp_path / "QMX"), folder, {"fixture": "recorded"})
 
     assert report.status == "passed"
     assert card["absent"] == ["sentiment"]
@@ -796,16 +807,16 @@ def test_the_panel_marks_an_absent_seat_and_labels_a_judge_of_the_same_family(
     assert card["judge_same_family_as"] == ["macro", "positioning"]
 
 
-def test_a_clipping_already_held_runs_once_and_the_second_links_to_it(tmp_path: Path) -> None:
+def test_a_clipping_already_held_runs_once_and_the_second_links_to_it(home: Path) -> None:
     text = json.loads((CLIPPINGS / "fixtures" / "clippings.json").read_text("utf-8"))[0]["text"]
     content = hashlib.sha256(text.encode("utf-8")).hexdigest()
     key = hashlib.sha256(f"clipping|{content}|fixture".encode()).hexdigest()
-    with LibraryFake.open(tmp_path) as library:
+    with LibraryFake.open(home) as library:
         seeded = library.put_artifact(
             b'{"seed": true}', "clipping", {"hash": content}, run_id="seed",
             principal="run:seed", intent_key=key,
         )  # fmt: skip
-    report, card = try_template(tmp_path, CLIPPINGS, {"fixture": True})
+    report, card = try_template(home, CLIPPINGS, {"fixture": True})
 
     assert report.status == "passed"
     assert (card["figures"]["new"], card["figures"]["seen"]) == (1, 1)
@@ -815,15 +826,15 @@ def test_a_clipping_already_held_runs_once_and_the_second_links_to_it(tmp_path: 
 
 
 def test_the_digest_reads_from_his_cursor_and_moves_it_after_the_digest_passes(
-    tmp_path: Path,
+    home: Path,
 ) -> None:
-    with LibraryFake.open(tmp_path) as library:
+    with LibraryFake.open(home) as library:
         seeded = library.put_artifact(
             b'{"landed": true}', "clipping", {"title": "one"}, run_id="seed",
             principal="run:seed", intent_key="landed-once",
         )  # fmt: skip
-    report, card = try_template(tmp_path, DIGEST, {"fixture": True})
-    with sqlite3.connect(tmp_path / "control.db") as db:
+    report, card = try_template(home, DIGEST, {"fixture": True})
+    with sqlite3.connect(home / "control.db") as db:
         (position,) = db.execute(
             "SELECT position FROM operator_cursor WHERE name='last_look'"
         ).fetchone()
@@ -839,7 +850,7 @@ def test_crystallise_refuses_the_script_when_one_replay_disagrees(tmp_path: Path
     replays = json.loads((folder / "fixtures" / "replays.json").read_text("utf-8"))
     replays[17]["title"] = "pod"
     (folder / "fixtures" / "replays.json").write_text(json.dumps(replays), "utf-8")
-    report, card = try_template(tmp_path / "run", folder, {"fixture": True})
+    report, card = try_template(qmx_folder(tmp_path / "QMX"), folder, {"fixture": True})
 
     assert report.status == "passed"
     assert (card["crystallised"], card["equivalent"], card["sampling"]) == (False, False, None)
@@ -849,14 +860,14 @@ def test_crystallise_refuses_the_script_when_one_replay_disagrees(tmp_path: Path
     assert card["figures"]["agreeing"] == 19
 
 
-def test_a_feed_run_lands_its_new_item_as_one_source_through_save_source(tmp_path: Path) -> None:
+def test_a_feed_run_lands_its_new_item_as_one_source_through_save_source(home: Path) -> None:
     feed = find("feed")
-    report, _ = try_template(tmp_path, PACK / feed.folder, feed.test_inputs)
+    report, _ = try_template(home, PACK / feed.folder, feed.test_inputs)
     name = "library/sources/4bce335b378af3d330222548e5b5a379.json"
-    saved = json.loads((RunZone.of(tmp_path, report.run_id).work / name).read_text("utf-8"))
+    saved = json.loads((RunZone.of(home, report.run_id).work / name).read_text("utf-8"))
 
     assert report.status == "passed"
-    assert produced_files(tmp_path, report.run_id) == [name, "library/sources/index.json"]
+    assert produced_files(home, report.run_id) == [name, "library/sources/index.json"]
     assert {key: saved[key] for key in ("kind", "origin", "intent_key", "part_of", "licence")} == {
         "kind": "source",
         "origin": "feed",
@@ -869,15 +880,16 @@ def test_a_feed_run_lands_its_new_item_as_one_source_through_save_source(tmp_pat
 def test_the_cli_installs_one_template_into_the_homes_real_store(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    home = str(tmp_path)
-    unknown = main(["templates", "install", "--home", home, "--template", "no-such-template"])
+    home = qmx_folder(tmp_path / "QMX")
+    folder = str(home.parent)
+    unknown = main(["templates", "install", "--home", folder, "--template", "no-such-template"])
     refused = capsys.readouterr().out
-    installed = main(["templates", "install", "--home", home, "--template", "backup-weekly"])
-    with Store.open(tmp_path / "library", redactor=redact) as store:
+    installed = main(["templates", "install", "--home", folder, "--template", "backup-weekly"])
+    with Store.open(home / "library", redactor=redact) as store:
         on_main = sorted(item for item, _ in store.heads_on("main"))
 
     assert (unknown, refused) == (1, "refused: no template 'no-such-template' in the catalogue\n")
     assert installed == 0
     assert "backup-weekly published: 0.1.0" in capsys.readouterr().out
     assert on_main == ["backup-weekly"]
-    assert not (tmp_path / "engine" / "library-fake.sqlite").exists()
+    assert not (home / "engine" / "library-fake.sqlite").exists()

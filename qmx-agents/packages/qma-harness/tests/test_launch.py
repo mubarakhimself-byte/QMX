@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 from claude_agent_sdk import ClaudeAgentOptions, PermissionResultDeny
 from claude_agent_sdk.types import ToolPermissionContext
+from qmx_home import resolve
 from qmx_router.profiles import (
     PLAN,
     BaseUrl,
@@ -73,7 +74,7 @@ def home(tmp_path: Path) -> QmxHome:
     plugin = tmp_path / "plugin"
     plugin.mkdir()
     (plugin / "QMX.md").write_text("Money is read-only.\n", encoding="utf-8")
-    return QmxHome(tmp_path / "qmx", plugin_dir=plugin)
+    return QmxHome(resolve(tmp_path / "QMX", create=True, drives=[]).home, plugin_dir=plugin)
 
 
 @pytest.fixture
@@ -116,7 +117,7 @@ def test_a_plan_launch_sets_only_the_plan_home_and_the_launcher_inputs(home: Qmx
         **windows,
         "CLAUDE_CONFIG_DIR": str(home.root / "claude"),
         "QMA_CHAT_ID": CHAT,
-        "QMA_PROC_DIR": str(home.root / "procs"),
+        "QMA_PROC_DIR": str(home.root.parent / "cache" / "run" / "procs"),
         "QMA_CAP": "Local\\qma-cap",
     }
 
@@ -298,7 +299,7 @@ def test_a_relayed_launch_carries_the_relay_and_its_grant_never_a_key(home: QmxH
         "ANTHROPIC_DEFAULT_FABLE_MODEL": "a/f",
         "NO_PROXY": "127.0.0.1,localhost",
         "QMA_CHAT_ID": CHAT,
-        "QMA_PROC_DIR": str(home.root / "procs"),
+        "QMA_PROC_DIR": str(home.root.parent / "cache" / "run" / "procs"),
         "QMA_CAP": "c",
     }
 

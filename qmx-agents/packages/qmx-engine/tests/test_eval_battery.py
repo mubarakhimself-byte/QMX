@@ -10,7 +10,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fake_port import TOKENS, FakePort
+from qmx_home import resolve
 
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.settings import StaticSettings
@@ -26,6 +28,12 @@ SEEDS: list[dict[str, Any]] = json.loads((FOLDER / "fixtures" / "tasks.json").re
 DEEPSEEK = "openrouter/deepseek/deepseek-chat"
 HAIKU = "claude/haiku"
 KIMI = "openrouter/moonshotai/kimi-k2.5"
+
+
+@pytest.fixture
+def home(tmp_path: Path) -> Path:
+    """A QMX folder made the way `--create` makes one, and its home `data/`."""
+    return resolve(tmp_path / "QMX", create=True, drives=[]).home
 
 
 def script(name: str, given: Any) -> Any:
@@ -161,12 +169,12 @@ def battery_run(home: Path, port: FakePort, tasks: list[dict[str, Any]]) -> dict
 
 
 def test_a_model_change_reports_pass3_per_task_for_the_new_model_and_the_baseline(
-    tmp_path: Path,
+    home: Path,
 ) -> None:
     port = answering(wrong=frozenset({"deepseek/deepseek-chat"}))
     tasks = [t for t in SEEDS if t["id"] in ("quant-basis-points", "op-hard-truth")]
 
-    result = battery_run(tmp_path, port, tasks)
+    result = battery_run(home, port, tasks)
 
     assert result["per_task"] == [
         {"id": "quant-basis-points", "candidate": False, "baseline": True},
@@ -184,10 +192,10 @@ def test_a_model_change_reports_pass3_per_task_for_the_new_model_and_the_baselin
     )
 
 
-def test_a_side_whose_tries_ran_on_another_model_reports_no_pass3(tmp_path: Path) -> None:
+def test_a_side_whose_tries_ran_on_another_model_reports_no_pass3(home: Path) -> None:
     values = {**DEFAULTS, "roles.test_only": ("kimi/k3", KIMI)}
     tasks = [t for t in SEEDS if t["id"] == "quant-basis-points"]
-    with EngineService.open(tmp_path, settings=StaticSettings(values), harness=answering()) as svc:
+    with EngineService.open(home, settings=StaticSettings(values), harness=answering()) as svc:
         result: Any = asyncio.run(
             battery.run(
                 svc,
@@ -205,8 +213,8 @@ def test_a_side_whose_tries_ran_on_another_model_reports_no_pass3(tmp_path: Path
     assert result["per_task"] == [{"id": "quant-basis-points", "candidate": None, "baseline": True}]
 
 
-def test_the_template_test_run_on_its_seed_tasks_passes_all_20(tmp_path: Path) -> None:
-    result = battery_run(tmp_path, answering(), SEEDS)
+def test_the_template_test_run_on_its_seed_tasks_passes_all_20(home: Path) -> None:
+    result = battery_run(home, answering(), SEEDS)
 
     assert (result["candidate"]["passed"], result["candidate"]["total"]) == (20, 20)
     assert [t["id"] for t in result["per_task"]] == [t["id"] for t in SEEDS]

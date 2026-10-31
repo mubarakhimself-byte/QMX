@@ -1,7 +1,8 @@
 # qmx-recover.ps1: the PC's twin of the server's qmx-recover (engine AD-71, ruling 139).
 # `qmx node setup` writes it to <home>\bin\ with qmx-recover.conf beside it (the SSH target, the
-# server's tailnet address, this PC's host port and Python; no secret). It never prints a key or
-# a code: a pairing code is copied from file to file and never shown.
+# server's tailnet address, this PC's QMX folder, its home data\, host port and Python; no
+# secret). It never prints a key or a code: a pairing code is copied from file to file and never
+# shown.
 param(
     [Parameter(Position = 0)] [string] $What = 'help',
     [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]] $Rest = @()
@@ -12,7 +13,8 @@ $conf = @{
     TARGET = ''
     SSH_KEY = ''
     SERVER_TAILNET = ''
-    SERVER_HOME = '/srv/qmx/home/.qmx'
+    SERVER_HOME = '/srv/qmx/home/.qmx/data'
+    QMX_FOLDER = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
     QMX_HOME = (Split-Path -Parent $PSScriptRoot)
     PORT = '8766'
     PYTHON = ''
@@ -97,7 +99,7 @@ function Invoke-Server([string[]] $Words) {
 
 function Invoke-Pair {
     if (Test-Python) {
-        Invoke-Qmx @('node', 'pair', '--home', $conf.QMX_HOME, '--ssh-host', $conf.TARGET)
+        Invoke-Qmx @('node', 'pair', '--home', $conf.QMX_FOLDER, '--ssh-host', $conf.TARGET)
         return
     }
     "QMX's Python does not work here, so the server makes the code and this PC copies it."
@@ -121,17 +123,17 @@ function Invoke-Pair {
 
 function Invoke-Vault {
     if (-not (Test-Python)) { throw "QMX's Python does not work on this PC, so the key copy cannot be built. Reinstall QMX here first." }
-    Invoke-Qmx @('node', 'vault', 'install', '--ssh-host', $conf.TARGET, '--pc-home', $conf.QMX_HOME)
+    Invoke-Qmx @('node', 'vault', 'install', '--ssh-host', $conf.TARGET, '--pc-home', $conf.QMX_FOLDER)
 }
 
 function Invoke-Restart {
     if (-not (Test-Python)) { throw "QMX's Python does not work on this PC. Reinstall QMX here first." }
-    & $conf.PYTHON -m qmx_host stop --home $conf.QMX_HOME
-    & $conf.PYTHON -m qmx_host start --home $conf.QMX_HOME --port $conf.PORT
+    & $conf.PYTHON -m qmx_host stop --home $conf.QMX_FOLDER
+    & $conf.PYTHON -m qmx_host start --home $conf.QMX_FOLDER --port $conf.PORT
 }
 
 function Show-Logs {
-    $log = Join-Path $conf.QMX_HOME 'control.log'
+    $log = Join-Path $conf.QMX_FOLDER 'logs\host.log'
     if (-not (Test-Path -LiteralPath $log)) { "There is no log at $log yet."; return }
     Get-Content -LiteralPath $log -Tail 200
 }

@@ -35,6 +35,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from qmx_home import Layout
 
 SALT: Final = b"qmx-vault-v1"
 """The KDF's salt. Fixed, because the ephemeral key is already unique per entry."""
@@ -59,10 +60,9 @@ STATIC_PREFIXES: Final[tuple[str, ...]] = ("qmx/read/", "qmx/data/")
 """A connection's static read or data key. The connection is the segment after the prefix."""
 TOKEN_MARKS: Final[tuple[str, ...]] = ("token", "oauth", "chatgpt")
 """A name holding a token is never a static key, whatever prefix it tries to hide behind."""
-KEY_FOLDER: Final = ".qmx"
-"""The folder each machine keeps its own private key in, inside its home."""
 KEY_FILE: Final = "vault.key"
-"""The file name the plan names: `<home>/.qmx/vault.key`, mode 0600, owner only."""
+"""The file each machine keeps its own private key in: `<QMX>/keys/vault.key` beside the home
+`<QMX>/data` (design 62 A3), mode 0600 in a 0700 folder, owner only."""
 
 
 class NotReplicable(PermissionError):
@@ -192,16 +192,15 @@ def _derive(shared: bytes) -> bytes:
 
 
 def key_file(home: Path) -> Path:
-    """`<home>/.qmx/vault.key`: the one file a machine's private key lives in."""
-    return home / KEY_FOLDER / KEY_FILE
+    """`<QMX>/keys/vault.key`: the one file a machine's private key lives in."""
+    return Layout.from_home(home).keys / KEY_FILE
 
 
 def write_machine_key(home: Path, key: VaultKey) -> Path:
     """Write this machine's private key where only its user reads it: 0600 in a 0700 folder. The
     server's file is written by its setup as `qmx`, which is the only reader it needs."""
-    folder = home / KEY_FOLDER
-    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-    path = folder / KEY_FILE
+    path = key_file(home)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     path.write_bytes(key.private_bytes())
     path.chmod(0o600)
     return path

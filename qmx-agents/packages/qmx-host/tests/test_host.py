@@ -16,12 +16,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from qmx_control.service import ControlService
 from qmx_engine.control_door import PRINCIPAL, EngineDoor, as_run
 from qmx_engine.ports.library import Bundle
+from qmx_home import resolve
 
+import qmx_host.host
 from qmx_host.door import PrincipalDoor
 from qmx_host.host import compose, hindsight_runs, record, single_instance
 
@@ -31,10 +34,11 @@ CHAIN = Path(__file__).parents[2] / "qmx-engine/tests/fixtures/workflows/script-
 
 
 def test_a_second_host_on_the_same_home_refuses_with_one_line(tmp_path: Path) -> None:
-    with single_instance(tmp_path):
-        record(tmp_path, 8766)
+    layout = resolve(tmp_path / "QMX", create=True, drives=[])
+    with single_instance(layout.home):
+        record(layout.home, 8766)
         second = subprocess.run(
-            [sys.executable, "-m", "qmx_host", "serve", "--home", str(tmp_path), "--port", "1"],
+            [sys.executable, "-m", "qmx_host", "serve", "--home", str(layout.root), "--port", "1"],
             capture_output=True,
             text=True,
             timeout=120,
@@ -43,8 +47,34 @@ def test_a_second_host_on_the_same_home_refuses_with_one_line(tmp_path: Path) ->
 
     assert second.returncode == 1
     assert second.stderr.splitlines() == [
-        f"refused: {tmp_path.resolve()} already has a host, PID {os.getpid()}; stop it first."
+        f"refused: {layout.home} already has a host, PID {os.getpid()}; stop it first."
     ]
+
+
+def test_start_hands_the_child_the_qmx_folder_and_logs_into_its_logs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    layout = resolve(tmp_path / "QMX", create=True, drives=[])
+    started: list[list[str]] = []
+
+    class Exited:
+        pid = 0
+
+        def __init__(self, command: list[str], **_: object) -> None:
+            started.append(command)
+
+        def poll(self) -> int:
+            return 1
+
+    monkeypatch.setattr(qmx_host.host.subprocess, "Popen", Exited)
+
+    assert qmx_host.host.start(layout.home, 0, "pc", "http://127.0.0.1:5173") == 1
+
+    [command] = started
+    assert command[command.index("--home") + 1] == str(layout.root)
+    host_log = layout.root / "logs" / "host.log"
+    assert host_log.is_file()
+    assert capsys.readouterr().err == f"The host failed to start; see {host_log}.\n"
 
 
 def test_the_lock_is_free_again_once_its_holder_lets_go(tmp_path: Path) -> None:

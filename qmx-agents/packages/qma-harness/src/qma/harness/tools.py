@@ -898,14 +898,19 @@ def _both(paths: list[Path]) -> tuple[str, ...]:
 
 def secret_files(home: QmxHome) -> list[Path]:
     """Files that hold or may hold a login or a key: the plan login in both forms under each
-    QMX Claude home and his `~/.claude`, his `~/.claude.json`, and the QMX home's
-    `settings.toml` and `rclone.conf`."""
+    QMX Claude home and his `~/.claude`, his `~/.claude.json`, the QMX home's `settings.toml`
+    and `rclone.conf`, and the QMX folder's `keys/` with everything in it."""
     personal = Path.home() / ".claude"
     return [
         folder / name
         for folder in (home.plan_dir, home.relayed_dir, personal)
         for name in (".credentials.json", ".claude.json")
-    ] + [Path.home() / ".claude.json", home.root / "settings.toml", home.root / "rclone.conf"]
+    ] + [
+        Path.home() / ".claude.json",
+        home.root / "settings.toml",
+        home.root / "rclone.conf",
+        home.layout.keys,
+    ]
 
 
 STORE_FILES: Final = ("control.db", "portfolio.db", "library.db", "memory.db", "runs.db")
@@ -931,12 +936,14 @@ def guard_rules(
     Python's environment. `workspace` is where a recursive delete runs without asking; `rules`
     is `settings.toml [rules]`, his two lists."""
     personal = Path.home() / ".claude"
+    layout = home.layout
     protected = [
         home.plan_dir,
         home.relayed_dir,
         home.chats_dir,
-        home.procs_dir,
-        home.state_dir,
+        home.run_dir,
+        home.packs_dir,
+        layout.keys,
         home.plugin_dir,
         home.root / "engine",
         *(
@@ -951,8 +958,8 @@ def guard_rules(
     return GuardRules(
         mandatory_asks=frozenset(tool.full for tool in defs if asks(tool.effect, domain_write)),
         protected_paths=_both(protected),
-        qmx_homes=_both([home.root]),
-        writable_paths=_both([home.workspaces_dir, home.agent_memory_dir]),
+        qmx_homes=_both([layout.root]),
+        writable_paths=_both([home.workspaces_dir, home.agent_memory_dir, layout.cache / "zones"]),
         install_paths=_both([Path(sys.prefix)]),
         secret_paths=_both(secret_files(home)),
         personal_homes=_both([personal]),

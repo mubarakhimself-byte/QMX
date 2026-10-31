@@ -46,7 +46,7 @@ import time
 import tomllib
 import urllib.request
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Final, cast
 
 import uvicorn
@@ -95,10 +95,14 @@ packages do not depend on each other, so the name is written once on each side."
 PLAN_MARKER: Final = "home.toml"
 SERVER_LIBRARY: Final = "/srv/qmx/library"
 """The server store's one root (Appendix D): `import`, `rebuild` and the host's unit all name it."""
-SERVER_HOME: Final = "/srv/qmx/home/.qmx"
-"""The server host's home, as its unit's `--home` names it; its `vault/pairing-key` is the key."""
-SERVER_VAULT: Final = f"{SERVER_HOME}/vault"
-"""The folder the server's own commands read: the pairing key and the host's control token."""
+SERVER_FOLDER: Final = "/srv/qmx/home/.qmx"
+"""The server's QMX folder in the tree layout (design 62 A3, guard 4), as its unit's `--home`
+names it."""
+SERVER_HOME: Final = f"{SERVER_FOLDER}/data"
+"""What the server's packages call its home; its `vault/pairing-key` is the pairing key."""
+SERVER_KEYS: Final = f"{SERVER_FOLDER}/keys"
+"""The folder the server's own commands read the host's control token from, beside its vault
+key."""
 NODE_STATE: Final = "/var/lib/qmx"
 """The bootstrap's folder: the bucket, `rclone.conf` and the old Hub's home."""
 SERVER_VENV: Final = "/opt/qmx/qmx-agents/.venv"
@@ -508,12 +512,11 @@ def host_port(unit: str) -> int:
 
 
 def host_unit_script(role: str = "server") -> str:
-    """Install the host: its home and the store root owned by `qmx`, its package in the
-    environment, and its unit, not yet started (the import comes first)."""
+    """Install the host: the store root owned by `qmx`, its package in the environment, and its
+    unit, not yet started (the import comes first). Its QMX folder is the layout step's."""
     return (
         "set -eu\n"
-        f"install -d -o qmx -g qmx -m 750 /srv/qmx/home {SERVER_HOME} {SERVER_LIBRARY}\n"
-        f"install -d -o qmx -g qmx -m 700 {SERVER_HOME}/vault\n"
+        f"install -d -o qmx -g qmx -m 750 {SERVER_LIBRARY}\n"
         "uv sync --project /opt/qmx/qmx-agents --package qmx-host --frozen --no-default-groups\n"
         f"cat > /etc/systemd/system/{HOST_UNIT} <<'QMXUNIT'\n"
         f"{host_unit(role)}"
@@ -523,27 +526,43 @@ def host_unit_script(role: str = "server") -> str:
     )
 
 
-MOVED: Final = (PAIRING_KEY, "control-token")
-"""What the bootstrap and the old node service kept in `OLD_VAULT`; the host reads both from its
-own vault folder."""
+def layout_script(folder: str = SERVER_FOLDER, venv: str = SERVER_VENV) -> str:
+    """Lay out the server's QMX folder as the tree (design 62 A3, guard 4), with the host
+    stopped, and start the host again when it was running, or was failing or restarting: a new
+    host refuses a flat folder, so after an update it is down until the folder is laid out. One
+    stopped on purpose stays stopped. qmx-home's layout step labels a fresh folder and makes its
+    five parts, moves a flat home from an earlier setup into the tree, and leaves a tree as it
+    is; the key folders are then made owner-only, whichever it was."""
+    unit = HOST_UNIT.removesuffix(".service")
+    return (
+        "set -eu\n"
+        f"was=$(systemctl is-active {unit} || true)\n"
+        f"systemctl stop {unit} || true\n"
+        f"install -d -o qmx -g qmx -m 750 {PurePosixPath(folder).parent} {folder}\n"
+        f"runuser -u qmx -- {venv}/bin/python -m qmx_home layout {folder}\n"
+        f"install -d -o qmx -g qmx -m 700 {folder}/keys {folder}/data/vault\n"
+        f'case "$was" in active | activating | failed) systemctl start {unit} ;; esac\n'
+    )
 
 
-def move_key_script(server_home: str = SERVER_HOME, old_vault: str = OLD_VAULT) -> str:
-    """Move the pairing key and the control token from `old_vault` into the host's home, once.
+def move_key_script(
+    server_home: str = SERVER_HOME, keys: str = SERVER_KEYS, old_vault: str = OLD_VAULT
+) -> str:
+    """Move the pairing key and the control token from `old_vault` into the host's QMX folder,
+    once: the key to `<home>/vault`, the token to `keys/`.
 
     The bootstrap writes a fresh key whenever none is at the old path, and the old `qmx node
-    bootstrap` a token, so on a rerun the home already holds both: the copy at the old path is
+    bootstrap` a token, so on a rerun the folder already holds both: the copy at the old path is
     then removed unread and the one the running host uses is kept.
     """
-    vault = f"{server_home}/vault"
     lines = ["set -eu"]
-    for name in MOVED:
+    for name, folder in ((PAIRING_KEY, f"{server_home}/vault"), ("control-token", keys)):
         lines += [
-            f"if [ -s {vault}/{name} ]; then rm -f {old_vault}/{name}",
-            f"elif [ -s {old_vault}/{name} ]; then mv {old_vault}/{name} {vault}/{name}",
+            f"if [ -s {folder}/{name} ]; then rm -f {old_vault}/{name}",
+            f"elif [ -s {old_vault}/{name} ]; then mv {old_vault}/{name} {folder}/{name}",
             "fi",
-            f"if [ -e {vault}/{name} ]; then chown qmx:qmx {vault}/{name}; "
-            f"chmod 600 {vault}/{name}; fi",
+            f"if [ -e {folder}/{name} ]; then chown qmx:qmx {folder}/{name}; "
+            f"chmod 600 {folder}/{name}; fi",
         ]
     return "\n".join(lines) + "\n"
 
@@ -553,7 +572,9 @@ def recover_script(pc_name: str = "") -> str:
     source = "/opt/qmx/qmx-agents/packages/qmx-control/src/qmx_control/qmx-recover.sh"
     conf = {
         "HOST_UNIT": HOST_UNIT.removesuffix(".service"),
+        "QMX_FOLDER": SERVER_FOLDER,
         "QMX_HOME": SERVER_HOME,
+        "QMX_KEYS": SERVER_KEYS,
         "LIBRARY": SERVER_LIBRARY,
         "PORT": str(host_port(host_unit())),
         "PROJECT": "/opt/qmx/qmx-agents",
@@ -589,8 +610,9 @@ def setup_steps(
 
     The recovery script comes straight after the bootstrap, because it owns the firewall's rules
     and is his way in if a later step fails. The standalone Hub stops before the import because it
-    would hold the old store's lock and serve a second root; the host starts last, so it opens the
-    store the import wrote.
+    would hold the old store's lock and serve a second root; the QMX folder is laid out once the
+    host has stopped, so a flat home from an earlier setup moves while nothing holds it open; the
+    host starts last, so it opens the store the import wrote.
     """
     return [
         ("bootstrap", bootstrap_script(revision, hindsight=hindsight, hub_port=hub_port)),
@@ -602,6 +624,7 @@ def setup_steps(
             "set -eu\nsystemctl stop qmx-host || true\n"
             f"systemctl disable --now {' '.join(STANDALONE)}\n",
         ),
+        ("lay out the QMX folder", layout_script()),
         ("move the pairing key and the control token", move_key_script()),
         (
             "import as qmx",
@@ -648,14 +671,15 @@ def setup(
                 raise
         if step == FIREWALL_STEP and not kept_closed(host, call, say, sleep):
             return 1
+    server_key = f"{SERVER_HOME}/vault/{PAIRING_KEY}"
     if dry_run:
-        say(f"then on this PC: copy {SERVER_VAULT}/{PAIRING_KEY} to {home}/vault")
+        say(f"then on this PC: copy {server_key} to {home}/vault")
         say(f'then on this PC: [library] hub_url = "http://<tailnet address>:{port}"')
         say(f"then on this PC: write the recovery twin to {home / TWIN_FOLDER}")
         return 0
     address = call([*ssh, "tailscale ip -4"], None).splitlines()[0]
     url = f"http://{address}:{port}"
-    key = call([*ssh, f"sudo cat {SERVER_VAULT}/{PAIRING_KEY}"], None).strip()
+    key = call([*ssh, f"sudo cat {server_key}"], None).strip()
     # The key is written, never printed, so it cannot land in a log (MIGRATION step 7, AD-11).
     held = home / "vault" / PAIRING_KEY
     if not held.exists() or held.read_text(encoding="utf-8").strip() != key:
@@ -719,7 +743,8 @@ TWIN: Final = "qmx-recover.ps1"
 
 def write_twin(home: Path, host: str, address: str) -> Path:
     """The PC twin of `qmx-recover` in `<home>/bin`, with the server's SSH target and tailnet
-    address and this PC's Python beside it. No secret is written."""
+    address, this PC's QMX folder and home `data/`, and its Python beside it. No secret is
+    written."""
     folder = home / TWIN_FOLDER
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / TWIN
@@ -728,6 +753,7 @@ def write_twin(home: Path, host: str, address: str) -> Path:
         "TARGET": host,
         "SERVER_TAILNET": address,
         "SERVER_HOME": SERVER_HOME,
+        "QMX_FOLDER": str(home.resolve().parent),
         "QMX_HOME": str(home.resolve()),
         "PYTHON": sys.executable,
     }
@@ -786,14 +812,17 @@ def update(
     installer: Callable[[str], None] | None = None,
     address_of: Callable[[], str] | None = None,
 ) -> dict[str, object]:
-    """`qmx node update`: drain, then install the pinned revision and let the bootstrap restart.
+    """`qmx node update`: drain, then install the pinned revision, let the bootstrap restart, and
+    lay out the QMX folder with the new program (guard 4).
 
     `installer` and `address_of` are the install step and the node's own address, so a test never
-    runs sudo or asks Tailscale; the real ones are the bootstrap script and `tailscale ip -4`.
+    runs sudo or asks Tailscale; the real ones are the bootstrap and layout scripts and
+    `tailscale ip -4`.
     """
 
     def bootstrap_install(pinned: str) -> None:
         run(["sudo", "bash", "-s"], input_text=bootstrap_script(pinned))
+        run(["sudo", "bash", "-s"], input_text=layout_script())
 
     token = read_secret(vault, "qmx/control-token", "control-token")
     if not token:
@@ -885,15 +914,15 @@ def main() -> int:
     pairing.add_argument("--ssh-host", default="", help="also install the same code on that host")
     check = commands.add_parser("verify")
     check.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    check.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
+    check.add_argument("--vault", type=Path, default=Path(SERVER_KEYS))
     check.add_argument("--root", type=Path, default=Path(SERVER_LIBRARY))
     login = commands.add_parser("login")
     login.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    login.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
+    login.add_argument("--vault", type=Path, default=Path(SERVER_KEYS))
     login.add_argument("--machine", default="")
     refresh = commands.add_parser("update")
     refresh.add_argument("--home", type=Path, default=Path(SERVER_HOME))
-    refresh.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
+    refresh.add_argument("--vault", type=Path, default=Path(SERVER_KEYS))
     refresh.add_argument("--revision", default="")
     refresh.add_argument("--timeout", type=float, default=3600.0)
     vault_command = commands.add_parser("vault")
@@ -914,7 +943,7 @@ def main() -> int:
     vault_key_command.add_argument("--machine", default="", help="the server's place name")
     serve = commands.add_parser("serve")
     serve.add_argument("--home", type=Path, default=Path("/var/lib/qmx"))
-    serve.add_argument("--vault", type=Path, default=Path(SERVER_VAULT))
+    serve.add_argument("--vault", type=Path, default=Path(SERVER_KEYS))
     args = parser.parse_args()
     if args.command == "import":
         from qmx_engine.ledger import redact  # noqa: PLC0415

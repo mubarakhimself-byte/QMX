@@ -85,8 +85,7 @@ def test_each_program_with_no_folder_refuses_in_one_line_and_creates_nothing(
 def test_the_engine_and_the_host_open_the_same_folder_each_way(
     way: str, scratch: dict[str, str], tmp_path: Path
 ) -> None:
-    home = tmp_path / "QMX"
-    home.mkdir()
+    home = resolve(tmp_path / "QMX", create=True, drives=[]).root
     flag: list[str] = []
     if way == "flag":
         flag = ["--home", str(home)]
@@ -101,7 +100,7 @@ def test_the_engine_and_the_host_open_the_same_folder_each_way(
     stats = ran(["-m", "qmx_engine", "ledger", "stats", *flag], scratch, tmp_path / "cwd")
     host = ran(["-m", "qmx_host", "status", *flag], scratch, tmp_path / "cwd")
 
-    ledger = home.resolve() / "engine" / "engine.sqlite"
+    ledger = home / "data" / "engine" / "engine.sqlite"
     assert (stats.returncode, stats.stdout) == (1, f"no ledger at {ledger}\n")
     assert (host.returncode, host.stdout) == (0, "qmx_host is stopped.\n")
-    assert tree(home) == []
+    assert tree(home) == ["backups", "cache", "data", "keys", "logs", "qmx-home.toml"]

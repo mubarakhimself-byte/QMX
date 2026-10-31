@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 from flows import edge, folder, node
+from qmx_home import resolve
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger import mirror
@@ -28,6 +29,7 @@ from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.runs import RunView, status_of
 from qmx_engine.settings import DEFAULTS
+from qmx_engine.workers.zones import zones_root
 
 START = node("start", "trigger")
 HOLD = node("hold", "wait", seconds=3600)
@@ -71,6 +73,11 @@ class JournalBox:
         return found
 
 
+def machine(tmp_path: Path, name: str) -> Path:
+    """The home of machine `name`: the `data/` of its own QMX folder, so each keeps its zones."""
+    return resolve(tmp_path / name, create=True, drives=[]).home
+
+
 @contextmanager
 def running(home: Path) -> Generator[Engine]:
     home.mkdir(parents=True, exist_ok=True)
@@ -100,7 +107,7 @@ def held(tmp_path: Path, middle: dict[str, Any], name: str, text: str) -> tuple[
     box = JournalBox("pc")
     mirror.attach(box)
     try:
-        with running(tmp_path / "pc") as engine:
+        with running(machine(tmp_path, "pc")) as engine:
             outcome = asyncio.run(engine.start(root, found[1], mode="test", inputs=None))
     finally:
         mirror.attach(None)
@@ -111,7 +118,7 @@ def held(tmp_path: Path, middle: dict[str, Any], name: str, text: str) -> tuple[
 def adopt(tmp_path: Path, box: JournalBox, run_id: str) -> tuple[RunView, list[Event]]:
     """Adopt the run into a second home, and read the ledger the adoption left."""
     box.home = "contabo"
-    target = tmp_path / "contabo"
+    target = machine(tmp_path, "contabo")
     mirror.attach(box)
     try:
         with EngineService.open(target, name="contabo") as service:
@@ -153,7 +160,7 @@ def test_a_node_that_committed_files_runs_again_after_adoption(tmp_path: Path) -
     assert view.status == "waiting"
     assert [line.get("node_id") for line in after(events, "node_started")] == ["save"]
     assert [line.get("paths") for line in after(events, "zone_committed")] == [["out/saved.txt"]]
-    work = tmp_path / "contabo.zones" / run_id / "work"
+    work = zones_root(machine(tmp_path, "contabo")) / run_id / "work"
     assert (work / "out" / "saved.txt").read_text() == "kept"
 
 
@@ -163,7 +170,7 @@ def test_the_old_home_marks_its_copy_moved_and_never_resumes_it(tmp_path: Path) 
     box.home = "pc"
     mirror.attach(box)
     try:
-        with running(tmp_path / "pc") as engine:
+        with running(machine(tmp_path, "pc")) as engine:
             with pytest.raises(Refused):
                 asyncio.run(engine.resume(run_id))
             with pytest.raises(Refused):
@@ -171,7 +178,7 @@ def test_the_old_home_marks_its_copy_moved_and_never_resumes_it(tmp_path: Path) 
     finally:
         mirror.attach(None)
 
-    with Reader.open(tmp_path / "pc") as reader:
+    with Reader.open(machine(tmp_path, "pc")) as reader:
         events = reader.events(run_id)
 
     moved = [e.data for e in events if e.kind == "run_cancelled"]

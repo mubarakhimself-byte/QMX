@@ -52,14 +52,15 @@ def test_the_allow_list_is_static_keys_and_provider_rows_only(name: str, wanted:
 
 
 def test_a_missing_key_file_names_the_machine_that_has_none(tmp_path: Path) -> None:
+    home = tmp_path / "QMX" / "data"
     with pytest.raises(VaultUnavailable) as raised:
-        read_machine_key(tmp_path, "contabo")
+        read_machine_key(home, "contabo")
     assert str(raised.value) == "vault:unavailable:contabo"
 
     key = VaultKey.generate()
-    written = write_machine_key(tmp_path, key)
-    assert written == key_file(tmp_path) == tmp_path / ".qmx" / "vault.key"
-    assert read_machine_key(tmp_path, "contabo").public_bytes() == key.public_bytes()
+    written = write_machine_key(home, key)
+    assert written == key_file(home) == tmp_path / "QMX" / "keys" / "vault.key"
+    assert read_machine_key(home, "contabo").public_bytes() == key.public_bytes()
     if os.name == "posix":
         assert written.stat().st_mode & 0o777 == 0o600
 

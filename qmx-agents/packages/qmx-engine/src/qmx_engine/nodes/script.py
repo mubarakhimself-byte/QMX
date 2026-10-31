@@ -31,6 +31,7 @@ from typing import Final
 
 import keyring
 from pydantic import JsonValue
+from qmx_home import Layout
 
 from qmx_engine.definition.lint import TOOL_KEY
 from qmx_engine.ledger.redact import redact, register
@@ -95,6 +96,23 @@ def script_env(
     if key is not None:
         env[IDEMPOTENCY_ENV] = key
     return env
+
+
+def model_caches(zone: RunZone) -> dict[str, str]:
+    """Where a script's downloads go when its zone sits in a QMX folder's `cache/zones/`: the
+    folder's `cache/models/` (design 62 A3), so Docling, torch and pip stop landing in his
+    profile. None for a zone elsewhere, such as a remote worker's."""
+    parents = zone.root.resolve().parents
+    layout = Layout(parents[2]) if len(parents) > 2 else None
+    if layout is None or not layout.label.is_file():
+        return {}
+    models = layout.cache / "models"
+    return {
+        "HF_HOME": str(models / "huggingface"),
+        "TORCH_HOME": str(models / "torch"),
+        "XDG_CACHE_HOME": str(models / "xdg"),
+        "PIP_CACHE_DIR": str(models / "pip"),
+    }
 
 
 def keyring_secret(ref: str) -> str | None:
@@ -225,7 +243,7 @@ class HostScript:
         return found
 
     def context(self, job: NodeJob, zone: RunZone) -> dict[str, str]:
-        return {
+        return model_caches(zone) | {
             "QMX_RUN_ID": job.run_id,
             "QMX_NODE_ID": job.node_id,
             "QMX_ATTEMPT": str(job.attempt),
