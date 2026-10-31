@@ -39,16 +39,16 @@ He saw the "next" list change between messages. This is the single list; every m
 
 **Night stop (his word, 31 Oct about 18:05 UTC):** his generator goes off; let the three Level 1 agents finish, then stop fully. No R1 tonight. Resume tomorrow morning.
 
-**Running at the stop:** the three Level 1 agents, launched 17:59 UTC (part C finished at 18:56 UTC, part B at 19:0x UTC; both committed; part A was still running), writing `architecture/parts/A-qml-dictionary-unit/`, `B-qmb-journals-workflows/`, `C-node-mis-external/`.
+**Level 1 finished before the stop:** all three part folders are written and committed: `architecture/parts/A-qml-dictionary-unit/` (AD-101 to AD-120, slices A0 to A15), `B-qmb-journals-workflows/` (AD-201 to AD-216, slices B1 to B21), `C-node-mis-external/` (AD-301 to AD-323, slices C-01 to C-22). Each spine lints to 0. The parts raise clashes with Level 0 for R1 rather than override it (A: six findings; B: six disagreements and 12 contract changes; C: CF-1 to CF-7 and three more mini-app core fixes). Nothing is running.
 
 **How to resume (a fresh session reads this):**
 1. Check each part folder: it is finished only if it holds `ARCHITECTURE-SPINE.md` that lints to 0 (`bmad-architecture`'s `lint_spine.py`), `CONTRACTS.md`, `BUILD-SLICES.md`, `UI-NEEDS.md`, `RISK-SIZING-POINTS.md` and `LEAD-CALLS.md`, and its commit is on `plan/unit-system`.
 2. Any part not finished (for example the power cut it off): move its partial folder aside to `architecture/parts/_partial-<date>/` and rerun that part's brief with a fresh poteto-agent on Opus. Never resume an old agent.
-3. Then items 3 to 6 below, starting with R1.
+3. Then items 3 to 6 below, starting with R1, which must also settle the clashes each part raised.
 
 **Next, in order:**
 1. (done) R0's fix.
-2. (running at the stop) Level 1, three agents at once: A (`L1-A-qml-dictionary-unit.md`), B (`L1-B-qmb-journals-workflows.md`), C (`L1-C-node-mis-external.md`: the node, the MIS in depth, external connections, DevOps, clocks, networking).
+2. (done) Level 1, three agents at once: A (`L1-A-qml-dictionary-unit.md`), B (`L1-B-qmb-journals-workflows.md`), C (`L1-C-node-mis-external.md`: the node, the MIS in depth, external connections, DevOps, clocks, networking).
 3. R1, the full review (`R1-full-review.md`); one fix round by fresh agents per part; one fix-check.
 4. P2 (`P2-plan-and-prompts.md`): the build plan checked to 0 problems, the orchestrator prompt, the builder brief, the UI notes, the placeholders list.
 5. The final brief to him, with the paste prompt.
