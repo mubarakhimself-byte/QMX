@@ -29,6 +29,20 @@ Last updated: 2026-10-31 midday (his foundation round; the midday program).
 10. **Positioning:** when generating strategies is nearly free, judging them is the product. QMX is his own platform, not for sale.
 11. **Bring him only real ambiguity.** Settle simple architecture issues and report them in one line.
 
+## RESUME HERE (31 Oct, 11:40 UTC): clean stopping point for the 5-hour usage window
+
+His word at 11:30 UTC: "Go ahead... mind the... usage limit, because we are 90%, which I'll resume at around 5:10" (Nairobi; the window resets 14:10 UTC). Stopped here on purpose, with no agent running.
+
+**Done and committed:** grounding (G1, G2, G3, G4a, G4b, research 54), the ledger, the skills view, the best session's method, the frame (`architecture/00-frame-after-grounding.md`), the funnel (solutions, experience, edge cases), and the lead's review of the funnel (`architecture/funnel/00-lead-review-of-funnel.md`). He said "go ahead" to the architecture with this shape.
+
+**Next, in order, once the window resets** (briefs ready in `architecture/briefs/`; each brief is pasted by path into a poteto-agent on Opus):
+1. A0, `A0-versions-and-level-0.md`: party mode on the versions, then Level 0 and `01-connections.md`. Add to its reading: `architecture/funnel/00-lead-review-of-funnel.md` (binding settlements).
+2. R0, `R0-review-level-0.md`: the quick review; then one fix by resuming A0 or by the lead.
+3. Level 1, three agents at once: `L1-A-qml-dictionary-unit.md`, `L1-B-qmb-journals-workflows.md`, `L1-C-node-mis-external.md`.
+4. R1, `R1-full-review.md`: the full review; one fix round by fresh agents; one fix-check.
+5. P2, `P2-plan-and-prompts.md`: the build plan checked to 0 problems, the orchestrator prompt, the builder brief, the UI notes, the placeholders list.
+6. Owed to him: the MIS artifact page (ruling 55).
+
 ## Operator round 2026-10-31 midday: build the foundation, plan to the orchestrator prompt tonight (binding; outranks 52, 53 and the morning program)
 
 Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T09:12 UTC, and the nudge at 09:14: the session was compacted, so re-ground on the files, not on memory).
