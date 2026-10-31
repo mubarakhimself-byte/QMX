@@ -1,10 +1,12 @@
 """The market-data door: this machine's one way in to price history (Lib AD-28; 55 D-5).
 
 A downloader, an importer or a derived-data step writes finished partition files into a
-staging folder and calls `commit(files)`; nothing else writes the store. Every read is
-opened with the holdout seal and the split definitions, so a sealed month is refused with
-its reason and never with an empty answer, and a read that names a split gets only that
-segment, minus its gap. Only the primary's door serves the one journaled final look;
+staging folder and calls `commit(files)`; nothing else writes the store. The door opens with
+no holdout and serves every month (ruling 137). A holdout is his choice per study: a read
+names one, or takes the default from Settings `[data]`, and a month it seals is refused with
+its reason and never with an empty answer. A run's holdout is fixed on its first read, so one
+run never mixes sealed and unsealed months. A read that names a split gets only that segment,
+minus its gap. Only the door at `[library] primary` serves the one journaled final look;
 another machine's door forwards a final look to it and waits.
 
 QMB reads through `materialise`, which hands it paths and fingerprints. A read past
@@ -18,6 +20,7 @@ import json
 import multiprocessing
 import re
 import shutil
+import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor
@@ -25,7 +28,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, Literal, cast
 
 import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
 from fastapi import APIRouter, HTTPException, Request
@@ -73,8 +76,21 @@ HANDLE_ROWS: Final[int] = 5_000
 SEAL_READ_REASON: Final[str] = "this month is sealed for the final look"
 """The sentence a refused sealed read carries. It is the reason, never an empty answer."""
 
+NO_HOLDOUT: Final[str] = (
+    "this study has no holdout; read with exploration, which serves every month"
+)
+"""The answer to a final look or a seal move when the read has no holdout."""
+
 DEFAULT_HOLDOUT_MONTHS: Final[int] = 12
 """Claude's default (plan Appendix D) when the host's settings name no window."""
+
+RUNS_NAME: Final[str] = "run-holdouts.jsonl"
+"""Each run's holdout, fixed on its first read, one line per run under the door's root."""
+_RUNS_LOCK: Final = threading.Lock()
+
+type HoldoutAsk = Mapping[str, object] | str | None
+"""A read's holdout: `{"boundary": "YYYY-MM" or ns, "months": n}`, `"off"`, or None for the
+run's fixed holdout, else the Settings default."""
 
 DEFAULT_CALENDAR: Final[tuple[str, str, str]] = ("forex-17NY", "v1", "2025a")
 """Claude's default calendar identity, replaced by `[data] calendar` when the host sets one."""
@@ -103,7 +119,7 @@ _PURPOSE_ROLE: Final[dict[Purpose, SegmentRole]] = {
 
 
 class Placement(StrEnum):
-    """Which machine's door this is. The server holds the main copy and is the primary."""
+    """Which machine's door this is: This PC, a node, or a server he added (ruling 136)."""
 
     PC = "pc"
     NODE = "node"
@@ -171,27 +187,33 @@ class MarketDoor:
     """The one reader and writer of a machine's price store (Lib AD-28).
 
     ``root`` is the qmf store root: the partitions sit under its ``series`` folder. ``seal``
-    is required, because a door without the holdout lock is not a door. ``split`` is the
+    is the default holdout a read gets when it names none, or None for no holdout, which is
+    the default (ruling 137). ``settings`` reads `[data]` live, so a holdout he turns on in
+    Settings reaches the next read; when it is set it replaces ``seal``. ``split`` is the
     split definition a read names its purpose against; a host that has none serves
     exploration only, and a split read is refused by name rather than served without its gap.
 
+    ``primary_place`` is `[library] primary`; the door at that place serves the final look.
     ``primary_forward`` is how a door off the primary reaches it: the host wires the tailnet
     call, and the door forwards a final look and waits for the answer. Left unset, the
     request waits and serves nothing.
     """
 
     root: Path
-    seal: HoldoutSeal
+    seal: HoldoutSeal | None = None
     split: SplitManifest | None = None
     placement: Placement = Placement.PC
+    primary_place: Placement = Placement.PC
     world: World = World.REPLAY
+    calendar: CalendarIdentity | None = None
     handles: Path | None = None
     primary_forward: Callable[[Mapping[str, object]], Result[ReadAnswer]] | None = None
+    settings: Callable[[], Mapping[str, object]] | None = None
 
     @property
     def primary(self) -> bool:
-        """Only the server's door serves the final look (F8)."""
-        return self.placement is Placement.SERVER
+        """Only the door at `[library] primary` serves the final look (F8, ruling 136)."""
+        return self.placement is self.primary_place
 
     @property
     def store_root(self) -> Path:
@@ -207,24 +229,20 @@ class MarketDoor:
         data: Mapping[str, object],
         *,
         placement: Placement = Placement.PC,
+        primary: Placement = Placement.PC,
         split: SplitManifest | None = None,
         handles: Path | None = None,
+        settings: Callable[[], Mapping[str, object]] | None = None,
     ) -> Result[MarketDoor]:
-        """Build the door the host's `[data]` settings describe, or refuse and stay shut.
+        """Build the door the host's `[data]` settings describe. It opens with no holdout.
 
-        `seal_boundary_ns` is the one setting the door cannot invent: without it the host has
-        said nothing about where its holdout starts, so the door refuses to open rather than
-        guess a window over his price history.
+        It refuses only a store it cannot read, or a `[data]` it cannot use: an unknown
+        calendar or world, or a holdout turned on with no month to start at.
         """
-        boundary_ns = data.get("seal_boundary_ns")
-        if not isinstance(boundary_ns, int) or isinstance(boundary_ns, bool):
-            return invalid_input(
-                "seal_boundary_ns",
-                "the market-data door opens only with the seal's boundary: set "
-                "[data] seal_boundary_ns in this machine's settings",
-                given=repr(boundary_ns),
+        if root.exists() and not root.is_dir():
+            return storage_failure(
+                "the market-data store is not a folder", context={"root": str(root)}
             )
-        months = data.get("holdout_months", DEFAULT_HOLDOUT_MONTHS)
         rule_set, version, tzdata = DEFAULT_CALENDAR
         named = data.get("calendar")
         if isinstance(named, str) and named.count(":") == 2:
@@ -232,33 +250,43 @@ class MarketDoor:
         calendar = CalendarIdentity.try_create(rule_set, version, tzdata)
         if is_refusal(calendar):
             return calendar
-        boundary = SplitBoundary.try_create(boundary_ns)
-        if is_refusal(boundary):
-            return boundary
-        seal = HoldoutSeal.try_create(
-            seal_boundary=boundary.value,
-            calendar_identity=calendar.value,
-            world=data.get("world", World.REPLAY.value),
-            holdout_months=months,
-        )
+        try:
+            world = World(str(data.get("world", World.REPLAY.value)))
+        except ValueError:
+            return invalid_input(
+                "world", "[data] world names a world qmf knows", given=repr(data.get("world"))
+            )
+        seal = _settings_seal(data, calendar.value, world)
         if is_refusal(seal):
             return seal
-        world = seal.value.world
         return Ok(
             cls(
                 root=root,
                 seal=seal.value,
                 split=split,
                 placement=placement,
+                primary_place=primary,
                 world=world,
+                calendar=calendar.value,
                 handles=handles,
+                settings=settings,
             )
         )
+
+    def default_seal(self) -> Result[HoldoutSeal | None]:
+        """The holdout a read gets when neither it nor its run names one: Settings `[data]`."""
+        if self.settings is None:
+            return Ok(self.seal)
+        return _settings_seal(self.settings(), self._calendar(), self.world)
 
     # --- reads -------------------------------------------------------------
 
     def instruments(self) -> Result[tuple[SeriesInfo, ...]]:
-        """Every series this machine holds, with its months and whether any month is sealed."""
+        """Every series this machine holds, with its months and whether the Settings default
+        holdout seals any month."""
+        seal = self.default_seal()
+        if is_refusal(seal):
+            return seal
         found: list[SeriesInfo] = []
         store = self.series_store()
         for folder in sorted(self.store_root.glob("*/*/*/*")):
@@ -288,7 +316,7 @@ class MarketDoor:
                     rows=sum(state.rows for _, state in states),
                     bytes=sum(state.bytes for _, state in states),
                     frozen=sum(1 for _, state in states if state.frozen),
-                    sealed=any(self._month_is_sealed(key) for key in keys),
+                    sealed=any(_month_is_sealed(key, seal.value) for key in keys),
                 )
             )
         return Ok(tuple(found))
@@ -298,6 +326,9 @@ class MarketDoor:
         keys = self._keys_of_series(series)
         if is_refusal(keys):
             return keys
+        seal = self.default_seal()
+        if is_refusal(seal):
+            return seal
         store = self.series_store()
         partitions: list[dict[str, object]] = []
         for key in keys.value:
@@ -323,7 +354,7 @@ class MarketDoor:
             "digests": [item["fingerprint"] for item in partitions],
             "world": self.world.value,
             "split_fp": self.split.split_id if self.split is not None else "",
-            "seal_boundary": self.seal.seal_boundary.label(),
+            "seal_boundary": "" if seal.value is None else seal.value.seal_boundary.label(),
         }
         return Ok(payload)
 
@@ -338,13 +369,19 @@ class MarketDoor:
         data_scope: Sequence[str] | None = None,
         into: Path | None = None,
         open_months: bool = False,
+        holdout: HoldoutAsk = None,
+        run: str | None = None,
     ) -> Result[ReadAnswer]:
-        """Serve one read through the seal and the split, or refuse it by name.
+        """Serve one read through its holdout and the split, or refuse it by name.
 
         ``data_scope`` is the run pass's dataset scope as the host parsed it. A door that
         answers remote callers refuses a read with no scope; the PC's own door, whose caller
         is the operator and his copilot, needs none. ``purpose`` arrives as a word from a
         route or a tool and is parsed here into the closed vocabulary it names.
+
+        ``holdout`` is the study's: `"off"` reads every month, even under an "on" default.
+        ``run`` fixes the holdout on the run's first read; a later read of that run that asks
+        for a different one is refused by name, and one that names none gets the fixed one.
 
         ``open_months`` serves only the months before the seal instead of refusing the read
         for holding a sealed one. It is for a remote attempt's read with no range, which cannot
@@ -362,6 +399,9 @@ class MarketDoor:
         scoped = self._scope_refusal(series, data_scope)
         if scoped is not None:
             return scoped
+        seal = self._holdout_for(holdout, run)
+        if is_refusal(seal):
+            return seal
         keys = self._keys_of_series(series) if series else self._keys_of_fingerprints(fingerprints)
         if is_refusal(keys):
             return keys
@@ -381,7 +421,9 @@ class MarketDoor:
                 given=[window_start, window_end],
             )
         if purpose is Purpose.FINAL_LOOK:
-            return self._final_look(asked, window_start, window_end, into, data_scope)
+            return self._final_look(
+                asked, window_start, window_end, into, data_scope, seal.value, run
+            )
         if purpose in _PURPOSE_ROLE:
             clipped = self._split_window(_PURPOSE_ROLE[purpose], window_start, window_end)
             if is_refusal(clipped):
@@ -390,26 +432,31 @@ class MarketDoor:
         served: list[SeriesKey] = []
         refused: list[str] = []
         for key in asked:
-            sealed = self._month_sealed(key)
+            sealed = _month_sealed(key, seal.value)
             if is_refusal(sealed):
                 return sealed
             if sealed.value:
                 refused.append(key.text)
             else:
                 served.append(key)
-        if refused and not (open_months and served):
+        if seal.value is not None and refused and not (open_months and served):
             return policy_rejection(
                 "seal",
                 f"{SEAL_READ_REASON}; a read into the sealed no-peek window is refused at the "
                 f"{ReadBoundary.RESEARCH_DOOR.value} boundary, never returned as a silent "
                 "empty result",
                 months=refused,
-                seal_boundary=self.seal.seal_boundary.label(),
+                seal_boundary=seal.value.seal_boundary.label(),
             )
         return self._serve(tuple(served), window_start, window_end, purpose, into)
 
     def materialise(
-        self, fingerprints: Sequence[str], *, into: Path | None = None
+        self,
+        fingerprints: Sequence[str],
+        *,
+        into: Path | None = None,
+        holdout: HoldoutAsk = None,
+        run: str | None = None,
     ) -> Result[tuple[Path, ...]]:
         """Copy the named partitions to local paths, verifying each fingerprint (QMB's read).
 
@@ -417,8 +464,11 @@ class MarketDoor:
         hash of the file's bytes, so a copy is verified by streaming its rows back through that
         same writer and comparing the two. A sealed partition is never copied into a shared
         cache: it needs the run's own attempt folder, so a sealed month cannot be left lying
-        where the next run finds it.
+        where the next run finds it. ``holdout`` and ``run`` are as for `read`.
         """
+        seal = self._holdout_for(holdout, run)
+        if is_refusal(seal):
+            return seal
         keys = self._keys_of_fingerprints(fingerprints)
         if is_refusal(keys):
             return keys
@@ -435,7 +485,7 @@ class MarketDoor:
             state = store.state(key)
             if state is None:
                 return missing_artifact("key", "no series is stored under this key", key=key.text)
-            sealed = self._month_sealed(key)
+            sealed = _month_sealed(key, seal.value)
             if is_refusal(sealed):
                 return sealed
             if sealed.value and into is None:
@@ -492,16 +542,18 @@ class MarketDoor:
         staged: Sequence[Path],
         *,
         staging: Path,
-        born_on: Placement = Placement.SERVER,
+        born_on: Placement | None = None,
         correction: str | None = None,
     ) -> Result[tuple[CommitReceipt, ...]]:
         """Verify staged partition files and record them: the door is the only writer.
 
         Each staged file names its key by its place under ``staging``, and its rows are
         streamed through the typed writer, so the fingerprint the store records is computed
-        here and never taken from the file's own claim. A file born on the PC stays pinned
-        until the server's commit reports the same fingerprint (`verify`).
+        here and never taken from the file's own claim. ``born_on`` defaults to this door's
+        own place. A file born on the PC stays pinned until the server's commit reports the
+        same fingerprint (`verify`).
         """
+        born_on = self.placement if born_on is None else born_on
         receipts: list[CommitReceipt] = []
         store = self.series_store()
         for path in staged:
@@ -562,26 +614,21 @@ class MarketDoor:
         )
 
     def holdout_task(self, at: object) -> Result[dict[str, object] | None]:
-        """The inbox task when the sealed span outgrew its setting, filed once (F8, N15)."""
-        task = self.seal.overdue_task(self.sealed_months(), at=at)
+        """The inbox task when the sealed span outgrew its setting, filed once (F8, N15).
+
+        With no default holdout there is nothing to outgrow, so nothing is filed.
+        """
+        seal = self.default_seal()
+        if is_refusal(seal):
+            return seal
+        if seal.value is None:
+            return Ok(None)
+        task = seal.value.overdue_task(_sealed_months(self.store_root, seal.value), at=at)
         if is_refusal(task):
             return task
         if task.value is None:
             return Ok(None)
         return Ok(self._file_task(task.value))
-
-    def sealed_months(self) -> int:
-        """How many stored months the seal covers, read from the partitions themselves."""
-        count = 0
-        for folder in self.store_root.glob("*/*/*/*"):
-            for month in folder.iterdir():
-                match = MONTH_NAME.match(month.name)
-                if match is None or not (month / "state.json").is_file():
-                    continue
-                built = _key_of(*folder.relative_to(self.store_root).parts, month=month.name)
-                if is_ok(built) and self._month_is_sealed(built.value):
-                    count += 1
-        return count
 
     def inbox(self) -> tuple[dict[str, object], ...]:
         """Every task the door filed, oldest first. One per seal boundary."""
@@ -600,20 +647,27 @@ class MarketDoor:
         self, boundary: object, *, at: object, click: object
     ) -> Result[dict[str, object]]:
         """Move the seal to a new boundary on his click, journaled (55 D-5; F8)."""
-        journal = self._journal()
+        seal = self.default_seal()
+        if is_refusal(seal):
+            return seal
+        if seal.value is None:
+            return policy_rejection("holdout", NO_HOLDOUT)
+        journal = self._journal(seal.value)
         if is_refusal(journal):
             return journal
         writer = self._writer()
         if is_refusal(writer):
             return writer
-        receipt = self.seal.move(journal.value, writer.value, at=at, click=click, boundary=boundary)
+        receipt = seal.value.move(
+            journal.value, writer.value, at=at, click=click, boundary=boundary
+        )
         if is_refusal(receipt):
             return receipt
         moved_to = SplitBoundary.try_create(boundary)
         if is_refusal(moved_to):
             return moved_to
         answer: dict[str, object] = {
-            "was": self.seal.seal_boundary.label(),
+            "was": seal.value.seal_boundary.label(),
             "sealed": moved_to.value.label(),
         }
         return Ok(answer)
@@ -622,7 +676,7 @@ class MarketDoor:
 
     def _scope_refusal(self, series: str, data_scope: Sequence[str] | None) -> TypedRefusal | None:
         if data_scope is None:
-            if self.primary:
+            if self.placement is Placement.SERVER:
                 return policy_rejection(
                     "data_scope",
                     "the server's door serves remote callers only through a run pass that "
@@ -646,28 +700,60 @@ class MarketDoor:
             data_scope=list(scope),
         )
 
-    def _sealed(self, position_ns: int) -> Result[bool]:
-        position = SplitBoundary.try_create(position_ns)
-        if is_refusal(position):
-            return position
-        return self.seal.is_sealed(position.value)
+    def _calendar(self) -> CalendarIdentity:
+        if self.calendar is not None:
+            return self.calendar
+        if self.seal is not None:
+            return self.seal.calendar_identity
+        built = CalendarIdentity.try_create(*DEFAULT_CALENDAR)
+        if is_refusal(built):
+            raise ValueError(f"the default calendar does not build: {dict(built.context)}")
+        return built.value
 
-    def _is_sealed(self, month_start_ns: int) -> bool:
-        sealed = self._sealed(month_start_ns)
-        return is_ok(sealed) and sealed.value
+    def _holdout_for(self, holdout: HoldoutAsk, run: str | None) -> Result[HoldoutSeal | None]:
+        """The seal one read goes through: its own, its run's fixed one, or the default.
 
-    def _month_sealed(self, key: SeriesKey) -> Result[bool]:
-        """Whether any part of the month is sealed: a month that straddles the boundary is out."""
-        start = self._sealed(key.start_ns)
-        if is_refusal(start):
-            return start
-        if start.value:
-            return Ok(True)
-        return self._sealed(key.end_ns - 1)
+        The first read of a run fixes its holdout in `RUNS_NAME`; the first line for a run wins,
+        so two processes racing on one run's first read converge on one holdout (edge case 11).
+        An agent may read with no holdout at all: that is his choice per study (edge case 10).
+        """
+        asked = self.default_seal() if holdout is None else self._parse_holdout(holdout)
+        if is_refusal(asked) or not run:
+            return asked
+        record = _record_of(asked.value)
+        try:
+            fixed = _fix_holdout(self.root / RUNS_NAME, run, record)
+        except OSError as exc:
+            return storage_failure(
+                "could not read or write the runs' holdouts", context={"error": str(exc)}
+            )
+        if fixed == record:
+            return asked
+        if holdout is None:
+            return self._parse_holdout(fixed)
+        return policy_rejection(
+            "holdout",
+            "this run's holdout was fixed on its first read, and this read asks for a "
+            "different one; one run never mixes sealed and unsealed months",
+            run=run,
+            fixed=json.dumps(fixed, sort_keys=True),
+            asked=json.dumps(record, sort_keys=True),
+        )
 
-    def _month_is_sealed(self, key: SeriesKey) -> bool:
-        sealed = self._month_sealed(key)
-        return is_ok(sealed) and sealed.value
+    def _parse_holdout(self, holdout: object) -> Result[HoldoutSeal | None]:
+        if holdout == "off":
+            return Ok(None)
+        if not isinstance(holdout, Mapping):
+            return invalid_input(
+                "holdout",
+                'a holdout is "off" or {"boundary": "YYYY-MM", "months": n}',
+                given=repr(holdout),
+            )
+        named = cast("Mapping[str, object]", holdout)
+        boundary = named.get("boundary", named.get("boundary_ns"))
+        months = named.get("months", DEFAULT_HOLDOUT_MONTHS)
+        seal = _seal_at(boundary, months, self._calendar(), self.world)
+        return seal if is_refusal(seal) else Ok(seal.value)
 
     def _keys_of_series(self, series: str) -> Result[tuple[SeriesKey, ...]]:
         parts = series.split("/")
@@ -737,7 +823,11 @@ class MarketDoor:
         end_ns: int,
         into: Path | None,
         data_scope: Sequence[str] | None,
+        seal: HoldoutSeal | None,
+        run: str | None,
     ) -> Result[ReadAnswer]:
+        if seal is None:
+            return policy_rejection("final_look", NO_HOLDOUT)
         if not self.primary:
             if self.primary_forward is None:
                 return policy_rejection(
@@ -753,6 +843,8 @@ class MarketDoor:
                     "end_ns": end_ns,
                     "into": str(into),
                     "data_scope": list(data_scope or ()),
+                    "holdout": _record_of(seal),
+                    "run": run or "",
                 }
             )
         if self.split is None:
@@ -766,18 +858,18 @@ class MarketDoor:
                 "shared cache",
                 given=None,
             )
-        journal = self._journal()
+        journal = self._journal(seal)
         if is_refusal(journal):
             return journal
         writer = self._writer()
         if is_refusal(writer):
             return writer
-        allowed = self.seal.authorize_final_look(
+        allowed = seal.authorize_final_look(
             journal.value, writer.value, at=time.time_ns(), split_id=self.split.split_id
         )
         if is_refusal(allowed):
             return allowed
-        sealed = [key for key in keys if self._month_is_sealed(key)]
+        sealed = [key for key in keys if _month_is_sealed(key, seal)]
         if not sealed:
             return policy_rejection(
                 "final_look",
@@ -897,8 +989,8 @@ class MarketDoor:
             encoding="utf-8",
         )
 
-    def _journal(self) -> Result[JournalStore]:
-        bundle = EvidenceStore(self.root, seal=self.seal).for_world(self.world)
+    def _journal(self, seal: HoldoutSeal | None = None) -> Result[JournalStore]:
+        bundle = EvidenceStore(self.root, seal=seal or self.seal).for_world(self.world)
         if is_refusal(bundle):
             return bundle
         return Ok(bundle.value.journal)
@@ -940,17 +1032,21 @@ class ReadBody(BaseModel):
     purpose: Purpose = Purpose.EXPLORATION
     data_scope: list[str] | None = None
     into: str | None = None
+    holdout: dict[str, int | str] | Literal["off"] | None = None
+    run: str | None = None
 
 
 class MaterialiseBody(BaseModel):
     fingerprints: list[str]
     into: str | None = None
+    holdout: dict[str, int | str] | Literal["off"] | None = None
+    run: str | None = None
 
 
 class CommitBody(BaseModel):
     staged: list[str]
     staging: str
-    born_on: Placement = Placement.SERVER
+    born_on: Placement | None = None
     correction: str | None = None
 
 
@@ -1026,6 +1122,8 @@ def market_router(door: MarketDoor) -> APIRouter:
             data_scope=pass_scope(body, minted) if isinstance(minted, Pass) else body.data_scope,
             into=Path(body.into) if body.into else None,
             open_months=isinstance(minted, Pass) and body.start_ns is None and body.end_ns is None,
+            holdout=body.holdout,
+            run=minted.run if isinstance(minted, Pass) else body.run,
         )
         if is_refusal(answered):
             raise _refused(answered)
@@ -1033,7 +1131,12 @@ def market_router(door: MarketDoor) -> APIRouter:
 
     @router.post("/api/data/materialise")
     def materialise(body: MaterialiseBody) -> dict[str, object]:
-        copied = door.materialise(body.fingerprints, into=Path(body.into) if body.into else None)
+        copied = door.materialise(
+            body.fingerprints,
+            into=Path(body.into) if body.into else None,
+            holdout=body.holdout,
+            run=body.run,
+        )
         if is_refusal(copied):
             raise _refused(copied)
         return {"paths": [str(path) for path in copied.value]}
@@ -1103,6 +1206,136 @@ def market_router(door: MarketDoor) -> APIRouter:
 
     _ = (instruments, card, read, materialise, commit, verify, pinned, inbox, move_seal)
     return router
+
+
+def _settings_seal(
+    data: Mapping[str, object], calendar: CalendarIdentity, world: World
+) -> Result[HoldoutSeal | None]:
+    """The Settings default holdout: none unless `[data] holdout` is on (ruling 137).
+
+    `holdout_boundary` is the month it starts, as `YYYY-MM`. A `[data]` written before the
+    switch existed names only `seal_boundary_ns`; that is read as on, because he set it. A
+    month saved without the switch is not.
+    """
+    boundary = data.get("holdout_boundary", data.get("seal_boundary_ns"))
+    on = data.get("holdout", "seal_boundary_ns" in data)
+    if on is False:
+        return Ok(None)
+    if on is not True:
+        return invalid_input("holdout", "[data] holdout is true or false", given=repr(on))
+    if boundary is None:
+        return invalid_input(
+            "holdout_boundary",
+            "[data] holdout is on, so it needs the month it starts: set holdout_boundary = "
+            '"YYYY-MM", or turn holdout off',
+            given=None,
+        )
+    seal = _seal_at(boundary, data.get("holdout_months", DEFAULT_HOLDOUT_MONTHS), calendar, world)
+    return seal if is_refusal(seal) else Ok(seal.value)
+
+
+def _seal_at(
+    boundary: object, months: object, calendar: CalendarIdentity, world: World
+) -> Result[HoldoutSeal]:
+    """A seal from a boundary given as a `YYYY-MM` month or as nanoseconds since the epoch."""
+    if isinstance(boundary, str):
+        match = MONTH_NAME.fullmatch(boundary)
+        if match is None or int(match.group(1)) < 1970 or not 1 <= int(match.group(2)) <= 12:
+            return invalid_input(
+                "holdout_boundary",
+                "a holdout starts at a month written YYYY-MM, 1970-01 or later",
+                given=boundary,
+            )
+        start = datetime(int(match.group(1)), int(match.group(2)), 1, tzinfo=UTC)
+        boundary = int(start.timestamp()) * 1_000_000_000
+    if not isinstance(boundary, int) or isinstance(boundary, bool):
+        return invalid_input(
+            "holdout_boundary",
+            "a holdout starts at a month written YYYY-MM, or at nanoseconds since the epoch",
+            given=repr(boundary),
+        )
+    position = SplitBoundary.try_create(boundary)
+    if is_refusal(position):
+        return position
+    return HoldoutSeal.try_create(
+        seal_boundary=position.value,
+        calendar_identity=calendar,
+        world=world,
+        holdout_months=months,
+    )
+
+
+def _record_of(seal: HoldoutSeal | None) -> object:
+    """How a run's fixed holdout is written down and compared: `"off"`, or where it starts."""
+    if seal is None:
+        return "off"
+    instant = seal.seal_boundary.instant
+    boundary = seal.seal_boundary.label() if instant is None else instant.value_ns
+    return {"boundary_ns": boundary, "months": seal.holdout_months}
+
+
+def _fix_holdout(path: Path, run: str, record: object) -> object:
+    """The run's fixed holdout: the first line recorded for it, written now if there is none."""
+    with _RUNS_LOCK:
+        found = _fixed_holdout(path, run)
+        if found is None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as sink:
+                line = {"run": run, "holdout": record, "at": datetime.now(UTC).isoformat()}
+                sink.write(json.dumps(line, sort_keys=True) + "\n")
+            found = _fixed_holdout(path, run)
+    return record if found is None else found
+
+
+def _fixed_holdout(path: Path, run: str) -> object | None:
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            row: object = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(row, dict) and cast("dict[str, object]", row).get("run") == run:
+            return cast("dict[str, object]", row).get("holdout")
+    return None
+
+
+def _sealed(position_ns: int, seal: HoldoutSeal) -> Result[bool]:
+    position = SplitBoundary.try_create(position_ns)
+    if is_refusal(position):
+        return position
+    return seal.is_sealed(position.value)
+
+
+def _month_sealed(key: SeriesKey, seal: HoldoutSeal | None) -> Result[bool]:
+    """Whether any part of the month is sealed: a month that straddles the boundary is out."""
+    if seal is None:
+        return Ok(False)
+    start = _sealed(key.start_ns, seal)
+    if is_refusal(start):
+        return start
+    if start.value:
+        return Ok(True)
+    return _sealed(key.end_ns - 1, seal)
+
+
+def _month_is_sealed(key: SeriesKey, seal: HoldoutSeal | None) -> bool:
+    sealed = _month_sealed(key, seal)
+    return is_ok(sealed) and sealed.value
+
+
+def _sealed_months(store_root: Path, seal: HoldoutSeal) -> int:
+    """How many stored months the seal covers, read from the partitions themselves."""
+    count = 0
+    for folder in store_root.glob("*/*/*/*"):
+        for month in folder.iterdir():
+            match = MONTH_NAME.match(month.name)
+            if match is None or not (month / "state.json").is_file():
+                continue
+            built = _key_of(*folder.relative_to(store_root).parts, month=month.name)
+            if is_ok(built) and _month_is_sealed(built.value, seal):
+                count += 1
+    return count
 
 
 def _key_of(*parts: str, month: str) -> Result[SeriesKey]:

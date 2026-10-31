@@ -1,9 +1,12 @@
-"""Import the server's raw-backup copy of the old ticks and the risk-lab CSVs as partitions.
+"""Import the old ticks and the risk-lab CSVs as partitions, read where they already are.
 
-One run walks `/srv/qmx/data/raw-backup/`, imports each instrument and month through the server
-door's `commit`, resumes from the last committed month after a stop, writes one `dataset` card
-per series, and writes a report of rows per month, files per series and a comparison against
-the `MANIFEST.sha256` that DR0 left beside the copy.
+One run reads the old ticks (`--ticks-root`) and the CSVs (`--csv-root`) in place, or a copy
+under `--raw-backup-root` when one was made; nothing is copied first. It imports each instrument
+and month through the door's `commit` into the QMX folder's `market` (`--market`, by default
+`$QMX_HOME/market`, else `~/.qmx/market`), resumes from the last committed month after a stop,
+writes one `dataset` card per series, and writes a report of rows per month, files per series
+and a comparison against a `MANIFEST.sha256` when one sits beside the copy. A commit needs no
+holdout: the door opens without one (ruling 137), and `--seal-boundary-ns` is optional.
 
 How a month is imported. DR3A's importers own the reading: `RawTicks` selects a month's hour
 files and `raw_tick_rows` decodes them, `CsvBars` reads a risk-lab file. The importer's rows are
@@ -24,11 +27,9 @@ manifest paths a month's files did not match.
 
     cd qmx-agents
     uv run --no-sync python ../scripts/data/import_old_ticks.py `
-        --raw-backup-root /srv/qmx/data/raw-backup `
-        --store /srv/qmx/home/.qmx/market `
-        --library /srv/qmx/library `
-        --seal-boundary-ns 1751328000000000000 `
-        --report /srv/qmx/data/dr3c-import.json
+        --ticks-root <the old ticks folder> `
+        --csv-root <the risk-lab CSV folder> `
+        --report <where the JSON report goes>
 
 `--from-month` and `--to-month` bound a scratch run. They are the run's own bound, not a cap on
 the import: the real run passes neither and imports every month the copy holds.
@@ -62,7 +63,6 @@ from qmf.data.series import (
     SeriesStore,
 )
 from qmf.data.store.engines.typed import write_in_child
-from qmx_control.node import SERVER_HOME
 from qmx_engine.ledger import redact
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Correction, Partition, SeriesCard, write_card
@@ -110,11 +110,12 @@ HOUR_SUFFIX: Final[str] = "h_ticks.bi5"
 class Plan:
     """What one run imports, where it writes, and where its report goes."""
 
-    raw_backup_root: Path
     store: Path
     staging: Path
     report: Path
-    seal_boundary_ns: int
+    raw_backup_root: Path | None = None
+    seal_boundary_ns: int | None = None
+    placement: Placement = Placement.PC
     library: Path | None = None
     holdout_months: int = 12
     world: str = "replay"
@@ -128,20 +129,20 @@ class Plan:
     only: str = "all"
 
     @property
-    def ticks(self) -> Path:
-        return self.ticks_root or self.raw_backup_root / TICKS_FOLDER
+    def ticks(self) -> Path | None:
+        return self.ticks_root or _under(self.raw_backup_root, TICKS_FOLDER)
 
     @property
-    def ticks_record(self) -> Path:
-        return self.ticks_manifest or self.raw_backup_root / MANIFEST_NAME
+    def ticks_record(self) -> Path | None:
+        return self.ticks_manifest or _under(self.raw_backup_root, MANIFEST_NAME)
 
     @property
-    def csvs(self) -> Path:
-        return self.csv_root or self.raw_backup_root / CSV_FOLDER
+    def csvs(self) -> Path | None:
+        return self.csv_root or _under(self.raw_backup_root, CSV_FOLDER)
 
     @property
-    def csv_record(self) -> Path:
-        return self.csv_manifest or self.raw_backup_root / RISK_LAB_MANIFEST
+    def csv_record(self) -> Path | None:
+        return self.csv_manifest or _under(self.raw_backup_root, RISK_LAB_MANIFEST)
 
     def in_scope(self, year: int, month: int) -> bool:
         """Whether a month falls inside the run's own bound, inclusive at both ends."""
@@ -216,7 +217,7 @@ class Report:
         imported = [row for row in self.months if row["action"] == "imported"]
         spent = sum(float(str(row["seconds"])) for row in imported)
         return {
-            "raw_backup_root": self.plan.raw_backup_root.as_posix(),
+            "raw_backup_root": _posix(self.plan.raw_backup_root),
             "store": self.plan.store.as_posix(),
             "first_month": self.plan.first_month,
             "last_month": self.plan.last_month,
@@ -280,6 +281,14 @@ def _peak_mb(scope: str) -> float | None:
     except OSError, ValueError:
         return None
     return None
+
+
+def _under(root: Path | None, name: str) -> Path | None:
+    return None if root is None else root / name
+
+
+def _posix(path: Path | None) -> str | None:
+    return None if path is None else path.as_posix()
 
 
 def _reason(refusal: TypedRefusal) -> str:
@@ -443,20 +452,25 @@ def _verdict(
 def import_ticks(plan: Plan, door: MarketDoor, report: Report) -> None:
     """Import every instrument and month of the raw copy, in time order."""
     store = door.series_store()
-    checked = plan.ticks_record.is_file()
-    rows = manifest_rows(plan.ticks_record) if checked else ()
+    ticks = plan.ticks
+    if ticks is None:
+        report.fail("name the old ticks with --ticks-root, where they are, or --raw-backup-root")
+        return
+    record = plan.ticks_record
+    checked = record is not None and record.is_file()
+    rows = manifest_rows(record) if record is not None and checked else ()
     wanted = manifest_ticks(rows)
     tick_files = sum(len(paths) for paths in wanted.values())
     report.manifest["ticks"] = {
-        "record": plan.ticks_record.as_posix(),
+        "record": _posix(record),
         "lines": len(rows),
         "tick_files": tick_files,
         "other_files": len(rows) - tick_files,
         "months": len(wanted),
     }
-    directories = instrument_dirs(plan.ticks)
+    directories = instrument_dirs(ticks)
     if not directories:
-        report.fail(f"no instrument folder is under {plan.ticks.as_posix()}")
+        report.fail(f"no instrument folder is under {ticks.as_posix()}")
         return
     named: set[str] = set()
     read: set[str] = set()
@@ -469,7 +483,17 @@ def import_ticks(plan: Plan, door: MarketDoor, report: Report) -> None:
             named.update(wanted.get((subject, year, month), ()))
             read.update(
                 _import_tick_month(
-                    plan, door, store, report, subject, directory, year, month, wanted, checked
+                    plan,
+                    door,
+                    store,
+                    report,
+                    ticks,
+                    subject,
+                    directory,
+                    year,
+                    month,
+                    wanted,
+                    checked,
                 )
             )
     report.manifest["ticks"] |= {
@@ -488,6 +512,7 @@ def _import_tick_month(
     door: MarketDoor,
     store: SeriesStore,
     report: Report,
+    ticks: Path,
     subject: str,
     directory: Path,
     year: int,
@@ -499,7 +524,7 @@ def _import_tick_month(
     key = _key(DUKASCOPY_SOURCE, subject, TICKS_KIND, year, month)
     started = time.perf_counter()
     files = RawTicks(directory, subject, year, month).hours()
-    found = tuple(sorted(path.relative_to(plan.ticks).as_posix() for _, path in files))
+    found = tuple(sorted(path.relative_to(ticks).as_posix() for _, path in files))
     verdict, missing, extra = _verdict(
         found, wanted.get((subject, year, month), ()), checked=checked
     )
@@ -548,14 +573,19 @@ def _import_tick_month(
 def import_csv(plan: Plan, door: MarketDoor, report: Report) -> None:
     """Import every risk-lab file, one month partition per side, in name order."""
     store = door.series_store()
-    rows = manifest_rows(plan.csv_record) if plan.csv_record.is_file() else ()
+    csvs = plan.csvs
+    if csvs is None:
+        report.fail("name the risk-lab CSVs with --csv-root, where they are, or --raw-backup-root")
+        return
+    record = plan.csv_record
+    rows = manifest_rows(record) if record is not None and record.is_file() else ()
     recorded = {row.path: row for row in rows}
-    files = csv_files(plan.csvs)
+    files = csv_files(csvs)
     if not files:
-        report.fail(f"no risk-lab CSV is under {plan.csvs.as_posix()}")
+        report.fail(f"no risk-lab CSV is under {csvs.as_posix()}")
         return
     report.manifest["csv"] = {
-        "record": plan.csv_record.as_posix(),
+        "record": _posix(record),
         "lines": len(rows),
         "files": len(files),
         "unrecorded": sorted(path.name for path, *_ in files if path.name not in recorded),
@@ -740,15 +770,10 @@ def _write_card(
 def run(plan: Plan) -> Report:
     """Import both sources through the door, then write the cards and the report."""
     report = Report(plan)
-    opened = MarketDoor.open(
-        plan.store,
-        {
-            "seal_boundary_ns": plan.seal_boundary_ns,
-            "holdout_months": plan.holdout_months,
-            "world": plan.world,
-        },
-        placement=Placement.SERVER,
-    )
+    data: dict[str, object] = {"holdout_months": plan.holdout_months, "world": plan.world}
+    if plan.seal_boundary_ns is not None:
+        data["seal_boundary_ns"] = plan.seal_boundary_ns
+    opened = MarketDoor.open(plan.store, data, placement=plan.placement)
     if is_refusal(opened):
         report.fail(f"the door did not open: {_reason(opened)}")
         report.write()
@@ -768,18 +793,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--raw-backup-root",
         type=Path,
-        default=Path("/srv/qmx/data/raw-backup"),
-        help="the server folder holding both copies and their manifests",
+        default=None,
+        help="a folder holding a copy of both sources and their manifests, when one was made",
     )
     parser.add_argument("--ticks-root", type=Path, default=None, help="the old ticks copy")
     parser.add_argument("--ticks-manifest", type=Path, default=None, help="its manifest")
     parser.add_argument("--csv-root", type=Path, default=None, help="the risk-lab CSV copy")
     parser.add_argument("--csv-manifest", type=Path, default=None, help="its manifest")
     parser.add_argument(
+        "--market",
         "--store",
+        dest="store",
         type=Path,
-        default=Path(SERVER_HOME) / "market",
-        help="the door's store root, inside the server host's home",
+        default=Path(os.environ.get("QMX_HOME") or Path.home() / ".qmx") / "market",
+        help="the door's store root, by default the QMX folder's market",
+    )
+    parser.add_argument(
+        "--placement",
+        type=Placement,
+        choices=tuple(Placement),
+        default=Placement.PC,
+        help="the place this store is on, which each commit records as born_on",
     )
     parser.add_argument("--library", type=Path, default=None, help="the Library store to card")
     parser.add_argument("--staging", type=Path, default=None, help="where staged files wait")
@@ -787,8 +821,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--seal-boundary-ns",
         type=int,
-        required=True,
-        help="the host's [data] seal_boundary_ns; the door does not guess it",
+        default=None,
+        help="optional: a holdout boundary for the door; a commit needs none",
     )
     parser.add_argument("--holdout-months", type=int, default=12)
     parser.add_argument("--world", default="replay")
@@ -806,6 +840,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         staging=arguments.staging or arguments.store / "staging",
         report=arguments.report,
         seal_boundary_ns=arguments.seal_boundary_ns,
+        placement=arguments.placement,
         library=arguments.library,
         holdout_months=arguments.holdout_months,
         world=arguments.world,

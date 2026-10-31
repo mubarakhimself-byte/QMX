@@ -70,6 +70,8 @@ class MarketPort(Protocol):
         purpose: Any = "exploration",
         data_scope: Sequence[str] | None = None,
         into: Path | None = None,
+        holdout: Any = None,
+        run: str | None = None,
     ) -> Result[Any]: ...
 
 
@@ -88,6 +90,11 @@ class SeriesRequest(Page):
     timeframe: str = Field(min_length=1)
     start: int | None = None
     end: int | None = None
+    holdout: dict[str, int | str] | Literal["off"] | None = None
+    """The study's holdout, `{"boundary": "YYYY-MM", "months": n}` or "off"; None takes the
+    run's fixed one, else the Settings default, which is off (ruling 137)."""
+    run: str | None = None
+    """The run this read belongs to; its first read fixes its holdout."""
 
     @model_validator(mode="after")
     def ordered_window(self) -> SeriesRequest:
@@ -242,17 +249,25 @@ class DomainContext:
     def read(self, kind: str, request: SeriesRequest) -> dict[str, Any]:
         """Read one series through the host's market-data door, and cite the card it came from.
 
-        The door is the only reader: it applies the seal and the split, so a sealed month is
-        refused with its reason here, never served as an empty page.
+        The door is the only reader: it applies the read's holdout and the split, so a sealed
+        month is refused with its reason here, never served as an empty page.
         """
         door = self.market
         if door is None:
             raise ValueError(
-                "No market-data door on this host; the data tools need the host's door (Lib AD-28)"
+                "The market-data door did not open on this host: its store cannot be read or "
+                "its [data] settings cannot be used; the host log's market-data line says which"
             )
         series = self._series_for(door, kind, request.symbol, request.timeframe)
         answer = unwrap(
-            door.read(series, start_ns=request.start, end_ns=request.end, purpose="exploration")
+            door.read(
+                series,
+                start_ns=request.start,
+                end_ns=request.end,
+                purpose="exploration",
+                holdout=request.holdout,
+                run=request.run,
+            )
         )
         return {
             **self.page([dict(row) for row in answer.rows], request, kind),
