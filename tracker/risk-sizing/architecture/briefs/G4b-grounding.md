@@ -24,7 +24,7 @@ You are grounding agent G4b in the QMX unit-system planning run: a second ground
 Also: do not use the Workflow tool.
 
 ## Why you exist
-He read the first grounding's findings and disputed several (STATE.md "Operator round 2026-10-31 midday", rulings 24-30; read them first, and his message of 2026-10-31 around 10:40 UTC in `operator/transcript-2026-10-30-to-31.md` if present, word for word). Much of what the first grounding called missing was designed, and maybe shipped, in the session you read. His rule for legacy code: be surgical; QMA v2's agents, the copilot and mini apps took two weeks to ship; record what exists so the design can use it as it is.
+He read the first grounding's findings and disputed several (STATE.md "Operator round 2026-10-31 midday", rulings 24-30; read them first, and his message of 2026-10-31T09:58 UTC in `operator/transcript-2026-10-30-to-31.md`, word for word). Much of what the first grounding called missing was designed, and maybe shipped, in the session you read. His rule for legacy code: be surgical; QMA v2's agents, the copilot and mini apps took two weeks to ship; record what exists so the design can use it as it is.
 
 ## Read
 - `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md` (midday rulings 1-30) and `architecture/00-ledger.md`.
