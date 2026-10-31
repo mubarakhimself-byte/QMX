@@ -203,4 +203,106 @@ A unit is one complete algorithm (U-01). These cases are about what the template
 | MIS-13 | Templates wait to read MIS logs that never reach the PC, because no node-to-PC link exists | H, Stop | MIS, Contracts | templates with `needs: trading-node` (`TPL/db-desk-brief/README.md:24`, G4b §0 item 6) | F8 | Readings land in one of the four Library homes that exist (G4b Q6) | G4b Q6 |
 | MIS-14 | A market's data level changes (a venue drops depth), and a sensor silently falls back | M, Silent | MIS | none | F13, F19 | Fallback steps per reading are declared and every fallback is logged | funnel5 |
 
+---
+
+## 6. Journals and records
+
+| ID | What happens | Odds, harm | Owner | Today | Property | Proof | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| JR-01 | Two writers land on one unit journal: a demo twin on the PC and live on the server, or a failover server | M, Silent | Journal | CT-13 streams are writer-scoped (`packages/qmf-data/src/qmf/data/journal.py:1-26`, G1 §7) | F18 | The stream key is unit plus world plus machine; one lease per unit and account during a failover | R44-E01 |
+| JR-02 | The journal cannot be written before an order goes out (disk full, write error) | M, Money | Journal, Node | journal-before-dispatch: the effect does not dispatch, entries block, exits and protection still go (`qmn/src/qmn/journal_dispatch.py:1-12`; FR-33) | F9 | A test fills the journal disk and shows entries blocked and a stop still amended | FR-33 |
+| JR-03 | A unit in an error loop logs every tick, and the log flood fills the disk the journal needs | M, Money | Journal, DevOps | the engine exporter batches in memory and counts drops (`ENG/telemetry.py:1-20`, G2 §8) | F9, F13 | Logs and journals have separate disk budgets; logs are rate-limited per source with a dropped-lines count; a disk alarm fires before full | Brief |
+| JR-04 | Signals seen but not taken, and missed trades, are not recorded | H, Silent | Journal | CT-13 decision outcomes include suppressed and refused-by-door (G1 §7) | F13 | Every decision a unit makes is a row, taken or not | J-03 |
+| JR-05 | A trade's world (backtest, paper, demo, live) is labelled wrongly | M, Silent | Journal | every broker read says demo or live (PR 215, G2 §11) | F13 | The world is stamped by the venue reader, never by the unit | G4a §1.2 |
+| JR-06 | A unit goes back to paper, and paper trades mix into its live figures | H, Silent | Journal | none | F13 | Every row carries its stage (backtest, stress, paper, live); figures are computed per stage | R-11, R08 §2.3 |
+| JR-07 | Fills replayed after a reconnect land twice | H, Silent | Journal, Node | the cTrader deal id is the fill key (G3 §2.6); gap replay (`qmn/src/qmn/venue/reconnect.py`) | F8 | Appending the same fill twice leaves one row | New |
+| JR-08 | Backfilled rows mix with live rows, so a live statistic includes history | M, Silent | Journal, Library | none | F13 | Backfilled rows are marked | R33 §2 |
+| JR-09 | Rows from two machines with drifting clocks sort in the wrong order | M, Silent | Journal, Clocks | cTrader stamps only receive time (`ctrader.py:14-17`, G3 §2.1) | F17 | Rows carry venue time and receive time and the machine's clock band | New |
+| JR-10 | Market facts (spread, fees, slippage) are copied into every unit journal and the volume explodes | H, Stop | Journal | none | F3, F18 | One market journal per broker, account type and instrument; unit rows link to it | J-04 |
+| JR-11 | An agent's analysis written into a journal is later read as a record | H, Silent | Journal, Agents | none | F13 | Agent rows are a separate kind and carry receipts | R29-F1 |
+| JR-12 | The journal row shape changes partway through a unit's life | M, Stop | Journal | Library kinds carry `schema_version` (G2 §6) | F1 | Old rows stay readable under their version | New |
+| JR-13 | A capped memory or journal silently drops old rows to stay under a limit | M, Silent | Journal, Agents | Hermes memory edits deleted six rules to fit 1,375 characters (`research/41` §2.6) | F14 | Nothing is dropped silently; a provider limit shows as an error | R41 item 8 |
+| JR-14 | An artifact sits in a tool folder, outside the Library, and an agent later pulls it in without knowing its origin | M, Silent | Journal, Library | none | F10, F3 | Draft or published, never orphaned | R41 item 1 |
+| JR-15 | Imported broker fills carry no initial risk, so R is missing for those trades | H, Silent | Journal | the `trade` kind has `initial_risk` and `r`; imported fills leave them empty (G1 §7) | F19 | Trades without R are flagged, never averaged in as zero | G1 §7 |
+| JR-16 | Journals made on the node must reach the PC; the one-way pull was never built, and a copy may fail its check | H, Stop | Journal, Contracts | sealed-archive copy with verification (FR-50); PC side missing (G3 §1.3) | F8, F15 | The node keeps journals until the PC confirms a verified copy; a week offline loses nothing | FR-50, G3 §1.3 |
+| JR-17 | A failed effect is retried silently and lands twice, or is retried after its moment has passed | M, Money | Journal, Node | "the act is re-decided, never blindly retried" (FR-33) | F7 | A failed effect is re-decided from current state | FR-33 |
+
+---
+
+## 7. The copilot and agents writing units
+
+| ID | What happens | Odds, harm | Owner | Today | Property | Proof | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| AG-01 | An agent never calls the unit checker | H, Silent | Agents | no catalog row lints a unit (G1 §1.7); the Library kind check returns only the first schema problem (`LIB/kinds/__init__.py:46-55`, here) | F12, F3 | The same check runs at the Library door for the unit kind, so no path skips it, and it returns every problem | G2 §2.2 option D |
+| AG-02 | An agent writes a unit with `python -c`, past a hook bound to Write and Edit | H, Silent | Agents | chats keep a shell (G2 trap 4) | F12 | The check sits at the door the unit must pass to be saved or run, not at the editor | G2 trap 4 |
+| AG-03 | A slow check inside the 10 s guard blocks the tool call | M, Stop | Agents | guard timeout 10 s (`HAR/launch.py:436-438`, G2 §2.1) | F12, F13 | Fast lint in the loop; slow checks run as a job with a handle | G2 trap 6 |
+| AG-04 | A hook added mid-session only applies at the next launch | M, Friction | Agents | the ConfigChange hook blocks reloads (`HAR/home.py:428-439`, G2 §2.1) | F13 | The checker is a tool row, so it reaches chats already running | G2 trap 5 |
+| AG-05 | Workflow agent steps cannot write files, so a unit authored inside a workflow has nowhere to go | H, Stop | Agents, Workflows | the read-only policy (`ENG/policy.py:15-31`); AGW skipped after a probe (G4b Q1) | F3 | Units are written as a step's JSON output or a Library save, then checked by a script step | G4b Q1 |
+| AG-06 | An agent grades its own unit, agrees with him, or several agents agree and it is taken as proof | H, Silent | Agents | none | F12 | Verdicts come from scripts and QMB numbers; agreement counts for nothing | R29-F8, F9, F16 |
+| AG-07 | A source (a video description, a forum post) carries instructions the agent follows | M, Silent | Agents | the guard covers tools, not text (R29-F11) | F14, F13 | Sources enter as marked data; numbers come from tools | R29-F11 |
+| AG-08 | A cheap model uses a dictionary word wrongly | H, Silent | Agents, QML | none | F12, F20 | The checker's error names the right entry | D-03 |
+| AG-09 | Unit tools placed inside a mini app do not reach the default copilot | M, Stop | Agents, Mini apps | the copilot preset is core toolsets only (`HAR/surface.py:484-489`, G2 §1.4); a settings line closes it (G4b Q3) | F3 | Unit tools are core catalog rows | G2 §1.4 |
+| AG-10 | Two agents edit the same unit at once | M, Silent | Agents | branch and merge (PR 195) | F10, F18 | Both kept; a merge is explicit | BACKLOG B36 |
+| AG-11 | An agent loops on the checker (fix, new error, fix) for hours | M, Friction | Agents | a stuck detector, no caps (`ENG/nodes/agent.py:8-12`, G2 §1.1) | F12 | The same problem set twice counts as no progress | New |
+| AG-12 | An agent states a market value from its training memory | M, Silent | Agents | none | F13 | Every number in an agent's output cites a tool receipt | R29-F12 |
+| AG-13 | An agent proposes a promotion while he is away, and it is treated as approved | M, Money | Agents | governed kinds land as drafts awaiting his yes (`LIB/landing.py:1-18`, G2 §3) | F16 | A promotion without his act is impossible by type | CC-11 |
+| AG-14 | The model provider is down overnight, and the slow lane fails | M, Stop | Agents | provider rows and relays (G2 §1.1) | F15, F9 | Nothing in the fast lane waits on an agent | ruling 44 |
+| AG-15 | A tool answer over 20,000 characters spills to the Library; the agent reads head and tail and misses the failing problem | M, Silent | Agents | spill at 20,000 characters (`CTL/catalog.py:86-89`, G2 §1.3) | F12 | The checker's answer leads with the count and the refusals | New |
+| AG-16 | Copilot and workflow agents see different tools for the same job | M, Friction | Agents | parity holds by construction for core rows; no test pins it (G4b Q3) | F3 | A test that every agent-visible core row is on the default copilot surface | G2 §1.4 |
+
+---
+
+## 8. Workflows and templates
+
+| ID | What happens | Odds, harm | Owner | Today | Property | Proof | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| WF-01 | A template needs a door that does not exist yet, installs as a draft, and a newcomer sees 23 drafts with no reason given | H, Friction | Workflows | `meta.needs` drafts (G2 §4) | F13, F2 | Each draft says which door it waits for | G2 §4 |
+| WF-02 | The `market_open` check holds crypto runs on Saturdays | H, Stop | Workflows, Clocks | weekend and holiday rule in the trigger's zone (`ENG/triggers/preflight.py:14-16`, here) | F17, F19 | Open or shut comes from each instrument's calendar | G2 §9 |
+| WF-03 | Zone defaults disagree (templates London, the build skill Berlin, three host paths the machine's zone), so reviews run at the wrong hour | H, Friction | Workflows, Clocks | G2 trap 11 | F17 | One default zone setting; every trigger states its zone | G2 trap 11 |
+| WF-04 | A 24/7 market has no end of day, so "the nightly review" has no time | H, Friction | Workflows | none | F17 | Reviews key on each market's session close or a named UTC hour | T-02 ("We are literally trading 24/7, my days.", T2:325) |
+| WF-05 | An event-trigger chain loops: a template lands an item that fires the template again | M, Friction | Workflows | event triggers from the Library ref log (PR 160) | F8, F13 | Each trigger carries its cause id; a chain that re-fires itself is caught | New |
+| WF-06 | A run pass minted on the PC fails at the server's door while the PC sleeps | M, Stop | Workflows, Contracts | backlog row "Cross-machine run passes" (G2 §6) | F1 | One pass format on every host | G2 §6 |
+| WF-07 | An agent step idles on a long tool and its cache expires | M, Friction | Workflows | idea logged (G4b §1.3) | F11 | Long work runs as a script step or a background job with a handle | G4b §1.3 |
+| WF-08 | The `library` node kind is marked available but has no executor | M, Stop | Workflows | `ENG/definition/registry.py:94` (G2 §4) | F12 | Validation refuses a kind with no executor | G2 §4 |
+| WF-09 | A QMX update ships a newer template and overwrites the one he edited | M, Friction | Workflows | templates are Library items (G2 §4) | F10 | An update makes a new version beside his | New |
+| WF-10 | A webhook trigger has no sender signature check | L, Silent | Workflows, Contracts | `HO/host.py:1370-1393`; backlog row (G2 §6) | F14 | Deliveries are signed and deduplicated by id | G2 §6, HP TRG2a |
+| WF-11 | An analyst workflow marks its own forecasts | H, Silent | Workflows | none | F12 | Calls are written with a date and scored later by a script against the market | R29 §4 |
+| WF-12 | The shared judge step is edited, and every past verdict changes meaning | M, Silent | Workflows, QMB | none | F10, F1 | Verdicts record the judge version | New |
+| WF-13 | A run's home machine dies mid-run | M, Stop | Workflows | another machine adopts a run whose home died, refused while the home's heartbeat is fresh (HP ADOPT) | F7, F18 | A run is adopted once; the old home never resumes it | HP ADOPT |
+| WF-14 | The PC was off for two days and missed scheduled runs | H, Friction | Workflows | catch-up after downtime (HP BUG1) | F11 | Missed runs either catch up once or are marked skipped, by a setting per trigger | HP BUG1 |
+
+---
+
+## 9. Mini apps holding units
+
+| ID | What happens | Odds, harm | Owner | Today | Property | Proof | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MA-01 | A unit lives in a mini app, and the app's breaker stops it after 3 errors: a process stop, not a risk stop | M, Money | Mini apps | `max_errors` default 3, `heartbeat_timeout` 10 s (`APPS/manifest.py:104-110`, here) | F16, F9 | Only the node sends orders; a mini app holding a unit is research only, and its breaker stops research, never protection | G2 trap 8, G4b Q5 |
+| MA-02 | The machine an app lives on dies; a move is a snapshot plus a lease handover, with no remote restore | M, Stop | Mini apps | `APPS/supervisor.py:527-533`, `:1064` (G2 §5.1) | F18, F10 | The app's state of record lives in the Library, so a new home can start from it | G2 §5.1 |
+| MA-03 | A newcomer installs an example app that imports deleted code and crashes | H, Friction | Mini apps | two of four examples import the deleted runtime (G4b §1.7) | F13 | Examples are built and tested in CI | G4b §1.7 |
+| MA-04 | An app's `provides` contract changes shape and its consumers break | M, Stop | Mini apps, Contracts | `provides` and `feeds` as JSON Schemas (`APPS/manifest.py:148-167`) | F1 | Contract versions with an overlap window | New |
+| MA-05 | The trading node as a mini app is a `money` app, which needs his signature to start; does every restart need it? | M, Stop | Mini apps, Node | `APPS/supervisor.py:542-547` (G2 §5.1) | F16, F11 | His signature binds a version, not a restart | New |
+| MA-06 | `app_op {app: qmb}` fails because no app named `qmb` runs | H, Stop | Mini apps, QMB | `ENG/nodes/app_op.py:1-25` (G4b Q4) | F3 | QMB answers through the `app_op` route whether it runs as a host door or as a mini app | G4b Q4 |
+| MA-07 | Several QMB variants are installed; which one does `backtest_run` call? | M, Silent | Mini apps, QMB | none | F2, F13 | A default named in settings; every result records which variant ran | New |
+| MA-08 | A long backtest in an app needs more memory than he set | L, Stop | Mini apps | memory unlimited unless he sets a number (G4b Q5) | F14 | A limit hit is logged with the number that was set | G4b §3 row 8 |
+| MA-09 | A mini app reads another app's output while that app is offline | M, Stop | Mini apps | reading an app's latest output is a Library read that works offline (HP APP2b) | F8, F15 | Outputs are Library artifacts with `stale_after` | HP APP2b |
+
+---
+
+## 10. Contracts and APIs
+
+| ID | What happens | Odds, harm | Owner | Today | Property | Proof | Source |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| CA-01 | Routes carry no version and the API title is fixed at 0.1.0, so a UI or outside agent built today breaks silently on a change | H, Stop | Contracts | `CTL/server.py:415` (G2 §6) | F1 | A version on every seam, an overlap window, a deprecation notice that names the replacement | G2 §6 |
+| CA-02 | The `unit` kind has an empty schema, so anything lands as a unit | H, Silent | Contracts, Library | `LIB/kinds/unit.schema.json:7-10` (G2 §3) | F12 | A real schema with every problem returned | G2 §3 |
+| CA-03 | "The bot may not size" is in four layers; a half-done change leaves one layer sizing or refusing | H, Money | Contracts | `qml/src/qml/protocol/intents.py:1-7`, `qmf-risk/door.py:7-10`, QMB admission context, `qmn/src/qmn/seats/dispatch.py` (G1 §0 item 4) | F1 | All four layers move in one wave; a test sends a sized intent end to end | G1 §0 item 4 |
+| CA-04 | Adding a venue means editing a closed enum in the node's law | H, Stop | Contracts, Venues | `VenueClientKind` is `ctrader`, `replay`, `conformance` (`qmn/src/qmn/venue/port.py:40-45`, here) | F3 | A new venue is a capability declaration plus an adapter behind the port | G3 §5 |
+| CA-05 | Errors come in different shapes: tools give code, message and next step; the Library gives the first problem only | M, Friction | Contracts | `HAR/tools.py:188-213`; `LIB/kinds/__init__.py:46-55` (here) | F12 | One error shape with every problem | New |
+| CA-06 | The PC and the node run different contract versions after an update on one side | H, Stop | Contracts, Node | none | F1, F15 | Both sides state their contract version on connect; the node keeps trading what it has and refuses new deploys until they match | New |
+| CA-07 | The risk socket is built now and the risk session's design does not fit it | M, Stop | Contracts | none; the socket is a designed placeholder (C-06) | F2, F1 | The placeholder implements the same typed contract the risk session will fill | C-06 |
+| CA-08 | A unit's logic fingerprint does not match its stored source | M, Stop | Contracts, QML | Layer 2 refuses source that differs from the manifest (`conformance/layer2.py:292-302`, G1 §1.5) | F10 | Source and fingerprint travel together | G1 §1.5 |
+| CA-09 | The same capability exists through two doors with different rules | M, Silent | Contracts | one catalog row per capability, every door derived from it (`CTL/catalog.py:1-10`, G2 §1.2) | F3 | New unit doors are catalog rows only | G2 §1.2 |
+| CA-10 | An outside agent's observer token outlives its purpose | L, Friction | Contracts | tokens last 30 days (`CTL/service.py:89`, G2 §6) | F14 | Expiry shown; renewals are his | G2 §6 |
+| CA-11 | A browser client cannot resume a stream, because EventSource cannot set the auth header | L, Friction | Contracts | fetch stream with an Authorization header (G2 §6) | F8 | Resume by `Last-Event-ID` | G2 §6 |
+
 <!-- E1-CONTINUE -->
