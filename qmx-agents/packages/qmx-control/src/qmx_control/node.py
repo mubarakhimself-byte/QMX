@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any, Final, cast
 
 import uvicorn
+from qmx_home import NoQmxFolder, resolve
 
 from qmx_control.server import create_app
 from qmx_control.service import ControlService
@@ -847,6 +848,14 @@ def transfer(host: str, revision: str) -> str:
     return ssh
 
 
+def pc_home(parser: argparse.ArgumentParser, flag: Path | None) -> Path:
+    """This PC's QMX folder for `setup`, `pair` and `vault install`, or one plain line and exit."""
+    try:
+        return resolve(flag).home
+    except NoQmxFolder as missing:
+        parser.exit(2, f"{missing}\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="qmx")
     node = parser.add_subparsers(dest="group", required=True).add_parser("node")
@@ -855,7 +864,7 @@ def main() -> int:
     bootstrap.add_argument("ssh_host")
     setting_up = commands.add_parser("setup")
     setting_up.add_argument("ssh_host")
-    setting_up.add_argument("--home", type=Path, default=Path("./qmx-home"))
+    setting_up.add_argument("--home", type=Path, default=None)
     setting_up.add_argument("--hub-port", type=int, default=0)
     setting_up.add_argument("--hindsight", action="store_true")
     setting_up.add_argument("--dry-run", action="store_true", help="print the steps, run nothing")
@@ -872,7 +881,7 @@ def main() -> int:
         help="the services stopped first, comma-separated; empty stops none",
     )
     pairing = commands.add_parser("pair")
-    pairing.add_argument("--home", type=Path, default=Path("./qmx-home"))
+    pairing.add_argument("--home", type=Path, default=None)
     pairing.add_argument("--ssh-host", default="", help="also install the same code on that host")
     check = commands.add_parser("verify")
     check.add_argument("--home", type=Path, default=Path(SERVER_HOME))
@@ -896,7 +905,7 @@ def main() -> int:
         "--ssh-host", default="", help="build the PC's document here and install it on that host"
     )
     vault_install_command.add_argument("--machine", default="", help="the server's place name")
-    vault_install_command.add_argument("--pc-home", type=Path, default=Path("./qmx-home"))
+    vault_install_command.add_argument("--pc-home", type=Path, default=None)
     vault_install_command.add_argument(
         "--name", action="append", default=[], help="one more qmx/read/* or qmx/data/* name"
     )
@@ -931,7 +940,7 @@ def main() -> int:
         return 0 if found.get("restored") else 1
     if args.command == "pair":
         code = pairing_code()
-        target = pair(cast(Path, args.home), code)
+        target = pair(pc_home(parser, args.home), code)
         host = cast(str, args.ssh_host)
         if host:
             if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
@@ -948,10 +957,10 @@ def main() -> int:
         host = cast(str, args.ssh_host)
         if not re.fullmatch(r"[a-zA-Z0-9_@.:-]+", host) or host.startswith("-"):
             parser.error("Use an SSH hostname or user@hostname.")
+        home = pc_home(parser, args.home)
         revision = run(["git", "rev-parse", "HEAD"])
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
             raise RuntimeError("Setup needs an exact Git commit.")
-        home = cast(Path, args.home)
         dry_run = bool(args.dry_run)
         if not dry_run:
             transfer(host, revision)
@@ -1035,7 +1044,7 @@ def main() -> int:
 
         names = (*(f"qmx/{row}" for row in PROVIDERS), READ_APP, *cast(list[str], args.name))
         document = pc_vault_document(
-            cast(Path, args.pc_home), public, machine=machine, source=KeyringSource(names)
+            pc_home(parser, args.pc_home), public, machine=machine, source=KeyringSource(names)
         )
         print(run(["ssh", host, f"{as_qmx} install --home {SERVER_HOME}"], input_text=document))
         return 0

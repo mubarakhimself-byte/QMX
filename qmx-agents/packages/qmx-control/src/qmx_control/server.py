@@ -25,6 +25,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from keyring.backends import fail, null
 from qmx_apps.errors import AppError
+from qmx_home import resolve
 from qmx_library.client import HubClient
 from qmx_library.port import LibraryRefused
 from qmx_remote.models import RemoteError
@@ -484,4 +485,5 @@ def create_app(
 
 
 def default_home() -> Path:
-    return Path.home() / ".qmx"
+    """The home of the QMX folder `qmx_home.resolve` finds; raises `NoQmxFolder` when none."""
+    return resolve().home

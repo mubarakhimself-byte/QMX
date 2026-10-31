@@ -1,10 +1,9 @@
 """The broker MCP door exposes seven reads and one local proposal writer."""
 
-import os
-from pathlib import Path
 from typing import Any
 
 from fastmcp import FastMCP
+from qmx_home import NoQmxFolder, resolve
 
 from qmx_broker.service import BrokerService
 
@@ -72,4 +71,8 @@ def create_server(service: BrokerService) -> FastMCP:
 
 
 def main() -> None:
-    create_server(BrokerService(Path(os.environ.get("QMX_HOME", str(Path.home() / ".qmx"))))).run()
+    try:
+        home = resolve().home
+    except NoQmxFolder as missing:
+        raise SystemExit(str(missing)) from None
+    create_server(BrokerService(home)).run()

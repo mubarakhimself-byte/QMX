@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import tempfile
+import sys
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 from qma.harness import Harness, QmxHome
 from qmx_control.server import local_token
 from qmx_control.service import ControlService
+from qmx_home import NoQmxFolder, resolve
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.port import LibraryRefused as StoreRefused
 from qmx_library.store import Store
@@ -53,6 +54,13 @@ type Line = tuple[str, str, str, str]
 """One installed template as the command prints it: id, folder, action, detail."""
 
 
+def homed(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--home", type=Path, help="the QMX folder; found when left out")
+    command.add_argument(
+        "--create", action="store_true", help="make the --home folder when it is missing"
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     cli = argparse.ArgumentParser(
         prog="python -m qmx_engine", description="The QMX workflow engine."
@@ -70,7 +78,7 @@ def parser() -> argparse.ArgumentParser:
     stats = ledger_commands.add_parser(
         "stats", help="print the schema version, the SQLite version and the event count"
     )
-    stats.add_argument("--home", type=Path, required=True)
+    homed(stats)
     run = commands.add_parser("run", help="start one run from a workflow folder")
     run.add_argument("folder", type=Path)
     run.add_argument(
@@ -79,7 +87,7 @@ def parser() -> argparse.ArgumentParser:
         default="test",
         help="test only; a live run starts through the engine service (AD-11)",
     )
-    run.add_argument("--home", type=Path, help="the QMX home; a fresh temporary one when left out")
+    homed(run)
     run.add_argument("--inputs", default="null", help="the run's inputs as JSON")
     run.add_argument("--run-id")
     run.add_argument(
@@ -87,25 +95,25 @@ def parser() -> argparse.ArgumentParser:
     )
     resume = commands.add_parser("resume", help="pick a run up again from the ledger")
     resume.add_argument("run_id")
-    resume.add_argument("--home", type=Path, required=True)
+    homed(resume)
     triggers = commands.add_parser("triggers", help="read the trigger rows")
     trigger_commands = triggers.add_subparsers(dest="triggers_command", required=True)
     listed = trigger_commands.add_parser(
         "list", help="print each trigger's kind, next_fire_at and last_status"
     )
-    listed.add_argument("--home", type=Path, required=True)
+    homed(listed)
     why = commands.add_parser("explain", help="print what a run did, node by node, and why")
     why.add_argument("run_id")
-    why.add_argument("--home", type=Path, required=True)
+    homed(why)
     why.add_argument("--json", action="store_true", help="print the explain document as JSON")
     pack = commands.add_parser("templates", help="list or install the template pack")
     pack_commands = pack.add_subparsers(dest="templates_command", required=True)
     shown = pack_commands.add_parser("list", help="print each template's status in the home")
-    shown.add_argument("--home", type=Path, required=True)
+    homed(shown)
     put = pack_commands.add_parser(
         "install", help="install the pack disabled: test and publish runnable ones, draft the rest"
     )
-    put.add_argument("--home", type=Path, required=True)
+    homed(put)
     put.add_argument(
         "--template",
         action="append",
@@ -130,7 +138,7 @@ async def start(args: argparse.Namespace) -> int:
         for problem in found:
             print(f"{problem.code} {problem.path} {problem.message}")
         return 1
-    home: Path = args.home or Path(tempfile.mkdtemp(prefix="qmx-engine-"))
+    home: Path = args.home
     run_id = args.run_id or new_run_id(datetime.now(UTC))
     print(f"run {run_id} home {home} mode: {args.mode}", flush=True)
     harness: Harness | None = None
@@ -342,6 +350,12 @@ async def install_templates(home: Path, ids: Sequence[str] | None) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.command != "validate":
+        try:
+            args.home = resolve(args.home, create=args.create).home
+        except NoQmxFolder as missing:
+            print(missing, file=sys.stderr)
+            return 1
     if args.command == "templates":
         if args.templates_command == "list":
             return list_templates(args.home)

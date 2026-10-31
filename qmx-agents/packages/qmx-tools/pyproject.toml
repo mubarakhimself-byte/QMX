@@ -3,7 +3,7 @@ name = "qmx-tools"
 version = "0.1.0"
 description = "Shared QMX domain tools and MCP servers"
 requires-python = ">=3.14,<3.15"
-dependencies = ["fastmcp==4.0.11", "pydantic>=2,<3", "qmf-data", "qmb", "qml", "qmn", "qmx-control"]
+dependencies = ["qmx-home", "fastmcp==4.0.11", "pydantic>=2,<3", "qmf-data", "qmb", "qml", "qmn", "qmx-control"]
 
 [project.scripts]
 qmx-mcp-data = "qmx_tools.servers:data"
@@ -16,6 +16,7 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
+qmx-home = { workspace = true }
 qmf-data = { workspace = "../../.." }
 qmb = { workspace = "../../.." }
 qml = { workspace = "../../.." }

@@ -3,7 +3,7 @@ name = "qmx-broker"
 version = "0.1.0"
 description = "Broker account reads and unsigned Portfolio proposals"
 requires-python = ">=3.14,<3.15"
-dependencies = ["fastmcp==4.0.11", "pydantic>=2,<3", "keyring==25.7.0", "ccxt==4.5.85", "qmf-venue"]
+dependencies = ["qmx-home", "fastmcp==4.0.11", "pydantic>=2,<3", "keyring==25.7.0", "ccxt==4.5.85", "qmf-venue"]
 
 [project.scripts]
 qmx-broker = "qmx_broker.server:main"
@@ -13,6 +13,7 @@ requires = ["uv_build>=0.12,<0.13"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
+qmx-home = { workspace = true }
 qmf-venue = { workspace = "../../.." }
 
 [dependency-groups]
