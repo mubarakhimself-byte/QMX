@@ -35,6 +35,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Final, Self, cast
 
+from qmx_home.versions import check_sqlite
 from qmx_ledger.journal import encoded
 
 from qmx_engine import telemetry
@@ -264,17 +265,20 @@ class Ledger:
         self._lock.release()
 
     def _run(self) -> None:
+        opened: sqlite3.Connection | None = None
         try:
-            connection = sqlite3.connect(
+            opened = sqlite3.connect(
                 self.path, isolation_level=None, timeout=BUSY_TIMEOUT_S, check_same_thread=True
             )
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.execute("PRAGMA synchronous = FULL")
-            self.applied = migrate(connection)
+            opened.execute("PRAGMA synchronous = FULL")
+            self.applied = migrate(opened)
         except BaseException as error:
+            if opened is not None:
+                opened.close()
             self._startup = error
             self._ready.set()
             return
+        connection = opened
         self._ready.set()
         stopping = False
         while not stopping:
@@ -377,6 +381,11 @@ class Reader:
         self.connection = sqlite3.connect(
             f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=BUSY_TIMEOUT_S
         )
+        try:
+            check_sqlite(self.connection, "engine")
+        except BaseException:
+            self.connection.close()
+            raise
 
     @classmethod
     def open(cls, home: Path) -> Reader:

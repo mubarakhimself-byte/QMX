@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -81,11 +83,22 @@ def flat(root: Path, files: dict[str, str]) -> Path:
     return root
 
 
+def free_space(free: int) -> Callable[[object], SimpleNamespace]:
+    """A drive with `free` bytes left, for `shutil.disk_usage`."""
+
+    def usage(_path: object) -> SimpleNamespace:
+        return SimpleNamespace(free=free)
+
+    return usage
+
+
 def files(root: Path) -> dict[str, str]:
+    """Every file but the label and the step's own copy in backups/, which
+    `test_the_step_copies_the_stores_and_settings_first` checks."""
     return {
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
         for path in sorted(root.rglob("*"))
-        if path.is_file() and path.name != LABEL
+        if path.is_file() and path.name != LABEL and path.relative_to(root).parts[0] != "backups"
     }
 
 
@@ -107,6 +120,72 @@ def test_the_step_moves_every_file_into_the_tree_and_takes_none_away(
     assert folders(root) == ["backups", "cache", "data", "keys", "logs", LABEL]
     assert Label.parse((root / LABEL).read_text(encoding="utf-8")).format_version == 2
     assert resolve(root, drives=[]) == Layout(root.resolve())
+
+
+def test_the_step_copies_the_stores_and_settings_first(tmp_path: Path) -> None:
+    root = flat(tmp_path / "home", {**PC_HOME, "engine/engine.sqlite-wal": "frames"})
+
+    step_to_tree(root)
+    step_to_tree(root)
+
+    (copy,) = (root / "backups").glob("pre-layout-1-2-*")
+    assert files(copy) == {
+        "engine/engine.sqlite": "ledger",
+        "engine/engine.sqlite-wal": "frames",
+        "settings.toml": PC_HOME["settings.toml"],
+        "layout-step.json": (copy / "layout-step.json").read_text(encoding="utf-8"),
+    }
+    (logged,) = (root / "backups" / "backups.jsonl").read_text(encoding="utf-8").splitlines()
+    assert json.loads(logged)["path"] == f"backups/{copy.name}"
+    assert files(root)["data/engine/engine.sqlite-wal"] == "frames"
+
+
+def test_a_step_whose_copy_would_fill_the_disk_moves_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = flat(tmp_path / "home", PC_HOME)
+    monkeypatch.setattr("qmx_home.versions.shutil.disk_usage", free_space(10 << 20))
+
+    with pytest.raises(LayoutRefused) as refused:
+        step_to_tree(root)
+
+    assert "nothing was moved" in str(refused.value)
+    assert "QMX keeps at least 1,024 MB free there" in str(refused.value)
+    assert {k: v for k, v in files(root).items() if k != "layout-step.json"} == PC_HOME
+    assert not (root / "backups").exists()
+
+
+def test_a_step_whose_copy_failed_is_not_stuck_when_its_plan_is_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = flat(tmp_path / "home", PC_HOME)
+    with monkeypatch.context() as full:
+        full.setattr("qmx_home.versions.shutil.disk_usage", free_space(10 << 20))
+        with pytest.raises(LayoutRefused):
+            step_to_tree(root)
+    (root / "backups").mkdir()
+    (root / "layout-step.json").unlink()
+
+    step_to_tree(root)
+
+    assert files(root) == PC_TREE
+
+
+def test_a_copy_cut_short_is_made_again_and_the_short_one_left_as_it_was(tmp_path: Path) -> None:
+    root = flat(tmp_path / "home", PC_HOME)
+    cut = root / "backups" / "pre-layout-1-2-20261026T000000000000Z"
+    (cut / "engine").mkdir(parents=True)
+    (cut / "engine" / "engine.sqlite").write_text("led", encoding="utf-8")
+
+    step_to_tree(root)
+
+    copies = sorted(path.name for path in (root / "backups").glob("pre-layout-1-2-*"))
+    (made,) = [name for name in copies if name != cut.name]
+    assert files(root / "backups" / made)["engine/engine.sqlite"] == "ledger"
+    assert files(cut) == {"engine/engine.sqlite": "led"}
+    (logged,) = (root / "backups" / "backups.jsonl").read_text(encoding="utf-8").splitlines()
+    assert json.loads(logged)["path"] == f"backups/{made}"
+    assert files(root) == PC_TREE
 
 
 def test_the_step_keeps_a_format_1_labels_home_id_and_runs_once(tmp_path: Path) -> None:

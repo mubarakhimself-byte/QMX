@@ -19,12 +19,14 @@ import shutil
 import sys
 import tomllib
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path, PureWindowsPath
 from typing import Final, cast
+
+from qmx_home.stores import STORES
 
 __all__ = [
     "LABEL",
@@ -95,19 +97,38 @@ class LayoutRefused(Exception):
     """The layout step cannot move this folder. The message names what is in the way."""
 
 
+KNOWN_KEYS: Final = frozenset(
+    {"format", "format_version", "home_id", "created_by", "last_written_by", "min_reader", "stores"}
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Label:
-    """The label at the top of a QMX folder (design 62 B1), without its store table yet."""
+    """The label at the top of a QMX folder (design 62 B1).
+
+    `min_reader` is the oldest folder format whose code may still open it; absent, it is the
+    format itself. `stores` is the `[stores]` table as read: the truth for stores of plain files
+    and a cache of each SQLite file's own marks. `extra` holds every top-level key this release
+    does not know, so a rewrite keeps what a newer release added (B2 rule 3).
+    """
 
     home_id: str
     format_version: int
     created_by: str
     last_written_by: str
+    min_reader: int | None = None
+    stores: Mapping[str, object] = field(default_factory=dict[str, object])
+    extra: Mapping[str, object] = field(default_factory=dict[str, object])
 
     @classmethod
     def mint(cls, format_version: int = TREE) -> Label:
         release = version("qmx-home")
-        return cls(str(uuid.uuid7()), format_version, release, release)
+        files = {
+            store.name: {"version": store.release.version, "min_reader": store.release.min_reader}
+            for store in STORES.values()
+            if store.kind == "files"
+        }
+        return cls(str(uuid.uuid7()), format_version, release, release, stores=files)
 
     @classmethod
     def parse(cls, text: str) -> Label:
@@ -124,18 +145,76 @@ class Label:
                 "created_by": str(created_by),
                 "last_written_by": str(last_written_by),
             }:
-                return cls(home_id, format_version, created_by, last_written_by)
+                floor = fields.get("min_reader")
+                stores = fields.get("stores", {})
+                return cls(
+                    home_id,
+                    format_version,
+                    created_by,
+                    last_written_by,
+                    floor if isinstance(floor, int) else None,
+                    cast("dict[str, object]", stores) if isinstance(stores, dict) else {},
+                    {key: value for key, value in fields.items() if key not in KNOWN_KEYS},
+                )
             case _:
                 raise ValueError("not a qmx-home label")
 
+    @property
+    def reader_floor(self) -> int:
+        """The oldest folder format whose code may open this folder."""
+        return self.format_version if self.min_reader is None else self.min_reader
+
     def dump(self) -> str:
-        return (
-            f'format = "{FORMAT}"\n'
-            f"format_version = {self.format_version}\n"
-            f'home_id = "{self.home_id}"\n'
-            f'created_by = "{self.created_by}"\n'
-            f'last_written_by = "{self.last_written_by}"\n'
-        )
+        lines = [
+            f'format = "{FORMAT}"',
+            f"format_version = {self.format_version}",
+            f'home_id = "{self.home_id}"',
+            f'created_by = "{self.created_by}"',
+            f'last_written_by = "{self.last_written_by}"',
+        ]
+        if self.min_reader is not None:
+            lines.append(f"min_reader = {self.min_reader}")
+        lines += [f"{_toml_key(key)} = {_toml_value(value)}" for key, value in self.extra.items()]
+        if self.stores:
+            lines += ["", "[stores]"]
+            lines += [
+                f"{_toml_key(key)} = {_toml_value(value)}" for key, value in self.stores.items()
+            ]
+        return "\n".join(lines) + "\n"
+
+
+_BARE_KEY = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _toml_string(text: str) -> str:
+    """A TOML basic string: JSON's escapes are TOML's, and TOML also escapes DEL."""
+    return json.dumps(text).replace("\x7f", "\\u007f")
+
+
+def _toml_key(key: str) -> str:
+    return key if _BARE_KEY.fullmatch(key) else _toml_string(key)
+
+
+def _toml_value(value: object) -> str:
+    """One TOML value on one line: tables become inline tables, so any value a label read can be
+    written back."""
+    match value:
+        case bool():
+            return "true" if value else "false"
+        case int():
+            return str(value)
+        case float():
+            return {"inf": "inf", "-inf": "-inf", "nan": "nan"}.get(repr(value), repr(value))
+        case str():
+            return _toml_string(value)
+        case dict():
+            pairs = cast("dict[str, object]", value).items()
+            return "{ " + ", ".join(f"{_toml_key(k)} = {_toml_value(v)}" for k, v in pairs) + " }"
+        case list():
+            return "[" + ", ".join(_toml_value(item) for item in cast("list[object]", value)) + "]"
+        case _:
+            isoformat = getattr(value, "isoformat", None)
+            return str(isoformat()) if callable(isoformat) else _toml_string(str(value))
 
 
 @dataclass(frozen=True, slots=True)
@@ -237,8 +316,15 @@ def _opened(root: Path) -> Layout:
     ancestor = _labelled_ancestor(root)
     if ancestor is not None:
         raise NoQmxFolder(_nested(root, ancestor))
-    if label is not None and label.format_version == TREE:
+    if label is not None and opens(label):
         return Layout(root)
+    if label is not None and label.format_version > TREE:
+        raise NoQmxFolder(
+            f"{root} was written by QMX {label.last_written_by} (folder format "
+            f"{label.format_version}). This QMX reads folder format {TREE}, and this folder "
+            f"needs a QMX that reads format {label.reader_floor} or newer. Install that QMX, or "
+            f"restore the copy taken before the upgrade from {root / 'backups'}"
+        )
     if label is None and not any(root.iterdir()):
         raise NoQmxFolder(f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)")
     refused = _refusal(root, label) if label is None or label.format_version == FLAT else None
@@ -251,6 +337,14 @@ def _opened(root: Path) -> Layout:
         )
     raise NoQmxFolder(
         f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read"
+    )
+
+
+def opens(label: Label) -> bool:
+    """Whether this release opens a folder with this label (B2 for the folder): its own format,
+    or a newer one whose `min_reader` this release still meets."""
+    return label.format_version == TREE or (
+        label.format_version > TREE and label.reader_floor <= TREE
     )
 
 
@@ -337,7 +431,7 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     ancestor = _labelled_ancestor(root)
     if ancestor is not None:
         raise LayoutRefused(f"{_nested(root, ancestor)}; nothing in it was moved")
-    if label is not None and label.format_version == TREE:
+    if label is not None and opens(label):
         journal.unlink(missing_ok=True)
         return []
     if label is not None and label.format_version != FLAT:
@@ -348,6 +442,7 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     plan = _read_plan(root, journal) if journal.is_file() else _plan(root)
     if not journal.is_file():
         journal.write_text(json.dumps(plan, indent=1), encoding="utf-8")
+    _copy_before_layout(root)
     moved = [(source, target) for source, target in plan if _move(root, source, target)]
     _remove_if_empty(root / ".qmx")
     for part in PARTS:
@@ -357,6 +452,31 @@ def step_to_tree(root: Path) -> list[tuple[str, str]]:
     _write_label(root, Label(stepped.home_id, TREE, stepped.created_by, release))
     journal.unlink()
     return moved
+
+
+def _copy_before_layout(root: Path) -> None:
+    """The pre-change copy of the layout step (B3, guard 4): the flat home's SQLite stores, its
+    settings and the step's plan, into `backups/` before the first move. A stopped step whose
+    copy the backup log records as complete is not copied again; a copy cut short is made again
+    beside it. A home with no store has nothing to copy."""
+    from qmx_home.versions import (  # noqa: PLC0415 (versions imports this module)
+        SnapshotFailed,
+        completed_copies,
+        snapshot,
+    )
+
+    if completed_copies(Layout(root), "layout"):
+        return
+    stores = [root / store.path for store in STORES.values() if store.kind == "sqlite"]
+    if not any(store.is_file() for store in stores):
+        return
+    try:
+        files = [*stores, root / "settings.toml", root / JOURNAL]
+        snapshot(Layout(root), "layout", FLAT, TREE, files, closed=True)
+    except SnapshotFailed as failed:
+        raise LayoutRefused(
+            f"the copy taken before the move could not be made: {failed}; nothing was moved"
+        ) from None
 
 
 def _refusal(root: Path, label: Label | None) -> str | None:
@@ -455,8 +575,20 @@ def _remove_if_empty(folder: Path) -> None:
         folder.rmdir()
 
 
+def _own_backups(folder: Path) -> bool:
+    """Whether `folder` holds nothing but the layout step's own copies and their log: what a
+    step that stopped, or whose copy was refused, leaves in a flat home's `backups/`."""
+    return folder.is_dir() and all(
+        (entry.name == "backups.jsonl" and entry.is_file())
+        or (entry.name.startswith("pre-layout-") and entry.is_dir())
+        for entry in folder.iterdir()
+    )
+
+
 def _plan(root: Path) -> list[tuple[str, str]]:
     top = {entry.name for entry in root.iterdir()} - {LABEL, JOURNAL}
+    if _own_backups(root / "backups"):
+        top.discard("backups")
     taken = sorted(top & TAKEN)
     if taken:
         raise LayoutRefused(

@@ -32,6 +32,7 @@ from qmx_apps.supervisor import Supervisor
 from qmx_apps.volume import Volume
 from qmx_broker.models import BrokerSettings
 from qmx_broker.service import read_proposals
+from qmx_home.versions import open_sqlite, too_new
 from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
@@ -91,6 +92,22 @@ OBSERVER_REF: Final = "refs/agents/{observer}/diagnosis"
 NOTE_TITLE: Final = "an outside agent left a diagnosis"
 """How the inbox names a diagnosis note. `info` never enters the engine's trouble inbox, so the
 note is a control row the inbox lists beside the engine's items."""
+CONTROL_SCHEMA: Final = (
+    "CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS blocks (session_id TEXT NOT NULL, seq INTEGER NOT NULL,"
+    " data TEXT NOT NULL, PRIMARY KEY(session_id, seq))",
+    "CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " topic TEXT NOT NULL, subject TEXT NOT NULL, data TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS delegate_completions (handle TEXT PRIMARY KEY,"
+    " parent_session TEXT NOT NULL, data TEXT NOT NULL, delivered_at TEXT)",
+    "CREATE INDEX IF NOT EXISTS delegate_pending"
+    " ON delegate_completions(parent_session, delivered_at)",
+    "CREATE TABLE IF NOT EXISTS operator_cursor (name TEXT PRIMARY KEY,"
+    " position INTEGER NOT NULL, at TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS observer_notes (id TEXT PRIMARY KEY,"
+    " observer TEXT NOT NULL, ref TEXT NOT NULL, body TEXT NOT NULL, at TEXT NOT NULL)",
+)
+"""`control.db` at version 1 (design 62 B1). A later version adds a step; it never edits these."""
 LOGS: Final = "logs"
 """The home's log folder: heartbeat, connection, feed and telemetry reads live here as JSON."""
 
@@ -439,6 +456,63 @@ class Observers:
         scratch.replace(self.path)
 
 
+_TABLE_HEADER = re.compile(r"^\s*(\[\[?)\s*(.+?)\s*(\]\]?)\s*(?:#.*)?$")
+
+
+def _top_key(header: re.Match[str]) -> str | None:
+    """The top-level key a `[a.b]` or `[[a.b]]` header line opens, read by TOML itself."""
+    opening, name, closing = header.groups()
+    try:
+        parsed = tomllib.loads(f"{opening}{name}{closing}\n")
+    except tomllib.TOMLDecodeError:
+        return None
+    return next(iter(parsed), None)
+
+
+def kept_word_for_word(text: str, stored: Document, settings: Document) -> str:
+    """`settings.toml` rewritten to hold `settings`, keeping every section that did not change
+    as its own lines, comments and all (design 62 B2 rule 3): an older release never drops or
+    reshapes what a newer one wrote. Only the sections whose values changed are written again,
+    in the place of their old lines. When the old text does not split cleanly into sections
+    (a top-level key of a changed section, a header inside a multi-line string), every key is
+    still kept, written whole by `tomli_w`. Raises TypeError or ValueError for a value TOML
+    cannot hold."""
+    changed = {key for key in {*stored, *settings} if stored.get(key) != settings.get(key)}
+    fresh = tomli_w.dumps({key: settings[key] for key in settings if key in changed})
+    if not text.strip():
+        return tomli_w.dumps(settings)
+    kept: list[str] = []
+    at: int | None = None
+    owner: str | None = None
+    above: list[str] = []
+    """Comment and blank lines at the end of a changed section: they sit above the next header
+    and belong to it, so they are kept."""
+    for line in text.splitlines(keepends=True):
+        header = _TABLE_HEADER.match(line)
+        if header is not None:
+            owner = _top_key(header)
+        if owner is not None and owner in changed:
+            at = len(kept) if at is None else at
+            bare = line.strip()
+            above = [*above, line] if not bare or bare.startswith("#") else []
+            continue
+        kept += [*above, line]
+        above = []
+    if kept and not kept[-1].endswith("\n"):
+        kept[-1] += "\n"
+    if fresh and at is None:
+        kept.append(f"\n{fresh}" if kept else fresh)
+    elif fresh and at is not None:
+        kept.insert(at, fresh)
+    result = "".join(kept)
+    try:
+        if tomllib.loads(result) == settings:
+            return result
+    except tomllib.TOMLDecodeError:
+        pass
+    return tomli_w.dumps(settings)
+
+
 class _Adopted:
     """The home this process's one door reads observer rows from."""
 
@@ -488,24 +562,12 @@ class ControlService:
         self.run_index = RunIndex(self.home)
         self._aggregate = read_cache(ttl=5)(self._aggregate_read)
         adopt_observers(self.home)
-        with self._connect() as db:
-            db.executescript("""
-                PRAGMA journal_mode=WAL;
-                CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, data TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS blocks (session_id TEXT NOT NULL, seq INTEGER NOT NULL,
-                    data TEXT NOT NULL, PRIMARY KEY(session_id, seq));
-                CREATE TABLE IF NOT EXISTS events (seq INTEGER PRIMARY KEY AUTOINCREMENT,
-                    topic TEXT NOT NULL, subject TEXT NOT NULL, data TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS delegate_completions (handle TEXT PRIMARY KEY,
-                    parent_session TEXT NOT NULL, data TEXT NOT NULL, delivered_at TEXT);
-                CREATE INDEX IF NOT EXISTS delegate_pending
-                    ON delegate_completions(parent_session, delivered_at);
-                CREATE TABLE IF NOT EXISTS operator_cursor (name TEXT PRIMARY KEY,
-                    position INTEGER NOT NULL, at TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS observer_notes (id TEXT PRIMARY KEY,
-                    observer TEXT NOT NULL, ref TEXT NOT NULL, body TEXT NOT NULL,
-                    at TEXT NOT NULL);
-            """)
+        with closing(
+            sqlite3.connect(self.home / "control.db", isolation_level=None, timeout=5)
+        ) as db:
+            open_sqlite(db, "control", (CONTROL_SCHEMA,))
+            for statement in CONTROL_SCHEMA:
+                db.execute(statement)
 
     @contextmanager
     def _connect(self) -> Generator[sqlite3.Connection]:
@@ -747,17 +809,19 @@ class ControlService:
 
         with self._lock:
             path = self.home / "settings.toml"
-            settings: Document = {}
-            if path.exists():
-                with path.open("rb") as file:
-                    settings = cast(Document, tomllib.load(file))
+            refused = too_new(path, "settings")
+            if refused is not None:
+                raise ControlError("settings_too_new", refused, 409)
+            text = path.read_text(encoding="utf-8") if path.exists() else ""
+            stored = cast(Document, tomllib.loads(text))
+            settings = dict(stored)
             if stored_rows is not None:
                 settings["connections"] = cast(JsonValue, stored_rows)
                 settings.pop("brokers", None)
             else:
                 settings[section] = values
             try:
-                encoded = tomli_w.dumps(settings)
+                encoded = kept_word_for_word(text, stored, settings)
             except (TypeError, ValueError) as error:
                 raise ControlError(
                     "invalid_settings", "Settings must contain TOML-compatible values (no nulls)."

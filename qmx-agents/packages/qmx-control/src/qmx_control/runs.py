@@ -12,24 +12,30 @@ from contextlib import closing
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
 from pydantic import JsonValue
+from qmx_home.versions import open_sqlite
 
 from qmx_control.library import encoded
 from qmx_control.models import ControlError, Document
+
+RUNS_SCHEMA: Final = (
+    "CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,data TEXT NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS journals(path TEXT PRIMARY KEY,digest TEXT NOT NULL,"
+    " size INTEGER NOT NULL)",
+)
+"""`runs.db` at version 1 (design 62 B1)."""
 
 
 class RunIndex:
     def __init__(self, home: Path) -> None:
         self.home = home
+        with closing(sqlite3.connect(home / "runs.db", isolation_level=None)) as db:
+            open_sqlite(db, "runs_index", (RUNS_SCHEMA,))
+            for statement in RUNS_SCHEMA:
+                db.execute(statement)
         with closing(sqlite3.connect(home / "runs.db")) as db, db:
-            db.executescript("""
-                PRAGMA journal_mode=WAL;
-                CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,data TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS journals(path TEXT PRIMARY KEY,digest TEXT NOT NULL,
-                    size INTEGER NOT NULL);
-            """)
             for run_id, raw in db.execute("SELECT id,data FROM runs").fetchall():
                 data = cast(Document, json.loads(raw))
                 if self.is_chat(run_id, data):

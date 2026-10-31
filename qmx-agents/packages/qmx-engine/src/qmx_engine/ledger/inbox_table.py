@@ -29,6 +29,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import Final, Literal, Self, cast, get_args
 
+from qmx_home.versions import open_sqlite
+
 from qmx_engine.ledger.redact import redact
 from qmx_engine.ledger.signature import signature as masked
 from qmx_engine.ports.inbox import (
@@ -130,10 +132,14 @@ class InboxTable:
         """The engine the answers go to; without one an answer is only recorded."""
         path.parent.mkdir(parents=True, exist_ok=True)
         self.connection = sqlite3.connect(path, isolation_level=None, timeout=BUSY_TIMEOUT_S)
-        self.connection.execute("PRAGMA journal_mode = WAL")
-        self.connection.execute(SCHEMA)
-        self.connection.execute(INCIDENTS)
-        self.connection.execute(APP_INCIDENTS)
+        try:
+            open_sqlite(self.connection, "inbox", ((SCHEMA, INCIDENTS, APP_INCIDENTS),))
+            self.connection.execute(SCHEMA)
+            self.connection.execute(INCIDENTS)
+            self.connection.execute(APP_INCIDENTS)
+        except BaseException:
+            self.connection.close()
+            raise
 
     @classmethod
     def open(cls, home: Path) -> InboxTable:

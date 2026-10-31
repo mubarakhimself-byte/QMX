@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from flows import CHAIN, edge, edited, folder, node, workflow
+from qmx_home import resolve
 from scheduled import Clock, Flags, enabled, fires_of
 
 from qmx_engine.definition.validate import checked
@@ -124,7 +125,8 @@ def test_the_live_ticker_passes_connection_readings_to_preflight(tmp_path: Path)
 
 
 def test_old_trigger_rows_survive_the_kind_migration_and_new_kinds_store(tmp_path: Path) -> None:
-    path = tmp_path / "engine" / "engine.sqlite"
+    home = resolve(tmp_path / "QMX", create=True, drives=[]).home
+    path = home / "engine" / "engine.sqlite"
     path.parent.mkdir(parents=True)
     old = sqlite3.connect(path)
     for statement in (*STEPS[0], *STEPS[1]):
@@ -139,13 +141,13 @@ def test_old_trigger_rows_survive_the_kind_migration_and_new_kinds_store(tmp_pat
     old.commit()
     old.close()
 
-    with Ledger.open(tmp_path) as ledger:
+    with Ledger.open(home) as ledger:
         applied = ledger.applied
         for spec in (rows.Webhook(), rows.Session(), rows.Event({"kind": "report"})):
             rows.create(
                 ledger, workflow_item="wf", pinned_object="obj", spec=spec, caller=OPERATOR, now=T0
             )
-    with Reader.open(tmp_path) as reader:
+    with Reader.open(home) as reader:
         found = rows.triggers(reader.connection)
 
     assert applied == [3, 4]
