@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from fake_library import fake_door
 from fastapi.testclient import TestClient
 from flows import CHAIN
 from qmx_control import ControlService, create_app
@@ -58,7 +59,7 @@ def served(home: Path) -> Generator[tuple[TestClient, EngineDoor]]:
     ready, stop = threading.Event(), threading.Event()
 
     async def main() -> None:
-        async with EngineDoor.open(control, principal=lambda: OPERATOR) as door:
+        async with fake_door(control, principal=lambda: OPERATOR) as door:
             opened.append(door)
             ready.set()
             while not stop.is_set():

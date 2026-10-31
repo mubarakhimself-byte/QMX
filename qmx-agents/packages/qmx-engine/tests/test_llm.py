@@ -9,6 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
+from fake_library import fake_service
 from fake_port import TOKENS, FakePort
 
 from qmx_engine.admission import Admission
@@ -21,7 +22,6 @@ from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle
 from qmx_engine.ports.router import Reply, Row, adopt
 from qmx_engine.runner import Engine, Outcome
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.settings import DEFAULTS
 
@@ -230,7 +230,7 @@ def test_the_fake_switch_answers_from_the_schema_and_calls_no_model(tmp_path: Pa
     port = FakePort()
 
     outcome, span = run(tmp_path, port, fake=True)
-    with EngineService.open(tmp_path / "svc") as svc:
+    with fake_service(tmp_path / "svc") as svc:
         item = svc.drafts.put(None, Bundle.read(ONE_LLM), 0, caller=OPERATOR).item
         report = asyncio.run(svc.tests.run(item, caller=OPERATOR, fake=True))
         state = svc.drafts.state(item)

@@ -281,8 +281,8 @@ class EngineDoor:
         cls,
         control: ControlService,
         *,
+        library: LibraryPort,
         harness: HarnessPort | None = None,
-        library: LibraryPort | None = None,
         settings: SettingsPort | None = None,
         clock: Clock | None = None,
         wait_seconds: float = WAIT_SECONDS,
@@ -290,7 +290,7 @@ class EngineDoor:
     ) -> AsyncGenerator[EngineDoor]:
         """The engine on `control`'s home, attached for as long as the block runs, with the
         scheduler ticking (a limit-paused run wakes only while it ticks). `principal` names the
-        caller of a door, read on the caller's thread. `library` is the fake unless given."""
+        caller of a door, read on the caller's thread. `library` is the host's Library store."""
         with EngineService.open(
             control.home,
             library=library,

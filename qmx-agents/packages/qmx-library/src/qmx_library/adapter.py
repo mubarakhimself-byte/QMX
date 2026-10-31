@@ -12,7 +12,7 @@ How the engine's verbs map onto the Library's:
   on its own `refs/runs/<run_id>` and the engine lands it on the draft.
 - Run summaries, artifacts, test reports, memory rows and agent tools are put on
   `refs/runs/<run_id>` by the run itself. When a run summary says `passed`, the standing rule of
-  `landing.land` moves them (AD-18).
+  `landing.land` moves them (AD-18), unless the summary says the run was fake.
 - Champion moves, draft landings and the engine's own version-state annotations carry
   `engine:<store>` (engine AD-14).
 
@@ -51,7 +51,7 @@ from qmx_engine.ports.library import LibraryRefused as EngineRefused
 
 from qmx_library import port
 from qmx_library.landing import land
-from qmx_library.principal import Principal, agent_ref, may_advance
+from qmx_library.principal import Principal, agent_ref, may_advance, state_ref
 from qmx_library.store import Store
 
 CODES: Final = {
@@ -143,6 +143,23 @@ class EngineLibraryAdapter:
 
     def find_by_intent(self, intent_key: str) -> list[str]:
         return self.store.find_by_intent(self.store.engine, intent_key)
+
+    def find_by_write_key(self, run_id: str, write_key: str) -> str | None:
+        ref = runs_ref(run_id)
+        for object_id in self.store.with_field("artifact", "metadata.write_key", write_key):
+            item = self.store.get(self.store.engine, object_id).item
+            if self.store.ever_placed(object_id, item, ref):
+                return object_id
+        return None
+
+    def moved_to_main(self, after: int = 0) -> list[LibraryEvent]:
+        return [
+            LibraryEvent(m["seq"], f"library.{m['kind']}.landed", m["new_head"], m["ref"])
+            for m in self.store.main_moves(after)
+        ]
+
+    def last_seq(self) -> int:
+        return self.store.last_seq()
 
     def list_runs(self, workflow_item: str, object_id: str | None = None) -> list[RunSummary]:
         latest: dict[str, RunSummary] = {}
@@ -338,6 +355,14 @@ class EngineLibraryAdapter:
             return self._stored(object_id)
 
     def _land(self, summary: RunSummary) -> None:
+        """A fake run's canned answers never leave its run ref, so it lands nothing. What a test
+        or fake run made is sample data, so its artifacts other than the trace are archived: kept,
+        but out of search, recall and every duplicate check. A failed live run's stay visible,
+        since its data is his. A test run still lands its definitions on their drafts."""
+        if summary.fake or summary.mode == "test":
+            self._archive_samples(summary.run_id, "fake" if summary.fake else "test")
+        if summary.fake:
+            return
         status: RunStatus = summary.status
         try:
             publish = self.store.get(self.store.engine, summary.object_id).fields.get("publish")
@@ -350,6 +375,15 @@ class EngineLibraryAdapter:
             status=status,
             publish=str(publish or "auto"),
         )
+
+    def _archive_samples(self, run_id: str, made_by: str) -> None:
+        for item, head in self.store.heads_on(runs_ref(run_id)):
+            view = self.store.get(self.store.engine, head)
+            archived = self.store.head(item, state_ref(item))
+            if view.kind != "artifact" or view.fields.get("type") == "trace":
+                continue
+            if archived is None or archived[0] != "archived":
+                self.store.archive(self.store.engine, item, f"made by a {made_by} run")
 
     def put_test_report(self, draft_hash: str, report: JsonObject, *, principal: str) -> Stored:
         item, run_id = str(report["workflow_item"]), str(report["run_id"])

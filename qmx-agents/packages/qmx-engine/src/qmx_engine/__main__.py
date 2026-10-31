@@ -149,9 +149,9 @@ async def start(args: argparse.Namespace) -> int:
         harness = await Harness.open(QmxHome(home), control=control)
         settings = ControlSettings(control).values()
     try:
-        with Ledger.open(home) as ledger:
+        with Ledger.open(home) as ledger, home_library(home) as library:
             port = HarnessAdapter(harness) if harness is not None else None
-            engine = Engine(home, ledger, settings=settings, harness=port)
+            engine = Engine(home, ledger, settings=settings, harness=port, library=library)
             engine.doctor = LlmDoctor.of(engine)
             outcome = await engine.start(
                 args.folder,
@@ -162,6 +162,9 @@ async def start(args: argparse.Namespace) -> int:
                 fake=args.fake,
             )
             await engine.settle()
+    except REFUSED as refused:
+        print(f"refused: {refused}")
+        return 1
     finally:
         if harness is not None:
             await harness.close()
@@ -188,14 +191,14 @@ def spans(home: Path, run_id: str) -> list[Span]:
 
 async def resume(args: argparse.Namespace) -> int:
     print(f"run {args.run_id} resumed", flush=True)
-    with Ledger.open(args.home) as ledger:
-        engine = Engine(args.home, ledger)
-        try:
+    try:
+        with Ledger.open(args.home) as ledger, home_library(args.home) as library:
+            engine = Engine(args.home, ledger, library=library)
             outcome = await engine.resume(args.run_id)
-        except Refused as refused:
-            print(f"refused: {refused}")
-            return 1
-        await engine.settle()
+            await engine.settle()
+    except (Refused, *REFUSED) as refused:
+        print(f"refused: {refused}")
+        return 1
     return report(outcome)
 
 

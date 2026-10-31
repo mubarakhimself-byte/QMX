@@ -17,6 +17,7 @@ from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.nodes.agent import RESUMED, STUCK_SUMMARY
 from qmx_engine.ports.harness_adapter import Activity, ToolCall, ToolStep, Turn
 from qmx_engine.ports.inbox import InboxPort
+from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.runner import Engine
 from qmx_engine.settings import DEFAULTS
 
@@ -75,8 +76,10 @@ def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbo
         raise AssertionError("unreachable")
 
     async def die() -> None:
-        with Ledger.open(home) as ledger:
-            engine = Engine(home, ledger, settings=DEFAULTS, harness=FakePort(hang))
+        with Ledger.open(home) as ledger, LibraryFake.open(home) as library:
+            engine = Engine(
+                home, ledger, settings=DEFAULTS, harness=FakePort(hang), library=library
+            )
             run = engine.start(root, found[1], mode="test", inputs=None, run_id="run-died")
             with pytest.raises(TimeoutError):
                 await asyncio.wait_for(run, 1)
@@ -85,8 +88,10 @@ def test_the_engine_dying_mid_attempt_retries_once_on_the_same_chat_with_no_inbo
     port = FakePort(CARD, holds_task=held)
 
     async def again() -> str:
-        with Ledger.open(home) as ledger:
-            engine = Engine(home, ledger, settings={**DEFAULTS, **FAST_RETRY}, harness=port)
+        with Ledger.open(home) as ledger, LibraryFake.open(home) as library:
+            engine = Engine(
+                home, ledger, settings={**DEFAULTS, **FAST_RETRY}, harness=port, library=library
+            )
             outcome = await engine.resume("run-died")
             inbox: InboxPort = engine.inbox
             return f"{outcome.status} {len(inbox.list_items(open_only=False))}"

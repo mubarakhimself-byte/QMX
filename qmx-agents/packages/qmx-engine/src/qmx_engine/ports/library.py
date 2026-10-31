@@ -186,6 +186,8 @@ class RunSummary:
     trace_artifact_hash: str | None
     started_by: str
     """The principal of the call that started the run (27b S17)."""
+    fake: bool = False
+    """The run answered its model nodes with the fake provider, so it lands nothing."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -253,6 +255,18 @@ class LibraryPort(Protocol):
     def link(self, from_id: str, edge: EdgeName, to_id: str, *, principal: str) -> None: ...
 
     def find_by_intent(self, intent_key: str) -> list[str]: ...
+
+    def find_by_write_key(self, run_id: str, write_key: str) -> str | None:
+        """The artifact on `refs/runs/<run_id>` whose `metadata.write_key` is `write_key`."""
+        ...
+
+    def moved_to_main(self, after: int = 0) -> list[LibraryEvent]:
+        """Each object's first move onto `main` after the log position `after`, oldest first."""
+        ...
+
+    def last_seq(self) -> int:
+        """The position of the newest ref move in the log."""
+        ...
 
     def list_runs(self, workflow_item: str, object_id: str | None = None) -> list[RunSummary]: ...
 

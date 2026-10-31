@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from fake_library import fake_service
 from flows import CHAIN
 from pydantic import JsonValue
 
@@ -70,8 +71,8 @@ def asked(
 
 def test_a_merged_run_list_names_each_rows_home(tmp_path: Path) -> None:
     with (
-        EngineService.open(tmp_path / "node-home", name="contabo") as node,
-        EngineService.open(tmp_path / "pc-home", name="pc") as pc,
+        fake_service(tmp_path / "node-home", name="contabo") as node,
+        fake_service(tmp_path / "pc-home", name="pc") as pc,
     ):
         draft = node.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR)
         asyncio.run(node.tests.run(draft.item, caller=OPERATOR))
@@ -90,8 +91,8 @@ def test_a_merged_run_list_names_each_rows_home(tmp_path: Path) -> None:
 
 def test_an_inbox_answer_is_forwarded_and_only_the_home_folds_it(tmp_path: Path) -> None:
     with (
-        EngineService.open(tmp_path / "node-home", name="contabo") as node,
-        EngineService.open(tmp_path / "pc-home", name="pc") as pc,
+        fake_service(tmp_path / "node-home", name="contabo") as node,
+        fake_service(tmp_path / "pc-home", name="pc") as pc,
     ):
         raised = node.ctx.inbox.raise_item(
             Raise(
@@ -117,8 +118,8 @@ def test_an_inbox_answer_is_forwarded_and_only_the_home_folds_it(tmp_path: Path)
 
 def test_an_unreachable_node_keeps_its_last_rows_and_says_since_when(tmp_path: Path) -> None:
     with (
-        EngineService.open(tmp_path / "node-home", name="contabo") as node,
-        EngineService.open(tmp_path / "pc-home", name="pc") as pc,
+        fake_service(tmp_path / "node-home", name="contabo") as node,
+        fake_service(tmp_path / "pc-home", name="pc") as pc,
     ):
         raised = node.ctx.inbox.raise_item(
             Raise(
@@ -156,7 +157,7 @@ def test_a_node_never_reached_still_reads_as_unreachable(tmp_path: Path) -> None
     def post(url: str, body: Mapping[str, JsonValue], headers: Mapping[str, str]) -> JsonValue:
         raise OSError("connection refused")
 
-    with EngineService.open(tmp_path / "pc-home", name="pc") as pc:
+    with fake_service(tmp_path / "pc-home", name="pc") as pc:
         pc.watching(name="pc", forwarders=[asked(post)])
         rows = pc.merged_inbox()
 

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -112,7 +113,8 @@ def test_runs_intent_keys_and_champions(library: LibraryPort) -> None:
     made = library.put_artifact(
         b"brief", "report", {"path": "out.md"}, run_id="r2", principal="run:r2", intent_key="k1"
     )
-    run = library.put_run_summary(summary("r2", draft.item, draft.object_id), principal="run:r2")
+    live = replace(summary("r2", draft.item, draft.object_id), mode="live")
+    run = library.put_run_summary(live, principal="run:r2")
     library.link(made.object_id, "produced-by", run.object_id, principal="run:r2")
     library.set_champion(draft.item, draft.object_id, principal="operator")
 
@@ -133,9 +135,12 @@ def test_a_run_saves_a_workflow_onto_its_draft(library: LibraryPort) -> None:
 
 @pytest.mark.parametrize("adapter", ADAPTERS)
 def test_the_engine_runs_a_workflow_end_to_end(tmp_path: Path, adapter: str) -> None:
-    with Store.open(tmp_path / "library", redactor=redact) as store:
+    with (
+        Store.open(tmp_path / "library", redactor=redact) as store,
+        LibraryFake.open(tmp_path) as fake,
+    ):
         real = EngineLibraryAdapter(store) if adapter == "store" else None
-        with EngineService.open(tmp_path, library=real) as svc:
+        with EngineService.open(tmp_path, library=real or fake) as svc:
             item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR).item
             tested = asyncio.run(svc.tests.run(item, caller=OPERATOR))
             version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)

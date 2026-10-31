@@ -19,16 +19,17 @@ The edge of a row is its own `edge`, else `variant-of` when the row is a variant
 
 The record this step stores is the child the edges start from, so the numbers are the run's own:
 the template id, the run id, what changed, and every parent it was given.
+
+The step never opens the Library. It writes the record under `library/` in its overlay and lists
+the record and its edges under `library`; the runner makes them on the run's own ref and answers
+with `library_written`, where the record's receipt carries its object id and each edge's receipt
+says whether it was written or refused.
 """
 
 import json
 import os
 import sys
 from pathlib import Path
-
-from qmx_engine.ports.library import LibraryRefused
-from qmx_engine.ports.library_fake import LibraryFake
-from qmx_engine.workers.zones import home_of
 
 VARIANT_KEYS = ("variant", "label", "overrides")
 LINEAGE_EDGE = "variant-of"
@@ -103,7 +104,6 @@ def change_of(row):
 
 given = flat(json.load(sys.stdin)["in"])
 run_id = os.environ["QMX_RUN_ID"]
-principal = f"run:{run_id}"
 named = [row for row in rows_of(given) if row.get("object_id")]
 changes = [change for change in map(change_of, named) if change]
 what_changed = " | ".join(dict.fromkeys(changes))
@@ -113,27 +113,25 @@ record = {
     "what_changed": what_changed,
     "parents": [{"edge": edge_of(row), "object_id": str(row["object_id"])} for row in named],
 }
-written = []
-with LibraryFake.open(home_of(Path(os.environ["QMX_WORK_SHARED"]))) as library:
-    stored = library.put_artifact(
-        json.dumps(record, sort_keys=True).encode(),
-        "lineage",
-        {"what_changed": what_changed, "run_id": run_id, "parents": record["parents"]},
-        run_id=run_id,
-        principal=principal,
-        intent_key=f"lineage|{run_id}",
+bodies = Path(os.environ["QMX_WORK"]) / "library"
+bodies.mkdir(parents=True, exist_ok=True)
+(bodies / "lineage.json").write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+writes = [
+    {
+        "op": "put_artifact",
+        "as": "record",
+        "type": "lineage",
+        "body": "library/lineage.json",
+        "metadata": {"what_changed": what_changed, "run_id": run_id, "parents": record["parents"]},
+        "intent_key": f"lineage|{run_id}",
+    }
+]
+edges = []
+for row in named:
+    edges.append(
+        {"edge": edge_of(row), "to": str(row["object_id"]), "what_changed": change_of(row)}
     )
-    for row in named:
-        edge = edge_of(row)
-        line = {
-            "edge": edge,
-            "from": stored.object_id,
-            "to": str(row["object_id"]),
-            "what_changed": change_of(row),
-        }
-        try:
-            library.link(stored.object_id, edge, str(row["object_id"]), principal=principal)
-        except LibraryRefused as refused:
-            line["refused"] = refused.code
-        written.append(line)  # fmt: skip
-print(json.dumps({"record": stored.object_id, "what_changed": what_changed, "edges": written}))
+    writes.append(
+        {"op": "link", "from": "$record", "edge": edge_of(row), "to": str(row["object_id"])}
+    )
+print(json.dumps({"what_changed": what_changed, "edges": edges, "library": writes}))

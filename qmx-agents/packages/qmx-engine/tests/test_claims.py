@@ -8,6 +8,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from fake_library import fake_service
 from fake_port import CARD, OPEN, FakePort, agent, agent_files, events_of
 from flows import edge, folder, node
 from scheduled import Clock, enabled, fires_of
@@ -16,7 +17,6 @@ from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.store import Transaction
 from qmx_engine.ports.harness_adapter import PlanUse
 from qmx_engine.ports.settings import StaticSettings
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.triggers import rows
@@ -97,7 +97,7 @@ def test_a_run_paused_before_its_engine_died_is_resumed_once_by_its_wake(tmp_pat
     settings = StaticSettings({**DEFAULTS, "limits.slack": 0})
 
     async def go() -> tuple[str, int, int]:
-        with EngineService.open(home, settings=settings, harness=port) as svc:
+        with fake_service(home, settings=settings, harness=port) as svc:
             paused = await svc.ctx.engine.start(root, found[1], mode="live", inputs=None)
             ledger = svc.ctx.engine.ledger
             ledger.write(

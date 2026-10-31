@@ -5,7 +5,10 @@
   "inputs": {
     "type": "object",
     "properties": {
-      "fixture": {"type": "string", "description": "replay the recorded replays and batch"}
+      "workflow": {"type": "string", "description": "the Library item of the workflow whose step is settling"},
+      "node": {"type": "string", "description": "the id of the agent step to replace"},
+      "batch": {"type": "array", "description": "the new items to label, each {item_id, title}"},
+      "fixture": {"type": ["boolean", "string"], "description": "replay the recorded replays and batch"}
     }
   },
   "outputs": {"type": "object", "description": "the rule the replays agree on, its equivalence, the sampling rate and the fallback lines"},
@@ -20,7 +23,8 @@
      "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "replays", "name": "Read the recorded replays", "type": "script", "typeVersion": 1,
      "position": [220, 0], "effect": "none",
-     "parameters": {"script": "scripts/replays.py", "fixture_ref": "fixtures/replays.json"}},
+     "parameters": {"script": "scripts/replays.py", "fixture_ref": "fixtures/replays.json",
+                    "library_reads": {"version": {"published": "workflow"}}}},
     {"id": "agree", "name": "Does the script agree on all of them?", "type": "script",
      "typeVersion": 1, "position": [440, 0], "effect": "none",
      "parameters": {"script": "scripts/agree.py"}},
@@ -49,6 +53,8 @@
   ],
   "connections": {
     "Crystallise the step": {"main": [[{"node": "Read the recorded replays", "port": "in",
+                                         "map": "one"},
+                                        {"node": "Classify the batch by the rule", "port": "in",
                                          "map": "one"}]]},
     "Read the recorded replays": {"main": [[{"node": "Does the script agree on all of them?",
                                               "port": "in", "map": "one"}]]},

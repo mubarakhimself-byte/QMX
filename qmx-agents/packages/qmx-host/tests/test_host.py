@@ -21,8 +21,11 @@ from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
 from qmx_control.service import ControlService
 from qmx_engine.control_door import PRINCIPAL, EngineDoor, as_run
+from qmx_engine.ledger import redact
 from qmx_engine.ports.library import Bundle
 from qmx_home import resolve
+from qmx_library.adapter import EngineLibraryAdapter
+from qmx_library.store import Store
 
 import qmx_host.host
 from qmx_host.door import PrincipalDoor
@@ -143,11 +146,12 @@ def hosted(home: Path) -> Generator[tuple[TestClient, EngineDoor]]:
     ready, stop = threading.Event(), threading.Event()
 
     async def run() -> None:
-        async with EngineDoor.open(control) as door:
-            opened.append(door)
-            ready.set()
-            while not stop.is_set():
-                await asyncio.sleep(0.05)
+        with Store.open(home / "library", redactor=redact) as store:
+            async with EngineDoor.open(control, library=EngineLibraryAdapter(store)) as door:
+                opened.append(door)
+                ready.set()
+                while not stop.is_set():
+                    await asyncio.sleep(0.05)
 
     thread = threading.Thread(target=asyncio.run, args=(run(),))
     thread.start()

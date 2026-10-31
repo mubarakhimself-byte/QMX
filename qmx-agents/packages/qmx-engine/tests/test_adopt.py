@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fake_library import fake_service
 from flows import edge, folder, node
 from qmx_home import resolve
 
@@ -24,7 +25,6 @@ from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_engine.ledger.mirror import Journal, MirrorRefused
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.runner import Engine, Refused
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.context import Refused as ServiceRefused
 from qmx_engine.service.runs import RunView, status_of
@@ -121,7 +121,7 @@ def adopt(tmp_path: Path, box: JournalBox, run_id: str) -> tuple[RunView, list[E
     target = machine(tmp_path, "contabo")
     mirror.attach(box)
     try:
-        with EngineService.open(target, name="contabo") as service:
+        with fake_service(target, name="contabo") as service:
             view = asyncio.run(service.runs.adopt(run_id, caller=OPERATOR))
     finally:
         mirror.attach(None)
@@ -194,7 +194,7 @@ def test_adoption_is_refused_with_no_hub_and_when_another_home_holds_the_claim(
     mirror.attach(None)
     try:
         with (
-            EngineService.open(tmp_path / "qmb", name="qmb") as service,
+            fake_service(tmp_path / "qmb", name="qmb") as service,
             pytest.raises(ServiceRefused) as nobody,
         ):
             asyncio.run(service.runs.adopt(run_id, caller=OPERATOR))
@@ -205,7 +205,7 @@ def test_adoption_is_refused_with_no_hub_and_when_another_home_holds_the_claim(
     mirror.attach(box)
     try:
         with (
-            EngineService.open(tmp_path / "qmb", name="qmb") as service,
+            fake_service(tmp_path / "qmb", name="qmb") as service,
             pytest.raises(ServiceRefused) as lost,
         ):
             asyncio.run(service.runs.adopt(run_id, caller=OPERATOR))

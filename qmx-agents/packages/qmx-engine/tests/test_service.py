@@ -8,6 +8,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from fake_library import fake_service
 from flows import CHAIN
 from qmx_control.models import Document
 from qmx_control.service import ControlService, SettingsSection
@@ -16,7 +17,6 @@ from qmx_engine.ledger.store import ledger_path
 from qmx_engine.ports.inbox import Category, Raise
 from qmx_engine.ports.library import Bundle
 from qmx_engine.ports.settings import ControlSettings
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Caller, Refused
 from qmx_engine.settings import DEFAULTS
 
@@ -55,7 +55,7 @@ def test_engine_and_roles_settings_override_the_defaults_without_a_write(tmp_pat
 
 
 def test_a_live_run_leaves_its_summary_and_trace_in_the_library_only(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         item = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR).item
         asyncio.run(svc.tests.run(item, caller=OPERATOR))
         version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)
@@ -85,7 +85,7 @@ def test_a_live_run_leaves_its_summary_and_trace_in_the_library_only(tmp_path: P
 def test_only_the_operator_resolves_an_inbox_item_and_memory_notes_land_in_run_scope(
     tmp_path: Path,
 ) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         found = Raise("r1", "sig", Category.SYSTEM_FAULT, "engine fault", "boom")
         item_id = svc.ctx.inbox.raise_item(found, at="2026-10-17T09:00:00+00:00")
         with pytest.raises(Refused, match=r"^ui_only:"):

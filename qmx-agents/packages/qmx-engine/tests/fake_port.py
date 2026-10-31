@@ -17,6 +17,7 @@ from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.ports.harness_adapter import Activity, PlanUse, Turn
+from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.runner import Engine, Mode, Outcome
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.sink import Listener
@@ -57,8 +58,10 @@ async def drive(
 ) -> Outcome:
     found = checked(root)
     assert not isinstance(found, list), found
-    with Ledger.open(home) as ledger:
-        engine = Engine(home, ledger, settings={**DEFAULTS, **(settings or {})}, harness=port)
+    with Ledger.open(home) as ledger, LibraryFake.open(home) as library:
+        engine = Engine(
+            home, ledger, settings={**DEFAULTS, **(settings or {})}, harness=port, library=library
+        )
         return await engine.start(root, found[1], mode=mode, inputs=inputs)
 
 

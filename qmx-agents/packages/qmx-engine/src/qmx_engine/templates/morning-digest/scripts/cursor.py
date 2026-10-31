@@ -2,6 +2,8 @@
 
 The digest read starts at that position, so a second digest shows only what landed after the first
 one (46 K-32). Before he has looked once the position is zero and the digest reads the whole log.
+The runner serves the Library's newest log position (`library.log`): a cursor above it was counted
+in another file, so control resets it to zero once.
 """
 
 import json
@@ -13,12 +15,13 @@ from qmx_control.service import ControlService
 
 from qmx_engine.workers.zones import home_of
 
-given = json.load(sys.stdin)["in"]
+payload = json.load(sys.stdin)
+given = payload["in"]
 state = given if isinstance(given, dict) else next((v for v in given if isinstance(v, dict)), {})
 home = home_of(Path(os.environ["QMX_WORK_SHARED"]))
 service = ControlService(home)
 try:
-    row = service.last_look()
+    row = service.last_look("library", int(payload["library"]["log"]))
 finally:
     service.close()
 print(

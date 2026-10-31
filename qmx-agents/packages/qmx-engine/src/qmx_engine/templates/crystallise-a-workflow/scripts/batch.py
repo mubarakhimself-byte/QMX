@@ -5,13 +5,17 @@ A title the rule matches is labelled by the script, for free. A title it does no
 it proved, the agent keeps what it never saw.
 
 Every tenth item is also sent to the agent as a sample, so production keeps measuring the script
-against the agent after the equivalence check passed (K-19)."""
+against the agent after the equivalence check passed (K-19).
+
+The batch is the run's own `batch` input, each item `{item_id, title}`; a run with none is refused.
+Only a run whose `fixture` input is set classifies the shipped fixture batch."""
 
 import json
 import re
 import sys
 from pathlib import Path
 
+FAILURE = "[QMX_FAILURE]"
 SHORT = 3
 
 
@@ -27,11 +31,22 @@ def classify(title, rules):
 given = json.load(sys.stdin)["in"]
 items = given if isinstance(given, list) else [given]
 agreed = next((v for v in items if isinstance(v, dict) and "rules" in v), {})
+asked = next((v for v in items if isinstance(v, dict) and "rules" not in v), {})
 rules = agreed.get("rules") or {}
 one_in = int(((agreed.get("sampling") or {}).get("one_in")) or 0)
-batch = json.loads(
-    (Path(__file__).parents[1] / "fixtures" / "batch.json").read_text(encoding="utf-8")
-)
+if asked.get("fixture") or agreed.get("fixture"):
+    batch = json.loads(
+        (Path(__file__).parents[1] / "fixtures" / "batch.json").read_text(encoding="utf-8")
+    )
+else:
+    batch = [
+        item
+        for item in asked.get("batch") or []
+        if isinstance(item, dict) and "item_id" in item and "title" in item
+    ]
+    if not batch:
+        print(f"{FAILURE} no batch given: name the new items as batch, each {{item_id, title}}")
+        raise SystemExit(0)
 classified = []
 for index, item in enumerate(batch):
     label = classify(item["title"], rules)

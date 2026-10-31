@@ -7,16 +7,16 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from fake_library import fake_service
 from flows import CHAIN
 
 from qmx_engine.ports.library import Bundle, runs_ref
 from qmx_engine.ports.library_fake import LibraryFake
-from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import OPERATOR, Refused
 
 
 def test_only_a_version_on_main_runs_live(tmp_path: Path) -> None:
-    with EngineService.open(tmp_path) as svc:
+    with fake_service(tmp_path) as svc:
         draft = svc.drafts.put(None, Bundle.read(CHAIN), 0, caller=OPERATOR)
         stored = svc.ctx.library.get(draft.object_id)
         library = cast(LibraryFake, svc.ctx.library)

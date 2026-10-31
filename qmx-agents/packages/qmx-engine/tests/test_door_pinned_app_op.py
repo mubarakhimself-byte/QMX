@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import cast
 
+from fake_library import fake_door
 from qmx_control import ControlService
 from qmx_control.models import Document
 
@@ -51,7 +52,7 @@ def door_executor(control: ControlService) -> Generator[AppOp]:
     ready, stop = threading.Event(), threading.Event()
 
     async def main() -> None:
-        async with EngineDoor.open(control, principal=lambda: OPERATOR) as found:
+        async with fake_door(control, principal=lambda: OPERATOR) as found:
             opened.append(found)
             ready.set()
             while not stop.is_set():
