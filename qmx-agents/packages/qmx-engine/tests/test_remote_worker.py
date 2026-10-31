@@ -26,6 +26,15 @@ from qmx_engine.workers.remote import (
 PASS = "pass_" + "a" * 48
 """A stand-in run pass, long enough that the sidecar registers it for redaction."""
 MIB = 1024 * 1024
+ADDED = {
+    **DEFAULTS,
+    "placement.contabo.kind": "owned",
+    "placement.contabo.attempt_cpus": 2,
+    "placement.contabo.attempt_timeout": 3_600,
+    "placement.contabo.attempt_gpu": 0,
+    "placement.contabo.machine": "vmi-1",
+}
+"""The settings with the server row he added under the name `contabo`; no row ships."""
 
 
 def job(placement: str = "contabo") -> NodeJob:
@@ -107,7 +116,7 @@ def worker(
     return PlacementWorker(
         gateway=gateway,
         providers={"contabo": provider},
-        settings=DEFAULTS,
+        settings=ADDED,
         mint=lambda _job: PASS,
         remote={"contabo"},
         heartbeat_timeout=0.05,
@@ -157,6 +166,11 @@ def test_a_placed_job_ships_its_shape_and_returns_the_result() -> None:
         "gpu": 0,
     }
     assert [kind for kind, _ in emitted] == ["node_started", "heartbeat", "log"]
+    assert {key: emitted[0][1][key] for key in ("place", "place_id", "machine")} == {
+        "place": "contabo",
+        "place_id": "contabo",
+        "machine": "vmi-1",
+    }
     assert emitted[1][1] == {"at": "2026-10-21T20:00:05+00:00", "note": "running"}
 
 
@@ -212,9 +226,9 @@ def test_a_bundle_takes_its_memory_from_the_node_then_the_measured_session() -> 
         job(), node_definition={**job().node_definition, "parameters": {"memory_mb": 512}}
     )
 
-    from_node = attempt_bundle(declared, live=host_row())
-    from_reading = attempt_bundle(job(), live=host_row())
-    from_nothing = attempt_bundle(job())
+    from_node = attempt_bundle(declared, settings=ADDED, live=host_row())
+    from_reading = attempt_bundle(job(), settings=ADDED, live=host_row())
+    from_nothing = attempt_bundle(job(), settings=ADDED)
 
     assert from_node["resources"] == {"cpus": 2, "memory_mb": 512, "timeout": 3_600, "gpu": 0}
     assert from_reading["resources"] == {"cpus": 2, "memory_mb": 1_536, "timeout": 3_600, "gpu": 0}
@@ -222,8 +236,9 @@ def test_a_bundle_takes_its_memory_from_the_node_then_the_measured_session() -> 
 
 
 def test_the_session_count_comes_from_the_live_row_and_is_zero_without_one() -> None:
-    assert sessions_of(DEFAULTS, "contabo", live=host_row()) == 7
-    assert sessions_of(DEFAULTS, "contabo") == 0
+    assert sessions_of(ADDED, "contabo", live=host_row()) == 7
+    assert sessions_of(ADDED, "contabo") == 0
+    assert sessions_of(DEFAULTS, "contabo", live=host_row()) == 0
     assert sessions_of(DEFAULTS, "nowhere", live=host_row()) == 0
 
 
@@ -269,7 +284,7 @@ def test_a_placed_job_carries_its_placements_door_url() -> None:
     placed = PlacementWorker(
         gateway=FakeGateway(rows=[], result={"status": "ok", "outputs": {"count": 1}}),
         providers={"contabo": provider},
-        settings=DEFAULTS,
+        settings=ADDED,
         mint=lambda _job: PASS,
         remote={"contabo"},
         poll_seconds=0.0,

@@ -51,7 +51,7 @@ from qma.harness.tools import HostRead
 from qma.telemetry import configured
 from qmf.core import is_refusal
 from qmx_control.models import Document
-from qmx_control.node import library_primary
+from qmx_control.node import PLACE, library_primary
 from qmx_control.primary import CARD_REF, HOLD, Flip
 from qmx_control.service import ControlService
 from qmx_engine.admission import setting
@@ -85,6 +85,7 @@ from qmx_engine.service.forward import (
     wall,
 )
 from qmx_engine.service.rest import engine_router
+from qmx_engine.settings import PC
 from qmx_engine.workers.remote import PlacementWorker
 from qmx_home import Layout
 from qmx_hub.server import Hub, in_process
@@ -151,6 +152,10 @@ class HostRunning(Exception):
         super().__init__(f"refused: {home} already has a host, {who}; stop it first.")
 
 
+class PlaceRefused(Exception):
+    """This host's place name is missing or not a place name; the message is the one line."""
+
+
 def _lock(handle: IO[bytes]) -> None:
     if sys.platform == "win32":
         import msvcrt  # noqa: PLC0415
@@ -213,12 +218,13 @@ def serve_forever(
     scrubbed: Sequence[str],
     keep: Sequence[str],
     library_root: Path | None = None,
+    place: str = "",
 ) -> int:
     try:
         with single_instance(home):
             record(home, port)
-            asyncio.run(serve(home, port, role, ui_origin, scrubbed, keep, library_root))
-    except HostRunning as refused:
+            asyncio.run(serve(home, port, role, ui_origin, scrubbed, keep, library_root, place))
+    except (HostRunning, PlaceRefused) as refused:
         print(refused, file=sys.stderr)
         return 1
     return 0
@@ -626,10 +632,13 @@ async def serve(
     scrubbed: Sequence[str],
     keep: Sequence[str],
     library_root: Path | None = None,
+    place: str = "",
 ) -> None:
-    """Assumes the caller scrubbed the environment and holds the home's lock."""
+    """Assumes the caller scrubbed the environment and holds the home's lock. `place` is the
+    `--place` name setup gives a server's host."""
     qmx_home = QmxHome(home)
     control = control_service(qmx_home)
+    name = placement_name(control, role, place)
     serving = role == "server"
     # Computed once, so the REST gate, the door's restamp and the Library routes share one bearer.
     bearer = qmx_control.server.local_token(home, create=True)
@@ -681,7 +690,7 @@ async def serve(
                         )
                         if placed is not None:
                             core.worker = placed
-                        name = placement_name(control, role)
+                        core.worker.place = name
                         link = hub_link(home, control)
                         asking = Streams.of(forwarders_for(home, core, name, role))
                         engine.svc.watching(name=name, forwarders=asking.forwarders)
@@ -879,12 +888,28 @@ def hear(link: HubLink, row: Heartbeat, control: ControlService) -> None:
         control.settings_put("engine", {"autonomy": {"paused": reply.autonomy_paused}})
 
 
-def placement_name(control: ControlService, role: Role) -> str:
-    """This host's placement name (AD-30): the PC is `pc`, a node names itself, else `contabo`."""
+def placement_name(control: ControlService, role: Role, place: str = "") -> str:
+    """This host's place name (AD-30, AD-72). This PC is always `pc`. A host started for a server
+    takes `--place`, which setup passes, else `[engine] host_name`, and never guesses one; the
+    name is a place name (`PLACE`) other than `pc`. A refusal is one line that echoes nothing he
+    typed."""
+    if role == "pc":
+        if place not in ("", PC):
+            raise PlaceRefused("refused: a host started as pc is This PC; --place names a server")
+        return PC
     found = section(control, "engine").get("host_name")
-    if isinstance(found, str) and found:
-        return found
-    return "pc" if role == "pc" else "contabo"
+    name = place or (found if isinstance(found, str) else "")
+    if not name:
+        raise PlaceRefused(
+            f"refused: a host started as {role} needs its place name; pass --place <name>, the"
+            " name he gave this machine in his place list, or set [engine] host_name."
+        )
+    if name == PC or not PLACE.fullmatch(name):
+        raise PlaceRefused(
+            "refused: a server's place name is lowercase letters, digits and dashes, up to 63,"
+            " and is not pc."
+        )
+    return name
 
 
 def hub_link(home: Path, control: ControlService) -> HubLink | None:
@@ -1133,7 +1158,12 @@ def health(port: int, home: Path) -> int | None:
 
 
 def start(
-    home: Path, port: int, role: Role, ui_origin: str, library_root: Path | None = None
+    home: Path,
+    port: int,
+    role: Role,
+    ui_origin: str,
+    library_root: Path | None = None,
+    place: str = "",
 ) -> int:
     """`serve` in a background process, once it answers `/api/health`. The child is given the
     QMX folder, which it resolves again, and writes to the folder's `logs/host.log`."""
@@ -1153,6 +1183,8 @@ def start(
     command += ["--role", role, "--ui-origin", ui_origin]
     if library_root is not None:
         command += ["--library-root", str(library_root)]
+    if place:
+        command += ["--place", place]
     host_log = layout.logs / "host.log"
     host_log.parent.mkdir(parents=True, exist_ok=True)
     with host_log.open("ab") as log:

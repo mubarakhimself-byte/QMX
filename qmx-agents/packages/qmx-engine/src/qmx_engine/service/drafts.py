@@ -19,6 +19,7 @@ from qmx_engine.definition.overlay import OverlayError, resolve
 from qmx_engine.definition.validate import needs_line, validate
 from qmx_engine.ports.library import Bundle, Draft, JsonObject, LibraryRefused, drafts_ref
 from qmx_engine.service.context import Caller, Context, State
+from qmx_engine.settings import places
 
 
 class Drafts:
@@ -70,7 +71,8 @@ class Drafts:
             bundle, _ = self.resolved(bundle)
         except (OverlayError, LibraryRefused, ValueError) as error:
             return [Problem("extends_invalid", "extends", str(error))]
-        found = validate(bundle.folder(), roles=self.ctx.roles())
+        listed = places(self.ctx.settings.values())
+        found = validate(bundle.folder(), roles=self.ctx.roles(), placements=listed)
         if needs and bundle.needs():
             found.append(Problem("needs_unmet", "meta.needs", needs_line(bundle.needs())))
         return found

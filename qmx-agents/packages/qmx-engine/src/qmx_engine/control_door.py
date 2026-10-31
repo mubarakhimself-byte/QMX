@@ -47,6 +47,7 @@ from qmx_engine.runner import new_run_id
 from qmx_engine.service.api import EngineService
 from qmx_engine.service.context import Caller, Refused
 from qmx_engine.service.runs import RunView, fire_after, status_of, summarize_again
+from qmx_engine.settings import places
 from qmx_engine.trace_export import export
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.catchup import CatchUp
@@ -123,8 +124,10 @@ def bundle_of(graph: Mapping[str, JsonValue]) -> Bundle:
 
 
 def webhook_home(settings: Mapping[str, object]) -> rows.HomeEngine:
-    """Where a new webhook trigger lives: `triggers.webhook_home`, `pc` until the server exists."""
-    return "contabo" if settings.get("triggers.webhook_home") == "contabo" else "pc"
+    """Where a new webhook trigger lives: the place `triggers.webhook_home` names, This PC when
+    it names none."""
+    found = settings.get("triggers.webhook_home")
+    return found if isinstance(found, str) and found else rows.HERE
 
 
 def card(act: str, title: str, method: str, path: str, body: Document) -> Document:
@@ -217,6 +220,9 @@ class TriggerIn(BaseModel):
     continuity: bool = False
     catch_up: CatchUp = "merged"
     max_concurrent: int = Field(default=1, ge=1)
+    place: str | None = None
+    """The place whose engine fires it, by its name in the place list; This PC when left out,
+    or `triggers.webhook_home` for a webhook."""
 
     def spec(self, now: datetime) -> rows.Spec:
         match self.kind:
@@ -409,7 +415,7 @@ class EngineDoor:
             found = rows.triggers(reader.connection, "WHERE id = ?", trigger_id)
         if not found:
             raise Refused("unknown_trigger", f"no trigger {trigger_id}")
-        return found[0]
+        return rows.standing(found[0], places(self.svc.ctx.engine.settings))
 
     @staticmethod
     def _trigger_view(trigger: rows.Trigger) -> Mapping[str, object]:
@@ -626,7 +632,8 @@ class EngineDoor:
             where, args = ("WHERE workflow_item = ?", (workflow_id,)) if workflow_id else ("", ())
             with Reader.open(home) as reader:
                 found = rows.triggers(reader.connection, where, *args)
-            return [self._trigger_view(t) for t in found]
+            listed = places(self.svc.ctx.engine.settings)
+            return [self._trigger_view(rows.standing(t, listed)) for t in found]
 
         return self._serve_all(listed)
 
@@ -641,6 +648,10 @@ class EngineDoor:
                 raise Refused("trigger_refused", f"{object_id} is not a version of {workflow_id}")
             now = self.svc.ctx.clock.now()
             ledger = self.svc.ctx.engine.ledger
+            settings = self.svc.ctx.engine.settings
+            home = wanted.place or (
+                webhook_home(settings) if wanted.kind == "webhook" else rows.HERE
+            )
             made = rows.create(
                 ledger,
                 workflow_item=workflow_id,
@@ -656,9 +667,8 @@ class EngineDoor:
                 max_concurrent=wanted.max_concurrent,
                 priority=wanted.rank,
                 ready_by=wanted.ready_by,
-                home_engine=webhook_home(self.svc.ctx.engine.settings)
-                if wanted.kind == "webhook"
-                else rows.HERE,
+                place=home,
+                places=places(settings),
             )
             ledger.write(set_enabled(made.id, False))
             return self._trigger_view(self._trigger_row(made.id))

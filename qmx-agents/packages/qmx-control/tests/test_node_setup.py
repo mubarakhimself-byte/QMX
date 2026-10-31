@@ -19,7 +19,10 @@ from qmx_home import resolve
 from qmx_router.vault import MemorySource, VaultKey, VaultStore, as_text
 
 from qmx_control.node import (
+    HOST_UNIT,
+    UNIT_COPY,
     SessionLost,
+    bootstrap_script,
     host_unit,
     layout_script,
     main,
@@ -34,6 +37,8 @@ from qmx_control.node import (
 )
 
 REVISION = "0" * 40
+MACHINE = "home-server"
+"""The place name he gives the server at setup."""
 RECOVER = "/usr/local/sbin/qmx-recover"
 
 
@@ -117,6 +122,7 @@ def test_setup_keeps_the_firewall_after_a_fresh_login_says_on_then_starts_the_ho
     done = setup(
         "qmx-server",
         tmp_path,
+        machine=MACHINE,
         revision=REVISION,
         call=server,
         say=lambda _: None,
@@ -165,6 +171,7 @@ def test_a_failed_fresh_login_stops_setup_before_the_host_and_lets_the_undo_fire
     done = setup(
         "qmx-server",
         tmp_path,
+        machine=MACHINE,
         revision=REVISION,
         call=server,
         say=said.append,
@@ -191,6 +198,7 @@ def test_setup_waits_past_six_checks_for_a_late_switch_on_then_keeps_the_firewal
     done = setup(
         "qmx-server",
         tmp_path,
+        machine=MACHINE,
         revision=REVISION,
         call=server,
         say=lambda _: None,
@@ -213,6 +221,7 @@ def test_setup_stops_when_the_firewall_never_says_on_and_lets_the_undo_fire(
     done = setup(
         "qmx-server",
         tmp_path,
+        machine=MACHINE,
         revision=REVISION,
         call=server,
         say=said.append,
@@ -252,19 +261,63 @@ def test_a_dropped_ssh_session_is_told_apart_from_a_command_that_failed(tmp_path
     assert type(failed.value) is RuntimeError
 
 
-def test_the_import_and_the_host_unit_name_the_one_root() -> None:
-    importing = dict(setup_steps(REVISION))["import as qmx"]
-    exec_start = next(line for line in host_unit().splitlines() if line.startswith("ExecStart="))
+def test_the_import_and_the_host_unit_name_the_one_root_and_the_servers_place() -> None:
+    steps = dict(setup_steps(REVISION, machine=MACHINE))
+    importing = steps["import as qmx"]
+    installed = steps["install the host"]
+    exec_start = next(line for line in installed.splitlines() if line.startswith("ExecStart="))
     assert exec_start == (
         "ExecStart=/opt/qmx/qmx-agents/.venv/bin/python -m qmx_host serve --home "
-        "/srv/qmx/home/.qmx --port 8766 --role server --library-root /srv/qmx/library"
+        "/srv/qmx/home/.qmx --port 8766 --role server --place home-server"
+        " --library-root /srv/qmx/library"
+    )
+    assert (
+        f"install -D -o root -g root -m 644 /etc/systemd/system/qmx-host.service {UNIT_COPY}"
+        in installed
     )
     assert importing.endswith("--root /srv/qmx/library\n")
+    with pytest.raises(ValueError, match=r"^a place name is lowercase letters"):
+        host_unit("server", "Home Server")
+
+
+def test_an_update_keeps_the_place_name_setup_wrote_into_the_host_unit() -> None:
+    unit_path = f"/etc/systemd/system/{HOST_UNIT}"
+    recover = (Path(__file__).parents[1] / "src/qmx_control/qmx-recover.sh").read_text("utf-8")
+
+    assert unit_path not in bootstrap_script(REVISION)
+    assert unit_path not in layout_script()
+    assert 'install -m 644 "$UNIT_COPY" "$UNIT_DIR/$HOST_UNIT.service"' in recover
+
+
+def test_setup_without_the_servers_place_name_stops_before_anything_runs(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def run(command: list[str], **_: object) -> str:
+        raise AssertionError(f"ran {command}")
+
+    monkeypatch.setattr("qmx_control.node.run", run)
+    monkeypatch.setattr(sys, "argv", ["qmx", "node", "setup", "qmx-server", "--dry-run"])
+
+    with pytest.raises(SystemExit) as stopped:
+        main()
+
+    assert stopped.value.code == 2
+    assert capsys.readouterr().err.splitlines()[-1] == (
+        "qmx: error: Name the server's place with --machine, the name its host runs under."
+    )
 
 
 def test_a_dry_run_prints_the_order_and_writes_nothing(tmp_path: Path) -> None:
     said: list[str] = []
-    setup("qmx-server", tmp_path, revision=REVISION, call=Server(), say=said.append, dry_run=True)
+    setup(
+        "qmx-server",
+        tmp_path,
+        machine=MACHINE,
+        revision=REVISION,
+        call=Server(),
+        say=said.append,
+        dry_run=True,
+    )
     assert [line for line in said if line.startswith("step ")] == [
         "step 1: bootstrap",
         "step 2: install the recovery script",

@@ -39,7 +39,7 @@ from qmx_engine.admission import sessions_of as sessions_for_ram
 from qmx_engine.heartbeat import Heartbeat
 from qmx_engine.ledger.events import KINDS, EventKind
 from qmx_engine.ledger.signature import signature
-from qmx_engine.nodes.base import Failed, Gate, NodeJob, NodeResult, Ok, Waiting
+from qmx_engine.nodes.base import Failed, Gate, NodeJob, NodeResult, Ok, Waiting, where_ran
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.workers.local import Emit, LocalWorker
 
@@ -325,6 +325,9 @@ class PlacementWorker(LocalWorker):
     def routes(self, placement: str) -> bool:
         return placement in self.remote
 
+    def reaches(self, place: str) -> bool:
+        return self.routes(place) or super().reaches(place)
+
     async def run(self, job: NodeJob, emit: Emit) -> NodeResult:
         if not self.routes(job.placement):
             return await super().run(job, emit)
@@ -344,10 +347,12 @@ class PlacementWorker(LocalWorker):
     async def dispatch(
         self, job: NodeJob, provider: Any, bundle: Document, emit: Emit
     ) -> NodeResult:
+        machine = self.settings.get(f"placement.{job.placement}.machine")
         emit(
             "node_started",
             attempt_keys(job)
-            | {"placement": job.placement, "idempotency_key": job.idempotency_key},
+            | {"placement": job.placement, "idempotency_key": job.idempotency_key}
+            | where_ran(job, job.placement, machine if isinstance(machine, str) else ""),
         )
         try:
             handle = provider.provision(job.run_id, _as_bundle(bundle, job.placement))

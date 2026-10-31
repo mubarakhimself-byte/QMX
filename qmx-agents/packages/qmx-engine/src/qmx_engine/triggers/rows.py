@@ -1,7 +1,11 @@
 """Trigger and fire rows (SOLUTION-DESIGN 4.1), in `engine.sqlite` under the one writer (AD-23).
 
 A trigger lives outside the definition and pins one published object (AD-10). It names one
-`home_engine`, and an engine instance claims only its own home's rows (AD-3); this one is `pc`.
+`home_engine`: the stable id of the place whose engine fires it, any place in his list (AD-72),
+This PC unless he names another, so renaming a place keeps its triggers. An engine instance claims
+only its own home's rows (AD-3); this one is `pc`. A trigger is written only onto a listed place
+(`create`, which takes the place by name), and one whose place has since left the list reads
+`blocked_config` with a line naming it (`standing`, which also gives the place's current name).
 The kinds are `cron` in an IANA zone, `interval`, `manual`, `after`, `webhook`, `event` and
 `session`. A `webhook` fires once per delivery id the host's door hands in (`deliver`). An `event`
 row stores its filter; its matcher comes with TRG2b. A `session` row waits for copilot loops. A
@@ -21,8 +25,10 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import datetime, time, timedelta
+from types import MappingProxyType
 from typing import Final, Literal, cast
 from zoneinfo import ZoneInfo
 
@@ -30,11 +36,13 @@ from pydantic import JsonValue
 
 from qmx_engine.ledger.store import Ledger, Operation, Transaction
 from qmx_engine.service.context import Caller, Refused
+from qmx_engine.settings import PC
 from qmx_engine.triggers.catchup import CatchUp
 from qmx_engine.triggers.cron import Clocked, Cron, Interval, after, instant, stamp
 
 type JsonObject = dict[str, JsonValue]
-type HomeEngine = Literal["pc", "contabo"]
+type HomeEngine = str
+"""A place's stable id from the place list (`settings.places`); `pc` for This PC."""
 type Delivery = Literal["inbox", "digest", "silent"]
 type Delivered = Literal["delivered", "unverified", "failed", "none"]
 """What became of a fire's delivery, beside its status. An empty payload fails closed."""
@@ -55,8 +63,11 @@ type FireStatus = Literal[
     "cancelled",
 ]
 
-HERE: Final[HomeEngine] = "pc"
+HERE: Final[HomeEngine] = PC
 """The home this engine instance claims for."""
+ONLY_PC: Final[Mapping[str, str]] = MappingProxyType({PC: PC})
+"""The place list with no place added: a caller that passes none can home a trigger on This PC
+only."""
 LIVE: Final = ("claimed", "running")
 """Fire statuses that hold a lease."""
 ENDINGS: Final = ("ok", "silent", "blocked_config", "failed", "unknown", "cancelled", "skipped")
@@ -124,6 +135,10 @@ class Trigger:
     priority: int = 0
     ready_by: str | None = None
     """A local `HH:MM` in `zone`."""
+    blocked: str | None = None
+    """Why it cannot fire, read against the place list by `standing`; never stored."""
+    place: str | None = None
+    """Its place's current name, read against the place list by `standing`; never stored."""
 
     @property
     def kind(self) -> str:
@@ -256,7 +271,7 @@ def trigger_of(row: tuple[object, ...]) -> Trigger:
         spec=spec_of(str(kind), str(spec), str(created)),
         created_by=str(by),
         created_at=str(created),
-        home_engine=cast(HomeEngine, home),
+        home_engine=str(home),
         follow_champion=bool(follow),
         enabled=bool(enabled),
         precheck_ref=cast(str | None, precheck),
@@ -333,7 +348,7 @@ def create(
     spec: Spec,
     caller: Caller,
     now: datetime,
-    home_engine: HomeEngine = HERE,
+    place: str = PC,
     follow_champion: bool = False,
     precheck_ref: str | None = None,
     delivery: Delivery = "digest",
@@ -342,11 +357,16 @@ def create(
     max_concurrent: int = 1,
     priority: int = 0,
     ready_by: str | None = None,
+    places: Mapping[str, str] = ONLY_PC,
 ) -> Trigger:
     """A new trigger, created by a user or an agent. A run never creates one (SOLUTION-DESIGN
-    4.2 step 7)."""
+    4.2 step 7). `place` is its home by name, which must be in the place list `places`
+    (`name -> id`); the row stores the place's id."""
     if caller.kind == "workflow":
         raise Refused("trigger_refused", "a workflow run cannot create, edit or enable triggers")
+    home_engine = places.get(place)
+    if home_engine is None:
+        raise Refused("place_unknown", f"the place '{place}' is not in the place list")
     if isinstance(spec, Interval):
         spec = Interval(spec.seconds, now)
     trigger = Trigger(
@@ -433,6 +453,17 @@ def triggers(connection: sqlite3.Connection, where: str = "", *args: object) -> 
         args,
     ).fetchall()
     return [trigger_of(row) for row in rows]
+
+
+def standing(trigger: Trigger, places: Mapping[str, str]) -> Trigger:
+    """The trigger as he should see it against the place list `places` (`name -> id`): its
+    place's current name, found by id so a rename keeps it live, or, for a place no longer in the
+    list, `blocked_config` with a line naming the place, until it is listed again."""
+    name = next((named for named, stable in places.items() if stable == trigger.home_engine), None)
+    if name is not None:
+        return replace(trigger, place=name)
+    line = f"the place '{trigger.home_engine}' was removed"
+    return replace(trigger, last_status="blocked_config", blocked=line)
 
 
 def fires(connection: sqlite3.Connection, trigger_id: str) -> list[Fire]:

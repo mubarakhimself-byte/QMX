@@ -24,6 +24,9 @@ and no live run starts a node; OPS2 makes the Hub's copy authoritative. `trigger
 are the spend-neutral re-runs after a failed fire, counted from its first failure.
 `triggers.precheck_timeout` bounds a trigger's own check script, which is not a node. The
 `market_open` precheck holds a fire on weekends and `market.holidays` in the trigger's zone.
+
+The place list (AD-30, AD-72) is `pc`, built in, plus every name he gives a `placement.<name>.*`
+row. No other row ships here: a place is one he adds, under whatever name he typed.
 """
 
 from __future__ import annotations
@@ -37,6 +40,31 @@ from qmx_router import agents
 from qmx_engine.ports.router import Row
 
 type Setting = int | float | str | tuple[int, ...] | tuple[str, ...] | None
+
+PC: Final = "pc"
+"""This PC: the one built-in place, always in the list and the default of every choice."""
+
+
+def place_of(key: str) -> str | None:
+    """The place a `placement.<name>.<field>` key belongs to, or None for any other key."""
+    parts = key.split(".")
+    if len(parts) == 3 and parts[0] == "placement" and parts[1] and parts[2]:
+        return parts[1]
+    return None
+
+
+def places(settings: Mapping[str, object]) -> dict[str, str]:
+    """The place list as `name -> id`: This PC, then every name with a `placement.<name>.*` row.
+    A row's stable `id` is its `placement.<name>.id`, so renaming a place keeps its history; a
+    row that names none is known by its name."""
+    found = {PC: PC}
+    for key in settings:
+        name = place_of(key)
+        if name is not None:
+            stable = settings.get(f"placement.{name}.id")
+            found.setdefault(name, stable if isinstance(stable, str) and stable else name)
+    return found
+
 
 ROLE_TIERS: Final[Mapping[str, str]] = MappingProxyType(
     {**agents.ROLE_TIERS, "memory_extractor": "mid"}
@@ -105,7 +133,7 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "triggers.rerun_delays": (300, 900, 1_800),  # Claude's default, UI-editable
         "triggers.ready_by_window": 3_600,  # Claude's default, UI-editable
         "triggers.precheck_timeout": 600,  # Claude's default, UI-editable; a check, not a node
-        "triggers.webhook_home": "pc",  # Claude's default, UI-editable; contabo once it exists
+        "triggers.webhook_home": PC,  # Claude's default, UI-editable; any place in the list
         "market.holidays": (),  # Claude's default, UI-editable; local dates, YYYY-MM-DD
         "limits.slack": 60,  # Claude's default, UI-editable
         "limits.alert_after": 21_600,  # Claude's default, UI-editable
@@ -131,11 +159,6 @@ DEFAULTS: Final[Mapping[str, Setting]] = MappingProxyType(
         "placement.pc.cpu_slots": None,  # Claude's default, UI-editable; unset is cores minus one
         "placement.pc.container_slots": 3,  # Claude's default, UI-editable
         "placement.pc.gpu_slots": 1,  # Claude's default, UI-editable; the one Quadro T1000 (DR13)
-        "placement.contabo.kind": "owned",  # Claude's default, UI-editable; AD-30 row
-        "placement.contabo.relay": "local",  # Claude's default, UI-editable; the central relay
-        "placement.contabo.attempt_cpus": 2,  # Claude's default, UI-editable
-        "placement.contabo.attempt_timeout": 3_600,  # Claude's default, UI-editable
-        "placement.contabo.attempt_gpu": 0,  # Claude's default, UI-editable; no GPU on the box
         "context_window": 200_000,  # Claude's default, UI-editable
         "roles.triage": _CHEAP,  # Claude's default, UI-editable
         "roles.clarifier": _CHEAP,  # Claude's default, UI-editable
