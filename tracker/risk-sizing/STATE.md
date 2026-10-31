@@ -2,7 +2,7 @@
 
 **Read this first.** It is the single entry point for the unit work: every finding, operator correction and open decision in one place, with links to the detail. Updated after every agent result and every operator message.
 
-Last updated: 2026-10-27 (after 07 funnel).
+Last updated: 2026-10-31 midday (his foundation round; the midday program).
 
 ## Where everything is
 
@@ -28,6 +28,38 @@ Last updated: 2026-10-27 (after 07 funnel).
 9. **The MQL5 DeepSeek run is dropped** (no credits). Use the articles later inside QMX through mini apps and workflows.
 10. **Positioning:** when generating strategies is nearly free, judging them is the product. QMX is his own platform, not for sale.
 11. **Bring him only real ambiguity.** Settle simple architecture issues and report them in one line.
+
+## Operator round 2026-10-31 midday: build the foundation, plan to the orchestrator prompt tonight (binding; outranks 52, 53 and the morning program)
+
+Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T09:12 UTC, and the nudge at 09:14: the session was compacted, so re-ground on the files, not on memory).
+
+**Rulings (his words, binding):**
+1. **No throwaway prototype.** "I can't wait 2 days for you just to code something and throw it away." Build the real parts: the dictionary, QML, and the other parts of QMX. The proof is a dummy unit on the real template, with any strategy the lead picks ("you are smart enough to conjure up any strategy you want"), shown working. He makes new and better units himself later, in daily use.
+2. **The lead solves the weak spots itself.** "You already know what I want." Do not bring him problems to solve; settle them in the design and report them in a line.
+3. **Plan as much as possible, then code tonight.** He comes back for one thing: the orchestrator prompt. The building agents do most of the testing and review.
+4. **The workflow stays his,** not Fable's cut-down stack: party mode with brainstorming for the solutions; CIS for his day-to-day experience; party mode again for the versions of the architecture and the foundational set; bmad-architecture is required (Winston, the architect persona, joins party mode). No prototype skill. Blast radius sits inside the architecture step. bmad-review may serve during coding. poteto-mode runs the coding ("no skill cluster caters for coding more than potato mode"). The lead also gets its own view of the skills from its own sub-agent and compares it with Fable's and his.
+5. **Start with a pass through the whole conversation** (late 30 Oct and all of 31 Oct), then fold the architecture with the latest decisions.
+6. **Foundation first.** Design the smallest set of parts that is complete and solid (he asked that the word "minimal viable" not be used), so QMX can grow on top without rework: "building a house on a very strong foundation"; design for complexity, not a complex system. It is the same pattern as mini apps, the lab and the pods. The same approach will apply to risk and sizing.
+7. **Parts (his list, a seed):** QML with its dictionary, the MIS, contracts and APIs (internal and external), the trading node, QMA workflows, the unit itself, "and so on".
+8. **QMA v2 is in scope.** "Anything that an agent under QMA can do, the copilot should already be able to do." Ground on the recent PRs that touch QMA v2, and widen the search.
+9. **The earlier sessions' designs** (the 20-28 Oct transcript and its explainer sites) may already solve much; check whether they were carried forward.
+10. **Priority: QML first** ("a small mistake in there is very costly"), the trading node second, then the MIS.
+11. **The MIS gets defaults now** and room for models he trains later. It must hold for every instrument now in scope, not only forex. He sees the MIS as incomplete.
+12. **Contracts.** External: what the new parts need from outside, above all live trading (partly covered). Internal: QML, and the copilot and agents writing to QML. Agents get feedback while they write, the way Claude Code gets a linter error through a hook (QMA v2 runs on the Claude Agent SDK); no false positives. QML is not new: much exists, the dictionary does not.
+13. **Dictionary expansion:** the lead decides who expands it (planning agents now, or the orchestrator's agents), and gives them directions: ground first, do not limit them.
+14. **Futures platforms:** cTrader may not handle futures. Find a free platform or feed with order-flow data (he does not want to pay for a platform; check Sierra Chart's cost). Algorithms need order-flow data, not order-flow charts.
+15. **Write down** what the UI needs, and every risk and sizing point, in the files that exist for them.
+16. **No more Fable agents** until he asks.
+
+**The lead's answer to ruling 13:** the dictionary's form (schema, checks, authoring tools) is built by the orchestrator's builders as code. Its first content wave (porting the 239 entries into the new form, then new families beyond forex) is a packet in the same build, done by builders with a grounding brief and no cap. Later growth goes through the same authoring door that the copilot and QMA agents use, checked by the same scripts.
+
+**The midday program (lead):**
+1. Grounding, three agents: the algo side as built (QML, dictionary, QMB, the MIS, journals, plus the earlier designs and the gold mine intent); the agent side and the platform as built (QMA v2 copilot and tools, hooks, workflows, mini apps, lab and pods, contracts and APIs, DevOps, clocks); the trading node and external connections as built, plus outside research (futures platforms and order-flow data, platform languages). A fourth agent makes the decision ledger of the whole conversation and the lead's own skills view.
+2. Funnel: party mode with brainstorming on the solutions; CIS on his day-to-day experience.
+3. Party mode on the versions of the architecture and the foundation, then bmad-architecture Level 0 and the connections.
+4. bmad-architecture per part, four grouped agents.
+5. One review (bmad-review lenses, blast radius) and one fix round.
+6. The build plan (checked), the orchestrator prompt and the builder prompt. Folder: `architecture/`.
 
 ## Operator round 2026-10-31 morning: the run was sloppy in the technical lens; layer the architecture (binding; outranks the 43 convergence)
 
