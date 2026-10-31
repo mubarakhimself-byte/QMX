@@ -34,7 +34,8 @@ output readable for the cross-check adapter.
 
 ## Left out, and why
 
-- `[data] root`, `[data] seal_boundary_ns` and `[data] placement` come from the home's settings;
-  a home that names no root fails rather than writing somewhere else.
+- `[data] root` and `[data] placement` come from the home's settings; a home that names no root
+  fails rather than writing somewhere else. A commit needs no holdout: the door opens without
+  one, and a holdout is his choice per study in Settings (ruling 137).
 - The card's Library item is written by the series-card writer outside this template; the run
   emits the same fields (`qmx_library.cards.card_fields`) as its artifact.

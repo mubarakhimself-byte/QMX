@@ -905,18 +905,24 @@ def forwarders_for(home: Path, core: Engine, name: str, role: Role) -> list[Forw
 
 
 def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor | None:
-    """This machine's market-data door, or None when its `[data]` settings name no seal (AD-28).
+    """This machine's market-data door, open with no holdout by default (AD-28, ruling 137).
 
-    A host with no seal boundary configured keeps its door shut: the door will not guess where
-    his holdout starts, so the data tools say why instead of serving a month they should not.
+    It is None only for a store it cannot read or a `[data]` it cannot use, and the log line
+    says which. The door reads `[data]` live, so a holdout turned on in Settings reaches the
+    next read, and the door at `[library] primary` serves the final look.
     """
     root = home / MARKET
     built = MarketDoor.open(
-        root, section(control, "data"), placement=Placement(role), handles=root / "handles"
+        root,
+        section(control, "data"),
+        placement=Placement(role),
+        primary=Placement.SERVER if library_primary(home) == "server" else Placement.PC,
+        handles=root / "handles",
+        settings=lambda: section(control, "data"),
     )
     if is_refusal(built):
         print(
-            f"market-data: the door stays closed: {built.category} {dict(built.context)}",
+            f"market-data: the door did not open: {built.category} {dict(built.context)}",
             file=sys.stderr,
         )
         return None

@@ -64,6 +64,7 @@ type SettingsSection = Literal[
     "roles",
     "rules",
     "observers",
+    "data",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -208,6 +209,46 @@ def _rule_lists(values: Document) -> Document:
             kept.append({**table, "pattern": pattern.strip(), "source": source})
         stored[name] = kept
     return stored
+
+
+HOLDOUT_MONTH: Final = re.compile(r"(19[7-9]\d|[2-9]\d{3})-(0[1-9]|1[0-2])")
+
+
+def _with_holdout(values: Document) -> Document:
+    """`[data]` with its switch written out, as the door reads it: off unless set, except that
+    a section from before the switch, naming only `seal_boundary_ns`, is on."""
+    return {"holdout": "seal_boundary_ns" in values, **values}
+
+
+def _data_settings(values: Document) -> Document:
+    """`[data]`: the market-data door's settings. The holdout is his choice per study and off
+    by default (ruling 137); when on, `holdout_boundary` is the month it starts, 1970-01 or
+    later, and `holdout_months` the window a new study takes. The door's other keys pass
+    through."""
+    values = _with_holdout(values)
+    holdout = values["holdout"]
+    if not isinstance(holdout, bool):
+        raise ControlError("invalid_settings", "data.holdout is true or false.")
+    boundary = values.get("holdout_boundary")
+    if boundary is not None and not (
+        isinstance(boundary, str) and HOLDOUT_MONTH.fullmatch(boundary)
+    ):
+        raise ControlError(
+            "invalid_settings",
+            "data.holdout_boundary is a month written YYYY-MM, 1970-01 or later, such as "
+            f"2025-01; got {boundary!r}.",
+        )
+    months = values.get("holdout_months", 12)
+    if isinstance(months, bool) or not isinstance(months, int) or months < 1:
+        raise ControlError(
+            "invalid_settings", f"data.holdout_months is a whole number, 1 or more; got {months!r}."
+        )
+    if holdout and boundary is None and "seal_boundary_ns" not in values:
+        raise ControlError(
+            "invalid_settings",
+            "data.holdout is on, so it needs holdout_boundary, the month it starts.",
+        )
+    return values
 
 
 def _no_secrets(value: JsonValue) -> None:
@@ -566,6 +607,8 @@ class ControlService:
                     values = cast(Document, stored.get(section, {}))
             if section == "brokers":
                 values = legacy_brokers(stored)
+            if section == "data":
+                values = _with_holdout(values)
             if section == "connections":
                 rows = stored.get("connections")
                 values = {"connections": rows if isinstance(rows, list) else []}
@@ -636,6 +679,8 @@ class ControlService:
             values = parser(values, self.settings_get(section))
         if section == "rules":
             values = _rule_lists(values)
+        if section == "data":
+            values = _data_settings(values)
         if section == "remote":
             try:
                 RemoteSettings.model_validate(values)
