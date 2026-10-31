@@ -32,6 +32,7 @@ from qmx_engine.ledger import redact
 from qmx_engine.ledger.migrations import STEPS
 from qmx_engine.ledger.store import Ledger
 from qmx_home import FLAT, LABEL, Label, pointer_file, resolve
+from qmx_home.files import PARTIAL, copy_file, long_path
 from qmx_library.migrate import OPERATOR, from_library_b, place
 from qmx_library.migrate.from_library_b import JUNK, resolve_alias
 from qmx_library.migrate.snapshot import snapshot as freeze
@@ -41,7 +42,6 @@ from qmx_library.store import Store
 from qmx_host import first_start
 from qmx_host.__main__ import main
 from qmx_host.bring_in import (
-    PARTIAL,
     REPORT,
     REPORT_TEXT,
     Refused,
@@ -49,8 +49,6 @@ from qmx_host.bring_in import (
     again,
     bring_in,
     brought_from,
-    copy_file,
-    long_path,
 )
 from qmx_host.first_start import Places, bring_in_old, first_start_router, offer
 from qmx_host.host import recheck_test_runs
@@ -820,6 +818,17 @@ def locked(path: Path) -> Generator[None]:
 
             fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
+
+
+def test_a_busy_first_start_lock_is_still_409_when_making_or_opening_a_folder(pc: Path) -> None:
+    client = card_client(places(pc), old_home(pc / ".qmx", pc))
+    with locked(pc / "profile" / "Roaming" / "QMX" / "first-start.lock"):
+        made = client.post("/api/first-start/new", json={"folder": str(pc / "QMX")})
+        opened = client.post("/api/first-start/open", json={"folder": str(pc / "QMX")})
+
+    assert (made.status_code, opened.status_code) == (409, 409)
+    assert made.json()["detail"] == "another first start is running on this PC; wait for it to end"
+    assert not (pc / "QMX").exists()
 
 
 def test_a_first_start_in_another_process_makes_the_card_answer_409_even_with_no_appdata(

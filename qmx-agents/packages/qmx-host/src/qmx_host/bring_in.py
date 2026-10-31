@@ -34,7 +34,6 @@ characters is copied and hashed like any other.
 from __future__ import annotations
 
 import errno
-import hashlib
 import json
 import os
 import shutil
@@ -46,7 +45,7 @@ from contextlib import AbstractContextManager, closing, nullcontext, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import IO, Final, cast
+from typing import Final, cast
 
 from qmx_apps.supervisor import APPS_SCHEMA
 from qmx_broker.service import PORTFOLIO_SCHEMA
@@ -72,6 +71,16 @@ from qmx_home import (
     opens,
     resolve,
 )
+from qmx_home.files import (
+    PARTIAL,
+    Busy,
+    Held,
+    copy_file,
+    hold,
+    long_path,
+    sha256_of,
+)
+from qmx_home.files import plain as _plain
 from qmx_home.stores import STORES
 from qmx_home.versions import FLOOR_BYTES, StoreRefused, check_open, folder_of, open_sqlite
 from qmx_library.migrate.from_library_b import JUNK, TEST_RULE, recheck_test_runs, switch_over
@@ -120,9 +129,6 @@ needs is counted twice."""
 CLOUD_ONLY: Final = 0x0040_0000 | 0x0004_0000 | 0x0000_1000
 """FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, RECALL_ON_OPEN and OFFLINE: a file a sync client keeps
 only online. Reading it would download it into the old folder, so such a folder is refused."""
-CHUNK: Final = 1 << 20
-PARTIAL: Final = ".qmx-copying"
-"""Added to a copy's name while it is written; `again` removes only names ending in it."""
 BUSY: Final = "another first start is running on this PC; wait for it to end"
 LISTING: Final = "listing your old folder"
 COPYING: Final = "copying"
@@ -137,7 +143,7 @@ TREE_PARTS: Final = (
 )
 
 
-class Refused(Exception):
+class Refused(Busy):
     """The bring-in did not start. Nothing was written anywhere; the message is the one line."""
 
 
@@ -192,41 +198,6 @@ type Copier = Callable[[Path, Path], str]
 """Copies one file and returns the sha256 of the bytes it wrote."""
 
 
-def long_path(path: Path) -> Path:
-    """`path` as Windows opens it past 260 characters: absolute, with `\\\\?\\` before it (and
-    `\\\\?\\UNC\\` before a network path). Unchanged on other systems."""
-    if os.name != "nt" or str(path).startswith("\\\\?\\"):
-        return path
-    full = os.path.abspath(path)
-    if full.startswith("\\\\"):
-        return Path("\\\\?\\UNC\\" + full[2:])
-    return Path("\\\\?\\" + full)
-
-
-def _plain(name: object) -> str:
-    """A path as he reads it: without the prefix `long_path` adds."""
-    text = os.fsdecode(name) if isinstance(name, str | bytes) else str(name)
-    if text.startswith("\\\\?\\UNC\\"):
-        return "\\\\" + text.removeprefix("\\\\?\\UNC\\")
-    return text.removeprefix("\\\\?\\")
-
-
-def copy_file(source: Path, target: Path) -> str:
-    """Copy `source` to the new file `target` byte for byte, keeping its times. `target` must not
-    exist, so a copy never lands on a file already there."""
-    source, target = long_path(source), long_path(target)
-    digest = hashlib.sha256()
-    with source.open("rb") as reading, target.open("xb") as writing:
-        while chunk := reading.read(CHUNK):
-            digest.update(chunk)
-            writing.write(chunk)
-        writing.flush()
-        os.fsync(writing.fileno())
-    found = source.stat()
-    os.utime(target, ns=(found.st_atime_ns, found.st_mtime_ns))
-    return digest.hexdigest()
-
-
 def _placed(copy: Copier, source: Path, target: Path, sha256: str) -> bool:
     """Copy `source` to a name of QMX's own beside `target` and rename it into place only once
     its sha256 is `sha256`, so a copy cut short never sits at `target`. False, with the copy
@@ -239,14 +210,6 @@ def _placed(copy: Copier, source: Path, target: Path, sha256: str) -> bool:
         raise FileExistsError(errno.EEXIST, "File exists", str(target))
     long_path(writing).rename(long_path(target))
     return True
-
-
-def sha256_of(path: Path) -> str:
-    digest = hashlib.sha256()
-    with long_path(path).open("rb") as reading:
-        while chunk := reading.read(CHUNK):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def place_in_tree(relative: str) -> str | None:
@@ -417,7 +380,7 @@ def _bring_in(
             "bring your old data in again"
         ) from None
     started = time.monotonic()
-    with hold(layout.data / HOST_LOCK, f"a QMX host is running on {layout.root}; stop it first"):
+    with _held(layout.data / HOST_LOCK, f"a QMX host is running on {layout.root}; stop it first"):
         if (layout.data / UNFINISHED).is_file() and not resumed:
             raise Refused(str(old_library(layout.data)))
         if not _holds_only(layout.data, MARKED if resumed else frozenset()):
@@ -814,52 +777,18 @@ def _finished(folder: Path) -> Report | None:
     return Report(True, folder, tuple(lines), facts)
 
 
-class Held:
-    """An OS lock on a file, held until `release` or the end of a `with` block, from any thread.
-    The OS lets go when the process ends, so a stopped first start never leaves it held."""
-
-    def __init__(self, path: Path, handle: IO[bytes], *, removed: bool, made: bool) -> None:
-        self._path = path
-        self._handle: IO[bytes] | None = handle
-        self._removed = removed
-        self._made = made
-
-    def __enter__(self) -> Held:
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        self.release()
-
-    def release(self) -> None:
-        """Let go, once; a second call does nothing."""
-        handle, self._handle = self._handle, None
-        if handle is None:
-            return
-        if self._removed and os.name != "nt":
-            self._path.unlink(missing_ok=True)
-        handle.close()
-        if self._removed and os.name == "nt":
-            with suppress(OSError):
-                self._path.unlink(missing_ok=True)
-        if self._removed and self._made:
-            with suppress(OSError):
-                self._path.parent.rmdir()
-
-
-def hold(path: Path, busy: str, *, removed: bool = False) -> Held:
-    """Take an OS lock on `path`; refused with `busy` while another process or handle holds it.
-    `removed` takes the file (and its folder, when this made it) away on release, so nothing but
-    the pointer stays beside the pointer (ruling 143). A holder checks that its file is still the
-    one at `path`, because a file removed under a waiting process is not a lock."""
-    made = not path.parent.exists()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return Held(path, _locked(path, busy), removed=removed, made=made)
-
-
 def _taken(lock: Lock) -> AbstractContextManager[object]:
     if isinstance(lock, Held):
         return lock
-    return nullcontext() if lock is None else hold(lock, BUSY, removed=True)
+    return nullcontext() if lock is None else _held(lock, BUSY, removed=True)
+
+
+def _held(path: Path, busy: str, *, removed: bool = False) -> Held:
+    """`hold`, refused the bring-in's way, so every refusal of a bring-in is a `Refused`."""
+    try:
+        return hold(path, busy, removed=removed)
+    except Busy as held:
+        raise Refused(str(held)) from None
 
 
 def _clear_unfinished(old: Path, folder: Path, progress: Progress) -> None:
@@ -903,7 +832,7 @@ def _clear_unfinished(old: Path, folder: Path, progress: Progress) -> None:
                 f"{changed if named else other}, so QMX cannot tell its own copy in {folder}; "
                 f"nothing was cleared. Remove {folder} yourself and bring your old data in again"
             )
-    with hold(data / HOST_LOCK, f"a QMX host is running on {folder}; stop it first"):
+    with _held(data / HOST_LOCK, f"a QMX host is running on {folder}; stop it first"):
         if isinstance(saved, dict):
             _clear_outside_data(folder, cast("dict[str, object]", saved))
         for entry in long_path(data).iterdir():
@@ -963,35 +892,6 @@ def _writable_then_again(
     with suppress(OSError):
         os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
     remove(path)
-
-
-def _locked(path: Path, busy: str) -> IO[bytes]:
-    while True:
-        handle = path.open("a+b")
-        try:
-            _lock(handle)
-        except OSError:
-            handle.close()
-            raise Refused(busy) from None
-        try:
-            same = os.path.samestat(os.fstat(handle.fileno()), os.stat(path))
-        except OSError:
-            same = False
-        if same:
-            return handle
-        handle.close()
-
-
-def _lock(handle: IO[bytes]) -> None:
-    if os.name == "nt":
-        import msvcrt  # noqa: PLC0415
-
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-    else:
-        import fcntl  # noqa: PLC0415
-
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
 def _write(path: Path, text: str) -> None:
