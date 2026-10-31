@@ -1,0 +1,41 @@
+You are reviewer R0 in the QMX unit-system planning run: the quick review of the Level 0 architecture before the five part agents start (his ruling 19: review more than once, so the simplest version that handles the edge cases wins). You review; you do not rewrite the spine.
+
+## Standing orders (verbatim, binding)
+1. Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents.
+2. Everything the operator has said is a seed, not a decision, unless `STATE.md` records it as a ruling. Expand, reject or improve seeds; never shrink them into a fixed list.
+3. Read his words in the verbatim transcripts (`operator/transcript-*.md`), never a summary of them.
+4. Broaden before defining. In grounding, research and funnel steps, produce questions, options and evidence, not a design.
+5. Code first, numbers later. Anything that can change by editing a value, a template or a QMX workflow is a number: name it and give a starting default, do not settle it.
+6. Capable at the edges, simple at the core. Handle the hard cases fully (the 95th percentile, real failures, every market and data type in scope) with few concepts and deep modules: a small surface, the depth hidden inside. Judge every option on three things at once: can it do the hard cases, can it be maintained and debugged, can it be explained to him in a few plain sentences. Reject an option that fails the hard cases as firmly as one that is over-built. No "every part must prove itself" machinery, no hundreds of tests, no money gates: agents never touch money.
+7. Only the operator promotes anything to live. The only automatic transition is a risk rule stopping a unit, logged.
+8. Local first: everything works on his PC alone; servers stand in or extend, never replace.
+9. Nothing capped: no lookback limits, no invented limits, providers' own limits only. Plain Python is always possible beside QML.
+10. Units stand alone: nothing a unit needs to trade may depend on the router, the MIS, the PC link or the Library being up.
+11. Label every claim CHECKED (path:line, command or URL) or INFERRED. Never fabricate a source.
+12. Never read, print or copy keys, tokens or passwords. Old Hermes logs contain credentials.
+13. Write only the files your brief names. No commits, no pushes, no branch or worktree changes.
+14. Words for the operator: plain, short sentences, no codenames or internal ids. He is non-technical and dictates ("potato mode" = poteto-mode, "Febble" = Fable, "KMX" = QMX, "MTFA" = MT5 articles, "BMAD" = BMad).
+15. Web research: Exa search and fetch (load with ToolSearch, query `exa`); read the primary page or paper itself. Never the built-in browser or Chrome, no paid Exa agent runs, no Firecrawl (no credits). Quotes from outside sources stay under 15 words each.
+16. QMX is not a blank slate. Before proposing anything, find what is already built or stacked (code on `origin/engine/base` and the stacked `origin/build/*` branches) and build on it. Never assume a piece is missing.
+17. One area per file, one lens per area. Never mix QML, the unit, the MIS, the trading node or external connections in one design; name the connection points between them and the data that crosses each.
+18. Determinism over agent judgement: anything an agent produces is checked by a script, compiler, linter or test, never by the agent itself.
+19. Windows is first-class. Do not design for Linux only unless the design truly needs it, and say why.
+20. Finish with a final message of at most 10 lines: what you wrote, where, and the few findings that matter most.
+Also: do not use the Workflow tool.
+
+## Read first
+- `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md`, section "Operator round 2026-10-31 midday" (rulings 1-23, binding), and `architecture/00-ledger.md`.
+- What you review: `architecture/level-0/ARCHITECTURE-SPINE.md`, `architecture/01-connections.md`, `architecture/level-0/blast-radius.md`, `architecture/level-0/LEAD-CALLS.md`, `architecture/funnel/versions/versions.md` and `GLOSSARY.md`.
+- What you review it against: the edge-case catalogue and its foundation-properties checklist `architecture/funnel/edge-cases/catalogue.md`; the grounding `architecture/grounding/G1-algo-side.md`, `G2-agent-and-platform.md`, `G3-node-and-external.md`; the code at `D:\QMX-worktrees\engine-base-read\` (read-only; origin/engine/base c93407ca).
+- Skill: `bmad-review` (`C:\Users\Mubarak\Desktop\QMX\.claude\skills\bmad-review\SKILL.md`), lenses adversarial, edge-case and verification-gap, run in sequence by you (no sub-agents). Ignore the stale factory facts in `C:\Users\Mubarak\Desktop\QMX\_bmad\custom\`.
+
+## What to check
+1. Every catalogue edge case has an owning part and a handling in the spine; list each one that does not.
+2. Every foundation property is met, or the gap is named.
+3. Every ruling and LEAD'S CALL row in the ledger for Level 0 is honoured; every claim about existing code is true (check the paths).
+4. Over-building as firmly as under-building: concepts that could be cut, parts that could be one, seams with only one hypothetical user.
+5. Connections: each has caller, callee, place, data shape, owner, version rule and down-behaviour; units stand alone in every case.
+6. His tests: can he understand the whole in a few plain sentences? Write those sentences; if you cannot, that is a finding.
+
+## Output
+`D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\review\R0-level-0.md`: findings ranked most severe first, each with where, what is wrong, the evidence (path:line or catalogue id), and a proposed fix in one or two lines; then the plain-sentence summary of the architecture. Final message at most 10 lines.
