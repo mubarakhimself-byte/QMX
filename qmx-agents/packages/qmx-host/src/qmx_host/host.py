@@ -120,6 +120,7 @@ from qmx_router.server import (
 )
 from uvicorn.config import STARTUP_FAILURE
 
+from qmx_host.backups import Backups, backups_router
 from qmx_host.bring_in import recheck_at_start
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
@@ -753,6 +754,13 @@ async def serve(
                 recheck_test_runs(home, store)
                 control.attach_library(store)
                 harness.doctor_from(lambda: library_line(store))
+                backups = Backups(
+                    Layout.from_home(home),
+                    control,
+                    clock=lambda: datetime.now().astimezone(),
+                    floor=floor,
+                )
+                harness.doctor_from(backups.doctor_line)
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(
                     compose_memory, harness, store, home, control, role
@@ -780,6 +788,7 @@ async def serve(
                         origin = ui_origin if role == "pc" else ""
                         answering = [*answering_router(home, engine), drain_router(core)]
                         answering.append(templates_router(engine))
+                        answering.append(backups_router(backups))
                         answering.append(
                             market_router(door)
                             if isinstance(door, MarketDoor)
@@ -807,6 +816,7 @@ async def serve(
                             if replicator is not None
                             else None
                         )
+                        copying = asyncio.create_task(backups.run())
                         # Uvicorn logs no started line for a socket it was handed.
                         address, _ = sock.getsockname()
                         print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
@@ -819,7 +829,7 @@ async def serve(
                         finally:
                             if server.started:
                                 served.set()
-                            for task in (beating, exporting, holding, syncing):
+                            for task in (beating, exporting, holding, syncing, copying):
                                 if task is None:
                                     continue
                                 task.cancel()
