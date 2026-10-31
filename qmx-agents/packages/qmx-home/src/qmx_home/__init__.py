@@ -24,7 +24,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from importlib.metadata import version
 from pathlib import Path, PureWindowsPath
-from typing import Final, cast
+from typing import Final, Literal, cast
 
 from qmx_home.stores import STORES
 
@@ -89,8 +89,20 @@ PROFILE_FILE: Final = "NTUSER.DAT"
 """The registry hive at the top of every Windows user profile."""
 
 
+type NotOpened = Literal["missing", "old", "refused"]
+"""Why no folder opened: none was found (`missing`), the folder holds his old flat data (`old`),
+or a folder was found and refused (`refused`), where his data may sit, so the first start must
+never offer to make a second folder beside it (ruling 141)."""
+
+
 class NoQmxFolder(Exception):
-    """No QMX folder could be found or made. The message is the one line a command prints."""
+    """No QMX folder could be found or made. The message is the one line a command prints;
+    `folder` is the folder the line is about, when there is one."""
+
+    def __init__(self, line: str, kind: NotOpened = "refused", folder: Path | None = None) -> None:
+        super().__init__(line)
+        self.kind: NotOpened = kind
+        self.folder = folder
 
 
 class LayoutRefused(Exception):
@@ -279,8 +291,10 @@ def resolve(
     The flag, `QMX_HOME` and the pointer must name a folder labelled in the tree layout; an
     unlabelled or format 1 folder is refused with the layout step's command. `create` makes the
     flag's folder, labelled and with its five parts, when it is missing or empty. A pointer naming
-    a missing folder is passed over, so a lost pointer falls through to the scan; a pointer that
-    cannot be read is refused by name. `drives` is the list of fixed drives to scan; the
+    a missing folder is passed over, so a lost pointer falls through to the scan; when the scan
+    finds none either, that folder is refused by name (kind `refused`), because his data may sit
+    on a drive that is unplugged and the first start must not offer a second folder. A pointer
+    that cannot be read is refused by name. `drives` is the list of fixed drives to scan; the
     machine's own when None.
     """
     if create and flag is None:
@@ -289,33 +303,39 @@ def resolve(
         root = flag.resolve()
         ancestor = _labelled_ancestor(root)
         if ancestor is not None:
-            raise NoQmxFolder(_nested(root, ancestor))
+            raise NoQmxFolder(_nested(root, ancestor), folder=root)
         if create:
             _make(root)
         if not root.is_dir():
-            raise NoQmxFolder(f"no QMX folder at {root}")
+            raise NoQmxFolder(f"no QMX folder at {root}", "missing", root)
         return _opened(root)
     named = os.environ.get("QMX_HOME")
     if named:
         root = Path(named).resolve()
         if not root.is_dir():
-            raise NoQmxFolder(f"QMX_HOME names {root}, which is not a folder")
+            raise NoQmxFolder(f"QMX_HOME names {root}, which is not a folder", folder=root)
         return _opened(root)
-    pointed = _pointed()
+    pointed, gone = _pointed()
     if pointed is not None:
         return _opened(pointed)
     fixed = _fixed_drives() if drives is None else list(drives)
     for candidate in dict.fromkeys([_default_root(fixed), *(d / "QMX" for d in fixed)]):
         if _label(candidate) is not None:
             return _opened(candidate.resolve())
-    raise NoQmxFolder(NOT_FOUND)
+    if gone is not None:
+        raise NoQmxFolder(
+            f"the QMX folder {gone} is not there. If it is on a drive that is unplugged, plug the "
+            "drive in and start QMX again; if you moved the folder, open it where it is now",
+            folder=gone,
+        )
+    raise NoQmxFolder(NOT_FOUND, "missing")
 
 
 def _opened(root: Path) -> Layout:
     label = _label(root)
     ancestor = _labelled_ancestor(root)
     if ancestor is not None:
-        raise NoQmxFolder(_nested(root, ancestor))
+        raise NoQmxFolder(_nested(root, ancestor), folder=root)
     if label is not None and opens(label):
         return Layout(root)
     if label is not None and label.format_version > TREE:
@@ -323,17 +343,23 @@ def _opened(root: Path) -> Layout:
             f"{root} was written by QMX {label.last_written_by} (folder format "
             f"{label.format_version}). This QMX reads folder format {TREE}, and this folder "
             f"needs a QMX that reads format {label.reader_floor} or newer. Install that QMX, or "
-            f"restore the copy taken before the upgrade from {root / 'backups'}"
+            f"restore the copy taken before the upgrade from {root / 'backups'}",
+            folder=root,
         )
     if label is None and not any(root.iterdir()):
-        raise NoQmxFolder(f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)")
+        raise NoQmxFolder(
+            f"no QMX folder at {root}: it has no {LABEL} (pass --create to make one)",
+            "missing",
+            root,
+        )
     refused = _refusal(root, label) if label is None or label.format_version == FLAT else None
     if refused is not None:
-        raise NoQmxFolder(refused)
+        raise NoQmxFolder(refused, folder=root)
     if label is None or label.format_version == FLAT:
-        raise NoQmxFolder(old_flat(root))
+        raise NoQmxFolder(old_flat(root), "old", root)
     raise NoQmxFolder(
-        f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read"
+        f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read",
+        folder=root,
     )
 
 
@@ -366,7 +392,9 @@ def _make(root: Path) -> None:
             (root / part).mkdir(parents=True, exist_ok=True)
         _write_label(root, Label.mint())
     except OSError as refused:
-        raise NoQmxFolder(f"cannot make a QMX folder at {root}: {refused.strerror}") from None
+        raise NoQmxFolder(
+            f"cannot make a QMX folder at {root}: {refused.strerror}", folder=root
+        ) from None
 
 
 def _write_label(root: Path, label: Label) -> None:
@@ -375,21 +403,23 @@ def _write_label(root: Path, label: Label) -> None:
     staged.replace(root / LABEL)
 
 
-def _pointed() -> Path | None:
+def _pointed() -> tuple[Path | None, Path | None]:
+    """The folder the pointer names when it is there; otherwise None and the folder it names that
+    is gone (an unplugged drive, a moved folder)."""
     pointer = pointer_file()
     if pointer is None:
-        return None
+        return None, None
     try:
         text = pointer.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
-        return None
+        return None, None
     except (OSError, ValueError) as unreadable:
         raise NoQmxFolder(_unreadable(pointer, unreadable)) from None
     named = _pointer_home(text)
     if named is None:
         raise NoQmxFolder(_unreadable(pointer, ValueError("it names no home")))
     root = Path(named)
-    return root.resolve() if root.is_dir() else None
+    return (root.resolve(), None) if root.is_dir() else (None, root.absolute())
 
 
 _HOME_LINE = re.compile(r"""^\s*home\s*=\s*(["'])(.*)\1\s*(?:#.*)?$""", re.MULTILINE)

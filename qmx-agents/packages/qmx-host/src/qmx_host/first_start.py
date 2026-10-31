@@ -11,6 +11,10 @@ Every choice refuses A1's "never" places by name before it writes anything (`Pla
 inside the Windows app folders, inside QMX's own program folder or checkout, a network drive, a
 drive's root, and a folder a sync client syncs live (OneDrive, Dropbox, Google Drive, and any
 client Windows lists as a sync root). Only a finished choice writes the pointer.
+
+On the card's routes the bring-in runs as a job the card reads by id (`qmx_host.jobs`), and the
+card hands the folder of its own last finished choice to the desktop app (`handover`), which then
+starts the host on it (loose strings P1, Appendix E).
 """
 
 from __future__ import annotations
@@ -20,8 +24,11 @@ import json
 import os
 import shutil
 import sys
+import tempfile
+import threading
 import tomllib
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 from typing import Final, cast
@@ -30,7 +37,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from qmx_control.library import old_library
+from qmx_control.library import UNFINISHED, old_library
 from qmx_home import (
     Layout,
     NoQmxFolder,
@@ -41,20 +48,35 @@ from qmx_home import (
 )
 
 from qmx_host.bring_in import (
+    BUSY,
     Copier,
+    Held,
     Refused,
     Report,
+    again,
     bring_in,
     brought_from,
     copy_file,
+    hold,
     old_refusal,
+    refusal_before_copy,
+    unfinished_facts,
 )
+from qmx_host.jobs import Jobs, Progress, Stopped
 
 OLD_FOLDER: Final = ".qmx"
 """The old folder's name in his user profile. It is looked at to offer the bring-in and only ever
 read; it is never a QMX folder (`qmx_home.resolve` decides those)."""
 LOCK: Final = "first-start.lock"
 """Beside the pointer: one first start at a time for this user, whatever folders they name."""
+TEMP_LOCK: Final = "qmx-first-start.lock"
+"""The same lock in the system temp folder when the OS names no pointer file, so nothing is
+written beside a pointer that does not exist (ruling 143)."""
+BRING_IN: Final = "bring-in"
+NOTHING_CHOSEN: Final = (
+    "no QMX folder was chosen in this first start yet; make a new one, open one or bring your old "
+    "data in first"
+)
 RESTORE_LATER: Final = (
     "Restoring from a backup comes with QMX's local backup, which is not built yet. Nothing was "
     "changed."
@@ -223,6 +245,13 @@ class Offer:
     old: str | None
     """His old QMX folder, when one is there to bring in."""
     choices: tuple[str, ...]
+    unfinished: Mapping[str, str] | None = None
+    """The folder a bring-in did not finish in (`folder`, `line`): offered again, never beside."""
+    refused: Mapping[str, str | None] | None = None
+    """A folder QMX found and refused (`folder`, `line`): his data may sit there, so only "open"
+    is offered."""
+    warning: str | None = None
+    """What he should know about the default folder: a removable drive."""
 
     def document(self) -> dict[str, object]:
         return {
@@ -232,12 +261,34 @@ class Offer:
             "old": self.old,
             "choices": list(self.choices),
             "chosen": self.choices[0],
+            "unfinished": None if self.unfinished is None else dict(self.unfinished),
+            "refused": None if self.refused is None else dict(self.refused),
+            "warning": self.warning,
         }
 
     def lines(self) -> list[str]:
         if self.found is not None:
             return [f"QMX already has its folder at {self.found}; no first start is needed."]
+        if self.refused is not None:
+            return [
+                f"QMX found its folder but cannot open it: {self.refused['line']}",
+                "  Open an existing QMX folder: python -m qmx_host open --home <folder>",
+            ]
+        if self.unfinished is not None:
+            folder = self.unfinished["folder"]
+            lines = [self.unfinished["line"]]
+            if self.old is not None:
+                lines.append(
+                    f"  Bring it in again (chosen): python -m qmx_host bring-in --again --home "
+                    f"{folder} --old {self.old}"
+                )
+            return [
+                *lines,
+                "  Open an existing QMX folder: python -m qmx_host open --home <folder>",
+            ]
         lines = ["No QMX folder was found on this PC. Pick one of these:"]
+        if self.warning is not None:
+            lines.append(f"  Note: {self.warning}")
         if self.old is not None:
             lines.append(
                 f"  Bring in your old QMX data from {self.old} (chosen): python -m qmx_host "
@@ -252,20 +303,61 @@ class Offer:
         return lines
 
 
-def offer(old: Path, drives: Sequence[Path] | None = None) -> Offer:
+def offer(old: Path, places: Places, drives: Sequence[Path] | None = None) -> Offer:
     """The first-start card's content. `old` is where his old data would be; `drives` the fixed
-    drives, the machine's own when None."""
+    drives, the machine's own when None.
+
+    A folder QMX finds and refuses, or one whose bring-in did not finish, is never answered with
+    "new": his data may sit there (ruling 141). An unfinished one is offered the bring-in again
+    into the same folder; old flat data named by the pointer or a flag is offered the bring-in."""
     fixed = _fixed_drives() if drives is None else list(drives)
+    found: str | None = None
+    unfinished: dict[str, str] | None = None
+    refused: dict[str, str | None] | None = None
     try:
-        found: str | None = str(resolve(drives=fixed).root)
-    except NoQmxFolder:
-        found = None
+        layout = resolve(drives=fixed)
+    except NoQmxFolder as missing:
+        if missing.kind == "refused":
+            refused = {"folder": _named(missing.folder), "line": str(missing)}
+        elif missing.kind == "old" and missing.folder is not None:
+            old = missing.folder
+    else:
+        unfit = old_library(layout.home)
+        facts = unfinished_facts(layout.root)
+        if unfit is None:
+            found = str(layout.root)
+        elif facts is not None:
+            unfinished = {"folder": str(layout.root), "line": _unfinished_line(layout)}
+            old = Path(str(facts["old"])) if facts.get("old") else old
+        else:
+            refused = {"folder": str(layout.root), "line": unfit}
     room = tuple((str(drive), _free(drive)) for drive in fixed)
     seen = str(old) if old_refusal(old.resolve()) is None else None
-    choices = ("bring-in", "new", "open", "restore") if seen else ("new", "open", "restore")
-    if found is not None:
-        choices = ("open",)
-    return Offer(found, str(_default_root(fixed)), room, seen, choices)
+    if found is not None or refused is not None:
+        choices: tuple[str, ...] = ("open",)
+    elif unfinished is not None:
+        choices = ("bring-in", "open", "restore") if seen else ("open", "restore")
+    else:
+        choices = ("bring-in", "new", "open", "restore") if seen else ("new", "open", "restore")
+    default = _default_root(fixed)
+    warning = places.warning(default)
+    return Offer(found, str(default), room, seen, choices, unfinished, refused, warning)
+
+
+def _named(folder: Path | None) -> str | None:
+    return None if folder is None else str(folder)
+
+
+def _unfinished_line(layout: Layout) -> str:
+    try:
+        why = (layout.data / UNFINISHED).read_text(encoding="utf-8").strip()
+    except OSError, ValueError:
+        why = "its record cannot be read"
+    return (
+        f"Bringing your old QMX data into {layout.root} did not finish: {why}. Your old folder was "
+        "never changed. Bring it in again into the same folder; QMX first clears only its own "
+        "unfinished copy there."
+    )
 
 
 def _free(drive: Path) -> int:
@@ -275,52 +367,93 @@ def _free(drive: Path) -> int:
         return -1
 
 
+def lock_file() -> Path:
+    """The per-user first-start lock: beside the pointer, or in the system temp folder when the OS
+    names no pointer file."""
+    pointer = pointer_file()
+    return (
+        pointer.with_name(LOCK) if pointer is not None else Path(tempfile.gettempdir()) / TEMP_LOCK
+    )
+
+
 def make_new(folder: Path, places: Places) -> Layout:
     """A new, empty QMX folder at `folder`, and the pointer to it."""
     _refuse(places, folder)
-    try:
-        layout = resolve(folder, create=True)
-    except NoQmxFolder as refused:
-        raise Refused(str(refused)) from None
-    write_pointer(layout.root)
+    with hold(lock_file(), BUSY, removed=True):
+        try:
+            layout = resolve(folder, create=True)
+        except NoQmxFolder as refused:
+            raise Refused(str(refused)) from None
+        write_pointer(layout.root)
     return layout
 
 
 def open_existing(folder: Path, places: Places) -> Layout:
     """The existing QMX folder at `folder`, and the pointer to it."""
     _refuse(places, folder)
-    try:
-        layout = resolve(folder)
-    except NoQmxFolder as refused:
-        raise Refused(str(refused)) from None
-    unfit = old_library(layout.home)
-    if unfit is not None:
-        raise Refused(unfit)
-    write_pointer(layout.root)
+    with hold(lock_file(), BUSY, removed=True):
+        try:
+            layout = resolve(folder)
+        except NoQmxFolder as refused:
+            raise Refused(str(refused)) from None
+        unfit = old_library(layout.home)
+        if unfit is not None:
+            raise Refused(unfit)
+        write_pointer(layout.root)
     return layout
 
 
-def bring_in_old(old: Path, folder: Path, places: Places, *, copy: Copier = copy_file) -> Report:
+def bring_in_old(
+    old: Path,
+    folder: Path,
+    places: Places,
+    *,
+    copy: Copier = copy_file,
+    lock: Held | None = None,
+    progress: Progress | None = None,
+    anew: bool = False,
+) -> Report:
     """His old data brought into a new QMX folder at `folder`; the pointer once it finished. A
     second copy of the same old folder into another folder is refused, so his data is never
-    doubled. The first start's lock beside the pointer is gone again when it returns."""
+    doubled. `lock` is the first start's lock when the caller holds it already; either way it is
+    gone again when this returns. `anew` brings it in again into a folder where it did not
+    finish (`qmx_host.bring_in.again`)."""
+    try:
+        already = _already_brought(old, folder)
+        if already is not None:
+            raise Refused(already)
+        run = again if anew else bring_in
+        report = run(
+            old,
+            folder,
+            place_refusal=places.refusal,
+            lock=lock or lock_file(),
+            copy=copy,
+            progress=progress,
+        )
+    finally:
+        if lock is not None:
+            lock.release()
+    if report.finished:
+        write_pointer(report.folder)
+    return report
+
+
+def _already_brought(old: Path, folder: Path) -> str | None:
+    """Why `old` may not be brought into `folder`: it was brought into the folder QMX uses now."""
     try:
         current: Path | None = resolve(drives=[]).root
     except NoQmxFolder:
         current = None
-    if current is not None and current != folder.absolute().resolve():
-        facts = brought_from(current)
-        if facts is not None and Path(str(facts.get("old"))).resolve() == old.resolve():
-            raise Refused(
-                f"your old data from {old} was already brought into {current}; open that folder "
-                "instead of copying it again"
-            )
-    pointer = pointer_file()
-    lock = pointer.with_name(LOCK) if pointer is not None else None
-    report = bring_in(old, folder, place_refusal=places.refusal, lock=lock, copy=copy)
-    if report.finished:
-        write_pointer(report.folder)
-    return report
+    if current is None or current == folder.absolute().resolve():
+        return None
+    facts = brought_from(current)
+    if facts is not None and Path(str(facts.get("old"))).resolve() == old.resolve():
+        return (
+            f"your old data from {old} was already brought into {current}; open that folder "
+            "instead of copying it again"
+        )
+    return None
 
 
 def _refuse(places: Places, folder: Path) -> None:
@@ -370,43 +503,162 @@ def old_layout_hint(folder: Path) -> str | None:
 class Chosen(BaseModel):
     folder: str
     old: str | None = None
+    again: bool = False
+    """Bring-in only: into a folder where a bring-in from the same old folder did not finish."""
+
+
+def _document(report: Report) -> dict[str, object]:
+    return {
+        "finished": report.finished,
+        "folder": str(report.folder),
+        "report": list(report.lines),
+        "facts": dict(report.facts),
+    }
 
 
 def first_start_router(
-    places: Places, old: Path, drives: Sequence[Path] | None = None
+    places: Places,
+    old: Path,
+    drives: Sequence[Path] | None = None,
+    *,
+    port: int,
+    on_handover: Callable[[Path], None] | None = None,
 ) -> APIRouter:
     """The card's routes. A refusal answers 409 with its line; restore answers 501 until the local
-    backup lands."""
+    backup lands. The bring-in answers 202 with its job, read by id. The handover answers the
+    folder of this card's own last finished choice and the card's `port`, then calls
+    `on_handover`; before any finished choice, or while a bring-in runs, it answers 409."""
+    jobs = Jobs()
+    starting = threading.Lock()
+    chosen: list[Path] = []
+    """The folder of the last finished choice in this card, once there is one."""
+    targets: dict[str, Path] = {}
+    """Each bring-in job's folder, by job id."""
+
+    def finished(root: Path) -> None:
+        chosen[:] = [root]
 
     def card() -> dict[str, object]:
-        return offer(old, drives).document()
+        job = jobs.latest(BRING_IN)
+        shown = offer(old, places, drives).document()
+        target = None if job is None or job.state != "running" else targets.get(job.id)
+        running = None if target is None else str(target)
+        unfinished = cast("dict[str, str] | None", shown["unfinished"])
+        if running is not None and unfinished is not None and unfinished["folder"] == running:
+            shown["unfinished"] = None
+        return {**shown, "running": running, "job": None if job is None else job.document()}
 
-    def new(chosen: Chosen) -> dict[str, object]:
-        return {"folder": str(_answer(lambda: make_new(Path(chosen.folder), places)).root)}
+    def new(choice: Chosen) -> dict[str, object]:
+        root = _answer(lambda: make_new(Path(choice.folder), places)).root
+        finished(root)
+        return {"folder": str(root), "warning": places.warning(root)}
 
-    def existing(chosen: Chosen) -> dict[str, object]:
-        return {"folder": str(_answer(lambda: open_existing(Path(chosen.folder), places)).root)}
+    def existing(choice: Chosen) -> dict[str, object]:
+        root = _answer(lambda: open_existing(Path(choice.folder), places)).root
+        finished(root)
+        return {"folder": str(root), "warning": places.warning(root)}
 
     def restore() -> JSONResponse:
         return JSONResponse({"detail": RESTORE_LATER}, status_code=501)
 
-    def bring(chosen: Chosen) -> dict[str, object]:
-        source = Path(chosen.old) if chosen.old else old
-        report = _answer(lambda: bring_in_old(source, Path(chosen.folder), places))
-        return {
-            "finished": report.finished,
-            "folder": str(report.folder),
-            "report": list(report.lines),
-            "facts": dict(report.facts),
-        }
+    def bring(choice: Chosen) -> JSONResponse:
+        folder = Path(choice.folder)
+        saved = unfinished_facts(folder.absolute())
+        source = Path(choice.old) if choice.old else old
+        if choice.again and not choice.old and saved and saved.get("old"):
+            source = Path(str(saved["old"]))
+        with starting:
+            running = jobs.latest(BRING_IN)
+            if running is not None and running.state == "running":
+                raise HTTPException(
+                    409,
+                    detail=f"a bring-in is already running (job {running.id}); wait for it to end",
+                )
+            held = _answer(lambda: hold(lock_file(), BUSY, removed=True))
+            try:
+                refusal = _bring_in_refusal(source, folder, places, saved, again=choice.again)
+            except BaseException:
+                held.release()
+                raise
+            if refusal is not None:
+                held.release()
+                raise HTTPException(409, detail=refusal)
+            chosen.clear()
+
+            def work(progress: Progress) -> dict[str, object]:
+                try:
+                    report = bring_in_old(
+                        source, folder, places, lock=held, progress=progress, anew=choice.again
+                    )
+                except Refused as refused:
+                    raise Stopped(str(refused)) from None
+                if not report.finished:
+                    raise Stopped(report.lines[0], _document(report))
+                finished(report.folder)
+                return _document(report)
+
+            job = jobs.start(BRING_IN, work).job
+            targets[job.id] = folder.absolute().resolve()
+        return JSONResponse(
+            {**job.document(), "warning": places.warning(folder.absolute())}, status_code=202
+        )
+
+    def read_job(job_id: str) -> dict[str, object]:
+        job = jobs.get(job_id)
+        if job is None:
+            raise HTTPException(
+                404,
+                detail=f"no job {job_id} in this first start; the card started again since, so "
+                "read GET /api/first-start for the latest one",
+            )
+        return job.document()
+
+    def handover() -> dict[str, object]:
+        with starting:
+            running = jobs.latest(BRING_IN)
+            if running is not None and running.state == "running":
+                raise HTTPException(409, detail=f"the bring-in (job {running.id}) is still running")
+            if not chosen:
+                raise HTTPException(409, detail=NOTHING_CHOSEN)
+            try:
+                layout = resolve(chosen[0])
+            except NoQmxFolder as refused:
+                raise HTTPException(409, detail=str(refused)) from None
+            unfit = old_library(layout.home)
+            if unfit is not None:
+                raise HTTPException(409, detail=unfit)
+            if on_handover is not None:
+                on_handover(layout.root)
+        return {"folder": str(layout.root), "port": port}
 
     router = APIRouter(prefix="/api/first-start")
     router.add_api_route("", card, methods=["GET"])
     router.add_api_route("/new", new, methods=["POST"])
     router.add_api_route("/open", existing, methods=["POST"])
     router.add_api_route("/restore", restore, methods=["POST"])
-    router.add_api_route("/bring-in", bring, methods=["POST"])
+    router.add_api_route("/bring-in", bring, methods=["POST"], status_code=202)
+    router.add_api_route("/jobs/{job_id}", read_job, methods=["GET"])
+    router.add_api_route("/handover", handover, methods=["POST"])
     return router
+
+
+def _bring_in_refusal(
+    old: Path,
+    folder: Path,
+    places: Places,
+    saved: Mapping[str, object] | None,
+    *,
+    again: bool,
+) -> str | None:
+    """The bring-in's refusals that answer at once, before its job starts."""
+    if again and saved is None:
+        return f"{folder} holds no unfinished bring-in; nothing was cleared"
+    if not again and saved is not None:
+        return (
+            f"bringing your old QMX data into {folder} did not finish; choose to bring it in "
+            "again into the same folder, which clears only QMX's own unfinished copy there"
+        )
+    return _already_brought(old, folder) or refusal_before_copy(old, folder, places.refusal)
 
 
 def _answer[T](act: Callable[[], T]) -> T:
@@ -416,10 +668,22 @@ def _answer[T](act: Callable[[], T]) -> T:
         raise HTTPException(409, detail=str(refused)) from None
 
 
-def first_start_app(places: Places, old: Path, ui_origin: str) -> FastAPI:
-    """The first start's own app on the loopback, before any QMX folder exists."""
+def first_start_app(
+    places: Places,
+    old: Path,
+    ui_origin: str,
+    *,
+    port: int,
+    on_handover: Callable[[Path], None] | None = None,
+) -> FastAPI:
+    """The first start's own app on the loopback, before any QMX folder exists. A first-start
+    lock a killed card left behind, which no process holds, is removed first."""
+    lock = lock_file()
+    if lock.exists():
+        with suppress(Refused, OSError):
+            hold(lock, BUSY, removed=True).release()
     app = FastAPI(title="QMX first start")
-    app.include_router(first_start_router(places, old))
+    app.include_router(first_start_router(places, old, port=port, on_handover=on_handover))
     if ui_origin:
         app.add_middleware(CORSMiddleware, allow_origins=[ui_origin], allow_methods=["GET", "POST"])
     return app

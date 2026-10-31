@@ -19,6 +19,12 @@ Before `serve` or `start`, every store of the folder is read against this releas
 a store opened read-only is named on stderr, and a refused one stops the start with its name and
 the version it needs.
 
+Exit codes the desktop app branches on (loose strings P1, Appendix E): `serve`, `start`, `status`
+and `stop` exit 3 when a first start is due (no QMX folder yet, only his old data, or an
+unfinished bring-in) and 2 for a folder found and refused. `first-start --serve` exits 4 when its
+port is taken, 0 after a handover with the handover line last on stdout, and 1 when it stopped
+with no handover.
+
 Order is the invariant: parse the arguments, read the keep list with the standard library, scrub
 this process's environment, and only then import the harness, because the SDK reads `os.environ`
 at every `connect()`.
@@ -27,7 +33,9 @@ at every `connect()`.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -36,6 +44,10 @@ from qmx_home import NoQmxFolder, resolve
 from qmx_home.versions import check_open
 
 FIRST_START = ("first-start", "new", "open", "bring-in", "restore")
+FIRST_START_DUE = 3
+PORT_TAKEN = 4
+HANDOVER_GRACE_S = 3
+"""How long the card's server waits for open requests once it handed over."""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--serve", action="store_true", help="first-start: serve the card's routes on --port"
+    )
+    parser.add_argument(
+        "--again",
+        action="store_true",
+        help="bring-in: into the --home folder where it did not finish, clearing QMX's own copy",
     )
     parser.add_argument("--create", action="store_true", help="make the --home folder if missing")
     parser.add_argument("--port", type=int, default=8766)
@@ -64,13 +81,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         layout = resolve(args.home, create=args.create)
     except NoQmxFolder as missing:
-        parser.exit(2, f"{_old_hint(args.home) or missing}\n")
+        if missing.kind == "refused":
+            parser.exit(2, f"{missing}\n")
+        parser.exit(FIRST_START_DUE, f"{_old_hint(args.home) or missing}\n")
     if args.command in ("serve", "start"):
-        from qmx_control.library import old_library  # noqa: PLC0415
+        from qmx_control.library import UNFINISHED, old_library  # noqa: PLC0415
 
         unfit = old_library(layout.home)
         if unfit is not None:
-            parser.exit(2, f"QMX did not start: {unfit}\n")
+            due = (layout.home / UNFINISHED).is_file()
+            parser.exit(FIRST_START_DUE if due else 2, f"QMX did not start: {unfit}\n")
         held = check_open(layout).held_back
         for verdict in held:
             print(verdict.line, file=sys.stderr)
@@ -128,15 +148,29 @@ def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         open_existing,
     )
 
+    sock = _bound(parser, args.port) if args.command == "first-start" and args.serve else None
     old = args.old or default_old()
     places = Places.this_pc()
     if args.command == "first-start":
-        print("\n".join(offer(old).lines()))
-        if args.serve:
-            import uvicorn  # noqa: PLC0415
+        print("\n".join(offer(old, places).lines()), flush=True)
+        if sock is None:
+            return 0
+        import uvicorn  # noqa: PLC0415
 
-            app = first_start_app(places, old, args.ui_origin)
-            uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port)).run()
+        handed: list[Path] = []
+
+        def handover(folder: Path) -> None:
+            handed[:] = [folder]
+            server.should_exit = True
+
+        app = first_start_app(places, old, args.ui_origin, port=args.port, on_handover=handover)
+        config = uvicorn.Config(app, access_log=False, timeout_graceful_shutdown=HANDOVER_GRACE_S)
+        server = uvicorn.Server(config)
+        server.run(sockets=[sock])
+        if not handed:
+            print("the first start stopped with no QMX folder handed over", file=sys.stderr)
+            return 1
+        print(json.dumps({"handover": {"folder": str(handed[0]), "port": args.port}}), flush=True)
         return 0
     if args.command == "restore":
         print(RESTORE_LATER)
@@ -154,11 +188,27 @@ def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         warning = places.warning(folder)
         if warning is not None:
             print(f"note: {warning}", file=sys.stderr)
-        report = bring_in_old(old, folder, places)
+        report = bring_in_old(old, folder, places, anew=args.again)
     except Refused as refused:
         parser.exit(2, f"refused: {refused}\n")
     print(report.text, end="")
     return 0 if report.finished else 1
+
+
+def _bound(parser: argparse.ArgumentParser, port: int) -> socket.socket:
+    """The card's socket on the loopback, bound once before anything is served, so a port taken
+    between a check and the bind cannot be read as a stop with no handover."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError:
+        sock.close()
+        parser.exit(
+            PORT_TAKEN,
+            f"port {port} is in use: stop what holds it, or start the first start on another "
+            "port\n",
+        )
+    return sock
 
 
 if __name__ == "__main__":

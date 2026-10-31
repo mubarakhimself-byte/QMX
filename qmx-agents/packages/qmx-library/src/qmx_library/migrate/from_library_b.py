@@ -31,7 +31,7 @@ import shutil
 import sqlite3
 import stat
 import uuid
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -231,7 +231,11 @@ def recheck_test_runs(store: Store, home: Path) -> tuple[str, ...] | None:
     return archive_test_runs(store, [row for row in rows if str(row["id"]) not in JUNK])
 
 
-def import_library_b(store: Store, home: Path) -> Imported:
+type OnItem = Callable[[int, int], None]
+"""Called after each old version row: how many are done, of how many."""
+
+
+def import_library_b(store: Store, home: Path, *, on_item: OnItem | None = None) -> Imported:
     """Every row of the frozen `library.db` but the known test junk, with the items `TEST_LANES`
     matches archived."""
     db_path = pre(home) / "library.db"
@@ -247,12 +251,14 @@ def import_library_b(store: Store, home: Path) -> Imported:
     rows = [row for row in rows if str(row["id"]) not in JUNK]
     rows.sort(key=lambda r: (str(r["root_id"]), int(r["version"])))
     put = skipped = 0
-    for row in rows:
+    for done, row in enumerate(rows, start=1):
         body = (pre(home) / "artifacts" / str(row["sha256"])).read_bytes()
         if put_version(store, row, body, memo.get(str(row["id"]))):
             put += 1
         else:
             skipped += 1
+        if on_item is not None:
+            on_item(done, len(rows))
     edges = sum(relate(store, str(s), str(t)) for s, t in links)
     return Imported(put, skipped, edges, junk, archive_test_runs(store, rows))
 
@@ -344,7 +350,7 @@ def retire(home: Path) -> tuple[str, ...]:
     return tuple(moved)
 
 
-def switch_over(home: Path, *, redactor: Redactor) -> Switched:
+def switch_over(home: Path, *, redactor: Redactor, on_item: OnItem | None = None) -> Switched:
     """MIGRATION step 0, steps 2 and 4, then step 6's retirement, verified before anything moves.
 
     The store is written under `<home>/library/`; the import reads only `migration/pre/`; the old
@@ -355,7 +361,7 @@ def switch_over(home: Path, *, redactor: Redactor) -> Switched:
     counts = snapshot(home)
     store = open_target(home, dry_run=False, redactor=redactor)
     try:
-        imported = import_library_b(store, home)
+        imported = import_library_b(store, home, on_item=on_item)
         apps = import_apps(store, home)
     finally:
         store.close()

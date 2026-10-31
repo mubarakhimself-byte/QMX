@@ -61,8 +61,9 @@ def old_library(home: Path) -> str | None:
             why = "its record cannot be read"
         return (
             f"bringing your old QMX data into {home} did not finish: {why}. Your old folder was "
-            f"never changed. Remove this QMX folder and run the first start again: "
-            f"{BRING_IN_COMMAND}"
+            "never changed. Bring it in again into the same folder from the first start, which "
+            "clears only QMX's own unfinished copy there: python -m qmx_host bring-in --again "
+            f"--home {home.parent} --old <old folder>"
         )
     objects = home / LIBRARY / "objects"
     if (home / OLD_LIBRARY).is_file() and not (objects.is_dir() and any(objects.iterdir())):
