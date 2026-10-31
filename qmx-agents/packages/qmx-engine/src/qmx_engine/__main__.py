@@ -6,11 +6,14 @@ import argparse
 import asyncio
 import json
 import sys
+import time
 from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from http import HTTPStatus
+from http.client import HTTPException as BrokenAnswer
 from pathlib import Path
-from typing import Final, cast
+from typing import Any, Final, NamedTuple, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -50,6 +53,9 @@ HOST_STATE: Final = "control-process.json"
 INSTALL_ROUTE: Final = "/api/templates/install"
 """The host's install door (`qmx_host.door.templates_router`)."""
 INSTALLED: Final = frozenset({"published", "saved draft", "unchanged"})
+POLL_S: Final = 0.2
+"""How often the command reads the host's install job; a loopback read costs milliseconds."""
+HOST_LOST: Final = "the host stopped during the install; start it and run the install again"
 REFUSED: Final = (StoreRefused, EngineRefused)
 
 type Line = tuple[str, str, str, str]
@@ -257,27 +263,64 @@ def host_port(home: Path) -> int | None:
     return port if isinstance(port, int) else None
 
 
-def through_host(home: Path, port: int, names: list[str] | None) -> list[Line] | None:
-    """The install, run by the home's host on its loopback port with its bearer. None when no
-    host answers there: the record of a host that died. No timeout, because an install's test
-    runs take as long as their models do."""
-    request = Request(
-        f"http://127.0.0.1:{port}{INSTALL_ROUTE}",
+class HostLost(Exception):
+    """The host answered the install and then stopped answering before its job ended."""
+
+
+class Through(NamedTuple):
+    lines: list[Line]
+    stopped: str
+    """The host's line when its install job stopped; empty when it finished."""
+
+
+def _answer(request: Request) -> Any:
+    with urlopen(request) as reply:  # noqa: S310 - the port the home's own host recorded
+        return json.loads(reply.read())
+
+
+def _lines(rows: list[dict[str, str]]) -> list[Line]:
+    return [(row["id"], row["folder"], row["action"], row["detail"]) for row in rows]
+
+
+def through_host(home: Path, port: int, names: list[str] | None) -> Through | None:
+    """The install, run by the home's host on its loopback port with its bearer: post it, then
+    read the host's install job until it ends. A host older than the job answers the rows at once,
+    which is read as they are. None only when the first POST cannot connect: the record of a host
+    that died. Once the host has answered, losing it raises `HostLost`, so the caller never starts
+    a second install beside the host's. No timeout, because an install's test runs take as long
+    as their models do."""
+    bearer = {"Authorization": f"Bearer {local_token(home)}"}
+    route = f"http://127.0.0.1:{port}{INSTALL_ROUTE}"
+    posted = Request(
+        route,
         data=json.dumps({"templates": names}).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {local_token(home)}",
-            "Content-Type": "application/json",
-        },
+        headers={**bearer, "Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with urlopen(request) as reply:  # noqa: S310 - the port the home's own host recorded
-            rows = cast(list[dict[str, str]], json.loads(reply.read()))
+        job = _answer(posted)
     except HTTPError:
         raise
     except URLError:
         return None
-    return [(row["id"], row["folder"], row["action"], row["detail"]) for row in rows]
+    except (OSError, BrokenAnswer) as lost:
+        raise HostLost from lost
+    if isinstance(job, list):
+        return Through(_lines(cast(list[dict[str, str]], job)), "")
+    while job["state"] == "running":
+        time.sleep(POLL_S)
+        read = Request(f"{route}/{job['id']}", headers=bearer)  # noqa: S310 - the same host
+        try:
+            job = _answer(read)
+        except HTTPError as refused:
+            if refused.code != HTTPStatus.NOT_FOUND:
+                raise
+            raise HostLost from refused
+        except (OSError, BrokenAnswer) as lost:
+            raise HostLost from lost
+    stopped = str(job["line"]) if job["state"] == "stopped" else ""
+    result = cast(dict[str, list[dict[str, str]]], job["result"] or {})
+    return Through(_lines(result.get("rows", [])), stopped)
 
 
 @contextmanager
@@ -324,14 +367,20 @@ async def install_templates(home: Path, ids: Sequence[str] | None) -> int:
         print(f"refused: no template {templates!r} in the catalogue")
         return 1
     port = host_port(home)
-    lines: list[Line] | None = None
+    through: Through | None = None
     if port is not None:
         try:
-            lines = through_host(home, port, None if ids is None else [t.id for t in templates])
+            through = through_host(home, port, None if ids is None else [t.id for t in templates])
         except HTTPError as refused:
             print(f"refused: {refused.code} {refused.read().decode('utf-8', 'replace')}")
             return 1
-    if lines is None:
+        except HostLost:
+            print(HOST_LOST)
+            return 1
+    stopped = ""
+    if through is not None:
+        lines, stopped = through
+    else:
         control = ControlService(home)
         harness = await Harness.open(QmxHome(home), control=control)
         try:
@@ -353,6 +402,9 @@ async def install_templates(home: Path, ids: Sequence[str] | None) -> int:
         lines = [(f.template.id, f.template.folder, f.action, f.detail) for f in done]
     for template_id, folder, action, detail in lines:
         print(f"{template_id:<4} {folder} {action}: {detail}")
+    if stopped:
+        print(f"stopped: {stopped}")
+        return 1
     return 0 if all(line[2] in INSTALLED for line in lines) else 1
 
 
