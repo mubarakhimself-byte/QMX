@@ -1,5 +1,5 @@
 """The one connect dialog's backend (design 06 section 9): the screen and the copilot connect a
-storage, and later compute and deep logs, through the same routes.
+storage, a machine and the deep logs through the same routes.
 
 A connection kind is an ordered list of steps, each `(name, who, check, do)`. A job runs the kind
 on the host's job runner: it skips every step whose `check` passes, runs QMX's steps in order, and
@@ -34,6 +34,9 @@ from qmx_host.jobs import Job, Jobs, Progress, Stopped
 
 if TYPE_CHECKING:
     from qmx_control.service import ControlService
+
+    from qmx_host.connect_compute import Ports
+    from qmx_host.connect_logs import Logs
 
 type Who = Literal["his", "qmx"]
 type Rows = dict[str, dict[str, object]]
@@ -89,6 +92,11 @@ class World:
         default_factory=dict[str, threading.Event]
     )
     """A long job's stop switch, by its job id."""
+    compute: Ports | None = None
+    """The server kind's shell, terminal and source, and the key kinds' provider check; None
+    means the real ones."""
+    logs: Logs | None = None
+    """Deep logs on this PC: OpenObserve's release, its fetch and the host's process."""
 
 
 @dataclass(slots=True)
@@ -373,7 +381,10 @@ def same_folder(one: Path, other: Path) -> bool:
     )
 
 
-from qmx_host.connect_storage import STORAGE  # noqa: E402 - the kinds build on the types above
+# The kinds build on the types above.
+from qmx_host.connect_compute import COMPUTE  # noqa: E402
+from qmx_host.connect_logs import DEEP_LOGS  # noqa: E402
+from qmx_host.connect_storage import STORAGE  # noqa: E402
 
-KINDS: Final[Mapping[str, Kind]] = kinds_of(STORAGE)
+KINDS: Final[Mapping[str, Kind]] = kinds_of(STORAGE, COMPUTE, DEEP_LOGS)
 """Every kind the dialog connects, by id."""

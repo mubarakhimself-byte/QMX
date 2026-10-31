@@ -50,7 +50,7 @@ from pydantic import JsonValue
 from qma.harness import Harness, QmxHome, SessionId, chat_routes, control_service
 from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
-from qma.telemetry import configured
+from qma.telemetry import THIS_PC, configured, target
 from qmf.core import TypedRefusal, is_refusal
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.models import Document
@@ -127,9 +127,10 @@ from uvicorn.config import STARTUP_FAILURE
 from qmx_host.backups import Backups, Refusal, backups_router
 from qmx_host.bring_in import recheck_at_start
 from qmx_host.connect import KINDS, Connect, World, connect_router, placement
+from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
-from qmx_host.jobs import Jobs
+from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.process_record import STATE, recorded_host
@@ -797,6 +798,7 @@ async def serve(
                 )
                 backups.reindex(lambda: memory.rebuild("all"), hindsight=memory.index is not None)
                 adopt_router(RelayRouter(harness_relay(harness)))
+                deep_logs(home, connect)
                 try:
                     async with EngineDoor.open(
                         control,
@@ -878,6 +880,8 @@ async def serve(
                                     await task
                             await asking.close()
                 finally:
+                    if connect.world.logs is not None and connect.world.logs.process is not None:
+                        await asyncio.to_thread(connect.world.logs.process.close)
                     adopt_router(None)
                     install(None)
                     await asyncio.to_thread(memory.close)
@@ -973,8 +977,8 @@ def storage_dialog(
     layout: Layout, control: ControlService, backups: Backups, keys: KeyStore | None = None
 ) -> Connect:
     """The connect dialog on this folder (design 06 section 9): its rclone from
-    `[backup] rclone_path`, Credential Manager as its key store, and the first sync of a storage
-    it connected asked of `backups`."""
+    `[backup] rclone_path`, Credential Manager as its key store, the first sync of a storage
+    it connected asked of `backups`, and this PC's OpenObserve, which the host runs."""
     store = CredentialManager() if keys is None else keys
     named = section(control, "backup").get("rclone_path")
     rclone = Rclone(layout, keys=store, path=named if isinstance(named, str) else "")
@@ -986,7 +990,26 @@ def storage_dialog(
             return f"the first sync did not start: {refused}"
         return f"the first sync started (job {started.job.id})"
 
-    return Connect(World(layout, store, rclone, Jobs(), control, first_sync), KINDS)
+    deep = OpenObserveProcess(layout, store, lambda: section(control, "telemetry"))
+    world = World(layout, store, rclone, Jobs(), control, first_sync, logs=Logs(deep))
+    return Connect(world, KINDS)
+
+
+def deep_logs(home: Path, connect: Connect) -> None:
+    """With `[telemetry] send_to = "this-pc"`, start this PC's OpenObserve on its own thread, so
+    the host answers before it does. The host stops it with its other work."""
+    found = connect.world.logs
+    if target(home) != THIS_PC or found is None or found.process is None:
+        return
+    process = found.process
+
+    def start() -> None:
+        try:
+            print(f"deep logs: {process.start()}", file=sys.stderr)
+        except (Stopped, NeedsAdmin) as refused:
+            print(f"deep logs: OpenObserve did not start: {refused}", file=sys.stderr)
+
+    threading.Thread(target=start, name="openobserve", daemon=True).start()
 
 
 def dialog_routers(connect: Connect, control: ControlService) -> list[APIRouter]:

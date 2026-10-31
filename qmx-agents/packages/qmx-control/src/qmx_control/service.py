@@ -286,6 +286,58 @@ def _check_backup_plan(values: Document, layout: Layout, engine: Document) -> No
         raise ControlError("invalid_backup_settings", str(refused)) from refused
 
 
+TELEMETRY_DEFAULTS: Final[Document] = {
+    "send_to": "off",
+    "openobserve": {"cache_gb": 1, "keep_days": 30},
+}
+"""`[telemetry]` with every default: nothing is sent, and OpenObserve on this PC keeps a 1 GB disk
+cache and 30 days."""
+
+
+def _check_telemetry(values: Document, engine: Document) -> None:
+    """Refuse a `[telemetry]` section no sender can use, naming the value, before it is saved:
+    a `send_to` that is not `off`, `this-pc` or a place that can run, and OpenObserve sizes it
+    does not take (it keeps no fewer than 3 days)."""
+    from qma.telemetry import (  # noqa: PLC0415  # pyright: ignore[reportMissingTypeStubs]
+        OFF,
+        THIS_PC,
+        send_to,
+    )
+
+    try:
+        target = send_to(values.get("send_to"))
+    except ValueError as error:
+        raise ControlError("invalid_telemetry", str(error)) from error
+    if target not in (OFF, THIS_PC):
+        rows = engine.get("placement")
+        row = cast("dict[str, object]", rows).get(target) if isinstance(rows, dict) else None
+        can = cast("dict[str, object]", row).get("can", ["run"]) if isinstance(row, dict) else None
+        if not isinstance(can, list) or "run" not in can:
+            why = "is not one of your machines" if can is None else "only keeps copies"
+            raise ControlError(
+                "invalid_telemetry",
+                f"[telemetry] send_to is {target!r}, which {why}; use off, this-pc or a machine "
+                "that runs work, such as your server",
+            )
+    found = values.get("openobserve", {})
+    sizes = cast("dict[str, object]", found) if isinstance(found, dict) else {}
+    cache, days = sizes.get("cache_gb", 1), sizes.get("keep_days", 30)
+    if (
+        not isinstance(found, dict)
+        or isinstance(cache, bool)
+        or not isinstance(cache, int | float)
+        or cache <= 0
+        or isinstance(days, bool)
+        or not isinstance(days, int)
+        or days < 3
+    ):
+        raise ControlError(
+            "invalid_telemetry",
+            f"[telemetry.openobserve] is {found!r}: cache_gb is a number of GB above 0 and "
+            "keep_days a whole number of days, 3 or more (OpenObserve keeps no fewer)",
+        )
+
+
 def _merged(stored: Document, sent: Document) -> Document:
     """`sent` merged into `stored`: a table sent merges key by key, any other value replaces."""
     merged = dict(stored)
@@ -792,6 +844,8 @@ class ControlService:
                 values = cast(
                     Document, backup_defaults(values, cast(Document, stored.get("engine", {})))
                 )
+            if section == "telemetry":
+                values = _merged(TELEMETRY_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:
@@ -907,6 +961,8 @@ class ControlService:
                     "invalid_settings",
                     "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
                 )
+        if section == "telemetry":
+            _check_telemetry(values, self._stored("engine"))
         if section == "backup":
             _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
         elif section in ("brokers", "connections"):
