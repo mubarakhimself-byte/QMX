@@ -27,7 +27,9 @@ from qmx_library.port import LibraryRefused, MergeResult, ObjectId
 from qmx_library.principal import MAIN, drafts_ref, runs_ref
 from qmx_library.store import Store
 
-type Mode = Literal["live", "test"]
+type Mode = Literal["live", "test", "unknown"]
+"""`unknown` is an imported run whose record never said live or test; like a test run, its records
+never land on `main`."""
 
 NOT_PRIMARY: Final = "not_primary"
 """The refusal of a store that may not move `main` because another store is primary."""

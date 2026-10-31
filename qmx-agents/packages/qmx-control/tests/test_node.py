@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 from qmx_apps.docker import DockerSupervisor
+from qmx_engine.ledger import redact
+from qmx_library.principal import Principal
+from qmx_library.store import Store
 
 from qmx_control.node import bootstrap_script, main, read_secret, run, verify
 from qmx_control.server import create_app
@@ -85,3 +89,24 @@ def test_verify_reports_missing_components(tmp_path: Path, monkeypatch: pytest.M
 
     monkeypatch.setattr("qmx_control.node.run", unavailable)
     assert not any(verify(tmp_path, tmp_path).values())
+
+
+def test_node_import_reads_a_bucket_run_with_no_mode_as_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    folder = tmp_path / "bucket" / "runs" / "old-run"
+    folder.mkdir(parents=True)
+    (folder / "manifest.json").write_text(
+        json.dumps({"run_id": "old-run", "status": "passed", "workflow_item": "paper"}),
+        encoding="utf-8",
+    )
+    root = tmp_path / "library"
+    argv = ["qmx", "node", "import", "--home", str(tmp_path), "--root", str(root)]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert main() == 0
+    with Store.open(root, redactor=redact, name="server") as store:
+        (head,) = [head for item, _, head, _, _ in store.refs() if item == "old-run"]
+        mode = store.get(Principal("operator"), head).fields["mode"]
+    assert mode == "unknown"
+    assert capsys.readouterr().out == "imported 1 runs, 0 artifacts, 0 blobs, 0 skipped\n"

@@ -73,3 +73,37 @@ def test_a_rerun_imports_nothing_twice(store: Store, tmp_path: Path) -> None:
     again = import_bucket(store, bucket)
 
     assert again == Imported(runs=0, artifacts=0, blobs=0, skipped=1)
+
+
+def test_a_run_whose_manifest_does_not_say_live_or_test_imports_as_unknown(
+    store: Store, tmp_path: Path
+) -> None:
+    for run_id, mode in (("run-a", None), ("run-b", "remote"), ("run-c", "test")):
+        folder = tmp_path / "bucket" / "runs" / run_id
+        folder.mkdir(parents=True)
+        manifest = {"run_id": run_id, "status": "passed", "workflow_item": "paper"}
+        if mode is not None:
+            manifest["mode"] = mode
+        (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    done = import_bucket(store, tmp_path / "bucket")
+
+    modes = {item: store.get(OPERATOR, head).fields["mode"] for item, _, head, _, _ in store.refs()}
+    assert done == Imported(runs=3, artifacts=0, blobs=0, skipped=0)
+    assert modes == {"run-a": "unknown", "run-b": "unknown", "run-c": "test"}
+
+
+def test_an_unknown_runs_artifact_is_never_ranked_as_a_live_runs(
+    store: Store, tmp_path: Path
+) -> None:
+    bucket = bucket_with_one_run(tmp_path)
+    manifest = bucket / "runs" / "run-7" / "manifest.json"
+    unproven = json.loads(manifest.read_text(encoding="utf-8"))
+    del unproven["mode"]
+    manifest.write_text(json.dumps(unproven), encoding="utf-8")
+    import_bucket(store, bucket)
+
+    (_, _, artifact, _, _) = store.refs()[0]
+
+    assert store.get(OPERATOR, artifact).kind == "artifact"
+    assert store.catalog.producer(artifact) == "run"

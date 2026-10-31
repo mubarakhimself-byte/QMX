@@ -50,6 +50,9 @@ type EdgeName = Literal[
     "archived-as",
 ]
 type Mode = Literal["live", "test"]
+type SummaryMode = Mode | Literal["unknown"]
+"""A run's mode as the Library holds it. Only the old bucket import writes `unknown`, for a run
+whose record never said live or test; no run starts in it."""
 type RunStatus = Literal[
     "queued", "running", "waiting", "passed", "failed", "stopped", "interrupted"
 ]
@@ -178,7 +181,7 @@ class RunSummary:
     run_id: str
     workflow_item: str
     object_id: str
-    mode: Mode
+    mode: SummaryMode
     status: RunStatus
     reason: str | None
     totals: JsonObject

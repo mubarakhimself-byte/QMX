@@ -14,8 +14,11 @@ in `bring_in`:
    byte, each file hashed as it is written, then the old folder listed and hashed again, then each
    copy hashed again from disk. Any difference stops the bring-in.
 4. The switch (`qmx_library.migrate.from_library_b.switch_over`, the one `switch_library.py`
-   runs) on the copy only, then every store read against this release (`check_open`).
-5. The report, in plain words, into `data/migration/bring-in-report.txt` beside its facts.
+   runs) on the copy only, then every store read against this release (`check_open`). The switch
+   archives the items its `TEST_LANES` rule says test runs made.
+5. The report, in plain words, into `data/migration/bring-in-report.txt` beside its facts, which
+   carry the rule's version as `test_rule`. A folder brought in under an older rule gets the
+   archive once at its next host start (`recheck_at_start`).
 
 `data/migration/bring-in-unfinished.txt` is written before the first copy and removed last, so a
 bring-in that fails or stops part way leaves the new folder marked unfinished, and the Library and
@@ -64,7 +67,8 @@ from qmx_home import (
 )
 from qmx_home.stores import STORES
 from qmx_home.versions import FLOOR_BYTES, StoreRefused, check_open, folder_of, open_sqlite
-from qmx_library.migrate.from_library_b import JUNK, switch_over
+from qmx_library.migrate.from_library_b import JUNK, TEST_RULE, recheck_test_runs, switch_over
+from qmx_library.store import Store
 
 LIST: Final = "migration/old-layout-list.json"
 REPORT: Final = "migration/bring-in-report.json"
@@ -377,6 +381,8 @@ def _carry(
     _write(unfinished, "it stopped while moving your old Library into the new one")
     facts["library"] = None
     facts["set_aside"] = None
+    facts["test_rule"] = TEST_RULE
+    facts["test_runs"] = []
     if (layout.data / OLD_LIBRARY).is_file():
         stale = layout.data / PRE
         if stale.exists():
@@ -422,9 +428,11 @@ def _opens(layout: Layout) -> str | None:
 def _switch(layout: Layout, facts: dict[str, object]) -> str | None:
     """The built switch on the copy only."""
     switched = switch_over(layout.data, redactor=redact)
+    tests = switched.imported.tests
+    facts["test_runs"] = list(tests)
     facts["library"] = {
         "report": switched.report(),
-        "kinds": _kinds_brought_in(layout.data / "migration" / "pre" / OLD_LIBRARY),
+        "kinds": _kinds_brought_in(layout.data / "migration" / "pre" / OLD_LIBRARY, tests),
     }
     if switched.ok:
         return None
@@ -441,14 +449,15 @@ def _switch(layout: Layout, facts: dict[str, object]) -> str | None:
     return "the new Library does not match your old one: " + "; ".join(differences)
 
 
-def _kinds_brought_in(frozen: Path) -> dict[str, int]:
-    """Items per old kind in the switch's frozen copy, the test junk left out: what the switch
-    imported and then checked against the store."""
+def _kinds_brought_in(frozen: Path, tests: tuple[str, ...]) -> dict[str, int]:
+    """Items per old kind in the switch's frozen copy, the test junk and the archived test runs
+    left out: what the switch imported for him."""
     kinds: dict[str, int] = {}
+    left_out = {*JUNK, *tests}
     with closing(sqlite3.connect(f"{frozen.resolve().as_uri()}?mode=ro", uri=True)) as db:
         for (raw,) in db.execute("SELECT data FROM items"):
             row = cast("dict[str, object]", json.loads(raw))
-            if str(row["id"]) not in JUNK:
+            if str(row["id"]) not in left_out:
                 kinds[str(row["kind"])] = kinds.get(str(row["kind"]), 0) + 1
     return dict(sorted(kinds.items()))
 
@@ -535,6 +544,42 @@ def _room(folder: Path, survey: tuple[tuple[str, int, int], ...]) -> None:
 def _switched(path: str) -> bool:
     top = path.split("/", 1)[0]
     return top in SWITCHED or top.removesuffix("-wal") in SWITCHED
+
+
+def recheck_at_start(home: Path, store: Store) -> int | None:
+    """The host's one pass over a folder whose bring-in finished under an older `TEST_RULE`, or
+    before there was one: archive what the rule matches, stamp the saved report with the rule's
+    version and add the count to its text. Returns the count, or None when nothing was due.
+
+    A finished bring-in with no frozen Library copy left to judge by is left alone, unstamped.
+    Archiving skips what is archived already, so a pass stopped part way is finished by the next
+    start."""
+    done = _finished(home.parent)
+    stamp = None if done is None else done.facts.get("test_rule")
+    if done is None or (isinstance(stamp, int) and stamp >= TEST_RULE):
+        return None
+    tests: tuple[str, ...] = ()
+    if done.facts.get("library") is not None:
+        found = recheck_test_runs(store, home)
+        if found is None:
+            return None
+        tests = found
+    facts = {**done.facts, "test_rule": TEST_RULE, "test_runs": list(tests)}
+    lines = list(done.lines)
+    if tests:
+        when = f"{datetime.now(UTC):%Y-%m-%d}"
+        lines += ["", f"Checked again when QMX started on {when}: {_made_by_tests(len(tests))}"]
+    _write(home / REPORT_TEXT, Report(True, home.parent, tuple(lines)).text)
+    _write(home / REPORT, json.dumps(facts, indent=1, sort_keys=True))
+    return len(tests)
+
+
+def _made_by_tests(count: int) -> str:
+    return (
+        f"{_count(count, 'item')} made by test runs, not by you, {'is' if count == 1 else 'are'} "
+        "in the new Library but archived: search and recall leave them out, and nothing was "
+        "deleted."
+    )
 
 
 def brought_from(folder: Path) -> Mapping[str, object] | None:
@@ -674,6 +719,9 @@ def _lines(facts: Mapping[str, object]) -> list[str]:
         junk = cast("list[str]", switched.get("junk", []))
         lines += ["", f"Your Library: {_count(sum(kinds.values()), 'item')} in the new Library."]
         lines += [f"  {kind}: {count}" for kind, count in kinds.items()]
+        tests = cast("list[str]", facts.get("test_runs", []))
+        if tests:
+            lines.append(f"  {_made_by_tests(len(tests))}")
         retired = cast("list[str]", switched.get("retired", []))
         if retired:
             lines.append(

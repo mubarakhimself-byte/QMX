@@ -376,7 +376,7 @@ class Catalog:
         ).fetchone()
         if run is not None and run[0] == "test":
             return "test-run"
-        if run is not None and run[1] == "passed":
+        if run is not None and run[0] == "live" and run[1] == "passed":
             return "live-run"
         return "run"
 
