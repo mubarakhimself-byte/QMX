@@ -27,10 +27,17 @@ Also: do not use the Workflow tool.
 Follow `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\00-workflow-and-skills.md` sections 3 and 4, and your own step in section 5: the headless payloads, YOLO at CIS checkpoints, session mode for party mode, sequential fallbacks for any spawning step. His voice is quotes only, taken from the transcripts or `00-ledger.md` with their line refs, and checked by a script against the transcript before you finish. Ignore the stale factory facts and `on_complete` endings in `C:\Users\Mubarak\Desktop\QMX\_bmad\custom\`; never write to `_bmad-output` (it sits on `main`); write only under the folder your brief names, always by absolute path. Anything the ledger does not settle becomes a lead's call: propose a default and log it in a "Lead's calls" section of your index file (what, why, how to undo). Never ask him anything.
 The merged code is checked out read-only at `D:\QMX-worktrees\engine-base-read\` (origin/engine/base, c93407ca); run code only from a copy in your own scratchpad.
 
+## His corrections of 31 Oct, late morning (STATE.md midday rulings 24-33; binding)
+- Legacy code: be surgical, not frozen. QMA v2's agents, the copilot and mini apps took two weeks to ship and you lack their history: design within their realms and change only what is necessary, each change with its reason in one line.
+- QMB is called by agents as a tool (designed earlier; check G4 for what shipped).
+- The trading node is the biggest task and may need a fresh start: it should set itself up on a server, set up the MIS and everything units need to trade autonomously, with kill switches, risk and sizing. Only the node sends orders, by design, so the kill switch works. Linux because servers are VPSs.
+- Brokers: cTrader first; CCXT opened up beyond reading spot markets; Hyperliquid designed. Futures: design for futures accounts and every instrument now; no decision from him needed.
+- The "QMX wrap-up coordination" session left a very solid foundation: build on it.
+
 ## Read first
 - `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md` in full; "Operator round 2026-10-31 midday" is newest and binding. Then his message of 2026-10-31T09:12 UTC in `operator/transcript-2026-10-30-to-31.md`, word for word, and his answer to question 5 of 31 Oct morning (out of the box, start a node and see it started, deploy with less stress, mini apps and workflows, units inside mini apps).
 - `architecture/00-ledger.md`, `architecture/00-workflow-and-skills.md`.
-- The grounding: `architecture/grounding/G1-algo-side.md`, `G2-agent-and-platform.md`, `G3-node-and-external.md`, `research/54-futures-platforms-languages-clocks.md`.
+- The grounding: `architecture/grounding/G1-algo-side.md`, `G2-agent-and-platform.md`, `G3-node-and-external.md`, `research/54-futures-platforms-languages-clocks.md`, and `architecture/grounding/G4a-wrapup-session-node-library.md` and `architecture/grounding/G4b-qma-v2-session-agents-workflows.md` (the second grounding; where it corrects the first, it wins).
 - `research/30-desk-analysis.md` (his day-to-day), the explainer sources `explainers/src/pages*.mjs` and `explainers/round2/src/`, and the UI notes that exist: `D:\QMX-worktrees\unit-plan\tracker\qma-v2\UI-NOTES.md` and `UI-HANDOFF.md`. UI is design, not code: derive needs from intent and screens, never from UI code.
 - Skills: `bmad-cis-design-thinking` and the other `bmad-cis-*` skills (under `C:\Users\Mubarak\Desktop\QMX\.claude\skills\` or `_bmad/`).
 
