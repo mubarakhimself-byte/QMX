@@ -195,6 +195,12 @@ def claim(root: Path, key_text: str) -> Path | None:
     return path
 
 
+def door_place(home: Path, data: dict[str, object]) -> tuple[Path, Placement]:
+    """`[data] root` and `placement`, by default the host door's own `<home>/market` on This PC."""
+    root = Path(str(data.get("root") or home / "market"))
+    return root, Placement(str(data.get("placement") or Placement.PC))
+
+
 def free_disk(folder: Path, floor_gb: float) -> str:
     """Why this write may not start, or an empty string when the disk has room."""
     folder.mkdir(parents=True, exist_ok=True)
@@ -228,10 +234,7 @@ home = home_of(shared)
 settings_file = home / "settings.toml"
 settings = tomllib.loads(settings_file.read_text("utf-8")) if settings_file.is_file() else {}
 data = settings.get("data") if isinstance(settings.get("data"), dict) else {}
-root = Path(str(data.get("root") or ""))
-if str(data.get("root") or "") == "":
-    fail("this home's settings name no [data] root for the door")
-placement = Placement(str(data.get("placement") or "server"))
+root, placement = door_place(home, data)
 key = SeriesKey.try_create("dukascopy", symbol, "ticks", year, month)
 if is_refusal(key):
     fail(f"the partition key was refused: {key.context}")

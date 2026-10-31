@@ -14,9 +14,10 @@ pinned instead of retyped.
 
 A **training run on the PC is a placement** (Lab AD-20): it declares a GPU slot from
 `placement.pc.gpu_slots`, checks the PC's live free disk against the partitions it must fetch and
-refuses with both sizes when they do not fit, then materialises exactly those partitions into the PC
-cache and reads nothing else. The `model` it lands carries the data fingerprints, the code version
-and the seed, links `consumed` to the card and `derived-from` its code.
+refuses with both sizes when they do not fit, then materialises exactly those partitions from the
+PC's own store, which holds the main copy, into the run's partition cache and reads nothing else.
+The `model` it lands carries the data fingerprints, the code version and the seed, links
+`consumed` to the card and `derived-from` its code.
 
 Pods are not part of this backend (Lab AD-10 to AD-12 stay designed and unbuilt). The operations are
 `lab` catalog rows, served by the host's user door for the UI's Lab and on no model's surface: the

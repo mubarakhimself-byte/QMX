@@ -100,7 +100,7 @@ class RunBundle(StrictModel):
 class Target(StrictModel):
     provider: Literal["ssh", "amp", "modal", "e2b"] = "ssh"
     host: str = Field(default="", pattern=r"^(?:[a-zA-Z0-9][a-zA-Z0-9@._-]*)?$")
-    root: str = "/srv/qmx/bucket"
+    root: str = ""
     bucket_local: bool = True
     image: str = ""
     gpu: int = Field(default=0, ge=0)
@@ -114,14 +114,16 @@ class Target(StrictModel):
     def validate_target(self) -> Self:
         if self.provider in {"ssh", "amp"} and not self.host:
             raise RemoteError("SSH and Amp targets need an SSH host for their durable worker.")
-        if not self.root.startswith("/") or ".." in PurePosixPath(self.root).parts:
+        if self.provider == "ssh" and not self.root:
+            raise RemoteError("An SSH target needs its node root, the folder runs work under.")
+        if self.root and (not self.root.startswith("/") or ".." in PurePosixPath(self.root).parts):
             raise RemoteError("Node root must be an absolute POSIX path.")
         return self
 
 
 class RemoteSettings(StrictModel):
-    default_target: str = "vps"
-    bucket: str = "vps:/srv/qmx/bucket"
+    default_target: str = ""
+    bucket: str = ""
     targets: dict[str, Target] = Field(default_factory=dict)
 
     def place(self, requested: str | None, resources: Resources) -> tuple[str, Target]:

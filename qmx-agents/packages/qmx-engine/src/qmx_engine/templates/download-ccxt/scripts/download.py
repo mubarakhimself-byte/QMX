@@ -76,6 +76,12 @@ def heartbeat(shared: Path, state: dict[str, object]) -> threading.Event:
     return stop
 
 
+def door_place(home: Path, data: dict[str, object]) -> tuple[Path, Placement]:
+    """`[data] root` and `placement`, by default the host door's own `<home>/market` on This PC."""
+    root = Path(str(data.get("root") or home / "market"))
+    return root, Placement(str(data.get("placement") or Placement.PC))
+
+
 def claim(root: Path, key_text: str) -> Path | None:
     folder = root / ".claims"
     folder.mkdir(parents=True, exist_ok=True)
@@ -154,10 +160,7 @@ home = home_of(shared)
 settings_file = home / "settings.toml"
 settings = tomllib.loads(settings_file.read_text("utf-8")) if settings_file.is_file() else {}
 data = settings.get("data") if isinstance(settings.get("data"), dict) else {}
-if str(data.get("root") or "") == "":
-    fail("this home's settings name no [data] root for the door")
-root = Path(str(data["root"]))
-placement = Placement(str(data.get("placement") or "server"))
+root, placement = door_place(home, data)
 key = SeriesKey.try_create(exchange_name, symbol.replace("/", ""), KIND, year, month, VARIANT)
 if is_refusal(key):
     fail(f"the partition key was refused: {key.context}")

@@ -64,6 +64,7 @@ type SettingsSection = Literal[
     "roles",
     "rules",
     "observers",
+    "telemetry",
     "data",
 ]
 type SettingsParser = Callable[[Document, Document], Document]

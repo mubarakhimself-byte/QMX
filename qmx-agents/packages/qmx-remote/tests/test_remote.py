@@ -11,7 +11,7 @@ import pytest
 from qmx_ledger.journal import fingerprint
 
 from qmx_remote.code import publish
-from qmx_remote.models import RemoteError, RemoteSettings, RunBundle, Target
+from qmx_remote.models import RemoteError, RemoteSettings, Resources, RunBundle, Target
 from qmx_remote.providers import AmpProvider, E2BProvider, ModalProvider, SSHProvider
 
 
@@ -34,10 +34,21 @@ def settings(root: Path) -> RemoteSettings:
     return RemoteSettings(
         bucket=str(root / "bucket"),
         targets={
-            "vps": Target(host="vps", image="qmx-worker:test"),
-            "gpu": Target(host="gpu-node", gpu=2, image="qmx-worker:test"),
+            "vps": Target(host="vps", root="/srv/qmx/bucket", image="qmx-worker:test"),
+            "gpu": Target(host="gpu-node", root="/srv/qmx/bucket", gpu=2, image="qmx-worker:test"),
         },
     )
+
+
+def test_a_fresh_runner_names_no_place_and_an_ssh_place_names_its_root() -> None:
+    fresh = RemoteSettings()
+
+    with pytest.raises(RemoteError, match="Configure the remote target in Settings first"):
+        fresh.place(None, Resources())
+    with pytest.raises(ValueError, match="An SSH target needs its node root"):
+        Target(host="home-server", image="worker")
+    assert (fresh.default_target, fresh.bucket) == ("", "")
+    assert Target(provider="modal", image="worker").root == ""
 
 
 def test_ssh_uses_detached_docker_and_secrets_only_on_stdin(

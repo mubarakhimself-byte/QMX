@@ -59,11 +59,12 @@ if [[ ! -s /etc/qmx/vault/pairing-key ]]; then
   openssl rand -hex 32 > /etc/qmx/vault/pairing-key
 fi
 chmod 600 /etc/qmx/vault/pairing-key /var/lib/qmx/rclone.conf
-# hub.toml is AD-19's configuration on the server side: the server is primary from this setup on.
+# hub.toml is AD-19's configuration on the server side. This PC stays primary (ruling 136) and
+# the server's Library is a copy of it.
 if [[ ! -f /var/lib/qmx/hub.toml ]]; then
   node_ip="$(tailscale ip -4 2>/dev/null | head -1 || true)"
   cat > /var/lib/qmx/hub.toml <<EOF
-primary = "server"
+primary = "pc"
 host = "${node_ip:-127.0.0.1}"
 port = @HUB_PORT@
 bucket = ["/var/lib/qmx/bucket"]

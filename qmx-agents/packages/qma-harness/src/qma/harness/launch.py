@@ -12,8 +12,9 @@ Everything not set here is the vanilla CLI default, which is the operator's floo
 - `qma.boot` reduced this process's env to an allow-list at startup, and `assert_scrubbed`
   re-checks the banned fragments at every launch. `launch_env` sets exactly the names a launch
   needs; nothing inherited is left to blank out.
-- Every chat sends the CLI's own telemetry to the server's one collector (`TELEMETRY_ENV`), which
-  is on by default and carries no prompt text: the CLI redacts it (AD-69, HARNESS-REQUESTS H60).
+- A chat sends the CLI's own telemetry only where `settings.toml [telemetry] send_to` names a
+  target (`telemetry_env`), which is `off` by default. What it sends carries no prompt text: the CLI
+  redacts it (AD-69, HARNESS-REQUESTS H60).
 - `cli_path` is the QMA launcher, which puts the CLI under the OS limits before it starts.
 - `verbatim_prompts` follows the chat kind, so text QMA built from news, files or tool output
   never dispatches a slash command or reads an `@path`.
@@ -44,6 +45,7 @@ from qmx_router.server import PORT_FILE
 
 from qma.boot import banned_fragment
 from qma.harness import guard
+from qma.telemetry import configured
 
 if TYPE_CHECKING:
     from claude_agent_sdk import McpServerConfig, SdkPluginConfig
@@ -401,18 +403,20 @@ CONSTANT_ENV: Final[Mapping[str, str]] = {
 DesignSync and PushNotification tools (measured, CLI 2.1.299). On Windows, vanilla Claude Code
 offers PowerShell, so it is turned back on by name; the other three stay off."""
 
-COLLECTOR_ENDPOINT: Final = "http://155.133.27.86:4318"
-"""The server's collector, OTLP/HTTP, as `qmx_engine.telemetry.DEFAULT_ENDPOINT` names it. One
-collector for every machine and the PC runs none (F46)."""
-TELEMETRY_ENV: Final[Mapping[str, str]] = {
-    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-    "OTEL_METRICS_EXPORTER": "otlp",
-    "OTEL_LOGS_EXPORTER": "otlp",
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    "OTEL_EXPORTER_OTLP_ENDPOINT": COLLECTOR_ENDPOINT,
-}
-"""What each chat's CLI needs to send its own events to the server's collector (H60). The CLI
-redacts prompt text by default; QMX adds nothing to what it sends."""
+
+def telemetry_env(endpoint: str) -> dict[str, str]:
+    """What a chat's CLI needs to send its own events to `endpoint` over OTLP/HTTP (H60), or
+    nothing while `endpoint` is empty. The CLI redacts prompt text; QMX adds nothing to it."""
+    if not endpoint:
+        return {}
+    return {
+        "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+        "OTEL_METRICS_EXPORTER": "otlp",
+        "OTEL_LOGS_EXPORTER": "otlp",
+        "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
+        "OTEL_EXPORTER_OTLP_ENDPOINT": endpoint,
+    }
+
 
 LAUNCHER: Final = Path(sys.executable).parent / (
     "qma-cli-launcher.exe" if os.name == "nt" else "qma-cli-launcher"
@@ -537,7 +541,8 @@ def api_timeout_ms() -> int:
 
 
 def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str) -> dict[str, str]:
-    """The names this launch needs plus `CONSTANT_ENV` and `TELEMETRY_ENV`. A relayed launch adds
+    """The names this launch needs plus `CONSTANT_ENV` and the home's `telemetry_env`, read at
+    each launch so a Settings edit applies to the next chat. A relayed launch adds
     the relay URL, the grant secret (never a provider key), the four pinned tiers, `NO_PROXY` for
     loopback, the profile's env quirks and, while the router's port is pinned, `API_TIMEOUT_MS`.
     The `QMA_*` names are the launcher's inputs, which it strips before the CLI starts."""
@@ -559,7 +564,7 @@ def launch_env(launch: Launch, *, home: QmxHome, session_id: SessionId, cap: str
                 routing["API_TIMEOUT_MS"] = str(api_timeout_ms())
     return {
         **CONSTANT_ENV,
-        **TELEMETRY_ENV,
+        **telemetry_env(configured(home.root)),
         **routing,
         "QMA_CHAT_ID": session_id,
         "QMA_PROC_DIR": str(home.procs_dir),

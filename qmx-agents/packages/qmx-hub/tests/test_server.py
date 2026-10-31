@@ -14,7 +14,7 @@ from qmx_library.client import HubClient
 from qmx_library.port import Draft
 from qmx_library.store import Store
 
-from qmx_hub.server import Hub, serve
+from qmx_hub.server import Hub, config, serve, store_role
 
 KEY = "pairing-key-of-this-test"
 
@@ -77,3 +77,13 @@ def test_a_wrong_key_is_refused(hub: tuple[HubClient, Store]) -> None:
         impostor.health()
 
     assert refused.value.code == 401
+
+
+def test_a_hub_with_no_primary_named_replicates_the_pc(tmp_path: Path) -> None:
+    named = tmp_path / "named"
+    named.mkdir()
+    (named / "hub.toml").write_text('primary = "server"\n', encoding="utf-8")
+
+    assert store_role(config(tmp_path)) == "replica"
+    assert store_role(config(named)) == "writer"
+    assert store_role(config(named), "pc") == "replica"

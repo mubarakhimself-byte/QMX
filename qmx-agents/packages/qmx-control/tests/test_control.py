@@ -73,6 +73,16 @@ def test_firecrawl_settings_are_off_by_default_and_persist_only_a_vault_referenc
     assert "do-not-save" not in (tmp_path / "settings.toml").read_text()
 
 
+def test_telemetry_send_to_is_edited_from_settings(tmp_path: Path) -> None:
+    with TestClient(create_app(ControlService(tmp_path), TOKEN)) as rest:
+        fresh = rest.get("/api/settings/telemetry", headers=HEADERS).json()
+        named = rest.put("/api/settings/telemetry", headers=HEADERS, json={"send_to": "this-pc"})
+        stored = rest.get("/api/settings/telemetry", headers=HEADERS).json()
+
+    assert (fresh, named.status_code, stored) == ({}, 200, {"send_to": "this-pc"})
+    assert '[telemetry]\nsend_to = "this-pc"' in (tmp_path / "settings.toml").read_text()
+
+
 def test_rest_mcp_parity_and_openapi(tmp_path: Path) -> None:
     service = ControlService(tmp_path)
     service.library_save(LibraryInput(title="Research", kind="note", content={"text": "rates"}))

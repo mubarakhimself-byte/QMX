@@ -128,6 +128,21 @@ def test_a_heartbeat_row_goes_out_as_gauges(tmp_path: Path) -> None:
     assert labels["qmx.id"] == {"stringValue": "pc"}
 
 
+def test_a_ledger_starts_the_exporter_only_where_send_to_names_a_target(tmp_path: Path) -> None:
+    settings = tmp_path / "settings.toml"
+    with Ledger.open(tmp_path):
+        fresh = telemetry.process()
+    settings.write_text('[telemetry]\nsend_to = "off"\n', encoding="utf-8")
+    with Ledger.open(tmp_path):
+        off = telemetry.process()
+    settings.write_text('[telemetry]\nsend_to = "this-pc"\n', encoding="utf-8")
+    with Ledger.open(tmp_path):
+        found = telemetry.process()
+
+    assert (fresh, off) == (None, None)
+    assert found is not None and found.endpoint == "http://127.0.0.1:5080/api/default"
+
+
 def test_a_collector_that_is_down_drops_and_counts_and_never_fails_the_write(
     tmp_path: Path,
 ) -> None:
