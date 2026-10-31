@@ -72,6 +72,8 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 32. **Surgical, not frozen.** Ruling 24 does not freeze legacy code: "if you figure out that something needs to change or something is necessary, we shall add it." The lead lacks that code's history, so it changes what is necessary, surgically, with the reason in one line, after grounding.
 33. **Work the way "QMA V2 Workflow System Design 2" worked.** He called it "a perfect session": how it ran and how it responded. The lead adopts its method (studied by the G4b agent into `architecture/00-how-the-best-session-worked.md`). The "QMX wrap-up coordination" session ran four days and left "a very solid foundation to build on already".
 
+34. **The plan after grounding is open.** The readers of the two sessions may change how the lead works, not only what it designs: "QMA V2 Workflow System Design 2" handled far more than this run, and both sessions were trusted to run on their own. The midday program below is provisional; once both readers land, the lead re-plans from that session's method and the wrap-up session's foundation, and only then starts anything new.
+
 **The lead's answer to ruling 13:** the dictionary's form (schema, checks, authoring tools) is built by the orchestrator's builders as code. Its first content wave (porting the 239 entries into the new form, then new families beyond forex) is a packet in the same build, done by builders with a grounding brief and no cap. Later growth goes through the same authoring door that the copilot and QMA agents use, checked by the same scripts.
 
 **The midday program (lead):**
