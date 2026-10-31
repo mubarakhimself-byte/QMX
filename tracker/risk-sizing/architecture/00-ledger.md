@@ -6,6 +6,8 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 
 **Sources read in full.** `operator/transcript-2026-10-20-to-28.md` (T1), `operator/transcript-2026-10-29-to-30.md` (T2), `operator/transcript-2026-10-30-to-31.md` (T3), `operator/2026-10-27-review-dictation.md` (D27, the same text as T1:1574 and T1:1613), `operator/2026-10-28-router-system1-system2.md` (D28, identical to T1:1903, checked by script), `operator/2026-10-28-discussion-notes.md`, `seeds.md`, `RISK-SIZING-PACK.md`, `STATE.md`. Read as inputs: `research/43-convergence.md` (sections 1 to 8, appendix B and the fold), `research/52-fable-read-of-the-whole-run.md`, `research/53-fable-next-steps.md`.
 
+**His rulings 17 to 23** reached `STATE.md` (commits `634f8f1c` and `fc7b0d0b`, 31 Oct) after the transcript on disk was last refreshed; T3 still ends at 09:14. Those rows quote him as `STATE.md` quotes him and cite `STATE mid r17` to `r23`. They are not checked against a verbatim log until the transcript is refreshed.
+
 **Citations.** `T3:1264` is line 1264 of T3, the line that holds his message text (the header line plus one). Every quote in the "His words" column was checked by script against the cited line (see the last section). Quotes are his dictation as it arrived, slips included.
 
 **Status.**
@@ -26,7 +28,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | ID | Item | His words | Date | Status | Lives now |
 | --- | --- | --- | --- | --- | --- |
 | CC-01 | Foundation first. Design the smallest set of parts that is complete and solid, so QMX grows on top without rework. Same pattern as mini apps, the Lab and the pods. The same approach later for risk and sizing. Never call it "minimal viable". | "it's like building a house on a very strong foundation" (T3:1264); "And don't use that word" (T3:1264) | 31 Oct | RULED | STATE mid r6; MEM foundation-first-design.md |
-| CC-02 | Design for complexity, not a complex system. Handle the hard cases (the 95th percentile) with few parts that are easy to maintain and explain. Lead's wording, which he delegated: "capable at the edges, simple at the core". | "Design for complexity means design a system that can handle very hard edge cases" (T1:1177); "design for complexity and don't design a complex system" (T2:1208); "Design for complexity. Yes, very much." (T3:1105) | 24 Oct to 31 Oct | RULED | STATE corr 1; STATE run "His proposal for the architecture step"; standing order 6 |
+| CC-02 | Design for complexity, not a complex system. Handle the hard cases (the 95th percentile) with few parts that are easy to maintain and explain. Lead's wording, which he delegated: "capable at the edges, simple at the core". | "Design for complexity means design a system that can handle very hard edge cases" (T1:1177); "design for complexity and don't design a complex system" (T2:1208); "design for complexity. Yes, very much." (T3:1105) | 24 Oct to 31 Oct | RULED | STATE corr 1; STATE run "His proposal for the architecture step"; standing order 6 |
 | CC-03 | Not a blank slate. Ground on what is built and stacked before proposing anything. Never casually remove shipped backend work. | "you are not building from a blank slate" (T3:903); "I don't want to just mess around, okay, and remove a lot of the things we've been shipping" (T1:828) | 24 Oct, 31 Oct | RULED | STATE am r1; STATE corr 7; standing order 16 |
 | CC-04 | Nothing is out of scope, but every proposal names what it touches and how. | "just because you're handling units doesn't mean anything is really out of scope or blocked" (T1:828) | 24 Oct | RULED | STATE corr 7 |
 | CC-05 | Code first, numbers later. Everything QMX must be able to do as a system ships now; numbers (thresholds, sizing maths, pass marks, portfolio optimisation) ship as editable defaults or templates. | "I want to first get the things that need to be coded out of the way" (T2:6) | 29 Oct | RULED | STATE 29/30; standing order 5 |
@@ -49,6 +51,9 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | CC-22 | QMX has two faces. Algo-facing (QMB, QML, QMF, QMN) and human-facing (copilot, workflows, Lab, pods, mini apps); agents sit between. The unit lives on the algo face with agents as its users. | "we have human usable and algorithmic usable or agentic usable" (T1:444) | 20 Oct | SEED | seeds §"System split" |
 | CC-23 | Three lenses, none a cage. Agents and code; traders of each instrument; creators who build anything in plain Python. Copy what MT5, cTrader and NinjaTrader do well. | "I also want you to think through the lens of traders" (T1:783) | 24 Oct | SEED | wayfinder/MAP.md notes |
 | CC-24 | Every part serves a logical purpose, without "every part must prove itself" machinery. | "it needs to serve a logical thing" (T1:264); "Okay, don't make this so complex." (T1:1177) | 20 Oct, 24 Oct | RULED (the machinery is rejected) | STATE corr 1 |
+| CC-25 | Edge cases build the foundation. Catalogue the edge cases before the architecture, judge the architecture versions against them, and review more than once, so the simplest version that handles them wins. His picture is white-label software, Shopify or Wix: a solid core others build on, with a small core and stable extension points. | (STATE quotes no exact words) | 31 Oct, after midday | RULED | STATE mid r19 |
+| CC-26 | Extensible by design. Most things can become mini apps; mini apps already have a core foundation. Every part is judged as core or as a mini app on that core, with defaults out of the box. QMB is the first candidate. | "most things can actually become mini apps" (STATE mid r23) | 31 Oct, after midday | RULED | STATE mid r23 |
+| CC-27 | He directs; the lead decides. His guidance is a seed the lead may refuse with a reason. His recorded rulings stay binding. | "I'm directing, not telling you what to do" (STATE mid r21) | 31 Oct, after midday | RULED | STATE mid r21 |
 
 ---
 
@@ -126,15 +131,15 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | M-05 | The router only routes. It directs and gives depth of information ("this market fits your conditions"); it never switches a unit on or off. | "Neither does it switch on, nor does it switch off." (T1:1574) | 27 Oct | RULED | STATE corr 5; STATE 27 Oct "Router" |
 | M-06 | The round-two router (expiring offers, load-balancer algorithms) took the analogy too literally and was over-built. | "I think you took it verbatim, and that's causing issues" (T1:1903) | 28 Oct | RULED (over-built machinery dropped) | STATE 28 Oct; 43 "Subtract first" item 4 |
 | M-07 | Router speed is an architecture problem (precompute, cache), not a modelling one. | "if speed is the issue, let us figure out a way to make it faster" (T1:1177) | 24 Oct | RULED | STATE corr 5 |
-| M-08 | Split: the fast part on the trading node, the planning part elsewhere (his PC). | "Actually, yeah, splitting it, I think, is the best fit." (T1:1574) | 27 Oct | RULED | STATE 27 Oct Q7 |
+| M-08 | Split: the fast part on the trading node, the planning part elsewhere (his PC). | "splitting it, I think, is the best fit" (T1:1574) | 27 Oct | RULED | STATE 27 Oct Q7 |
 | M-09 | QMX workflow templates read the MIS's logs, not the MIS model directly. | "They should be using the logs from the MIS." (T3:903) | 31 Oct | RULED | STATE am r12 |
-| M-10 | The MIS can be upgraded by agents as they see fit, with the user's approval; a new context term needs a new sensor. | "the MIS can be upgraded as the agent see fit, obviously with my approval" (T1:1951) | 28 Oct | RULED | 43 §3.3 |
+| M-10 | The MIS can be upgraded by agents as they see fit, with the user's approval; a new context term needs a new sensor. | "the MIS can be upgraded as the agent see fit, obviously with my approval" (T1:1951) | 28 Oct | RULED (his approval, per CC-11); SEED (agents proposing new sensors) | 43 §3.3 |
 | M-11 | Organise the MIS by instrument type (futures, currency, crypto, gold). Research which context sensing works best per class; that study can itself reveal inefficiencies, a new source of strategies. | "categorizing by instrument type" (T1:1999) | 28 Oct | SEED | discussion notes 28 Oct; research 23, 37 |
 | M-12 | A scalper's MIS holds fast indicators, not an HMM, and its contents come from research, not assumption. His per-market, per-timeframe HMM was only an example. | "you are not going to put an HMM inside a scalper's MIS" (T2:219) | 29 Oct | SEED | research 22, 23; 43 §3.3 |
 | M-13 | Indicators, statistical tests (Hurst, variance ratio, efficiency ratio) and models (HMM, BOCPD, MS-GARCH) are one family that measures market state; make that layer usable in the Lab too. | "we can add this to the lab" (T1:1999) | 28 Oct | SEED | discussion notes 28 Oct |
-| M-14 | Several trading nodes and instruments mean several routers or one central one; models need training per instrument. Think it through. | "we also need to train for specific instruments" (T1:1574) | 27 Oct | SEED | STATE 27 Oct "Router" |
+| M-14 | Several trading nodes and instruments mean several routers or one central one; models need training per instrument. Think it through. | "we also need to train for specific instruments" (T1:1574) | 27 Oct | RULED (to be thought through; the answer is open) | STATE 27 Oct "Router" |
 | M-15 | Fundamentals as an MIS input, from an agentic workflow with proof. | "We can write it to an agent, fundamental analysis with proof" (T1:376) | 20 Oct | SEED (later; news is out for now) | seeds §"Fundamentals as an MIS input" |
-| M-16 | A correlation ledger in the router. | "we need one in the router, whether we like it or not" (T1:1574) | 27 Oct | SUPERSEDED by R-06 (book and correlation control go to the risk session; the MIS only publishes readings for it) | PACK §2.10 C5 |
+| M-16 | A correlation ledger in the router. | "We need one in the router, whether we like it or not" (T1:1574) | 27 Oct | SUPERSEDED by R-06 (book and correlation control go to the risk session; the MIS only publishes readings for it) | PACK §2.10 C5 |
 | M-17 | The MIS as a router inside versus outside the unit; "does it add noise?" | "It was never meant to be part of a unit." (T1:376) | 20 Oct | SUPERSEDED by M-01 | seeds §"MIS is a router" |
 
 ## 5. Journals
@@ -153,8 +158,9 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 
 | ID | Item | His words | Date | Status | Lives now |
 | --- | --- | --- | --- | --- | --- |
+| B-00 | QMB gets its own architecture pass and its own depth (its own Level 1 agent). Build it as a foundation that can be improved: he must be able to build a new QMB version, improve it, or run several variants. It is the first candidate to sit as a mini app on the core (CC-26). | (STATE quotes no exact words) | 31 Oct, after midday | RULED | STATE mid r22, r23; STATE mid program "Amended after rulings 17-23" |
 | B-01 | QMB is not live trading. Backtest and stress test are one world; live trading on the node is another. | "I hope you haven't confused QMB and live trading." (T1:1177) | 24 Oct | RULED | STATE corr 4 |
-| B-02 | QMB is a tool an agent calls; it runs and waits, the way a test suite runs, and returns results the agent does not tinker with. | "It runs the same way you run your tests." (T2:135) | 29 Oct | RULED (as intent) | 43 §3.4 |
+| B-02 | QMB is a tool an agent calls; it runs and waits, the way a test suite runs, and returns results the agent does not tinker with. | "It runs the same way you run your tests." (T2:135) | 29 Oct | SEED (a strong one; STATE does not record it as a ruling) | 43 §3.4 |
 | B-03 | Professional quant level for agents, so agents never hand-roll backtest code. Base on QuantConnect LEAN CLI logic; consider Jesse; StrategyQuant's what-if scenarios can improve. | "your whole goal is building something that agents can use, but at the same time at a professional quantitative trader level" (T1:1574) | 27 Oct | RULED | STATE 27 Oct "QMB" |
 | B-04 | All instrument types supported by default. | "we need to cater for them by default" (T1:1574) | 27 Oct | RULED | STATE 27 Oct "QMB" |
 | B-05 | No lookback limit. 1990 is allowed; post-COVID is a sensible default, never a cap. | "there is no point in me being refused that" (T1:1574) | 27 Oct | RULED | STATE 27 Oct "Unbounded by default"; research 12, 14 |
@@ -174,7 +180,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | L-01 | Historical data is the Library's job, not this run's. Assume the data will be there and agents can use it (dukascopy-node exists). | "Just know the data will be there." (T3:903) | 31 Oct | RULED | STATE am r8 |
 | L-02 | Recording data: use the Library; it may already be covered by the shipped data PRs. | "We have a library, we should use it." (T3:903) | 31 Oct | RULED | STATE am r11 |
 | L-03 | Everything must fit the Library: router logs, journals, caches. The same compute, different positions. | "make sure that most of these things can fit into the library we have" (T1:1574) | 27 Oct | RULED | STATE 27 Oct "Router" |
-| L-04 | Everything a workflow produces is stored in the Library. | "everything that a workflow produces is meant to be stored in the library" (T2:325) | 29 Oct | RULED (as fact of the design) | chat only |
+| L-04 | Everything a workflow produces is stored in the Library. | "everything that a workflow produces is meant to be stored in the library" (T2:325) | 29 Oct | SEED (consistent with L-03) | chat only |
 | L-05 | QMX collects its own live market data across most instruments. | "should be collecting his market data, live market data" (T2:219) | 29 Oct | SEED (consistent with L-02) | 43 §3.5 |
 | L-06 | Who provides data (order flow and the like) is separate from which broker executes. | "But that's mostly for brokers. In other words, trade execution." (T2:1000) | 30 Oct | RULED | STATE run "Data versus execution" |
 | L-07 | Data quality and cleanliness (Dukascopy, dukascopy-node, other sources). | "in terms of data quality, data cleanliness, we might need to know" (T1:1574) | 27 Oct | SEED (researched in 12, 33); the terms questions are not his (see section "settled") | research 12, 33 |
@@ -190,7 +196,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | N-05 | Out of the box: start a trading node, see it started, deploy with little stress. | "is it going to start as server, then show me that the server has started?" (T3:1102) | 31 Oct | RULED | STATE Q5 |
 | N-06 | A server can be a server: no special machine names on his screens. | "A server can be a server." (T3:1102) | 31 Oct | RULED | STATE Q5 |
 | N-07 | Setting up a node is as simple as renting a server from a provider (a wizard or one click). The UI already proposes an external compute provider setting. One node to start, maybe more later. Ground on the wrap-up PRs first. | "a trading node should be as simple as how, for example, I can set up a server from a provider" (T2:1148) | 30 Oct | RULED | STATE run "The trading node" |
-| N-08 | The node exists because his laptop goes off (power cuts, Wi-Fi drops); markets now run 24/7. Network-bound speed justifies the node further. | "we are literally trading 24/7, my days. This is why we need a trading node." (T2:325); "Which means the trading node is justified more." (T3:903) | 29 Oct, 31 Oct | SEED (the reason the node exists) | STATE run "The trading node" |
+| N-08 | The node exists because his laptop goes off (power cuts, Wi-Fi drops); markets now run 24/7. Network-bound speed justifies the node further. | "We are literally trading 24/7, my days. This is why we need a trading node." (T2:325); "Which means the trading node is justified more." (T3:903) | 29 Oct, 31 Oct | SEED (the reason the node exists) | STATE run "The trading node" |
 | N-09 | Node = a trading server: a home for trusted units after backtest, stress test and his admission. Reuse the "connect a machine" design. Self-tests on connect (kill-switch speed, a test trade, broker and platform connections, network speed). Kill switches at several levels, some firing without his PC. | (21 to 22 Oct seeds, recorded by the lead) | 21 Oct, 22 Oct | SEED | seeds §"Trading node = a trading server" |
 | N-10 | Ruling 135 (no live-trading grant on his PC) is a code fact the node pass handles technically, not a question for him. | (lead, from his 31 Oct words) | 31 Oct | LEAD'S CALL | STATE am r9 |
 | N-11 | The node holds the MIS and the kill switches. | (21 Oct seed) | 21 Oct | SUPERSEDED by M-08 (only the fast part of the MIS sits on the node) | seeds §"Trading node = a trading server" |
@@ -225,7 +231,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | ID | Item | His words | Date | Status | Lives now |
 | --- | --- | --- | --- | --- | --- |
 | T-01 | Clocks and time zones. Trading nodes in Singapore and London keep different local times; treat a node like a firm whose local time is the node's time. Monitoring a crypto node in Singapore and an FX node in London together must work. | "the trading node is perhaps a firm" (T3:903) | 31 Oct | RULED, design OWED | STATE am r15 |
-| T-02 | Trading 24/7 means no end of day; when reviews and plans run. | "we are literally trading 24/7, my days." (T2:325) | 29 Oct | SEED | 43 §4 "Review timing in 24/7 markets" |
+| T-02 | Trading 24/7 means no end of day; when reviews and plans run. | "We are literally trading 24/7, my days." (T2:325) | 29 Oct | SEED | 43 §4 "Review timing in 24/7 markets" |
 
 ## 12. DevOps
 
@@ -240,7 +246,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | --- | --- | --- | --- | --- | --- |
 | A-01 | QMA v2 is in scope. Anything an agent under QMA can do, the copilot can already do. Ground on the recent PRs that touch QMA v2 and widen the search. | "Remember, anything that an agent under QMA can do, the copilot should already be able to do." (T3:1264) | 31 Oct | RULED | STATE mid r8 |
 | A-02 | The agentic side is already built in QMA v2. The work is workflow templates on top of it, not new agents. | "Agentic stuff is already done. Look at QMAV2." (T2:1148) | 30 Oct | RULED | STATE run "Corrections, 30 Oct evening" |
-| A-03 | Agents as analysts, in two families: analysis of markets and analysis of units. They must prove their analysis with something that cannot be cheated (skills, scripts, tools). | "analysis based off the markets themselves and also analysis based off the units themselves" (T2:385); "something that can be, that can't be cheated" (T2:385) | 29 Oct, 30 Oct | RULED (as seed to expand) | STATE 29/30; research 29 |
+| A-03 | Agents as analysts, in two families: analysis of markets and analysis of units. They must prove their analysis with something that cannot be cheated (skills, scripts, tools). | "analysis based off the markets themselves and also analysis based off the units themselves" (T2:385); "something that can be, that can't be cheated" (T2:385) | 29 Oct, 30 Oct | SEED (STATE calls it "a seed to expand") | STATE 29/30; research 29 |
 | A-04 | Analyst agents use live data and today's charts, with a landmark window, not training memory. The "model may remember past markets" worry applies only to building on history. | "They are going to be using live markets" (T2:385); "you need to give a pass, in other words, a landmark" (T2:385) | 30 Oct | RULED (correction) | 43 §4 |
 | A-05 | "Agents never touch money" is moot. QMX cannot touch money by design, and QMA v2 already enforces it. | "I think this was already built in QMEV2." (T3:1105) | 31 Oct | RULED | STATE Q6 |
 | A-06 | Hooks are very important: standards stop cheaper models making big mistakes. | "this is why hooks are very important in this system" (T1:1574) | 27 Oct | RULED (as intent) | STATE 27 Oct |
@@ -270,6 +276,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | MA-02 | Mini apps are the foundation pattern: he created them when expansion hit its limit. The same logic shapes this architecture. | "I proposed the creation of mini apps" (T3:1264) | 31 Oct | RULED (as the pattern to follow) | STATE mid r6 |
 | MA-03 | A mini app may rewrite a unit's logic in plain Python, or hold an ML ensembler. | "If I want to rewrite the logic of a unit, maybe as part of a mini app" (T1:1574) | 27 Oct | RULED | STATE 27 Oct "Unbounded by default" |
 | MA-04 | The Lab shipped quite well and will improve; it shares the pattern. | "If you look at the lab, I think it was shipped quite well." (T3:1264) | 31 Oct | SEED | chat only |
+| MA-05 | Every part is judged as core or as a mini app on that core, with defaults out of the box; QMB first (see CC-26, B-00). | "most things can actually become mini apps" (STATE mid r23) | 31 Oct, after midday | RULED | STATE mid r23 |
 
 ## 16. The UI
 
@@ -297,7 +304,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | R-10 | Self-configuration is mostly under risk and sizing. | "self-configuration is mostly under the risk management and position sizing" (T2:219) | 29 Oct | SEED | PACK §2.1 |
 | R-11 | Units go back to paper at times; that is known risk practice and the journal must carry it. | "there are times whereby a unit will go back to paper trading. That is known." (T3:903) | 31 Oct | RULED (as a fact the design honours) | STATE am r14 |
 | R-12 | The guards (spread quality sensor, news kill switch, account guards) work independently of the router. | "most of that should be independent of the spread quality sensor, new skill switch" (T1:1574) | 27 Oct | RULED | STATE 27 Oct "Router" |
-| R-13 | "Funding" in his words is the money part of a unit (risk and sizing), not perps funding. | "the money part of a unit, the risk management and position sizing system" (T2:135) | 29 Oct | RULED (meaning) | 43 §8 parked list |
+| R-13 | "Funding" in his words is the money part of a unit (risk and sizing), not perps funding. | "the money part of a unit, the risk management and position sizing system" (T2:135) | 29 Oct | LEAD'S CALL from his words (the 30 Oct fix round) | STATE run research 44 row; 43 §8 parked list |
 
 ## 18. Process: how the planning run and the build work
 
@@ -318,7 +325,7 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | P-13 | Everything he says is a seed; agents read his verbatim words, never a summary. | "verbatim might be necessary" (T2:439) | 30 Oct | RULED | STATE 29/30; standing orders 2, 3 |
 | P-14 | Branches: planning on `plan/unit-system`, building on `build/unit-system`; the merge target is decided later, never `main`. | "Plan, then unit system, then build unit system." (T2:442) | 30 Oct | RULED | STATE 29/30 |
 | P-15 | Research is done by the lead's sub-agents (Codex paused, not trusted for this work), through Exa; Firecrawl is nearly out of credits; the built-in browser is not trusted. | "even the research is going to be done by your sub-agents" (T3:515) | 30 Oct | RULED | STATE run "Research moves to Claude agents" |
-| P-16 | Coding later goes partly to other models; "we shall see how to do this". | "I'll hand over the coding to other models precisely" (T3:515) | 30 Oct | SEED (open; see "owed" item 13) | STATE run "Research moves to Claude agents" |
+| P-16 | Coding later goes partly to other models; "we shall see how to do this". | "I'll hand over the coding to other models precisely" (T3:515) | 30 Oct | SEED (open; see "owed" item 15) | STATE run "Research moves to Claude agents" |
 | P-17 | Words for him are plain and short; he dictates; no codenames. | (standing) | standing | RULED | standing order 14 |
 | P-18 | Write everything down; nothing lives only in chat. | "I think you should update it properly." (T1:1297) | 24 Oct | RULED | MEM (STATE update rule) |
 | P-19 | No explainer site for the planning run; everything in chat and the files. | "No need for an explainer site." (T2:602) | 30 Oct | RULED | STATE run "Operator away" |
@@ -327,8 +334,11 @@ Written 2026-10-31 by agent P1 of the midday program, from a full read of his wo
 | P-22 | Pause for him before folding the architecture. | "before you fold the bloody architecture" (T2:1208) | 30 Oct | SUPERSEDED by P-01 (plan through to the prompt; he returns only for it) | STATE run "PAUSED" |
 | P-23 | Broaden before defining; "we are like taking 5% of what we are actually meant to be solving". | "I think we are like taking 5% of what we are actually meant to be solving" (T2:325) | 29 Oct | SUPERSEDED by P-05 for this run (the funnel in P-02 is the broadening) | STATE 29/30 |
 | P-24 | Codex runs the research on his own time. | (29 to 30 Oct) | 29 Oct | SUPERSEDED by P-15 | STATE run |
-| P-25 | Edge-case review after the architecture. | "edge case working is very important" (T1:651) | 24 Oct, 30 Oct | RULED (kept by the lead's midday program step 5 as one review and one fix round) | STATE mid program step 5 |
-| P-26 | The lead's midday program: grounding (three agents) plus this ledger and skills view; funnel (party mode with brainstorming; CIS); party mode on the versions, then bmad-architecture Level 0 and the connections; bmad-architecture per part in four grouped agents; one review and one fix round; the checked build plan, the orchestrator prompt and the builder prompt, in `architecture/`. | (lead) | 31 Oct | LEAD'S CALL | STATE mid program |
+| P-25 | Edge-case review after the architecture. | "edge case working is very important" (T1:651) | 24 Oct, 30 Oct | SUPERSEDED in part by CC-25 (the edge cases are now catalogued before the architecture as well, and reviewed more than once) | STATE mid r19 |
+| P-26 | The lead's midday program: grounding (three agents) plus this ledger and skills view; funnel (party mode with brainstorming; CIS) with an edge-case catalogue beside it; party mode on the versions, judged against the catalogue, then bmad-architecture Level 0 and the connections, with a quick review of the Level 0 spine before the parts; bmad-architecture per part in five agents (QMB has its own); one full review that checks every part against the catalogue, and one fix round; the checked build plan, the orchestrator prompt and the builder prompt, in `architecture/`. | (lead) | 31 Oct | LEAD'S CALL | STATE mid program, as amended after rulings 17 to 23 |
+| P-29 | When a nudge or a finding changes what a running agent should do, cut it and restart a fresh one with the new information rather than waiting. | (STATE quotes no exact words) | 31 Oct, after midday | RULED | STATE mid r17 |
+| P-30 | Harvest before generating. The earlier work already holds much: the 20 to 28 Oct transcript (with its links and platform studies), the Hermes gold mine, the 30 Oct funnels, this session's files and the agents' outputs. | (STATE quotes no exact words) | 31 Oct, after midday | RULED | STATE mid r18 |
+| P-31 | Questions to him go through the question tool, which pops up where he sees it; otherwise he is watching, not steering. | (STATE quotes no exact words) | 31 Oct, after midday | RULED | STATE mid r20 |
 | P-27 | Add the foundation stance to memory so new sessions know it. | "add it there so that any other session I begin knows that the way we handle units and stuff is foundational" (T3:1264) | 31 Oct | RULED, done | MEM foundation-first-design.md |
 | P-28 | The docs are out of date; every agent that reads `docs/` is misled. A doc pass after the build, which nobody has scheduled. | "the documentation is not up to date, okay? It's not at all." (T2:1148) | 30 Oct | OWED (scheduling) | 52 §4 Docs row; 43 "Subtract first" item 7 |
 
@@ -347,20 +357,20 @@ Each item gives his words, what was heard, and what he meant. The evidence is th
 7. **"You drive" means own the technical calls.** On 31 Oct the walkthrough led with nine decisions (T3:815-837). He had said "call BS or make a better call" (T2:135) and, at midday, "You already know what I want." (T3:1264). The calls belong to the lead, logged in a line.
 8. **"Nothing is set in stone" means do not close a design before grounding; it does not mean re-ask him.** He was angry at re-asked items: "I thought we were done with System 1 and System 2" (T3:903).
 9. **"Already set up" means "coded and stacked", and he expects the lead to say which is which.** He: "there are already connections set up for these things" (T3:903). The code: Hyperliquid has no lines, CCXT reads spot only, MT5 is a declaration, the cTrader sign-in never ran, and the trading node was never deployed (52 §4, §8 item 4). Report "built / stacked / missing / never run" per part, never "decision for you".
-10. **"The trading node was finished in the latest PRs" (T2:439) conflated two machines.** The wrap-up shipped a workflow server; the trading node is QMN, 98,000 lines, never deployed (52 §8 item 5).
-11. **"Windows first" plus "Linux node" is not a contradiction.** He prefers not to manage two operating systems on his PC (T3:903), and he accepted the node on Linux because servers run Linux, with WSL on the PC only "if all goes south" (T3:1096). Design the PC side Windows-native; the node is a Linux program; WSL is the fallback for rehearsal.
+10. **"Seems like a trading node was finished in the latest PRs." (T2:439) conflated two machines.** The wrap-up shipped a workflow server; the trading node is QMN, 98,000 lines, never deployed (52 §8 item 5).
+11. **"Windows first" plus "Linux node" is not a contradiction.** He prefers not to manage two operating systems on his PC (T3:903), and he accepted the node on Linux because servers run Linux, with WSL on the PC only as the fallback: "If all goes south." (T3:1096). Design the PC side Windows-native; the node is a Linux program; WSL is the fallback for rehearsal.
 12. **"Funding" is the money part of a unit.** He: "the money part of a unit, the risk management and position sizing system" (T2:135). Agents read perps funding (44 A04).
 13. **"It's numbers" was him reading the lead's option back** before asking how the if-else rules self-tune (T2:788; 44 A01). It is not his answer.
 14. **System 2 includes per-market logic changes.** His EMA crossover example: "changing or enhancing different logics for different markets" (T1:1903). The first convergence kept only "a market's own settings" (44 A02).
 15. **"Quantity doesn't matter, quality might matter" was written backwards** as "quantity over quality" (T3:133; fixed in STATE).
 16. **"Multiple experiences" is his own experience as the user** making money with units, and what gives QMX an edge over a simple bot (T2:858).
 17. **"A model may remember past markets" missed his point.** He described agents reading today's live charts (T2:385). The risk applies only to agents building units on history.
-18. **"Lean" was the wrong word.** He wants "keep it stupid simple" and "design for complexity, not a complex system" (T2:1208), then let the lead pick a wording that does not slide into "easy and incapable" (T2:1219).
+18. **"Lean" was the wrong word.** He wants "keep it stupid simple" and "design for complexity and don't design a complex system" (T2:1208), then let the lead pick a wording that does not slide into "easy and incapable" (T2:1219).
 19. **"Specialist", "terrain", "System 1/2" were never his terms.** "Terrain was not mine" (T2:788); "Specialist, what do you mean by a specialist?" (T2:788).
 20. **"Market context" is the trader's sense, not an invented MIS word.** "you can't tell me market context is something that you are not understanding" (T2:788).
 21. **"The MIS is incomplete" means it was never designed per instrument class.** He thinks the MIS "is mostly using HMM, BOCPD, MS, GARC" (T1:1951), but nothing fitted is live: six rule labelers and SQS run inside QMN, which never ran (52 §4 MIS row). He wants defaults that cover every class now and room for his own models (M-02).
 22. **"The real-money key" was the wrong frame.** He: "QMX realistically never touches money" (T3:903). The trading grant still has to sit where orders are placed; that is a node design fact (ruling 135 in code), never a question for him (52 §5).
-23. **Hyperliquid and his country.** "It's not about my country allowing it. ... I already have accounts there." (T3:903). The lead and research 38 asked it twice.
+23. **Hyperliquid and his country.** "It's not about my country allowing it." (T3:903) and "I already have accounts there." (T3:903). The lead and research 38 asked it twice.
 24. **Historical data is not this run's job.** "For example, data, historical data, don't cater for them." (T3:903). The data-terms questions (Dukascopy, Binance Vision) were raised to him anyway.
 25. **The foundation is the mini-app pattern.** "I proposed the creation of mini apps. Mini apps came in because of the same pattern." (T3:1264). A solid core with freedom on top, not a pile of features.
 26. **"Who expands the dictionary? You have to give them directions."** (T3:1264). He expects explicit grounding directions in the builder briefs, with no caps.
@@ -368,6 +378,7 @@ Each item gives his words, what was heard, and what he meant. The evidence is th
 28. **"Wilson" is Winston, the BMad architect persona** (T3:1264). On 30 Oct "is it Marcus who's part of the party mode thing?" (T2:1219) points at the same persona (INFERRED).
 29. **The Hermes notes are GPT's work, not his** ("Okay, the hammer's not mine. Those things were not mine, they were from GPT.", T2:219). They are seeds he valued, not his rulings.
 30. **The 31 Oct "PRs are merged" was true after his clicks.** He merged 207 to 234 into `engine/base` between 05:13 and 05:25 UTC; only PR 204 and the old draft 25 stay open (53 lead's note). Do not ask him to "land the stack".
+31. **The foundation is a white-label core.** His picture after midday is Shopify or Wix: a small, solid core with stable extension points that others build their own things on, and "most things can actually become mini apps" (STATE mid r19, r23). The architecture's product is that core and its extension points, with defaults out of the box; a part that can live as a mini app on the core should, QMB first. A design that grows features into the core misses him.
 
 ---
 
@@ -405,7 +416,10 @@ Each line: the older position, the newer one, which wins.
 28. **The router's shape.** A load balancer with its algorithms (27 Oct, his analogy) → taken too literally (28 Oct). **Wins:** M-05, M-06.
 29. **Wayfinder.** Introduced (29 Oct); "it's very narrow, party mode first" (30 Oct 04:42) → "I told you to use the wayfinder skill" (31 Oct 04:08) → not named in the midday workflow. **Wins:** the 04:08 word stands and is not withdrawn; the lead uses it as the decision index, not as the driver (LEAD'S CALL, see the skills file).
 30. **The risk hand-off.** `HANDOFF-RISK-SIZING.md` (27 Oct) → the pack of his own words (30 Oct). **Wins:** R-03.
-31. **Where risk and sizing lives** (on the unit, in the pod, or central) and **Book versus BMS.** Not settled by recency; his statements still conflict (PACK §2.10 C1, C2). **Wins:** nobody; the risk session settles it. The socket must not presume an answer.
+31. **When edge cases are worked.** An edge-case review after the architecture (24 and 30 Oct), and "bmad-review may serve during coding" (midday ruling 4) → catalogue the edge cases before the architecture, judge the versions against them, review more than once (ruling 19). **Wins:** CC-25; the review during coding stays as well.
+32. **How binding his words are.** "Bring him only real ambiguity" and binding rulings (24 Oct onward) → "He directs; the lead decides", his guidance a seed the lead may refuse with a reason (ruling 21). **Wins:** the rulings recorded in `STATE.md` stay binding; everything else he says is guidance the lead may refuse, stating why.
+33. **How many part agents.** Four grouped agents (the midday program) → five, with QMB on its own (ruling 22 and the amended program). **Wins:** five.
+34. **Where risk and sizing lives** (on the unit, in the pod, or central) and **Book versus BMS.** Not settled by recency; his statements still conflict (PACK §2.10 C1, C2). **Wins:** nobody; the risk session settles it. The socket must not presume an answer.
 
 ---
 
@@ -415,22 +429,24 @@ In the order the build needs them. Each names where it should land.
 
 1. **The orchestrator prompt**, with the builder prompt and a build plan checked to zero problems (P-01). Lands in `architecture/`.
 2. **The layered architecture folded with the latest decisions**: the Level 0 map of parts and connections, one file per part, and a contracts file (CC-16, C-01). Lands in `architecture/`.
-3. **The dummy unit on the real template, shown working**, and a plain statement of what "the unit works" means in his sense (U-02, U-05, CC-17). Lands as a packet in the build plan.
-4. **How a unit configures itself, shown concretely**, owed since 27 Oct (U-06, Q-12). At least one real number must move by a declared rule from the unit's own record, even with placeholder sizing (53 §3.2). Lands in the unit part file and the dummy-unit packet.
-5. **A concrete dictionary rebuild proposal in his register** (D-02). 43 §3.2 is the source; one page in the QML part file.
-6. **How agents write units and know they are correct** (Q-05, Q-06, Q-09): the authoring door, the deterministic check, the in-loop hook, and the plain fact that QML's conformance gate already exists (53 §2 item 3). Lands in the QML part file and the contracts file.
-7. **The unit-to-MIS connection in code** (C-04). Lands in the contracts file.
-8. **Journals in depth** (J-01). Lands in the journals part file.
-9. **The trading node pass**: deploy from his PC, results back, monitoring, kill switch, what is automated, how orders are placed, checked against the code (N-02, N-04). Lands in the node part file.
-10. **Clocks across regions and the DevOps layer**, including which observability stack wins (T-01, O-01). Lands in the node part file.
-11. **MIS defaults for every instrument class in scope, with room for his models** (M-02). Lands in the MIS part file.
-12. **External research still missing**: platform languages and API standards (Q-10, X-06), a free futures platform or feed with order-flow data and Sierra Chart's cost (X-03), and a plain explanation of futures and indices for him (X-04). Lands in the connections part file, with the explanation in chat.
-13. **The builder model.** The orchestrator prompt must name it. His words: builders always Opus (19 Oct memory) and "I'll hand over the coding to other models" (30 Oct, P-16). Default to Opus `poteto-agent` per `CLAUDE.md` and say plainly in the prompt's notes how to switch.
-14. **UI needs written into the UI files** (UI-01) and **every risk and sizing point plus the placeholder list written into the pack** (R-02, U-04).
-15. **Grounding on QMA v2's recent PRs and on mini apps** (A-01, MA-01), and **a check that the 20 to 28 Oct designs and explainer sites were carried forward** (P-06).
-16. **Two plain explanations owed since 24 Oct**: "tighten, never loosen belongs on the drawdown floor", and "the bot never sizes against the unit sizes itself" (STATE "Owed to the operator"). The second is now answered by U-01; say it to him in one line. The first belongs to the risk session.
-17. **A one-line note at the top of `HANDOFF-RISK-SIZING.md`** saying the pack is the hand-off (53 §2 item 12).
-18. **The doc pass after the build** (P-28), not yet scheduled.
+3. **The edge-case catalogue, made before the architecture**, the versions judged against it, and reviews run more than once (CC-25). Lands beside the funnel in `architecture/`.
+4. **A verdict per part: core, or a mini app on the core**, with defaults out of the box (CC-26). QMB's own pass, built so he can make a new QMB version, improve it, or run several variants (B-00). Lands in each part file.
+5. **The dummy unit on the real template, shown working**, and a plain statement of what "the unit works" means in his sense (U-02, U-05, CC-17). Lands as a packet in the build plan.
+6. **How a unit configures itself, shown concretely**, owed since 27 Oct (U-06, Q-12). At least one real number must move by a declared rule from the unit's own record, even with placeholder sizing (53 §3.2). Lands in the unit part file and the dummy-unit packet.
+7. **A concrete dictionary rebuild proposal in his register** (D-02). 43 §3.2 is the source; one page in the QML part file.
+8. **How agents write units and know they are correct** (Q-05, Q-06, Q-09): the authoring door, the deterministic check, the in-loop hook, and the plain fact that QML's conformance gate already exists (53 §2 item 3). Lands in the QML part file and the contracts file.
+9. **The unit-to-MIS connection in code** (C-04). Lands in the contracts file.
+10. **Journals in depth** (J-01). Lands in the journals part file.
+11. **The trading node pass**: deploy from his PC, results back, monitoring, kill switch, what is automated, how orders are placed, checked against the code (N-02, N-04). Lands in the node part file.
+12. **Clocks across regions and the DevOps layer**, including which observability stack wins (T-01, O-01). Lands in the node part file.
+13. **MIS defaults for every instrument class in scope, with room for his models** (M-02). Lands in the MIS part file.
+14. **External research still missing**: platform languages and API standards (Q-10, X-06), a free futures platform or feed with order-flow data and Sierra Chart's cost (X-03), and a plain explanation of futures and indices for him (X-04). Lands in the connections part file, with the explanation in chat.
+15. **The builder model.** The orchestrator prompt must name it. His words: builders always Opus (19 Oct memory) and "I'll hand over the coding to other models" (30 Oct, P-16). Default to Opus `poteto-agent` per `CLAUDE.md` and say plainly in the prompt's notes how to switch.
+16. **UI needs written into the UI files** (UI-01) and **every risk and sizing point plus the placeholder list written into the pack** (R-02, U-04).
+17. **Grounding on QMA v2's recent PRs and on mini apps** (A-01, MA-01), and **a check that the 20 to 28 Oct designs and explainer sites were carried forward** (P-06).
+18. **Two plain explanations owed since 24 Oct**: "tighten, never loosen belongs on the drawdown floor", and "the bot never sizes against the unit sizes itself" (STATE "Owed to the operator"). The second is now answered by U-01; say it to him in one line. The first belongs to the risk session.
+19. **A one-line note at the top of `HANDOFF-RISK-SIZING.md`** saying the pack is the hand-off (53 §2 item 12).
+20. **The doc pass after the build** (P-28), not yet scheduled.
 
 Not owed, so nobody waits on it: his "Market and gaps" reply, which he said he would write himself (T1:1574); his Claude Code sign-in for the replay study in `research/29-study/` (his small item, not a blocker).
 
@@ -468,4 +484,4 @@ Each was answered by him or by his rulings. Raising any of them again breaks his
 
 ## How the quotes were checked
 
-A script read every `"..." (Tn:line)` pair in this file and looked for the quoted text, with whitespace normalised, on the cited line of the cited transcript. The command and its result are in the agent's hand-back. Quotes the lead wrote (marked "(lead)") and quotes of agents carry no transcript citation and were not checked.
+A script read every `"..." (Tn:line)` pair in this file and looked for the quoted text, with whitespace normalised, on the cited line of the cited transcript. Result on 31 Oct: 279 quotes found on their cited lines, 0 not. Line numbers follow `grep -n`; a checker must open the transcripts with `newline=''`, because stray carriage returns make Python's default line count run one or more lines ahead in T2 and T3. Rows marked "(lead)" and agents' words carry no transcript citation and were not checked.
