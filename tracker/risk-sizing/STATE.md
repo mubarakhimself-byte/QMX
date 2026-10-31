@@ -29,6 +29,38 @@ Last updated: 2026-10-27 (after 07 funnel).
 10. **Positioning:** when generating strategies is nearly free, judging them is the product. QMX is his own platform, not for sale.
 11. **Bring him only real ambiguity.** Settle simple architecture issues and report them in one line.
 
+## Operator round 2026-10-31 morning: the run was sloppy in the technical lens; layer the architecture (binding; outranks the 43 convergence)
+
+Verbatim: `operator/transcript-2026-10-30-to-31.md` (his long message at 2026-10-31T04:05 UTC). He judged the walkthrough and the one-file convergence sloppy: assumptions treated as settled, no technical grounding of what is already built, areas mixed together, and too little depth for the ground covered. File 43 is now an input, not the plan.
+
+**Rulings (his words, binding):**
+1. **Nothing is set in stone. First understand what is built.** QMX is not a blank slate: external connections, the local-first stack, the Library, broker links (cTrader, CCXT, the crypto connections) and trading-node work were shipped or stacked. Ground on the code in a technical lens before proposing anything.
+2. **Split the work by area, each with its own lens and its own files.** QML, the unit, the MIS, the trading node, external connections and the rest each get their own pass and their own documents. Their connection points get their own design: who connects to whom, where, and what data crosses.
+3. **Layer the architecture.** First a high-level architecture that lists the biggest parts and how they connect; then each part gets its own seed, ideation and architecture. His list (a seed, not closed): QML (a library, like React: nothing assumed, everything certain); the unit, as a template; the MIS (what models it uses); risk and sizing (out of scope here, but part of the unit); external connections; the trading node on its own; contracts and APIs, internal and external, across platforms; the DevOps layer (observability, logging, monitoring; OpenObserve was planned).
+4. **Prove the unit in practice.** "In theory it might make sense, but in practice it can't work": the unit idea must be shown working in code (practical evidence before or while building).
+5. **Agents write units through deterministic checks, not their own judgement.** How an agent writes a unit (MCP, tools, what) and knows it is correct: a compiler, linter or test runner in the spirit of pytest or React Doctor. "Favor determinism over non-determinism. That's the whole point of QML." Check what QML already has.
+6. **The language is not assumed.** QML was built for cTrader in Python. Research what each platform uses (cTrader, NinjaTrader, futures and index platforms; C# and .NET came up) before choosing.
+7. **Windows is first-class.** He prefers plain Windows to WSL ("two operating systems, two file managements"); do not design for Linux only, unless the architecture truly needs it.
+8. **Historical data is not this run's job.** The Library holds it (dukascopy-node exists); assume the data will be there and agents can use it.
+9. **Drop the "real-money key" decision.** QMX never touches money: brokers sign in through their own web pages, and his cTrader credentials sit in Windows Credential Manager. Not to be raised again. (Ruling 135's refusal of trading sign-ins on his PC is a code fact the trading-node pass must handle technically, not a question for him.)
+10. **Markets first:** forex, futures, metals and CFDs; cTrader first, Hyperliquid second. He already has Hyperliquid accounts: no country question. Crypto goes through CCXT (already built). Explain futures and indices to him, and what trading them needs.
+11. **Recording data:** use the Library; it may already be covered.
+12. **Workflow templates: build them** (they can be removed or improved later). They read the MIS's logs, not the MIS model directly.
+13. **News is out:** no news trading for now.
+14. **Journals are not one simple row shape.** A journal spans instruments, brokers, accounts, platforms, trading nodes, and paper or live (units go back to paper; paper also follows backtesting as its own phase). Design the journal in depth.
+15. **Clocks and time zones.** Trading nodes in Singapore and London keep different local times; monitoring a crypto node in Singapore and an FX node in London together must work.
+16. **The trading node gets its own pass.** It runs on his machine first, then on a server. How units deploy from his machine, how results come back, how it is monitored, the kill switch, what is automated; the stack may change (he doubts Python covers all of it).
+17. **System 1 and System 2 are settled as explanation names.** Do not raise them again. He will think about "market settings and market version" himself.
+18. **The gold mine session's intent for QML is a key seed:** where the dictionary was meant to end and how QML was meant to be built. Do not set it aside.
+
+**Still his:** decision 2 (what his click lets go live), 3 (he is thinking), 7 (the April rules), 8 (names). Decisions 1, 4, 5, 6, 9 are answered above.
+
+**The new program (lead, 31 Oct):**
+1. **Grounding, technical lens:** the platform as built (Library, external connections, local-first stack, trading node, DevOps, APIs and contracts, clocks, Windows support) and the algo side as built (QML in code, how a unit is written and checked today, QMB's door, the MIS's models, agent tools), plus the gold mine's QML intent. Outside research: what each trading platform uses (languages, APIs, standards), futures and indices explained, clocks across regions, monitoring across machines.
+2. **Level 0, the high-level architecture:** the parts, what each owns, and every connection point with the data that crosses it. Its own party mode first. Folder `architecture/`.
+3. **Level 1, one pass per part,** each with its own expansion, design and review, in its own files: QML, the unit template, the MIS, journals and records, external connections, the trading node with its DevOps layer, agent authoring and deterministic checks, workflow templates. Contracts between parts get their own file.
+4. **Proof in code:** small prototypes that show the unit idea and the agent check loop work, before the PR plan.
+
 ## Operator round 2026-10-27 (his review of the explainer site; binding)
 
 Verbatim dictation: `operator/2026-10-27-review-dictation.md`. **Method he asked for:** use the skill stack, not vibing. Funnel round 2 = `bmad-brainstorming` + `bmad-party-mode` over the verbatim dictation plus research 10-12, mapping permutations. Then design-idea studies (operator 10-27: **ideas and options only, never folded into architecture yet**) with `improve-codebase-architecture`, `codebase-design`, `domain-modeling` and poteto-mode principles for the router/MIS, the feed pool, unit independence, the journals, and the account guard with the pod.

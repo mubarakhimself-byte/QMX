@@ -17,4 +17,8 @@ Pasted verbatim into every brief. One rule per line. The operator's rulings in `
 13. Write only the files your brief names. No commits, no pushes, no branch or worktree changes.
 14. Words for the operator: plain, short sentences, no codenames or internal ids. He is non-technical and dictates ("potato mode" = poteto-mode, "Febble" = Fable, "KMX" = QMX, "MTFA" = MT5 articles, "BMAD" = BMad).
 15. Web research: Exa search and fetch (load with ToolSearch, query `exa`); read the primary page or paper itself. Never the built-in browser or Chrome, no paid Exa agent runs, no Firecrawl (no credits). Quotes from outside sources stay under 15 words each.
-16. Finish with a final message of at most 10 lines: what you wrote, where, and the few findings that matter most.
+16. QMX is not a blank slate. Before proposing anything, find what is already built or stacked (code on `origin/engine/base` and the stacked `origin/build/*` branches) and build on it. Never assume a piece is missing.
+17. One area per file, one lens per area. Never mix QML, the unit, the MIS, the trading node or external connections in one design; name the connection points between them and the data that crosses each.
+18. Determinism over agent judgement: anything an agent produces is checked by a script, compiler, linter or test, never by the agent itself.
+19. Windows is first-class. Do not design for Linux only unless the design truly needs it, and say why.
+20. Finish with a final message of at most 10 lines: what you wrote, where, and the few findings that matter most.
