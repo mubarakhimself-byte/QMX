@@ -112,3 +112,22 @@ def test_the_engine_and_the_host_open_the_same_folder_each_way(
     assert (stats.returncode, stats.stdout) == (1, f"no ledger at {ledger}\n")
     assert (host.returncode, host.stdout) == (0, "qmx_host is stopped.\n")
     assert tree(home) == ["backups", "cache", "data", "keys", "logs", "qmx-home.toml"]
+
+
+@pytest.mark.parametrize("program", sorted(PROGRAMS))
+def test_each_program_sends_an_old_flat_home_to_the_bring_in_and_leaves_it_alone(
+    program: str, scratch: dict[str, str], tmp_path: Path
+) -> None:
+    old = tmp_path / "old" / ".qmx"
+    old.mkdir(parents=True)
+    (old / "control.db").write_bytes(b"his control store")
+    (old / "library.db").write_bytes(b"his old Library")
+    scratch["QMX_HOME"] = str(old)
+    argv, _ = PROGRAMS[program]
+
+    done = ran(argv, scratch, tmp_path / "cwd")
+
+    said = done.stdout + done.stderr
+    assert f"python -m qmx_host bring-in --home <new QMX folder> --old {old}" in said, said
+    assert "qmx_home layout" not in said
+    assert tree(old) == ["control.db", "library.db"]
