@@ -34,11 +34,19 @@ def app_of(backups: Backups) -> FastAPI:
 
 
 def ended(rest: TestClient | httpx.Client, job_id: str) -> dict[str, object]:
+    """A job once it ended, and once each send a round started ended."""
     for _ in range(1200):
         job = cast(
             "dict[str, object]", rest.get(f"/api/backups/jobs/{job_id}", headers=BEARER).json()
         )
         if job["state"] != "running":
+            result = cast("dict[str, object] | None", job.get("result")) or {}
+            places = list(cast("list[object]", result.get("places", [])))
+            for send_id in cast("dict[str, str]", result.get("sends", {})).values():
+                sent = cast("dict[str, object] | None", ended(rest, send_id).get("result")) or {}
+                places += cast("list[object]", sent.get("places", []))
+            if result:
+                job["result"] = {**result, "places": places}
             return job
         time.sleep(0.05)
     raise AssertionError("the round did not end within 60 s")
@@ -48,13 +56,13 @@ def ended(rest: TestClient | httpx.Client, job_id: str) -> dict[str, object]:
 def held_rounds(monkeypatch: pytest.MonkeyPatch) -> Generator[threading.Event]:
     """Rounds that wait until the test lets them go, then run as written."""
     go = threading.Event()
-    real = module.run_round
+    real = module.copy_round
 
     def waiting(*args: object, **kwargs: object) -> object:
         go.wait(30)
         return cast("Callable[..., object]", real)(*args, **kwargs)
 
-    monkeypatch.setattr(module, "run_round", waiting)
+    monkeypatch.setattr(module, "copy_round", waiting)
     try:
         yield go
     finally:

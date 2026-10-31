@@ -68,7 +68,7 @@ def test_a_full_section_parses_its_storages_from_engine_and_old_keys_are_left_al
         ),
         Storage("01J-DRV", "drive", "rclone", None),
     )
-    assert [s.id for s in plan.folders] == ["01J-USB"]
+    assert [s.id for s in plan.sending] == ["01J-USB"]
     assert (plan.upkeep.drill_every, plan.upkeep.drill_sample) == ("1w", 50)
     assert parse({"remote": "b2", "bucket": "apps"}, layout) == Plan()
 

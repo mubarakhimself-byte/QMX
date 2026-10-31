@@ -229,7 +229,7 @@ def test_a_restore_that_fails_leaves_the_new_folder_marked_unpointed_and_offered
     stamp = sent(layout, usb)
     place = FolderRepository(usb / "QMX-backup" / home_id(layout.root))
     note = next(e for e in place.manifest(stamp).entries if e.path == "notes/0.txt")
-    place.pool_path(note.sha256).unlink()
+    place.local_pack(place.index().good(note.sha256)[0].pack).unlink()
     client = card(pc)
     default = pc / "profile" / "QMX"
     body = {"folder": str(default), "source": source(usb), "copy": stamp}
@@ -246,7 +246,7 @@ def test_a_restore_that_fails_leaves_the_new_folder_marked_unpointed_and_offered
 
     new = default.resolve()
     assert failed["state"] == "stopped"
-    assert failed["line"].startswith(f"the copy {stamp} in {place.where} lacks notes/0.txt")
+    assert failed["line"].startswith(f"the copy {stamp} in {place.where} lacks ")
     assert after_failure is None, "no pointer to a folder whose restore failed"
     assert offered["restore_unfinished"] == {
         "folder": str(new),

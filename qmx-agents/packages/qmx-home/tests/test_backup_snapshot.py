@@ -21,12 +21,17 @@ from qmx_library.port import Draft
 from qmx_library.principal import Principal
 from qmx_library.store import Store
 
-from qmx_home import resolve
+from qmx_home import Layout, resolve
 from qmx_home.backup import snapshot
 from qmx_home.backup.repository import FolderRepository, Manifest
 from qmx_home.backup.snapshot import make
 
 STAMP = "20261027T030000000000Z"
+
+
+def pool_of(layout: Layout) -> FolderRepository:
+    """The loose pool a copy is made into, as a round's staging is."""
+    return FolderRepository(layout.backups / "quick")
 
 
 def quick_pool(manifest: Manifest, home: Path, path: str) -> Path:
@@ -37,7 +42,13 @@ def quick_pool(manifest: Manifest, home: Path, path: str) -> Path:
 def test_a_copy_holds_every_file_but_the_left_out_the_secret_and_the_links(tmp_path: Path) -> None:
     filled = filled_folder(tmp_path / "QMX")
 
-    copy = make(filled.layout, previous=None, stamp=STAMP)
+    copy = make(
+        filled.layout,
+        into=pool_of(filled.layout),
+        have=pool_of(filled.layout),
+        previous=None,
+        stamp=STAMP,
+    )
 
     paths = {entry.path for entry in copy.entries}
     assert len(paths) == 65
@@ -72,7 +83,13 @@ def test_each_store_is_copied_as_committed_with_its_row_counts_and_never_checkpo
         wal = ledger.with_name("engine.sqlite-wal")
         before = (wal.stat().st_size, wal.stat().st_mtime_ns, ledger.stat().st_mtime_ns)
 
-        copy = make(filled.layout, previous=None, stamp=STAMP)
+        copy = make(
+            filled.layout,
+            into=pool_of(filled.layout),
+            have=pool_of(filled.layout),
+            previous=None,
+            stamp=STAMP,
+        )
 
         after = (wal.stat().st_size, wal.stat().st_mtime_ns, ledger.stat().st_mtime_ns)
         writer.execute("ROLLBACK")
@@ -87,7 +104,13 @@ def test_a_second_copy_of_an_unchanged_folder_reads_only_settings_again(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     filled = filled_folder(tmp_path / "QMX")
-    first = make(filled.layout, previous=None, stamp=STAMP)
+    first = make(
+        filled.layout,
+        into=pool_of(filled.layout),
+        have=pool_of(filled.layout),
+        previous=None,
+        stamp=STAMP,
+    )
     pool = FolderRepository(filled.layout.backups / "quick")
     pooled = sorted(p.name for p in pool.pool.rglob("*") if p.is_file())
     opened: list[str] = []
@@ -107,7 +130,13 @@ def test_a_second_copy_of_an_unchanged_folder_reads_only_settings_again(
     monkeypatch.setattr(snapshot, "open_shared", shared)
     monkeypatch.setattr(sqlite3, "connect", connect)
 
-    second = make(filled.layout, previous=first, stamp="20261027T040000000000Z")
+    second = make(
+        filled.layout,
+        into=pool_of(filled.layout),
+        have=pool_of(filled.layout),
+        previous=first,
+        stamp="20261027T040000000000Z",
+    )
 
     assert opened == [str(filled.layout.data / "settings.toml")]
     assert second.files == first.files
@@ -180,7 +209,14 @@ def test_writes_at_every_step_never_leave_a_copied_ref_or_price_state_naming_a_m
             commit(month, settled=False)
         between("before the copy")
         with ledger_writer(ledger):
-            copy = make(layout, previous=None, stamp=STAMP, progress=between)
+            copy = make(
+                layout,
+                into=pool_of(layout),
+                have=pool_of(layout),
+                previous=None,
+                stamp=STAMP,
+                progress=between,
+            )
 
     assert steps[1:] == ["stores", "library logs", "files", "price months", "files written once"]
     listed = {entry.path for entry in copy.entries}
@@ -229,7 +265,7 @@ def test_a_month_that_freezes_while_its_files_are_copied_is_copied_again_whole(
 
     monkeypatch.setattr(snapshot, "_month_files", then_freeze)
 
-    copy = make(layout, previous=None, stamp=STAMP)
+    copy = make(layout, into=pool_of(layout), have=pool_of(layout), previous=None, stamp=STAMP)
 
     month = "market/series/dukascopy/EURUSD/ticks/-/2024-03"
     assert sorted(e.path for e in copy.entries) == [

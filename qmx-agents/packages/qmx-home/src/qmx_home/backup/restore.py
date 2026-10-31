@@ -38,7 +38,7 @@ from typing import Final, Literal, cast
 from qmx_home import LABEL, TREE, Label, Layout, opens
 from qmx_home.backup.keep import when
 from qmx_home.backup.repository import (
-    FORMAT,
+    READS,
     STAMP,
     Entry,
     FolderRepository,
@@ -47,7 +47,7 @@ from qmx_home.backup.repository import (
     Unreadable,
     free_bytes,
 )
-from qmx_home.backup.round import LOCK, QUICK, place_key
+from qmx_home.backup.round import LOCK, QUICK
 from qmx_home.backup.snapshot import BORN_BLOB, left_out
 from qmx_home.classes import PER_MACHINE, secret_paths
 from qmx_home.files import PARTIAL, Busy, copy_file, hold, long_path, plain, sha256_of, write_new
@@ -276,7 +276,7 @@ def stage(
     *,
     replace: bool = False,
     keep_free: int = FLOOR_BYTES,
-    progress: Callable[[str], None] | None = None,
+    progress: Callable[..., None] | None = None,
 ) -> Staged:
     """Rebuild `data/` from the copy `stamp` into `backups/restoring-<stamp>/data/` and check
     it. Raises RestoreRefused, with nothing of the folder changed, for a copy this release cannot
@@ -293,6 +293,7 @@ def stage(
         if waiting is not None:
             _clear(layout, waiting)
         told("checking the copy")
+        repository.refresh()
         try:
             manifest = repository.manifest(stamp)
         except Unreadable as torn:
@@ -326,13 +327,14 @@ def stage(
         _journal(layout, record)
         folder = _staging(layout, stamp) / "data"
         try:
-            told("placing the copy's files")
-            linked, copied = _place_all(folder, repository, manifest, placing, stones)
+            linked, copied = _place_all(folder, repository, manifest, placing, stones, told)
             told("checking the copy's stores")
             _check_rows(folder, manifest, repository.where)
         except BaseException:
             _clear(layout, record)
             raise
+        finally:
+            _let_go(repository)
         _journal(layout, _at(record, "staged"))
     return Staged(
         stamp,
@@ -436,14 +438,19 @@ def drill(
     sample: int,
     rng: random.Random,
     keep_free: int = FLOOR_BYTES,
+    lock: Path | None = None,
 ) -> Drilled:
     """Restore a random copy's mutable files and `sample` of its pooled files written once into
     `cache/restore-drill/`, check their hashes, each store's `quick_check` and row counts, and
-    remove the folder. A pooled file whose bytes are wrong is deleted from the place, so the next
-    round that holds the file pools it again. Never reads or writes `data/`. Logged as a `drill`
-    line, which the keep rule reads. Raises Busy while a backup round runs."""
+    remove the folder. A pooled file whose bytes are wrong goes on the storage's bad list, so the
+    next round that holds the file sends it again and the next prune drops its pack. Never reads
+    or writes `data/`. Logged as a `drill` line, which the keep rule reads. Raises Busy while a
+    backup round runs."""
     where = repository.where
-    with hold(layout.backups / LOCK, _round_busy(layout)):
+    held = lock or layout.backups / LOCK
+    busy = _round_busy(layout) if lock is None else f"QMX is working on {where}; the drill waits"
+    with hold(held, busy, removed=lock is not None):
+        repository.refresh()
         readable: list[Manifest] = []
         for stamp in repository.copies():
             try:
@@ -475,6 +482,7 @@ def drill(
                     damaged.append(f"{entry.path} ({trouble})")
         finally:
             shutil.rmtree(long_path(folder), ignore_errors=True)
+            _let_go(repository)
         passed = not damaged
         log_line(
             layout,
@@ -505,7 +513,7 @@ def _check(
     """Refuse a copy this release must not restore here; whether the folder takes its
     `home_id`."""
     head, where, stamp = manifest.header, repository.where, manifest.stamp
-    if head.get("format") != FORMAT:
+    if head.get("format") not in READS:
         raise RestoreRefused(
             f"the copy {stamp} in {where} was made by a QMX whose copy format "
             f"({head.get('format')}) this QMX does not read; install that QMX to restore it, or "
@@ -676,11 +684,24 @@ def _place_all(
     manifest: Manifest,
     placing: Sequence[_Placing],
     stones: Sequence[tuple[str, Path]],
+    told: Callable[..., None] | None = None,
 ) -> tuple[int, int]:
-    """Place every file into the staged `folder`; the files linked and the bytes copied."""
+    """Place every file into the staged `folder`; the files linked and the bytes copied. The
+    files fetched from the storage come first, counted in bytes, then the rest, counted in
+    files."""
     linked = copied = 0
     made: set[Path] = set()
-    for one in placing:
+    told = told or _quiet
+    fetched = [one for one in placing if one.source is None]
+    rest = [one for one in placing if one.source is not None]
+    fetching = f"fetching your copy from {repository.where}"
+    total = sum(one.entry.size for one in fetched)
+    told(fetching, done=0, total=total)
+    for number, one in enumerate([*fetched, *rest]):
+        if number == len(fetched):
+            told("placing the copy's files", done=0, total=len(rest))
+        elif number > len(fetched):
+            told("placing the copy's files", done=number - len(fetched), total=len(rest))
         target = folder / one.entry.path
         if target.parent not in made:
             long_path(target.parent).mkdir(parents=True, exist_ok=True)
@@ -706,6 +727,9 @@ def _place_all(
                 "hold the bytes the copy names: it is damaged there. Pick another copy"
             )
         copied += one.entry.size
+        told(fetching, done=copied, total=total)
+    if rest:
+        told("placing the copy's files", done=len(rest), total=len(rest))
     for stone, source in stones:
         target = folder / stone
         long_path(target.parent).mkdir(parents=True, exist_ok=True)
@@ -1068,10 +1092,10 @@ def _drilled(repository: Repository, entry: Entry, target: Path) -> str | None:
     except FileNotFoundError:
         return f"missing from {repository.where}; the next round copies it again"
     if got != entry.sha256:
-        repository.discard(entry.sha256)
+        repository.mark_bad(entry.sha256)
         return (
-            f"damaged in {repository.where}, so QMX removed it there; the next round copies it "
-            "again"
+            f"damaged in {repository.where}, so QMX put it on the list of damaged files there; "
+            "the next round sends it again"
         )
     if entry.kind != "store":
         return None
@@ -1156,13 +1180,18 @@ def _lacks(manifest: Manifest) -> tuple[str, ...]:
 
 def _key(layout: Layout, repository: Repository) -> str:
     """The place's key in the backup log, as a round writes it."""
-    if not isinstance(repository, FolderRepository):
-        return repository.where
-    if os.path.normcase(os.path.abspath(repository.root)) == os.path.normcase(
-        os.path.abspath(layout.backups / "quick")
-    ):
+    if isinstance(repository, FolderRepository) and os.path.normcase(
+        os.path.abspath(repository.root)
+    ) == os.path.normcase(os.path.abspath(layout.backups / "quick")):
         return QUICK
-    return place_key(repository)
+    return repository.key
+
+
+def _let_go(repository: Repository) -> None:
+    """Remove the pack a storage fetched last, so none stays on this PC."""
+    let_go = getattr(repository, "let_go", None)
+    if callable(let_go):
+        let_go()
 
 
 def _label(layout: Layout) -> Label:
@@ -1264,5 +1293,5 @@ def _mb(count: int) -> str:
     return f"{max(count, 0) / (1 << 20):,.0f} MB"
 
 
-def _quiet(_line: str) -> None:
+def _quiet(_line: str, **_counts: int) -> None:
     return None

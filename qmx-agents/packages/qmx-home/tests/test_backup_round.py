@@ -4,6 +4,7 @@ in pytest's tmp folder."""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import shutil
@@ -12,14 +13,14 @@ from pathlib import Path
 from typing import IO
 
 import pytest
-from backup_fixtures import SECRETS, filled_folder, folder
+from backup_fixtures import SECRETS, filled_folder, folder, stored, stored_bytes
 
 from qmx_home import Label, Layout
 from qmx_home.backup import repository
 from qmx_home.backup.plan import Plan, Storage, span
 from qmx_home.backup.repository import FolderRepository
 from qmx_home.backup.round import carry_on, due, quick, run_round
-from qmx_home.files import Busy, hold, sha256_of
+from qmx_home.files import Busy, hold
 from qmx_home.versions import log_lines
 
 NOW = datetime(2026, 10, 27, 3, 0, tzinfo=UTC)
@@ -59,7 +60,9 @@ def test_a_round_copies_to_the_quick_undo_and_the_target_and_a_second_copies_not
     assert len(copied.entries) == 65
     assert {e.at for e in copied.entries} == {"pool"}
     for entry in copied.entries:
-        assert sha256_of(usb.pool_path(entry.sha256)) == entry.sha256
+        assert hashlib.sha256(stored_bytes(usb, entry.sha256, tmp_path / "back")).hexdigest() == (
+            entry.sha256
+        )
     assert not {e.path for e in copied.entries} & set(SECRETS)
     assert usb.about() == {
         "home_id": usb.root.name,
@@ -77,8 +80,11 @@ def test_a_round_copies_to_the_quick_undo_and_the_target_and_a_second_copies_not
         usb_files,
     )
     assert [(line["kind"], line.get("result")) for line in log_lines(filled.layout)] == [
+        ("round", "copied"),
+        ("sending", None),
         ("sent", None),
         ("round", "copied"),
+        ("round", "unchanged"),
         ("round", "unchanged"),
     ]
 
@@ -90,13 +96,13 @@ def test_a_changed_file_pools_only_itself_and_the_keep_rule_runs_after_the_new_c
     plan = Plan(storages=(target(tmp_path),))
     run_round(filled.layout, plan, now=NOW, floor=0)
     usb = place(filled.layout, tmp_path)
-    pooled = len(files_under(usb.pool))
+    pooled = len(stored(usb))
     (filled.layout.data / "chats" / "c1.json").write_bytes(b'{"title": "renamed"}')
 
     later = run_round(filled.layout, plan, now=NOW + timedelta(days=1), floor=0)
 
     assert [p.files for p in later.places] == [1, 1]
-    assert len(files_under(usb.pool)) == pooled + 1
+    assert len(stored(usb)) == pooled + 1
     assert usb.copies() == ("20261027T030000000000Z", "20261028T030000000000Z")
 
 
@@ -145,9 +151,11 @@ def test_a_target_with_too_little_room_refuses_whole_and_writes_nothing(
     usb = report.places[1]
     assert (usb.result, usb.files) == ("refused", 0)
     assert usb.line.startswith(f"{usb.where} needs ")
+    assert "MB free there, so nothing was written. The biggest part of what it keeps is " in (
+        usb.line
+    )
     assert usb.line.endswith(
-        "MB free there, so nothing was written. Free some space on it, or connect another "
-        "storage in Settings"
+        "free some space there, stop sending that to it in Settings, or connect another storage"
     )
     assert not usb_drive.exists() or files_under(usb_drive) == []
 
@@ -178,7 +186,9 @@ def test_a_killed_rounds_leftovers_are_removed_by_the_next_round(tmp_path: Path)
     run_round(filled.layout, plan, now=NOW, floor=0)
     usb = place(filled.layout, tmp_path)
     for where in (filled.layout.backups / "quick", usb.root):
+        (where / "pool").mkdir(exist_ok=True)
         (where / "pool" / "0f0f.qmx-copying").write_bytes(b"cut short")
+        (where / "packs" / "1f1f.pack.qmx-copying").write_bytes(b"cut short")
         (where / "snapshots" / "20261027T040000000000Z").mkdir()
         (where / "snapshots" / "20261027T040000000000Z" / "manifest.jsonl.new").write_bytes(b"{")
     (filled.layout.data / "settings.toml").write_bytes(b"[engine]\n")
@@ -244,7 +254,7 @@ def test_a_torn_manifest_stops_the_sweep_and_is_never_thinned(tmp_path: Path) ->
     usb = place(filled.layout, tmp_path)
     torn = usb.root / "snapshots" / "20261027T030000000000Z" / "manifest.jsonl"
     torn.write_bytes(torn.read_bytes()[:-40])
-    pooled = files_under(usb.pool)
+    pooled = stored(usb)
     (filled.layout.data / "chats" / "c1.json").write_bytes(b'{"title": "changed"}')
 
     report = run_round(filled.layout, plan, now=NOW + timedelta(hours=1), floor=0)
@@ -254,7 +264,7 @@ def test_a_torn_manifest_stops_the_sweep_and_is_never_thinned(tmp_path: Path) ->
         f"files is not whole; QMX removes no file from {usb.where} until it is"
     )
     assert torn.is_file()
-    assert set(pooled) <= set(files_under(usb.pool))
+    assert pooled <= stored(usb)
 
 
 def test_a_round_is_refused_while_another_holds_the_lock_and_quick_copies_at_once(
@@ -271,7 +281,7 @@ def test_a_round_is_refused_while_another_holds_the_lock_and_quick_copies_at_onc
     newest = FolderRepository(filled.layout.backups / "quick").copies()[-1]
     manifest = FolderRepository(filled.layout.backups / "quick").manifest(newest)
     assert manifest.header["why"] == "before-upgrade"
-    assert json.loads(json.dumps(manifest.header["format"])) == "qmx-backup/1"
+    assert json.loads(json.dumps(manifest.header["format"])) == "qmx-backup/2"
 
 
 def test_a_damaged_blob_is_left_out_of_a_target_copy_by_name_and_the_rest_is_sent(
@@ -293,7 +303,7 @@ def test_a_damaged_blob_is_left_out_of_a_target_copy_by_name_and_the_rest_is_sen
     assert copied.header["partial"] is True
     assert filled.written_once[0] not in {e.path for e in copied.entries}
     assert len(copied.entries) == 29
-    assert log_lines(filled.layout)[-1]["places"][1]["partial"] is True  # type: ignore[index]
+    assert log_lines(filled.layout)[-1]["places"][0]["partial"] is True  # type: ignore[index]
 
 
 def test_a_round_killed_after_a_targets_copy_is_up_never_refuses_that_target_next_time(
@@ -316,6 +326,30 @@ def test_a_round_killed_after_a_targets_copy_is_up_never_refuses_that_target_nex
     report = run_round(filled.layout, plan, now=NOW + timedelta(days=1), floor=0)
 
     assert [p.result for p in report.places] == ["copied", "copied"]
+
+
+def test_a_copy_that_landed_reads_copied_when_tidying_the_storage_after_it_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    filled = filled_folder(tmp_path / "QMX", files=5)
+    plan = Plan(storages=(target(tmp_path),))
+    real = FolderRepository.sweep
+
+    def unplugged(self: FolderRepository, **kwargs: object) -> object:
+        if "usb" in str(self.root):
+            raise OSError(5, "Access is denied")
+        return real(self, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(FolderRepository, "sweep", unplugged)
+    report = run_round(filled.layout, plan, now=NOW, floor=0)
+    usb = place(filled.layout, tmp_path)
+
+    assert report.places[-1].result == "copied"
+    assert report.places[-1].line.endswith(
+        f"; tidying {usb.where} after the copy stopped (Access is denied); the next round tries "
+        "again"
+    )
+    assert usb.copies() == ("20261027T030000000000Z",)
 
 
 def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_its_manifest(
@@ -350,9 +384,12 @@ def test_every_file_a_target_copy_names_is_written_through_to_the_disk_before_it
     placed = [
         what.partition(" -> ")[0]
         for kind, what in events[:manifest_at]
-        if kind == "rename" and str(usb.pool) in what.partition(" -> ")[2]
+        if kind == "rename"
+        and str(usb.root) in what.partition(" -> ")[2]
+        and ("packs" in what or "index" in what)
     ]
-    assert len(placed) == 30
+    assert len([p for p in placed if "index" in p]) >= 1
+    assert len([p for p in placed if "packs" in p]) >= 1
     assert set(placed) <= durable
 
 

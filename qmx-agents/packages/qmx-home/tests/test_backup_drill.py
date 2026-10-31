@@ -5,6 +5,7 @@ folder."""
 
 from __future__ import annotations
 
+import hashlib
 import os
 import random
 from dataclasses import replace
@@ -12,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from backup_fixtures import filled_folder, folder
+from backup_fixtures import damage, filled_folder, folder, stored_bytes
 
 from qmx_home import Label, Layout
 from qmx_home.backup import restore
@@ -43,9 +44,12 @@ def data_hashes(layout: Layout) -> dict[str, str]:
 
 
 def whole(place: FolderRepository, stamp: str) -> bool:
+    place.refresh()
     entries = place.manifest(stamp).entries
     return all(
-        place.pool_has(e.sha256) and sha256_of(place.pool_path(e.sha256)) == e.sha256
+        place.pool_has(e.sha256)
+        and hashlib.sha256(stored_bytes(place, e.sha256, place.root.parent / "back")).hexdigest()
+        == e.sha256
         for e in entries
     )
 
@@ -76,14 +80,13 @@ def test_the_drill_passes_on_a_good_copy_and_leaves_data_and_its_folder_as_they_
     assert [(d["stamp"], d["passed"]) for d in drills] == [(stamp, True)]
 
 
-def test_a_damaged_pooled_file_is_deleted_named_and_pooled_again_by_the_next_round(
+def test_a_damaged_pooled_file_is_listed_as_damaged_named_and_sent_again_by_the_next_round(
     tmp_path: Path,
 ) -> None:
     layout, plan, place = copied(tmp_path)
     stamp = place.copies()[-1]
     chat = next(e for e in place.manifest(stamp).entries if e.path == "chats/c1.json")
-    with long_path(place.pool_path(chat.sha256)).open("r+b") as pooled:
-        pooled.truncate(3)
+    damage(place, chat.sha256)
 
     drilled = restore.drill(layout, place, sample=0, rng=seeded(1), keep_free=0)
     report = run_round(layout, plan, now=NOW + timedelta(days=1), floor=0)
@@ -91,8 +94,8 @@ def test_a_damaged_pooled_file_is_deleted_named_and_pooled_again_by_the_next_rou
 
     assert drilled.passed is False
     assert drilled.damaged == (
-        f"chats/c1.json (damaged in {place.where}, so QMX removed it there; the next round "
-        "copies it again)",
+        f"chats/c1.json (damaged in {place.where}, so QMX put it on the list of damaged files "
+        "there; the next round sends it again)",
     )
     assert report.places[1].result == "copied"
     assert whole(place, stamp)
@@ -156,6 +159,6 @@ def test_a_manifest_hash_that_is_not_a_sha256_is_unreadable_and_names_no_file_ou
     with pytest.raises(ValueError, match="not a sha256"):
         place.pool_path(bad)
     with pytest.raises(ValueError, match="not a sha256"):
-        place.discard(bad)
+        place.mark_bad(bad)
 
     assert canary.read_bytes() == b"his file"

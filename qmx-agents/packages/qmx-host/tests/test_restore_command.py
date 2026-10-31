@@ -232,7 +232,9 @@ def test_a_store_that_upgrades_gets_a_copy_of_the_folder_first_and_a_failed_copy
     (copy,) = quick.copies()
     manifest = quick.manifest(copy)
     ledger = next(e for e in manifest.entries if e.path == "engine/engine.sqlite")
-    with closing(sqlite3.connect(quick.pool_path(ledger.sha256))) as db:
+    held = roomy.cache / "ledger-copy.sqlite"
+    quick.fetch(ledger.sha256, held)
+    with closing(sqlite3.connect(held)) as db:
         copied_at = db.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
     assert (first, second, served) == (0, 0, [0, 0])
     assert (manifest.header["why"], copied_at) == ("before-upgrade", ("2",))
