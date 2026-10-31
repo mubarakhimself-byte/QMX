@@ -15,7 +15,12 @@ inside the Windows app folders, inside QMX's own program folder or checkout, a n
 drive's root, and a folder a sync client syncs live (OneDrive, Dropbox, Google Drive, and any
 client Windows lists as a sync root). Only a finished choice writes the pointer.
 
-On the card's routes the bring-in and the restore run as jobs the card reads by id
+A restore from his storage first connects that storage on the card (`connect_storage`, design 06
+section 9): the connect dialog's storage kind runs as a card job with no host, an rclone kind
+writes its remote into the chosen folder's own `data/rclone.conf` (making the folder the restore
+goes into when it is missing or empty), and the job ends with the `source` the restore reads.
+
+On the card's routes the bring-in, the restore and that connect run as jobs the card reads by id
 (`qmx_host.jobs`), one at a time, and the card hands the folder of its own last finished choice
 to the desktop app (`handover`), which then starts the host on it (loose strings P1, Appendix E).
 """
@@ -34,12 +39,13 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PureWindowsPath
-from typing import Final, cast
+from typing import Any, Final, cast
 
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.library import UNFINISHED, old_library
 from qmx_home import (
     LABEL,
@@ -68,6 +74,7 @@ from qmx_home.backup.restore import (
     stage,
 )
 from qmx_home.files import Busy, Held, copy_file, hold
+from qmx_home.rclone import Rclone
 from qmx_home.versions import check_open
 
 from qmx_host.bring_in import (
@@ -82,6 +89,9 @@ from qmx_host.bring_in import (
     refusal_before_copy,
     unfinished_facts,
 )
+from qmx_host.connect import KINDS, PLACE_NAME, Kind, Run, World, run_kind
+from qmx_host.connect import Refused as ConnectRefused
+from qmx_host.connect import document as connect_document
 from qmx_host.jobs import Job, Jobs, Progress, Stopped
 from qmx_host.process_record import recorded_host
 
@@ -99,6 +109,7 @@ NOTHING_CHOSEN: Final = (
     "data in first"
 )
 RESTORE: Final = "restore"
+CONNECT: Final = "connect"
 NOT_CONFIRMED: Final = (
     "a restore needs confirmed: true, after you saw what it replaces; nothing was changed"
 )
@@ -798,6 +809,42 @@ class Restoring(Checking):
     """Restore another QMX folder's copy into a folder that holds data, set aside first."""
 
 
+class Connecting(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    folder: str
+    kind: str
+    place: str
+    answer: dict[str, object] = Field(default_factory=dict[str, object])
+
+
+def connect_storage(
+    asked: Connecting, places: Places, world_of: Callable[[Layout], World]
+) -> tuple[World, Kind]:
+    """The storage a restore reads from, connected for `asked.folder` before any host runs. An
+    rclone kind writes its remote into that folder's own `data/rclone.conf`, so a missing or
+    empty folder is first made the folder the restore goes into. Raises Refused (or Connect's
+    Refused) with the one line."""
+    kind = KINDS.get(asked.kind)
+    if kind is None or "keep" not in kind.can or kind.source is None:
+        storages = ", ".join(k.id for k in KINDS.values() if k.source is not None)
+        raise ConnectRefused(f"there is no storage kind {asked.kind!r}; choose {storages}", 400)
+    if not PLACE_NAME.fullmatch(asked.place) or asked.place == "pc":
+        raise ConnectRefused(f"{asked.place!r} cannot name a storage", 400)
+    folder = Path(asked.folder)
+    if kind.rclone:
+        layout = restore_into(folder, places, make=True).layout
+    else:
+        _refuse(places, folder)
+        layout = Layout(folder.absolute())
+    world = world_of(layout)
+    if kind.refusal is not None:
+        refused = kind.refusal(Run(kind, asked.place, asked.answer, world))
+        if refused is not None:
+            raise ConnectRefused(refused)
+    return world, kind
+
+
 def _document(report: Report) -> dict[str, object]:
     return {
         "finished": report.finished,
@@ -814,12 +861,14 @@ def first_start_router(
     *,
     port: int,
     on_handover: Callable[[Path], None] | None = None,
+    key_store: KeyStore | None = None,
 ) -> APIRouter:
     """The card's routes. A refusal answers 409 with its line. The copies a backup place holds
-    and what restoring one replaces are read at once; the bring-in and a confirmed restore answer
-    202 with their job, read by id, one job at a time. The handover answers the folder of this
-    card's own last finished choice and the card's `port`, then calls `on_handover`; before any
-    finished choice, or while a job runs, it answers 409."""
+    and what restoring one replaces are read at once; the bring-in, a confirmed restore and a
+    storage connected for a restore answer 202 with their job, read by id, one job at a time. The
+    handover answers the folder of this card's own last finished choice and the card's `port`,
+    then calls `on_handover`; before any finished choice, or while a job runs, it answers 409.
+    `key_store` is Credential Manager unless a test names another."""
     jobs = Jobs()
     starting = threading.Lock()
     chosen: list[Path] = []
@@ -831,6 +880,15 @@ def first_start_router(
     shown_at_start: list[dict[str, object]] = []
     """The card as it stood when the newest job started, shown while it runs: reading the stores
     of a folder while a restore renames its `data/` can make the rename fail on Windows."""
+    remembered: dict[str, dict[str, Any]] = {}
+    cancels: dict[str, threading.Event] = {}
+    """What the connect dialog keeps between the card's reruns, for every folder it names."""
+
+    def world_of(layout: Layout) -> World:
+        keys = CredentialManager() if key_store is None else key_store
+        return World(
+            layout, keys, Rclone(layout, keys=keys), jobs, remembered=remembered, cancels=cancels
+        )
 
     def finished(root: Path) -> None:
         chosen[:] = [root]
@@ -965,6 +1023,24 @@ def first_start_router(
             {**job.document(), "warning": places.warning(folder.absolute())}, status_code=202
         )
 
+    def connect(asked: Connecting) -> JSONResponse:
+        with starting:
+            _one_job(running())
+            try:
+                world, kind = _answer(lambda: connect_storage(asked, places, world_of))
+            except ConnectRefused as refused:
+                raise HTTPException(refused.status, str(refused)) from None
+
+            def work(progress: Progress) -> dict[str, object]:
+                return dict(
+                    run_kind(
+                        kind, asked.place, asked.answer, report=progress, world=world, card=True
+                    )
+                )
+
+            job = started(CONNECT, work, world.layout.root)
+        return JSONResponse(connect_document(job), status_code=202)
+
     def read_job(job_id: str) -> dict[str, object]:
         job = jobs.get(job_id)
         if job is None:
@@ -973,7 +1049,7 @@ def first_start_router(
                 detail=f"no job {job_id} in this first start; the card started again since, so "
                 "read GET /api/first-start for the latest one",
             )
-        return job.document()
+        return connect_document(job) if job.kind == CONNECT else job.document()
 
     def handover() -> dict[str, object]:
         with starting:
@@ -1001,6 +1077,7 @@ def first_start_router(
     router.add_api_route("/restore/check", checked, methods=["POST"])
     router.add_api_route("/restore", restore, methods=["POST"], status_code=202)
     router.add_api_route("/bring-in", bring, methods=["POST"], status_code=202)
+    router.add_api_route("/connect", connect, methods=["POST"], status_code=202)
     router.add_api_route("/jobs/{job_id}", read_job, methods=["GET"])
     router.add_api_route("/handover", handover, methods=["POST"])
     return router

@@ -52,6 +52,7 @@ from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qma.telemetry import configured
 from qmf.core import TypedRefusal, is_refusal
+from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.models import Document
 from qmx_control.node import PLACE, library_primary
 from qmx_control.primary import CARD_REF, HOLD, Flip
@@ -93,6 +94,7 @@ from qmx_engine.workers.remote import PlacementWorker
 from qmx_home import Layout
 from qmx_home.backup.restore import RESTORE_LOCK
 from qmx_home.files import Busy, Held, hold
+from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused
 from qmx_hub.server import Hub, in_process
 from qmx_library.adapter import EngineLibraryAdapter
@@ -122,10 +124,13 @@ from qmx_router.server import (
 )
 from uvicorn.config import STARTUP_FAILURE
 
-from qmx_host.backups import Backups, backups_router
+from qmx_host.backups import Backups, Refusal, backups_router
 from qmx_host.bring_in import recheck_at_start
+from qmx_host.connect import KINDS, Connect, World, connect_router, placement
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
+from qmx_host.jobs import Jobs
+from qmx_host.keys import keys_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
@@ -784,6 +789,8 @@ async def serve(
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
+                connect = storage_dialog(Layout.from_home(home), control, backups)
+                harness.doctor_from(connect.doctor_line)
                 harness.record_into(SessionRecorder(store))
                 memory = await asyncio.to_thread(
                     compose_memory, harness, store, home, control, role
@@ -813,6 +820,7 @@ async def serve(
                         answering = [*answering_router(home, engine), drain_router(core)]
                         answering.append(templates_router(engine))
                         answering.append(backups_router(backups))
+                        answering.extend(dialog_routers(connect, control))
                         answering.append(
                             market_router(door)
                             if isinstance(door, MarketDoor)
@@ -959,6 +967,36 @@ def make_room(home: Path, engine: Engine, floor: int) -> None:
         f"gave way: {', '.join(taken) or 'nothing was expendable'}",
         file=sys.stderr,
     )
+
+
+def storage_dialog(
+    layout: Layout, control: ControlService, backups: Backups, keys: KeyStore | None = None
+) -> Connect:
+    """The connect dialog on this folder (design 06 section 9): its rclone from
+    `[backup] rclone_path`, Credential Manager as its key store, and the first sync of a storage
+    it connected asked of `backups`."""
+    store = CredentialManager() if keys is None else keys
+    named = section(control, "backup").get("rclone_path")
+    rclone = Rclone(layout, keys=store, path=named if isinstance(named, str) else "")
+
+    def first_sync(place_id: str) -> str:
+        try:
+            started = backups.start(place_id, asked=True)
+        except Refusal as refused:
+            return f"the first sync did not start: {refused}"
+        return f"the first sync started (job {started.job.id})"
+
+    return Connect(World(layout, store, rclone, Jobs(), control, first_sync), KINDS)
+
+
+def dialog_routers(connect: Connect, control: ControlService) -> list[APIRouter]:
+    """The connect routes and the write-only key routes, both behind the bearer."""
+
+    def referred() -> list[str]:
+        rows = placement(control).values()
+        return [str(row["credential_ref"]) for row in rows if "credential_ref" in row]
+
+    return [connect_router(connect), keys_router(connect.world.keys, referred)]
 
 
 def app_rows(control: ControlService, paused: bool) -> list[Heartbeat]:
