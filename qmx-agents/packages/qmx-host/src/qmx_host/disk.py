@@ -6,9 +6,9 @@ then the telemetry queue, then fetched cache copies, which the PC may drop at an
 were copied over the tailnet. A class is a folder under the machine's home; taking it means
 deleting its oldest files until the machine has the room that was asked for.
 
-The floor is the room a machine keeps for itself. It is measured from the machine's own free space
-when the host starts, as a twentieth of it, and `disk.floor_gb` raises it: a Settings value he
-edits, never a constant of ours. Below it a writer that cannot fit refuses whole with `disk_full`
+The floor is the room a machine keeps for itself, the one local floor of `qmx_home.files`: the
+larger of 1 GiB and `disk.floor_gb`, a Settings value he edits, or a twentieth of the free space
+measured when the host starts. Below it a writer that cannot fit refuses whole with `disk_full`
 rather than leaving half a file, and the Library is the last writer to be refused.
 """
 
@@ -21,11 +21,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from qmx_home.files import local_floor
+
 MIB: Final = 1024 * 1024
-GIB: Final = 1024 * MIB
-FLOOR_SETTING: Final = "disk.floor_gb"
-FLOOR_SHARE: Final = 1 / 20
-"""The share of the free space measured at start that a machine keeps: a floor no run can cross."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +51,9 @@ def free_bytes(at: Path) -> int:
 
 
 def floor_bytes(settings: Mapping[str, object], free: int) -> int:
-    """The room this machine keeps: `disk.floor_gb` when he raised it, else a twentieth of the
-    free space measured now (D-11, Appendix D)."""
-    raised = settings.get(FLOOR_SETTING)
-    if isinstance(raised, int | float) and not isinstance(raised, bool) and raised > 0:
-        return int(raised * GIB)
-    return int(free * FLOOR_SHARE)
+    """The room this machine keeps, from `[engine]` and the free space measured now (D-11,
+    design 06 section 4)."""
+    return local_floor(settings, free)
 
 
 def clear(folder: Path, want: int) -> int:

@@ -53,7 +53,7 @@ async def ship_budgets(session: Session, log: Log, **values: object) -> AsyncIte
     try:
         yield
     finally:
-        control.settings_put("budgets", found)
+        control.settings_update("budgets", lambda _current: found)
         log(f"ship home [budgets] restored to {dict(control.settings_get('budgets'))}")
 
 

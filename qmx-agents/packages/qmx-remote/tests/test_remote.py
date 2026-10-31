@@ -11,7 +11,7 @@ import pytest
 from qmx_ledger.journal import fingerprint
 
 from qmx_remote.code import publish
-from qmx_remote.models import RemoteError, RemoteSettings, Resources, RunBundle, Target
+from qmx_remote.models import RemoteError, RunBundle, Target
 from qmx_remote.providers import AmpProvider, E2BProvider, ModalProvider, SSHProvider
 
 
@@ -30,24 +30,12 @@ def bundle(
     )
 
 
-def settings(root: Path) -> RemoteSettings:
-    return RemoteSettings(
-        bucket=str(root / "bucket"),
-        targets={
-            "vps": Target(host="vps", root="/srv/qmx/bucket", image="qmx-worker:test"),
-            "gpu": Target(host="gpu-node", root="/srv/qmx/bucket", gpu=2, image="qmx-worker:test"),
-        },
-    )
+GPU_NODE = Target(host="gpu-node", root="/srv/qmx/bucket", gpu=2, image="qmx-worker:test")
 
 
-def test_a_fresh_runner_names_no_place_and_an_ssh_place_names_its_root() -> None:
-    fresh = RemoteSettings()
-
-    with pytest.raises(RemoteError, match="Configure the remote target in Settings first"):
-        fresh.place(None, Resources())
+def test_an_ssh_place_names_its_root() -> None:
     with pytest.raises(ValueError, match="An SSH target needs its node root"):
         Target(host="home-server", image="worker")
-    assert (fresh.default_target, fresh.bucket) == ("", "")
     assert Target(provider="modal", image="worker").root == ""
 
 
@@ -62,7 +50,7 @@ def test_ssh_uses_detached_docker_and_secrets_only_on_stdin(
 
     monkeypatch.setattr("qmx_remote.providers.shutil.which", Mock(return_value="ssh"))
     monkeypatch.setattr("qmx_remote.providers.subprocess.run", run)
-    provider = SSHProvider(settings(tmp_path).targets["gpu"])
+    provider = SSHProvider(GPU_NODE)
     provider.start(provider.provision("run1", bundle(resources={"gpu": 2})), {"TOKEN": "hidden"})
     args, kwargs = calls[-1]
     assert "hidden" not in str(args)

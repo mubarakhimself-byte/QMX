@@ -48,7 +48,8 @@ from qmx_home.backup.repository import (
     free_bytes,
 )
 from qmx_home.backup.round import LOCK, QUICK, place_key
-from qmx_home.backup.snapshot import BORN_BLOB, SECRET, left_out
+from qmx_home.backup.snapshot import BORN_BLOB, left_out
+from qmx_home.classes import PER_MACHINE, secret_paths
 from qmx_home.files import PARTIAL, Busy, copy_file, hold, long_path, plain, sha256_of, write_new
 from qmx_home.stores import STORES, Version
 from qmx_home.versions import FLOOR_BYTES, log_line, log_lines
@@ -62,9 +63,13 @@ ENGINE_LOCK: Final = "engine.lock"
 HOST_RECORD: Final = "control-process.json"
 TOMBSTONES: Final = "library/blobs/tombstones"
 TOMBSTONE: Final = re.compile(r"library/blobs/tombstones/([0-9a-f]{64})\.json")
-CARRIED: Final = (*(path.removesuffix("/**") for path in SECRET), "locks")
+CARRIED: Final = (
+    *(p.removeprefix("data/") for p in (*secret_paths(), *PER_MACHINE) if p.startswith("data/")),
+    "locks",
+)
 """What a restore carries over from the data it set aside, in this order: the folder's keys and
-logins, never in a copy, and each mini app's lease generation in `locks/`."""
+logins, never in a copy, the files that belong to this machine (`observers.json`), and each mini
+app's lease generation in `locks/`."""
 STEPS: Final = (
     "staged",
     "set-aside",
@@ -1145,7 +1150,8 @@ def _lacks(manifest: Manifest) -> tuple[str, ...]:
         f"{pair[0]} (its bytes were damaged when it was copied)"
         for pair in cast("list[list[str]]", head.get("skipped") or [])
     ]
-    return (*unread, *skipped)
+    switched = [str(line) for line in cast("list[object]", head.get("left_out") or [])]
+    return (*unread, *skipped, *switched)
 
 
 def _key(layout: Layout, repository: Repository) -> str:

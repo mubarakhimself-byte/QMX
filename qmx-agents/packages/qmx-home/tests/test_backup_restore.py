@@ -13,11 +13,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from backup_fixtures import SECRETS, filled_folder, rows
+from backup_fixtures import SECRETS, filled_folder, folder, rows
 
 from qmx_home import Label, Layout, NoQmxFolder, resolve
 from qmx_home.backup import restore
-from qmx_home.backup.plan import Plan, Target
+from qmx_home.backup.plan import Plan, Storage
 from qmx_home.backup.repository import FolderRepository, Manifest
 from qmx_home.backup.restore import RestoreRefused
 from qmx_home.backup.round import quick, run_round
@@ -29,13 +29,13 @@ LEASE = "locks/demo.lock"
 """A mini app's lease generation, never in a copy and carried over by a restore."""
 
 
-def usb(tmp_path: Path) -> Target:
-    return Target("usb", "folder", tmp_path / "usb" / "QMX-backup")
+def usb(tmp_path: Path) -> Storage:
+    return folder(tmp_path / "usb" / "QMX-backup")
 
 
 def sent(layout: Layout, tmp_path: Path, now: datetime = NOW) -> tuple[FolderRepository, str]:
     """A round to the USB target; the place and the copy's stamp."""
-    report = run_round(layout, Plan(targets=(usb(tmp_path),)), now=now, floor=0)
+    report = run_round(layout, Plan(storages=(usb(tmp_path),)), now=now, floor=0)
     place = report.places[1]
     assert place.stamp is not None
     return FolderRepository(Path(place.where)), place.stamp

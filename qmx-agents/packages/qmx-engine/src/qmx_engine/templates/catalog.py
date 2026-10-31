@@ -394,15 +394,6 @@ CATALOG: Final[tuple[Template, ...]] = (
         test_inputs={"command": ["python", "-c", "print(42)"]},
     ),
     Template(
-        "backup-weekly",
-        "Weekly backup",
-        card("46", "G13"),
-        "RUN1C",
-        folder="backup-weekly",
-        triggers=(Cron("0 6 * * 1", "UTC"),),
-        test_inputs={"dry_run": True},
-    ),
-    Template(
         "synthetic-data",
         "Synthetic data from a month of prices",
         card("46", "G7"),

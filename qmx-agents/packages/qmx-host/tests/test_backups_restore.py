@@ -13,12 +13,12 @@ from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
-from pydantic import JsonValue
+from qmx_control.models import Document
 from qmx_engine.ledger.inbox_table import InboxTable
 from qmx_home import Layout
 from qmx_home.backup import restore as restoring
 from test_backups_routes import BEARER, app_of, ended, held_rounds
-from test_backups_service import Clock, finished, folder, service, target
+from test_backups_service import Clock, connect, finished, folder, service, target
 
 from qmx_host.backups import Backups
 
@@ -36,7 +36,7 @@ def copied(tmp_path: Path) -> tuple[Layout, Backups, Clock, str]:
     """A folder with one whole copy at the place `usb`, and that copy's date."""
     layout, clock = folder(tmp_path / "QMX"), clock_now()
     backups = service(layout, clock)
-    backups.control.settings_put("backup", {"targets": [target(tmp_path / "usb")]})
+    connect(backups, target(tmp_path / "usb"))
     assert finished(backups, backups.start("usb", asked=True).job).state == "finished"
     (stamp,) = [c["stamp"] for c in backups.copies("usb")]
     return layout, backups, clock, str(stamp)
@@ -229,11 +229,11 @@ def test_the_drill_runs_once_a_month_on_each_place_in_turn_and_a_failed_one_open
 ) -> None:
     layout, clock = folder(tmp_path / "QMX"), clock_now()
     backups = service(layout, clock)
-    places: list[JsonValue] = [
+    places: list[Document] = [
         target(tmp_path / "one", place="one"),
         target(tmp_path / "two", place="two"),
     ]
-    backups.control.settings_put("backup", {"targets": places})
+    connect(backups, *places)
     assert finished(backups, backups.sweep()).kind == "backup"
     assert backups.sweep() is None, "the first copy is not a month old"
 

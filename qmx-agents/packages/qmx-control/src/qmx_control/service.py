@@ -23,27 +23,24 @@ from urllib.parse import urlsplit
 import keyring
 import tomli_w
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
-from qmx_apps.backup import BackupSettings, backup, restore
-from qmx_apps.backup_schedule import BackupSchedule
 from qmx_apps.docker import DockerSupervisor
 from qmx_apps.errors import AppError
 from qmx_apps.manifest import Trust
 from qmx_apps.road.models import Stage
 from qmx_apps.supervisor import Supervisor
-from qmx_apps.volume import Volume
 from qmx_broker.models import Broker, BrokerSettings
 from qmx_broker.sandbox import demo_refusal
 from qmx_broker.service import read_proposals
 from qmx_home import Layout
-from qmx_home.backup.plan import APP_KEYS, PlanRefused
+from qmx_home.backup.plan import PlanRefused, orphans_dropped
+from qmx_home.backup.plan import defaults as backup_defaults
 from qmx_home.backup.plan import parse as parse_backup_plan
+from qmx_home.classes import secret_name
 from qmx_home.versions import open_sqlite, too_new
 from qmx_library.cards import SERIES_PREFIX
 from qmx_library.port import LibraryRefused
 from qmx_library.store import Store
-from qmx_remote.models import RemoteSettings
 
-from qmx_control.backup import weekly_backup
 from qmx_control.cache import read_cache
 from qmx_control.catalog import operation
 from qmx_control.library import OPERATOR as LIBRARY_OPERATOR
@@ -62,7 +59,6 @@ type SettingsSection = Literal[
     "backup",
     "brokers",
     "connections",
-    "remote",
     "claude",
     "environment",
     "agents",
@@ -278,35 +274,52 @@ def _data_settings(values: Document) -> Document:
     return values
 
 
-BACKUP_PLAN_KEYS: Final = frozenset({"quick_undo", "targets", "leave_out", "drill", "keys"})
-"""The keys of `[backup]` his copies read (`qmx_home.backup.plan`); `APP_KEYS` are the rest."""
+WHOLE_SECTIONS: Final[frozenset[str]] = frozenset({"observers", "brokers", "connections"})
+"""Sections a write sends whole: an observer mint or revoke, and the broker row lists."""
 
 
-def _check_backup_plan(values: Document, layout: Layout) -> None:
+def _check_backup_plan(values: Document, layout: Layout, engine: Document) -> None:
     """Refuse a `[backup]` section his copies cannot use, naming the row, before it is saved."""
-    unknown = sorted(set(values) - BACKUP_PLAN_KEYS - APP_KEYS)
-    if unknown:
-        raise ControlError(
-            "invalid_backup_settings",
-            f"[backup] has {', '.join(unknown)}, which QMX does not know; use "
-            f"{', '.join(sorted(BACKUP_PLAN_KEYS | APP_KEYS))}",
-        )
     try:
-        parse_backup_plan(values, layout)
+        parse_backup_plan(values, layout, engine)
     except PlanRefused as refused:
         raise ControlError("invalid_backup_settings", str(refused)) from refused
 
 
-def _volume_keys(values: Document) -> Document:
-    """The keys of `[backup]` the mini apps' volume backup reads."""
-    return {key: value for key, value in values.items() if key in APP_KEYS - {"repository"}}
+def _merged(stored: Document, sent: Document) -> Document:
+    """`sent` merged into `stored`: a table sent merges key by key, any other value replaces."""
+    merged = dict(stored)
+    for key, value in sent.items():
+        before = merged.get(key)
+        if isinstance(value, dict) and isinstance(before, dict):
+            merged[key] = _merged(cast(Document, before), cast(Document, value))
+        else:
+            merged[key] = value
+    return merged
+
+
+def _removed(section: Document, path: Sequence[str]) -> Document:
+    """`section` less the dotted key `path`, and less any table that held only it."""
+    head, rest = path[0], path[1:]
+    if head not in section:
+        return section
+    kept = dict(section)
+    inner = kept[head]
+    if not rest:
+        del kept[head]
+    elif isinstance(inner, dict):
+        trimmed = _removed(cast(Document, inner), rest)
+        if trimmed:
+            kept[head] = trimmed
+        else:
+            del kept[head]
+    return kept
 
 
 def _no_secrets(value: JsonValue) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
-            normalized = key.lower().replace("_", "").replace("-", "")
-            if normalized in {"key", "apikey", "token", "password", "secret", "clientkey"}:
+            if secret_name(key):
                 raise ControlError(
                     "secret_ref_required",
                     "Store secrets in Credential Manager; use credential_ref.",
@@ -626,8 +639,6 @@ class ControlService:
         self._lock = threading.RLock()
         self._app_hooks: dict[str, Callable[[str, Document], None]] = {}
         self._apps: Supervisor | None = None
-        self._backup_lock = threading.Lock()
-        self._backup_schedule: BackupSchedule | None = None
         self.tier = tier
         self.node = node
         self.secret_getter = secret_getter
@@ -777,17 +788,35 @@ class ControlService:
                     "credential_ref": "qmx/firecrawl",
                     **firecrawl,
                 }
+            if section == "backup":
+                values = cast(
+                    Document, backup_defaults(values, cast(Document, stored.get("engine", {})))
+                )
             return values
+
+    def _stored(self, section: str) -> Document:
+        """One section exactly as `settings.toml` holds it: no default filled in."""
+        with self._lock:
+            path = self.home / "settings.toml"
+            if not path.exists():
+                return {}
+            with path.open("rb") as file:
+                found = tomllib.load(file).get(section, {})
+            return cast(Document, found) if isinstance(found, dict) else {}
 
     def settings_update(
         self, section: SettingsSection, change: Callable[[Document], Document]
     ) -> Document:
-        """Read, change and write one section under the settings lock, so concurrent updates
-        all land. Writes nothing when the change returns the section as it was."""
+        """Read the stored section, change it and write what the change returns, under the
+        settings lock, so concurrent updates all land and a change can remove a key. Writes
+        nothing when the change returns the section as it was. A `[backup]` policy whose
+        storage row is gone is dropped on the way."""
         with self._lock:
-            current = self.settings_get(section)
+            current = self._stored(section)
             values = change(current)
-            return values if values == current else self.settings_put(section, values)
+            if section == "backup":
+                values = cast(Document, orphans_dropped(values, self._stored("engine")))
+            return values if values == current else self._settings_put(section, values)
 
     @operation(
         "settings_read",
@@ -798,9 +827,25 @@ class ControlService:
         left_out="an agent that edits a provider row could send a stored key to a host",
     )
     def settings_put(self, section: SettingsSection, values: Document) -> Document:
-        """Replace a settings section; credentials must be vault references."""
+        """Merge `values` into the stored section, key by key, so a screen saving from an old
+        read never drops another writer's keys; `remove` lists dotted keys to delete, such as
+        `placement.usb`. Brokers and connections send their whole row list. Credentials must be
+        vault references."""
         with self._lock:
-            return self._settings_put(section, values)
+            if section in WHOLE_SECTIONS:
+                return self._settings_put(section, values)
+            sent = dict(values)
+            removed = sent.pop("remove", [])
+            if not isinstance(removed, list) or not all(
+                isinstance(key, str) and key for key in removed
+            ):
+                raise ControlError(
+                    "invalid_settings", "remove lists dotted keys to delete, such as placement.usb."
+                )
+            merged = _merged(self._stored(section), sent)
+            for key in cast("list[str]", removed):
+                merged = _removed(merged, key.split("."))
+            return self._settings_put(section, merged)
 
     def _observers_put(self, values: Document) -> Document:
         """Mint or revoke one observer token, as a Settings write by the operator (AD-69).
@@ -837,13 +882,6 @@ class ControlService:
             values = _rule_lists(values)
         if section == "data":
             values = _data_settings(values)
-        if section == "remote":
-            try:
-                RemoteSettings.model_validate(values)
-            except ValueError as error:
-                raise ControlError(
-                    "invalid_settings", "Use valid remote targets and bucket settings."
-                ) from error
         if section == "mcp_servers" and "firecrawl" in values:
             firecrawl = values["firecrawl"]
             if not isinstance(firecrawl, dict) or set(firecrawl) - {
@@ -870,16 +908,7 @@ class ControlService:
                     "Firecrawl needs HTTPS, an enabled boolean and qmx/firecrawl.",
                 )
         if section == "backup":
-            if "repository" in values:
-                repository = values["repository"]
-                if not isinstance(repository, str) or not repository.strip():
-                    raise ControlError(
-                        "invalid_settings", "Backup repository must be nonempty text."
-                    )
-            _check_backup_plan(values, Layout.from_home(self.home))
-            app_settings = _volume_keys(values)
-            if app_settings:
-                BackupSettings.model_validate(app_settings).destination("validation", "validation")
+            _check_backup_plan(values, Layout.from_home(self.home), self._stored("engine"))
         elif section in ("brokers", "connections"):
             try:
                 parsed = BrokerSettings.model_validate(values)
@@ -1341,28 +1370,6 @@ class ControlService:
             for line in blamed.lines
         ]
 
-    @operation(
-        "ops",
-        "backup_weekly",
-        "manage",
-        rest=("POST", "/api/backup/weekly"),
-        agent=False,
-        left_out="a host maintenance job, not an agent act",
-    )
-    def backup_weekly(self, dry_run: bool = False) -> Document:
-        """Snapshot small stores to the private backup repo in Settings, at most weekly."""
-        settings = self.settings_get("backup")
-        repository = settings.get("repository")
-        if not isinstance(repository, str) or not repository:
-            raise ControlError("backup_not_configured", "Set backup.repository in Settings.")
-        try:
-            result = weekly_backup(self.home, repository, dry_run=dry_run)
-        except (OSError, sqlite3.Error) as error:
-            raise ControlError(
-                "backup_failed", "Snapshot creation failed; backup was not published.", 409
-            ) from error
-        return result
-
     def _aggregate_read(self, revision: int) -> Document:
         return self._aggregate_counts(revision)
 
@@ -1625,62 +1632,8 @@ class ControlService:
                         event_sink=self._app_event,
                         secret_getter=self.secret_getter,
                     )
-                self._backup_schedule = BackupSchedule(
-                    self._backup_settings,
-                    self._backup_apps,
-                    self.apps_backup,
-                    self._backup_failed,
-                )
                 self._apps.attach_library(self.library.landed)
             return self._apps
-
-    def _backup_settings(self) -> BackupSettings | None:
-        values = _volume_keys(self.settings_get("backup"))
-        return BackupSettings.model_validate(values) if values else None
-
-    def _backup_apps(self) -> list[str]:
-        return [
-            str(item["definition"]["id"])
-            for item in self.apps_list()
-            if isinstance(item["definition"], dict)
-            and Volume(self.home, str(item["definition"]["id"])).root.joinpath("app.db").is_file()
-        ]
-
-    def _backup_failed(self, app_id: str, error: Exception) -> None:
-        with self._lock, self._connect() as db:
-            self._event(
-                db, "apps", app_id, {"type": "backup_failed", "error": type(error).__name__}
-            )
-
-    @operation("apps_admin", "backup", "domain_write", rest=("POST", "/api/apps/{app_id}/backup"))
-    def apps_backup(self, app_id: str) -> Document:
-        """Back up now using the UI-editable remote and verify a downloaded restore."""
-        self.app_runtime().get(app_id)
-        settings = self._backup_settings()
-        if settings is None:
-            raise ControlError(
-                "backup_unconfigured", "Configure the backup remote in Settings.", 409
-            )
-        with self._backup_lock:
-            result = backup(Volume(self.home, app_id), settings)
-        with self._lock, self._connect() as db:
-            self._event(db, "apps", app_id, {"type": "backup", **result})
-        return result
-
-    @operation("apps_admin", "restore", "manage", rest=("POST", "/api/apps/{app_id}/restore"))
-    def apps_restore(self, app_id: str, snapshot_id: str) -> Document:
-        """Verify and replace a stopped app's volume from a backup snapshot."""
-        self.app_runtime().get(app_id)
-        settings = self._backup_settings()
-        if settings is None:
-            raise ControlError(
-                "backup_unconfigured", "Configure the backup remote in Settings.", 409
-            )
-        with self._backup_lock:
-            result = restore(self.home, app_id, settings, snapshot_id)
-        with self._lock, self._connect() as db:
-            self._event(db, "apps", app_id, {"type": "restored", **result})
-        return result
 
     def _app_event(self, app_id: str, data: Document) -> None:
         with self._lock, self._connect() as db:
@@ -1700,9 +1653,6 @@ class ControlService:
             self._event(db, "apps", app_id, data)
 
     def close(self) -> None:
-        if self._backup_schedule is not None:
-            self._backup_schedule.close()
-            self._backup_schedule = None
         if self._apps is not None:
             self._apps.close()
             self._apps = None

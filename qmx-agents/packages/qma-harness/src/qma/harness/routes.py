@@ -415,7 +415,13 @@ def router(
 
     @api.put("/api/claude-settings")
     async def write_claude_settings(values: Document) -> Document:
-        return await asyncio.to_thread(control.settings_put, "claude", values)
+        """The Claude settings screen sends the whole section, so a rule or hook it leaves out
+        is removed; `remembered`, which the chats write, is kept unless the body names it."""
+
+        def whole(_current: Document) -> Document:
+            return values
+
+        return await asyncio.to_thread(control.settings_update, "claude", whole)
 
     _ = read_doctor, read_claude_settings, write_claude_settings
     return api

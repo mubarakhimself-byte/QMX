@@ -34,6 +34,7 @@ from pydantic import JsonValue
 
 from qmx_engine.ports.inbox import Action
 from qmx_engine.ports.settings import SettingsPort
+from qmx_engine.settings import can_run
 
 HOME_ENGINE: Final = "home_engine"
 """The field every merged row carries: the host whose ledger owns it."""
@@ -158,11 +159,13 @@ def owned_instances(rows: Iterable[Mapping[str, JsonValue]], *, home: str) -> li
 
 
 def placement_rows(settings: Mapping[str, object] | SettingsPort) -> list[Mapping[str, JsonValue]]:
-    """The `[placement]` registry as rows: one per name, with the fields AD-30 gives it."""
+    """The `[placement]` registry as rows: one per name that can run, with the fields AD-30 gives
+    it. A storage's row (`can = ["keep"]`) is no place to run or forward work."""
     values: Mapping[str, object] = settings if isinstance(settings, Mapping) else settings.values()
     names = {
         key.split(".")[1] for key in values if key.startswith("placement.") and key.count(".") >= 2
     }
+    names = {name for name in names if can_run(values, name)}
     return [
         cast(
             "Mapping[str, JsonValue]",

@@ -11,7 +11,7 @@ import functools
 import hashlib
 import os
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
 from typing import IO, Final, cast
@@ -26,8 +26,41 @@ PARTIAL: Final = ".qmx-copying"
 it are ever cleared."""
 
 
+GIB: Final = 1 << 30
+MIN_FLOOR: Final = GIB
+"""The local floor is never below this, whatever the drive's size."""
+FLOOR_SHARE: Final = 20
+"""With no `disk.floor_gb`, the local floor is a twentieth of the drive's free space."""
+
+
 class Busy(Exception):
     """An OS lock is held by another process or handle. The message is the one line to show."""
+
+
+def floor_gb(settings: Mapping[str, object]) -> float | None:
+    """`disk.floor_gb` in the `[engine]` section, as read from `settings.toml` (a `disk` table)
+    or as the engine's dotted keys; None when unset or not a positive number."""
+    disk = settings.get("disk")
+    raised = (
+        cast("Mapping[str, object]", disk).get("floor_gb")
+        if isinstance(disk, Mapping)
+        else settings.get("disk.floor_gb")
+    )
+    if isinstance(raised, int | float) and not isinstance(raised, bool) and raised > 0:
+        return float(raised)
+    return None
+
+
+def floor_of(raised: float | None, free: int) -> int:
+    """The room a local write leaves on its drive: the larger of 1 GiB and `raised` GB, or a
+    twentieth of `free` when `raised` is None. It protects his drive and is not a cap."""
+    return max(MIN_FLOOR, int(raised * GIB) if raised is not None else free // FLOOR_SHARE)
+
+
+def local_floor(settings: Mapping[str, object], free: int) -> int:
+    """The one local floor for every local write (design 06 section 4), from `[engine]`'s
+    `disk.floor_gb` and the drive's `free` bytes."""
+    return floor_of(floor_gb(settings), free)
 
 
 def long_path(path: Path) -> Path:

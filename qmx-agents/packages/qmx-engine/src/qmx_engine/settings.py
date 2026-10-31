@@ -53,14 +53,26 @@ def place_of(key: str) -> str | None:
     return None
 
 
+def can_run(settings: Mapping[str, object], name: str) -> bool:
+    """Whether the place `name` can run work: its `placement.<name>.can` holds `run`. A row that
+    names no `can` runs, as every row did before storages joined the list (design 06 section 4);
+    a storage's row says `can = ["keep"]`."""
+    can = settings.get(f"placement.{name}.can")
+    if can is None:
+        return True
+    if isinstance(can, str):
+        return can == "run"
+    return isinstance(can, list | tuple) and "run" in can
+
+
 def places(settings: Mapping[str, object]) -> dict[str, str]:
-    """The place list as `name -> id`: This PC, then every name with a `placement.<name>.*` row.
-    A row's stable `id` is its `placement.<name>.id`, so renaming a place keeps its history; a
-    row that names none is known by its name."""
+    """The places work can run at, as `name -> id`: This PC, then every name with a
+    `placement.<name>.*` row that can run. A row's stable `id` is its `placement.<name>.id`, so
+    renaming a place keeps its history; a row that names none is known by its name."""
     found = {PC: PC}
     for key in settings:
         name = place_of(key)
-        if name is not None:
+        if name is not None and can_run(settings, name):
             stable = settings.get(f"placement.{name}.id")
             found.setdefault(name, stable if isinstance(stable, str) and stable else name)
     return found

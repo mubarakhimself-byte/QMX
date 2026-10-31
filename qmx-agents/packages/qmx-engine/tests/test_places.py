@@ -172,7 +172,7 @@ def test_a_trigger_on_a_removed_place_reads_blocked_config_naming_the_place(
             json={"kind": "manual", "place": "nowhere"},
             headers=BEARER,
         )
-        control.settings_put("engine", {})
+        control.settings_put("engine", {"remove": ["placement.home-server"]})
         removed = rest.get("/api/triggers", headers=BEARER).json()
         control.settings_put("engine", SERVER_BY_NAME)
         back = rest.get("/api/triggers", headers=BEARER).json()

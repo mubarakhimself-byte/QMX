@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from qmx_engine.ledger.store import Ledger
 from qmx_home import LABEL, RESTORE_UNFINISHED, Label, Layout, pointer_file, resolve
 from qmx_home.backup import restore
-from qmx_home.backup.plan import Plan, Target
+from qmx_home.backup.plan import Plan, Storage
 from qmx_home.backup.repository import FolderRepository, Manifest
 from qmx_home.backup.round import run_round
 from test_bring_in import old_home
@@ -82,7 +82,9 @@ def folder(root: Path) -> Layout:
 
 def sent(layout: Layout, usb: Path, now: datetime = COPY_AT) -> str:
     """A round to a folder target at `usb`; the copy's stamp there."""
-    report = run_round(layout, Plan(targets=(Target("usb", "folder", usb),)), now=now, floor=0)
+    report = run_round(
+        layout, Plan(storages=(Storage("usb", "usb", "folder", usb),)), now=now, floor=0
+    )
     stamp = report.places[1].stamp
     assert stamp is not None, report.lines
     return stamp
