@@ -33,7 +33,7 @@ Written 2026-10-31 by grounding agent G2. Read and record only. Nothing here is 
 **Three facts that colour everything below.**
 1. **The merged stack has never started on his PC.** No QMX folder in the new layout exists: no `%APPDATA%\QMX\home.toml`, no `~\QMX`, no `C:\QMX`, `D:\QMX`, `E:\QMX` or `F:\QMX` (CHECKED, `ls` of each). Only the old flat `~/.qmx` exists (control.db, library.db, runs.db, artifacts), which is what the first-start "bring in" step would import (CHECKED `ls ~/.qmx`; PR 214). The resolver's default is the roomiest non-system drive, else the profile (`qmx-home/src/qmx_home/__init__.py:734-741`, CHECKED). The wrap-up handover was last written 29 Oct and plans the first real boot after landing (`D:\QMX-worktrees\qma-ship\wrapup\RESUME.md:55`, CHECKED). So every BUILT row is also NEVER RUN on his real home unless said otherwise.
 2. **No screen talks to the host.** The UI on `engine/base` is the 1 Oct client of the retired wire (`apps/qmx-ui/package.json` description, last commit `aeccd2fd` 1 Oct, CHECKED). The rebuild branch `ui-review/repair` (`eea09941`, 14 Oct) exists only on this PC: no `origin/ui-review/*` ref (CHECKED `git branch -r`, `git branch --list` in the Desktop repo).
-3. **The copilot methodology session never ran.** The newest methodology file is `T/research/methodology/59-methodology-seeds.md` (seeds); 60 to 62 are wrap-up and local-first (CHECKED `ls`). So no persona or home methodology text ships; only the rules file `PLG/QMX.md` (INFERRED from `HAR/surface.py:132` docstring of PR 132: editable slots live under `<qmx_home>/slots/`).
+3. **The copilot methodology session never ran.** The newest methodology file is `T/research/methodology/59-methodology-seeds.md` (seeds); 60 to 62 are wrap-up and local-first (CHECKED `ls`). So no persona or home methodology text ships; only the rules file `PLG/QMX.md` (CHECKED PR 132 body, Departures: editable slots live under `<qmx_home>/slots/`, and the install tree gives only the rules).
 
 His words that frame this lens (verbatim transcripts, not summaries):
 - "most of this system is just to give agents standardized, because when you get less intelligent models, they're obviously going to make mistakes ... this is why hooks are very important in this system" (`operator/transcript-2026-10-20-to-28.md:1574`, CHECKED).
@@ -47,13 +47,13 @@ His words that frame this lens (verbatim transcripts, not summaries):
 
 | Item | Tag | Evidence | Note |
 |---|---|---|---|
-| Every chat, copilot or agent, is one Claude Code CLI subprocess driven by the Claude Agent SDK | BUILT | `HAR/harness.py:1-16`; `HAR/launch.py:41` imports `ClaudeAgentOptions`; `qma-harness/pyproject.toml:8` pins `claude-agent-sdk==0.2.166`; CLI floor 2.1.248 (`HAR/home.py:862`) | CHECKED. The CLI's own `claude_code` tool preset and system prompt preset are used (`HAR/launch.py:7-8`, `:463-473`) |
-| Settings in code: no settings file loads from any home; one per-launch settings file QMX writes; plugins and MCP servers only as passed | BUILT | `HAR/launch.py:9-13`, `:709-722` (`setting_sources=[]`, `strict_mcp_config=True`) | CHECKED. Project settings, project hooks and `.mcp.json` are off (`HAR/home.py:864-885` DEPARTURES) |
-| Any provider: the Max plan directly, key providers and GPT through a loopback relay | BUILT | `HAR/launch.py:520-540` (`PlanLaunch`, `RelayedLaunch`); `HAR/harness.py:1-6` | CHECKED. Because every provider runs the same CLI, the guard and any settings hook apply on every provider (INFERRED from the one launch path) |
+| Every chat, copilot or agent, is one Claude Code CLI subprocess driven by the Claude Agent SDK | BUILT | `HAR/harness.py:1-16`; `HAR/launch.py:41` imports `ClaudeAgentOptions`; `qma-harness/pyproject.toml:8` pins `claude-agent-sdk==0.2.166`; CLI floor 2.1.248 (`HAR/home.py:862`) | CHECKED. The CLI's own `claude_code` tool preset and system prompt preset are used (`HAR/launch.py:7-8`, `:460-470`) |
+| Settings in code: no settings file loads from any home; one per-launch settings file QMX writes; plugins and MCP servers only as passed | BUILT | `HAR/launch.py:8-13`, `:715-718` (`setting_sources=[]`, `strict_mcp_config=True`) | CHECKED. Project settings, project hooks and `.mcp.json` are off (`HAR/home.py:864-885` DEPARTURES) |
+| Any provider: the Max plan directly, key providers and GPT through a loopback relay | BUILT | `HAR/launch.py:522-535` (`PlanLaunch`, `RelayedLaunch`); `HAR/harness.py:1-6` | CHECKED. Because every provider runs the same CLI, the guard and any settings hook apply on every provider (INFERRED from the one launch path) |
 | Three chat kinds: Interactive (the copilot; asks reach him), Background (scheduled or workflow), Child (a helper from `delegate`, no Agent tool, never starts children) | BUILT | `HAR/launch.py:77-121` | CHECKED |
 | Homes: `general`, `lab`, `portfolio`, `library`, `app`, `agent`, fixed at birth | BUILT | `HAR/launch.py:163-175` | CHECKED. The REST door cannot set a home: `NewChatIn` has title, model, effort, mode, workspace, profile only (`HAR/routes.py:126-133`) |
-| System text by slot, in cache order: rules, persona (copilot only), methodology per home, pack layers, skills index, memory, the workspace's CLAUDE.md, the caller's brief | BUILT | `HAR/surface.py:68-110`, `:649-668` | CHECKED. Only the rules text ships (fact 3 above) |
-| Slots: one budget each, a slot over budget keeps its head and spills the rest into a skill, never cut silently | BUILT | `HAR/surface.py:15-20`, `:91-104` | CHECKED |
+| System text by slot, in cache order: rules, persona (copilot only), methodology per home, pack layers, skills index, memory, the workspace's CLAUDE.md, the caller's brief | BUILT | `HAR/surface.py:68-110`, `:628-668` | CHECKED. Only the rules text ships (fact 3 above) |
+| Slots: one budget each, a slot over budget keeps its head and spills the rest into a skill, never cut silently | BUILT | `HAR/surface.py:16-20`, `:93-104` | CHECKED |
 | Chat slots derived from the PC's RAM; no turn, tool-call or spend ceiling; a stuck detector instead | BUILT | `HAR/harness.py:9-16`; `ENG/settings.py:15-20`; `ENG/nodes/agent.py:8-12` | CHECKED |
 | Memory on Hindsight | BUILT | package `qmx-memory`; `memory` toolset rows (5) | CHECKED by listing; not studied further |
 
@@ -66,7 +66,7 @@ His words that frame this lens (verbatim transcripts, not summaries):
 | Rows per toolset (scratch parse of `_row(...)` and `@operation(...)`): library 17, workflows 21, ops 13, apps_admin 18, broker_read 7, lab 7, data 4, backtest 4, delegate 4, context 5, memory 5, settings_read 3, router 2, node 2, research 1 | BUILT | scratch regex over `CTL/catalog.py` and every `@operation` | CHECKED; the parse is approximate (it does not read `agent=False`) |
 | Rows that never reach a model (`agent=False`): `settings_read_put`, `ops_sessions_create`, `ops_sessions_append`, `ops_sessions_stream`, `apps_admin_enable`, `apps_admin_call`, the two primary-store rows, and all 7 `lab` rows | BUILT | `CTL/service.py:930-932`, `:1079-1135`, `:1625-1627`, `:1685-1691`; `CTL/catalog.py:600-706` | CHECKED. Enable and settings writes are his clicks by design |
 | Each toolset is its own in-process SDK MCP server; a tool is `mcp__qmx_<toolset>__<op>`; the CLI never sees the control bearer | BUILT | `HAR/tools.py:1-12`; PR 127 | CHECKED |
-| Dynamic toolsets: `app:<id>` per running mini app, `mcp:<server>` per vetted external server, `run:` | BUILT | `HAR/surface.py:442-450`; `CTL/catalog.py:735-770` | CHECKED |
+| Dynamic toolsets: `app:<id>` per running mini app, `mcp:<server>` per vetted external server, `run:` | BUILT | `HAR/surface.py:442-450`; `CTL/catalog.py:735-769` | CHECKED |
 | External MCP servers from `settings.toml mcp_servers`, vetted (an order-shaped tool is refused by name) | BUILT | `HAR/chat.py:1242-1283`; PR 125 "External servers" | CHECKED |
 | Approvals by Effect: READ runs, DOMAIN_WRITE follows `[agents] domain_write`, MANAGE always asks, PROPOSE_MONEY always asks; there is no money-moving effect | BUILT | `HAR/tools.py:63-80` | CHECKED |
 | The core plugin: rules `QMX.md`; skills `build-workflow` (252 lines, full), `inspect-qmx`, `qmx-overview`, `build-mini-app` and `debug-app` (5-line placeholders); sub-agents researcher, data-analyst, app-builder, overnight-builder | BUILT | `PLG/` (`wc -l`) | CHECKED. No skill for units, QML, QMB or markets |
@@ -81,7 +81,7 @@ His words that frame this lens (verbatim transcripts, not summaries):
 | An answer over 20,000 characters | BUILT | `CTL/catalog.py:86-89` | It spills to the Library; head and tail of 2,000 characters come back with the id |
 | The guard's refusal | BUILT | `HAR/guard.py:1-12`; `HAR/launch.py:690-695` | A PreToolUse deny with a reason, before the tool runs |
 | An engine agent step's refusal | BUILT | `ENG/policy.py:15-31` | "is refused: steps of this workflow are read-only ..." or "this step declares only ...", which the agent reads |
-| An ask in an Interactive chat | BUILT | `HAR/harness.py` (`SessionBlock(type="needs_you")` at `:407-411`, `:425-427`) | The operator answers; the model waits |
+| An ask | BUILT | `HAR/chat.py:236-290` (an ask is a block in the chat's log; answers `AllowOnce`, `AllowAlways`, `Reject`, `Answers`; a Background or Child ask goes to its named policy as a `PolicyCall`) | In an Interactive chat the operator answers and the model waits; in a workflow the engine policy answers at once |
 | A `PostToolUse` observer | BUILT | `HAR/launch.py:499-517` | Nothing. Its result is dropped (section 2) |
 
 ### 1.4 His ruling 8: can the copilot do everything an agent can?
@@ -95,7 +95,7 @@ His words that frame this lens (verbatim transcripts, not summaries):
 | **Gap: mini-app operations.** A workflow agent step can declare `app:<id>` and an `app_op` step can run an app job. A copilot chat started through `POST /api/chats` cannot declare toolsets or packs, and its home preset lists core toolsets only, so a running app's operations are cut from its surface | BUILT gap | `HAR/surface.py:579-598` (asked = home preset, kept only if named), `:484-489`; `CTL/catalog.py:66`; `HAR/routes.py:126-133`, `:259-271`; `Harness.set_toolsets` exists at `HAR/harness.py:505-508` but no route calls it (CHECKED `grep set_toolsets`) | INFERRED from checked lines (not run). PR 198's "a chat now gets every running app's operations" holds for a chat that names them. `apps_admin_call` is UI-only (`CTL/service.py:1685-1691`) |
 | **Gap: the Lab.** The 7 Lab rows serve the UI's door only, "on no model's surface"; the Lab copilot pack is "a later slice" | BUILT gap; pack DESIGNED | `CTL/lab.py:22-24`; `T/architecture/lab-and-pods/ARCHITECTURE-SPINE.md:177` (AD-14) | CHECKED. The Lab design promises the copilot "the same permissions as the operator's buttons" (`T/architecture/lab-and-pods/PLAIN-WORDS.md`, "The copilot") |
 | **Gap: nothing checks parity.** No test asserts that every capability a workflow step can reach is on the copilot's surface | MISSING | no such test in `qma-harness/tests/` or `qmx-engine/tests/` (grep for parity terms found none) | INFERRED from absence |
-| His ruling 6 "agents never touch money" | BUILT, by construction | `PLG/QMX.md` "Money is read-only"; `HAR/tools.py:63-80` (no money effect); `ENG`'s `propose_order` saves a proposal and never executes (`TLS/functions.py:238-254`) | CHECKED. His 31 Oct answer: already built in QMA v2 |
+| His ruling 6 "agents never touch money" | BUILT, by construction | `PLG/QMX.md` "Money is read-only"; `HAR/tools.py:63-80` (no money effect); `propose_order` saves a proposal and never executes (`TLS/functions.py:238-254`) | CHECKED. His 31 Oct answer: already built in QMA v2 |
 
 ---
 
@@ -106,12 +106,12 @@ His words that frame this lens (verbatim transcripts, not summaries):
 | Hook point | Tag | Evidence | Can it give the agent feedback? |
 |---|---|---|---|
 | **The guard**, one PreToolUse SDK callback, first on every call, every mode, inside sub-agents; fails closed; 10 s matcher timeout | BUILT | `HAR/guard.py:1-12`; `HAR/launch.py:436-438`, `:690-695` | Yes, as a deny with a reason, before the write. It reads inputs as text (`HAR/guard.py:9-11`) |
-| **Observe-only chat hooks** (PreToolUse, PostToolUse, PreCompact, Stop, SubagentStop) for Background and Child chats | BUILT | `HAR/launch.py:127-160`, `:499-517` | No. The callback's result is dropped, it is cancelled after 5 s (`OBSERVER_TIMEOUT_S`), and an Interactive chat refuses them (`HAR/launch.py:479-497`) |
+| **Observe-only chat hooks** (PreToolUse, PostToolUse, PreCompact, Stop, SubagentStop) for Background and Child chats | BUILT | `HAR/launch.py:127-160`, `:499-517` | No. The callback's result is dropped, it is cancelled after 5 s (`OBSERVER_TIMEOUT_S`), and an Interactive chat refuses them (`HAR/launch.py:478-496`) |
 | **The engine's hook sink** for agent steps: PostToolUse spans, PreCompact memory note, Stop logged | BUILT | `ENG/nodes/agent.py:21-25` | No. Observe-only. A workflow cannot declare its own hook (R42 §1.3, rechecked) |
-| **His own Claude Code hooks**, `settings.toml [claude] hooks`, merged into every launch's settings file; types `command`, `http`, `prompt`, `agent` with `matcher`, `if`, `timeout` | BUILT | `HAR/home.py:236-249` (allowed keys), `:268-276` (`HOOK_KEYS`), `:343-365` (shape check), `:447-483` (merge per launch) | Yes. These are real Claude Code hooks. A PostToolUse hook can append `additionalContext` to the tool result or replace it (CHECKED https://code.claude.com/docs/en/agent-sdk/hooks, "Outputs"). NEVER RUN: QMX ships no such hook |
-| **Per-chat Claude hooks**, `NewChat(claude_hooks=...)`, checked for shape and secrets, merged into that chat's settings | BUILT, unwired | `HAR/harness.py:211`, `:242-245`; `HAR/home.py:472-474` | Yes, same semantics. No production caller sets it: not REST (`HAR/routes.py:259-271`), not the engine (`ENG/ports/harness_adapter.py:262-280`) (CHECKED `grep claude_hooks`) |
+| **His own Claude Code hooks**, `settings.toml [claude] hooks`, merged into every launch's settings file; types `command`, `http`, `prompt`, `agent` with `matcher`, `if`, `timeout` | BUILT | `HAR/home.py:237-249` (allowed keys), `:270-276` (`HOOK_KEYS`), `:343-365` (shape check), `:447-483` (merge per launch) | Yes. These are real Claude Code hooks. A PostToolUse hook can append `additionalContext` to the tool result or replace it (CHECKED https://code.claude.com/docs/en/agent-sdk/hooks, "Outputs"). NEVER RUN: QMX ships no such hook |
+| **Per-chat Claude hooks**, `NewChat(claude_hooks=...)`, checked for shape and secrets, merged into that chat's settings | BUILT, unwired | `HAR/harness.py:211`, `:242-245`; `HAR/home.py:472-474` | Yes, same semantics. No production caller sets it: not REST (`HAR/routes.py:259-271`), not the engine (`ENG/ports/harness_adapter.py:248-283`) (CHECKED `grep claude_hooks`) |
 | **Packs and workflows declaring hooks** | refused by design | `HAR/packs.py:44` `NEVER_WRITTEN = ("hooks", ".mcp.json")`; `qmx app check` refuses them (PR 144) | No |
-| **The ConfigChange hook** QMX adds to every launch blocks settings reloads mid-session | BUILT | `HAR/home.py:429-440`, `:474` | A hook added later applies at the next launch only (`HAR/home.py:878-879`) |
+| **The ConfigChange hook** QMX adds to every launch blocks settings reloads mid-session | BUILT | `HAR/home.py:428-439`, `:474` | A hook added later applies at the next launch only (`HAR/home.py:879`) |
 | **A tool that checks and answers with problems**: `workflows_validate` returns every problem as kind, where, message; the `build-workflow` skill loops fix, save, validate until empty | BUILT | `ENG/definition/validate.py:1-4`; `PLG/skills/build-workflow/SKILL.md:206-209` | Yes, through the tool result. This is the one deterministic author-check loop that agents already use |
 | **The workflow grader node** (deterministic): a script prints `{"verdict": "pass" or "fail", "feedback": ...}` and the node routes on the verdict | BUILT | `ENG/nodes/grader.py:1-4`; `ENG/nodes/script.py:1-25` | Yes, inside a workflow: a loop can route the feedback back to an `llm` or `agent` step |
 | **QML's own checker**: `qml.conformance.layer1.lint_declaration`, pure, typed refusals tagged `layer=1` | BUILT in QML, unused by agents | `qml/src/qml/conformance/layer1.py:1-7`, `:95-103`; `git grep lint_declaration -- qmx-agents` = 0 hits | Not reachable by any agent today. G1 owns QML depth |
@@ -122,7 +122,7 @@ His words that frame this lens (verbatim transcripts, not summaries):
 | Option | What exists to build on | Hard case it handles | Hard case it misses |
 |---|---|---|---|
 | A. A catalog row that checks and answers with problems, like `workflows_validate` | the catalog (`CTL/catalog.py:1-10`), the problem shape (`ENG/definition/validate.py:1-4`), the skill loop (`PLG/skills/build-workflow/SKILL.md:206-209`) | one row reaches the copilot, workflow agents, REST, the UI and the engine node type at once; works on every provider | an agent that never calls it |
-| B. A PostToolUse command hook on Write and Edit of unit files, answering with `additionalContext` | `[claude] hooks` and per-chat `claude_hooks` (2.1); `matcher` and `if` keys exist to scope it to unit paths (`HAR/home.py:268-276`) | the "linter error while writing" he described, in the copilot | engine agent steps cannot write files today (`ENG/policy.py:15-31`), so it never fires in a workflow; a shell write (`python -c ...`) may bypass a Write matcher |
+| B. A PostToolUse command hook on Write and Edit of unit files, answering with `additionalContext` | `[claude] hooks` and per-chat `claude_hooks` (2.1); `matcher` and `if` keys exist to scope it to unit paths (`HAR/home.py:270-276`) | the "linter error while writing" he described, in the copilot | engine agent steps cannot write files today (`ENG/policy.py:15-31`), so it never fires in a workflow; a shell write (`python -c ...`) may bypass a Write matcher |
 | C. A pre-write check in the guard's PreToolUse path (deny with the problems) | the guard runs first on every call (`HAR/guard.py:1-12`) | stops a broken file landing at all | the 10 s gate timeout (`HAR/launch.py:436-438`) blocks the call when a check is slow; the guard is text-based |
 | D. A check at the Library's door for the `unit` kind | governed kinds land as drafts awaiting his yes (`LIB/landing.py:1-18`); kinds carry `schema_version` | catches every path, shell included ("Every chat still has a shell and Python, so an agent can go around the doors", `T/HANDOFF-2026-10-24.md:106`) | feedback arrives at save time, not while writing |
 | E. Script plus grader plus loop inside unit-building workflow templates | the grader node (2.1); `b-build-and-prove` already chains scripts and a grader | deterministic for unattended runs | only inside workflows |
@@ -139,9 +139,9 @@ Evidence on false positives:
 
 | Door | Tag | Evidence | Today's answer |
 |---|---|---|---|
-| Library: save, search, get, versions, link, links, branch, merge, conflicts, resolve, history, blame, mark, eval tasks, publish card (17 rows) | BUILT | `CTL/catalog.py`; PRs 136, 195, 201 | Works. Every `library_*` write by a chat acts on the chat's own agent ref (`HO/door.py:1-12`) |
-| Saving a unit | BUILT, unchecked | `LIB/kinds/unit.schema.json:1-10` (`fields.properties` is `{}`, no `additionalProperties`); governed kinds: binding, bms, book, bot-card, bot, strategy, unit (CHECKED `grep '"class": "governed"'`) | A unit lands as a draft waiting his yes; nothing checks its content (INFERRED from the empty schema) |
-| Market data: instruments, bars, features, calendar | BUILT | `CTL/catalog.py:275-278`; `TLS/functions.py:25-110` | The price door opens by default (PR 207). A tool call cannot pass a study holdout or a run id (PR 207 departures; R42 §1.7) |
+| Library: save, search, get, versions, link, links, branch, merge, conflicts, resolve, history, blame, mark, eval tasks, publish card (17 rows) | BUILT | `CTL/catalog.py`; PRs 136, 195, 201 | Works. A chat's tool calls act as `agent:<session_id>` (`HO/door.py:4-8`). On 24 Oct every `library_*` row still acted as "operator" in blame (`T/HANDOFF-2026-10-24.md`, B "Chat agents cannot save a version onto a named branch"); not rechecked |
+| Saving a unit | BUILT, unchecked | `LIB/kinds/unit.schema.json:7-10` (`fields.properties` is `{}`, no `additionalProperties`); governed kinds: binding, bms, book, bot-card, bot, strategy, unit (CHECKED `grep '"class": "governed"'`) | A unit lands as a draft waiting his yes; nothing checks its content (INFERRED from the empty schema) |
+| Market data: instruments, bars, features, calendar | BUILT | `CTL/catalog.py:280-283`; `TLS/functions.py:25-110` | The price door opens by default (PR 207). A tool call cannot pass a study holdout or a run id (PR 207 departures; R42 §1.7) |
 | QML: `research_qml_run` evaluates a host-registered QML bot on recorded instants, intents never orders | BUILT, dead in production | `CTL/catalog.py:318`; `TLS/functions.py:179-205`; the host builds `DomainContext` with control, library and market only (`HAR/harness.py:419-421`), so `bots` is always empty | Always "Unknown bot_ref" (INFERRED from checked lines) |
 | QML: write, check, compile or new-unit tools | MISSING | no catalog row (CHECKED parse) | |
 | QMB: `backtest_run`, `status`, `results`, `compare` | BUILT, refuses | `CTL/catalog.py:285-317`; `TLS/service.py:295-315` | "Unknown config_ref" (no host registers one), then "This host binds no qmb_backtest door" |
@@ -160,9 +160,9 @@ Evidence on false positives:
 
 | Item | Tag | Evidence | Note |
 |---|---|---|---|
-| Runnable node kinds: trigger, script, rule, loop, join, wait, llm, agent, subworkflow, grader (deterministic), monitor, app_op | BUILT | `ENG/definition/registry.py:51-97`; `ENG/runner.py:700-720`; `ENG/control_door.py:308` | CHECKED |
+| Runnable node kinds: trigger, script, rule, loop, join, wait, llm, agent, subworkflow, grader (deterministic), monitor, app_op | BUILT | `ENG/definition/registry.py:52-97`; `ENG/runner.py:700-720`; `ENG/control_door.py:308` | CHECKED |
 | `library` node kind marked available with no executor | BUILT bug | `ENG/definition/registry.py:94`; no `library` entry at `ENG/runner.py:700-720` | CHECKED. The Lab design leans on it (`T/architecture/lab-and-pods/ARCHITECTURE-SPINE.md:209-211`) |
-| `human_gate`, `rlm`, `claude_workflow`, grader `llm` mode | DESIGNED | `ENG/definition/registry.py:61`, `:80`, `:95`, `:84-91` | CHECKED |
+| `human_gate`, `rlm`, `claude_workflow`, grader `llm` mode | DESIGNED | `ENG/definition/registry.py:62`, `:81`, `:95`, `:84-91` | CHECKED |
 | The format `qmx.workflow/1` as a JSON Schema; validate returns every problem; lint refuses settings writes, trigger creation, token-shaped literals; no limit is required | BUILT | `ENG/definition/schema/qmx.workflow.1.json`; `ENG/definition/validate.py:1-4`; `ENG/definition/lint.py:1-8` | CHECKED |
 | Script steps: `python -I`, JSON on stdin and stdout, allow-listed env, `QMX_NOW` run clock, Library reads and writes only through the host, no run timeout, in the engine's Job object | BUILT | `ENG/nodes/script.py:1-25`, `:490` | CHECKED |
 | Triggers: cron in an IANA zone with cron's DST rules, interval, manual, after, webhook, session, Library event (across machines); installed disabled | BUILT | `ENG/triggers/cron.py:1-7`; PR 160; R42 §1.2 | CHECKED |
@@ -175,7 +175,7 @@ Evidence on false positives:
 | Editing a workflow in the UI | DESIGNED | `T/UI-HANDOFF.md` (Workflows shelf); the Lab's "graph and code, two views of one draft" (`T/architecture/lab-and-pods/PLAIN-WORDS.md`) | Today only agents edit, through drafts and validate |
 | Templates reading the MIS's logs | MISSING | no MIS log, no catalog row (section 3) | His 31 Oct ruling 12: templates read the MIS's logs, not the model |
 | The unit-shaped templates (`b-build-and-prove`, `l1-idea-to-first-result`, `d3-iterate-against-qmb`, `d4-variant-comparison`, `l4-overnight-lab-loop`, `rs3-source-to-lab-test`, `d6-ml-training-run`) | BUILT as drafts | `meta.needs` includes `qmb-door` | They wait on the door; PR 204 frees none (R42 §1.8) |
-| `b-build-and-prove` seals a holdout per family and fixes the split (first 60 % in-sample, next 20 % in three folds, last 20 % holdout, minimum days per window) | BUILT, conflicts | `ENG/templates/b-build-and-prove/scripts/spec.py:1-11`, `:19-20` | Conflicts with "a holdout is his choice per study, off by default" (PR 207). INFERRED conflict |
+| `b-build-and-prove` seals a holdout per family and fixes the split (first 60 % in-sample, next 20 % in three folds, last 20 % holdout, minimum days per window) | BUILT, conflicts | `ENG/templates/b-build-and-prove/scripts/spec.py:1-11`, `:18-19` | Conflicts with "a holdout is his choice per study, off by default" (PR 207). INFERRED conflict |
 
 ---
 
@@ -185,12 +185,12 @@ Evidence on false positives:
 
 | Item | Tag | Evidence | Note |
 |---|---|---|---|
-| A mini app is an immutable image plus an `app.toml` manifest: id, semver version, risk (`shows`, `runs`, `money`), kind (screens, headless, both), entrypoints (an MCP server, jobs, agents, workflows, a UI), capabilities (network allow-list, secrets by key-store name, data reads) | BUILT | `APPS/manifest.py:1-7`, `:67-79`, `:170-187` | CHECKED |
-| `[operations]`: the only way a chat or another app reaches it; each has input and output JSON Schemas, an approval, a reversibility, state, and what it returns | BUILT | `APPS/manifest.py:129-141`; `CTL/catalog.py:735-770` | CHECKED |
-| `[provides]` and `[feeds]`: contracts at its seams, each a JSON Schema with an optional `stale_after`; `[profiles]` for a profile document | BUILT | `APPS/manifest.py:144-164` | CHECKED. Example: `macro-daily-bias` provides `bias` with `stale_after = 129600` (`examples/apps/macro-daily-bias/app.toml`) |
-| The landing is the event: an app's output is a Library artifact under a `provides` name; no event list | BUILT | `APPS/manifest.py:1-7`, `:205-212` | CHECKED |
-| `[suggested_trigger]`: the engine trigger his enable creates, interval or cron with a zone | BUILT | `APPS/manifest.py:112-126` | CHECKED |
-| Runtime: one host owns each app's volume and long-lived MCP connection; an app lives on one machine; a move is a snapshot plus lease handover, with no remote restore | BUILT | `APPS/supervisor.py:1`, `:527-533`; PR 198 | CHECKED |
+| A mini app is an immutable image plus an `app.toml` manifest: id, semver version, risk (`shows`, `runs`, `money`), kind (screens, headless, both), entrypoints (an MCP server, jobs, agents, workflows, a UI), capabilities (network allow-list, secrets by key-store name, data reads) | BUILT | `APPS/manifest.py:1-7`, `:67-79`, `:169-187` | CHECKED |
+| `[operations]`: the only way a chat or another app reaches it; each has input and output JSON Schemas, an approval, a reversibility, state, and what it returns | BUILT | `APPS/manifest.py:132-145`; `CTL/catalog.py:735-769` | CHECKED |
+| `[provides]` and `[feeds]`: contracts at its seams, each a JSON Schema with an optional `stale_after`; `[profiles]` for a profile document | BUILT | `APPS/manifest.py:148-167`, `:183-186` | CHECKED. Example: `macro-daily-bias` provides `bias` with `stale_after = 129600` (`examples/apps/macro-daily-bias/app.toml`) |
+| The landing is the event: an app's output is a Library artifact under a `provides` name; no event list | BUILT | `APPS/manifest.py:1-7`, `:196-205` | CHECKED |
+| `[suggested_trigger]`: the engine trigger his enable creates, interval or cron with a zone | BUILT | `APPS/manifest.py:113-129` | CHECKED |
+| Runtime: one host owns each app's volume and long-lived MCP connection; an app lives on one machine; a move is a snapshot plus lease handover, with no remote restore | BUILT | `APPS/supervisor.py:1`, `:527-533`, `:1064`; PR 198 | CHECKED |
 | Isolation on Windows by Job object (memory, CPU rate), a Docker tier elsewhere | BUILT | `APPS/windows_job.py:1-25`; `APPS/supervisor.py:649-665`; `APPS/docker.py` | CHECKED |
 | A breaker trips an app after `max_errors` (default 3) errors or a 10 s heartbeat gap | BUILT | `APPS/manifest.py:108-110`; `APPS/supervisor.py:817-828` | CHECKED |
 | `isolation.memory_mb` is capped at 16,384 | BUILT | `APPS/manifest.py:92` | CHECKED. A QMX-invented cap (standing order 9) |
@@ -243,9 +243,9 @@ What the code shows (CHECKED parts, INFERRED summary):
 | Store versions: each store opens, upgrades after a copy, or refuses by name; the engine ledger moved to version (5, 3) in PR 220 | BUILT | PR 213; PR 220 body | CHECKED |
 | Generated client types for the UI (OpenAPI to TypeScript) | MISSING | `git grep -i openapi -- apps` = none; the UI on `engine/base` is a client of the retired wire | CHECKED |
 | How the UI calls the backend | DESIGNED | REST and SSE with the bearer (`qmx-control/README.md:13-17`); `T/UI-HANDOFF.md` | Not wired (fact 2) |
-| External door, observer tokens: an outside agent reads the `ops` rows and the doctor and leaves one note; tokens last 30 days | BUILT | `CTL/catalog.py:67-79`; `CTL/service.py:89`, `:530`; `HO/door.py:14-22` | CHECKED |
+| External door, observer tokens: an outside agent reads the `ops` rows and the doctor and leaves one note; tokens last 30 days | BUILT | `CTL/catalog.py:69-79`; `CTL/service.py:89`, `:530`; `HO/door.py:16-24` | CHECKED |
 | External door, webhooks: `POST /api/hooks/{trigger_id}`, deduplicated by a delivery header | BUILT | `HO/host.py:1370-1393` | No sender signature check (`T/HANDOFF-2026-10-24.md`, B "Webhooks have no sender signature check") |
-| Between QMX hosts: run passes (a remote step reads data only on `POST /api/data/read`) and host passes | BUILT | `HO/door.py:24-35` | A pass minted on the PC fails at the server's door (`T/HANDOFF-2026-10-24.md`, B "Cross-machine run passes"); recheck |
+| Between QMX hosts: run passes (a remote step reads data only on `POST /api/data/read`) and host passes | BUILT | `HO/door.py:26-36` | A pass minted on the PC fails at the server's door (`T/HANDOFF-2026-10-24.md`, B "Cross-machine run passes"); recheck |
 | Monitoring door for agents: OpenObserve's MCP door with an agent login | BUILT | `HO/connect_logs.py:10`, `:53` | |
 | Broker contracts: cTrader's Open API protocol descriptor ships inside QMX; CCXT 4.5.85 | BUILT | `qmx-broker/src/qmx_broker/protocol/openapi-91.pb`; PR 224 | G3 owns the detail |
 | Standards in use: OpenAPI (FastAPI), MCP, SSE, OTLP over HTTP with JSON bodies and pinned GenAI conventions, JSON Schema 2020-12, IANA zones, ISO-8601 UTC text, five-field cron, protobuf for cTrader | BUILT | rows above; `ENG/telemetry.py:1-20` | CHECKED |
@@ -258,9 +258,9 @@ What the code shows (CHECKED parts, INFERRED summary):
 |---|---|---|---|
 | On This PC: one `qmx-host` per QMX folder holding the harness, the engine and its scheduler, the control service, the Library store (single writer), the apps supervisor, the router thread and the relay; an OS lock stops two hosts | BUILT; NEVER RUN | `HO/host.py:1-25` | CHECKED |
 | The PC host listens on loopback; a server-role host listens on its tailnet address | BUILT | `HO/host.py:254` | CHECKED |
-| Finding the QMX folder: flag, `QMX_HOME`, a pointer under `%APPDATA%\QMX`, the default folder, a scan of fixed drives; nothing makes a folder he did not ask for | BUILT; NEVER RUN | PR 209; `qmx-home/src/qmx_home/__init__.py:290-330`, `:734-741` | CHECKED |
+| Finding the QMX folder: flag, `QMX_HOME`, a pointer under `%APPDATA%\QMX`, the default folder, a scan of fixed drives; nothing makes a folder he did not ask for | BUILT; NEVER RUN | PR 209; `qmx-home/src/qmx_home/__init__.py:292-330`, `:734-741` | CHECKED |
 | The folder tree (data, keys, backups, cache, logs), store versions, the first-start card (new, open, restore, bring in the old data) | BUILT; NEVER RUN | PRs 210, 213, 214, 219, 228, 234 | CHECKED (PR bodies) |
-| Places: `pc` is built in; any other is a name he types | BUILT | `ENG/settings.py:26-28`, `:44-75`; PR 212 | CHECKED |
+| Places: `pc` is built in; any other is a name he types | BUILT | `ENG/settings.py:28-29`, `:44-75`; PR 212 | CHECKED |
 | A server is the same `qmx-host` in the server role (workflow steps, Library, Hub), set up from the connect dialog: his cards first, then checked steps that are safe to rerun | BUILT; NEVER RUN on a kept server | PR 232; R42 §2.2 | WU9's lanes ran on his server, which was then restored to empty (R42) |
 | Modal and E2B as places | BUILT; NEVER RUN against his accounts | PR 232 | |
 | A trading-server kind in the connect dialog | MISSING | `HO/connect.py` `KINDS` (R42 §2.1, rechecked by file presence) | G3 owns |
@@ -273,7 +273,7 @@ What the code shows (CHECKED parts, INFERRED summary):
 
 | Item | Tag | Evidence | Note |
 |---|---|---|---|
-| One setting for all monitoring: `[telemetry] send_to` is `off` (default), `this-pc`, or a place name; no sender holds an address | BUILT | `qma-harness/src/qma/telemetry.py:1-12`, `:23-29`, `:38-45` | CHECKED |
+| One setting for all monitoring: `[telemetry] send_to` is `off` (default), `this-pc`, or a place name; no sender holds an address | BUILT | `qma-harness/src/qma/telemetry.py:1-12`, `:25-29`, `:39-45` | CHECKED |
 | OpenObserve on This PC: open-source v1.1.2 for windows-amd64, fetched into `cache/openobserve/` and checked against its published sha256 before it runs | BUILT; NEVER RUN | `HO/connect_logs.py:1-12`, `:76-90` | CHECKED. The pin is filled now (R42 saw it empty) |
 | OpenObserve on a server with a collector and an on-disk queue | BUILT; NEVER RUN | `qmx-host/deploy/openobserve.service`, `otelcol.service`, `otelcol.yaml` | CHECKED (files present) |
 | The engine's exporter: spans to OTLP traces, heartbeats to gauges, ledger events and log lines to OTLP logs; an in-memory batch whose drops are counted; the four records stay the source of truth | BUILT | `ENG/telemetry.py:1-20` | CHECKED |
@@ -388,7 +388,7 @@ Newest first. "Merged" = into `engine/base`. Bodies read in full: 92, 125, 127, 
 | The grader node and loops | Deterministic pass or fail with feedback inside unattended workflows | `ENG/nodes/grader.py` |
 | Governed kinds landing as drafts | "Only he promotes" with no new gate | `LIB/landing.py:1-18` |
 | Library kinds with versioned schemas, and store versions | The unit can be a kind with a real schema; its store follows open, upgrade or refuse | `LIB/kinds/`; PR 213 |
-| The mini-app manifest's contracts (`provides`, `feeds`, `stale_after`, operation schemas) | A ready contract style for what a unit publishes and reads | `APPS/manifest.py:129-164` |
+| The mini-app manifest's contracts (`provides`, `feeds`, `stale_after`, operation schemas) | A ready contract style for what a unit publishes and reads | `APPS/manifest.py:132-167` |
 | QMF's time types | UTC instants, calendar identity, session windows and a replay clock already exist | `chrono.py` |
 | `QMX_NOW` for scripts | A unit run in a workflow sees the run clock | `ENG/nodes/script.py:490` |
 | Places and the attempt record; the connect dialog's step runner | Work runs on This PC by default and records where it ran | PR 212; PR 232 |
@@ -399,9 +399,9 @@ Newest first. "Merged" = into `engine/base`. Bodies read in full: 92, 125, 127, 
 
 | What | Why | Where |
 |---|---|---|
-| Wire per-chat checks: something must set `claude_hooks` (or a new hook kind that returns feedback) for chats that write units | Today only observers exist for programs, and they cannot answer | `HAR/launch.py:127-160`, `:499-517`; `HAR/routes.py:259-271`; `ENG/ports/harness_adapter.py:262-280` |
+| Wire per-chat checks: something must set `claude_hooks` (or a new hook kind that returns feedback) for chats that write units | Today only observers exist for programs, and they cannot answer | `HAR/launch.py:127-160`, `:499-517`; `HAR/routes.py:259-271`; `ENG/ports/harness_adapter.py:248-283` |
 | Give agents a QML door: check, compile and run a unit, with a host that actually registers bots and backtest configurations | `research_qml_run` and `backtest_run` exist and always refuse | `HAR/harness.py:419-421`; `TLS/service.py:295-315` |
-| Give the `unit` kind a real schema | Anything lands today | `LIB/kinds/unit.schema.json:6-9` |
+| Give the `unit` kind a real schema | Anything lands today | `LIB/kinds/unit.schema.json:7-10` |
 | Close the copilot gaps: app operations on the default copilot, Lab rows on a model surface, a test that asserts parity | Ruling 8 holds only for core toolsets | `HAR/surface.py:484-489`; `CTL/lab.py:22-24` |
 | Rebase or replace PR 204 | It conflicts with the merged stack and runs no trades | section 3 |
 | An MIS log that agents and templates can read | His ruling 12; nothing exists on the agent side | section 3 |
@@ -415,11 +415,11 @@ Newest first. "Merged" = into `engine/base`. Bodies read in full: 92, 125, 127, 
 2. **Observer hooks look like feedback hooks and are not.** Their return value is dropped and they are cancelled after 5 s (`HAR/launch.py:499-517`). Feedback needs a settings hook or a new hook kind.
 3. **Workflow agent steps cannot write files or run commands** (`ENG/policy.py:15-31`). A PostToolUse-on-Write check never fires inside a workflow; route unit authoring there through scripts, tool rows or the Library.
 4. **Chats keep a shell.** A check bound only to Write and Edit can be bypassed by `python -c`; a check at the Library door catches every path (`T/HANDOFF-2026-10-24.md:106`).
-5. **Hooks apply at the next launch.** The ConfigChange hook blocks reloads mid-session (`HAR/home.py:429-440`, `:878-879`).
+5. **Hooks apply at the next launch.** The ConfigChange hook blocks reloads mid-session (`HAR/home.py:428-439`, `:879`).
 6. **A 10 s gate.** A slow check inside PreToolUse blocks the tool call (`HAR/launch.py:436-438`).
 7. **`POST /api/chats` cannot set a home, toolsets or packs** (`HAR/routes.py:126-133`), so a "unit home" copilot needs a route change.
 8. **A mini app's breaker stops it on its own after three errors** (`APPS/supervisor.py:817-828`), and `memory_mb` is capped at 16,384 (`APPS/manifest.py:92`). Both clash with standing orders 7 and 9 if a unit lives in an app.
-9. **`b-build-and-prove` hard-codes a family holdout and a 60/20/20 split** (`spec.py:1-11`, `:19-20`), against holdouts being his choice per study.
+9. **`b-build-and-prove` hard-codes a family holdout and a 60/20/20 split** (`spec.py:1-11`, `:18-19`), against holdouts being his choice per study.
 10. **Two monitoring stacks.** QMN ships Grafana, Loki and Prometheus; QMX ships OpenObserve. A unit's logs need one home.
 11. **Zone defaults disagree.** Templates use Europe/London; the build skill suggests Europe/Berlin; three host paths use the machine's local zone.
 12. **PR 204 touches `HO/host.py` and `ENG/control_door.py`**, which the merged stack also changed; a unit build that edits them will conflict with it.
