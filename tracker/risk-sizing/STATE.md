@@ -95,6 +95,12 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 49. **The workflow engine is "my baby."** Understand it fully before changing it. Every improvement rests on the ideas and reasons of "QMA V2 Workflow System Design 2" (memory, deterministic and non-deterministic steps, the Hermes and n8n ideas, his own ideas): surgical in its ideas, not only in its code; nothing appended without a core reason from that session. The skipped agent-step file writes (probe P-PERM, 18 Oct) is one of the fixes, maybe a simple one. Script steps writing files is intentional.
 50. **Agents and the MIS:** agents come in through the slow lane only (ruling 44): an agent reads the market its own way next to the MIS's reading, and where they disagree, the examples go to him to improve the MIS. Agents never feed the fast lane.
 
+51. **The Library is the centre.** It is QMX's central store, built in the wrap-up session. Everything a node produces comes back to it: the MIS's readings and logs, and the trading journals too, not only the MIS. Most of it is already stored; where something is missing (for example the MIS's logs), add it as a simple addition. The Library "was hard to pull off, so don't ruin its core."
+52. **Keep QMX's few errors few.** The wrap-up session ran many tests so QMX works out of the box with very few errors. Every change keeps the shipped tests green; the build plan says so in every PR.
+53. **Two babies, handled with care: the workflow engine and the mini-app core.** Understand the intent of how each was built before touching it. Mini apps already log for themselves; the copilot and workflows can already read them; since QMX now builds its own mini apps, the work is mostly connecting them.
+54. **Methodology comes later,** after this session and the risk session; it is mostly for the copilot as his daily driver. Out of scope here.
+55. **The MIS: a core to build on, enhanced later in the Lab.** The Lab already has ML; training and MIS research happen there later. Now: a core that needs no training (or variants as the lead sees fit), with room for trained models. His earlier visions of the MIS are seeds and key (levels of specificity; an MIS that works on one market alone; the 29-30 Oct discussions), more than the research. Keep the MIS research handy and turn it into an artifact he can come back to, so it is not forgotten (owed).
+
 **The lead's answer to ruling 13:** the dictionary's form (schema, checks, authoring tools) is built by the orchestrator's builders as code. Its first content wave (porting the 239 entries into the new form, then new families beyond forex) is a packet in the same build, done by builders with a grounding brief and no cap. Later growth goes through the same authoring door that the copilot and QMA agents use, checked by the same scripts.
 
 **The midday program (lead):**
@@ -404,6 +410,8 @@ The operator ruled that the unit work owns QMB. Source: `../qma-v2/QMB-BACKTEST-
 - **decisions.md** (workroom) still carries the 20 Oct "MIS = blocks bots read" lean, which `seeds.md` reversed.
 
 ## Owed to the operator (explain in plain words, at his laptop)
+
+- (31 Oct) An artifact page on the MIS: the research (22, 23, 37, the funnel5 rounds), his visions of it, and what the build ships, so he can come back to it (midday ruling 55).
 
 - "Tighten, never loosen belongs on the drawdown floor, not on the edge estimate."
 - "The bot never sizes vs the unit sizes itself": clear the ambiguity given correction 2.
