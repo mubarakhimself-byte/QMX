@@ -56,6 +56,10 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 19. **Edge cases build the foundation.** Catalogue the edge cases before the architecture, judge the architecture versions against them, and review more than once, so the simplest version that handles them wins. His picture: white-label software, Shopify or Wix: a solid core that others build their own things on. Learn from how such platforms keep their core small and their extension points stable.
 20. **Questions to him go through the question tool** (it pops up where he sees it); otherwise he is watching, not steering.
 
+21. **He directs; the lead decides.** His guidance is a seed the lead may refuse with a reason ("I'm directing, not telling you what to do").
+22. **QMB gets its own pass and its own depth.** He spoke about it in the 20-28 Oct transcript (including the old QMX's backtesting system) and again on 30 Oct. Build it as a foundation that can be improved; he must be able to build a new QMB version, improve it, or run several variants.
+23. **Extensible by design: "most things can actually become mini apps."** Mini apps already have a core foundation. Every part is judged as core or as a mini app on that core, with defaults out of the box; QMB is the first candidate.
+
 **The lead's answer to ruling 13:** the dictionary's form (schema, checks, authoring tools) is built by the orchestrator's builders as code. Its first content wave (porting the 239 entries into the new form, then new families beyond forex) is a packet in the same build, done by builders with a grounding brief and no cap. Later growth goes through the same authoring door that the copilot and QMA agents use, checked by the same scripts.
 
 **The midday program (lead):**
@@ -65,7 +69,7 @@ Verbatim: `operator/transcript-2026-10-30-to-31.md` (his message at 2026-10-31T0
 4. bmad-architecture per part, four grouped agents.
 5. One review (bmad-review lenses, blast radius) and one fix round.
 6. The build plan (checked), the orchestrator prompt and the builder prompt. Folder: `architecture/`.
-Amended after rulings 17-19: an edge-case catalogue runs beside the funnel (step 2); the versions in step 3 are judged against it; a quick review of the Level 0 spine runs before step 4; the full review in step 5 checks every part against the catalogue.
+Amended after rulings 17-23: QMB gets its own Level 1 agent (five Level 1 agents in all); an edge-case catalogue runs beside the funnel (step 2); the versions in step 3 are judged against it; a quick review of the Level 0 spine runs before step 4; the full review in step 5 checks every part against the catalogue.
 
 ## Operator round 2026-10-31 morning: the run was sloppy in the technical lens; layer the architecture (binding; outranks the 43 convergence)
 
