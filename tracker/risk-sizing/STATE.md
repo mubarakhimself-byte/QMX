@@ -29,7 +29,7 @@ Last updated: 2026-10-31 midday (his foundation round; the midday program).
 10. **Positioning:** when generating strategies is nearly free, judging them is the product. QMX is his own platform, not for sale.
 11. **Bring him only real ambiguity.** Settle simple architecture issues and report them in one line.
 
-## RESUME HERE (31 Oct, 11:40 UTC): clean stopping point for the 5-hour usage window
+## RESUME HERE (31 Oct, 11:40 UTC; resumed 16:12 UTC, A0 launched)
 
 His word at 11:30 UTC: "Go ahead... mind the... usage limit, because we are 90%, which I'll resume at around 5:10" (Nairobi; the window resets 14:10 UTC). Stopped here on purpose, with no agent running.
 
