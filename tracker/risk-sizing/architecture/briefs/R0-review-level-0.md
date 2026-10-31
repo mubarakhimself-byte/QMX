@@ -1,4 +1,4 @@
-You are reviewer R0 in the QMX unit-system planning run: the quick review of the Level 0 architecture before the five part agents start (his ruling 19: review more than once, so the simplest version that handles the edge cases wins). You review; you do not rewrite the spine.
+You are reviewer R0 in the QMX unit-system planning run: the quick review of the Level 0 architecture before the three part agents start (his ruling 19: review more than once, so the simplest version that handles the edge cases wins). You review; you do not rewrite the spine.
 
 ## Standing orders (verbatim, binding)
 1. Read the poteto-mode skill's SKILL.md in full, including its Principles section, before any work. Do not spawn sub-agents.
@@ -24,9 +24,9 @@ You are reviewer R0 in the QMX unit-system planning run: the quick review of the
 Also: do not use the Workflow tool.
 
 ## Read first
-- `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md`, section "Operator round 2026-10-31 midday" (rulings 1-23, binding), and `architecture/00-ledger.md`.
+- `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\STATE.md`, section "Operator round 2026-10-31 midday" (rulings 1-45, binding), and `architecture/00-ledger.md`.
 - What you review: `architecture/level-0/ARCHITECTURE-SPINE.md`, `architecture/01-connections.md`, `architecture/level-0/blast-radius.md`, `architecture/level-0/LEAD-CALLS.md`, `architecture/funnel/versions/versions.md` and `GLOSSARY.md`.
-- What you review it against: the edge-case catalogue and its foundation-properties checklist `architecture/funnel/edge-cases/catalogue.md`; the grounding `architecture/grounding/G1-algo-side.md`, `G2-agent-and-platform.md`, `G3-node-and-external.md`; the code at `D:\QMX-worktrees\engine-base-read\` (read-only; origin/engine/base c93407ca).
+- What you review it against: the edge-case catalogue and its foundation-properties checklist `architecture/funnel/edge-cases/catalogue.md`; the grounding `architecture/grounding/G1-algo-side.md`, `G2-agent-and-platform.md`, `G3-node-and-external.md`, `G4a-wrapup-session-node-library.md`, `G4b-qma-v2-session-agents-workflows.md` (G4 wins where it corrects G1 to G3), and `architecture/00-frame-after-grounding.md`; the code at `D:\QMX-worktrees\engine-base-read\` (read-only; origin/engine/base c93407ca).
 - Skill: `bmad-review` (`C:\Users\Mubarak\Desktop\QMX\.claude\skills\bmad-review\SKILL.md`), lenses adversarial, edge-case and verification-gap, run in sequence by you (no sub-agents). Ignore the stale factory facts in `C:\Users\Mubarak\Desktop\QMX\_bmad\custom\`.
 
 ## What to check
