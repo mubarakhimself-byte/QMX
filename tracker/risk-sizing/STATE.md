@@ -39,7 +39,7 @@ He saw the "next" list change between messages. This is the single list; every m
 
 **Night stop (his word, 31 Oct about 18:05 UTC):** his generator goes off; let the three Level 1 agents finish, then stop fully. No R1 tonight. Resume tomorrow morning.
 
-**Running at the stop:** the three Level 1 agents, launched 17:59 UTC, writing `architecture/parts/A-qml-dictionary-unit/`, `B-qmb-journals-workflows/`, `C-node-mis-external/`.
+**Running at the stop:** the three Level 1 agents, launched 17:59 UTC (part C finished and committed at 18:56 UTC), writing `architecture/parts/A-qml-dictionary-unit/`, `B-qmb-journals-workflows/`, `C-node-mis-external/`.
 
 **How to resume (a fresh session reads this):**
 1. Check each part folder: it is finished only if it holds `ARCHITECTURE-SPINE.md` that lints to 0 (`bmad-architecture`'s `lint_spine.py`), `CONTRACTS.md`, `BUILD-SLICES.md`, `UI-NEEDS.md`, `RISK-SIZING-POINTS.md` and `LEAD-CALLS.md`, and its commit is on `plan/unit-system`.
