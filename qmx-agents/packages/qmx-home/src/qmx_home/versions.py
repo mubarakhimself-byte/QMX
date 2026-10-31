@@ -33,7 +33,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Final, Literal, cast
 
-from qmx_home import LABEL, TREE, Label, Layout
+from qmx_home import LABEL, TREE, Label, Layout, restore_hint
 from qmx_home.stores import APPLICATION_ID, STORES, Store, Version
 
 FLOOR_BYTES: Final = 1 << 30
@@ -423,8 +423,7 @@ def _unreadable_entry(store: Store, layout: Layout) -> str:
     return (
         f"This QMX folder's label {layout.label} says what version the {store.words} is in a "
         "way this QMX cannot read, so it may be newer than this QMX. Install the QMX that last "
-        f"wrote this folder, or restore the copy taken before the upgrade from {layout.backups}."
-        f"{after}"
+        f"wrote this folder, or {restore_hint(layout.root)}.{after}"
     )
 
 
@@ -628,13 +627,12 @@ def _judge(store: Store, found: Found | None, path: Path | None) -> Found | None
 def _too_new(store: Store, found: Version, layout: Layout | None) -> str:
     label = None if layout is None else _label_of(layout)
     by = "" if label is None else f" by QMX {label.last_written_by}"
-    back = "" if layout is None else f" from {layout.backups}"
     after = f" The {store.words} opens read-only until then." if store.read_only else ""
     return (
         f"This QMX folder's {store.words} was written{by} as {store.words} version "
         f"{found.version}. This QMX reads {store.words} version {store.release.version}, and this "
         f"one needs a QMX that reads version {found.min_reader} or newer. Install that QMX, or "
-        f"restore the copy taken before the upgrade{back}.{after}"
+        f"{restore_hint(None if layout is None else layout.root)}.{after}"
     )
 
 

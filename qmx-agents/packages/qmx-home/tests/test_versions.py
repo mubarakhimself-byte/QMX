@@ -99,8 +99,9 @@ def test_a_store_whose_min_reader_is_raised_is_refused_by_name_and_not_written(
     assert str(refused.value) == (
         "This QMX folder's demo ledger was written by QMX 0.1.0 as demo ledger version 7. This "
         "QMX reads demo ledger version 3, and this one needs a QMX that reads version 5 or "
-        f"newer. Install that QMX, or restore the copy taken before the upgrade from "
-        f"{folder.backups}."
+        "newer. Install that QMX, or restore a copy from before the upgrade, with Restore from a "
+        f"backup on the start screen or python -m qmx_host restore --home {folder.root} --from "
+        f"{folder.backups / 'quick'}."
     )
     assert path.read_bytes() == before
 
@@ -254,8 +255,9 @@ def test_check_open_names_each_held_back_store_and_rewrites_the_label_from_the_f
         "read-only",
         "This QMX folder's Library was written by QMX 0.3.0 as Library version 3. This QMX "
         "reads Library version 1, and this one needs a QMX that reads version 2 or newer. "
-        f"Install that QMX, or restore the copy taken before the upgrade from {folder.backups}. "
-        "The Library opens read-only until then.",
+        "Install that QMX, or restore a copy from before the upgrade, with Restore from a backup "
+        f"on the start screen or python -m qmx_host restore --home {folder.root} --from "
+        f"{folder.backups / 'quick'}. The Library opens read-only until then.",
     )
     assert lines["engine"] == ("new", "run ledger: made at version 5 when first opened")
     assert [verdict.store for verdict in opening.held_back] == ["library"]
@@ -283,7 +285,9 @@ def test_a_newer_folder_opens_when_it_allows_this_release_and_is_refused_by_name
     assert str(refused.value) == (
         f"{folder.root} was written by QMX 0.4.0 (folder format 3). This QMX reads folder "
         "format 2, and this folder needs a QMX that reads format 3 or newer. Install that QMX, "
-        f"or restore the copy taken before the upgrade from {folder.root / 'backups'}"
+        "or restore a copy from before the upgrade, with Restore from a backup on the start "
+        f"screen or python -m qmx_host restore --home {folder.root} --from "
+        f"{folder.root / 'backups' / 'quick'}"
     )
 
 

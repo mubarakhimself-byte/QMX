@@ -30,6 +30,7 @@ from qmx_home.stores import STORES
 
 __all__ = [
     "LABEL",
+    "RESTORE_UNFINISHED",
     "TREE",
     "Label",
     "Layout",
@@ -37,6 +38,7 @@ __all__ = [
     "NoQmxFolder",
     "pointer_file",
     "resolve",
+    "restore_hint",
     "step_to_tree",
 ]
 
@@ -57,6 +59,10 @@ FIXED_DRIVE: Final = 3
 JOURNAL: Final = "layout-step.json"
 """The layout step's own plan, written before its first move so a stopped step resumes the same
 moves instead of guessing which `logs` folder is the old one."""
+RESTORE_UNFINISHED: Final = "migration/restore-unfinished.txt"
+"""Inside `data/` of a folder the first start made for a restore, until the restore finished: the
+folder holds nothing of his, so the card offers the restore again and `serve` treats it as a
+first start due. The finish sets it aside with the rest of that empty `data/`."""
 
 FLAT_TO_TREE: Final = (
     (".qmx/vault.key", "keys/vault.key"),
@@ -343,7 +349,7 @@ def _opened(root: Path) -> Layout:
             f"{root} was written by QMX {label.last_written_by} (folder format "
             f"{label.format_version}). This QMX reads folder format {TREE}, and this folder "
             f"needs a QMX that reads format {label.reader_floor} or newer. Install that QMX, or "
-            f"restore the copy taken before the upgrade from {root / 'backups'}",
+            f"{restore_hint(root)}",
             folder=root,
         )
     if label is None and not any(root.iterdir()):
@@ -360,6 +366,19 @@ def _opened(root: Path) -> Layout:
     raise NoQmxFolder(
         f"{root} is a QMX folder of format {label.format_version}, which this QMX does not read",
         folder=root,
+    )
+
+
+def restore_hint(root: Path | None) -> str:
+    """The way back that every refusal of a newer folder or store names: a copy from before the
+    upgrade, restored from the start screen or the command line (the folder's quick undo holds
+    the copy `serve` takes before each upgrade)."""
+    command = "python -m qmx_host restore"
+    if root is not None:
+        command += f" --home {root} --from {root / 'backups' / 'quick'}"
+    return (
+        "restore a copy from before the upgrade, with Restore from a backup on the start screen "
+        f"or {command}"
     )
 
 

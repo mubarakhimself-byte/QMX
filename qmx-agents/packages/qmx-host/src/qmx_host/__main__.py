@@ -20,15 +20,26 @@ A command pointed at his old folder, or given no folder while one sits at `~/.qm
 bring-in; `serve` and `start` refuse a folder holding an unswitched `library.db` or an unfinished
 bring-in.
 
-Before `serve` or `start`, every store of the folder is read against this release (design 62 B2):
-a store opened read-only is named on stderr, and a refused one stops the start with its name and
-the version it needs.
+`restore --home <folder> --from <backup place> [--copy <date>] [--yes] [--replace] [--create]`
+lists the place's copies when `--copy` is left out, prints what the copy replaces and changes
+nothing without `--yes`, and with it restores the copy into the folder (a new one only with
+`--create`). It exits 0 when it listed, showed or restored, 1 when a host serves the folder, and 2
+when refused.
+
+Before `serve` or `start`, a restore staged for the folder is finished (`qmx_home.backup.restore`),
+before any store opens; one that cannot finish stops the start with its line and stays staged.
+Then every store of the folder is read against this release (design 62 B2): a store opened
+read-only is named on stderr, and a refused one stops the start with its name and the version it
+needs. When a store upgrades, `serve` first takes a quick copy of the whole folder tagged
+`before-upgrade` (design 62 B3); a copy that cannot be made is one line on stderr and the start
+goes on.
 
 Exit codes the desktop app branches on (loose strings P1, Appendix E): `serve`, `start`, `status`
 and `stop` exit 3 when a first start is due (no QMX folder yet, only his old data, or an
-unfinished bring-in) and 2 for a folder found and refused. `first-start --serve` exits 4 when its
-port is taken, 0 after a handover with the handover line last on stdout, and 1 when it stopped
-with no handover.
+unfinished bring-in; `serve` and `start` also for a folder whose restore did not finish) and 2 for
+a folder found and refused or a staged restore that cannot finish. `first-start --serve` exits 4
+when its port is taken, 0 after a handover with the handover line last on stdout, and 1 when it
+stopped with no handover.
 
 Order is the invariant: parse the arguments, read the keep list with the standard library, scrub
 this process's environment, and only then import the harness, because the SDK reads `os.environ`
@@ -45,11 +56,14 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from qma.boot import read_keep_names, scrub_process_env
-from qmx_home import Layout, NoQmxFolder, resolve
+from qmx_home import RESTORE_UNFINISHED, Layout, NoQmxFolder, resolve
 from qmx_home.versions import check_open
+
+if TYPE_CHECKING:
+    from qmx_host.first_start import Places
 
 FIRST_START = ("first-start", "new", "open", "bring-in", "restore")
 FIRST_START_DUE = 3
@@ -86,6 +100,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--ui-origin", default="http://127.0.0.1:5173")
     parser.add_argument("--target", default=None, help="backup: only this backup place")
+    parser.add_argument(
+        "--from", dest="source", type=Path, default=None, help="restore: the backup place"
+    )
+    parser.add_argument("--copy", default=None, help="restore: the copy's date, as listed")
+    parser.add_argument("--yes", action="store_true", help="restore: restore it, after the check")
+    parser.add_argument(
+        "--replace", action="store_true", help="restore: another QMX folder's copy, over this one"
+    )
     args = parser.parse_args(argv)
     if args.command in FIRST_START:
         return first_start(parser, args)
@@ -100,15 +122,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in ("serve", "start"):
         from qmx_control.library import UNFINISHED, old_library  # noqa: PLC0415
 
+        _finish_restore(parser, layout)
+        if (layout.data / RESTORE_UNFINISHED).is_file():
+            parser.exit(
+                FIRST_START_DUE,
+                f"QMX did not start: restoring a copy into {layout.root} did not finish. Start the "
+                "first start and restore it again into the same folder.\n",
+            )
         unfit = old_library(layout.home)
         if unfit is not None:
             due = (layout.home / UNFINISHED).is_file()
             parser.exit(FIRST_START_DUE if due else 2, f"QMX did not start: {unfit}\n")
-        held = check_open(layout).held_back
+        opening = check_open(layout)
+        held = opening.held_back
         for verdict in held:
             print(verdict.line, file=sys.stderr)
         if any(verdict.action == "refused" for verdict in held):
             parser.exit(2, "QMX did not start: a store above is refused.\n")
+        if args.command == "serve" and any(v.action == "upgrades" for v in opening.verdicts):
+            _copy_before_upgrade(layout)
     home = layout.home
     library_root: Path | None = args.library_root.resolve() if args.library_root else None
     keep = read_keep_names(home / "settings.toml")
@@ -165,6 +197,63 @@ def backup(layout: Layout, only: str | None) -> int:
     return 1 if report.result == "refused" else 0
 
 
+def _finish_restore(parser: argparse.ArgumentParser, layout: Layout) -> None:
+    """A restore staged for the folder, finished before any store opens; a finish that cannot run
+    stops the start with its line, and the copy stays staged."""
+    from qmx_home.backup.restore import JOURNAL, RestoreRefused, finish  # noqa: PLC0415
+    from qmx_home.files import Busy  # noqa: PLC0415
+
+    from qmx_host.process_record import recorded_host  # noqa: PLC0415
+
+    if not (layout.backups / JOURNAL).is_file():
+        return
+    try:
+        done = finish(layout, running=recorded_host)
+    except (Busy, RestoreRefused) as refused:
+        parser.exit(2, f"QMX did not start: {refused}\n")
+    if done is not None:
+        print(done.line, file=sys.stderr, flush=True)
+
+
+def _copy_before_upgrade(layout: Layout) -> None:
+    """One quick copy of the whole folder tagged `before-upgrade`, with the floor the host keeps.
+    One that cannot be made is a line on stderr, and the start goes on: each store still copies
+    itself before its own upgrade."""
+    from qmx_home.backup.plan import PlanRefused, parse  # noqa: PLC0415
+    from qmx_home.backup.round import quick  # noqa: PLC0415
+
+    from qmx_host.disk import floor_bytes, free_bytes  # noqa: PLC0415
+
+    path = layout.home / "settings.toml"
+    try:
+        settings = tomllib.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        leave_out = parse(settings.get("backup", {}), layout).leave_out
+    except OSError, ValueError, PlanRefused:
+        settings, leave_out = {}, ()
+    engine = cast("dict[str, object]", settings.get("engine", {}))
+    try:
+        report = quick(
+            layout,
+            "before-upgrade",
+            floor=floor_bytes(engine, free_bytes(layout.home)),
+            leave_out=leave_out,
+        )
+    except Exception as failed:  # the stores' own pre-change copies still guard the upgrade
+        why = str(failed) or type(failed).__name__
+    else:
+        place = report.places[0]
+        if place.result == "copied":
+            print(f"before the upgrade: {place.line}", file=sys.stderr, flush=True)
+            return
+        why = place.line
+    print(
+        f"QMX made no copy of the folder before the upgrade: {why.rstrip('.')}. The start goes "
+        "on; each store still copies itself before it upgrades.",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
 def _old_hint(flag: Path | None) -> str | None:
     """The first start's line when the folder a command was given, or his profile's old folder
     when it was given none, holds old QMX data; the resolver's own line otherwise."""
@@ -179,7 +268,6 @@ def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
     from qmx_home.files import Busy  # noqa: PLC0415
 
     from qmx_host.first_start import (  # noqa: PLC0415
-        RESTORE_LATER,
         Places,
         bring_in_old,
         default_old,
@@ -214,8 +302,7 @@ def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         print(json.dumps({"handover": {"folder": str(handed[0]), "port": args.port}}), flush=True)
         return 0
     if args.command == "restore":
-        print(RESTORE_LATER)
-        return 2
+        return restore(parser, args, places)
     if args.home is None:
         parser.exit(2, f"{args.command} needs --home <folder>\n")
     folder: Path = args.home
@@ -234,6 +321,73 @@ def first_start(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
         parser.exit(2, f"refused: {refused}\n")
     print(report.text, end="")
     return 0 if report.finished else 1
+
+
+def restore(parser: argparse.ArgumentParser, args: argparse.Namespace, places: Places) -> int:
+    """`restore`: list a place's copies, show what one replaces, and restore it with `--yes`,
+    holding the first start as the card does."""
+    from qmx_home.backup.restore import HostServes, RestoreRefused, copies  # noqa: PLC0415
+    from qmx_home.files import Busy, hold  # noqa: PLC0415
+
+    from qmx_host.bring_in import BUSY  # noqa: PLC0415
+    from qmx_host.first_start import (  # noqa: PLC0415
+        backup_source,
+        check_restore,
+        lock_file,
+        picked,
+        refuse_restore,
+        restore_copy,
+        restore_into,
+    )
+
+    if args.home is None or args.source is None:
+        parser.exit(2, "restore needs --home <folder> and --from <backup place>\n")
+    try:
+        repository = backup_source({"kind": "folder", "path": str(args.source.absolute())})
+        if args.copy is None:
+            print(f"Copies in {repository.where}, newest first:")
+            for copy in copies(repository):
+                lacks = f"; partial, it lacks {', '.join(copy.lacks)}" if copy.partial else ""
+                print(
+                    f"  {copy.stamp}  {copy.why}  {copy.files:,} files, "
+                    f"{copy.bytes / (1 << 20):,.0f} MB, made by QMX {copy.release} on "
+                    f"{copy.machine}{lacks}"
+                )
+            print(
+                f"Restore one: python -m qmx_host restore --home {args.home} --from {args.source} "
+                "--copy <date> --yes"
+            )
+            return 0
+        into = restore_into(args.home, places, make=False)
+        if into.new and not args.create:
+            raise RestoreRefused(
+                f"there is no QMX folder at {into.layout.root}; add --create to make one from the "
+                "copy"
+            )
+        copy = picked(repository, args.copy)
+        if not args.yes:
+            print(check_restore(into, copy)["line"])
+            print("Nothing was changed. Add --yes to restore it.")
+            return 0
+        refuse_restore(into, repository, copy, replace=args.replace)
+        with hold(lock_file(), BUSY, removed=True):
+            if into.new:
+                into = restore_into(args.home, places, make=True)
+            done = restore_copy(
+                into,
+                repository,
+                copy,
+                replace=args.replace,
+                progress=lambda step: print(step, file=sys.stderr, flush=True),
+            )
+    except HostServes as hosted:
+        print(f"refused: {hosted}", file=sys.stderr)
+        return 1
+    except (Busy, RestoreRefused) as refused:
+        print(f"refused: {refused}", file=sys.stderr)
+        return 2
+    print(done.line)
+    return 0
 
 
 def _bound(parser: argparse.ArgumentParser, port: int) -> socket.socket:
