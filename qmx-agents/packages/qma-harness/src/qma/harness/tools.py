@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Final, Literal, NewType, cast
 
 from claude_agent_sdk import SdkMcpTool, create_sdk_mcp_server
 from pydantic import JsonValue
+from qmx_broker.models import ReadStamp
 from qmx_broker.service import BrokerService
 from qmx_control.catalog import (
     CORE_TOOLSETS,
@@ -219,19 +220,26 @@ def _text(result: Any) -> str:
 def _paged(
     row: OperationSpec, result: Any, arguments: Mapping[str, object], limit: int
 ) -> tuple[str, dict[str, object]]:
-    """A list answer as one page with the offset of the next, and that cursor alone; or the
-    answer's own text and no cursor."""
+    """A list answer as one page with the offset of the next, or the answer's own text; and what
+    a spill pointer keeps beside its head and tail: the cursor, and a broker read's demo-or-live
+    stamp, which also rides on every page."""
     structured = cast("Mapping[str, object] | None", getattr(result, "structured_content", None))
-    data = (structured or {}).get("result")
+    found = structured or {}
+    stamp = (
+        {key: found[key] for key in ReadStamp.__annotations__}
+        if all(key in found for key in ReadStamp.__annotations__)
+        else {}
+    )
+    data = found.get("result")
     if not row.cursor or not isinstance(data, list):
-        return _text(result), {}
+        return _text(result), stamp
     items = cast("list[object]", data)
     offset = arguments.get("offset", 0)
     start = offset if isinstance(offset, int) else 0
     wanted = arguments.get("limit", limit)
     full = len(items) >= (wanted if isinstance(wanted, int) else limit)
     cursor: dict[str, object] = {"next_offset": start + len(items) if full else None}
-    return json.dumps({"items": items, **cursor}), cursor
+    return json.dumps({**stamp, "items": items, **cursor}), {**stamp, **cursor}
 
 
 def wrap(row: OperationSpec, tool: Tool, save: Callable[..., Any]) -> ToolDef:
@@ -244,15 +252,17 @@ def wrap(row: OperationSpec, tool: Tool, save: Callable[..., Any]) -> ToolDef:
         schema["properties"] = {k: v for k, v in properties.items() if k not in forced}
         required = cast("list[str]", schema.get("required", []))
         schema["required"] = [name for name in required if name not in forced]
-    limit_default = cast("dict[str, Any]", properties.get("limit", {})).get("default", 100)
+    declared = cast("dict[str, Any]", properties.get("limit", {})).get("default")
+    # A `limit` whose default is None (broker bars: every bar) still pages by 100.
+    limit_default = declared if isinstance(declared, int) else 100
 
     async def call(arguments: dict[str, Any]) -> dict[str, Any]:
         try:
             result = await tool.run({**arguments, **forced})
         except Exception as error:
             return _failure_of(error)
-        text, cursor = _paged(row, result, arguments, int(limit_default))
-        answer = await asyncio.to_thread(spill, text, row, save, cursor)
+        text, keep = _paged(row, result, arguments, limit_default)
+        answer = await asyncio.to_thread(spill, text, row, save, keep)
         return {"content": [{"type": "text", "text": answer}]}
 
     metadata: dict[str, object] = {"_meta": dict(tool.meta or {})}

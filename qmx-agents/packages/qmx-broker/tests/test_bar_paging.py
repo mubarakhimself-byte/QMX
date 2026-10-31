@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from test_broker import ExchangeFixture, settings
 
@@ -37,7 +37,7 @@ def read(exchange: PagedExchange, tmp_path: Path, limit: int | None) -> list[dic
         yield CCXTAdapter(exchange)
 
     service = BrokerService(tmp_path, settings(), factory)
-    return asyncio.run(
+    envelope = asyncio.run(
         service.read(
             "bars",
             "crypto",
@@ -50,6 +50,7 @@ def read(exchange: PagedExchange, tmp_path: Path, limit: int | None) -> list[dic
             limit=limit,
         )
     )
+    return cast("list[dict[str, Any]]", envelope["result"])
 
 
 def test_bars_page_by_the_providers_own_limit_and_return_every_bar(tmp_path: Path) -> None:

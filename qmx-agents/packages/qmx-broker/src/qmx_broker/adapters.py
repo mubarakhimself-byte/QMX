@@ -82,6 +82,12 @@ class ReadAdapter(Protocol):
         """The provider's own most bars per request, or None when the provider picks the page."""
         ...
 
+    @property
+    def is_live(self) -> bool | None:
+        """Whether this session reads a live account, as the provider proved it; None before the
+        proof, which no read accepts."""
+        ...
+
     async def account_state(self) -> Document: ...
     async def positions(self) -> list[Document]: ...
     async def quotes(self, symbol: str) -> Document: ...
@@ -106,6 +112,26 @@ class LiveGrant(ValueError):
 
     def __init__(self) -> None:
         super().__init__(f"{self.code}: {self.message}")
+
+
+class EnvironmentMismatch(ValueError):
+    """A read whose session proved another kind than its connection says, so its figure would
+    carry the wrong label. The read fails rather than say demo over live money or the reverse.
+    The message names both kinds and points at the connection, never at a switch of its kind,
+    because a switch may be exactly what would read the live account."""
+
+    code = "environment_mismatch"
+
+    def __init__(self, connection_id: str, environment: str, is_live: bool | None) -> None:
+        proved = (
+            "proved neither demo nor live"
+            if is_live is None
+            else f"proved a {'live' if is_live else 'demo'} account"
+        )
+        super().__init__(
+            f"{self.code}: connection {connection_id} says {environment}, but its broker session"
+            f" {proved}, so nothing was read. Check this connection in Settings"
+        )
 
 
 def can_trade_live(listing: Document) -> bool:
@@ -133,6 +159,7 @@ class CTraderAdapter:
         self.account = account
         self.request = request
         self.spot = spot
+        self.is_live: bool | None = None
 
     async def authenticate(self, connection: Connection, secret: dict[str, str]) -> None:
         await self.request(
@@ -144,20 +171,22 @@ class CTraderAdapter:
         )
         if can_trade_live(accounts):
             raise LiveGrant
-        allowed = [
-            item
+        listed = [
+            item.get("isLive")
             for item in accounts.get("ctidTraderAccount", [])
             if str(item["ctidTraderAccountId"]) == self.account.id
-            and item.get("isLive") is (connection.environment == "live")
         ]
-        if not allowed:
+        if len(listed) != 1 or not isinstance(listed[0], bool):
             raise ValueError("Account token does not authorize this account/environment")
+        if listed[0] is not (connection.environment == "live"):
+            raise EnvironmentMismatch(connection.id, connection.environment, listed[0])
         authorized = await self.request(
             "ProtoOAAccountAuthReq",
             {"ctidTraderAccountId": int(self.account.id), "accessToken": secret["accessToken"]},
         )
         if str(authorized.get("ctidTraderAccountId", "")) != self.account.id:
             raise ValueError("Account authentication response belongs to another account")
+        self.is_live = listed[0]
 
     async def _read(self, name: str, **values: Any) -> Document:
         result = await self.request(name, {"ctidTraderAccountId": int(self.account.id), **values})
@@ -275,6 +304,18 @@ class CTraderAdapter:
 class CCXTAdapter:
     def __init__(self, exchange: Any) -> None:
         self.exchange = exchange
+
+    @property
+    def is_live(self) -> bool:
+        """False when `set_sandbox_mode(True)` took: CCXT's base sets `isSandboxModeEnabled` when it
+        swaps in the test endpoints, and Bitget's override sets only `options["sandboxMode"]`
+        (demo trading by header). In ccxt 4.5.85 no exchange proves demo a third way."""
+        options: object = getattr(self.exchange, "options", None)
+        sandboxed = getattr(self.exchange, "isSandboxModeEnabled", False) is True or (
+            isinstance(options, dict)
+            and cast("dict[str, object]", options).get("sandboxMode") is True
+        )
+        return not sandboxed
 
     @property
     def bar_page_limit(self) -> int | None:
