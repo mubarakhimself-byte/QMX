@@ -70,6 +70,7 @@ type SettingsSection = Literal[
     "telemetry",
     "data",
     "units",
+    "qmb",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -306,6 +307,20 @@ def _identity_row(label: str, result: str, counted_try: bool, click: bool) -> Do
         "counted_try": counted_try,
         "click_before_live": click,
     }
+
+
+QMB_DEFAULTS: Final[Document] = {
+    "agent_wait_s": 240,
+    "bars": "",
+    "equity": "10000.00",
+    "execution_target": {"role": "paper-validation", "venue_id": "qmb", "account_id": "backtest"},
+    "g_slice_margin": "0.20",
+}
+"""`[qmb]` with every default (Part B `qmb.md` section 8): `backtest_run` waits 240 s for a run
+before it answers the run id, below the prompt cache's five minutes; `bars` names the folder of
+dukascopy-node's CSV pairs, empty for the market store's `bars/`; a backtest trades 10,000 of the
+account's money on a backtest target that is no account; the behaviour check's slice is the
+warm-up and 20% more."""
 
 
 UNITS_DEFAULTS: Final[Document] = {
@@ -959,6 +974,8 @@ class ControlService:
                 values = _merged(TELEMETRY_DEFAULTS, values)
             if section == "units":
                 values = _merged(UNITS_DEFAULTS, values)
+            if section == "qmb":
+                values = _merged(QMB_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:

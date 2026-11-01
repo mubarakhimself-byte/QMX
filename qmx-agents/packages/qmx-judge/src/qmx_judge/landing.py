@@ -20,10 +20,12 @@ refused where kinds are enforced.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final, Protocol
+from pathlib import PurePosixPath
+from typing import Final, Protocol, cast
 
 from qmf.core import fingerprint_bytes
 
@@ -39,13 +41,20 @@ from qmx_judge.tries import TRY_KIND, Try, TryState, try_item
 
 __all__ = [
     "BASE_PRINCIPAL",
+    "CHECK_KIND",
+    "G_CHECK",
     "REPORT_SLOT",
     "RESULT_KIND",
+    "TEST_REPORT",
     "BacktestLanding",
     "BacktestResult",
+    "CheckFirst",
+    "GRecord",
+    "GRecords",
     "Lander",
     "LanderPort",
     "LandingPort",
+    "RunJob",
     "Stored",
     "land",
 ]
@@ -159,7 +168,56 @@ def land(
 RESULT_KIND: Final = "backtest-result"
 """The provides name the lander lands; an app that provides no such output gets no ticket."""
 
-CHECK_JOB: Final = "behaviour_check"
+CHECK_KIND: Final = "behaviour_check"
+"""The run kind of checker layer G, whose result is the unit's `test-report`, not a backtest."""
+G_CHECK: Final = "qml-g/1"
+"""The `check` a `test-report` names when it is a unit's layer G record (Part A CONTRACTS §3.3)."""
+TEST_REPORT: Final = "test-report"
+
+
+def run_kind(job: str) -> str:
+    """A job's run kind: its entrypoint's stem, `jobs/<kind>.py` in a tester (CONTRACTS §1)."""
+    return PurePosixPath(job).stem
+
+
+def check_job(job: str) -> str:
+    """The behaviour check's entrypoint beside `job`, laid out the same way."""
+    path = PurePosixPath(job)
+    return str(path.with_name(f"{CHECK_KIND}{path.suffix}"))
+
+
+@dataclass(frozen=True, slots=True)
+class GRecord:
+    """A unit's recorded layer G verdict for one compiled fingerprint."""
+
+    object_id: str
+    safety_passed: bool
+
+
+class GRecords(Protocol):
+    """What the host answers about a unit's compile and its G verdicts."""
+
+    def compiled_fingerprint(self, unit: str) -> str | None:
+        """The fingerprint `unit` compiles to, or None when the pin names no unit document."""
+        ...
+
+    def g_record(self, compiled_fp: str) -> GRecord | None:
+        """The finished layer G `test-report` of that fingerprint, if one landed."""
+        ...
+
+
+type RunJob = Callable[[str, str, Mapping[str, object], str], Mapping[str, object]]
+"""`(app_id, job, inputs, principal) -> what ran`: the supervisor's own `run_job`."""
+
+
+@dataclass(frozen=True, slots=True)
+class CheckFirst:
+    """What `open` needs to run the behaviour check before a run whose unit has no G record
+    (Part B AD-202 step 1): the supervisor's `run_job`, which the host injects, and the host's
+    answers about the unit's compile and its G records."""
+
+    run_job: RunJob
+    records: GRecords
 
 
 def _text(value: object) -> bool:
@@ -212,7 +270,8 @@ class Lander:
     """The one lander on the supervisor's job path (Part B CONTRACTS §3, the lander port).
 
     ``writer`` is the principal the host lands records as. ``provides_of`` answers the provides
-    names of an installed app version.
+    names of an installed app version. With ``check_first``, a run of a unit document pins the
+    fingerprint the unit compiles to, and runs only after a passing layer G verdict for it.
     """
 
     library: LanderPort
@@ -221,11 +280,15 @@ class Lander:
     provides_of: Callable[[str, str], Collection[str]]
     clock: Callable[[], datetime]
     mint: Callable[[], str] = new_ulid
+    check_first: CheckFirst | None = None
 
     def open(
         self, app_id: str, version: str, job: str, inputs: Mapping[str, object], principal: str
     ) -> Ticket | None:
-        """Mint the run id and land the `opened` try; None for an app that lands no result."""
+        """Mint the run id and land the `opened` try; None for an app that lands no result.
+
+        A request's `compiled_fp` defaults to what its unit compiles to; a check always runs on
+        that one, so a caller's pin can make a run fail but never a G record lie."""
         if RESULT_KIND not in self.provides_of(app_id, version):
             return None
         unit, study = inputs.get("unit"), inputs.get("study")
@@ -244,10 +307,21 @@ class Lander:
         problems = [message for ok, message in checks if not ok]
         if problems:
             raise BundleRefused(problems)
+        request = dict(inputs)
+        checking = run_kind(job) == CHECK_KIND
+        compiled = (
+            None
+            if self.check_first is None
+            else self.check_first.records.compiled_fingerprint(str(unit))
+        )
+        if compiled is not None:
+            request["compiled_fp"] = compiled if checking else request.get("compiled_fp", compiled)
+            if not checking:
+                self._behaviour_first(app_id, job, request, compiled, principal)
         run_id = mint_run_id(self.machine, self.mint())
         place = inputs.get("place")
         opened = Try(
-            kind="check" if job == CHECK_JOB else "run",
+            kind="check" if checking else "run",
             state="opened",
             run_id=run_id,
             family=str(family),
@@ -271,14 +345,42 @@ class Lander:
             study=opened.study,
             family=opened.family,
             opened=opened_id,
-            request=dict(inputs),
+            request=request,
         )
 
+    def _behaviour_first(
+        self, app_id: str, job: str, request: Mapping[str, object], compiled: str, principal: str
+    ) -> None:
+        """Run the unit's behaviour check on the same tester when no G verdict is recorded for
+        `compiled`, then refuse the run unless that verdict's safety half passed."""
+        first = cast(CheckFirst, self.check_first)
+        found = first.records.g_record(compiled)
+        if found is None:
+            ran = first.run_job(
+                app_id, check_job(job), {**request, "compiled_fp": compiled}, principal
+            )
+            found = first.records.g_record(compiled)
+            if found is None:
+                report = self.library.find(str(ran.get("run_id", "")))
+                raise BundleRefused(
+                    [f"the behaviour check of {compiled} gave no verdict; its report is {report}"]
+                )
+        if not found.safety_passed:
+            raise BundleRefused(
+                [
+                    f"the unit failed the safety half of its behaviour check; its report is "
+                    f"{found.object_id}"
+                ]
+            )
+
     def close(self, landing: Landing) -> str:
-        """Land the bundle's `backtest-result`, its edges and the closing try."""
+        """Land the bundle's `backtest-result` (a check's `test-report`), its edges and the
+        closing try."""
         ticket, bundle = landing.ticket, landing.bundle
         if bundle.run_id != ticket.run_id:
             raise BundleRefused([f"the bundle answers {bundle.run_id}, not {ticket.run_id}"])
+        if run_kind(ticket.job) == CHECK_KIND:
+            return self._close_check(landing)
         result_id = self.library.find(ticket.run_id)
         if result_id is None:
             fields = _result_fields(ticket, bundle.status, bundle.reason)
@@ -303,6 +405,8 @@ class Lander:
 
     def fail(self, ticket: Ticket, reason: str, *, status: RunStatus = "killed") -> str:
         """Land a result the tester never finished: its status and reason, no measures."""
+        if run_kind(ticket.job) == CHECK_KIND:
+            return self._check_report(ticket, status, {"reason": reason}, None)
         result_id = self.library.find(ticket.run_id)
         if result_id is None:
             fields = _result_fields(ticket, status, reason)
@@ -311,9 +415,45 @@ class Lander:
         self._closing_try(ticket, "failed", result_id)
         return result_id
 
+    def _close_check(self, landing: Landing) -> str:
+        """A check's leave is its behaviour report, landed as the unit's `test-report`."""
+        bundle = landing.bundle
+        if bundle.status != "finished":
+            return self._check_report(
+                landing.ticket, bundle.status, {"reason": bundle.reason or "failed"}, None
+            )
+        report = cast(dict[str, object], json.loads(_blobs(landing)[REPORT_SLOT]))
+        safety = cast(dict[str, object], report.pop("safety", {}))
+        return self._check_report(landing.ticket, "finished", report, safety)
+
+    def _check_report(
+        self,
+        ticket: Ticket,
+        status: RunStatus,
+        behaviour: Mapping[str, object],
+        safety: Mapping[str, object] | None,
+    ) -> str:
+        """Land the check's `test-report` once, link it `tests` to the unit, close its try. Only
+        a finished check carries a `safety` half, so only it is a G verdict."""
+        report_id = self.library.find(ticket.run_id)
+        if report_id is None:
+            fields: dict[str, object] = {
+                "check": G_CHECK,
+                "run_id": ticket.run_id,
+                "status": status,
+                "compiled_fingerprint": str(ticket.request.get("compiled_fp", "")),
+                "behaviour": dict(behaviour),
+            }
+            if safety is not None:
+                fields["safety"] = dict(safety)
+            report_id = self._once(TEST_REPORT, ticket.run_id, fields, {}, _title(ticket, status))
+        self.library.link(report_id, "tests", ticket.unit, principal=self.writer)
+        self._closing_try(ticket, "landed" if status == "finished" else "failed", report_id)
+        return report_id
+
     def _closing_try(self, ticket: Ticket, state: TryState, result_id: str) -> None:
         closing = Try(
-            kind="check" if ticket.job == CHECK_JOB else "run",
+            kind="check" if run_kind(ticket.job) == CHECK_KIND else "run",
             state=state,
             run_id=ticket.run_id,
             family=ticket.family,
@@ -361,7 +501,7 @@ def _result_fields(ticket: Ticket, status: RunStatus, reason: str | None) -> dic
     fields: dict[str, object] = {
         "run_id": ticket.run_id,
         "status": status,
-        "kind": ticket.job,
+        "kind": run_kind(ticket.job),
         "tester": {"app": ticket.app_id, "version": ticket.version},
         "unit": ticket.unit,
         "principal": ticket.principal,

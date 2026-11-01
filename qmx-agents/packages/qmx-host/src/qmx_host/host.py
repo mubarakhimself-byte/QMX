@@ -31,6 +31,7 @@ import asyncio
 import dataclasses
 import json
 import os
+import shutil
 import socket
 import sqlite3
 import subprocess
@@ -54,16 +55,19 @@ from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qma.telemetry import THIS_PC, configured, target
 from qmf.core import TypedRefusal, is_refusal
+from qml.compile import CompileContext, CompiledUnit, compile_unit
+from qml.numbers import InstrumentRecord, parse_record
 from qmx_apps.artifacts import Ending, Lander
 from qmx_apps.artifacts import Landing as AppLanding
 from qmx_apps.artifacts import Ticket as AppTicket
 from qmx_apps.manifest import Definition
-from qmx_apps.supervisor import Supervisor
+from qmx_apps.supervisor import MARKET_STORE, RUNS, Supervisor
+from qmx_apps.volume import Volume
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.models import Document
 from qmx_control.node import PLACE, library_primary
 from qmx_control.primary import CARD_REF, HOLD, Flip
-from qmx_control.service import ControlService
+from qmx_control.service import QMB_DEFAULTS, ControlService
 from qmx_engine.admission import setting
 from qmx_engine.control_door import EngineDoor
 from qmx_engine.heartbeat import (
@@ -105,8 +109,8 @@ from qmx_home.files import Busy, Held, hold
 from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
+from qmx_judge.landing import G_CHECK, TEST_REPORT, CheckFirst, GRecord, Stored, run_kind
 from qmx_judge.landing import Lander as RunLander
-from qmx_judge.landing import Stored
 from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
@@ -134,7 +138,7 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
-from qmx_tools.gather import check_unit, entry_problems
+from qmx_tools.gather import FIXTURE_RECORDS, check_unit, entry_problems, gather
 from uvicorn.config import STARTUP_FAILURE
 
 from qmx_host.app_logs import AppLogs
@@ -865,7 +869,9 @@ async def serve(
                     land_first_unit(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
-                runtime.attach_landers(landers(store, runtime, name))
+                runtime.attach_landers(
+                    landers(store, runtime, name, settings=lambda: control.settings_get("qmb"))
+                )
                 harness.doctor_from(lambda: library_line(store))
                 backups = Backups(
                     Layout.from_home(home),
@@ -1362,6 +1368,7 @@ class LanderLibrary:
 
     def __init__(self, store: Store) -> None:
         self.store = store
+        self._units: dict[str, RunUnit | str | None] = {}
 
     def find(self, item: str) -> str | None:
         head = self.store.head(item, MAIN)
@@ -1390,20 +1397,96 @@ class LanderLibrary:
     def holds(self, object_id: str) -> bool:
         return self.store.catalog.row(object_id) is not None
 
+    def unit(self, pin: str) -> RunUnit | str | None:
+        """The unit document `pin` names, compiled with the blocks and records `gather` finds;
+        why it does not compile; or None when the pin names an object of another kind. An object
+        never changes, so each pin compiles once per host."""
+        if pin not in self._units:
+            self._units[pin] = self._compiled(pin)
+        return self._units[pin]
+
+    def _compiled(self, pin: str) -> RunUnit | str | None:
+        view = self.store.get(OPERATOR_READ, pin)
+        if view.kind != "unit":
+            return None
+        document = cast(dict[str, object], view.fields)
+        context = gather(self.store, document).context
+        compiled = compile_unit(document, context)
+        if not isinstance(compiled, CompiledUnit):
+            first = compiled[0].message if compiled else "the unit does not compile"
+            return f"the unit {pin} does not compile: {first}"
+        return RunUnit(document, context, compiled)
+
+    def compiled_fingerprint(self, unit: str) -> str | None:
+        found = self.unit(unit) if self.holds(unit) else None
+        return found.compiled.compiled_fingerprint.value if isinstance(found, RunUnit) else None
+
+    def g_record(self, compiled_fp: str) -> GRecord | None:
+        """The first finished layer G `test-report` of `compiled_fp`: a check that failed or
+        was killed gave no verdict, so the next run checks again."""
+        for object_id in self.store.with_field(TEST_REPORT, "compiled_fingerprint", compiled_fp):
+            fields = self.store.get(OPERATOR_READ, object_id).fields
+            if fields.get("check") == G_CHECK and fields.get("status") == "finished":
+                safety = cast(dict[str, object], fields.get("safety") or {})
+                return GRecord(object_id, safety.get("verdict") == "pass")
+        return None
+
+
+OPERATOR_READ: Final = Principal.parse("operator")
+BAR_SIDES: Final = ("bid", "ask")
+BARS_TEMPLATE: Final = "download-dukascopy"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RunUnit:
+    """A unit pin as a run lays it out: its document, what its pins and markets read, and what
+    it compiled to."""
+
+    document: dict[str, object]
+    context: CompileContext
+    compiled: CompiledUnit
+
+    @property
+    def markets(self) -> tuple[str, ...]:
+        return tuple(market.market_id for market, _ in self.compiled.plan.markets)
+
+
+def _record_file(record: InstrumentRecord) -> Path | None:
+    """The fixture file `gather` read `record` from: records are QML's fixtures until C-02."""
+    for path in sorted(FIXTURE_RECORDS.glob("*.json")):
+        parsed = parse_record(json.loads(path.read_text("utf-8")))
+        if not is_refusal(parsed) and (parsed.value.venue, parsed.value.symbol) == (
+            record.venue,
+            record.symbol,
+        ):
+            return path
+    return None
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class QmbRun:
     """`qmb-run` as the apps supervisor's lander port: qmx-judge's lander, with the tester's
-    leave read as its `qmx.qmb.result-bundle/1` and its files read from the run folder."""
+    leave read as its `qmx.qmb.result-bundle/1` and its files read from the run folder.
+
+    For a unit document it lays the run out before the job starts (Part B AD-202 step 1), so
+    the tester reads files only: `in/request.json` with the core's fields filled, the unit, its
+    pinned blocks, its markets' records, and each market's bid and ask bars for the window. The
+    bars are the CSV pair `<symbol>-<stream>-<side>-<start>-<end>.csv` that dukascopy-node
+    saves, read from `[qmb] bars` (default the market store's `bars/` folder)."""
 
     lander: RunLander
     library: LanderLibrary
+    folder_of: Callable[[str, str], Path]
+    """The run folder the supervisor makes for `(app_id, run_id)` inside the app's volume."""
+    settings: Callable[[], Mapping[str, object]]
+    market: Path
 
     def open(
         self, app_id: str, version: str, job: str, inputs: Document, principal: str
     ) -> Ticket | None:
-        """Refuse a unit or study pin that names no Library object before any try lands: the
-        result's `uses` and `tests` edges point at them, so such a run could never close."""
+        """Refuse a unit or study pin that names no Library object, a unit that does not
+        compile, or a window with no bars before any try lands: the result's `uses` and `tests`
+        edges point at the pins, so such a run could never close."""
         unknown = [
             f"{name} {pin} names no object in the Library"
             for name in ("unit", "study")
@@ -1411,7 +1494,84 @@ class QmbRun:
         ]
         if unknown:
             raise BundleRefused(unknown)
-        return self.lander.open(app_id, version, job, inputs, principal)
+        pin = inputs.get("unit")
+        found = self.library.unit(pin) if isinstance(pin, str) and pin else None
+        if isinstance(found, str):
+            raise BundleRefused([found])
+        bars = None if found is None else self._bars(found, inputs)
+        ticket = self.lander.open(app_id, version, job, inputs, principal)
+        if ticket is not None and found is not None and bars is not None:
+            self._lay_out(self.folder_of(app_id, ticket.run_id) / "in", ticket, found, bars)
+        return ticket
+
+    def _bars(self, found: RunUnit, inputs: Document) -> dict[str, dict[str, Path]]:
+        """Each of the unit's markets' bid and ask files for the request's window, or a refusal
+        that names every missing file and the template that downloads it (LD-06)."""
+        asked = inputs.get("markets")
+        if asked is not None and sorted(cast(list[str], asked)) != sorted(found.markets):
+            raise BundleRefused(
+                [
+                    f"QMB replays every market the unit trades, {list(found.markets)}; leave "
+                    "markets out or name them all"
+                ]
+            )
+        window = inputs.get("window")
+        if not isinstance(window, dict) or not {"start", "end"} <= set(window):
+            raise BundleRefused(["a unit run names its window, {start, end} as dates"])
+        start, end = str(window["start"])[:10], str(window["end"])[:10]
+        named = self.settings().get("bars")
+        folder = Path(named) if isinstance(named, str) and named else self.market / "bars"
+        stream = found.compiled.plan.stream
+        found_bars: dict[str, dict[str, Path]] = {}
+        missing: list[str] = []
+        for market in found.markets:
+            record = found.context.records.get(market)
+            symbol = (record.symbol if record else market.rsplit(".", 1)[-1]).lower()
+            paths = {s: folder / f"{symbol}-{stream}-{s}-{start}-{end}.csv" for s in BAR_SIDES}
+            missing += [str(path) for path in paths.values() if not path.is_file()]
+            found_bars[market] = paths
+        if missing:
+            raise BundleRefused(
+                [
+                    f"no bars for {start} to {end}: {missing[0]} is missing; save the month "
+                    f"with dukascopy-node or the {BARS_TEMPLATE} template",
+                    *missing[1:],
+                ]
+            )
+        return found_bars
+
+    def _lay_out(
+        self, root: Path, ticket: Ticket, found: RunUnit, bars: Mapping[str, Mapping[str, Path]]
+    ) -> None:
+        settings = self.settings()
+        request: dict[str, object] = {
+            "schema_version": 1,
+            "equity": settings.get("equity"),
+            "execution_target": settings.get("execution_target"),
+            "g_slice_margin": settings.get("g_slice_margin"),
+            "motion": "on",
+            **ticket.request,
+            "kind": run_kind(ticket.job),
+            "run_id": ticket.run_id,
+            "markets": list(found.markets),
+        }
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "request.json").write_text(json.dumps(request, indent=2), "utf-8")
+        (root / "unit.json").write_text(json.dumps(found.document, indent=2), "utf-8")
+        for pin, source in found.context.sources.items():
+            block = root / "blocks" / pin
+            block.mkdir(parents=True, exist_ok=True)
+            (block / "block.py").write_bytes(source)
+            (block / "entry.json").write_bytes(found.context.entries[pin])
+        (root / "records").mkdir(exist_ok=True)
+        for market, record in found.context.records.items():
+            source_file = _record_file(record)
+            if source_file is not None:
+                shutil.copyfile(source_file, root / "records" / f"{market}.json")
+        for market, sides in bars.items():
+            (root / "bars" / market).mkdir(parents=True, exist_ok=True)
+            for side, path in sides.items():
+                shutil.copyfile(path, root / "bars" / market / f"{side}.csv")
 
     def close(self, landing: AppLanding) -> str:
         run, data = landing.run, landing.data
@@ -1431,9 +1591,17 @@ class QmbRun:
             raise BundleRefused([str(refused)]) from refused
 
 
-def landers(store: Store, runtime: Supervisor, machine: str) -> dict[str, Lander]:
+def landers(
+    store: Store,
+    runtime: Supervisor,
+    machine: str,
+    *,
+    settings: Callable[[], Mapping[str, object]] = lambda: QMB_DEFAULTS,
+) -> dict[str, Lander]:
     """The core landers this host registers: `qmb-run`, writing as the operator, the one
-    principal who puts records on `main`, and minting run ids named for this machine."""
+    principal who puts records on `main`, and minting run ids named for this machine. It runs a
+    unit's behaviour check first through the supervisor's own `run_job`. `settings` reads the
+    `[qmb]` section at each run."""
 
     def provides_of(app_id: str, version: str) -> set[str]:
         for row in runtime.versions(app_id):
@@ -1442,6 +1610,17 @@ def landers(store: Store, runtime: Supervisor, machine: str) -> dict[str, Lander
                 return set(Definition.load(image).manifest.provides)
         return set()
 
+    def run_job(
+        app_id: str, job: str, inputs: Mapping[str, object], principal: str
+    ) -> Mapping[str, object]:
+        return runtime.run_job(
+            app_id, job, inputs=cast(Document, dict(inputs)), principal=principal
+        )
+
+    def folder_of(app_id: str, run_id: str) -> Path:
+        data = runtime.status(app_id).get("data")
+        return Volume(runtime.home, app_id).root / str(data or "data") / RUNS / run_id
+
     library = LanderLibrary(store)
     lander = RunLander(
         library,
@@ -1449,8 +1628,9 @@ def landers(store: Store, runtime: Supervisor, machine: str) -> dict[str, Lander
         machine=machine,
         provides_of=provides_of,
         clock=lambda: datetime.now(UTC),
+        check_first=CheckFirst(run_job, library),
     )
-    return {QMB_RUN: QmbRun(lander, library)}
+    return {QMB_RUN: QmbRun(lander, library, folder_of, settings, runtime.home / MARKET_STORE)}
 
 
 async def keep_facts(control: ControlService) -> None:

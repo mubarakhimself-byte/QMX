@@ -10,11 +10,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from decimal import Decimal
 
-import qmb_tester as tester
 from qmb.host.unit_handler import Fill, UnitTrade
 from qmb.host.unit_runner import UnitRunResult, parse_unit_run_request, run_unit
 from qmf.core import fingerprint_bytes
 from qmf.core.refusal import is_refusal
+
+import qmb_tester as tester
 
 
 def _trade(trade: UnitTrade) -> dict[str, object]:
@@ -88,7 +89,11 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         run_id,
         "finished",
         measures=measures(result, trades),
-        labels={"zero_trades": not result.trades, "fidelity": "bars", "motion": asked.get("motion", "on")},
+        labels={
+            "zero_trades": not result.trades,
+            "fidelity": "bars",
+            "motion": asked.get("motion", "on"),
+        },
         files=[tester.write(folder, "report.json", report)],
         versions={"qmb": tester.TESTER["version"]},
     )

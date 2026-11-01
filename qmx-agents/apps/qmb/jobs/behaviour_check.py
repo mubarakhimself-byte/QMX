@@ -12,6 +12,7 @@ import json
 import subprocess
 import sys
 from collections.abc import Mapping
+from typing import Any, cast
 
 import qmb_tester as tester
 
@@ -27,7 +28,7 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         "request": tester.unit_body(asked, run_id),
         "margin": asked.get("g_slice_margin", "0.20"),
     }
-    child = subprocess.run(  # noqa: S603 - this interpreter, QMB's own module, no shell
+    child = subprocess.run(
         [sys.executable, "-m", "qmb.host.behaviour"],
         input=json.dumps(job),
         capture_output=True,
@@ -36,12 +37,12 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
     )
     try:
-        answer = json.loads(child.stdout)
+        answer = cast("dict[str, Any]", json.loads(child.stdout))
     except json.JSONDecodeError:
         tail = child.stderr.strip().splitlines()[-1:] or [f"exit {child.returncode}"]
         return tester.failed(run_id, f"the behaviour check's child gave no report: {tail[0]}")
     if answer.get("ok") is not True:
-        refusal = answer.get("refusal") or {}
+        refusal = cast("dict[str, str]", answer.get("refusal") or {})
         return tester.failed(run_id, f"{refusal.get('field')}: {refusal.get('reason')}")
     report = answer["report"]
     return tester.leave(

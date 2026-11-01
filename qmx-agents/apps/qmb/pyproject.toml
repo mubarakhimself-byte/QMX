@@ -30,3 +30,17 @@ qmf-indicators = { path = "../../../packages/qmf-indicators", editable = true }
 qmf-registry = { path = "../../../packages/qmf-registry", editable = true }
 qmf-risk = { path = "../../../packages/qmf-risk", editable = true }
 qmf-structure = { path = "../../../packages/qmf-structure", editable = true }
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLC0415"]
+
+[tool.pyright]
+include = [".", "tests"]
+extraPaths = ["."]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+venvPath = "../.."
+venv = ".venv"

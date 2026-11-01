@@ -101,8 +101,13 @@ def leave(
         "files": [dict(file) for file in files],
     }
     optional = {"reason": why, "measures": measures, "labels": labels, "versions": versions}
-    bundle.update({name: dict(value) if isinstance(value, Mapping) else value
-                   for name, value in optional.items() if value is not None})
+    bundle.update(
+        {
+            name: dict(value) if isinstance(value, Mapping) else value
+            for name, value in optional.items()
+            if value is not None
+        }
+    )
     return {"output": OUTPUT, "data": bundle}
 
 
