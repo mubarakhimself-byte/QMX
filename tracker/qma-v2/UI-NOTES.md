@@ -104,3 +104,7 @@ From `USER-JOURNEYS.md` §3 (unreviewed spin ideas) and the audits. Proposals on
 - A pre-flight estimate before long runs: time, USD and share of each window (spin 9).
 - A "switch back at reset" chip after a forced model switch, offered never performed (spin 19).
 - One multiplexed live stream per window to stay under the browser connection limit (R32 §B10).
+
+## Units, QMB and the trading node (added 2026-11-01)
+
+The unit-system planning wrote its screen needs as design intent, never code: `tracker/risk-sizing/build/UI-NOTES-UNITS.md` on branch `plan/unit-system` (one list, screen by screen, consolidated from the three design parts and the experience pass), with the per-part sources in `tracker/risk-sizing/architecture/parts/*/UI-NEEDS.md` and `tracker/risk-sizing/architecture/funnel/experience/ui-needs.md`. They include proposals for the QMB and trading-node mini apps' own screens and the MIS tab. The UI session decides the design.

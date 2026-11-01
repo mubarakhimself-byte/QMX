@@ -1,5 +1,33 @@
 # Hand-off: risk and sizing, a design conversation with the operator
 
+## Start here (updated 2026-11-01, after the unit-system planning)
+
+The section below this one is the 27 Oct version and is superseded: its paths point at the old `agent-system` worktree. Use this prompt. Paste it into a fresh Claude Code session started in `C:\Users\Mubarak\Desktop\QMX`.
+
+```text
+/poteto-mode This is a design conversation with me about risk management and position sizing inside a QMX unit. It is not a build run. Nothing about risk or sizing is decided without me: one small mistake here costs real money. Ask me decisions through the question tool, one at a time, each explained in plain words first. Use agents for heavy reading, Opus only, few at once, and tell them not to spawn their own.
+
+The unit system's build is running in another session from D:\QMX-worktrees\unit-plan\tracker\risk-sizing\build\UNIT-PLAN.md, with labelled placeholders where sizing, exits and account halts go. This session designs what replaces them. Same approach as the units (STATE midday ruling 6): a small, complete, solid core that everything else is built on, like mini apps, the lab and the pods. The pods already represent risk and sizing.
+
+Read first, from the branch plan/unit-system in D:\QMX-worktrees\unit-plan\tracker\risk-sizing\:
+1. STATE.md: "RESUME HERE", then "Operator round 2026-10-31 midday" (rulings 1-55) and the older operator rounds. His rulings outrank every file.
+2. RISK-SIZING-PACK.md in full: his own words on risk and sizing (sections 1-5), the questions moved here from the unit planning (section 6), and the build's placeholders (section 7).
+3. build\RISK-SIZING-PLACEHOLDERS.md: every placeholder the build leaves, where it sits, and what this session must replace.
+4. The risk and sizing points each design part found: architecture\parts\A-qml-dictionary-unit\RISK-SIZING-POINTS.md, architecture\parts\B-qmb-journals-workflows\RISK-SIZING-POINTS.md, architecture\parts\C-node-mis-external\RISK-SIZING-POINTS.md; the "for the risk session" sections of architecture\funnel\solutions\00-index.md and architecture\funnel\experience\design-thinking.md; the risk rows of architecture\funnel\edge-cases\catalogue.md.
+5. The design the risk core plugs into: architecture\level-0\ARCHITECTURE-SPINE.md (its "for the risk session" list and the risk socket), and part A's risk socket and its contract tests (build slice A15).
+6. Research: research\05-academic.md (sizing and Kelly), research\24-earning-a-specialist.md, research\26-quant-judging.md, and the rest the pack names.
+7. How to work: architecture\00-how-the-best-session-worked.md.
+
+Rules: risk and sizing authority is the GitBook and the node docs; the old QMX-discussion folder is barred as an authority. Report in USD. Only I promote anything to live. The only automatic move in trading is a risk rule stopping a unit, logged. Agents never touch money. Never print keys or tokens.
+
+Start by walking me, in plain words, through what the build leaves as placeholders and what this session must decide. Then we design it together.
+```
+
+---
+
+## The 27 Oct version (superseded)
+
+
 Paste the prompt below into a fresh Claude Code session started in `D:\QMX-worktrees\agent-system`.
 
 ```text
