@@ -1,0 +1,17 @@
+{
+  "description": "After a Write or Edit of a unit document (a JSON object whose schema is qmx.unit/<n>), run the QMX unit checker and hand a failing result back to the agent. Every other file passes untouched.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"\nimport json, sys\nfrom pathlib import Path\nevent = json.load(sys.stdin)\npath = Path(str(event.get('tool_input', {}).get('file_path', '')))\ntry:\n    document = json.loads(path.read_text('utf-8'))\nexcept (OSError, ValueError):\n    sys.exit(0)\nif not (isinstance(document, dict) and str(document.get('schema', '')).startswith('qmx.unit/')):\n    sys.exit(0)\nfrom qmx_tools.unit_check import checked\nresult = checked(None, document)\nif result['verdict'] != 'pass':\n    found = {key: result[key] for key in ('verdict', 'counts', 'errors', 'warnings', 'problem_set')}\n    told = 'QMX unit check of ' + path.name + ' failed. Fix every error, then save the file again. ' + json.dumps(found)\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PostToolUse', 'additionalContext': told}}))\n\"",
+            "timeout": 8
+          }
+        ]
+      }
+    ]
+  }
+}
