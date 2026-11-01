@@ -3,10 +3,24 @@
   "entry_id": "swing-stop-buffer",
   "version": 1,
   "family": "protective-stop",
+  "aliases": [
+    "swing stop"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
   "component_type": "exit",
   "definition": "Protective stop beyond the last swing low (long) or high (short) plus a buffer of its price.",
+  "boundaries": "A stand-in stop until the risk session writes the real exits.",
+  "recognition": "The stop sits just beyond the last confirmed swing low (long) or high (short).",
   "eligible_roles": [
     "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -22,19 +36,36 @@
   },
   "parameters": {
     "buffer": {
-      "measure": "percent"
+      "measure": "percent",
+      "default": "0.0002",
+      "origin": "placeholder",
+      "range": {
+        "min": "0",
+        "max": "0.01",
+        "step": "0.0001"
+      }
     }
   },
   "warm_up": {
     "rule": "5 bars",
     "bars": 5
   },
+  "confirmation_lag_bars": 2,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
     "observations": 6
   },
-  "origin": "placeholder",
-  "owner": "risk-session",
   "fingerprint": "fp1:sha256:db0cf634b2f2a91aff715079fc0e2cf4d1da19a2db04f316e78dc37960aedc52"
 }

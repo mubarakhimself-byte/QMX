@@ -3,12 +3,26 @@
   "entry_id": "ema",
   "version": 1,
   "family": "moving-average",
+  "aliases": [
+    "EMA",
+    "exponential moving average"
+  ],
+  "origin": "qml",
   "component_type": "context",
   "definition": "Exponential moving average of a series, seeded with the simple mean of its first period values.",
+  "boundaries": "A smoothing of price; it says where the average is, not how strong a trend is.",
+  "recognition": "Price above a rising EMA reads as an uptrend, below a falling one as a downtrend.",
   "eligible_roles": [
     "context",
     "filter",
     "location"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-118",
+      "quote": "a trend pullback on EURUSD and XAUUSD, M15, built only from blocks that wrap code QMX already runs (EMA, ROC, RSI, swing points)",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -24,18 +38,38 @@
   },
   "parameters": {
     "period": {
-      "measure": "bars"
+      "measure": "bars",
+      "default": "100",
+      "origin": "published_convention",
+      "range": {
+        "min": "20",
+        "max": "300",
+        "step": "1"
+      }
     }
   },
   "warm_up": {
     "rule": "period",
     "bars": null
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "not_applicable",
   "state_bound": {
     "rule": "constant",
     "observations": 1
   },
+  "fingerprint": "fp1:sha256:83996dbbf75d4cddefe157cccdffe61c9e86da3f79f7a4a1e6cc4f8f172112f4",
   "golden": {
     "reference": "talib.EMA 0.7.1",
     "cases": "qml/tests/golden/talib-0.7.1.json"
@@ -46,7 +80,5 @@
     },
     "bars": 900,
     "tolerance": "1e-9"
-  },
-  "origin": "qml",
-  "fingerprint": "fp1:sha256:83996dbbf75d4cddefe157cccdffe61c9e86da3f79f7a4a1e6cc4f8f172112f4"
+  }
 }

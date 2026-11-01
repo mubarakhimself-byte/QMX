@@ -3,11 +3,25 @@
   "entry_id": "roc-of-series",
   "version": 1,
   "family": "rate-of-change",
+  "aliases": [
+    "ROC",
+    "rate of change"
+  ],
+  "origin": "qml",
   "component_type": "context",
   "definition": "Rate of change of a series over a lookback, as a fraction; holds when at least the floor (long) or at most minus the floor (short).",
+  "boundaries": "A change over a fixed lookback; a slow drift and a jump of the same size read the same.",
+  "recognition": "The trend's strength: how far the series moved over the lookback, as a fraction.",
   "eligible_roles": [
     "context",
     "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-118",
+      "quote": "a trend pullback on EURUSD and XAUUSD, M15, built only from blocks that wrap code QMX already runs (EMA, ROC, RSI, swing points)",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [
     {
@@ -23,25 +37,50 @@
   },
   "parameters": {
     "lookback": {
-      "measure": "bars"
+      "measure": "bars",
+      "default": "20",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "5",
+        "max": "100",
+        "step": "1"
+      }
     },
     "floor": {
-      "measure": "percent"
+      "measure": "percent",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "0.0030",
+        "step": "0.0001"
+      }
     }
   },
   "warm_up": {
     "rule": "lookback + 1",
     "bars": null
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "supported",
   "state_bound": {
     "rule": "lookback + 1",
     "observations": null
   },
+  "fingerprint": "fp1:sha256:1b66c16724b58cf7e43db0f4b5ceaf691d0bbe7e56e89bc3f7718026adde3a00",
   "golden": {
     "reference": "talib.ROCP 0.7.1",
     "cases": "qml/tests/golden/talib-0.7.1.json"
-  },
-  "origin": "qml",
-  "fingerprint": "fp1:sha256:1b66c16724b58cf7e43db0f4b5ceaf691d0bbe7e56e89bc3f7718026adde3a00"
+  }
 }

@@ -3,11 +3,25 @@
   "entry_id": "time-exit-bars",
   "version": 1,
   "family": "time-exit",
+  "aliases": [
+    "time stop"
+  ],
+  "origin": "placeholder",
+  "owner": "risk-session",
   "component_type": "exit",
   "definition": "Close the position after it has been held a number of bars.",
+  "boundaries": "A stand-in exit until the risk session writes the real exits.",
+  "recognition": "The position closes once it has been open a set number of bars.",
   "eligible_roles": [
     "exit",
     "timeout"
+  ],
+  "sources": [
+    {
+      "source_ref": "plan/unit-system:tracker/risk-sizing/architecture/parts/A-qml-dictionary-unit/ARCHITECTURE-SPINE.md#AD-116",
+      "quote": "Placeholder blocks are ordinary blocks whose entry says `origin: placeholder` and names the risk session as owner",
+      "dated": "2026-11-01"
+    }
   ],
   "inputs": [],
   "output": {
@@ -16,19 +30,36 @@
   },
   "parameters": {
     "bars": {
-      "measure": "bars"
+      "measure": "bars",
+      "default": "48",
+      "origin": "placeholder",
+      "range": {
+        "min": "1",
+        "max": "1000",
+        "step": "1"
+      }
     }
   },
   "warm_up": {
     "rule": "none",
     "bars": 0
   },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
   "mirroring": "not_applicable",
   "state_bound": {
     "rule": "constant",
     "observations": 1
   },
-  "origin": "placeholder",
-  "owner": "risk-session",
   "fingerprint": "fp1:sha256:f19fa95dab6ce35827e90d82d2e1f41ffbdb1f53dadf601c3d74213db0430dc5"
 }
