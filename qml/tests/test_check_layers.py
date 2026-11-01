@@ -1,4 +1,5 @@
 """The checker names every problem of layers A to F at once, counts first (A6)."""
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ Document = dict[str, object]
 
 
 def _slots(document: Document, side: str) -> dict[str, dict[str, object]]:
-    logic = cast("dict[str, dict[str, dict[str, dict[str, dict[str, object]]]]]", document["logic"])
+    logic = cast("dict[str, dict[str, dict[str, dict[str, object]]]]", document["logic"])
     return logic[side]["slots"]
 
 

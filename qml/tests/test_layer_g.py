@@ -1,4 +1,5 @@
 """Layer G over a hosted unit: the unchanged ``evaluate_layer2`` and the behaviour report (A6)."""
+# pyright: reportPrivateUsage=false
 
 from __future__ import annotations
 
