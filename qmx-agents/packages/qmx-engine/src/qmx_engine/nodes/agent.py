@@ -212,8 +212,8 @@ class Agent:
                 zone.discard(overlay.path)
 
     def commit(self, zone: RunZone, job: NodeJob, overlay: Overlay, result: Ok) -> NodeResult:
-        """Only the declared `outputs.files` leave the overlay, as a script step's do (AD-51);
-        an agent returns no artifacts. Runs without awaiting, so no other commit interleaves."""
+        """Only the declared `outputs.files` leave the overlay, as for a script step (AD-51); an
+        agent returns no artifacts. Runs without awaiting, so no other commit interleaves."""
         try:
             done = zone.commit(job, overlay, declared_outputs(job).files, (), attempt_keys(job))
         except ZoneError as error:

@@ -6,7 +6,6 @@ commit into the run's `work/`."""
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -185,4 +184,4 @@ def test_a_read_only_step_is_born_in_its_workflow_folder_and_commits_nothing(
     assert outcome.status == "passed"
     assert port.workspaces == [home / "workspaces" / "wf-flow"]
     assert [e for e in events if e.kind == "zone_committed"] == []
-    assert json.loads(json.dumps(port.chats[0]["tools"])) == ["Read", "Grep"]
+    assert port.chats[0]["tools"] == ("Read", "Grep")
