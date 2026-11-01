@@ -153,7 +153,16 @@ def test_an_unreadable_vault_file_is_refused_by_name(home: Path) -> None:
 
 @pytest.mark.parametrize(
     "service",
-    ["qmx/../outside", "qmx/sub/name", "qmx/sub\\name", "qmx/pairing-key", "qmx/control-token"],
+    [
+        "qmx/../outside",
+        "qmx/sub/name",
+        "qmx/sub\\name",
+        "qmx/pairing-key",
+        "qmx/control-token",
+        "qmx/run-pass-key",
+        "qmx/PAIRING-KEY",
+        "qmx/Control-Token",
+    ],
 )
 def test_a_name_outside_the_apps_vault_is_refused(home: Path, value: str, service: str) -> None:
     vault_file(home, "pairing-key", value)
