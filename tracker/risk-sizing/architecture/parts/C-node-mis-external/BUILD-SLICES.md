@@ -4,7 +4,7 @@ Ordered, PR-sized slices a builder takes one at a time. Every slice keeps the sh
 
 Commands run from the repository root of a build checkout. `just ci` is the shipped gate; the named test files are new in their slice.
 
-Amended in the R1 fix round (`review/R1-FIXES-X1-C.md`): C-05 and C-12 are split into PRs (C-05a to C-05d, C-12a to C-12c); C-23 (promote and deploy) and C-24 (the core read rows) are new.
+Amended in the R1 fix round (`review/R1-FIXES-X1-C.md`): C-05 and C-12 are split into PRs (C-05a to C-05d, C-12a to C-12c); C-23 (promote and deploy) and C-24 (the core read rows) are new. After fix-check FC1 (`review/FC1-fix-check.md`, G3), C-05e (core change 7, the grants rule) is split out of C-17.
 
 ## C-01. Every machine proves its clock
 
@@ -69,6 +69,14 @@ Amended in the R1 fix round (`review/R1-FIXES-X1-C.md`): C-05 and C-12 are split
 - **Depends on.** Nothing.
 - **Verify.** `uv run pytest qmx-agents/packages/qmx-host/tests/test_server_secrets.py -q`, on Windows and Linux with keyring's fail backend forced (a fixture app declaring a secret starts with the vault reader; with the default reader it fails `startup_failed`, as `BLAST-RADIUS.md` C8 says); `just ci`.
 - **He sees.** Nothing yet.
+
+## C-05e. Core change 7: a volume's grants never leave its machine
+
+- **Goal.** A volume's `data/grants/` never leaves its machine (Level 0's core change 7): the backup classes call it `secret` and the move snapshot skips it, so the node's Linux grant folder is machine-bound and no backup or move carries a live grant (spine AD-306, R1-C-14).
+- **Files.** `qmx-agents/packages/qmx-home/src/qmx_home/classes.py` (one rule before `:119`: `data/apps/*/data/grants/**` is `secret`); `qmx-agents/packages/qmx-apps/src/qmx_apps/volume.py` (`snapshot()` skips `data/grants`, beside the `data/tmp` skip at `:271`); tests in `qmx-home` and `qmx-apps`.
+- **Depends on.** Nothing.
+- **Verify.** `uv run pytest qmx-agents/packages/qmx-home/tests/test_classes.py qmx-agents/packages/qmx-apps/tests -q` (a grant file under a node volume's `data/grants/` is classed `secret`, is not sent by a backup and is not copied by a move snapshot, the checks of `BLAST-RADIUS.md` C11 as tests; the shipped qmx-home and qmx-apps tests unchanged); `just ci`.
+- **He sees.** Nothing yet; a backup or a move of a node never carries its trading grant.
 
 ## C-06. The host route and the node link
 
@@ -162,7 +170,7 @@ Amended in the R1 fix round (`review/R1-FIXES-X1-C.md`): C-05 and C-12 are split
 
 - **Goal.** Inner supervisor with back-off, `CrashLoopFold` moved into `qmn/src/qmn/app/healing.py`, the stuck detector, `safe_to_restart`.
 - **Files.** `qmn/src/qmn/app/healing.py` (NEW); tests.
-- **Depends on.** C-12a, C-05a.
+- **Depends on.** C-12a, C-05a; Part A's A10 (cold start after a restart).
 - **Verify.** `uv run pytest qmn/tests/test_app_healing.py -q` (an exception restarts the runtime; 5 in 10 minutes stands down alive; a frozen runtime exits the process and the supervisor restarts it with the kill level still in force; a risk stop survives a restart); `just ci`.
 - **He sees.** "Healing" on the card and a Heals tab line, then "Trading" again.
 
@@ -192,10 +200,10 @@ Amended in the R1 fix round (`review/R1-FIXES-X1-C.md`): C-05 and C-12 are split
 
 ## C-17. A server
 
-- **Goal.** The kind's server placement (shipped server steps first, then chrony, the node and MIS apps, keys entered in the server's own window, round trip, self-test on demo); the server's OpenObserve bound to its Tailscale address; the route and node link across two real hosts; the run-pass recheck between them; the node's Linux grant folder made machine-bound (spine AD-306).
-- **Files.** `qmx-host/src/qmx_host/connect_node.py` (server steps); `qmx-host/deploy/openobserve.service` (`ZO_HTTP_ADDR`); `qmx-agents/packages/qmx-home/src/qmx_home/classes.py` (one rule before `:119`: `data/apps/*/data/grants/**` is `secret`); `qmx-agents/packages/qmx-apps/src/qmx_apps/volume.py` (`snapshot()` skips `data/grants`, beside the `data/tmp` skip at `:271`); tests and a lane script.
-- **Depends on.** C-11 to C-13, C-05d (secrets on a server).
-- **Verify.** `uv run pytest qmx-agents/packages/qmx-host/tests/test_connect_node_server.py qmx-agents/packages/qmx-home/tests/test_classes.py qmx-agents/packages/qmx-apps/tests -q` (steps rerun-safe against a fake SSH runner; a grant file under a node volume's `data/grants/` is classed `secret`, is not sent by a backup and is not copied by a move snapshot, the checks of `BLAST-RADIUS.md` C11 as tests; the shipped qmx-home and qmx-apps tests unchanged); the lane `tools/lanes/two_hosts.py` on his server (heartbeats, `apps.ask status`, a queued pause, a PC-minted run pass reading data, a deployment whose files reach the server through the hub and stage before `deploy`).
+- **Goal.** The kind's server placement (shipped server steps first, then chrony, the node and MIS apps, keys entered in the server's own window, round trip, self-test on demo); the server's OpenObserve bound to its Tailscale address; the route and node link across two real hosts; the run-pass recheck between them.
+- **Files.** `qmx-host/src/qmx_host/connect_node.py` (server steps); `qmx-host/deploy/openobserve.service` (`ZO_HTTP_ADDR`); tests and a lane script.
+- **Depends on.** C-11 to C-13, C-05d (secrets on a server), C-05e (grants stay on their machine).
+- **Verify.** `uv run pytest qmx-agents/packages/qmx-host/tests/test_connect_node_server.py -q` (steps rerun-safe against a fake SSH runner); the lane `tools/lanes/two_hosts.py` on his server (heartbeats, `apps.ask status`, a queued pause, a PC-minted run pass reading data, a deployment whose files reach the server through the hub and stage before `deploy`).
 - **He sees.** "London-1: Ready" on his PC, with its clock, round trip to cTrader and passport.
 
 ## C-18. Alarms and liveness
@@ -240,4 +248,4 @@ Amended in the R1 fix round (`review/R1-FIXES-X1-C.md`): C-05 and C-12 are split
 
 ## Order, merged with parts A and B
 
-As R1's check 3 merged it, with this round's splits: ground first (C-01, C-02, C-04, C-05a, C-05b, C-05c, C-05d, C-06); then C-03, C-07; C-08 and C-09 with the dictionary and the MIS on This PC; C-24 after Part A's A8; the node late: C-10, C-11, C-12a, C-12b, C-12c, C-23, C-13, C-14, C-15, C-16, C-17, C-18, C-19, C-20, C-21, C-22. No slice here needs a later one.
+As R1's check 3 merged it, with this round's splits: ground first (C-01, C-02, C-04, C-05a, C-05b, C-05c, C-05d, C-05e, C-06); then C-03, C-07; C-08 and C-09 with the dictionary and the MIS on This PC; C-24 after Part A's A8; the node late: C-10, C-11, C-12a, C-12b, C-12c, C-23, C-13, C-14, C-15, C-16, C-17, C-18, C-19, C-20, C-21, C-22. No slice here needs a later one.

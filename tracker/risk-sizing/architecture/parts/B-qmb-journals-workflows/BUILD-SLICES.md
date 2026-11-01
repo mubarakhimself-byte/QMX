@@ -6,7 +6,7 @@ Ordered, PR-sized slices a builder takes one at a time. Every PR keeps the shipp
 
 ## B1. Jobs take inputs and return a result
 
-- **Goal.** A workflow's `app_op` can tell an app's job what to do and get its answer back (mini-app core change 1 of Level 0 AD-33's six).
+- **Goal.** A workflow's `app_op` can tell an app's job what to do and get its answer back (mini-app core change 1 of Level 0 AD-33's seven).
 - **Files.** `qmx-agents/packages/qmx-apps/src/qmx_apps/supervisor.py` (`run_job`), `bootstrap.py` (`run_job`, `jobs`), `qmx-agents/packages/qmx-engine/src/qmx_engine/nodes/app_op.py`, `qmx-agents/packages/qmx-control/src/qmx_control/service.py` (`app_job` passes `inputs` and `principal`); new test `qmx-agents/packages/qmx-engine/tests/test_app_op_inputs.py` (from `scratchpad/l1b/tests/test_job_inputs.py`).
 - **Depends on.** nothing.
 - **Verify.** `cd qmx-agents && uv run pytest packages/qmx-engine/tests/test_app2a_app_op.py packages/qmx-engine/tests/test_app2b_routing.py packages/qmx-engine/tests/test_app_op_inputs.py packages/qmx-apps/tests/test_apps.py`, then `just ci`. Already proven on an overlay copy: 36 passed (`mini-app-core.md` §5).
@@ -185,7 +185,7 @@ Ordered, PR-sized slices a builder takes one at a time. Every PR keeps the shipp
 - **Goal.** Unit review, decay check, market review and almanac, pre-session shortlist, tagging units to markets, MIS check, daily data review, nightly live-day replay (STATE midday ruling 44).
 - **Files.** `templates/t7-trade-journal-review/`, `dm-demo-monitor/`, `dc-decay-and-limit-report/`, `db-desk-brief/`, `rv-weekly-review/` (read scripts replaced, `meta.needs` honest); new template folders for the shortlist, tagging, MIS check, data review and live-day replay; `templates/catalog.py`; pinned-status tests updated on purpose.
 - **Depends on.** B15, B18b; Part C's reading history, `readings_query` row and board for the shortlist, tagging and MIS check.
-- **Verify.** `cd qmx-agents && uv run pytest packages/qmx-engine/tests -k template`, then `just ci`. Live lane: test-run the unit review on the practice node's journal with `haiku`; save the note; pass when every number in it cites a receipt.
+- **Verify.** `cd qmx-agents && uv run pytest packages/qmx-engine/tests -k template`, then `just ci`. Live lane: test-run the unit review on a QMB run's unit journal (B9) with `haiku`; save the note; pass when every number in it cites a receipt.
 - **He sees.** Each morning a short note per unit (traded, skipped, missed, why), a market almanac, and a shortlist before each session, all marked as proposals.
 
 ## B21. The node watcher and the node-dependent drafts
@@ -193,7 +193,7 @@ Ordered, PR-sized slices a builder takes one at a time. Every PR keeps the shipp
 - **Goal.** The node watcher (heartbeats, node journal, guard rows; proposals and alerts, never presses); the remaining `needs: trading-node` drafts freed where their door now exists.
 - **Files.** `templates/gw-guard-watchdogs/`, `rk8-incident-post-mortem/` (enhanced), `templates/catalog.py`.
 - **Depends on.** B16; Part C's node read operations through AD-46.
-- **Verify.** `cd qmx-agents && uv run pytest packages/qmx-engine/tests -k template`, then `just ci`. Live lane: with the practice node running, stop its feed for two minutes; save the watcher's alert; pass when it names the stale feed and proposes nothing that acts.
+- **Verify.** `cd qmx-agents && uv run pytest packages/qmx-engine/tests -k template`, then `just ci`. Live lane: with the practice node running, stop its feed for two minutes; save the watcher's alert; pass when it names the stale feed and proposes nothing that acts. Then test-run the unit review (B20) on the practice node's journal with `haiku`; save the note; pass when every number in it cites a receipt.
 - **He sees.** A watcher that tells him when a node is unwell and why, and never touches it.
 
 ## Coverage

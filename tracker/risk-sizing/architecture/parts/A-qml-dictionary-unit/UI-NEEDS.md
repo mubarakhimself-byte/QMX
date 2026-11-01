@@ -53,6 +53,6 @@ The card keeps the shipped facts (version, state, used in) and adds a placeholde
 | Calibration rows and decision rows need Part B's journal read path before the Numbers tab can show moves | Part B |
 | The lifecycle fold needs the lifecycle journal kind (`lifecycle`, Part B) | Part B |
 | The dummy unit shows in his Library as a draft from first start, with its check result and a one-click publish (`BUILD-SLICES.md` A7) | Part A lands it; the UI session shows it |
-| His promote click toward paper or live is the host action `units_promote`; the card shows the diff against what is live (OP-03) | Part C builds the action (C-23); Part A's lifecycle checks his principal |
+| His promote click toward paper or live is the This PC host route `POST /api/units/promote` (not a catalog row); the card shows the diff against what is live (OP-03) | Part C builds the action (C-23); Part A's lifecycle checks his principal |
 | Layer D's market column needs Part C's instrument records | Part C |
 | Publishing a collection in one click needs a small host operation that publishes each item in turn (idempotent) | Part A proposes it in `LEAD-CALLS.md` LC-A1-14; the build plan places it |

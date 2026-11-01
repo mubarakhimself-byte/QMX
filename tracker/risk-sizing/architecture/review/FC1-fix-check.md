@@ -78,3 +78,18 @@ This is R1's check 3 order, with the fix round's new and split slices. With G3 a
 The smallest end-to-end runs are still early: A5 inside QML, and B6 through the platform.
 
 **How this was checked.** Each fix line was checked by script against its file, not by reading the fixer's report (Prove It Works, Build the Lever). The failing tests were reproduced and their cause read from the round's own message before anyone patched anything (Fix Root Causes). Each gap gets the smallest edit that makes files agree, not a redesign (Laziness Protocol).
+
+## Applied (X2)
+
+X2, 2026-11-01. Applied by `apply_x2.py` in this session's scratchpad folder `x2\`: 34 exact replacements, each asserted to match once before any file is written. `lint_spine.py --workspace` on `level-0` and `parts/A-qml-dictionary-unit` (the two spines touched) returns 0 findings (CHECKED). Nothing committed.
+
+- **G1.** Done in L0 AD-5, LC-X1-01, the handover's B row, A AD-107 and A `BUILD-SLICES.md` `:139`, `:144`: the handler is built in B5b (B6 uses it). Also done in master C12 (`01-connections.md:60`), which said "Part B slice B6" for the handler too.
+- **G2.** Done in L0 AD-31 and master C15: both rows sit in the new core toolsets `readings` and `instrument`, slice C-24, after A8.
+- **G3.** Done. L0 AD-33 has row 7 (Part C, C-05e), and its "set is consistent" sentence adds the volume's `snapshot()` and the backup classes table. C `BUILD-SLICES.md` has C-05e (depends on nothing, ground stage) with the two files and the grant test lines moved out of C-17. C-17 keeps its server lane and now depends on C-05e. C-05e is in the ground order and the amendment note. B `BUILD-SLICES.md` B1 now says "AD-33's seven". Not done, outside X2's files: "six" stays in B `ARCHITECTURE-SPINE.md:83`, `:130`, B `mini-app-core.md:24`, and C `ARCHITECTURE-SPINE.md:96` (still "proposes one more") and `:552`. C `BLAST-RADIUS.md` C11 (`:177`, `:179`) still names C-17 as the slice whose test pins the rule.
+- **G4.** Skipped. The lead handles it in P2's brief.
+- **G5.** Done in L0 AD-33's closing paragraph: "Part B's B6 test, where QMB opts in".
+- **G6.** Done. AD-33 change 4 drops the seal clause. Change 5 reads "its host facts, the holdout seal included". AD-40 and master C23 say the `mis` app skips months the host facts mark sealed.
+- **G7.** Done in L0 AD-23, the handover's C row, master X1, A `BUILD-SLICES.md:145` and A `UI-NEEDS.md:56`. Also done in A AD-115 (`ARCHITECTURE-SPINE.md:232`), which named it the same way. Not done, outside X2's files: A `CONTRACTS.md:229` still says `units_promote`.
+- **G8.** Done. B20's live lane runs the unit review on a QMB run's unit journal (B9). B21's live lane adds the same review on the practice node's journal.
+- **G9.** Done in master X3's cadence cell: open months of bars and readings hourly, ticks daily (settings, B AD-210).
+- **G10.** Done. C-13 depends on Part A's A10 (cold start after a restart).

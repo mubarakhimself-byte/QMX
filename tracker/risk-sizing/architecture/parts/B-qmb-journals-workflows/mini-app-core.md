@@ -21,7 +21,7 @@ From the workflow-engine spine (engine AD-64, CHECKED) and the code: things talk
 | An output lands as a plain `artifact` | `qmx_apps/artifacts.py:109-151` (`save` validates, hashes and hands a `Landing` to the host's `LibrarySink`) | a QMB result would bypass the run id, the try row and the `backtest-result` shape |
 | No running example app works in two of four cases | `macro-daily-bias/macro_bias.py`, `weekend-watcher/server.py` import the deleted `qmx_agents` and LangChain (G4b §1.7) | a newcomer's first app crashes (MA-03) |
 
-## 3. The two fixes (changes 1 and 2 of Level 0 AD-33's six, R1 CF-4)
+## 3. The two fixes (changes 1 and 2 of Level 0 AD-33's seven, R1 CF-4)
 
 **Fix 1: jobs take inputs and return a result.**
 

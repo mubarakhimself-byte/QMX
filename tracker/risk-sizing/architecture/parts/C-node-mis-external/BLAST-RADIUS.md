@@ -174,9 +174,9 @@ backup class of data/apps/trading-node/data/grants/ctrader-node.json: secret (ru
 move snapshot copies: ['app.db', 'data/node.sqlite']
 ```
 
-**Risk confirmed and closed.** Without the change, a live grant on a server would go to every backup storage and travel with a move. The first-match rule order means the new rule must sit before `data/apps/**`; the test in slice C-17 pins it.
+**Risk confirmed and closed.** Without the change, a live grant on a server would go to every backup storage and travel with a move. The first-match rule order means the new rule must sit before `data/apps/**`; the test in slice C-05e pins it.
 
-**Shipped tests.** The `qmx-home` and `qmx-apps` suites on the patched copies give the same result as on the shipped code (338 passed, 106 failed, 9 skipped, the same failure set; `test_classes.py` and all `qmx-apps` tests pass). The 106 are backup-round tests that fail on the shipped code too in the scratch environment (a round answers `refused`); cause not traced, INFERRED environmental. Slice C-17's `just ci` on a real checkout is the gate.
+**Shipped tests.** The `qmx-home` and `qmx-apps` suites on the patched copies give the same result as on the shipped code (338 passed, 106 failed, 9 skipped, the same failure set; `test_classes.py` and all `qmx-apps` tests pass). The 106 are backup-round tests that fail on the shipped code too in the scratch environment (a round answers `refused`); cause not traced, INFERRED environmental. FC1 traced it: his C: drive under a tenth free (343 passed, 0 failed with that rule off); the build sets TEMP on D:.
 
 **Cleared.** R1's other option, keeping the grant beside `<home>/vault/`, fails: the node is the one refresher and the bootstrap refuses app writes outside the volume (`qmx_apps/bootstrap.py:93-100`).
 

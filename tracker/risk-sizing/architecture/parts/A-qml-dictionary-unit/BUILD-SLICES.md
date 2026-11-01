@@ -136,11 +136,11 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 
 | Their slice | Needs from Part A | Part |
 | --- | --- | --- |
-| QMB's runner that trades a unit through the one run-slice handler over `HostedUnit` (`qmb/src/qmb/host/unit_handler.py`, B6, R1-L0-02), G in the sandbox, results in R | A5, A6, A7 | B |
+| QMB's runner that trades a unit through the one run-slice handler over `HostedUnit` (`qmb/src/qmb/host/unit_handler.py`, B5b, which B6 uses; R1-L0-02), G in the sandbox, results in R | A5, A6, A7 | B |
 | B9's one-month runs on both markets assert at least one `min_trend_strength` calibration row from real trades (R1-A-01) | A5 (the dummy declares `min_count` 20) | B |
 | B6 asserts the filled quantity equals the sizer receipt's quantity after lot rounding (CA-03, R1-C-08) | A1, A5 | B |
 | The journal kinds for decision, calibration, state and lifecycle rows | A5, A9 (bodies) | B |
 | The dictionary-expansion and librarian templates | A11 | B |
-| The node shell hosting units from a deployment's block folder, through Part B's unit handler (C-12a), and asserting the sent quantity equals the sizer receipt's (CA-03) | A4, A5, A10; B6's handler | C |
-| `units_promote`, his promote click that writes the lifecycle event and builds the deployment (C-23, R1-C-01) | A9 (the machine and its principal rule) | C |
+| The node shell hosting units from a deployment's block folder, through Part B's unit handler (C-12a), and asserting the sent quantity equals the sizer receipt's (CA-03) | A4, A5, A10; B5b's handler | C |
+| The This PC host route `POST /api/units/promote` (not a catalog row), his promote click that writes the lifecycle event and builds the deployment (C-23, R1-C-01) | A9 (the machine and its principal rule) | C |
 | Instrument records with the exact keys and the one class enum of `CONTRACTS.md` §2.3 (no `roll_rule`; the unit's market entry names its roll, R1-C-10) and the data-level vocabulary | A3, A11 (vocabulary) | C |

@@ -93,7 +93,7 @@ Read-only. Each binds this part as Level 0 wrote it; this spine designs under it
 | AD-14 numbers are named settings | Level 0 | every number below is a setting with a starting default |
 | AD-26 market facts as versioned records | Level 0 | records designed in `RECORDS.md` |
 | AD-27, AD-28 journals and the pull | Level 0 | the node's before-dispatch write is its own append store; Part B's records job harvests every append store on its machine into that machine's store (sealed months, the open month of bars and readings every minute, ticks hourly); results come home by pull; Part B owns the writer library, the records job and the pull job |
-| AD-33 the mini-app core, fixed only where it blocks | Level 0 | Level 0's one list of six core changes (R1 CF-4); this part builds items 3 to 6 (restart with back-off, the read-only market root, the host-facts file, the server's secret reader) as slices C-05a to C-05d, and proposes one more for that list: a volume's `data/grants/` never leaves its machine (AD-306) |
+| AD-33 the mini-app core, fixed only where it blocks | Level 0 | Level 0's one list of seven core changes (R1 CF-4, FC1 G3); this part builds items 3 to 7 (restart with back-off, the read-only market root, the host-facts file, the server's secret reader) as slices C-05a to C-05d, and proposes one more for that list: a volume's `data/grants/` never leaves its machine (AD-306) |
 | AD-36 organs kept, shell replaced | Level 0 | the cut in AD-323 |
 | AD-37 placements and keys | Level 0 | the grant store in AD-306 (one wording conflict surfaced, CF-1) |
 | AD-38 the node keeps returning to what he asked for | Level 0 | the stand-down table is inherited as is; identity in AD-305 |
@@ -549,7 +549,7 @@ extensions/qmf-calendar-*/            # calendars beyond forex as data
 
 ## Conflicts with the parent, surfaced
 
-Level 0 binds; this part does not apply these itself. R1 settled all seven as accepted (`review/R1-findings.md`, "Clash settlements"), with refinements: CF-4 became Level 0's one list of six core changes (this part builds items 3 to 6 as slices C-05a to C-05d); CF-5's fingerprint list won over Part B's watermark and Part B builds it in B16; CF-6 splits readings by tier. The Level 0 fixer applies them there. One more core change surfaced in the fix round, for that list: a volume's `data/grants/` never leaves its machine (AD-306, `BLAST-RADIUS.md` C11).
+Level 0 binds; this part does not apply these itself. R1 settled all seven as accepted (`review/R1-findings.md`, "Clash settlements"), with refinements: CF-4 became Level 0's one list of seven core changes (this part builds items 3 to 7 as slices C-05a to C-05e); CF-5's fingerprint list won over Part B's watermark and Part B builds it in B16; CF-6 splits readings by tier. The Level 0 fixer applies them there. One more core change surfaced in the fix round, for that list: a volume's `data/grants/` never leaves its machine (AD-306, `BLAST-RADIUS.md` C11).
 
 | Id | Level 0 text | What the code shows | Proposal |
 | --- | --- | --- | --- |
