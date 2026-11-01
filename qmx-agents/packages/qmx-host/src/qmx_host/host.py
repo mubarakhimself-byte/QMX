@@ -188,11 +188,11 @@ DID_NOT_OPEN: Final = 2
 E); `__main__` exits 2 for a folder it refuses before the host starts."""
 PORT_TAKEN: Final = 4
 OPEN_REFUSALS: Final = (StoreRefused, LibraryRefused, EngineLibraryRefused)
+"""What a store, the engine's ledger or either Library side raises when it must not open. Two
+classes share the name `LibraryRefused`, one per side of the engine's Library port."""
 UNIT_CHECKER: Final = "qml.unit/1"
 ENTRY_CHECKER: Final = "qml.entry/1"
 CHECK_FAILED: Final = "check_failed"
-"""What a store, the engine's ledger or either Library side raises when it must not open. Two
-classes share the name `LibraryRefused`, one per side of the engine's Library port."""
 
 
 class HostRunning(Exception):
