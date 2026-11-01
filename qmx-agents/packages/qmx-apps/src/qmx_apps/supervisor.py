@@ -902,6 +902,7 @@ class Supervisor:
         version (MA-05) and any other app what `restart` would start."""
         with self._lock:
             healing = self._healing.setdefault(app_id, Healing(breaker, profile))
+            healing.breaker, healing.profile = breaker, profile
             healing.trips += 1
             if healing.thread is None:
                 healing.thread = threading.Thread(
