@@ -1,0 +1,73 @@
+# R1 fixes for Part C (fixer X1-C)
+
+Fixer X1-C, 2026-11-01, per `architecture/briefs/X1-C-fix.md`. Applies `architecture/review/R1-findings.md` to `architecture/parts/C-node-mis-external/`. One line per finding and settlement: what was done and where, or why it was rejected. Labels: CHECKED (path:line in `D:\QMX-worktrees\engine-base-read\`, or the script run) or INFERRED. "Spine" is that folder's `ARCHITECTURE-SPINE.md`, "slices" its `BUILD-SLICES.md`. Scripts are in this session's scratchpad, folder `x1c\`.
+
+## Findings for part C
+
+- **R1-C-01 (High), nobody builds his promotion click.** Fixed: new spine AD-324, `CONTRACTS.md` §13, slice C-23. A This PC host route `POST /api/units/promote` beside the seal move, with the same `operator` check (`qmx_host/market_data.py:1201-1210`, CHECKED), not a catalog row; it folds `qml.lifecycle.fold`, writes the lifecycle event through Part B's writer, builds the deployment from the Library and asks `deploy` through the node link; parks and retires ask `withdraw`. Starting numbers: paper from the unit's defaults; live from the paper lane's last calibrated values and watermark, with the calibrator's statistics restarting there (LC-C-39). C-14 now promotes the dummy through it.
+- **R1-C-02 (High), the network-cut drill is in no slice.** Fixed: slice C-12b runs it on the conformance venue (answer lost, UNKNOWN, read by client order id and tag, no resend, one position); C-15 repeats it on demo and adds the TN-05 refresh drill; `EXTERNAL.md` §2, `NODE.md` §6 and §13, spine case rows TN-01 and TN-05.
+- **R1-C-03 (High), `readings_query` and `instrument_get` have no owner.** Fixed, with a different slice: both rows in `CONTRACTS.md` §12, in two new core toolsets `instrument` and `readings`, built in a new slice C-24 instead of C-02 and C-09. Reason: a row's name is `<toolset>_<op>` (`qmx_control/catalog.py:135-136`, CHECKED), so Level 0's names need those toolsets, and the harness serves a new toolset only after Part A's A8 derives `DOMAIN_GROUPS` (`qma-harness/src/qma/harness/tools.py:641`, `:668`, CHECKED); C-02 must stay free of dependencies (LC-C-41).
+- **R1-C-04 (Medium), `apps.job` carries no inputs.** Fixed: `CONTRACTS.md` §1 adds optional `inputs` and the job's `result` (Part B's B1); the principal rides the pass; spine AD-304; slice C-06 tests a job with inputs.
+- **R1-C-05 (Medium), the node link is not the only path.** Fixed as proposed, refined: spine AD-303 keeps the chat path to the practice node and makes the node keep the order. Changes carry `issued_at` (set by the node link, or stamped on arrival for a direct call); one older than the newest applied for its scope answers `superseded`; `kill` and `flatten` always apply (Level 0 AD-12). Refinement reason: a chat call's op id is written by the model, so its age cannot be trusted. `CONTRACTS.md` §2, `NODE.md` §4, LC-C-38, slice C-10 test.
+- **R1-C-06 (Medium), the 16 MB deployment cap.** Fixed: `deploy_max_bytes` removed (`CONTRACTS.md` §3, spine AD-317, `NODE.md` §12, LC-C-37). The document names its files by fingerprint; the node link on the node's home stages them from that machine's Library (a server's filled by the hub, X5) into `data/deployments/<id>/in/`, the pattern Part B's lander uses for a run folder; a file not there yet answers `files_missing` and the outbox retries; `deploy` refuses only a missing or mismatched file. No new route verb, no core change. Slice C-12a deploys a 32 MB weights fixture; C-17's lane stages through the hub. That a server's hub replica holds component code and weights blobs is INFERRED from X5 ("Library objects, refs, edges"); C-17 proves it.
+- **R1-C-07 (Medium), C-12 is several PRs.** Fixed: C-12a (feed keeper, runtime, order path, staging, the stop-on-every-order test), C-12b (reconcile with attribution, the drill), C-12c (paper lane, stand-down table); every later dependency repointed (`x1c/c_slices.py`: 0 problems).
+- **R1-C-08 (Medium), no sized intent end to end.** Fixed: slice C-12a asserts the quantity the conformance venue receives equals the sizer receipt's after lot rounding; spine case row CA-03; `NODE.md` §13; `RISK-SIZING-POINTS.md`.
+- **R1-C-09 (Medium), four core changes in one PR.** Fixed: C-05 split into C-05a (restart with back-off, with the MA-05 test), C-05b (market root), C-05c (host facts, holdout included), C-05d (server secret reader), each with its own test and the shipped `qmx-apps` tests unchanged.
+- **R1-C-10 (Medium), record keys and class names differ.** Fixed: `RECORDS.md` §2 is now a key table; keys Part A's §2.3 reads keep A's names (`contract_size`, `value_per_point`, `max_lot`, `day_boundary`, `calendar_ref`, `currency`); one class enum with underscores, Part A's spelling (`spot_crypto`, `index_cfd`, plus `stock`); the roll rule on the unit, never the record; `data_levels` in `qmx.data-level/1`. A key-parity test joins slice C-02. Packs renamed `<class>-<n>` and every class has one (`MIS.md` §4; LC-C-44). Part A's §2.3 dropping `roll_rule` is the Level 0 and A fixer's edit. Part B already uses `spot_crypto` (B `CONTRACTS.md` line 20, read).
+- **R1-C-11 (Medium), shipped tool counts.** Fixed: slice C-06 names `qmx-tools/tests/test_tools.py:374-376` as changed on purpose, the `node` server going from 2 to 6; C-24's rows sit in new toolsets, so that test is unchanged there.
+- **R1-C-12 (Medium), an agent starting a job on a money app.** Fixed: `apps.job` answers only `operator` for an app whose manifest `risk` is `money` (`qmx_apps/manifest.py:175`, CHECKED); `CONTRACTS.md` §1, spine AD-304, LC-C-45; test in slice C-06; slice C-10 pins that the node declares no job.
+- **R1-C-13 (Low), the MIS raw root skips the holdout.** Fixed, refined: the seal is not in the store root but in host Settings `[data]` (`qmx_host/market_data.py:1232-1255`, CHECKED), so the host adds `holdout` to the host facts it already writes (spine AD-307, `CONTRACTS.md` §5, slice C-05c), and the `mis` app skips sealed months (spine AD-313, `MIS.md` §3); test in slice C-09; LC-C-43.
+- **R1-C-14 (Low), a live grant travelling with its volume.** Fixed, and the risk proven real: a grant file in a node volume is classed `content` and sent by every backup (`qmx_home/classes.py:119`) and copied by the move snapshot (`qmx_apps/volume.py:261-285`, used at `supervisor.py:1072`), CHECKED by running `x1c/br/brx1_grants_copy.py`. Two one-line changes stop both (a `secret` rule before `:119`; a skip in `snapshot()`), proven by the same script on patched copies; the shipped `qmx-home` and `qmx-apps` suites on the patched copies: see "Checks". R1's vault option is rejected: the one refresher is the node, and an app cannot write outside its volume (`qmx_apps/bootstrap.py:93-100`, CHECKED). Spine AD-306, `BLAST-RADIUS.md` C11, slice C-17, LC-C-42.
+- **R1-C-15 (Low), three small inconsistencies.** Fixed: the host-facts path is `road/host/facts.json` everywhere (slice C-05c, `BLAST-RADIUS.md` C10); C-12a says its G record is a fixture and the real one comes from Part B's `behaviour_check` (B5b); C-09 keeps its dependency on Part B's B15, which no longer waits on the node (Part B's slices: "Nothing in B1 to B15 waits on the trading node", read), so C-09 stays before the node.
+- **R1-C-16 (Medium), two reconnect cases untested.** Fixed: slice C-12a tests EX-02 (a session dropped mid-book shows `book_state = rebuilding` until a fresh snapshot) and TN-19 (a silent socket reconnects, no entry until ready); spine case rows; `NODE.md` §13.
+
+## Clash settlements that name a Part C file
+
+- **A-C3 (units through `construct_unit`; one run-slice handler).** Fixed: spine AD-301 hosts units through `construct_unit` (`restore_unit` after a restart) and `HostedUnit`, driven by `run_slice` through Part B's one handler `qmb/src/qmb/host/unit_handler.py` (Part B now builds it in B5b, read), never a node copy; paradigm, inherited AD-5 row, inner diagram, `CONTRACTS.md` consumed shapes and master row C12; slice C-12a depends on B5b.
+- **CF-4 (one list of six core changes).** Applied here: the inherited AD-33 row and AD-315 name Level 0's list; this part builds items 3 to 6 as C-05a to C-05d. One more change is proposed for that list (machine-bound `data/grants/`, R1-C-14), recorded in the spine's conflicts section for the Level 0 fixer or the fix-check.
+- **CF-5 (`confirmed` fingerprints, Part B builds it in B16).** Kept: `CONTRACTS.md` §1 and change 2 now name B16.
+- **B-CC8 (`apps.job` inputs, principal in the pass, money guard).** Fixed: `CONTRACTS.md` §1 and change 12; spine AD-304.
+- **B-CC9 (reading history on the journal envelope, `source` in the body).** Fixed: `CONTRACTS.md` §7 carries `source` and `machine` in the body; spine AD-314.
+- **B-CC10, C-CC6, C-CC7 (rows C30 to C32).** Fixed in this folder: `CONTRACTS.md` changes 6 and 7 are now C31 (host facts) and C32 (log shipping); the master's numbering is the Level 0 fixer's.
+- **CF-1, CF-2, CF-3, CF-6, CF-7, C-CC2, C-CC3, C-CC5, C-CC8, C-CC9.** Settled at Level 0, the master and Part B, not in this folder's files; this folder already matches each (CF-1 AD-306; CF-2 `CONTRACTS.md` §5 roles; CF-3 the operation list; CF-6 AD-313; CF-7 AD-308; C-CC9 `CONTRACTS.md` change 9), and the spine's conflicts section records R1's settlement. C-CC3's refinement is R1-C-13.
+
+## Lines in Part C's files that other findings touch
+
+- **R1-L0-01 (Part C's share of the unowned cases).** Fixed: the spine's case table gains CA-01, CA-03 (shared with Parts A and B), CA-04, CA-06, CA-11 and MA-05, now 120 rows; "Also handled here" keeps MA-01 only. CA-01's version work is in spine AD-304 and slice C-06 (`qmx_control/server.py:415` fixes `0.1.0` today, CHECKED; LC-C-46). R1's `cases.py`, rerun: every non-risk catalogue case is now claimed; CA-03 and QML-06 are claimed by A and C on purpose.
+- **R1-L0-02.** Same fix as A-C3.
+- **R1-L0-03 (`operator`, not `user`).** Checked: this folder already says `operator` throughout; no change.
+- **R1-L0-08 (X6).** Checked: `NETWORKING.md` §3 already says verified by parse, a two-host run in C-17; no change.
+- **R1-B-02 (the records job is the one harvester).** Fixed in this folder: inherited AD-27/28 row, spine AD-313, `MIS.md` §3 and §9, LC-C-16, `CONTRACTS.md` change 9 and consumed shapes, all using Part B's `[records] open_harvest_s` and `tick_harvest_s` (Part B's `journals.md` uses the same names, read).
+- **R1-B-03.** Same as CF-5.
+- **R1-B-04.** Fixed here: slice C-14 checks that the practice node's real journal rows reach This PC's store through Part B's records job; the slices' opening paragraph says nothing before C-10 waits on the node.
+- **R1-B-06 (`lifecycle`, `state`, `node_lifecycle`).** Fixed here: spine AD-324 and `NODE.md` §5 (his clicks written on This PC; a risk stop is the unit's `lifecycle` event; the node's starts and stops are `node_lifecycle`); slice C-12c tests the risk-stop event.
+- **R1-B-07.** Same as B-CC9.
+- **R1-B-09 (QMB opts into restart).** Noted in spine AD-315; Part B's change.
+- **R1-B-10 (record id = row id).** Fixed here: spine AD-301 and `NODE.md` §7 say a re-run slice writes no double rows because of it.
+- **R1-B-11 (`fidelity`).** Checked: this folder's `data_level` is the glossary's level (Part A's `qmx.data-level/1`); no clash; no change.
+
+## The lead's additions from the Part B fixer (`R1-FIXES-X1-B.md`, cross-part notes)
+
+- **(1) The runtime hosts units through B5b's handler.** Applied: spine AD-301 and inherited AD-5 row name B5b; slice C-12a depends on B5b; `CONTRACTS.md` consumed shapes.
+- **(2) The recorder and the MIS write through B8's writer library.** Applied: spine AD-309 (bars and ticks as series rows), AD-314 (reading records); slices C-08, C-09, C-12a depend on B8.
+- **(3) `journal_tail` reads with B8's committed reader.** Applied: `CONTRACTS.md` §2 and consumed shapes, `NODE.md` §4; slice C-10 depends on B8 and tests that a read during a write returns whole lines and leaves the writer's file unchanged. The torn-line proof is Part B's (`x1b/br_reader_truncates.py`, its X1B-NEW-1), not rerun here.
+- **(4) B16 builds the copy-confirmation call.** Applied: slice C-06's route only accepts `confirmed`; `CONTRACTS.md` §1 says B16 adds the pin and the `verify` call in this handler.
+- **(5) The promote action calls B13's `qmx_host/lifecycle.py`.** Applied: spine AD-324 records his click through `record_move`, which folds and refuses illegal moves; `CONTRACTS.md` consumed shapes; slice C-23 depends on B13 instead of calling A9 itself.
+- **(6) One harvester per machine; nothing on a node is deleted in this build.** Already matched: inherited AD-27/28 row, AD-313, `CONTRACTS.md` change 9; pruning stays in the spine's Deferred table.
+
+## Notes for the fix-check
+
+- Level 0's AD-33 list of core changes: one proposed addition (a volume's `data/grants/` never leaves its machine), evidence in `BLAST-RADIUS.md` C11.
+- Level 0 AD-31 and master C15: this part puts `instrument_get` and `readings_query` in core toolsets `instrument` and `readings` (slice C-24).
+- R1-A-04 says `DOMAIN_GROUPS` sits at `qma-harness/src/qma/harness/tools.py:664`; on `c93407ca` it is at `:668` (CHECKED by grep while fixing R1-C-03), so Part A's original citation was right.
+
+## Checks run before finishing
+
+- `lint_spine.py --workspace parts/C-node-mis-external`: 0 findings (CHECKED, run after the last edit).
+- `x1c/c_cases.py`: 120 case rows, all in the catalogue, none empty, R1's six present (CHECKED).
+- `x1c/c_slices.py`: 29 slices, each with goal, files, dependency, check and what he sees; no slice depends on a later one; the stale-id hits left are finding ids and history notes (CHECKED).
+- `x1c/quotecheck.py` (the Part C quote checker, rerun): 29 of his quotes, 29 found on their cited lines; this round added none (CHECKED).
+- `x1c/br/brx1_grants_copy.py` on shipped and patched code: output in `BLAST-RADIUS.md` C11 (CHECKED).
+- Shipped `qmx-home` and `qmx-apps` suites, run on the shipped code and again on the R1-C-14 patched copies (`x1c/shipped_results.txt`, `x1c/patched_results.txt`): both 338 passed, 106 failed, 9 skipped, with the same failure set (CHECKED by diff). `test_classes.py` and every `qmx-apps` test pass on both. The 106 failures are `qmx-home` backup-round tests that fail on the shipped code too in this scratch environment (a round answers `refused`, for example `test_backup_secrets.py:23`); their cause was not traced (INFERRED: the environment, not the code). So the rule is proven by the step-4 script, and slice C-17's `just ci` must show those backup tests green on a real build checkout.
+
+Status: done. Every finding in Part C's share and every settlement naming this folder has a line above.

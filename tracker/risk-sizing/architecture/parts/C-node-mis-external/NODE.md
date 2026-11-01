@@ -1,6 +1,6 @@
 # The trading node
 
-Part C, area 1. The node is the `trading-node` mini app (risk `money`): the only place an order is sent from. Rules: spine AD-301 to AD-309, AD-315 to AD-317, AD-323, under Level 0 AD-2, AD-3, AD-8, AD-12, AD-13, AD-36 to AD-39, AD-45, AD-46. Shapes: `CONTRACTS.md` §2 to §5.
+Part C, area 1. The node is the `trading-node` mini app (risk `money`): the only place an order is sent from. Rules: spine AD-301 to AD-309, AD-315 to AD-317, AD-323, AD-324, under Level 0 AD-2, AD-3, AD-8, AD-12, AD-13, AD-36 to AD-39, AD-45, AD-46. Shapes: `CONTRACTS.md` §2 to §5.
 
 His words this answers: "So that when we click a kill switch, it can automatically work." (T3:1562); "something that should just be setting itself up on a server, setting up the MIS, and what everything the unit needs to trade autonomously" (T3:1562); "is it going to start as server, then show me that the server has started?" (T3:1102); "We are literally trading 24/7, my days. This is why we need a trading node." (T2:325).
 
@@ -64,6 +64,7 @@ network = ["live.ctraderapi.com", "demo.ctraderapi.com", "api.hyperliquid.xyz", 
 max_errors = 1000
 heartbeat_timeout = 30
 restart = "backoff"            # the AD-315 core fix; off by default for other apps
+# no [entrypoints] jobs: the route refuses agents a money app's job anyway, and a test pins none
 
 [operations.status]            # every operation: state = "instance"
 state = "instance"
@@ -96,13 +97,13 @@ The volume store is `data/node.sqlite`, two owned tables (spine AD-301):
 | `observed` | the runtime only | latest values (state word, reasons, per-unit and per-market states, positions, protection seen, clock band, venue sessions, safe-to-restart) and an append-only event list |
 | `identity` | first start only | install id, machine fingerprint, minted at; then his confirmations |
 
-The reconciler folds `desired` into the target (deployments, bindings, pauses, kill level, keys version), compares it with `observed`, and acts in a fixed order on every wake and tick: kill and pause first, then protection repair, then bindings, then deployments, then unpauses. Every action is idempotent: it checks what is in place before it acts (principle-make-operations-idempotent).
+Handlers write `desired` in arrival order. A change whose `issued_at` is older than the newest change applied for the same scope answers `superseded`; `kill` and `flatten` always apply (spine AD-303). The reconciler folds `desired` into the target (deployments, bindings, pauses, kill level, keys version), compares it with `observed`, and acts in a fixed order on every wake and tick: kill and pause first, then protection repair, then bindings, then deployments, then unpauses. Every action is idempotent: it checks what is in place before it acts (principle-make-operations-idempotent).
 
 | Operation | Writes | Answers |
 | --- | --- | --- |
 | `status` | nothing | node state word, reasons, identity, clock, venue sessions, units summary, `safe_to_restart` with reasons, contract versions |
 | `units`, `positions`, `deployments`, `passport` | nothing | the observed rows |
-| `journal_tail` | nothing | the newest node and unit journal rows after a sequence, at most `tail_rows` (default 500) per call |
+| `journal_tail` | nothing | the newest node and unit journal rows after a sequence, at most `tail_rows` (default 500) per call, read with Part B's committed reader so a line the runtime is still writing is never cut |
 | `deploy` | a deployment change | `accepted` and the deployment id; compile happens after (AD-317) |
 | `withdraw` | stop new entries for the deployment; remove it when flat | `accepted` |
 | `pause`, `resume` | per unit, market, account or all | `accepted`; `resume` first lists the open causes (OP-10) |
@@ -116,7 +117,7 @@ The reconciler folds `desired` into the target (deployments, bindings, pauses, k
 
 ## 5. Market events and stand-downs
 
-The stand-down table is Level 0 AD-38's, inherited as is (stale feed, clock band, disk, venue not ready, repeated fault, spec change, risk stop), each clearing as that table says. Market events every unit sees, from the venue and the calendars: market shut (calendar), exchange halt or price limit (a futures route's status, or a venue error class mapped to it), close-only switch (cTrader trading-mode change), maintenance window (venue record calendar), delisting. During any of them: no new entries, exits allowed, a journal row with the event. The node's `status` names each with "until when" from the calendar when it is known (OP-09).
+The stand-down table is Level 0 AD-38's, inherited as is (stale feed, clock band, disk, venue not ready, repeated fault, spec change, risk stop), each clearing as that table says. Market events every unit sees, from the venue and the calendars: market shut (calendar), exchange halt or price limit (a futures route's status, or a venue error class mapped to it), close-only switch (cTrader trading-mode change), maintenance window (venue record calendar), delisting. During any of them: no new entries, exits allowed, a journal row with the event. The node's `status` names each with "until when" from the calendar when it is known (OP-09). A risk stop is also the unit's `lifecycle` event (Part A's body, `by: {kind: risk_rule}`), written through Part B's writer; the node's own starts and stops are `node_lifecycle` rows (R1-B-06).
 
 ## 6. The order path per venue
 
@@ -130,7 +131,7 @@ Level 0 AD-39's chain, with the venue's own protection rule (spine AD-308):
 6. Journal before dispatch, in process, into the node's append store (`qmn/src/qmn/journal_dispatch.py`, kept); a failed write blocks the order, never a stop or an exit.
 7. The venue client; CT-20 events recorded before they are interpreted; reconcile.
 
-**UNKNOWN and resend (TN-01).** An outcome past `submission_deadline` (default 2 s) is UNKNOWN for that stream: no further entry on the stream until it resolves. Before any resend the node reads open orders by client order id and positions by tag; it resends only when both prove absent. A demo drill cuts the network after a send and proves one position.
+**UNKNOWN and resend (TN-01).** An outcome past `submission_deadline` (default 2 s) is UNKNOWN for that stream: no further entry on the stream until it resolves. Before any resend the node reads open orders by client order id and positions by tag; it resends only when both prove absent. The drill loses the answer to a send and proves one position: on the conformance venue in slice C-12b, on demo in slice C-15.
 
 **Typed rejections (TN-24).** A rejection the error map knows (stop too close, market closed, not enough margin) reaches the unit as a typed refusal; the unit's declared back-off applies (default: no new attempt on that market until the next bar). An unmapped code is UNKNOWN plus an alarm.
 
@@ -142,7 +143,7 @@ Level 0 AD-39's chain, with the venue's own protection rule (spine AD-308):
 
 | Situation | What happens | Logged as |
 | --- | --- | --- |
-| Start or restart | identity check, reconcile with the venue (venue wins), rebuild positions, restore calibration, re-place missing protection, warm up, then entries | node journal |
+| Start or restart | identity check, reconcile with the venue (venue wins), rebuild positions, restore calibration, re-place missing protection, warm up, then entries; a slice re-run after a crash writes no double rows, because Part B's record id for decision, calibration and state rows is Part A's row id | node journal |
 | Runtime exception | inner supervisor restarts the thread with back-off; the crash-loop fold stands down alive past 5 in 10 minutes | node journal, alarm on stand-down |
 | Runtime stuck past `stuck_after_s` | the process exits with `runtime_stuck`; the supervisor's opt-in restart brings it back | supervisor log, node journal |
 | Breaker trip or process death | the supervisor restarts the active signed version with back-off (5 s doubling to 300 s) | supervisor log |
@@ -154,7 +155,7 @@ Level 0 AD-39's chain, with the venue's own protection rule (spine AD-308):
 ## 8. Identity, tags and taking over
 
 - First start mints the install id and records the machine fingerprint (spine AD-305). The tag is its first 8 base-32 characters.
-- Every start compares the machine fingerprint. A mismatch means the volume moved or was copied: the node refuses all trading and shows a card with two choices. "This is the same node, moved" (`confirm_same_node`) re-binds the identity to this machine; the account records' owner field follows. "Take over a dead node" (`take_over`, with the old tag) first needs his word that the old node is gone and its heartbeat absent for `takeover_quiet_s` (default 600).
+- Every start compares the machine fingerprint. A mismatch means the volume moved or was copied: the node refuses all trading and shows a card with two choices. A Linux grant never travels with the volume (spine AD-306), so after either choice he signs in again. "This is the same node, moved" (`confirm_same_node`) re-binds the identity to this machine; the account records' owner field follows. "Take over a dead node" (`take_over`, with the old tag) first needs his word that the old node is gone and its heartbeat absent for `takeover_quiet_s` (default 600).
 - A take-over adopts positions and orders tagged with the old tag, under protection, and the account record names the new owner. This PC then re-issues the dead node's deployments for the new identity, from its own record of them.
 - A live twin (same identity, both running) shows as activity tagged with my tag that my journal does not hold. The node stands down entries on that account and raises an alarm; the twin does the same.
 - cTrader: positions keep `label` on their trade data (`ProtoOATradeData`, R0's read of `openapi-91.pb`). Whether `label` survives every path (partial close, amend) and what cTrader does with a repeated client order id are proven on demo in slice C-15; until then the design never relies on cTrader refusing a duplicate.
@@ -210,7 +211,7 @@ On his screen: one word, then the reason one click away.
 
 ## 12. Deploying a unit
 
-A deployment document is at most `deploy_max_bytes` (default 16 MB) and is refused past it, naming its size. From the unit page: pick a node (Ready only), an account binding, markets, lane (paper by default). This PC's node link builds the deployment document (`CONTRACTS.md` §3) from the Library (the unit, its pinned blocks, its recorded G verdict, calibrated values, record snapshots) and asks `deploy`. The preflight refusals are spine AD-317's. Live lane needs his signature step and a host in the trading profile.
+His click does it (spine AD-324): "Promote to paper" or "Promote to live" on the unit page, then pick a node (Ready only), an account binding and the market. The promote action writes the lifecycle event and builds the deployment document (`CONTRACTS.md` §3) from the Library: the unit, its pinned block files by fingerprint, its G record, the starting numbers (defaults on paper; the paper lane's last calibrated values and watermark on live), record snapshots. The node link on the node's home stages the files into `data/deployments/<deployment_id>/in/` from that machine's Library (a server's arrives by the hub) and asks `deploy`. There is no size limit; a file the home does not hold yet waits in the outbox as `files_missing`. The preflight refusals are spine AD-317's. A live lane on a live-world account needs his signature step and a host in the trading profile.
 
 ## 13. What must not break, and how each is checked
 
@@ -223,6 +224,11 @@ A deployment document is at most `deploy_max_bytes` (default 16 MB) and is refus
 | The kill works with the runtime stuck | a test freezes the runtime thread, calls `kill`, asserts the process exits and, after restart, the level is in force |
 | Twin and take-over | conformance-venue tests: same tag not in journal stands down; machine mismatch refuses until `confirm_same_node`; `take_over` adopts under protection |
 | No importer of a deleted module | `tools/import_scan.py` (NEW, the AST scan of `BLAST-RADIUS.md` C6) on the PR head |
+| The venue gets the size the unit chose | slice C-12a: the quantity the conformance venue receives equals the sizer receipt's quantity after lot rounding (CA-03) |
+| A lost answer never doubles a position | slice C-12b drill on the conformance venue, slice C-15 on demo (TN-01) |
+| No reader sees a half-built book; a silent socket reconnects | slice C-12a tests (EX-02, TN-19) |
+| An older change never undoes a newer one | slice C-10: an older `pause` after an applied `resume` answers `superseded`; an older `kill` still applies |
+| A deployment of any size | slice C-12a: a staged 32 MB weights file deploys; a missing or mismatched file refuses by name |
 
 ## 14. Ledger rows, growth seam
 

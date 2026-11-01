@@ -18,10 +18,10 @@ His ask (log 2026-10-31T16:20): "I hope you're considering networking, things li
 | Need | How |
 | --- | --- |
 | Which nodes exist and where | place rows written last by the node setup, each listing the apps homed there (`apps = ["trading-node", "mis"]`); This PC's practice node is homed `pc` |
-| Ask an operation | local: the supervisor's `call` with the pin; remote: `apps.ask` on the home's route |
+| Ask an operation | local: the supervisor's `call` with the pin; remote: `apps.ask` on the home's route, which hands an ask to the trading node to that host's own node link; before `deploy`, the node link on the home stages the deployment's files from that machine's Library |
 | Latest state (X2) | `heartbeats` and `apps.ask status` every `heartbeat_interval_s` (60) per node; kept with "unreachable since" after `unreachable_after` (3) missed reads |
-| A change while a node is down (X1) | the per-node outbox in the host's store, keyed by op id, retried with back-off (5 s doubling to 120 s) until the node answers; his screen shows "waiting for London-1" |
-| Workflows (`app_op`, X7) | the engine's `AppOp` is composed with `Placements` (Level 0 AD-46, `qmx_engine/control_door.py:308`) whose `remote` calls the node link's `apps.job` |
+| A change while a node is down (X1) | the per-node outbox in the host's store, keyed by op id and stamped `issued_at`, retried with back-off (5 s doubling to 120 s) until the node answers; his screen shows "waiting for London-1"; the node answers `superseded` to a change older than the newest it applied for that scope, except `kill` and `flatten` |
+| Workflows (`app_op`, X7) | the engine's `AppOp` is composed with `Placements` (Level 0 AD-46, `qmx_engine/control_door.py:308`) whose `remote` calls the node link's `apps.job`, with the step's `inputs`; a job on a `money` app answers only his principal |
 | Agents (X7) | the core `node` rows call the node link's reads; they cannot reach a `manage` operation |
 
 ## 3. Link by link
@@ -30,7 +30,7 @@ His ask (log 2026-10-31T16:20): "I hope you're considering networking, things li
 | --- | --- | --- | --- |
 | E1 node to cTrader | TLS protobuf on 5035, one long session per environment per machine | commands and events; quotes, depth, bars as they arrive; heartbeat 10 s | no new entries; protection already at the broker; reconnect with back-off (1 s doubling to 60 s), gap replay of fills, capabilities re-verified, book rebuilt before readers see it |
 | E3 node to Hyperliquid | CCXT REST (signed actions) and websockets | orders and fills; trades, book, funding as they arrive | as E1; the stop triggers rest at the venue; nothing relies on a venue dead man's switch |
-| X1 his click to a node | AD-46 `apps.ask` over the tailnet | rare; a deployment is kilobytes to a few megabytes | waits in the outbox; the kill also has the broker's own app (E10), named on the node page |
+| X1 his click to a node | AD-46 `apps.ask` over the tailnet; a promotion is the promote action on This PC (spine AD-324) | rare; the deployment document is small JSON; its block and weights files, of any size, reach a server through the Library hub (X5) and are staged there before `deploy` | waits in the outbox, also while files are still replicating (`files_missing`); the kill also has the broker's own app (E10), named on the node page |
 | X2 node state | AD-46 `heartbeats` and `apps.ask status` | every 60 s, small | "unreachable since" with last values; events arrive by X3 |
 | X3 pull | AD-46 `data.list`, `data.fetch`, `apps.ask journal_tail`; Part B's job | live tail every 5 minutes, closed partitions at once; bars and journals always, ticks only where a live unit's data card names them | the node and its machine's store keep everything; a week offline loses nothing |
 | X4 a server's deep logs | the server's OpenObserve on its Tailscale address, port 5080 | on demand | the server keeps its window |
@@ -74,3 +74,4 @@ The setup measures the round trip from the candidate server to each venue (8 han
 | A pass for another host is refused | a route test with a pass minted for another place answers `wrong_engine` |
 | A homed-here app keeps today's path | Level 0 `br11_app_op_remote.py` as an engine test |
 | The outbox converges | a test queues `pause` for an unreachable node, brings it back, asserts one `pause` applied and the outbox empty |
+| An agent cannot start a money app's job | a route test with principal `agent:x` on `apps.job` of a `money` app answers `refused_principal` (slice C-06) |

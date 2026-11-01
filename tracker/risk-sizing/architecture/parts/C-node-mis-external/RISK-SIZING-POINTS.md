@@ -17,5 +17,7 @@ Every place in the node, the MIS, the venues and the records where risk and sizi
 | A gap through the stop | the node's journal | the fill at the first tradable price, the loss in R as it fell, never capped at 1R | gap risk in sizing (RS-13) |
 | Funding and swaps held through their time | records (carry), readings (funding state) | recorded as costs; no rule | whether units avoid funding times (RS-14) |
 | Paper after a risk stop | lifecycle (Part A) | his click | direct or by his click |
+| The numbers a live deployment starts from | the promote action (spine AD-324) | paper starts from the unit's defaults; live from the paper lane's last calibrated values and watermark, the calibrator's statistics restarting there (LC-C-39) | whether sizing numbers carry from paper to live, restart, or carry full state |
+| The size the venue receives | the order path; slice C-12a's test | the sent quantity equals the sizer receipt's after lot rounding (CA-03) | none: a fact check, kept |
 | Decay and drift alarms | the node watcher template (Part B) | inform only | the action (RS-12, RS-17) |
 | What a stopped unit would have done | the node's unit journal | would-have rows of stopped units (Part B's kind) | replaying old sizing (RS-16) |

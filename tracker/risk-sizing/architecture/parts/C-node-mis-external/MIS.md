@@ -34,22 +34,22 @@ Part C, area 2. The market intelligence service reads markets and publishes what
 | Tier | Runs in | Reads | Writes | Why there |
 | --- | --- | --- | --- | --- |
 | Tick (spread against usual, SQS, quote gaps, feed state, tick rate, depth against usual and imbalance, order-flow pressure, liquidity stress) | the node, on a trading machine | the feed keeper's events in process | reading records `source = node` in the node's append store | only the node holds the live connection (AD-8); the execution-health ones are its guards (Level 0 AD-40) |
-| Bar (range volatility against usual, volatility state, small change detectors) | the `mis` app's instance on that machine | the open month of bars the host harvests every `bars_harvest_s` (60) | records `source = mis` in its volume | needs only bars; lag of one harvest is fine for a bar-tier published history |
+| Bar (range volatility against usual, volatility state, small change detectors) | the `mis` app's instance on that machine | the open month of bars Part B's records job harvests into that machine's store every `[records] open_harvest_s` (60) | records `source = mis` in its volume | needs only bars; lag of one harvest is fine for a bar-tier published history |
 | Session and day (efficiency ratio, variance ratio, Hurst, trend against range, calendar states, funding, open interest, roll, cash open, fixes) | the `mis` instance on that machine for its markets; This PC's instance for every other market | bars and derivatives fields from the store | records `source = mis` | slow; never on the order path |
 | Cross-market (currency strength, dispersion, herding counts, dated pair readings) and the board | This PC's instance | the Library's history of every market | records and the board artifact | needs every market at once |
 | Models in shadow | This PC's instance | Library history; a pinned weights file | shadow records | training and shadow runs belong to the PC and the Lab |
 
 One writer per series: the series key carries source, reading id and version, market id, instrument and machine. This PC's instance never computes a tier a trading machine publishes for its own markets; for a market no node trades, the PC computes it.
 
-**How the `mis` app reads data.** The supervisor hands an app whose manifest declares `data_reads = ["market"]` one more variable, `QMX_MARKET_ROOT`, the machine's market-data store root; the app reads partitions with `qmf.data.series` readers. It cannot write there, because the bootstrap refuses writes outside the volume. This is the one core change this area needs (CF-4): without it no app can read market data at all.
+**How the `mis` app reads data.** The supervisor hands an app whose manifest declares `data_reads = ["market"]` one more variable, `QMX_MARKET_ROOT`, the machine's market-data store root; the app reads partitions with `qmf.data.series` readers. It cannot write there, because the bootstrap refuses writes outside the volume. This is item 4 of Level 0's list of core changes (R1 CF-4, slice C-05b): without it no app can read market data at all. The raw root bypasses the door's holdout and its read log, so the app reads the `holdout` in its host facts (`road/host/facts.json`, the Settings `[data]` seal) and skips every month it seals; no reading over a sealed month lands in history (R1-C-13).
 
 **How the `mis` app is told what to read.** An operation `configure` (`domain_write`, `state = "instance"`) takes the markets, each instrument record's snapshot (calendar, data levels), and the pack ids@version. This PC's node link calls it when deployments change on a node's machine; This PC configures its own instance from his admitted universe.
 
 ## 4. The default packs
 
-Each reading has a tier, a minimum data level (0 calendar, 1 bars, 2 quote ticks, 3 depth, 4 tape with aggressor side, 5 derivatives fields), a price input (mid, bid, ask or trade) and a fallback chain. A market gets only what its levels allow. Packs are named by id and version; `fx-1`, `metals-1`, `index-cfd-1`, `futures-1`, `perps-1`, `crypto-spot-1`.
+Each reading has a tier, a minimum data level in Part A's `qmx.data-level/1` (0 calendar, 1 bars, 2 quote ticks, 3 depth, 4 tape with aggressor side, 5 derivatives fields; 6, outside data, has no default reading yet), a price input (mid, bid, ask or trade) and a fallback chain. A market gets only what its levels allow. Every class of the instrument record's enum (`RECORDS.md` §2) has a pack, named `<class>-<n>` and pinned by id and version: `fx-1`, `metal-1`, `index_cfd-1`, `future-1`, `perp-1`, `spot_crypto-1` follow the columns below; `commodity_cfd-1`, `stock_cfd-1` and `stock-1` take every row marked for all six columns, and `stock_cfd-1` and `stock-1` add the cash-open rows.
 
-| Reading | Tier | Level | fx | metals | index CFD | futures | perps | crypto spot |
+| Reading | Tier | Level | `fx` | `metal` | `index_cfd` | `future` | `perp` | `spot_crypto` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Range volatility against usual (bar ranges, same minute of session, 20 weeks) | bar | 1 | yes | yes | yes | yes | yes | yes |
 | Volatility state (quiet, normal, elevated, stressed) | bar, session | 1 | yes | yes | yes | yes | yes | yes |
@@ -89,7 +89,7 @@ The board is This PC's answer to "which of his admitted markets are in a given c
 - A model reading is a learned catalogue block with its weights as a pinned file with a fingerprint, loaded through Part A's one block loader (Level 0 AD-47); a retrain inside declared bounds is a calibration.
 - Trained in the Lab's PC training placement on Library history; it lands with data fingerprints, code version and seed.
 - It runs in This PC's instance beside the default, writing shadow records. His yes on the MIS tab flips it live: the next configuration names it. No unit changes, because the reading's id and shape stay; its version moves.
-- Agents: a slow-lane template ("check on the MIS") reads reading history and writes its own dated reading in the MIS's words before a session, scored later against what happened; disagreements land as notes with examples for him (ruling 50). Agents never write reading records.
+- Agents: a slow-lane template ("check on the MIS") reads reading history through the core row `readings_query` (`CONTRACTS.md` §12, slice C-24) and writes its own dated reading in the MIS's words before a session, scored later against what happened; disagreements land as notes with examples for him (ruling 50). Agents never write reading records.
 
 **One code, checked (MIS-04).** A golden replay runs one recorded day through a dummy unit that binds a reading, through QMB's replay and through the reading runner, and compares the three per reading id and version to the last digit.
 
@@ -104,7 +104,7 @@ The board is This PC's answer to "which of his admitted markets are in a given c
 | Bounce ratio | flag above 0.1; block price-only mean-reversion readings above 0.25 | research 22 §2 |
 | Order-flow horizon | 30 s | research 37 |
 | Funding extreme tail | bottom and top 10% of 180 days | research 37 |
-| `bars_harvest_s` (requested from Part B's harvest) | 60 | INFERRED |
+| `[records] open_harvest_s` (Part B's setting, read here) | 60 | R1-B-02 |
 | Model refit in shadow | monthly | research 43 §5 |
 | Retire card for an unread reading | 8 weeks unread | placeholder |
 

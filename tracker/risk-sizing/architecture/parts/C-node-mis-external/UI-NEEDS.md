@@ -23,7 +23,7 @@ The mini-app page as designed, with these tabs:
 | Positions | each position with its stop shown at the broker and when it was last seen there; untagged positions flagged "not ours, protected" | `positions` |
 | Readings | this node's markets and the readings computed here and by the MIS beside it, each with its freshness word; a badge when a unit used a fallback | node `status`, `mis` `status`, reading history |
 | Heals | every restart it made by itself: what, why, when (his time and node time), how many today; when healing keeps failing, the item it raised | node journal |
-| Deploys | every deploy, withdraw, update and rollback: what, when, whose click, from which PC, applied or "waiting for London-1" | `deployments`, the node link's outbox |
+| Deploys | every deploy, withdraw, update and rollback: what, when, whose click, from which PC, applied, "waiting for London-1", or "copying 3 files to London-1" | `deployments`, the node link's outbox |
 | Checks and passport | the self-test lines with their last result; round trip to each venue; grant and agent-wallet expiry dates | `passport` |
 | Logs | the node's logs, with a link to this machine's deep logs | the log shipper, OpenObserve |
 | Operations, Setup | as the mini-app page designs them | the manifest |
@@ -32,7 +32,7 @@ The mini-app page as designed, with these tabs:
 
 - **Stop card**: what stopped, when (his time, UTC, node), which rule and its values, what happened to open trades (kept with broker stops, or closed), risk rule or health check, what it takes to resume; Resume (his), Back to paper, Retire.
 - **Change card** (a broker changed a symbol): the old and new facts side by side, the checker's rerun, the units paused; Accept, Keep paused.
-- **Identity card**: "This node's disk moved or was copied." Two buttons: "This is the same node, moved" and "Take over a dead node" (asks him to confirm the old one is gone; shows its last heartbeat).
+- **Identity card**: "This node's disk moved or was copied." Two buttons: "This is the same node, moved" and "Take over a dead node" (asks him to confirm the old one is gone; shows its last heartbeat). Then a line: "Sign in on cTrader again; sign-ins never travel with a node."
 - **Twin alarm**: "Another copy of this node may be trading this account." Entries stopped; what to check.
 - **Soak cards** on a release and on a live binding: time done against 24 hours on This PC and one week on demo; shown, never blocking; his click decides.
 
@@ -42,9 +42,9 @@ The mini-app page as designed, with these tabs:
 - **A server**: the connect dialog's card-then-steps pattern with the trading node kind; the keys window on the server for the Hyperliquid agent wallet; the same step list. A failed step shows one line and two buttons: "Run this step again", "Help". Running the setup again picks up where it stopped.
 - **Binding a live account**: a separate, deliberate flow on the node page: it turns off chats and agent steps on that server first, says so in one line, then the bind, then the soak card.
 
-## 4. The deploy dialog
+## 4. The promote and deploy dialog
 
-From a unit ("Deploy") or a node ("Add unit"): pick a node (Ready only), an account, markets (from his admitted list), lane (paper by default). A preflight list runs by itself and explains each red line in one sentence: same fingerprint as tested; this node's versions match; warm-up history available; a record for each market at this broker; minimum lot fits; clock fine; each reading the unit reads available or with a fallback; placeholders on a live account need his tick; two units on one symbol of a netting account. Then: accepted, compiling, warming up, trading. "Withdraw" stays one click away.
+From a unit ("Promote to paper", "Promote to live") or a node ("Add unit"): pick a node (Ready only), an account, the market (from his admitted list). The click is his promotion: it is written in the unit's journal with his name and time, and nothing else can make it (no agent, no workflow). Paper starts from the unit's defaults; live starts from what paper learned, and the dialog shows those numbers. A preflight list runs by itself and explains each red line in one sentence: same fingerprint as tested; this node's versions match; warm-up history available; a record for each market at this broker; minimum lot fits; clock fine; each reading the unit reads available or with a fallback; placeholders on a live account need his tick; two units on one symbol of a netting account; the unit's files have reached that machine ("copying 3 files" while the hub works). There is no size limit. Then: accepted, compiling, warming up, trading. "Withdraw" stays one click away.
 
 ## 5. Several nodes, one clock
 
@@ -69,4 +69,4 @@ Portfolio's MIS tab as designed (Live and Shadow switches, a since time, a value
 
 ## 8. Backend each screen needs
 
-Every screen above reads the node link's latest values and the node and MIS operations in `CONTRACTS.md` §2 and §8; the setup flow reads the connect dialog's job progress (built); the clock strip reads heartbeat clock facts (slice C-01); the readings views read reading history (slice C-08 onward). Nothing here needs a new backend door beyond those.
+Every screen above reads the node link's latest values and the node and MIS operations in `CONTRACTS.md` §2 and §8; the promote and deploy dialog calls the promote action (`CONTRACTS.md` §13, slice C-23); the setup flow reads the connect dialog's job progress (built); the clock strip reads heartbeat clock facts (slice C-01); the readings views read reading history through `readings_query` (`CONTRACTS.md` §12, slice C-24). No screen here needs a browser stream, so none needs resuming (CA-11). Nothing here needs a new backend door beyond those.

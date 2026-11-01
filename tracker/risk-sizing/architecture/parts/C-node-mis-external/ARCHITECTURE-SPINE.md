@@ -7,8 +7,8 @@ paradigm: 'desired-state reconciler inside a money mini app, with ports and adap
 scope: 'Part C of the unit system: the trading-node app and its shell, the host roles, the host route and the node link, the MIS publisher and its reading records, the venue-client and data-route adapters, the instrument, venue and account records, observability and alarms, clocks and calendars, and every link between machines'
 status: final
 created: '2026-10-31'
-updated: '2026-10-31'
-binds: [P0, P4, P12, P13, P14, P15, AD-2, AD-3, AD-4, AD-5, AD-6, AD-8, AD-10, AD-12, AD-13, AD-14, AD-26, AD-27, AD-28, AD-33, AD-36, AD-37, AD-38, AD-39, AD-40, AD-41, AD-42, AD-43, AD-44, AD-45, AD-46]
+updated: '2026-11-01'
+binds: [P0, P4, P12, P13, P14, P15, AD-2, AD-3, AD-4, AD-5, AD-6, AD-8, AD-10, AD-12, AD-13, AD-14, AD-16, AD-23, AD-26, AD-27, AD-28, AD-33, AD-36, AD-37, AD-38, AD-39, AD-40, AD-41, AD-42, AD-43, AD-44, AD-45, AD-46]
 sources:
   - architecture/level-0/ARCHITECTURE-SPINE.md
   - architecture/01-connections.md
@@ -48,7 +48,7 @@ companions:
 
 # Architecture Spine: Part C, the trading node, the MIS and the market edge
 
-Code truth: `origin/engine/base` at `c93407ca`, read at `D:\QMX-worktrees\engine-base-read\` (CHECKED: only `build/wu4`, PR 204, and two October-19 fix branches hold commits not on it, none touching the node). Parent: `architecture/level-0/ARCHITECTURE-SPINE.md` (AD-1 to AD-47, binding and read-only here). Words: `architecture/funnel/versions/GLOSSARY.md` plus the words Level 0 adds. Labels: CHECKED means read at the path and line, or run (the script is named); INFERRED means judgement. Proofs by running code: `BLAST-RADIUS.md` in this folder (items C1 to C9). New decisions here are numbered from AD-301 so parts A, B and C never share an id.
+Code truth: `origin/engine/base` at `c93407ca`, read at `D:\QMX-worktrees\engine-base-read\` (CHECKED: only `build/wu4`, PR 204, and two October-19 fix branches hold commits not on it, none touching the node). Parent: `architecture/level-0/ARCHITECTURE-SPINE.md` (AD-1 to AD-47, binding and read-only here). Amended on 1 Nov by the R1 fix round: what changed, finding by finding, is `architecture/review/R1-FIXES-X1-C.md`. Words: `architecture/funnel/versions/GLOSSARY.md` plus the words Level 0 adds. Labels: CHECKED means read at the path and line, or run (the script is named); INFERRED means judgement. Proofs by running code: `BLAST-RADIUS.md` in this folder (items C1 to C9). New decisions here are numbered from AD-301 so parts A, B and C never share an id.
 
 Detail lives in one file per area, each with what exists, what is added, what must not break, how it is checked, its cases and its growth seam: `NODE.md` (the trading node), `MIS.md`, `EXTERNAL.md` (venues and data routes), `RECORDS.md` (instrument, venue and account records), `DEVOPS-CLOCKS.md`, `NETWORKING.md`. Every shape is field by field in `CONTRACTS.md`.
 
@@ -57,13 +57,14 @@ Detail lives in one file per area, each with what exists, what is added, what mu
 - The trading node is an app inside QMX. On your PC it trades practice accounts. On a rented Linux server it trades live. It is the only thing in QMX that can send an order.
 - You tell it what you want: which unit, on which markets, on which account. It writes that down and keeps returning to it. If it crashes, it restarts, checks the broker first, puts back any missing stop, and carries on. A risk stop waits for you.
 - Your PC talks to every server through one door. Your clicks change trading; an agent can only look.
+- A unit moves to paper or to live only when you click. That click is written down, and the same click sends the unit to the node with everything it needs.
 - The MIS looks at markets and writes down what it saw, with the time. It starts with indicators and simple statistics. Models you train later in the Lab slot in behind the same shape. No unit needs it to trade.
 - Every machine proves its clock. Every time is stored in UTC. Sessions follow each market's own city, so a Singapore node and a London node agree.
 - When your PC is off, a server can still reach your phone: an alarm through ntfy, and a watcher that shouts when the server goes quiet.
 
 ## Design Paradigm
 
-**A desired-state reconciler inside a money mini app, with ports and adapters at the market edge and a functional core of kept organs.** Every node operation only writes what he asked for (desired state) or reads what the node last saw (observed state); one control loop inside the node converges the venue and the units to the desired state, as Kubernetes controllers do. The kept QMN organs are the functional core (pure laws, reconcile, protection, clock bands, the loop over QMB's `run_slice`). The new shell is thin and imperative. Venues and data sources sit behind the two Level 0 ports.
+**A desired-state reconciler inside a money mini app, with ports and adapters at the market edge and a functional core of kept organs.** Every node operation only writes what he asked for (desired state) or reads what the node last saw (observed state); one control loop inside the node converges the venue and the units to the desired state, as Kubernetes controllers do. The kept QMN organs are the functional core (pure laws, reconcile, protection, clock bands, the loop over QMB's `run_slice`, which drives units through Part A's unit door and Part B's one shared unit handler). The new shell is thin and imperative. Venues and data sources sit behind the two Level 0 ports.
 
 | Layer | What lives there | Where (EXISTS path or NEW) |
 | --- | --- | --- |
@@ -71,7 +72,7 @@ Detail lives in one file per area, each with what exists, what is added, what mu
 | Kept organs (functional core) | venue laws, cTrader client, reconnect, capability check, pacer and UNKNOWN, reconcile, protection, kill switch, kill line, clock bands, loop, ledger, liveness, alerts | `packages/qmf-venue` (EXISTS), `qmn/src/qmn/{venue,order,reconcile,protection,capital,time,loop,ledger,observability/liveness.py,observability/alerts.py}` (EXISTS) |
 | Market-edge adapters | `ctrader` (kept), `ccxt` (NEW), futures placeholders, data routes | `qmn/src/qmn/venue/` (EXISTS, opened), `qmn/src/qmn/venue/ccxt_client.py` (NEW), `qmx-agents/packages/qmx-broker` (EXISTS reads) |
 | MIS publisher app | reading runner over catalogue blocks, history, board | `qmx-agents/apps/mis/` (NEW) over `packages/qmf-readings` (NEW, moved from `qmn/src/qmn/mis`) |
-| Host side (every machine) | host route, node link, trading-profile facts, harvest hooks, clock probe, connect-dialog kind, log shipping | `qmx-agents/packages/qmx-host` (EXISTS, extended) |
+| Host side (every machine) | host route, node link with deployment staging, the promote action (This PC), trading-profile and holdout facts, clock probe, connect-dialog kind, log shipping | `qmx-agents/packages/qmx-host` (EXISTS, extended) |
 | Records | `instrument`, `venue`, `account` kinds and refresh templates | `qmx-agents/packages/qmx-library/src/qmx_library/kinds/` (NEW files), `qmx-engine/src/qmx_engine/templates/` (NEW folders) |
 
 ## Inherited Invariants
@@ -83,7 +84,7 @@ Read-only. Each binds this part as Level 0 wrote it; this spine designs under it
 | AD-2 units stand alone; host and supervisor on the trading path | Level 0 | nothing a unit needs to trade crosses machines; the node app's process lives under its host's supervisor |
 | AD-3 only the node sends orders; only he promotes; one automatic stop | Level 0 | no operation places an order; `manage` operations are his |
 | AD-4 local first, Windows on the PC, Linux servers for live | Level 0 | the practice node runs native on Windows; WSL only as his fallback |
-| AD-5 same code in research and live | Level 0 | the loop keeps driving QMB's `run_slice` unforked; recorded feed pulled home for the nightly replay |
+| AD-5 same code in research and live | Level 0 | the loop keeps driving QMB's `run_slice` unforked, through the one unit handler Part B builds in B5b over Part A's `HostedUnit` (R1 A-C3); recorded feed pulled home for the nightly replay |
 | AD-6 versioned contracts with an overlap window | Level 0 | every verb argument and answer carries `schema_version`; mismatched contract versions refuse new deployments only |
 | AD-8 one owner per stream, credential, position and deployment | Level 0 | node tags on every order; one node per account; one feed keeper per venue and environment per machine |
 | AD-10 one time scale | Level 0 | UTC nanoseconds; venue and receive time; `clock_ok` |
@@ -91,8 +92,8 @@ Read-only. Each binds this part as Level 0 wrote it; this spine designs under it
 | AD-13 unknown is a state; ids everywhere; operations converge | Level 0 | no blind resend; idempotent operations by op id |
 | AD-14 numbers are named settings | Level 0 | every number below is a setting with a starting default |
 | AD-26 market facts as versioned records | Level 0 | records designed in `RECORDS.md` |
-| AD-27, AD-28 journals and the pull | Level 0 | the node's before-dispatch write is its own append store; results come home by pull; Part B owns the writer library and the pull job |
-| AD-33 the mini-app core, fixed only where it blocks | Level 0 | the opt-in restart with back-off; the secret map; this part adds two more blocking fixes (AD-315, AD-313) |
+| AD-27, AD-28 journals and the pull | Level 0 | the node's before-dispatch write is its own append store; Part B's records job harvests every append store on its machine into that machine's store (sealed months, the open month of bars and readings every minute, ticks hourly); results come home by pull; Part B owns the writer library, the records job and the pull job |
+| AD-33 the mini-app core, fixed only where it blocks | Level 0 | Level 0's one list of six core changes (R1 CF-4); this part builds items 3 to 6 (restart with back-off, the read-only market root, the host-facts file, the server's secret reader) as slices C-05a to C-05d, and proposes one more for that list: a volume's `data/grants/` never leaves its machine (AD-306) |
 | AD-36 organs kept, shell replaced | Level 0 | the cut in AD-323 |
 | AD-37 placements and keys | Level 0 | the grant store in AD-306 (one wording conflict surfaced, CF-1) |
 | AD-38 the node keeps returning to what he asked for | Level 0 | the stand-down table is inherited as is; identity in AD-305 |
@@ -110,6 +111,8 @@ Read-only. Each binds this part as Level 0 wrote it; this spine designs under it
 ```mermaid
 flowchart TB
   UI["His screens on This PC"] --> NL["Node link (host module)"]
+  UI --> PROM["Promote action (his click only)"]
+  PROM --> NL
   COP["Copilot and agents"] --> ROWS["Core node rows (reads)"]
   ROWS --> NL
   WF["Workflows"] --> APPOP["app_op with Placements"]
@@ -128,31 +131,31 @@ flowchart TB
   MISAPP["MIS app"] --> DOOR
 ```
 
-Arrows mean "may call or read". Nothing points up: the runtime never calls the host, the MIS app never calls the node, the node link is the only module on This PC that asks a node anything, and only the runtime reaches the venue-client port's order calls.
+Arrows mean "may call or read". Nothing points up: the runtime never calls the host, the MIS app never calls the node, the node link is the only host module that asks a node anything (a chat on This PC may also reach the practice node's operations through the harness; AD-303 says how the node orders both), and only the runtime reaches the venue-client port's order calls.
 
 ### AD-301. The node app is a desired-state reconciler in one process
 
-- **Binds:** P12, AD-36, AD-38
-- **Prevents:** an operation that blocks on trading work and trips the supervisor's call timeout; two writers on one piece of node state; a crash that loses what he asked for
-- **Rule:** the `trading-node` app is one process under its host's apps supervisor: the MCP server on the main thread, the runtime on its own thread with its own event loop, and the bootstrap's heartbeat thread. The volume holds one SQLite store with two owned tables: `desired` (written only by operation handlers, one row per change, each with an op id) and `observed` (written only by the runtime, latest values plus an append-only event list). Handlers write `desired`, wake the runtime through an in-process queue, and answer from `observed`; they never call into the runtime and never wait for the venue. The runtime reconciles toward `desired` on every wake and every `reconcile_tick_ms` (default 200). A runtime that makes no progress for `stuck_after_s` (default 30) exits the process with reason `runtime_stuck`, logged, so the supervisor's restart brings it back (AD-315). Losing options and reasons: `NODE.md` §2.
+- **Binds:** P12, AD-5, AD-16, AD-36, AD-38
+- **Prevents:** an operation that blocks on trading work and trips the supervisor's call timeout; two writers on one piece of node state; a crash that loses what he asked for; a second run-slice handler that hosts units differently from QMB
+- **Rule:** the `trading-node` app is one process under its host's apps supervisor: the MCP server on the main thread, the runtime on its own thread with its own event loop, and the bootstrap's heartbeat thread. The runtime hosts every unit through Part A's `construct_unit` (`restore_unit` after a restart) and `HostedUnit`, never `construct_bot` (which refuses a sized intent), and drives it with QMB's `run_slice` through the one shared unit handler Part B builds in slice B5b (`qmb/src/qmb/host/unit_handler.py`); the node imports that handler and never writes its own. Each `UnitStep`'s intents go to the order path; its decision, calibration and state rows go to Part B's writer, whose record id for those rows is Part A's row id, so a slice re-run after a crash writes no double rows. The volume holds one SQLite store with two owned tables: `desired` (written only by operation handlers, one row per change, each with an op id) and `observed` (written only by the runtime, latest values plus an append-only event list). Handlers write `desired`, wake the runtime through an in-process queue, and answer from `observed`; they never call into the runtime and never wait for the venue. The runtime reconciles toward `desired` on every wake and every `reconcile_tick_ms` (default 200). A runtime that makes no progress for `stuck_after_s` (default 30) exits the process with reason `runtime_stuck`, logged, so the supervisor's restart brings it back (AD-315). Losing options and reasons: `NODE.md` §2.
 
 ### AD-302. The node's operations: a closed set that never raises
 
 - **Binds:** P12, P10, AD-33, AD-46, connections X1, X7
 - **Prevents:** a second node started lazily on the caller's machine; a node killed by three bad calls; an agent changing trading
-- **Rule:** every operation declares `state = "instance"` (an operation with `state = "none"` starts the app on the caller's machine, CHECKED `brc3_lazy.py`). Reads (`status`, `units`, `positions`, `journal_tail`, `passport`, `deployments`) declare `approval = "domain_write"` and `reversibility = "none"`, because the manifest refuses an instance read (`qmx_apps/manifest.py:324-327`, CHECKED `brc4_manifest.py`); agents reach node state only through the core `node` rows, which are reads. Changes (`deploy`, `withdraw`, `pause`, `resume`, `kill`, `flatten`, `bind`, `confirm_same_node`, `take_over`, `sign_in_begin`, `sign_in_code`, `self_test`, `rotate_keys`) declare `approval = "manage"`. Every handler answers within `op_answer_budget_ms` (default 2,000) and never raises: a refusal is an answer `ok = false` with a code, because every tool exception counts toward the breaker and the default breaker kills the app at three (`qmx_apps/supervisor.py:884-934`, `:815-823`, CHECKED `brc2_breaker.py`). The manifest sets `[breaker] max_errors = 1000` and `heartbeat_timeout = 30`. No operation places an order. On This PC the copilot sees the practice node's operations as tools, because the harness serves every app running on the machine (`qma-harness/src/qma/harness/tools.py:538-588`); each `manage` one asks him first (R35) and the practice node holds demo grants only. A server's node offers agents reads only.
+- **Rule:** every operation declares `state = "instance"` (an operation with `state = "none"` starts the app on the caller's machine, CHECKED `brc3_lazy.py`). Reads (`status`, `units`, `positions`, `journal_tail`, `passport`, `deployments`) declare `approval = "domain_write"` and `reversibility = "none"`, because the manifest refuses an instance read (`qmx_apps/manifest.py:324-327`, CHECKED `brc4_manifest.py`); agents reach node state only through the core `node` rows, which are reads. Changes (`deploy`, `withdraw`, `pause`, `resume`, `kill`, `flatten`, `bind`, `confirm_same_node`, `take_over`, `sign_in_begin`, `sign_in_code`, `self_test`, `rotate_keys`) declare `approval = "manage"`. Every handler answers within `op_answer_budget_ms` (default 2,000) and never raises: a refusal is an answer `ok = false` with a code, because every tool exception counts toward the breaker and the default breaker kills the app at three (`qmx_apps/supervisor.py:884-934`, `:815-823`, CHECKED `brc2_breaker.py`). The manifest sets `[breaker] max_errors = 1000` and `heartbeat_timeout = 30`. No operation places an order. On This PC the copilot sees the practice node's operations as tools, because the harness serves every app running on the machine (`qma-harness/src/qma/harness/tools.py:538-588`); each `manage` one asks him first (R35) and the practice node holds demo grants only; those calls skip the node link, and AD-303 says how the node orders them. A server's node offers agents reads only. The node declares no job, so the route's job verb never reaches it (AD-304).
 
 ### AD-303. One node link on every host
 
-- **Binds:** P0, P8, P9, AD-46, connections X1, X2, X3, X7
-- **Prevents:** three callers each inventing a remote path; an agent's ask minted as his; a click lost while the server is down
-- **Rule:** one host module, `qmx_host.node_link`, is the only code on a machine that asks a node app anything. It resolves a node's home from the place rows; when the home is this machine it calls the local supervisor; otherwise it asks through AD-46 on the home's host route. It mints every host pass with the real caller's principal (`Caller.principal`: `operator` for his UI bearer, `agent:<id>`, `run:<id>`), never the constant the engine's forwarders use (`qmx_host/host.py:1155`, CHECKED `brc1_principal.py`). It keeps the latest answer per node and read, marked "unreachable since" with the last values. Every `manage` change passes a per-node outbox in the host's store, in order, keyed by op id, whether the node is reachable or not, so a later click is never overtaken by an earlier retried one; it is retried with back-off until the node answers, and the node treats a repeated op id as done. Three callers use it: the core `node` toolset rows (`node_state` moved here off `qmn.doors`, plus `node_units`, `node_positions`, `node_journal_tail`, `node_passport`), the UI's node routes, and `app_op`'s `Placements.remote`.
+- **Binds:** P0, P8, P9, AD-46, AD-47, connections X1, X2, X3, X5, X7
+- **Prevents:** three callers each inventing a remote path; an agent's ask minted as his; a click lost while the server is down; an older change undoing a newer one; a deployment too large for one call
+- **Rule:** one host module, `qmx_host.node_link`, is the only host code that asks a node app anything; on its home, the host route's `apps.ask` to the trading node goes through it too. It resolves a node's home from the place rows; when the home is this machine it calls the local supervisor; otherwise it asks through AD-46 on the home's host route. It mints every host pass with the real caller's principal (`Caller.principal`: `operator` for his UI bearer, `agent:<id>`, `run:<id>`), never the constant the engine's forwarders use (`qmx_host/host.py:1155`, CHECKED `brc1_principal.py`). It keeps the latest answer per node and read, marked "unreachable since" with the last values. Every `manage` change it carries passes a per-node outbox in the host's store, in order, keyed by op id and stamped `issued_at` from this host's clock, whether the node is reachable or not; it is retried with back-off until the node answers, and the node treats a repeated op id as done. It is not the only path: on This PC a chat reaches the practice node's operations through the harness (`qma-harness/src/qma/harness/tools.py:538-560`), and his approval prompt is his click there. So the node, not the outbox, keeps the order: it applies changes in arrival order through its `desired` table (a direct call is stamped on arrival) and answers `superseded` to a change whose `issued_at` is older than the newest change it applied for the same scope; `kill` and `flatten` always apply. Before it asks `deploy`, the node link on the node's home stages the deployment's files: each file the document names by fingerprint (`CONTRACTS.md` §3) is copied from that machine's Library into `data/deployments/<deployment_id>/in/` of the node's volume and verified; a file that Library does not hold yet (a server waiting for the hub, X5) answers `files_missing` with the fingerprints, and This PC's outbox retries. Four callers use it: the core `node` toolset rows (`node_state` moved here off `qmn.doors`, plus `node_units`, `node_positions`, `node_journal_tail`, `node_passport`), the UI's node routes, the promote action (AD-324), and `app_op`'s `Placements.remote`.
 
 ### AD-304. The host route answers a closed verb set
 
 - **Binds:** P0, P7, AD-46
-- **Prevents:** a route that answers any app tool; a verb whose arguments drift between builds
-- **Rule:** `POST /api/host/forward` takes one body `{verb, args, schema_version}` and answers `{ok, value | code, message, schema_version}`. It verifies the host pass against this host's place name and expiry first. Verbs: `apps.ask` (a declared operation of an app homed here, pin revalidated; a `manage` operation answers only when the pass principal is `operator`), `apps.job` (an app job, the `remote` side of `app_op`), `heartbeats` (newest rows per subject plus this host's clock facts), `data.list` (closed and open partitions after a watermark, with an optional `confirmed` list of fingerprints This PC now holds), `data.fetch` (one file by fingerprint, streamed). Each verb answers inside `route_answer_budget_s` (default 8); `data.fetch` streams with no budget. A new verb is a spine amendment. Field by field: `CONTRACTS.md` §1.
+- **Prevents:** a route that answers any app tool; a verb whose arguments drift between builds; an agent starting a job on a money app
+- **Rule:** `POST /api/host/forward` takes one body `{verb, args, schema_version}` and answers `{ok, value | code, message, schema_version}`. It verifies the host pass against this host's place name and expiry first. Verbs: `apps.ask` (a declared operation of an app homed here, pin revalidated; a `manage` operation answers only when the pass principal is `operator`; an ask to the trading node goes through this host's node link, AD-303), `apps.job` (an app job with optional `inputs`, the `remote` side of `app_op`; for an app whose manifest risk is `money` it answers only when the pass principal is `operator`), `heartbeats` (newest rows per subject plus this host's clock facts), `data.list` (closed and open partitions after a watermark, with an optional `confirmed` list of fingerprints This PC now holds), `data.fetch` (one file by fingerprint, streamed). Each verb answers inside `route_answer_budget_s` (default 8); `data.fetch` streams with no budget. A new verb is a spine amendment. The control server's OpenAPI document states the host build's version instead of the fixed `0.1.0` (`qmx_control/server.py:415`, CHECKED), so a client can tell builds apart (CA-01). Field by field: `CONTRACTS.md` §1.
 
 ### AD-305. Node identity, tags and attribution
 
@@ -163,14 +166,14 @@ Arrows mean "may call or read". Nothing points up: the runtime never calls the h
 ### AD-306. The node's keys and its own trading grant
 
 - **Binds:** P12, P14, AD-37, AD-33, connections C27, E8
-- **Prevents:** a node that cannot start on a server; a refreshed grant lost; a live grant on a machine where agents work
-- **Rule:** the node manifest names one secret, `qmx/trading-node-keys` (`NODE_KEYS`), a JSON document of this machine's static keys: venue registrations (cTrader trading app id and secret), Hyperliquid agent wallets with expiry, and alarm destinations. Install refuses any other app that names it (the Level 0 secret map). The document exists, possibly empty, from the first setup step, so a node with no venue keys still starts and shows each venue as "not set up". The refreshed cTrader grant lives in the node's own grant store, keyed by install id and app id: Credential Manager entries `qmx/node-<tag>-ctrader` on Windows, written only by the node, and an owner-only file in its volume (`data/grants/`) on Linux. One refresher per grant, store before discard (QMN's rotation rule, `qmn/src/qmn/secrets/rotation.py`). The sign-in is two node operations: `sign_in_begin` returns the consent link for the node's own app and This PC's loopback receiver; `sign_in_code` exchanges the one code This PC relays. A grant that can trade a live account is kept only when the host facts say the trading profile is on (AD-307); otherwise it is discarded with the host's own `LiveGrant` message. On a server the supervisor reads `NODE_KEYS` from the host's owner-only vault (`<home>/vault/trading-node-keys`), because keyring has no backend on a headless Linux server (`keyring/backends/fail.py` raises, CHECKED in the pinned package).
+- **Prevents:** a node that cannot start on a server; a refreshed grant lost; a live grant on a machine where agents work; a live grant copied off its machine by a backup or a move
+- **Rule:** the node manifest names one secret, `qmx/trading-node-keys` (`NODE_KEYS`), a JSON document of this machine's static keys: venue registrations (cTrader trading app id and secret), Hyperliquid agent wallets with expiry, and alarm destinations. Install refuses any other app that names it (the Level 0 secret map). The document exists, possibly empty, from the first setup step, so a node with no venue keys still starts and shows each venue as "not set up". The refreshed cTrader grant lives in the node's own grant store, keyed by install id and app id: Credential Manager entries `qmx/node-<tag>-ctrader` on Windows, written only by the node, and an owner-only file in its volume (`data/grants/`) on Linux. One refresher per grant, store before discard (QMN's rotation rule, `qmn/src/qmn/secrets/rotation.py`). A volume's `data/grants/` never leaves its machine: today a file there is classed `content` and sent by every backup (`qmx_home/classes.py:119`) and copied by the snapshot a move or the road check makes (`qmx_apps/volume.py:261-285`), CHECKED by running both (`BLAST-RADIUS.md` C11); two one-line changes fix it, a `secret` backup rule for `data/apps/*/data/grants/**` and a skip in `snapshot()`. The grant stays in the volume rather than the host's vault, because the one refresher is the node and an app cannot write outside its volume (`qmx_apps/bootstrap.py:93-100`). After a move he signs in again. The sign-in is two node operations: `sign_in_begin` returns the consent link for the node's own app and This PC's loopback receiver; `sign_in_code` exchanges the one code This PC relays. A grant that can trade a live account is kept only when the host facts say the trading profile is on (AD-307); otherwise it is discarded with the host's own `LiveGrant` message. On a server the supervisor reads `NODE_KEYS` from the host's owner-only vault (`<home>/vault/trading-node-keys`), because keyring has no backend on a headless Linux server (`keyring/backends/fail.py` raises, CHECKED in the pinned package).
 
 ### AD-307. The trading profile is host facts the node can read and the host enforces
 
 - **Binds:** P0, P12, AD-45
 - **Prevents:** a live grant on a host that runs chats or agent steps; the node trusting an argument an agent could forge
-- **Rule:** `[host] trading_profile` is a host setting that only the connect dialog's "bind live" step writes, over SSH, after it turns chats and agent steps off; This PC refuses it. When it is on, the host mounts no chat routes and its engine refuses to place an agent or llm step there. The host writes its facts (`placement`, `role`, `trading_profile`, `chats`, `agent_steps`, `at`, `schema_version`) to `road/host/facts.json` in every app volume it supervises, before the app starts and on every change, so a volume moved to a new home is rewritten by that home first; the app cannot write `road/` (`qmx_apps/bootstrap.py:93-100`). The node reads it before keeping a live-capable grant and every `reconcile_tick`; if the profile turns off while a live grant is held, the node stops new entries on live bindings and asks him to unbind.
+- **Rule:** `[host] trading_profile` is a host setting that only the connect dialog's "bind live" step writes, over SSH, after it turns chats and agent steps off; This PC refuses it. When it is on, the host mounts no chat routes and its engine refuses to place an agent or llm step there. The host writes its facts (`placement`, `role`, `trading_profile`, `chats`, `agent_steps`, `holdout`, `at`, `schema_version`; `holdout` is the Settings `[data]` default seal the market-data door applies, `qmx_host/market_data.py:1232-1255`) to `road/host/facts.json` in every app volume it supervises, before the app starts and on every change, so a volume moved to a new home is rewritten by that home first; the app cannot write `road/` (`qmx_apps/bootstrap.py:93-100`). The node reads it before keeping a live-capable grant and every `reconcile_tick`; if the profile turns off while a live grant is held, the node stops new entries on live bindings and asks him to unbind.
 
 ### AD-308. Protection follows each venue's own rule
 
@@ -182,7 +185,7 @@ Arrows mean "may call or read". Nothing points up: the runtime never calls the h
 
 - **Binds:** P12, P14, AD-8, AD-12, cases EX-01, EX-02, TN-19, TN-21
 - **Prevents:** two connections knocking each other off; a unit reading a stale or half-rebuilt book; volume invented from tick counts
-- **Rule:** the feed keeper lives inside the node app (its lifeline depends on no other app). It owns one long session per (venue, environment) on its machine, one subscription per symbol, and fans out in process to units, guards, the reading runner and the recorder. It normalises every source into four events (print, quote, book update, bar; `CONTRACTS.md` §6), each with venue time when given and receive time always. A one-sided cTrader spot event keeps the other side's last value. After every reconnect the book is rebuilt from a fresh snapshot or full depth before any reader sees it, and readers see `book_state = rebuilding` until then. "Connected" means authenticated, subscribed and capabilities re-verified; a silent socket past the venue heartbeat bound forces a reconnect. A tick count is never written as volume. The recorder writes bars always and ticks for symbols whose live units' data cards name ticks, into the node's append store.
+- **Rule:** the feed keeper lives inside the node app (its lifeline depends on no other app). It owns one long session per (venue, environment) on its machine, one subscription per symbol, and fans out in process to units, guards, the reading runner and the recorder. It normalises every source into four events (print, quote, book update, bar; `CONTRACTS.md` §6), each with venue time when given and receive time always. A one-sided cTrader spot event keeps the other side's last value. After every reconnect the book is rebuilt from a fresh snapshot or full depth before any reader sees it, and readers see `book_state = rebuilding` until then. "Connected" means authenticated, subscribed and capabilities re-verified; a silent socket past the venue heartbeat bound forces a reconnect. A tick count is never written as volume. The recorder writes bars always and ticks for symbols whose live units' data cards name ticks, into the node's append store as series rows through Part B's writer library (B8); the MIS app writes its reading records through the same library.
 
 ### AD-310. The venue-client port opens to `ccxt`; MT5 and futures stay declarations
 
@@ -206,19 +209,19 @@ Arrows mean "may call or read". Nothing points up: the runtime never calls the h
 
 - **Binds:** P13, AD-2, AD-5, AD-40, ruling 48, ruling 50, ruling 55
 - **Prevents:** a unit waiting on the MIS; QMB and live computing one reading two ways; two writers on one reading series; an app with no way to read market data
-- **Rule:** the reading runner is one module in `packages/qmf-readings` that runs catalogue reading blocks over normalised events or bars on tier clocks. Tick-tier readings on a trading machine run inside the node (only the node holds the tick stream) and are stamped `source = node`. The `mis` app runs bar, session and day tiers: one instance on each trading machine for that machine's markets, and one on This PC for the slow tier, the cross-market readings, the board and models in shadow. The `mis` app reads its machine's market-data store through a read-only root the supervisor hands to apps whose manifest declares `data_reads = ["market"]` (`QMX_MARKET_ROOT`; writes outside the volume stay refused by the bootstrap's audit hook). A reading series key carries reading id@version, tier, source and machine, and each (reading, tier) pair has one writer kind; This PC never recomputes a tier a trading machine publishes for its own markets. A reading with a new version, or a model, runs in shadow and goes live only on his yes. Agents reach readings only through the slow lane (`readings_query` over history). Detail and his questions: `MIS.md`.
+- **Rule:** the reading runner is one module in `packages/qmf-readings` that runs catalogue reading blocks over normalised events or bars on tier clocks. Tick-tier readings on a trading machine run inside the node (only the node holds the tick stream) and are stamped `source = node`. The `mis` app runs bar, session and day tiers: one instance on each trading machine for that machine's markets, and one on This PC for the slow tier, the cross-market readings, the board and models in shadow. The `mis` app reads its machine's market-data store through a read-only root the supervisor hands to apps whose manifest declares `data_reads = ["market"]` (`QMX_MARKET_ROOT`; writes outside the volume stay refused by the bootstrap's audit hook), including the open month of bars that Part B's records job harvests into that store every `[records] open_harvest_s` (default 60). It skips every month the host facts' `holdout` seals (AD-307), because the raw root bypasses the door's holdout and read log, so no reading over a sealed month lands in history where agents read it. A reading series key carries reading id@version, tier, source and machine, and each (reading, tier) pair has one writer kind; This PC never recomputes a tier a trading machine publishes for its own markets. A reading with a new version, or a model, runs in shadow and goes live only on his yes. Agents reach readings only through the slow lane: the core row `readings_query` over reading history (`CONTRACTS.md` §12, slice C-24). Detail and his questions: `MIS.md`.
 
 ### AD-314. The stamped reading record and the default packs
 
 - **Binds:** P13, P5, P1, connections §5
 - **Prevents:** a reading used as fresh when it is stale; a past label rewritten; a reading valid for forex applied to a 24/7 market
-- **Rule:** every published reading is one record under Part B's journal envelope with kind `reading`: reading id and version, block fingerprint, market id and instrument, tier, time base, the three outputs (value, percentile against the market's own usual for that minute of its session, word), health word, data level used and fallback step taken, inputs' last receive time, computed time and `stale_after`. Records are append-only; a correction is a new record linked to the old. Each instrument class has a default pack (`MIS.md` §4) named by id and version on the MIS configuration; a market gets only the readings its data levels allow.
+- **Rule:** every published reading is one record under Part B's journal envelope with kind `reading`: reading id and version, block fingerprint, source (`node` or `mis`) and machine in the body (Part B's envelope has no source field), market id and instrument, tier, time base, the three outputs (value, percentile against the market's own usual for that minute of its session, word), health word, data level used (Part A's `qmx.data-level/1`) and fallback step taken, inputs' last receive time, computed time and `stale_after`. Records are append-only; a correction is a new record linked to the old. Every class in the instrument record's class enum (`RECORDS.md` §2) has a default pack (`MIS.md` §4), named `<class>-<n>` and pinned by id and version on the MIS configuration; a market gets only the readings its data levels allow.
 
 ### AD-315. Healing at two levels, and the safe-to-restart test
 
 - **Binds:** P12, P10, AD-33, AD-38, cases TN-12, TN-13, TN-16, TN-27, DO-10
 - **Prevents:** a crash loop that keeps trading; a restart that undoes a risk stop; a host update during an open order
-- **Rule:** the inner supervisor restarts the runtime thread after an exception with back-off (`inner_backoff_s` 1, doubling to 60). Boot stamps are recorded in the volume by QMN's `CrashLoopFold`, moved out of `qmn.host._supervision` into `qmn/src/qmn/app/healing.py`; past `crash_loop_k` restarts in `crash_loop_t` (5 in 10 minutes) the node stands down alive and waits for his resume. The outer level is the core fix Level 0 named: a manifest `[breaker] restart = "backoff"` (off by default, on for `trading-node` and `mis`) makes the supervisor start the app again after a trip with back-off (5 s doubling to 300 s), each trip and start logged; a `money` app restarts only its active signed version (`qmx_apps/supervisor.py:542-547`). Every start reconciles first. `status` reports `safe_to_restart` with reasons: no command in flight or UNKNOWN, every open position's stop observed at the venue, reconcile clean, journal synced. A host update or a node release waits for his click while it is false.
+- **Rule:** the inner supervisor restarts the runtime thread after an exception with back-off (`inner_backoff_s` 1, doubling to 60). Boot stamps are recorded in the volume by QMN's `CrashLoopFold`, moved out of `qmn.host._supervision` into `qmn/src/qmn/app/healing.py`; past `crash_loop_k` restarts in `crash_loop_t` (5 in 10 minutes) the node stands down alive and waits for his resume. The outer level is item 3 of Level 0's core change list (slice C-05a): a manifest `[breaker] restart = "backoff"` (off by default, on for `trading-node` and `mis`, and QMB opts in too, R1-B-09) makes the supervisor start the app again after a trip with back-off (5 s doubling to 300 s), each trip and start logged; a `money` app restarts only its active signed version (`qmx_apps/supervisor.py:542-547`). Every start reconciles first. `status` reports `safe_to_restart` with reasons: no command in flight or UNKNOWN, every open position's stop observed at the venue, reconcile clean, journal synced. A host update or a node release waits for his click while it is false.
 
 ### AD-316. Setup is one connect-dialog kind, run on This PC first
 
@@ -229,8 +232,8 @@ Arrows mean "may call or read". Nothing points up: the runtime never calls the h
 ### AD-317. A deployment is a document the node compiles after it answers
 
 - **Binds:** P12, P1, AD-17, AD-38, AD-47, cases UT-10, TN-16, UT-22
-- **Prevents:** a deploy that restarts every unit; a unit traded with a fingerprint QMB never tested; a deploy that trips the call timeout
-- **Rule:** `deploy` takes the deployment document (`CONTRACTS.md` §3) and answers `accepted` at once; the runtime then loads the pinned blocks through the one block loader, compiles, and refuses if the compiled fingerprint differs from the recorded checker-G verdict's. Preflight refusals are named: another node's identity, an unknown account, a missing record snapshot, a placeholder on a live binding without his acknowledgement flag, two units on one symbol of a netting account, a venue capability the unit needs and the venue lacks, a version mismatch with the PC. A unit warms up from the node's own recording, then from broker history, trading nothing until its warm-up is complete, shown as "warming up n of m". Units are added and removed one at a time; recalibration runs where the unit runs, from its local journal.
+- **Prevents:** a deploy that restarts every unit; a unit traded with a fingerprint QMB never tested; a deploy that trips the call timeout; a unit too large to deploy
+- **Rule:** `deploy` takes the deployment document (`CONTRACTS.md` §3), which the promote action builds (AD-324) and which names its files by fingerprint instead of carrying them, so a deployment of any size fits one call; the node link has staged those files into the node's volume first (AD-303). `deploy` answers `accepted` at once; the runtime then loads the staged blocks through the one block loader, compiles, and refuses if the compiled fingerprint differs from the recorded G result's. Preflight refusals are named: another node's identity, an unknown account, a missing record snapshot, a staged file missing or not matching its fingerprint, a placeholder on a live binding without his acknowledgement flag, two units on one symbol of a netting account, a venue capability the unit needs and the venue lacks, a version mismatch with the PC. A unit warms up from the node's own recording, then from broker history, trading nothing until its warm-up is complete, shown as "warming up n of m". Units are added and removed one at a time; recalibration runs where the unit runs, from its local journal.
 
 ### AD-318. Alarms and liveness reach his phone while This PC is off
 
@@ -268,13 +271,24 @@ Arrows mean "may call or read". Nothing points up: the runtime never calls the h
 - **Prevents:** a compatibility layer between old and new shells; a kept organ broken by a deleted import
 - **Rule:** once the new shell trades on demo, one wave moves the names kept organs and their tests use (`StandDownTrigger`, `allocate_writer_ids`, `CrashLoopFold`, `BootAttemptStamp`, `SafePointSnapshot`) into `qmn/src/qmn/app/`, repoints those tests (`qmn/tests/test_qmn_time.py:19`, `test_qmn_roster.py:37`, `test_qmn_hygiene.py:22-36`), confirms the outside callers Level 0 named are gone (the agent's node-state tool moved in slice C-06; the kill line, bench fold and MIS register calls moved before the cut), and deletes `qmn.host` (with `runtime_risk_gate`, `fencing`, `lineage_persist`, `registry_mint`, whose only source importer is `qmn/host/__init__.py`, CHECKED `brc6_host_modules.py`), `seats`, `promotion`, `paper`, `doors`, `bench`, the rest of `observability`, the deploy recipes and the Grafana stack, with the tests of what it deletes. The kill line's breach acts through the Level 0 placeholder. The test that every order carries its stop at the broker runs before and after; the import scan reruns on the PR head and must show no importer of a deleted module.
 
+### AD-324. His click promotes, and the same click deploys
+
+- **Binds:** P0, P2, P12, AD-3, AD-16, AD-17, AD-23, AD-38, connections X1
+- **Prevents:** a promotion nobody records; an agent's move toward live; a deployment written by hand; a live unit starting from numbers no lane ran
+- **Rule:** one host route on This PC, `POST /api/units/promote` (`CONTRACTS.md` §13), answers only to the principal `operator`, as the seal move does (`qmx_host/market_data.py:1201-1210`, CHECKED); it is not a catalog row, so no agent or workflow sees it. For one unit version and market it records the move through Part B's host lifecycle writer (`qmx_host/lifecycle.py` `record_move`, slice B13), which folds the unit's events with Part A's `qml.lifecycle.fold`, refuses a move the transition table refuses, and appends the `qmx.lifecycle/1` event (`by: {kind: his_click, principal: operator}`); and, for a move into paper or live, builds the deployment document from the Library (the unit document, its pinned block files by fingerprint, the G `test-report` for its compiled fingerprint, the starting numbers, the instrument, venue and account snapshots, the lane) and asks `deploy` through the node link. A move to parked or retired asks `withdraw` (when flat); admitting a version on a market where another is on paper or live parks or retires the other in the same click (Part A's rule). The paper lane starts from the unit's defaults, as QMB tested it; the live lane starts from the paper lane's last calibrated values, read from its harvested calibration rows with their watermark, and the calibrator's statistics restart from that watermark (LC-C-39). A live move onto a live-world account also needs a host in the trading profile (AD-307); a live move with placeholders needs his tick. The event id and the deployment id derive from the op id, so a repeated click lands nothing new. A risk stop is the node's own lifecycle event (`by: {kind: risk_rule}`), written through the same writer.
+
 ## The cases this part owns
 
-Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the handover gave Part C, less MIS-10 (Part B's). 114 rows; R1 checks them by script. Fuller handling lives in the area file named.
+Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the handover gave Part C, less MIS-10 (Part B's), plus the six R1 gave it (R1-L0-01: CA-01, CA-03 shared with Parts A and B, CA-04, CA-06, CA-11, MA-05). 120 rows; checked by script. Fuller handling lives in the area file named.
 
 | Case | Handling | Where |
 | --- | --- | --- |
+| CA-01 | Every host-route answer carries `schema_version`; the control server's OpenAPI document states the host build's version, not the fixed `0.1.0`; a test in slice C-06 reads both | AD-304; `CONTRACTS.md` §1 |
+| CA-03 | Shared with Parts A (A1, the format) and B (B5b and B6, QMB's fills): slice C-12a asserts that the quantity the conformance venue receives equals the sizer receipt's quantity after lot rounding, so a door that drops the size fails the build | AD-301; `BUILD-SLICES.md` C-12a |
+| CA-04 | A new venue is a capability declaration plus an adapter behind the port; `VenueClientKind` gains `ccxt` in its own branch (slice C-16) | AD-310 |
+| CA-06 | Both sides state their contract versions on connect; on a mismatch the node keeps trading and refuses new deployments (test in slice C-19) | AD-322; `NETWORKING.md` §5 |
 | CA-10 | The observer token's expiry shows on its Settings row and on the doctor 7 days ahead; renewal is his click; nothing renews it | AD-321; `DEVOPS-CLOCKS.md` §6 |
+| CA-11 | No browser stream rides these links: the node and MIS screens read the node link's latest values and answers, so no stream needs resuming; a stream added later resumes by `Last-Event-ID` | AD-303; `UI-NEEDS.md` §8 |
 | CK-01 | The clock probe reports every machine's offset; data written unproven carries `clock_ok = false`; the doctor offers to start Windows Time | AD-319 |
 | CK-02 | Session rules live in the market's zone; a calendar test runs across both 2026 mismatch weeks | AD-320; `DEVOPS-CLOCKS.md` §3 |
 | CK-03 | No rule reads a machine's zone; two nodes in two zones compute one session from one instant (a test with both zones) | AD-320 |
@@ -303,7 +317,7 @@ Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the 
 | DO-13 | Kept as built: stores open, upgrade after a copy or refuse by name | AD-322 |
 | DO-14 | Kept as built: one redaction seam; the node's logs pass it; secrets are named, never valued, in logs | AD-306, AD-321 |
 | EX-01 | A one-sided spot event keeps the other side's last value | AD-309 |
-| EX-02 | The book is rebuilt after every reconnect before any reader sees it; readers see `book_state = rebuilding` | AD-309 |
+| EX-02 | The book is rebuilt after every reconnect before any reader sees it; readers see `book_state = rebuilding` (test in slice C-12a: a session dropped mid-book) | AD-309 |
 | EX-03 | Data levels are declared per venue; cTrader offers no tape or volume; a tick count is never labelled volume | AD-309, AD-311 |
 | EX-04 | History pages by the venue's own limits (one side, one week, five a second); retention is measured once on demo and stored on the venue record | AD-310; `EXTERNAL.md` §2 |
 | EX-05 | A broker switching the Open API off is a venue state with its reason; no new entries; protection stays at the broker | AD-310 |
@@ -327,6 +341,7 @@ Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the 
 | LD-02 | Completeness is judged against each instrument's own calendar | AD-320 |
 | LD-13 | Dividend events per index CFD live on the instrument record as dated cash events that QMB replays | AD-312; `RECORDS.md` §3 |
 | MA-02 | His take-over click lets a new node adopt the dead node's tagged positions under protection | AD-305 |
+| MA-05 | His signature binds a version, not a restart: the opt-in restart starts only the active signed version (test in slice C-05a) | AD-315 |
 | MIS-01 | Readings are library code a unit runs itself; a unit with the MIS cut off still trades (test) | AD-313 |
 | MIS-02 | Every reading carries computed time, inputs' receive time and `stale_after`; stale reads as absent | AD-314 |
 | MIS-03 | "Regime" means trend against range; the shipped buckets are renamed "volatility state" (his word to veto) | AD-314; `MIS.md` §7 |
@@ -337,7 +352,7 @@ Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the 
 | MIS-08 | Sessions come from each instrument's calendar; 24/7 markets use measured activity sessions | AD-320 |
 | MIS-09 | A missing shortlist changes nothing on the node; units trade their admitted markets on their own conditions | AD-313 |
 | MIS-12 | A new reading or vocabulary is a new version; old records keep theirs | AD-314 |
-| MIS-13 | Node readings come home with the pull, MIS node-instance readings too; templates read them from history | AD-313, AD-28 |
+| MIS-13 | Node readings come home with the pull, MIS node-instance readings too, the open month within a harvest; templates read them from history through `readings_query` (slice C-24) | AD-313, AD-28 |
 | MIS-14 | Every fallback step a reading takes is recorded on the record and counted on the reading's health | AD-314 |
 | OP-01 | First start shows each step's state and what to do, including the node kind's steps | AD-316 |
 | OP-02 | Slice C-14 is the first real start on his folder with his sign-ins, a named early step | `BUILD-SLICES.md` |
@@ -349,18 +364,18 @@ Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the 
 | OP-10 | `kill` is idempotent by op id and escalate-only; `resume` shows the open causes first | AD-302, AD-303 |
 | OP-11 | Names are labels; identity is the id; a node, unit or reading is found by id | AD-305 |
 | QB-06 | The record carries a futures CFD's at-expiry action and date; QMB replays it | AD-312 |
-| QML-06 | One record per venue and symbol with contract size, digits and money per point; a conversion check computes money per point two ways | AD-312; `RECORDS.md` §2 |
+| QML-06 | One record per venue and symbol with `contract_size`, `digits` and `value_per_point` under Part A's key names; a conversion check computes value per point two ways; a key-parity test pins the names | AD-312; `RECORDS.md` §2 |
 | RS-18 | Leverage and margin are versioned record fields; a change stands the symbol's units down until his click | AD-312 |
-| TN-01 | UNKNOWN is a state; before any resend the node reads open orders by client order id and positions by tag; a drill cuts the network after send | AD-305; `NODE.md` §6 |
+| TN-01 | UNKNOWN is a state; before any resend the node reads open orders by client order id and positions by tag; the drill (the answer to a send is lost; the node does not resend and ends with one position) runs on the conformance venue in slice C-12b and on demo in C-15 | AD-305; `NODE.md` §6 |
 | TN-02 | Start reconciles before any unit runs; an untagged position is protected and flagged, never adopted | AD-305 |
 | TN-03 | Every position already has its stop at the broker; the kill waits in the node link's outbox; the node page names the broker's own app | AD-303, AD-308 |
 | TN-04 | Install id plus machine fingerprint; a mismatch refuses until his click; a live twin is caught by own-tagged activity missing from the journal | AD-305 |
-| TN-05 | One cTrader app and grant per trading machine; one refresher; expiry on the passport; a refresh drill on demo | AD-306 |
+| TN-05 | One cTrader app and grant per trading machine; one refresher; expiry on the passport; the refresh drill on demo in slice C-15 (a forced refresh stores the new grant before discarding the old, the session comes back ready, a second refresher is refused) | AD-306 |
 | TN-06 | Maintenance windows are on the venue record's calendar; reconnect with back-off; no entries until re-verified; exits allowed | AD-309, AD-312 |
 | TN-07 | An exchange halt or price limit is a market event every unit sees: no entries; the journal records it | AD-312; `NODE.md` §5 |
 | TN-08 | No order without its stop at the broker; the protection gate refuses otherwise | AD-308 |
 | TN-09 | Hyperliquid stops are position-scope reduce-only triggers; `scheduleCancel` is never sent; protection is re-placed after any cancel | AD-308 |
-| TN-10 | Every boot value has a starting default; the first run is slice C-12 on the conformance venue, the first demo run C-14 | AD-315; `NODE.md` §9 |
+| TN-10 | Every boot value has a starting default; the first run is slice C-12a on the conformance venue, the first demo run C-14 | AD-315; `NODE.md` §9 |
 | TN-11 | Every setup step reruns; the dialog names the failed step | AD-316 |
 | TN-12 | Two healing levels with back-off; the crash-loop fold stands down alive | AD-315 |
 | TN-13 | After a reboot the node reconciles, warms up, then trades | AD-315, AD-317 |
@@ -369,7 +384,7 @@ Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the 
 | TN-16 | Units are added and removed one at a time; a node restart is only for node code | AD-317 |
 | TN-17 | The passport records the image digest; rows carry their writer's build | AD-322 |
 | TN-18 | Disk alarms before full; tick recording stops first; journals last; exits still go | `NODE.md` §7 |
-| TN-19 | A silent socket past the heartbeat bound forces a reconnect; connected is not ready | AD-309 |
+| TN-19 | A silent socket past the heartbeat bound forces a reconnect; connected is not ready; no entry until ready (test in slice C-12a) | AD-309 |
 | TN-20 | A symbol is stale only inside its open calendar | AD-320 |
 | TN-21 | One feed keeper per connection fans out to every unit on the machine | AD-309 |
 | TN-22 | Venue budgets are data; the pacer keeps a share for cancels and stops | AD-308, AD-310 |
@@ -407,7 +422,9 @@ Every case Level 0 gave parts P0, P4, P12, P13, P14 and P15, plus the cases the 
 | R0-16 | AD-307 |
 | R0-19 | AD-2 inherited (host and supervisor on the path); AD-6's overlap window on every verb (AD-304); `market_id` (AD-312) |
 
-**Also handled here, owned elsewhere.** CA-06 (contract versions on connect, AD-322), MA-01 (only the node sends orders; a research app's breaker stops research only), MA-05 (his signature binds a version, not a restart, AD-315), CA-11 (no browser stream on these links; the UI reads the node link's latest values).
+**Also handled here, owned elsewhere.** MA-01 (only the node sends orders; a research app's breaker stops research only). CA-06, MA-05 and CA-11 moved into the table above when R1 gave them to this part.
+
+**The R1 findings for this part** (`review/R1-findings.md`, "Findings for part C", and the clash settlements naming this folder) are settled line by line in `review/R1-FIXES-X1-C.md`.
 
 ## His MIS questions, answered
 
@@ -429,11 +446,13 @@ Level 0's conventions hold. This part adds:
 | Node words on screens | Setting up, Starting, Ready, Trading, Healing, Paused, Stopped by a risk rule, Stopped by a health check, Unreachable since `<time>`; a risk stop and a health stop never share a word |
 | Node tag | 8 base-32 characters from the install id; in every client order id, cTrader label and Hyperliquid cloid |
 | Operation answers | `{ok, value}` or `{ok: false, code, message, next_step}`; never an exception |
-| Desired changes | one row per change with an op id (ULID); a repeated op id answers its first result |
+| Desired changes | one row per change with an op id (ULID) and `issued_at`; a repeated op id answers its first result; a change older than the newest applied for its scope answers `superseded`, except `kill` and `flatten` |
+| Deployment files | named by fingerprint in the document, staged by the home's node link into `data/deployments/<deployment_id>/in/`, never inlined; no size limit |
+| Instrument classes | one enum with underscores (`RECORDS.md` §2), used by records, packs and every part |
 | Reading series key | source (`node` or `mis`), reading id and version, tier, market id, instrument, machine |
 | Trace id | a ULID (26 characters); the cloid is the tag's 5 bytes plus the first 11 bytes of SHA-256 of the ULID |
 | Recorded feed key | source `<venue>.<env>.<place>`, subject the symbol, kind `ticks`, `bar-m1`, `book` or `trades` |
-| Secrets | `qmx/trading-node-keys` (static, per machine); `qmx/node-<tag>-ctrader` grants on Windows; `data/grants/` on Linux; never in a deployment, journal, log or the Library |
+| Secrets | `qmx/trading-node-keys` (static, per machine); `qmx/node-<tag>-ctrader` grants on Windows; `data/grants/` on Linux, machine-bound (no backup, no move); never in a deployment, journal, log or the Library |
 | Settings | every number in this part is a named setting with its default in the area file that owns it |
 
 ## Stack
@@ -487,7 +506,7 @@ flowchart TB
   DES --> REC
   REC --> OBS
   REC --> FK["feed keeper"]
-  FK --> UNITS["compiled units over run_slice"]
+  FK --> UNITS["hosted units: construct_unit, Part B's unit handler, run_slice"]
   FK --> GUARDS["guards and tick readings"]
   FK --> RECORDER["recorder"]
   UNITS --> PATH["order path: guards, hook, CT-19, venue client"]
@@ -505,9 +524,10 @@ qmn/src/qmn/order/protection.py       # a second protective-stop form
 packages/qmf-readings/                # reading blocks moved from qmn/src/qmn/mis, plus the reading runner
 qmx-agents/apps/trading-node/         # app.toml, server.py, pyproject.toml, uv.lock
 qmx-agents/apps/mis/                  # app.toml, server.py, pyproject.toml, uv.lock
-qmx-agents/packages/qmx-host/         # host route, node_link, host facts, trading profile, clock probe, connect kind, log shipping
-qmx-agents/packages/qmx-apps/         # [breaker] restart, QMX_MARKET_ROOT for data_reads market, host-facts file
-qmx-agents/packages/qmx-control/      # node rows; secret reader for a server
+qmx-agents/packages/qmx-host/         # host route, node_link with staging, promote action, host facts, trading profile, clock probe, connect kind, log shipping
+qmx-agents/packages/qmx-apps/         # [breaker] restart, QMX_MARKET_ROOT for data_reads market, host-facts file, snapshot skips data/grants
+qmx-agents/packages/qmx-home/         # one backup rule: data/apps/*/data/grants/** is secret
+qmx-agents/packages/qmx-control/      # node, instrument and readings rows; secret reader for a server; OpenAPI version
 qmx-agents/packages/qmx-engine/       # app_op Placements; per-market calendar check
 qmx-agents/packages/qmx-library/      # instrument, venue, account kind files
 qmx-agents/packages/qmx-broker/       # CCXT contract reads
@@ -518,7 +538,8 @@ extensions/qmf-calendar-*/            # calendars beyond forex as data
 
 | Seam | Interface | Adapters | Real or hypothetical |
 | --- | --- | --- | --- |
-| Node link | `ask(node, operation, arguments, caller)` returning an answer or a queued receipt | local supervisor; host route | real (two adapters) |
+| Node link | `ask(node, operation, arguments, caller)` returning an answer or a queued receipt; stages a deployment's files on the home | local supervisor; host route | real (two adapters) |
+| Promote action | `promote(op_id, unit, market, to, node?, account?)` returning the lifecycle event and the node's answer | his UI route on This PC | real (one) |
 | Venue-client port | sessions, submit, observations, reconcile, capabilities | `ctrader`, `ccxt`, replay, conformance | real |
 | Data-route port | levels, subscribe, history | cTrader, CCXT venues, Dukascopy, Binance Vision, `file` placeholder | real |
 | Notification channel | `deliver(alert)` | ntfy; recording double | real (production and test) |
@@ -528,7 +549,7 @@ extensions/qmf-calendar-*/            # calendars beyond forex as data
 
 ## Conflicts with the parent, surfaced
 
-Level 0 binds; these are not applied. Each is a proposal for the lead's fold.
+Level 0 binds; this part does not apply these itself. R1 settled all seven as accepted (`review/R1-findings.md`, "Clash settlements"), with refinements: CF-4 became Level 0's one list of six core changes (this part builds items 3 to 6 as slices C-05a to C-05d); CF-5's fingerprint list won over Part B's watermark and Part B builds it in B16; CF-6 splits readings by tier. The Level 0 fixer applies them there. One more core change surfaced in the fix round, for that list: a volume's `data/grants/` never leaves its machine (AD-306, `BLAST-RADIUS.md` C11).
 
 | Id | Level 0 text | What the code shows | Proposal |
 | --- | --- | --- | --- |

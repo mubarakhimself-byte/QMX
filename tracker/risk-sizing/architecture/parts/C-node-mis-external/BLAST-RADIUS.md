@@ -18,6 +18,8 @@ Skill `blast-radius`. For each shipped seam this part changes: what changes, the
 | C8 | App secrets on a server (AD-306) | a missing declared secret stops the start, and the default reader is keyring, whose fallback backend raises | 2 |
 | C9 | X6, the cross-machine run pass | a run pass minted on This PC verifies at a server that holds the same pairing key | 4 |
 | C10 | The core fixes not yet built (restart, market root, host facts) | each is additive and opt-in by manifest or by the host | 2 |
+| C11 | A node volume's `data/grants/` (AD-306, R1-C-14) | today a grant file there is backed up and copied by a move; one backup rule and one snapshot skip stop both | 4 |
+| C12 | The promote action's principal (AD-324, R1-C-01) | the seal move already refuses every principal but `operator` on a host route; the promote route copies that check | 2 |
 
 ## C1. The host pass carries the caller's principal
 
@@ -86,7 +88,7 @@ door at server: committed ctrader.live.ldn-1/EURUSD/bar-m1/bid/2026-10 fp=290327
 door at pc: committed ctrader.live.ldn-1/EURUSD/bar-m1/bid/2026-10 fp=290327b1b872c64e78... pinned markers=1 pending=('bid/2026-10',)
 ```
 
-**What it means.** The host's harvest can commit straight from an app volume (the door's staging root is any folder). Level 0 AD-28's "the node keeps every partition until the PC confirms" is not held by any marker on a server today. CF-5 proposes pinning node-born partitions on a server; `born_on` has three callers, the downloader templates, which pass the door's own placement (`templates/download-*/scripts/download.py`), so a `NODE` branch changes none of them.
+**What it means.** The host's harvest can commit straight from an app volume (the door's staging root is any folder). R1 made Part B's records job that one harvester on every machine (R1-B-02); this part consumes it. Level 0 AD-28's "the node keeps every partition until the PC confirms" is not held by any marker on a server today. CF-5 proposes pinning node-born partitions on a server; `born_on` has three callers, the downloader templates, which pass the door's own placement (`templates/download-*/scripts/download.py`), so a `NODE` branch changes none of them.
 
 **Before merge.** The harvest test commits a node-born partition on a server door, asserts a pin, then clears it through `data.list`'s `confirmed`.
 
@@ -152,7 +154,34 @@ The run-pass secret is derived from the pairing key when `vault/pairing-key` exi
 | --- | --- | --- |
 | `[breaker] restart = "backoff"` | `Breaker` is a strict model with defaults (`manifest.py:108-110`); a new field with default `never` leaves every shipped manifest as today | 2 |
 | `QMX_MARKET_ROOT` for `data_reads = ["market"]` | `data_reads` is only logged today (`supervisor.py:700`); apps not declaring it get an unchanged environment (`:598-632`); writes outside the volume stay refused (`bootstrap.py:93-100`) | 2 |
-| `road/host-facts.json` | the bootstrap refuses app writes under `road/` (`bootstrap.py:100`), so only the host can write the file | 2 |
+| `road/host/facts.json` | the bootstrap refuses app writes under `road/` (`bootstrap.py:100`), so only the host can write the file | 2 |
 | `VenueClientKind.ccxt` | live selection refuses any kind it does not branch on (`qmn/src/qmn/venue/port.py:171-190`), so the new kind needs its own branch and changes no existing one | 2 |
 | `label` on cTrader orders | the encoder writes `clientOrderId` only (`encode.py:598`); `label` is an optional protobuf field (help.ctrader.com) | 2 |
 | `ZO_HTTP_ADDR` in the server's OpenObserve unit | unset today, which binds 0.0.0.0 (openobserve `src/main.rs`); This PC's own instance sets loopback (`connect_logs.py:186`) and is unchanged | 2 |
+
+## C11. A node volume's grants never leave the machine (R1-C-14)
+
+**What changes.** Two one-line changes to shipped code: `qmx_home/classes.py` gains `Rule("data/apps/*/data/grants/**", "secret", ...)` placed before the `data/apps/**` rule at `:119`, so no backup sends a grant (`secret` is in `NEVER`, `:31`); `qmx_apps/volume.py` `snapshot()` skips `data/grants` beside its `data/tmp` skip (`:271`), so a move (`supervisor.py:1072`) and the road check's copy (`road/validation.py:37`) never carry one.
+
+**Proof (step 4).** `x1c/br/brx1_grants_copy.py` builds a real volume with the shipped `Volume`, writes a grant file under `data/grants/`, and asks the shipped classifier and snapshot; then the same script against copies patched by `x1c/br/patch_grants.py`:
+
+```text
+== shipped
+backup class of data/apps/trading-node/data/grants/ctrader-node.json: content (rule Rule(glob='data/apps/**', ...)); sent by a backup: True
+move snapshot copies: ['app.db', 'data/grants/ctrader-node.json', 'data/node.sqlite']
+== patched
+backup class of data/apps/trading-node/data/grants/ctrader-node.json: secret (rule Rule(glob='data/apps/*/data/grants/**', ...)); sent by a backup: False
+move snapshot copies: ['app.db', 'data/node.sqlite']
+```
+
+**Risk confirmed and closed.** Without the change, a live grant on a server would go to every backup storage and travel with a move. The first-match rule order means the new rule must sit before `data/apps/**`; the test in slice C-17 pins it.
+
+**Shipped tests.** The `qmx-home` and `qmx-apps` suites on the patched copies give the same result as on the shipped code (338 passed, 106 failed, 9 skipped, the same failure set; `test_classes.py` and all `qmx-apps` tests pass). The 106 are backup-round tests that fail on the shipped code too in the scratch environment (a round answers `refused`); cause not traced, INFERRED environmental. Slice C-17's `just ci` on a real checkout is the gate.
+
+**Cleared.** R1's other option, keeping the grant beside `<home>/vault/`, fails: the node is the one refresher and the bootstrap refuses app writes outside the volume (`qmx_apps/bootstrap.py:93-100`).
+
+## C12. The promote action's principal (AD-324)
+
+**The one fact (step 2).** The shipped seal move is a host route that reads `PRINCIPAL.get()` and refuses any principal but `operator` (`qmx_host/market_data.py:1201-1210`); his UI bearer is `Caller("user")`, whose principal is `operator` (`qmx_engine/service/context.py:59-70`), and an agent's is `agent:<id>`. The promote route copies that check, so no agent or workflow can record a promotion.
+
+**Before merge.** Slice C-23's test: an `agent:x` principal answers `refused_principal`; his principal lands one lifecycle event.
