@@ -17,7 +17,9 @@ relay, and the router thread stops last.
 
 While it serves, the host writes one heartbeat row for itself and one per running app every
 `heartbeat.interval` (AD-65) into the home's heartbeat log, prunes the log to its window once an
-hour, and serves the log to the copilot's `ops_heartbeats` row through the harness.
+hour, and serves the log to the copilot's `ops_heartbeats` row through the harness. It also ships
+every app's JSONL logs and the engine's open incidents through the one telemetry switch
+(`app_logs`), and the doctor's deep-logs row says what went or that telemetry is off.
 
 The lock is an OS lock on `<home>/engine.lock` (AD-3, L-64, L-70): the OS releases it when the
 process dies, so a crashed host never blocks the next one, and two hosts cannot both take it.
@@ -135,6 +137,7 @@ from qmx_router.server import (
 from qmx_tools.gather import check_unit, entry_problems
 from uvicorn.config import STARTUP_FAILURE
 
+from qmx_host.app_logs import AppLogs
 from qmx_host.backups import Backups, Refusal, backups_router
 from qmx_host.bring_in import recheck_at_start
 from qmx_host.clock_probe import (
@@ -926,6 +929,8 @@ async def serve(
                         upgrade_moment_ended(Layout.from_home(home))
                         server = uvicorn.Server(uvicorn.Config(app))
                         clock_doctor(harness, home, name, core.settings)
+                        shipper = AppLogs(home, lambda: section(control, "telemetry"))
+                        harness.doctor_from(shipper.doctor_line)
                         beating = asyncio.create_task(
                             heartbeats(
                                 home,
@@ -940,6 +945,7 @@ async def serve(
                         exporting = asyncio.create_task(harness.idle_exports())
                         holding = asyncio.create_task(asking.hold_all())
                         refreshing = asyncio.create_task(keep_facts(control))
+                        shipping = asyncio.create_task(shipper.run())
                         syncing: list[asyncio.Task[None]] = []
                         loop = asyncio.get_running_loop()
 
@@ -967,6 +973,7 @@ async def serve(
                                 exporting,
                                 holding,
                                 refreshing,
+                                shipping,
                                 *syncing,
                                 copying,
                             ):

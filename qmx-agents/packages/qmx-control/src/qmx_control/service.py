@@ -1998,6 +1998,10 @@ class ControlService:
         return self._save_note(observer.strip(), note.body)
 
     def _save_note(self, observer: str, body: str) -> Document:
+        """An outside agent wrote `body`, so it is stored after the engine's one redaction."""
+        from qmx_engine.ledger import redact  # noqa: PLC0415
+
+        body = redact.redact(body)
         note_id = f"note-{uuid.uuid4().hex[:12]}"
         at = datetime.now(UTC).isoformat()
         ref = OBSERVER_REF.format(observer=observer)
