@@ -5,7 +5,10 @@ requires-python = "==3.14.*"
 [manifest]
 members = [
     "qmb",
+    "qmf-calendar-cme",
+    "qmf-calendar-crypto247",
     "qmf-calendar-forex",
+    "qmf-calendar-indices",
     "qmf-core",
     "qmf-data",
     "qmf-indicators",
@@ -1361,6 +1364,16 @@ requires-dist = [
 ]
 
 [[package]]
+name = "qmf-calendar-cme"
+version = "0.1.0"
+source = { editable = "extensions/qmf-calendar-cme" }
+
+[[package]]
+name = "qmf-calendar-crypto247"
+version = "0.1.0"
+source = { editable = "extensions/qmf-calendar-crypto247" }
+
+[[package]]
 name = "qmf-calendar-forex"
 version = "0.1.0"
 source = { editable = "extensions/qmf-calendar-forex" }
@@ -1374,6 +1387,11 @@ requires-dist = [
     { name = "qmf-core", editable = "packages/qmf-core" },
     { name = "tzdata", specifier = "==2025.2" },
 ]
+
+[[package]]
+name = "qmf-calendar-indices"
+version = "0.1.0"
+source = { editable = "extensions/qmf-calendar-indices" }
 
 [[package]]
 name = "qmf-core"
