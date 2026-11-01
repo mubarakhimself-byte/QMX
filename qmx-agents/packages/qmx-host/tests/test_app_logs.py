@@ -206,6 +206,43 @@ def test_a_secret_looking_field_never_leaves(tmp_path: Path, stub: tuple[str, Ta
     assert fields["qmx.tokens_in"] == "120"
 
 
+def posts_reach(taken: Taken, count: int) -> bool:
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if len(taken.posts) >= count:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def test_a_non_finite_number_arrives_as_text_and_the_sender_keeps_sending(
+    tmp_path: Path, stub: tuple[str, Taken]
+) -> None:
+    endpoint, taken = stub
+    sender = exporter(endpoint, tmp_path)
+    app_log(
+        tmp_path,
+        "fake-app",
+        '{"message": "odd numbers", "n": NaN, "low": -Infinity, "big": 1e400, "ok": 1.5}',
+    )
+    shipper = AppLogs(tmp_path, exporter=lambda: sender, switch=lambda: THIS_PC)
+
+    assert shipper.tick() == 1
+    assert posts_reach(taken, 1), "the sender thread posts the batch that held the odd numbers"
+    app_log(tmp_path, "fake-app", {"message": "the next line"})
+    assert shipper.tick() == 1
+    assert posts_reach(taken, 2), "the sender thread is still alive for the next batch"
+    sender.close()
+
+    shipped = taken.logs()
+    assert [r["body"]["stringValue"] for r in shipped] == ["odd numbers", "the next line"]
+    fields = attributes(shipped[0])
+    assert (fields["qmx.n"], fields["qmx.low"], fields["qmx.big"]) == ("NaN", "-Infinity", "1e400")
+    assert fields["qmx.ok"] == 1.5
+    stats = sender.stats()
+    assert (stats["sent"], stats["dropped"], stats["failed"]) == (2, 0, 0)
+
+
 def test_an_open_incident_is_exported_once_until_it_changes(
     tmp_path: Path, stub: tuple[str, Taken]
 ) -> None:

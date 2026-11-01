@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import sys
 from collections.abc import Callable, Mapping
@@ -86,15 +87,38 @@ def record_of(line: str, app_id: str, file: str) -> str:
     came from, secret-named values masked and every string redacted. A line that is not a JSON
     object is sent as its message."""
     try:
-        parsed: object = json.loads(line)
+        parsed: object = json.loads(line, parse_constant=str, parse_float=_finite_or_text)
     except ValueError:
         parsed = None
     fields = cast("dict[str, JsonValue]", parsed) if isinstance(parsed, dict) else {"message": line}
     at = fields.get("at")
     if at is not None and not _instant(at):
         fields = {**{k: v for k, v in fields.items() if k != "at"}, "app_at": at}
-    clean, _ = redact.redact_json(scrubbed({**fields, "app_id": app_id, "log_file": file}))
-    return json.dumps(clean, sort_keys=True)
+    return _sent({**fields, "app_id": app_id, "log_file": file})
+
+
+def _finite_or_text(text: str) -> float | str:
+    """`1.5` stays a float; `1e400`, which Python reads as infinity, stays its text."""
+    value = float(text)
+    return value if math.isfinite(value) else text
+
+
+def _sent(fields: JsonValue) -> str:
+    """The one way a record leaves the shipper. The exporter's own `json.dumps(allow_nan=False)`
+    raises outside its guard on NaN or infinity and kills its sender thread, so a non-finite
+    float is sent as its JSON spelling."""
+    clean, _ = redact.redact_json(scrubbed(_finite(fields)))
+    return json.dumps(clean, sort_keys=True, allow_nan=False)
+
+
+def _finite(value: JsonValue) -> JsonValue:
+    if isinstance(value, float) and not math.isfinite(value):
+        return "NaN" if math.isnan(value) else ("Infinity" if value > 0 else "-Infinity")
+    if isinstance(value, dict):
+        return {key: _finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_finite(item) for item in value]
+    return value
 
 
 def _instant(value: object) -> bool:
@@ -110,8 +134,7 @@ def _instant(value: object) -> bool:
 def incident_record(row: Mapping[str, object]) -> str:
     """One open incident as an OTLP log: its title as the message, at the time last seen."""
     fields = {**row, "message": row.get("title"), "level": "error", "at": row.get("last_seen")}
-    clean, _ = redact.redact_json(scrubbed(cast("JsonValue", fields)))
-    return json.dumps(clean, sort_keys=True)
+    return _sent(cast("JsonValue", fields))
 
 
 class AppLogs:
