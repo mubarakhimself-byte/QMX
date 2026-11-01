@@ -1,9 +1,12 @@
 """The dictionary entry ``qmx.entry/1``, its checker and its computed status (Part A AD-113).
 
 An entry is the ``entry`` object of one ``component`` item, flat, with ``component_type`` beside
-it. Its fields fall into three faces: trader words (what a trader means by the word), the machine
-spec (what the block reads, returns and needs) and the implementation (its code and the evidence
-that the code is right). ``FACES`` names which field belongs to which.
+it. Its fields fall into three faces: trader words (``definition``, ``boundaries``,
+``recognition``, ``eligible_roles``, ``class_meanings``, ``sources``), the machine spec (what the
+block reads, returns and needs: ``inputs``, ``output``, ``parameters``, ``warm_up``, the lags,
+``transfer``, ``mirroring``, ``state_bound``) and the implementation (``fingerprint``,
+``golden``, ``tests``, ``settle_bars``, and the code in the item's ``code`` blob). Identity
+(``entry_id``, ``version``, ``family``, ``aliases``, ``same_word_as``) and ``origin`` frame them.
 
 ``check_entry`` is the Library's put check of an item marked ``qmx.entry/1``: every problem at
 once, each with the JSON pointer of its place in the entry. A problem refuses the save. A face
@@ -38,7 +41,6 @@ __all__ = [
     "CHECKER_VERSION",
     "CUT_SAMPLES",
     "ENTRY_SCHEMA",
-    "FACES",
     "GOLDEN_ABSOLUTE",
     "GOLDEN_RELATIVE",
     "ComponentType",
@@ -115,33 +117,6 @@ class ComponentType(StrEnum):
     HALT = "halt"
     HOOK = "hook"
 
-
-FACES: Final[Mapping[str, tuple[str, ...]]] = {
-    "identity": ("schema", "entry_id", "version", "family", "aliases", "same_word_as", "origin"),
-    "trader": (
-        "definition",
-        "boundaries",
-        "recognition",
-        "eligible_roles",
-        "class_meanings",
-        "sources",
-    ),
-    "machine": (
-        "component_type",
-        "inputs",
-        "output",
-        "parameters",
-        "warm_up",
-        "confirmation_lag_bars",
-        "min_sample",
-        "expected_lag_bars",
-        "transfer",
-        "mirroring",
-        "state_bound",
-        "reading",
-    ),
-    "implementation": ("fingerprint", "golden", "tests", "settle_bars", "owner"),
-}
 
 _SPECIFIED: Final = ("inputs", "output", "parameters", "warm_up", "transfer", "mirroring")
 _TRANSFER_NEEDS_SOURCE: Final = frozenset({Transfer.NATIVE, Transfer.DIRECT})
@@ -609,23 +584,26 @@ def _golden_problems(
     if not isinstance(golden, Mapping):
         return [EntryProblem("/golden/cases", "the golden cases are not an object", "")]
     table = cast("Mapping[str, object]", golden)
-    closes = [Decimal(str(c)) for c in cast("list[object]", table.get("close") or [])]
     port = _series_port(raw)
-    named = list(_cases(table, pin))
+    try:
+        closes = [Decimal(str(c)) for c in cast("list[object]", table.get("close") or [])]
+        named = list(_cases(table, pin))
+    except (TypeError, ArithmeticError) as error:
+        return [EntryProblem("/golden/cases", f"the golden cases do not read: {error}", "")]
     if port is None or not closes or not named:
         return [EntryProblem("/golden/cases", f"the golden cases hold no run of {pin}", "")]
     problems: list[EntryProblem] = []
     for name, params in named:
-        expected = [
-            None if v is None else Decimal(str(v))
-            for v in cast("list[object]", cast("Mapping[str, object]", table["cases"])[name])
-        ]
 
         def run(series: Sequence[Decimal], params: Mapping[str, Decimal] = params) -> list[object]:
             instance = make({**_defaults(raw), **params})
             return [_value(instance.update({port: x})) for x in series]
 
         try:
+            expected = [
+                None if v is None else Decimal(str(v))
+                for v in cast("list[object]", cast("Mapping[str, object]", table["cases"])[name])
+            ]
             full = cast("list[Decimal | None]", run(closes))
             misses = [
                 i for i, (a, b) in enumerate(zip(full, expected, strict=True)) if not _close(a, b)
@@ -702,10 +680,14 @@ def compute_status(
     and, when the entry names golden cases, those cases (``golden``, the decoded cases file) and
     the cut-against-full check over them."""
     problems = list(check_entry(raw))
+    try:
+        printed = None if source is None else block_fingerprint(source).value
+    except UnicodeDecodeError:
+        printed = "not utf-8"
     evidence = fingerprint(
         {
             "entry": raw,
-            "source": None if source is None else block_fingerprint(source).value,
+            "source": printed,
             "golden": golden,
             "checker": CHECKER_VERSION,
         }
