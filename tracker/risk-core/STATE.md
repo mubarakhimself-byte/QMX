@@ -55,3 +55,21 @@ The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are 
 - Concurrency: ORB and scalpers trade at once. ORB never holds overnight; when it is out, scalpers take over through the 24 h.
 - The MIS is a router: it scans markets on scalping timeframes and publishes context (e.g. "this future is mean-reverting"); the unit widens its scope to those markets. Our job: placement (which unit on which instrument has the best odds, given its logic), the risk % per trade, and the stop size that limits each loss.
 - System 1 (a logic such as mean-reversion, placed where the market suits it) is the unit; System 2 (a strategy fitted to one pair) is the old way and overfits. System 2 can grow into System 1, not the reverse.
+
+## His second round, 2026-11-01 evening (stopped at item 3 of my answer; more to come)
+
+**Proposals (not ruled):**
+- Treat the $500 as a portfolio seed and split it: **$300 scalpers, $200 intraday**, each optimised for its style.
+- Units should hold **more than one position at once** across markets (like the old multi-pair bots: gold and crypto together), each position with its own rules and sizing, as long as conditions fit. He asks if that is viable, not just possible.
+- Rough idea, not agreed ("premature"): templates for a unit's sizing structure (old-style, Book-style, hybrids), the way mini apps are templates; the BMS as the pod manager that splits capital across styles. First get one structure off the ground.
+- Paper trading window: 7 days is doable, 14 is too long. He leans to counting trades over days, then doubts it.
+
+**Rulings / positions:**
+- **Every number needs a reason** (a derivation), never "5 % because". He doesn't recall why the old numbers (0.5 %, 0.8 %, x0.2-1 ranges, 5 % open risk) were set, so they carry no weight. This is why the unit must configure itself.
+- Costs per market, instrument, timeframe and time must be known to the unit; they feed Kelly.
+- The old gap list is old (May/June); he thought it was closed.
+- He thinks the old handbrake came from badly set variables and multipliers doing each other's jobs (my view: both that and the structure).
+- Market physics, RVOL and microstructure: unsure where they belong (MIS? here?). Microstructure feels scalper-specific and not a sizing matter. The correlation ledger is external to the unit ("internally external").
+- He'll aim for better than 55 % wins on scalpers. Strategy sources stay private for now (YouTube and social media); use demo units and placeholders with ranges.
+
+**His questions:** why does 1 % x 16 a day show 0 % ruin; why "half the edge" if paper is just demo; would a portfolio manager test at half edge, and how should this system handle it; half or full Kelly; isn't this all tuned for scalpers.
