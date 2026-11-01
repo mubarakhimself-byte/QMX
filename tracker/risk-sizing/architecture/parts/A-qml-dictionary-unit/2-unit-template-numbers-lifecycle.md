@@ -1,6 +1,6 @@
 # Sub-area 2: the unit template, its numbers and how they move, identity, lifecycle, the socket and the dummy unit
 
-Part A, 31 Oct 2026. Decisions: AD-102, AD-103, AD-115, AD-116, AD-118 in `ARCHITECTURE-SPINE.md`. Shapes: `CONTRACTS.md` §1, §2, §4.3, §7, §8.
+Part A, 31 Oct 2026; amended 1 Nov by fixer X1-0A after review R1 (the dummy's slow number, its landing, and its slow rule's shrink). Decisions: AD-102, AD-103, AD-115, AD-116, AD-118 in `ARCHITECTURE-SPINE.md`. Shapes: `CONTRACTS.md` §1, §2, §4.3, §7, §8.
 
 His words: "Unit is literally a replacement of a trading bot. It's just a self-configuring trading bot. Simple as that." (T2:788), "how do we make sure that those if-else statements can self-tune?" (T2:788), "we need the unit in terms of a template" (T3:904), "placeholders, I think is the right word" (T3:1087), "the unit is going to own its own exit" (T2:1000).
 
@@ -32,7 +32,7 @@ The answer to his if-else question, shown in data. The numbers inside the rules 
 | derived (fast) | every bar | the market: a price statistic, the indicator's own history, a state the unit computes | none | `rsi_low` = the 20th percentile of RSI over its last 500 bars |
 | calibrated (slow) | at its cadence, only when flat | the unit's own closed trades | a minimum count, then more for bigger moves | `min_trend_strength`, nightly or every 20 closed trades |
 
-Four rules make the slow speed safe with few trades: a minimum count before the first move (60); shrinkage toward the default by n/(n+k) with k = 100; at most one step per update and never outside the range; a market with a thin record shrinks toward the unit's pooled value across its markets. The motion runs inside QMB's replay exactly as live, reading only trades closed before the instant, so the backtest already includes the self-tuning and live motion is not a new try. QMB also runs motion off on the same split and reports the difference beside the verdict. Every slow move is a calibration row: which number, old and new value, the rule, the trade range it read and the statistic.
+Four rules make the slow speed safe with few trades: a minimum count before the first move (each number may declare its own `min_count`; one that declares none takes the setting `min_trades`, 60); shrinkage toward the default by n/(n+k) with k = 100; at most one step per update and never outside the range; a market with a thin record shrinks toward the unit's pooled value across its markets. The motion runs inside QMB's replay exactly as live, reading only trades closed before the instant, so the backtest already includes the self-tuning and live motion is not a new try. QMB also runs motion off on the same split and reports the difference beside the verdict. Every slow move is a calibration row: which number, old and new value, the rule, the trade range it read and the statistic.
 
 ## 4. Identity and lifecycle
 
@@ -55,22 +55,24 @@ Slot contracts: `CONTRACTS.md` §4.3. Places and today's stand-ins: `RISK-SIZING
 
 ## 6. The dummy unit (U-05, CC-17)
 
-"Trend pullback (dummy)", family `trend-pullback`, the first template, installed out of the box. Built only from blocks that wrap code QMX already runs, so the proof tests the unit and not new indicators.
+"Trend pullback (dummy)", family `trend-pullback`, the first template, installed out of the box: on first start the host lands it in his Library as a `unit` draft, once per store, and his yes publishes it (`BUILD-SLICES.md` A7, R1-A-05). Built only from blocks that wrap code QMX already runs, so the proof tests the unit and not new indicators.
 
 | Part | Content | Number and motion |
 | --- | --- | --- |
 | Markets | EURUSD and XAUUSD at IC Markets on cTrader; history from the Library's Dukascopy bid and ask partitions | markets list |
 | Stream | M15 closed bars, bid and ask | coordinate |
-| Context | long when close is above EMA(100) and the trend strength, ROC of that EMA over 20 bars, is at least `min_trend_strength`; short is stated explicitly as the mirror case with the same blocks, which declare mirroring | EMA period 100, fixed, `published_convention`; ROC lookback 20, fixed; `min_trend_strength`: calibrated, percent, range 0.00 to 0.30, step 0.01, default 0.00, origin `builder_chosen` |
+| Context | long when close is above EMA(100) and the trend strength, ROC of that EMA over 20 bars, is at least `min_trend_strength`; short is stated explicitly as the mirror case with the same blocks, which declare mirroring | EMA period 100, fixed, `published_convention`; ROC lookback 20, fixed; `min_trend_strength`: calibrated, percent, range 0.00 to 0.30, step 0.01, default 0.00, `min_count` 20, origin `builder_chosen` |
 | Trigger | long when RSI(14) crosses back above `rsi_low`; short when it crosses back below `rsi_high` | RSI period 14, fixed, `published_convention`; `rsi_low`: derived, `percentile_of_own_history`, percentile 20 (fixed, range 5 to 35) over 500 bars (fixed, range 200 to 2,000); `rsi_high` the 80th |
 | Entry order | market at the next bar's open | none |
 | Exit set | protective stop beyond the last swing point plus a buffer of 0.02% of price; target at 2R; time-out after 48 bars | all `placeholder`, owner the risk session |
 | Sizer | 0.5% of equity at risk at the stop, rounded down to the lot step; skip with a reason below the minimum lot | `placeholder` |
 | Halts | none beyond the node's guards | empty, a warning on the card |
 
-**The slow rule for `min_trend_strength`** (a motion block, `trend-floor-from-record@1`). At the market's day close, or after every 20 closed trades, once at least 60 trades have closed: bucket the closed trades by the trend strength stamped at their entry into five buckets; take each bucket's mean R after costs; shrink each toward zero by n/(n+k), k = 100; find the lowest bucket edge above which every shrunk bucket mean is at least zero; move the number one step toward that edge, inside its range. It is a logic number, not an exit or a size, so it shows self-tuning without touching the risk session's ground.
+**The slow rule for `min_trend_strength`** (a motion block, `trend-floor-from-record@1`). At the market's day close, or after every 20 closed trades, once at least 20 trades have closed (its declared `min_count`): bucket the closed trades by the trend strength stamped at their entry into five buckets; take each bucket's mean R after costs; find the lowest bucket edge above which every bucket that holds a trade has a mean of at least zero; shrink that edge toward the number's default by n/(n+k), with n the closed trades read and k = 100; move the number one step toward the shrunk edge, inside its range. It is a logic number, not an exit or a size, so it shows self-tuning without touching the risk session's ground.
 
-Why this strategy: every trader knows it; on M15 it trades a few times a day per market, so two years give enough closed trades for the slow number to move visibly; its stop is structural, so R is defined; QMB already replays bid and ask quotes.
+Two corrections from the R1 fix round. The minimum count is 20, not 60, because a one-month M15 run on two markets may close fewer than 60 trades, and the slow number must be seen to move in a real run, not only with a hand-fed journal (R1-A-01); QMB's B9 asserts at least one calibration row from real trades. The shrink now acts on the edge, as AD-103 says, because the first rule shrank each bucket's mean toward zero and then tested its sign, and shrinking toward zero never changes a sign, so the shrink did nothing (A-NEW-6, `scratchpad\x1-0a\shrink_sign.py`: 0 of 10,000 random cases changed). With 20 trades and an edge of 0.12, the target is 0.02 and the number moves one step to 0.01; with 400 trades the same edge gives 0.096.
+
+Why this strategy: every trader knows it; on M15 it trades a few times a day per market, so a month of both markets should close 20 trades or more and move the slow number at least once (INFERRED; B9 asserts it on real data), and two years move it visibly; its stop is structural, so R is defined; QMB already replays bid and ask quotes.
 
 ```json
 {
@@ -106,7 +108,7 @@ Why this strategy: every trader knows it; on M15 it trades a few times a day per
     "ema_period": {"kind": "fixed", "measure": "bars", "range": {"min": "20", "max": "300", "step": "1"}, "default": "100", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention"},
     "roc_lookback": {"kind": "fixed", "measure": "bars", "range": {"min": "5", "max": "100", "step": "1"}, "default": "20", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "builder_chosen"},
     "min_trend_strength": {"kind": "calibrated", "measure": "percent", "range": {"min": "0.00", "max": "0.30", "step": "0.01"}, "default": "0.00",
-      "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20, "at": "market_day_close"}, "min_count": 60, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@1", "rule_params": {"buckets": "5"}},
+      "motion": {"mode": "shrink_from_own_trades", "source": "own_record", "cadence": {"every_closed_trades": 20, "at": "market_day_close"}, "min_count": 20, "shrink_k": 100, "step_limit": 1, "rule": "trend-floor-from-record@1", "rule_params": {"buckets": "5"}},
       "authority": "motion_inside_range", "origin": "builder_chosen", "applies_to_open_positions": false},
     "rsi_period": {"kind": "fixed", "measure": "bars", "range": {"min": "2", "max": "50", "step": "1"}, "default": "14", "motion": {"mode": "fixed"}, "authority": "motion_inside_range", "origin": "published_convention"},
     "rsi_low": {"kind": "derived", "measure": "ratio", "range": {"min": "0", "max": "100", "step": "0.01"}, "default": "30",

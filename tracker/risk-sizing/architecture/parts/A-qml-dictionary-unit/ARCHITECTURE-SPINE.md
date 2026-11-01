@@ -7,7 +7,7 @@ paradigm: 'functional core, imperative shell: one pure library with a small door
 scope: 'QML (door, compiler, unit runtime door, block loader, motion engine, checker), the dictionary and catalogue, the unit template (document, numbers, identity, lifecycle, risk socket contracts, dummy unit), CT-23 format 3, the Library kind additions these need, and the agent authoring doors; not QMB, journals, workflow templates, the node, the MIS publisher or venue adapters'
 status: final
 created: '2026-10-31'
-updated: '2026-10-31'
+updated: '2026-11-01'
 binds: [P1, P2, L0-AD-2, L0-AD-5, L0-AD-7, L0-AD-9, L0-AD-11, L0-AD-14, L0-AD-15, L0-AD-16, L0-AD-17, L0-AD-18, L0-AD-19, L0-AD-20, L0-AD-21, L0-AD-22, L0-AD-23, L0-AD-24, L0-AD-29, L0-AD-30, L0-AD-31, L0-AD-47]
 sources:
   - architecture/level-0/ARCHITECTURE-SPINE.md
@@ -37,6 +37,8 @@ companions:
 
 Code truth: `origin/engine/base` at `c93407ca`, read at `D:\QMX-worktrees\engine-base-read\` (paths below are relative to it). Parent: the Level 0 spine, binding and read-only; its decisions are cited as L0 AD-n. This part's own decisions are AD-101 to AD-120. Words: `funnel/versions/GLOSSARY.md`. Labels: CHECKED means read at the cited line or run (script named, in `blast-radius.md`); INFERRED means judgement.
 
+Amended 2026-11-01 by fixer X1-0A after the full review R1 (`architecture/review/R1-findings.md`). AD ids stay stable and none is added: AD-103, AD-107, AD-115 and AD-118 are amended in place, the case table gains the 13 cases Level 0 now gives this part, and the conflicts below are marked settled. Per finding: `architecture/review/R1-FIXES-X1-0A.md`.
+
 ## In plain words
 
 1. A unit is a trading plan with named parts. Each part is a tested piece of code from QMX's catalogue. QML puts the pieces together, checks them and turns the plan into the code QMB and the trading node already run.
@@ -52,7 +54,7 @@ Code truth: `origin/engine/base` at `c93407ca`, read at `D:\QMX-worktrees\engine
 | Layer | What lives there | Where (EXISTS path or NEW) |
 | --- | --- | --- |
 | Door | `new`, `check`, `compile`, `find`, `explain` | `qml/src/qml/door.py` (NEW), re-exported by `qml/__init__.py` |
-| Kernel modules | the unit model and schema; numbers, measures and motion; the compiler; the unit runtime door; the block loader and block API; the checker; identity and lifecycle | `qml/src/qml/unit/`, `numbers/`, `compile/`, `protocol/unit.py`, `catalogue/`, `blocks/`, `check/`, `identity/`, `lifecycle/` (all NEW) beside the kept `protocol/`, `footprint/`, `conformance/`, `declaration/`, `logic/` (EXISTS) |
+| Core modules | the unit model and schema; numbers, measures and motion; the compiler; the unit runtime door; the block loader and block API; the checker; identity and lifecycle | `qml/src/qml/unit/`, `numbers/`, `compile/`, `protocol/unit.py`, `catalogue/`, `blocks/`, `check/`, `identity/`, `lifecycle/` (all NEW) beside the kept `protocol/`, `footprint/`, `conformance/`, `declaration/`, `logic/` (EXISTS) |
 | Contract family | CT-23 format 3, the unit's sized intent | `packages/qmf-risk/src/qmf/risk/unit_intent.py` (NEW; `door.py` untouched) |
 | Store | the `unit` kind's real shape, the `component` kind's entry face, kind-file checks, every problem returned | `qmx-agents/packages/qmx-library/src/qmx_library/kinds/` (EXISTS, additions) |
 | Shell for agents | catalog rows in two new core toolsets, the check entry point, skills, the hook after its probe | `qmx-control/.../catalog.py`, `qmx-tools/.../functions.py` and `unit_check.py`, `qma-harness/.../tools.py:668`, `qmx-agents/plugin/` (EXISTS, additions) |
@@ -85,9 +87,9 @@ Code truth: `origin/engine/base` at `c93407ca`, read at `D:\QMX-worktrees\engine
 | Library AD-1, AD-3, AD-5, AD-6 | library-and-data spine | the Library imports no QML; checkers are registered by the host; one writer; archive, never delete |
 | engine AD-61 one operation catalog | workflow-engine spine | every unit door is a catalog row |
 
-## Conflicts with Level 0, surfaced
+## Conflicts with Level 0, surfaced and settled
 
-None is overridden here; each states the code fact, how this part keeps the Level 0 rule's purpose, and the wording the lead may fold in.
+None is overridden here; each states the code fact, how this part keeps the Level 0 rule's purpose, and the wording the lead may fold in. **Settled by R1:** all six were accepted (settlements A-C1 to A-C5 and A-C7) and Level 0 now carries them (L0 AD-17 and AD-29 for row 1, AD-19 for row 2, AD-20 for row 3, AD-16 and AD-5 for row 4, AD-9 for row 5, AD-31 for row 6); this part's five drift closures were adopted too (A-C6: L0 AD-13, AD-16, AD-22, AD-23). R1-A-04's claim that row 6's line is `:664` was checked and rejected: at `c93407ca` `DOMAIN_GROUPS` is defined at `qma-harness/src/qma/harness/tools.py:668` and used at `:641` (`git show c93407ca:<path> | grep -n DOMAIN_GROUPS`).
 
 | # | Level 0 text | Code fact (CHECKED) | How this part honours it |
 | --- | --- | --- | --- |
@@ -109,6 +111,9 @@ flowchart TB
   TOOLS --> DOOR["qml door: new, check, compile, find, explain"]
   QMBAPP["QMB app (Part B)"] --> DOOR
   NODEAPP["Trading node app (Part C)"] --> DOOR
+  QMBAPP --> UH["One unit handler, qmb library (Part B)"]
+  NODEAPP --> UH
+  UH --> UDOOR
   MISAPP["MIS app (Part C)"] --> LOADER
   DOOR --> CHECK["check: layers A to F, G functions"]
   DOOR --> COMPILE["compile"]
@@ -134,13 +139,13 @@ Arrows mean "may import or call". QML imports only `qmf-core`, `qmf-registry` an
 
 - **Binds:** P2, every author, the Library `unit` kind, QMB, the node, the UI
 - **Prevents:** a JSON Schema and a Python model that drift; a shape check that blocks a draft for being unfinished; float drift in numbers
-- **Rule:** the unit document `qmx.unit/1` is defined once, as QML's typed model (`qml/src/qml/unit/`). The JSON Schema 2020-12 in the Library's `unit.schema.json` is generated from that model and committed; a test fails when they differ. The schema holds shape only (types, required keys, enums); completeness (at least one market, a trigger, an exit set) is layer E and identity rules are layers B and C, so a half-written draft saves and lists its gaps. Numbers are decimal strings parsed to exact values. `markets` stays a top-level field, because the shipped page reads `fields.markets` (`qmx-library/src/qmx_library/kinds/unit.schema.json`, Markets tab). Every number is declared once under `numbers` and bound by name. A unit that trades both sides states each side's bindings, or an explicit `mirror_of` on blocks that declare mirroring (QML-17). A unit holds one position per instrument unless it declares more (UT-15). Field by field: `CONTRACTS.md` §1.
+- **Rule:** the unit document `qmx.unit/1` is defined once, as QML's typed model (`qml/src/qml/unit/`). The JSON Schema 2020-12 in the Library's `unit.schema.json` is generated from that model and committed; a test fails when they differ. The schema holds shape only (types, required keys, enums); completeness (at least one market, a trigger, an exit set) is layer E and identity rules are layers B and C, so a half-written draft saves and lists its gaps. Numbers are decimal strings parsed to exact values. `markets` stays a top-level field, because the shipped page reads `fields.markets` (`qmx-library/src/qmx_library/kinds/unit.schema.json`, Markets tab); a futures market names its root and its roll rule there, since a unit picks its roll and the records only list the contract months (R1-C-10). Every number is declared once under `numbers` and bound by name. A unit that trades both sides states each side's bindings, or an explicit `mirror_of` on blocks that declare mirroring (QML-17). A unit holds one position per instrument unless it declares more (UT-15). Field by field: `CONTRACTS.md` §1.
 
 ### AD-103. Numbers: three kinds, one measure each, two speeds of motion
 
 - **Binds:** P1, P2, QMB's optimiser, the node, the risk session
 - **Prevents:** a stop ten times too wide; live tuning that was never tested; motion on few trades; a slow rule creeping into fast numbers
-- **Rule:** every number is a `NumberSpec`: kind (`fixed`, `calibrated`, `derived`), measure, range (min, max, step), default, motion, authority, origin, `applies_to_open_positions` (default false). The kind fixes the motion modes allowed: `fixed` never moves; `derived` moves every bar from the market (`scaled`, `percentile_of_own_history`, `state_table`); `calibrated` moves slowly from the unit's own record (`shrink_from_own_trades`, `learned`). Measures are QML's vocabulary (price distance, ticks, pips, ATR multiple, percent, ratio, bars, seconds, money, R, lots, count, probability, category, flag), each mapped to one QMF `UnitKind` by a table (`CONTRACTS.md` §2). A conversion between measures happens only through an instrument record; pips are an error unless the source states pips and the record defines a pip for that market. Calibrated motion is a pure function of the unit's closed-trade rows up to a watermark: a minimum count first, shrinkage toward the default by n/(n+k), at most one step per update, never outside the range, never while a position is open on that instrument, run at instants the cadence names. Every slow move is a calibration row in the unit's step output. The calibrator's sufficient statistics live in the unit's state, so a host feeds `own_journal` only the trades this hosted unit closed in its own run or deployment after its starting watermark: in QMB the run's trades, on the node the deployment's trades, starting from the calibrated state the deployment carries (L0 AD-38); replay and live therefore run one rule over the trades each one saw. Hosts can run a unit with motion off, so QMB reports both. Identity covers ranges and motion rules, never values.
+- **Rule:** every number is a `NumberSpec`: kind (`fixed`, `calibrated`, `derived`), measure, range (min, max, step), default, motion, authority, origin, `applies_to_open_positions` (default false). The kind fixes the motion modes allowed: `fixed` never moves; `derived` moves every bar from the market (`scaled`, `percentile_of_own_history`, `state_table`); `calibrated` moves slowly from the unit's own record (`shrink_from_own_trades`, `learned`). Measures are QML's vocabulary (price distance, ticks, pips, ATR multiple, percent, ratio, bars, seconds, money, R, lots, count, probability, category, flag), each mapped to one QMF `UnitKind` by a table (`CONTRACTS.md` §2). A conversion between measures happens only through an instrument record; pips are an error unless the source states pips and the record defines a pip for that market. Calibrated motion is a pure function of the unit's closed-trade rows up to a watermark: a minimum count first, shrinkage toward the default by n/(n+k), at most one step per update, never outside the range, never while a position is open on that instrument, run at instants the cadence names. Every slow move is a calibration row in the unit's step output. The calibrator's sufficient statistics live in the unit's state, so a host feeds `own_journal` only the trades this hosted unit closed in its own run or deployment after its starting watermark: in QMB the run's trades, on the node the deployment's trades, starting from the calibrated state the deployment carries (L0 AD-38: a paper lane starts from the unit's defaults, as QMB tested it; a live deployment carries the paper lane's last calibrated state with its watermark, Part C's call, R1-C-01); replay and live therefore run one rule over the trades each one saw. The minimum count is a per-number field (`motion.min_count`); a number that declares none takes the setting `min_trades` (60). Hosts can run a unit with motion off, so QMB reports both. Identity covers ranges and motion rules, never values.
 
 ### AD-104. Slots, roles and combiners: composition is data, conditions are code
 
@@ -164,7 +169,7 @@ Arrows mean "may import or call". QML imports only `qmf-core`, `qmf-registry` an
 
 - **Binds:** P1, QMB's runner (Part B), the node shell (Part C), checker layer G
 - **Prevents:** a unit's size dropped by the Book door; a version change rewriting an open trade's exits; state from another version loaded silently; trading while cold
-- **Rule:** hosts run units through `qml.protocol.unit`: `construct_unit(compiled, assignment, read_surfaces, scope_id, state_scope, state_bound, trace_level, motion)` and `restore_unit(snapshot, ...)` return a `HostedUnit`, whose `on_instant(instant)` returns a `UnitStep`: intents admitted by `accept_unit_intents` (CT-23 format 3 only), decision rows, calibration rows and state events. `construct_bot`, `HostedBot` and `accept_intents` stay unchanged and refuse a unit's sized intent. A hosted unit suppresses entries until every stream has its derived warm-up, and says so as a state event; exits still run. It emits exit intents only for positions its own compiled fingerprint opened, so a position belongs to the version that opened it until flat (UT-04). Its snapshot carries the compiled fingerprint and a state schema version; a mismatch on restore starts the unit from a declared cold state and returns a `cold_start` event with the reason, never a guess (UT-09). Decision rows are written for taken and skipped signals and near misses by default; every-bar rows only at `trace_level = every_bar`. Every row id is fp1 over the host's scope id (the QMB run id, or the node's deployment id), the instant and the row's ordinal, so a rerun writes the same ids and two deployments of one unit never collide.
+- **Rule:** hosts run units through `qml.protocol.unit`, and QMB and the node reach it through one run-slice handler, `qmb/src/qmb/host/unit_handler.py`, which Part B builds in slice B6 and the node imports in slice C-12a (L0 AD-5, R1-L0-02), so warm-up suppression, exits for own positions and `not_before` are applied by one piece of code in both worlds: `construct_unit(compiled, assignment, read_surfaces, scope_id, state_scope, state_bound, trace_level, motion)` and `restore_unit(snapshot, ...)` return a `HostedUnit`, whose `on_instant(instant)` returns a `UnitStep`: intents admitted by `accept_unit_intents` (CT-23 format 3 only), decision rows, calibration rows and state events. `construct_bot`, `HostedBot` and `accept_intents` stay unchanged and refuse a unit's sized intent. A hosted unit suppresses entries until every stream has its derived warm-up, and says so as a state event; exits still run. It emits exit intents only for positions its own compiled fingerprint opened, so a position belongs to the version that opened it until flat (UT-04). Its snapshot carries the compiled fingerprint and a state schema version; a mismatch on restore starts the unit from a declared cold state and returns a `cold_start` event with the reason, never a guess (UT-09). Decision rows are written for taken and skipped signals and near misses by default; every-bar rows only at `trace_level = every_bar`. Every row id is fp1 over the host's scope id (the QMB run id, or the node's deployment id), the instant and the row's ordinal, so a rerun writes the same ids and two deployments of one unit never collide; Part B's journal uses that id as the record id, so a slice the node replays after a crash writes nothing twice (L0 AD-13, R1-B-10).
 
 ### AD-108. CT-23 format 3: the unit's sized intent
 
@@ -224,7 +229,7 @@ G's result lands as a `test-report` record (an existing kind, extended additivel
 
 - **Binds:** P2, the judge and the Lab (they read the same table), the node, QMB
 - **Prevents:** two tables deciding "is this a new unit"; two versions trading one market; an agent moving a unit toward live
-- **Rule:** the identity table is a core setting, `units.identity_table`, shipped with a default (Lab AD-16's rows plus the unit edit labels, `CONTRACTS.md` §7) and handed to QML as data. `qml.identity.classify(old, new, table)` diffs two documents structurally into edit labels and returns, per label, calibration row, new version or new unit, whether it is a counted try and whether his click is needed before live; the judge and the Lab call this function rather than diffing documents themselves. The lifecycle is a pure machine in `qml.lifecycle`: a state per unit per market (draft, tested, parked, paper, live, stopped, retired), a transition table naming who may cause each move (the judge's verdict, his click, the unit's own risk rule), and `fold(events)` giving the current states. Only his click moves toward live; tested to paper is his click by default, with an automatic switch that ships off (R0-14); only a risk rule moves to stopped; stopped to anything is his click, and that click names the stop event it clears, so a stop that arrives later from another machine is never cleared by an earlier click whatever the two clocks say. One admitted version per unit and market: admitting a new version on a market retires or parks the old one there in the same click. Events ride Part B's journal as their own kind; this part owns their body (`CONTRACTS.md` §8).
+- **Rule:** the identity table is a core setting, `units.identity_table`, shipped with a default (Lab AD-16's rows plus the unit edit labels, `CONTRACTS.md` §7) and handed to QML as data. `qml.identity.classify(old, new, table)` diffs two documents structurally into edit labels and returns, per label, calibration row, new version or new unit, whether it is a counted try and whether his click is needed before live; the judge and the Lab call this function rather than diffing documents themselves. The lifecycle is a pure machine in `qml.lifecycle`: a state per unit per market (draft, tested, parked, paper, live, stopped, retired), a transition table naming who may cause each move (the judge's verdict, his click, the unit's own risk rule), and `fold(events)` giving the current states. A move toward paper or live is legal only when its actor is his click and its principal is `operator`, so an agent's proposal can never stand as approval (AG-13); This PC's promote action records his click (`units_promote`, Part C slice C-23, R1-C-01). Only his click moves toward live; tested to paper is his click by default, with an automatic switch that ships off (R0-14); only a risk rule moves to stopped; stopped to anything is his click, and that click names the stop event it clears, so a stop that arrives later from another machine is never cleared by an earlier click whatever the two clocks say. One admitted version per unit and market: admitting a new version on a market retires or parks the old one there in the same click. Events ride Part B's unit journal as kind `lifecycle`; this part owns their body (`CONTRACTS.md` §8). Three writers, each on its own partition: This PC's host for his clicks, the judge for draft to tested or parked, the node for risk stops (R1-B-06).
 
 ### AD-116. The risk socket's slot contracts
 
@@ -242,7 +247,7 @@ G's result lands as a `test-report` record (an existing kind, extended additivel
 
 - **Binds:** P2, QMB's conformance pack (Part B), the node's self-test (Part C), the newcomer's first unit
 - **Prevents:** a proof on a throwaway; a template that only shows the happy path
-- **Rule:** a template is a unit document with defaults and origins. The first is the dummy: a trend pullback on EURUSD and XAUUSD, M15, built only from blocks that wrap code QMX already runs (EMA, ROC, RSI, swing points), with one derived number (`rsi_low`, the 20th percentile of RSI's last 500 bars) and one calibrated number (`min_trend_strength`, moved nightly or every 20 closed trades by a shrunk rule from its own trades), and placeholder exits and sizer (`2-unit-template-numbers-lifecycle.md` §6). Its three broken twins (always long, an exit that cannot fire, a constant signal) and three broken documents (a stop in pips on gold with no pip defined, a depth block on a bars-only market with no fallback, a number outside its range) ship as test fixtures. The dummy installs out of the box.
+- **Rule:** a template is a unit document with defaults and origins. The first is the dummy: a trend pullback on EURUSD and XAUUSD, M15, built only from blocks that wrap code QMX already runs (EMA, ROC, RSI, swing points), with one derived number (`rsi_low`, the 20th percentile of RSI's last 500 bars) and one calibrated number (`min_trend_strength`, moved at the market's day close or every 20 closed trades, once 20 have closed, by a rule from its own trades shrunk toward its default), and placeholder exits and sizer (`2-unit-template-numbers-lifecycle.md` §6). Its three broken twins (always long, an exit that cannot fire, a constant signal) and three broken documents (a stop in pips on gold with no pip defined, a depth block on a bars-only market with no fallback, a number outside its range) ship as test fixtures. The dummy installs out of the box: on first start the host lands it in his Library as a `unit` draft through the governed landing, once per store (keyed by the document's fingerprint with the find-then-put pattern of `qmx_library/migrate/from_apps.py:52-57`, whose rerun writes nothing, CHECKED by running the shipped `test_migrate.py` rerun and app-import cases; it puts on the item's draft ref only, never `place`'s merge onto main), and his yes publishes it (R1-A-05). Its slow number declares `min_count` 20, so it moves within a month of real trades on its two markets (R1-A-01).
 
 ### AD-119. Versions, environment and upgrades
 
@@ -258,14 +263,14 @@ G's result lands as a `test-report` record (an existing kind, extended additivel
 
 ## The cases this part owns
 
-Every case Level 0 gives P1 and P2 (47), plus AG-11 and AG-15 handed over from P8, plus QML-06's QML side (P4 owns the case). R1 checks this table by script; `scratchpad\l1a\coverage_a.py` already does: 0 missing.
+Every case Level 0 gives P1 and P2 (47), plus AG-11 and AG-15 handed over from P8, plus QML-06's QML side (P4 owns the case), plus the 13 cases Level 0 gave this part after R1 found them unowned (AG-01, AG-02, AG-03, AG-04, AG-08, AG-09, AG-13, AG-16 from P8; CA-02, CA-03, CA-07, CA-08, CA-09 from P7; R1-L0-01). R1 checks this table by script (`scratchpad\r1\cases.py`; rerun by X1-0A as `scratchpad\x1-0a\cases.py`).
 
 | Case | Handling | Where |
 | --- | --- | --- |
 | QML-01 | every implemented block passes a cut-against-full test (value at t from data cut at t equals the value on full data, tolerance a setting) before its status can be `implemented` | AD-113, 4-dictionary §3 |
 | QML-02 | the entry declares its confirmation lag; the cut-against-full test catches a missing one | AD-113 |
 | QML-03 | the recursive-settle check runs each recursive block with several warm-up lengths and records the length where values agree; the block's warm-up is at least that | AD-113, AD-109 |
-| QML-04 | block state is bounded by its declared bound whatever the history; a test replays a week of ticks and asserts the retained observations never exceed the bound, and records time per update | AD-109 |
+| QML-04 | block state is bounded by its declared bound whatever the history; a test replays a week of ticks and asserts the retained observations never exceed the bound, and asserts the last tenth's median time per update is within `update_time_growth_tolerance` (1.5 times) of the first tenth's (R1-A-02) | AD-109 |
 | QML-05 | every number has a measure; a price distance converts only through the instrument record; pips error unless source-stated and defined; one unit run on EURUSD, USDJPY, XAUUSD and an index compares distances in ATR | AD-103 |
 | QML-06 | (owned by P4, Part C; the QML side here) conversions read the market's own instrument record (contract size, digits, value per point), so the same unit on two brokers gives the same risk in R | AD-103, CONTRACTS §2 |
 | QML-07 | roles are one typed vocabulary; the checker refuses an unknown role and names the nearest; the port maps the 154 strings by table | AD-104, AD-114 |
@@ -312,6 +317,19 @@ Every case Level 0 gives P1 and P2 (47), plus AG-11 and AG-15 handed over from P
 | OP-05 | editing a number is a new version by the identity table, effective for new positions; open positions keep the version that opened them | AD-115, AD-107 |
 | AG-11 | the result's problem-set fingerprint; the same set twice is `no_progress`, and the skill and the template loop stop and report | AD-110 |
 | AG-15 | the result leads with counts and errors and groups identical problems, so a spilled answer's head shows the failures | AD-110 |
+| AG-01 | a unit no agent checked still cannot be published, tested or traded: publish and `compile` run A to F and refuse, and `put` returns every shape problem; A7's test saves a broken unit as a draft and refuses its publish with every problem | AD-111 |
+| AG-02 | the check sits at the doors a unit must pass (Library `put` and publish, `compile`), not at the editor, so a unit written by `python -c` meets them too; A7's tests run through the store, not an editor | AD-111 |
+| AG-03 | the in-loop doors run A to F only, pure and fast; layer G runs only as QMB's job with a handle in its sandbox; A8 tests that `unit_check` runs no layer G | AD-111 |
+| AG-04 | the checker is the `unit_check` catalog row, not only a hook; the hook is an addition after its probe (A14) | AD-117 |
+| AG-08 | a block bound in a role its entry does not allow, or an unknown entry or role, is a layer B error whose `nearest` names the right entries; A11 tests an unknown role naming the nearest | AD-110, AD-113 |
+| AG-09 | the unit tools are core catalog rows in toolsets `unit` and `blocks`, never inside a mini app; A8's parity test pins them on the default copilot surface | AD-117 |
+| AG-13 | the lifecycle table refuses a move toward paper or live whose actor is not his click with principal `operator`; `fold` reports it as a rejected event; A9 tests every transition by every actor | AD-115 |
+| AG-16 | a test pins that every agent-visible core row is on the default copilot surface, so the copilot and workflow agents see the same tools | AD-117 |
+| CA-02 | the `unit` kind carries the shape generated from QML's model, and the kind check returns every problem; A2 tests the committed schema equals the generated one, A7 that a refusal lists every problem | AD-102, AD-112 |
+| CA-03 | a unit's size travels only as CT-23 format 3, a new family beside the untouched Book door, so no old layer can size or drop it; A1 round-trips the size and keeps the old doors' refusals as tests, and B6 and C-12a each assert that the quantity filled or sent equals the sizer receipt's after lot rounding (R1-C-08) | AD-108, AD-120 |
+| CA-07 | the socket's four slot contracts are typed protocols the placeholder blocks already implement; A15's contract tests are what any risk-session block must pass | AD-116 |
+| CA-08 | block source and its fingerprint travel together in every lock and block folder; the loader recomputes the fingerprint from the bytes and refuses a mismatch; A4 tests it | AD-109 |
+| CA-09 | new unit doors are catalog rows only, and saving goes through the existing `library_save` row and the Library's checks, so one capability has one door; A8's tests pin the rows | AD-117 |
 
 **Cases found by this part** (new to the catalogue; for R1's fold):
 
@@ -322,6 +340,7 @@ Every case Level 0 gives P1 and P2 (47), plus AG-11 and AG-15 handed over from P
 | A-NEW-3 | a dictionary checker on the `component` kind refuses the mini apps' provides components | the `entry.schema` marker decides which components are entries (AD-112, AD-113) |
 | A-NEW-4 | a save-time deep check of `unit` refuses the shipped every-kind view test | put checks shape; publish and compile check everything (AD-111) |
 | A-NEW-5 | a new domain toolset is invisible to chats because the harness keeps its own list | the harness derives the list from the catalog (AD-117) |
+| A-NEW-6 | a slow rule that shrinks each bucket's mean toward zero and then tests its sign ignores its shrink setting entirely, since shrinking toward zero keeps the sign (found in the dummy's first rule by X1-0A, `scratchpad\x1-0a\shrink_sign.py`: 0 of 10,000 random cases change) | the rule finds its edge from the bucket means and shrinks the edge toward the number's default by n/(n+k), as AD-103 says (`2-unit-template-numbers-lifecycle.md` §6) |
 
 ## Handover items settled
 
@@ -334,6 +353,7 @@ Every case Level 0 gives P1 and P2 (47), plus AG-11 and AG-15 handed over from P
 | R0-18 the identity table as a core setting handed to QML | AD-115, CONTRACTS §7 |
 | R0-19 no unit-to-unit read; socket reads local plus optional surfaces | AD-104, AD-105, AD-116 |
 | QML-04, QML-13, QML-17 to QML-22, QML-25, UT-01, UT-09, UT-11, OP-03, AG-11, AG-15 | the case table above |
+| R1 (1 Nov): the 13 cases Level 0 gave this part; the dummy's slow number in real runs (R1-A-01); QML-04's asserted time (R1-A-02); the dummy in his Library (R1-A-05); the roll rule and one class enum (R1-C-10); reading tiers (CF-6) | the case table above; AD-103, AD-118; `CONTRACTS.md` §1, §2.3, §5.3; `BUILD-SLICES.md` A2, A4, A5, A7, A9 |
 
 ## Consistency Conventions
 
@@ -400,7 +420,7 @@ tools/dictionary/                               # port, status, index, upgrade-p
 | --- | --- | --- | --- |
 | The QML door | five pure verbs over data | the catalog rows, the Library checkers, QMB, the node, the MIS app, templates | one module, many callers; the callers are not adapters |
 | `BotFactory` (structural, kept) | `construct(declaration, assignment, read_surfaces)` | compiled units, plain-Python units, bots | real (two hosts, CHECKED `blast-radius.md` L0 item 2) |
-| The unit door | `construct_unit`, `restore_unit`, `HostedUnit.on_instant -> UnitStep` | QMB's runner, the node shell, layer G's collector | real: three callers, two worlds |
+| The unit door | `construct_unit`, `restore_unit`, `HostedUnit.on_instant -> UnitStep` | QMB and the node through Part B's one run-slice handler (L0 AD-5), and layer G's collector | real: two worlds through one handler, plus the checker |
 | The block protocol | `BLOCK.make(params, inputs) -> instance`; `instance.update(evidence) -> output`; `export_state`, `import_state` | every catalogue block, placeholder blocks, the risk session's blocks | real: many adapters |
 | The loader | `load(lock, sources, weights) -> loaded or problems` | QMB's sandbox, the node, the MIS app, `compile` | one module, three callers |
 | The checker | `check(document, context) -> CheckResult` | four door entry points | one function; the doors are not adapters |
@@ -465,7 +485,7 @@ flowchart LR
 
 | Item | Why it can wait | Who |
 | --- | --- | --- |
-| The QMB runner that drives `HostedUnit` on Library data, the `own_journal` feed in replay, results in R | QMB is Part B's; the unit door and step shapes are fixed here | Part B |
+| The one run-slice handler over `HostedUnit` (`qmb/src/qmb/host/unit_handler.py`), the QMB runner that drives it on Library data, the `own_journal` feed in replay, results in R | QMB is Part B's; the unit door and step shapes are fixed here; the node imports the same handler (Part C) | Part B |
 | The node shell hosting units, the deployment record, the warm-up source and `own_position` feed | the node is Part C's; the folder layout and door are fixed here | Part C |
 | Instrument, venue and account record schemas and their refresh jobs | Part C owns them; the fields this part reads are listed in `CONTRACTS.md` §2.3 | Part C |
 | The dictionary-expansion and librarian workflow templates | templates are Part B's; the doors and directions are fixed here | Part B |

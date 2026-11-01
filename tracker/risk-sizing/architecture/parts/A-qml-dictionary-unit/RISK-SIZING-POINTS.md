@@ -26,4 +26,4 @@ Part A, 31 Oct 2026, for the risk-and-sizing session. Nothing here designs exit 
 1. Whether the cross-unit hook stays a host call or becomes a slot in the document.
 2. Whether an account-scope exit belongs to one unit's document or to a pod that compiles into socket blocks (Lab AD-10 to AD-12, still unbuilt).
 3. Whether a sizer's own numbers may be calibrated from the unit's record, and with which minimum count.
-4. Netting accounts: Part C keeps one virtual position per unit; the rule for conflicts is the session's.
+4. Netting accounts: on a netting account or a Hyperliquid subaccount, at most one unit per symbol, refused at deploy by Part C and labelled a placeholder, because per-unit broker stops cannot sit on one netted position (L0 risk table, R1 settlement CF-7); a hedging account keeps one virtual position per unit; the rule for conflicts is the session's.

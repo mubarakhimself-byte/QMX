@@ -6,6 +6,8 @@ Agent A0, 31 Oct 2026, skill `blast-radius`. For each shipped seam the spine cha
 
 Scratchpad: `C:\Users\Mubarak\AppData\Local\Temp\claude\C--Users-Mubarak-Desktop-QMX\ed09cf0c-69f1-44ab-8c6b-76992918774a\scratchpad\a0\br\`.
 
+**Amended 2026-11-01 by fixer X1-0A** after review R1: items 2 and 10 corrected (units are hosted through Part A's unit door, not `construct_bot`; his principal string is `operator`), item 15 added for the facts the R1 fixes rest on. X1-0A's script lives in `...\scratchpad\x1-0a\` and runs as `python -I br15_hosts.py node` with the export's root environment (`eb/.venv`) and `python -I br15_hosts.py host` with its agents environment (`eb/qmx-agents/.venv`); the export's `context.py`, `driver.py`, `loop.py`, `host.py` and the harness's `tools.py` were compared with the read-only checkout ignoring line endings: identical.
+
 **Amended 2026-10-31 evening by agent X0** after review R0: items 10 to 14 added for the seams the R0 fixes change (the host route, `app_op`'s placements, the node's own trading grant, the Library kinds R0-17 named, the supervisor's call timeout), and items 3 and 5 extended. X0's scripts live in `...\scratchpad\x0\` and run as `python -I <script> <args>` with the export's agents environment (`eb/qmx-agents/.venv`); the export's `door.py`, `venue_session.py`, `app_op.py`, `forward.py` and `control_door.py` were compared with the read-only checkout ignoring line endings: identical.
 
 ## Summary
@@ -13,7 +15,7 @@ Scratchpad: `C:\Users\Mubarak\AppData\Local\Temp\claude\C--Users-Mubarak-Desktop
 | # | Seam the spine changes | The one fact it is safe because of | Proven to step |
 | --- | --- | --- | --- |
 | 1 | QML's "the bot may not size" and CT-23's entry intent with no size (AD-18) | a CT-23 reader refuses an unknown contract format version; so a sized unit intent stamped format 3 can never be silently sized by the Book path. **Found on the way:** an unknown key is silently dropped, so a size must never travel as a new key | 4 |
-| 2 | QML's factory seam, now fed by a compiler (AD-16) | `BotFactory` is a structural protocol; `construct_bot` accepts any object with a matching `construct`, so a compiled factory needs no change in QMB or the node | 4 |
+| 2 | QML's factory seam, now fed by a compiler (AD-16) | `BotFactory` is a structural protocol; `construct_bot` accepts any object with a matching `construct`. **Corrected by R1:** construction holds, but `HostedBot` refuses a unit's format-3 intent at its first step, so units are hosted through Part A's unit door (Part A BR-A4) | 4 |
 | 3 | The conformance gate moved off the 1-2-3 slice onto recorded bars (AD-17) | `evaluate_layer2` is a pure verdict over an observations record; the slice enters only as a fingerprint | 4 |
 | 4 | QMB's silent runner replaced by a runner that trades a unit (AD-34, AD-35) | a trading replay path already exists and fills, prices in R and ledgers a fixture bot through the same factory seam; the new runner is wiring, not a new loop. PR 204's runner set is a closed set checked at one line, so a new name is additive | 4 (replay), 2 (runner set) |
 | 5 | QMN's seat door and the node's shell replaced (AD-36) | nothing outside `qmn/` imports the replaced shell except three named callers | 4 |
@@ -26,6 +28,7 @@ Scratchpad: `C:\Users\Mubarak\AppData\Local\Temp\claude\C--Users-Mubarak-Desktop
 | 12 | The node keeps its own trading grant (AD-37, ruling 135 row) | the host's cTrader paths read, replace and delete only `qmx/token/ctrader-app` and read only `qmx/read/ctrader-app`, so a grant the node keeps under another name in its own store never meets the host's refusal, and the refusal's tests stay unchanged | 4 (scan) |
 | 13 | R0-17's retirement of `bot` and `strategy` (rejected) | a save of a retired kind is refused, and shipped tests and the registry migration save those kinds, so retiring them breaks shipped tests | 3 |
 | 14 | Node operations reached by `apps.ask` (AD-33, X1) | the supervisor stops an app whose tool call passes 30 s, so a node operation must answer fast and do slow work after the answer | 2 |
+| 15 | One unit handler for QMB and the node (AD-5); his principal on the host route (AD-46); the host's roles (AD-45) | the node's driver accepts any handler with the five hooks, so one handler serves both hosts; `Caller("user").principal` is `operator`; the code has three roles | 4 |
 
 ## 1. Sizing: CT-23 format 3, never a new key
 
@@ -67,7 +70,9 @@ restore_bot callers outside tests: ['qml/src/qml/conformance/harness.py:165']
 direct .construct( calls in qmb/qmn src: []
 ```
 
-**Risks.** The node's caller sits in `qmn/seats/host.py`, which the shell replacement deletes (item 5): the new node shell must call `construct_bot` too, not the factory directly. Low odds, caught by the first demo run.
+**Risks.** The node's caller sits in `qmn/seats/host.py`, which the shell replacement deletes (item 5).
+
+**Corrected by R1 (X1-0A).** The factory seam holds for construction only. `HostedBot.on_instant` sends every intent through `accept_intents`, which refuses a CT-23 format 3 intent, so a unit hosted through `construct_bot` fails at its first sized entry (Part A `blast-radius.md` BR-A4, run at step 4). Units are hosted through Part A's unit door, `construct_unit` and `HostedUnit`, and QMB and the node reach it through one run-slice handler (AD-5, item 15); `construct_bot` stays for bots.
 
 **Cleared.** No host calls `.construct(` directly, so nothing bypasses `construct_bot`'s assignment check and intent door.
 
@@ -210,7 +215,7 @@ POST /api/host/forward                  pass admitted=False  no pass=False
 
 This is also R0-01's evidence run: no route carries a host pass to data or to an app operation today.
 
-**Risks.** (1) A host pass carries the caller's claimed principal, so any host holding the pairing key can claim `user`. That is the same trust the engine's forward route already gives `inbox.resolve` (`qmx_engine/service/api.py:165-166`); cost: a stolen pairing key could pause or flatten a node; odds: low; the pairing key never leaves the two machines (engine AD-12). (2) A builder who lets the route answer any app tool, not only declared operations, widens it past the catalog. The catalog builds a row only from declared operations (`qmx_apps/manifest.py:130-133`), and `apps.ask` must go through the same declaration.
+**Risks.** (1) A host pass carries the caller's claimed principal, so any host holding the pairing key can claim his principal `operator` (corrected by R1: the caller kind is `user`, its principal string `operator`, item 15). That is the same trust the engine's forward route already gives `inbox.resolve` (`qmx_engine/service/api.py:165-166`); cost: a stolen pairing key could pause or flatten a node; odds: low; the pairing key never leaves the two machines (engine AD-12). (2) A builder who lets the route answer any app tool, not only declared operations, widens it past the catalog. The catalog builds a row only from declared operations (`qmx_apps/manifest.py:130-133`), and `apps.ask` must go through the same declaration.
 
 **Before merge.** `br10` rerun showing exactly five admitted routes; a test that an agent principal's pass is refused on a `manage` operation; a test that a pass minted for another host's name is refused (`wrong_engine`, `qmx_engine/service/forward.py:128-129`).
 
@@ -271,10 +276,32 @@ CTRADER_TOKENS = "qmx/token/ctrader-app"
 
 **Before merge.** A test that `deploy` answers before it compiles, with a compile that sleeps past 30 s in the test.
 
+## 15. The facts the R1 fixes rest on (X1-0A)
+
+**What changes.** AD-5 puts one run-slice handler, `qmb/src/qmb/host/unit_handler.py` over Part A's `HostedUnit`, under both QMB and the node. AD-46's principal rule compares against `operator`. AD-45 names three host roles.
+
+**The one fact for the handler.** `run_slice` drives any handler with five hooks (`qmb/src/qmb/runloop/loop.py:778-801`), and the node's driver accepts a handler by checking only those hooks (`qmn/src/qmn/loop/driver.py:409-417`). So one handler written for QMB is accepted by the node unchanged, and nothing in either loop knows bots.
+
+**Proof (step 4).** `br15_hosts.py` imports the shipped node driver and the shipped host:
+
+```text
+node driver accepts a five-hook unit handler: True
+node driver accepts an object without the hooks: False
+his click, Caller('user').principal: 'operator'
+an agent: 'agent:s1' | a workflow: 'run:r1'
+host roles in code: ('pc', 'node', 'server')
+```
+
+**Risks.** (1) A builder who compares a pass's principal with `user` refuses his own clicks; closed by AD-46's wording. Cost: every `manage` operation refused; odds: high without the fix. (2) The node already imports QMB (`qmn/src/qmn/loop/driver.py:16`), so importing the handler adds no new dependency direction; a handler placed in the QMB app instead of the `qmb` library would make one app import another, which the spine's diagram forbids.
+
+**Cleared.** Role `node` stays in code unused; nothing in this build starts a host in it, and the shipped setup rewrites `--role node` to `--role server` (`qmx_control/node.py:488-509`).
+
+**Before merge.** B6's test drives the dummy through the handler in QMB; C-12a's test drives the same handler in the node's loop on the conformance venue; a test that a `manage` operation refuses a pass whose principal is `agent:<id>` and accepts `operator`.
+
 ## Not proven here
 
 - Plugin hooks firing under the Agent SDK in QMX's launch path (needs a running chat).
-- The run-pass failure at a server's door after the merged stack (needs two hosts).
+- A run between two real hosts with a run pass minted on This PC. Part C parsed such a pass at a paired server and saw an unpaired one refuse it (Part C `BLAST-RADIUS.md` C9); the two-host run is slice C-17.
 - AD-46's route end to end between two hosts, and This PC reaching a server's OpenObserve over the tailnet (need two hosts).
 - cTrader's `label` surviving onto the position, its length limit, and Hyperliquid's `cloid` on every order kind (need demo and testnet sign-ins).
 - Any order against cTrader or Hyperliquid (needs his sign-in; nothing in the build waits on it, ruling 37).

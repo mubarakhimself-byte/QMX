@@ -48,13 +48,13 @@ His words that set the bar: "QML is very important, please." (T3:1264) and "beca
 8. Motion: derived numbers were refreshed in step 2; calibrated numbers move only at their cadence instants, only when flat on that instrument, by their rule over `own_journal` rows up to the watermark; each move is a calibration row.
 9. Return the `UnitStep`: intents, decision rows (taken, skipped, near misses), calibration rows, state events.
 
-Every step is pure; the host journals the rows and turns intents into orders (node) or fills (QMB).
+Every step is pure; the host journals the rows and turns intents into orders (node) or fills (QMB). QMB and the node do this through one run-slice handler, `qmb/src/qmb/host/unit_handler.py`, which Part B builds (L0 AD-5, R1-L0-02), so the two worlds cannot drift on warm-up, own-position exits or `not_before`.
 
 ## 4. Fork: how a hosted unit admits its sized intent (principle-exhaust-the-design-space)
 
 | Option | What | Verdict |
 | --- | --- | --- |
-| **A. A separate unit door (picked)** | `construct_unit` and `HostedUnit` beside `construct_bot`; `accept_unit_intents` admits only format 3 | Picked. No shipped line changes; a unit hosted the old way fails closed (BR-A4); three callers (QMB, node, layer G) share one door |
+| **A. A separate unit door (picked)** | `construct_unit` and `HostedUnit` beside `construct_bot`; `accept_unit_intents` admits only format 3 | Picked. No shipped line changes; a unit hosted the old way fails closed (BR-A4); QMB and the node share one door through Part B's one handler, and layer G's collector calls it too |
 | B. QML protocol format version 2 | add 2 to the ladder; `HostedBot` switches its door on the version | Rejected: two shipped tests pin version 2 as unsupported and fail when it is added (BR-A6); skipping to 3 would leave a hole in an ordinal ladder |
 | C. A flag in the CT-33 declaration | `HostedBot` reads a `unit` field | Rejected: CT-33's six body fields and its forbidden list define bot identity (`declaration/bot.py:54-93`); a new field changes every bot fingerprint |
 | D. A flag on the factory object | `HostedBot` checks an attribute | Rejected: a hidden switch any plain-Python factory could set; the door would branch on an attribute nobody declares |

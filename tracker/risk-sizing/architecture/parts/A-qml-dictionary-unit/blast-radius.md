@@ -14,6 +14,8 @@ Part A, 31 Oct 2026, skill `blast-radius`. For each shipped seam this part chang
 | BR-A4 | Units hosted through a new unit door | today's `HostedBot` refuses a format-3 intent, so a unit hosted the old way fails closed | 4 |
 | BR-A5 | Block source stored in the Library | the write redaction leaves ordinary strategy-library Python unchanged and rewrites only key-shaped text | 4 |
 | BR-A6 | (the rejected option) a QML protocol version 2 | adding it fails exactly two shipped tests | 4 |
+| BR-A7 | The host lands the dummy unit as a draft on first start (R1 fix round, R1-A-05) | the find-then-put landing keyed by a field writes nothing on a rerun, so a second start adds no second dummy | 4 (the shipped pattern's tests), 2 (no host test asserts a fresh store's contents) |
+| BR-A8 | The dummy's slow rule shrinks its edge toward the default (A-NEW-6) | the first rule's shrink toward zero kept every sign, so it never changed a decision | 4 |
 
 ## BR-A1. The Library's kind check and kind-file checks
 
@@ -115,6 +117,43 @@ FAILED tests/test_protocol.py::test_construct_bot_refuses_unknown_protocol_versi
 ```
 
 This is the evidence behind fork F1 (`1-qml-door-compiler-runtime.md` §4).
+
+## BR-A7. The dummy lands in his Library on first start (X1-0A)
+
+**What changes.** At composition, beside registering the two checkers, the host puts the dummy unit document on its item's draft ref when no item carries the same document fingerprint (A7, AD-118). It never merges onto main; his yes publishes it.
+
+**The one fact.** The Library's own migration lands app items the same way: `once(store, key, value, draft)` returns the existing object when an item's `fields.<key>` already holds the value, and puts the draft only otherwise (`qmx_library/migrate/from_apps.py:52-57`, with `with_legacy` at `qmx_library/migrate/__init__.py:87-94`). A rerun therefore writes nothing. The find also sees an item that exists only on a draft ref, because the catalog indexes every ref's move, drafts included (`qmx_library/fts.py:42-45`, `:187-200`, read), and `with_legacy` joins on those moves.
+
+**Proof (step 4).** The shipped tests that pin that behaviour, run in the scratch export's agents environment (the export's `from_apps.py`, `migrate/__init__.py` and `test_migrate.py` compared with the read-only checkout ignoring line endings: identical):
+
+```text
+$ python -m pytest packages/qmx-library/tests/test_migrate.py -q -p no:cacheprovider -k "rerun_writes_nothing or app_artifacts"
+2 passed in 56.74s
+```
+
+**Risks.** (1) A shipped test that opens a host on a fresh folder and counts drafts or units would see one more. A grep over `qmx-host/tests` for assertions on Library contents found none (step 2); A7's Verify runs the host, control and library suites, and if one counts, the landing moves behind the first-start card's `make_new` plus a one-time host step for existing folders. (2) The `place` helper beside `once` merges a governed draft onto main; the landing must not use it, or the dummy would be published without his yes. A7's test asserts the dummy is a draft.
+
+**Before merge.** A7's fresh-folder test: one draft after the first start, still one after the second.
+
+## BR-A8. The dummy's slow rule and its shrink (X1-0A)
+
+**What changes.** `trend-floor-from-record@1` finds the lowest bucket edge above which every bucket with trades has a mean R of at least zero, then shrinks that edge toward the number's default by n/(n+k) before moving one step (`2-unit-template-numbers-lifecycle.md` §6).
+
+**The one fact.** The first rule shrank each bucket's mean toward zero and then tested its sign. Multiplying by n/(n+k), which is positive, never changes a sign, so `shrink_k` had no effect on any decision.
+
+**Proof (step 4).** `scratchpad\x1-0a\shrink_sign.py`, exact fractions, 10,000 random bucket sets:
+
+```text
+cases where k changes the old rule's edge: 0 of 10000
+amended target at n=20, k=100, edge 0.12, default 0.00: 0.02
+amended target at n=400, k=100, same edge: 0.096
+```
+
+**Before merge.** A5's test feeds a hand-made `own_journal`, asserts no calibration row before the 20th closed trade and one step toward the shrunk edge after it.
+
+## R1-A-04, checked and rejected
+
+R1 said `DOMAIN_GROUPS` sits at `qma-harness/src/qma/harness/tools.py:664`. At `c93407ca` it is defined at line 668 and used at line 641 (`git show c93407ca:qmx-agents/packages/qma-harness/src/qma/harness/tools.py | grep -n DOMAIN_GROUPS`, run in the read-only checkout; the file has CRLF endings and Python's `splitlines` gives the same two lines). BR-A2's citation stands.
 
 ## Not proven here
 

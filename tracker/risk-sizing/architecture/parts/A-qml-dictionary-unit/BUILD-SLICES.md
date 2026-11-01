@@ -1,6 +1,6 @@
 # Part A build slices
 
-Part A, 31 Oct 2026. Ordered, PR-sized slices a builder takes one at a time. Every slice keeps the shipped tests green (ruling 52): each "Verify" line ends with the shipped suites it touches. Commands run on Windows from the repo root unless marked; `just ci` is the full gate. The first six slices make the smallest thing that runs end to end: the dummy unit written, checked, compiled and trading sized intents over recorded prices inside QML.
+Part A, 31 Oct 2026; amended 1 Nov by fixer X1-0A after review R1 (A2's dependency, A4's assertion, A5's slow number, A7 lands the dummy, A9's principal test, the consumers table). Ordered, PR-sized slices a builder takes one at a time. Every slice keeps the shipped tests green (ruling 52): each "Verify" line ends with the shipped suites it touches. Commands run on Windows from the repo root unless marked; `just ci` is the full gate. The first six slices make the smallest thing that runs end to end: the dummy unit written, checked, compiled and trading sized intents over recorded prices inside QML.
 
 Dependencies on other parts are named; a slice never waits on a part that is not named in its "Depends on".
 
@@ -24,7 +24,7 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 
 - **Goal.** `qml.unit`: the typed model of `qmx.unit/1`, the layer A parser returning every problem with JSON pointers, the generated JSON Schema 2020-12 and the dummy document as a fixture (AD-102).
 - **Files.** `qml/src/qml/unit/{model,parse,schema}.py`, `qml/src/qml/unit/templates/dummy-trend-pullback.json`, `qml/tests/test_unit_model.py`, a committed `qml/src/qml/unit/qmx.unit.1.schema.json`.
-- **Depends on.** A1 (the intent types the model names).
+- **Depends on.** Nothing. The unit document names no intent type (`CONTRACTS.md` §1), so A1 and A2 land in either order (R1-A-03).
 - **Verify.** The dummy parses with zero problems; ten malformed documents give the expected problem kinds and pointers; the committed schema equals `schema()`; the schema accepts the smallest document `qmx-library/tests/test_view.py`'s `filled_from` builds from it. `uv run pytest qml/tests -q`.
 - **He sees.** The written form of a unit exists, with a real example.
 
@@ -41,7 +41,7 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 - **Goal.** `qml.blocks.api` (the block protocol), `qml.catalogue.loader` (AD-109), and QML's own block sources for the dummy: `ema@1`, `roc-of-series@1`, `rsi-cross-back@1`, `market-next-open@1`, `swing-stop-buffer@1`, `target-r-multiple@1`, `time-exit-bars@1`, `fixed-fraction-at-stop@1`, `percentile-of-own-history@1`, `trend-floor-from-record@1`. Placeholder blocks carry `origin: placeholder`.
 - **Files.** `qml/src/qml/blocks/api.py`, `qml/src/qml/catalogue/loader.py`, `qml/src/qml/blocks/stdlib/<entry>/1/block.py` and `entry.json` each, `qml/tests/test_loader.py`, `qml/tests/test_stdlib_blocks.py`; golden reference values computed with TA-Lib 0.7.1 in a fixture generator under `tools/dictionary/`.
 - **Depends on.** A3.
-- **Verify.** Loader: a missing block, a fingerprint mismatch, a CRLF copy (same fingerprint as LF), a module without `BLOCK` each give their problem kind, all at once. Blocks: golden values within the golden tolerance; the cut-against-full test at sampled bars; warm-up values missing, not zero; the recursive-settle length recorded; a week of replayed M1 updates never exceeds each block's state bound, and time per update in the last tenth is reported beside the first tenth (QML-04). `uv run pytest qml/tests -q`; `uv run pytest packages/qmf-indicators/tests -q`.
+- **Verify.** Loader: a missing block, a fingerprint mismatch, a CRLF copy (same fingerprint as LF), a module without `BLOCK` each give their problem kind, all at once. Blocks: golden values within the golden tolerance; the cut-against-full test at sampled bars; warm-up values missing, not zero; the recursive-settle length recorded; a week of replayed M1 updates never exceeds each block's state bound, and the last tenth's median time per update is asserted to be within `update_time_growth_tolerance` (1.5 times) of the first tenth's, both medians printed in the test log (QML-04, R1-A-02). `uv run pytest qml/tests -q`; `uv run pytest packages/qmf-indicators/tests -q`.
 - **He sees.** The dummy's parts exist as tested pieces.
 
 ## A5. The compiler, the unit door and the motion engine: the first end-to-end run
@@ -49,7 +49,7 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 - **Goal.** `qml.compile`, `qml.protocol.unit` (`construct_unit`, `restore_unit`, `HostedUnit`, `UnitStep`) and `qml.motion` (AD-103, AD-106, AD-107). The dummy compiles and runs over a recorded EURUSD M15 slice inside QML's test harness.
 - **Files.** `qml/src/qml/compile/`, `qml/src/qml/protocol/unit.py`, `qml/src/qml/motion/`, `qml/tests/test_compile_dummy.py`, a recorded slice fixture (one month of EURUSD and XAUUSD M15 bid and ask, cut from his Dukascopy partitions the way research 29's study did, git-ignored if licence requires; a synthetic month labelled "not evidence" as the committed fallback).
 - **Depends on.** A4.
-- **Verify.** The dummy compiles to a stable compiled fingerprint; driving it twice over the slice gives identical `UnitStep` sequences; entries are format-3 intents with quantity, protection and `not_before`; no entry before the derived warm-up (`warming` events); exits only for positions it opened; `rsi_low` stamped on every decision row; with a hand-fed `own_journal` of 80 closed trades the calibration row for `min_trend_strength` moves one step by the named rule, and motion off leaves it at its default; `construct_bot` on the same factory refuses at the first sized intent (BR-A4's script as a test). `uv run pytest qml/tests -q`.
+- **Verify.** The dummy compiles to a stable compiled fingerprint; driving it twice over the slice gives identical `UnitStep` sequences; entries are format-3 intents with quantity, protection and `not_before`; no entry before the derived warm-up (`warming` events); exits only for positions it opened; `rsi_low` stamped on every decision row; with a hand-fed `own_journal` the calibration row for `min_trend_strength` appears at the first cadence instant after the 20th closed trade (its declared `min_count`) and not before it, moves exactly one step toward the found edge shrunk toward the default by n/(n+k), and motion off leaves it at its default; `construct_bot` on the same factory refuses at the first sized intent (BR-A4's script as a test). `uv run pytest qml/tests -q`.
 - **He sees.** The first unit runs and tunes one of its own numbers from its own trades, with the receipt.
 
 ## A6. The checker: layers B to F, the result, the door, and layer G's functions
@@ -62,11 +62,11 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 
 ## A7. The Library additions and the checkers' registration
 
-- **Goal.** Every problem on a refusal with the first message kept; kind-file `checks`; the `unit` kind at schema version 2 with the generated shape and a publish check; the `component` entry face with its put check; `test-report` fields for G; the host registers `qml.unit/1` and `qml.entry/1` (AD-111, AD-112).
-- **Files.** `qmx-agents/packages/qmx-library/src/qmx_library/kinds/__init__.py`, `store.py` (the publish check call), `unit.schema.json`, `component.schema.json`, `test-report.schema.json`; `qmx-agents/packages/qmx-host/src/qmx_host/` (registration at composition); `qmx-agents/packages/qmx-tools/src/qmx_tools/gather.py` (builds `CheckContext` from the Library: pinned entries, block bytes, records); tests in each package.
+- **Goal.** Every problem on a refusal with the first message kept; kind-file `checks`; the `unit` kind at schema version 2 with the generated shape and a publish check; the `component` entry face with its put check; `test-report` fields for G; the host registers `qml.unit/1` and `qml.entry/1` (AD-111, AD-112); and on first start the host lands the dummy unit in his Library as a `unit` draft, once per store, keyed by the document's fingerprint (AD-118, R1-A-05). Its blocks are QML's own, read from QML's package files, so it needs no entry items; their entries follow in A11. The broken twins and broken documents stay test fixtures and never land.
+- **Files.** `qmx-agents/packages/qmx-library/src/qmx_library/kinds/__init__.py`, `store.py` (the publish check call), `unit.schema.json`, `component.schema.json`, `test-report.schema.json`; `qmx-agents/packages/qmx-host/src/qmx_host/` (registration at composition, and the dummy's landing beside it, using the find-then-put pattern of `qmx_library/migrate/from_apps.py:52-57` on the item's draft ref only, never `place`'s merge onto main); `qmx-agents/packages/qmx-tools/src/qmx_tools/gather.py` (builds `CheckContext` from the Library: pinned entries, block bytes, records); tests in each package.
 - **Depends on.** A6. Part C's instrument-record kind when it lands; until then `gather` reads the fixture records and says so in a warning.
-- **Verify.** The patched-copy run of `blast-radius.md` BR-A1 as tests: the Library suite (101 tests) and the control suite pass; a broken unit saves as a draft with its shape problems listed, then refuses to publish with every A to F problem; the dummy publishes; a mini app's provides component still saves unchecked; an entry draft with a broken face refuses on save; a store with no registered checker refuses an entry save with `checker_unavailable`. `cd qmx-agents; uv run pytest packages/qmx-library/tests packages/qmx-control/tests packages/qmx-host/tests -q`.
-- **He sees.** A unit he publishes has always passed every check.
+- **Verify.** The patched-copy run of `blast-radius.md` BR-A1 as tests: the Library suite (101 tests) and the control suite pass; a broken unit saves as a draft with its shape problems listed, then refuses to publish with every A to F problem; the dummy publishes; a mini app's provides component still saves unchecked; an entry draft with a broken face refuses on save; a store with no registered checker refuses an entry save with `checker_unavailable`; a fresh QMX folder made by `make_new` and opened by the host lists exactly one `dummy-trend-pullback` draft whose check result has zero errors, and a second start adds nothing (the shipped `test_migrate.py` rerun cases stay green). `cd qmx-agents; uv run pytest packages/qmx-library/tests packages/qmx-control/tests packages/qmx-host/tests -q`.
+- **He sees.** The dummy unit waiting in his Library on first start, ready to publish with one yes; a unit he publishes has always passed every check.
 
 ## A8. The authoring doors: rows, entry point, skill
 
@@ -81,7 +81,7 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 - **Goal.** The setting `units.identity_table` with its default rows; `qml.identity.classify` and `qml.identity.diff`; `qml.lifecycle` with its transition table and `fold` (AD-115).
 - **Files.** `qml/src/qml/identity/`, `qml/src/qml/lifecycle/`, the settings default in `qmx-agents/packages/qmx-control/` (settings defaults), tests.
 - **Depends on.** A2. Part B's lifecycle journal kind consumes the event body.
-- **Verify.** Table-driven tests: each default label from a pair of fixture documents; the highest result wins; every transition by every actor, allowed and refused; tested to paper refused for the judge unless `lifecycle.auto_paper` is on; admitting a second version on a live market without parking the first is refused. `uv run pytest qml/tests -q`.
+- **Verify.** Table-driven tests: each default label from a pair of fixture documents; the highest result wins; every transition by every actor, allowed and refused; tested to paper refused for the judge unless `lifecycle.auto_paper` is on; a `his_click` move toward paper or live whose principal is `agent:<id>` or `run:<id>` is a rejected event, and the same move with principal `operator` applies (AG-13); admitting a second version on a live market without parking the first is refused. `uv run pytest qml/tests -q`.
 - **He sees.** What counts as a new unit is one table he can read; nothing reaches live without his click.
 
 ## A10. Runtime care: restarts, warm-up seams, the interpreter, upgrades
@@ -136,8 +136,11 @@ Dependencies on other parts are named; a slice never waits on a part that is not
 
 | Their slice | Needs from Part A | Part |
 | --- | --- | --- |
-| QMB's runner that trades a unit, G in the sandbox, results in R | A5, A6, A7 | B |
+| QMB's runner that trades a unit through the one run-slice handler over `HostedUnit` (`qmb/src/qmb/host/unit_handler.py`, B6, R1-L0-02), G in the sandbox, results in R | A5, A6, A7 | B |
+| B9's one-month runs on both markets assert at least one `min_trend_strength` calibration row from real trades (R1-A-01) | A5 (the dummy declares `min_count` 20) | B |
+| B6 asserts the filled quantity equals the sizer receipt's quantity after lot rounding (CA-03, R1-C-08) | A1, A5 | B |
 | The journal kinds for decision, calibration, state and lifecycle rows | A5, A9 (bodies) | B |
 | The dictionary-expansion and librarian templates | A11 | B |
-| The node shell hosting units from a deployment's block folder | A4, A5, A10 | C |
-| Instrument records with the fields of `CONTRACTS.md` §2.3 and the data-level vocabulary | A3, A11 (vocabulary) | C |
+| The node shell hosting units from a deployment's block folder, through Part B's unit handler (C-12a), and asserting the sent quantity equals the sizer receipt's (CA-03) | A4, A5, A10; B6's handler | C |
+| `units_promote`, his promote click that writes the lifecycle event and builds the deployment (C-23, R1-C-01) | A9 (the machine and its principal rule) | C |
+| Instrument records with the exact keys and the one class enum of `CONTRACTS.md` §2.3 (no `roll_rule`; the unit's market entry names its roll, R1-C-10) and the data-level vocabulary | A3, A11 (vocabulary) | C |

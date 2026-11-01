@@ -1,6 +1,6 @@
 # Part A contracts: every shape this part owns or consumes
 
-Part A of the Level 1 run, 31 Oct 2026. Each shape is listed field by field with its owner, its version rule and the connection rows of `architecture/01-connections.md` that carry it. Version codes are that file's (V-S, V-K, V-P, V-CT). Decisions are this part's AD-101 to AD-120 (`ARCHITECTURE-SPINE.md`) and Level 0's L0 AD-n. CHECKED means read at the cited line or run; INFERRED means judgement.
+Part A of the Level 1 run, 31 Oct 2026; amended 1 Nov by fixer X1-0A after review R1 (the roll rule moves onto the unit, R1-C-10; reading tiers, CF-6; the journal kinds and writers, R1-B-06; record ids, R1-B-10; starting state, R1-C-01; deployment files by fingerprint, R1-C-06; one new setting, R1-A-02). Each shape is listed field by field with its owner, its version rule and the connection rows of `architecture/01-connections.md` that carry it. Version codes are that file's (V-S, V-K, V-P, V-CT). Decisions are this part's AD-101 to AD-120 (`ARCHITECTURE-SPINE.md`) and Level 0's L0 AD-n. CHECKED means read at the cited line or run; INFERRED means judgement.
 
 **Common rules.** Every document carries a `schema` marker such as `"qmx.unit/1"`. Fields may be added; meanings never change; a breaking change is a new version plus an upgrader that QML ships (AD-119). Numbers are decimal strings (`"0.30"`), parsed to exact values; instants are UTC nanoseconds as integers or ISO-8601 UTC text; ids are strings; pins are `entry_id@version` plus a fingerprint `fp1:sha256:...`. Optional fields are marked (opt).
 
@@ -16,7 +16,7 @@ Carried by: the Library `unit` kind's `fields` (C2), the `unit_*` rows (C1, C5),
 | `title` (opt) | string | display name; a label, never identity (OP-11) | A |
 | `claim_card` | object | `idea` (text), `claimed_context` (text, opt), `sources` (list of `{source_ref, locator, quote (opt), dated}`), `written_at` | A; E needs at least one source (UT-21) |
 | `lineage` (opt) | object | `parents`: list of `{unit_id, version_ref, edit_labels}`; `rewritten_from` (opt) | B, identity |
-| `markets` | list | each `{market_id, instrument_ref (venue, symbol), settings (opt): {number name: decimal string}, settings_record (opt): earning-record ref}`; read by the shipped Markets tab | A; E needs one; D per market |
+| `markets` | list | each `{market_id, instrument_ref (venue, symbol; or venue, root for a future), roll (futures, opt): {rule: calendar, volume or open_interest; days_before_expiry (opt)}, settings (opt): {number name: decimal string}, settings_record (opt): earning-record ref}`; the roll rule is the unit's, because a unit picks its roll, and the records only list the contract months (R1-C-10); read by the shipped Markets tab | A; E needs one; D per market, and a future with no `roll` and no exit before expiry is an error (UT-18) |
 | `streams` | list | each `{name, market: "*" or market_id, bar: {kind: time, tick, range, volume; size}, input: closed_bars, quotes, ticks; price: bid_ask, mid, last; derived_from (opt): stream name}` | A, D (QML-19, QML-20) |
 | `sessions` (opt) | list | each `{name, calendar_ref, zone (IANA), windows: [{from, to}] in the market's zone}` | A, D (UT-13) |
 | `direction` | `long`, `short`, `both` | sides traded | A |
@@ -69,7 +69,7 @@ Carried by: the Library `unit` kind's `fields` (C2), the `unit_*` rows (C1, C5),
 
 ### 2.3 Instrument record fields this part reads (owner: P4, Part C; consumed here)
 
-Layer C and D and the sizer slot read, per market at an instant: `market_id`; `venue`; `symbol`; `class` (fx, metal, index_cfd, commodity_cfd, stock_cfd, future, perp, spot_crypto, stock); `digits`; `tick_size`; `pip` (opt, with its source); `contract_size`; `value_per_point` (money per price unit per lot); `lot_step`; `min_lot`; `max_lot` (opt); `currency`; `calendar_ref` and zone; `day_boundary`; `data_levels` (the vocabulary of §5.2); `expiry` and `roll_rule` (futures, opt); `funding_interval` (perps, opt); `leverage` and `margin` (versioned); `record_version`. A missing field that a check needs is an error naming the field and the record, never a guess. Until Part C's records land, the first slices use fixture records for EURUSD and XAUUSD with the same fields (BUILD-SLICES A3).
+Layer C and D and the sizer slot read, per market at an instant: `market_id`; `venue`; `symbol`; `class` (fx, metal, index_cfd, commodity_cfd, stock_cfd, future, perp, spot_crypto, stock); `digits`; `tick_size`; `pip` (opt, with its source); `contract_size`; `value_per_point` (money per price unit per lot); `lot_step`; `min_lot`; `max_lot` (opt); `currency`; `calendar_ref` and zone; `day_boundary`; `data_levels` (the vocabulary of §5.2); `expiry`, `last_trade`, `root` and `rolls_to` (futures, opt; the roll rule is on the unit's market entry, §1, R1-C-10); `funding_interval` (perps, opt); `leverage` and `margin` (versioned); `record_version`. The class list above is the one class enum every part spells the same way (Part C's records and Part B's capabilities match it; R1-C-10), and the keys are the exact keys of Part C's `instrument` kind, which its key-parity test pins. A missing field that a check needs is an error naming the field and the record, never a guess. Until Part C's records land, the first slices use fixture records for EURUSD and XAUUSD with the same fields (BUILD-SLICES A3).
 
 ## 3. Check results
 
@@ -117,9 +117,11 @@ New optional fields on `test-report`: `check` (`"qml-g/1"`), `compiled_fingerpri
 
 `factory` (satisfies `BotFactory` structurally); `footprint` (QML `Footprint`); `parameter_space` (QML `ParameterSpec` list, for QMB's optimiser); `trace_schema`; `lock` (the pins); `compiled_fingerprint`; `compiler_format_version`; `warm_up` (from `derive_horizon`, per stream); `state_bound` (derived from the blocks' bounds); `placeholders` (bindings whose block origin is `placeholder`); `options` (the compiler options that change decisions, such as the port quantum, which enter the compiled fingerprint).
 
-`construct_unit` takes the compiled unit, the starting assignment (calibrated values the deployment or run starts from), the read surfaces of §4.5, `scope_id` (the QMB run id or the node's deployment id), the state scope and bound, `trace_level` and `motion` (`on` or `off`).
+`construct_unit` takes the compiled unit, the starting assignment (calibrated values the deployment or run starts from: a QMB run and a paper lane start from the unit's defaults; a live deployment carries the paper lane's last calibrated state with its watermark, Part C's call, R1-C-01), the read surfaces of §4.5, `scope_id` (the QMB run id or the node's deployment id), the state scope and bound, `trace_level` and `motion` (`on` or `off`).
 
 ### 4.2 `UnitStep`, returned by `HostedUnit.on_instant` (owner: P1; written by Part B's journal writer)
+
+QMB and the node turn a step into rows through one run-slice handler, `qmb/src/qmb/host/unit_handler.py` (Part B, L0 AD-5). Decision and calibration rows ride the unit journal under Part B's kinds for them; state events ride kind `state`, which means only these runtime events (lifecycle moves are kind `lifecycle`, §8; R1-B-06). Every row that carries a `row_id` is journaled with that id as its record id, so a slice replayed after a crash writes nothing twice (R1-B-10).
 
 | Part | Fields |
 | --- | --- |
@@ -190,7 +192,7 @@ The `status` annotation (`named`, `specified`, `implemented`, `tested_on_data`, 
 
 ### 5.3 The reading card (owner: P1; publishing is Part C's)
 
-A reading is an entry with `component_type: reading` and `reading: {tier: execution_health or market_state, clock: tick, bar, session, day; outputs: {value (measure), state (word list), health (live, stale, degraded, down)}, valid_classes, stale_after_s, minimum_sample, lag_bars, fallback chain}`. Stamped readings and reading history are Part C's (`01-connections.md` §5).
+A reading is an entry with `component_type: reading` and `reading: {tier: tick, bar, session, day or calendar (the clock it runs on, which decides where it runs: the tick tier inside the node on a trading machine, the others in the `mis` app, L0 AD-40, CF-6); concern: market_state or execution_health (a label for screens, never a placement rule); outputs: {value (measure), state (word list), health (live, stale, degraded, down)}, valid_classes, stale_after_s, minimum_sample, lag_bars, fallback chain}`. The tier words are Part C's (its reading record's `tier`). Stamped readings and reading history are Part C's (`01-connections.md` §5).
 
 ## 6. The block loader and the deployment's block folder (owner: P1; the folder carried by Part C's deployment)
 
@@ -202,7 +204,7 @@ blocks/
   weights/<entry_id>@<version>.<ext>   # learned weights (opt), fingerprint in lock.json
 ```
 
-`load(lock, sources, weights)` returns `{blocks: {pin: BLOCK}, lock_fingerprint}` or every problem (`block_missing`, `block_fingerprint_mismatch`, `block_compile_error`, `block_protocol`, `weights_missing`, `weights_fingerprint_mismatch`), each with the pin and a hint. Block fingerprint: fp1 over `{"block.py": LF-normalised UTF-8 text}`. The block protocol (`qml.blocks.api`): a module exports `BLOCK` with `make(params, inputs) -> instance`; an instance has `update(evidence) -> output` (exact, quantised at the port), `export_state() -> mapping` and `import_state(mapping)`, and its state never exceeds the entry's `state_bound`.
+On a node the folder is assembled in its volume from files the deployment names by fingerprint; files the volume lacks reach the machine ahead of the deploy through the Library hub, and there is no size setting, so a learned block's weights of any size deploy (R1-C-06, Part C). `load(lock, sources, weights)` returns `{blocks: {pin: BLOCK}, lock_fingerprint}` or every problem (`block_missing`, `block_fingerprint_mismatch`, `block_compile_error`, `block_protocol`, `weights_missing`, `weights_fingerprint_mismatch`), each with the pin and a hint. Block fingerprint: fp1 over `{"block.py": LF-normalised UTF-8 text}`. The block protocol (`qml.blocks.api`): a module exports `BLOCK` with `make(params, inputs) -> instance`; an instance has `update(evidence) -> output` (exact, quantised at the port), `export_state() -> mapping` and `import_state(mapping)`, and its state never exceeds the entry's `state_bound`.
 
 ## 7. The identity table `units.identity_table` (owner: P2; read by QML, the judge and the Lab)
 
@@ -224,7 +226,7 @@ A core setting, a list of rows `{label, result: calibration_row, new_version, ne
 
 ## 8. Lifecycle (owner: P2; events carried by Part B's journal)
 
-States per unit per market: `draft`, `tested`, `parked`, `paper`, `live`, `stopped`, `retired`. Event body: `{schema: "qmx.lifecycle/1", event_id, unit_id, version_ref, compiled_fingerprint, market_id, from, to, by: {kind: judge, his_click, risk_rule, system; principal}, reason, evidence_ref, clears (opt): the event id a move out of `stopped` clears, at}`. Transitions: draft to tested (judge pass) or parked (judge fail); tested to paper (his click; automatic only if `lifecycle.auto_paper` is on, default off); paper to live (his click); live or paper to stopped (risk rule, automatic, logged); stopped to paper or live (his click); live to parked (his click); any to retired (his click). `fold(events)` orders by `(at, writer, sequence)`, applies a move out of `stopped` only when its `clears` names the latest stop for that unit and market (so clock skew between This PC and a server cannot clear a newer stop), and refuses an illegal transition as a rejected event, which it reports. Admitting a version on a market where another is `paper` or `live` requires the same click to park or retire the other (UT-23).
+States per unit per market: `draft`, `tested`, `parked`, `paper`, `live`, `stopped`, `retired`. Event body: `{schema: "qmx.lifecycle/1", event_id, unit_id, version_ref, compiled_fingerprint, market_id, from, to, by: {kind: judge, his_click, risk_rule, system; principal}, reason, evidence_ref, clears (opt): the event id a move out of `stopped` clears, at}`. Carried by Part B's unit-journal kind `lifecycle`. Writers, each on its own partition: This PC's host for his clicks (through `units_promote` for moves toward paper or live, Part C slice C-23), the judge for draft to tested or parked, the node for risk stops (R1-B-06). A `his_click` event is legal only with `principal = "operator"`; any other principal on a move toward paper or live is a rejected event (AG-13). Transitions: draft to tested (judge pass) or parked (judge fail); tested to paper (his click; automatic only if `lifecycle.auto_paper` is on, default off); paper to live (his click); live or paper to stopped (risk rule, automatic, logged); stopped to paper or live (his click); live to parked (his click); any to retired (his click). `fold(events)` orders by `(at, writer, sequence)`, applies a move out of `stopped` only when its `clears` names the latest stop for that unit and market (so clock skew between This PC and a server cannot clear a newer stop), and refuses an illegal transition as a rejected event, which it reports. Admitting a version on a market where another is `paper` or `live` requires the same click to park or retire the other (UT-23).
 
 ## 9. Settings this part names (all editable; none is a cap)
 
@@ -240,7 +242,7 @@ States per unit per market: `draft`, `tested`, `parked`, `paper`, `live`, `stopp
 | `decision_tolerance` | decisions identical; values within 1e-9 relative | funnel `qml.md` §11 |
 | `golden_tolerance` | 1e-9 relative, 1e-12 absolute | shipped `bc-build-a-component/scripts/verdict.py` |
 | `settle_check_warmups` | 1x, 2x, 4x the declared warm-up | QML-03, INFERRED |
-| `min_trades` (slow motion) | 60 | funnel `unit.md` §10 |
+| `min_trades` (slow motion) | 60, for a calibrated number that declares no `motion.min_count`; the dummy's `min_trend_strength` declares 20 (R1-A-01) | funnel `unit.md` §10 |
 | `shrink_k` | 100 | funnel `unit.md` §10 |
 | `slow_cadence` | every 20 closed trades or at the market's day close | funnel `unit.md` §10 |
 | `range_edge_card` | at its range edge 3 times in 10 sessions | funnel `unit.md` §10 |
@@ -248,6 +250,7 @@ States per unit per market: `draft`, `tested`, `parked`, `paper`, `live`, `stopp
 | `trace_level` | `events` | funnel LC-18 |
 | `lifecycle.auto_paper` | off | R0-14 |
 | `state_bound` | derived from the blocks' bounds; the shipped 256 for bots stays | G1 §9 |
+| `update_time_growth_tolerance` | 1.5: the last tenth's median time per update may be at most 1.5 times the first tenth's (QML-04's test) | R1-A-02, INFERRED |
 
 ## 10. Catalog rows (owner: P8 by registration; functions here)
 
@@ -279,13 +282,15 @@ Saving uses the existing `library_save` row; the Library runs its checks.
 | C6 the loader | yes | layout and error shape defined in §6 |
 | C7, C8 QMB run requests | yes | the unit by `id@version`; QMB compiles and needs G (§3.3) |
 | C10 result landing | consumed | G's `test-report` rides it (contract change 3) |
-| C12 compiled unit in process | changed | hosted through `construct_unit`; the step and surfaces of §4 (contract change 4) |
+| C12 compiled unit in process | changed, folded in | hosted through `construct_unit` and Part B's one run-slice handler; the step and surfaces of §4 (contract change 4) |
 | C13 journal writer | consumed | decision, calibration, state and lifecycle bodies (contract change 5) |
 | C15 queries | consumed | `instrument_get` for records (§2.3) |
 | C18 refresh jobs to records | consumed | the data-level vocabulary is this part's (contract change 6) |
 | X1 deployment | consumed | carries the block folder of §6 (contract change 7) |
 
 ## Contract changes (for the writer of `01-connections.md`)
+
+All eight were folded into `01-connections.md` on 1 Nov by fixer X1-0A (rows C2, C5, C10, C12, C13, C18 and §5).
 
 1. **C2.** "unit document in; governed draft or a refusal with every problem out" becomes: the Library `put` of a `unit` checks the kind's generated shape (layer A) and returns every problem; publish of a `unit` runs the QML checker (A to F) and refuses with every problem; the kind file lists the check and the host registers the checker. Reason: a shipped test saves a schema-minimal unit (`qmx-library/tests/test_view.py:110-128`, run).
 2. **C5.** Rows `unit_new`, `unit_check`, `unit_explain`, `blocks_find`, `blocks_get`, `blocks_check`, `blocks_match` in two new core toolsets `unit` and `blocks`; the harness derives its domain groups from the catalog.
