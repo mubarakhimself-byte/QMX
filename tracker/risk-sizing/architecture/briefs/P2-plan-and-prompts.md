@@ -38,3 +38,6 @@ Also: do not use the Workflow tool.
 5. `RISK-SIZING-PLACEHOLDERS.md`: every placeholder for sizing and exits the build leaves, with where it sits and what the risk session must replace; and a short section appended to `D:\QMX-worktrees\unit-plan\tracker\risk-sizing\RISK-SIZING-PACK.md` pointing to it (append only; change nothing else there).
 
 Every PR keeps the shipped tests green (`just ci`), so QMX keeps its few errors few (STATE midday ruling 52). Plain words in everything he reads. Final message at most 10 lines: the PR count, the phases, the checker's result, and what only he must do tonight.
+
+## Size and the unstable internet
+The three parts hold about 70 slices, so the plan is long. Keep one PR per slice unless two slices are too small to stand alone. If the plan passes about 3,000 lines, write each phase as its own file under `build/plan-parts/` and assemble `UNIT-PLAN.md` with a small script, then run the checker on the assembled file. The operator's internet is unstable today: write each file early with its headings and save as each section is done, so a cut loses little.
