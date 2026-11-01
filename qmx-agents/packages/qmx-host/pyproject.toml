@@ -11,6 +11,7 @@ dependencies = [
     "qmx-engine",
     "qmx-broker",
     "qmx-hub",
+    "qmx-judge",
     "qmx-library",
     "qmx-memory",
     "qmx-remote",
@@ -36,6 +37,7 @@ qmx-control = { workspace = true }
 qmx-engine = { workspace = true }
 qmx-broker = { workspace = true }
 qmx-hub = { workspace = true }
+qmx-judge = { workspace = true }
 qmx-library = { workspace = true }
 qmx-memory = { workspace = true }
 qmx-remote = { workspace = true }
