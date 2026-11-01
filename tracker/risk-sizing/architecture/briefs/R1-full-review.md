@@ -39,4 +39,4 @@ Also: do not use the Workflow tool.
 6. His rulings: QML first with the most care; QMB extensible with variants; most things can be mini apps; Windows first-class; local first; nothing capped; only he promotes; the copilot can do what agents can.
 
 ## Output
-`D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\review\R1-findings.md`: findings ranked most severe first, grouped by the part folder that must fix them, each with where, what is wrong, the evidence, and a proposed fix in one or two lines. A short last section lists findings that need a decision only he can make (money, his values, the words on his screens), if any. Final message at most 10 lines.
+`D:\QMX-worktrees\unit-plan\tracker\risk-sizing\architecture\review\R1-findings.md`: findings ranked most severe first, grouped by the folder that must fix them (Level 0, A, B or C), plus a section "Clash settlements" for item 7; each finding with where, what is wrong, the evidence, and a proposed fix in one or two lines. A short last section lists findings that need a decision only he can make (money, his values, the words on his screens), if any. Final message at most 10 lines.
