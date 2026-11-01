@@ -221,6 +221,49 @@ def test_a_market_without_the_data_level_a_block_reads_is_an_error() -> None:
     }
 
 
+def _session(calendar_ref: str) -> dict[str, object]:
+    return {
+        "name": calendar_ref.split("@")[0],
+        "calendar_ref": calendar_ref,
+        "zone": "Europe/London",
+        "windows": [{"from": "08:00", "to": "16:00"}],
+    }
+
+
+def test_a_session_on_either_market_calendar_is_not_an_error() -> None:
+    document = _document()
+    document["sessions"] = [_session("fx-24x5@1"), _session("metals-24x5@1")]
+
+    result = check(document, _context())
+
+    assert result.errors == ()
+
+
+def test_a_session_on_a_calendar_no_market_holds_is_one_error() -> None:
+    document = _document()
+    document["sessions"] = [_session("fx-24x5@1"), _session("crypto-24x7@1")]
+
+    result = check(document, _context())
+
+    assert [(p.kind.value, p.where, p.message) for p in result.errors] == [
+        (
+            "calendar_not_held",
+            ("/sessions/1/calendar_ref",),
+            "crypto-24x7@1 is not a calendar any market's record holds "
+            "(fx-24x5@1, metals-24x5@1)",
+        )
+    ]
+
+
+def test_a_pin_whose_block_source_is_missing_is_named_not_raised() -> None:
+    context = _context()
+    sources = {k: v for k, v in context.sources.items() if k != "ema@1"}
+
+    result = check(_document(), CompileContext(sources, context.entries, context.records))
+
+    assert _errors(result) == {("block_source_missing", "B", ("/pins/0",))}
+
+
 # --- layer F --------------------------------------------------------------------------------
 
 _SNEAKY = b"""import importlib
@@ -279,6 +322,50 @@ def test_the_same_code_written_by_a_human_only_warns() -> None:
 
     assert result.errors == ()
     assert sum(1 for p in result.warnings if p.kind is ProblemKind.UNSAFE_CODE) == 4
+
+
+@pytest.mark.parametrize(
+    ("source", "first"),
+    [
+        (b"getattr(__builtins__, 'exec')('y=1')\n", "uses getattr"),
+        (b"getattr(__builtins__, '__im' + 'port__')('os')\n", "uses getattr"),
+        (b"from builtins import exec as run\nrun('1')\n", "from builtins import"),
+        (b"import builtins\nbuiltins.__dict__['exec']('1')\n", "import builtins"),
+        (b"globals()['__builtins__']['eval']('1')\n", "uses globals"),
+        (b"vars(__builtins__)['ev'+'al']('1')\n", "uses vars"),
+        (b"import sys\nsys.modules['os'].system('x')\n", "import sys"),
+        (b"().__class__.__base__.__subclasses__()\n", "uses __class__.__base__.__subclasses__"),
+        (b"(x for x in ()).gi_frame.f_globals['__builtins__']\n", "uses gi_frame.f_globals"),
+    ],
+    ids=[
+        "getattr-exec",
+        "getattr-import",
+        "from-builtins",
+        "builtins-dict",
+        "globals",
+        "vars",
+        "sys-modules",
+        "subclasses",
+        "frame-globals",
+    ],
+)
+def test_an_agent_block_reaching_builtins_another_way_fails_layer_f(
+    source: bytes, first: str
+) -> None:
+    agent = check_block("p@1", "agent", source)
+    human = check_block("p@1", "human", source)
+
+    assert agent.errors[0].message == f"p@1 line 1: {first}"
+    assert {p.kind.value for p in agent.errors} == {"unsafe_code"}
+    assert (human.errors, len(human.warnings)) == ([], len(agent.errors))
+
+
+@pytest.mark.parametrize("folder", sorted(p.name for p in _STDLIB.iterdir() if p.is_dir()))
+def test_every_stdlib_block_passes_layer_f_as_if_an_agent_wrote_it(folder: str) -> None:
+    found = check_block(f"{folder}@1", "agent", (_STDLIB / folder / "1" / "block.py").read_bytes())
+
+    assert found.errors == []
+    assert [p for p in found.warnings if p.kind.value == "unsafe_code"] == []
 
 
 def test_a_block_that_reads_the_clock_fails_whoever_wrote_it() -> None:

@@ -19,6 +19,12 @@ from qmf.core.refusal import is_refusal
 
 from qml.blocks.api import EntryFace, FaceProblem, OutputType, parse_entry
 from qml.catalogue.loader import block_fingerprint
+from qml.check.result import (
+    AGENT_BANNED_ATTRIBUTES,
+    AGENT_BANNED_NAMES,
+    AGENT_DUNDER_ASSIGNS,
+    AGENT_IMPORTS,
+)
 from qml.conformance.scan import scan_logic_source
 from qml.numbers.check import check_numbers
 from qml.numbers.records import InstrumentRecord
@@ -47,7 +53,6 @@ _AGENT: Final = "agent"
 _REVIEWED_ORIGINS: Final = frozenset({"qml", "port-239", _PLACEHOLDER})
 _BAR_FIELDS: Final = frozenset({"", "open", "high", "low", "close"})
 _BOUND_PORT_KINDS: Final = frozenset({"series", "bars"})
-_BANNED_NAMES: Final = frozenset({"eval", "exec", "__import__"})
 _STRUCTURAL_LITERALS: Final = frozenset({0, 1, -1})
 
 
@@ -497,15 +502,18 @@ def _data(
             )
             continue
         offered[market.market_id] = levels
+    given = [records[m.market_id] for m in unit.markets if m.market_id in records]
+    if len(given) == len(unit.markets):
+        held = sorted({record.calendar_ref for record in given})
         for s_index, session in enumerate(unit.sessions):
-            if session.calendar_ref != record.calendar_ref:
+            if session.calendar_ref not in held:
                 found.error(
                     "D",
                     ProblemKind.CALENDAR_NOT_HELD,
                     _at("/sessions", s_index, "calendar_ref"),
-                    f"{session.calendar_ref} is not the calendar the record {record.name} holds "
-                    f"({record.calendar_ref})",
-                    "name the calendar of every market the unit trades",
+                    f"{session.calendar_ref} is not a calendar any market's record holds "
+                    f"({', '.join(held)})",
+                    "name the calendar of a market the unit trades",
                 )
     for use, face in bound:
         for port in face.inputs:
@@ -674,21 +682,37 @@ def _chain(node: ast.AST) -> tuple[str, ...]:
     return tuple(reversed(parts))
 
 
+def _dunder(name: str) -> bool:
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
 def _widened(tree: ast.AST) -> Iterator[tuple[int, str]]:
-    """``importlib``, ``__import__``, ``eval`` and ``exec`` anywhere, called or not."""
+    """Deny by default: an import outside ``AGENT_IMPORTS``, any dunder read, any banned name.
+
+    Spelling out ``exec`` and ``eval`` cannot hold, since ``getattr``, ``builtins``, ``vars``,
+    a frame's globals and a dunder walk each reach them under another name. So every road
+    to a namespace or to builtins is closed instead.
+    """
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split(".")[0] == "importlib":
+                if alias.name not in AGENT_IMPORTS:
                     yield node.lineno, f"import {alias.name}"
-        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[0] == "importlib":
-            yield node.lineno, f"from {node.module} import"
-        elif isinstance(node, ast.Name) and node.id in _BANNED_NAMES:
-            yield node.lineno, f"uses {node.id}"
-        elif isinstance(node, ast.Attribute) and (
-            node.attr in _BANNED_NAMES or node.attr == "import_module"
-        ):
-            yield node.lineno, f"uses {'.'.join(_chain(node))}"
+        elif isinstance(node, ast.ImportFrom):
+            module = "." * node.level + (node.module or "")
+            if module not in AGENT_IMPORTS:
+                yield node.lineno, f"from {module} import"
+        elif isinstance(node, ast.Name):
+            assigns = isinstance(node.ctx, ast.Store) and node.id in AGENT_DUNDER_ASSIGNS
+            if node.id in AGENT_BANNED_NAMES or (_dunder(node.id) and not assigns):
+                yield node.lineno, f"uses {node.id}"
+        elif isinstance(node, ast.Attribute):
+            if node.attr in AGENT_BANNED_ATTRIBUTES or _dunder(node.attr):
+                yield node.lineno, f"uses {'.'.join(_chain(node))}"
+        elif isinstance(node, ast.MatchClass):
+            for attr in node.kwd_attrs:
+                if _dunder(attr) or attr in AGENT_BANNED_ATTRIBUTES:
+                    yield node.lineno, f"matches on {attr}"
 
 
 def _literals(tree: ast.AST) -> Iterator[tuple[int, object]]:
@@ -711,9 +735,10 @@ def check_block(pin: str, origin: str, source: bytes, where: str = "") -> Found:
     """Layer F over one block's source: the kept scan, then the rules for agent code.
 
     The kept scan's clock, I/O and network findings are errors for every block. Unseeded
-    random and the widened names are errors when an agent wrote the block, and warnings for
-    human plain Python. Numeric literals in comparisons warn for agent and human blocks only,
-    because QML's own blocks are reviewed and golden-tested; 0, 1 and -1 never warn.
+    random and the deny-by-default rules of ``_widened`` are errors when an agent wrote the
+    block, and warnings for human plain Python. Numeric literals in comparisons warn for agent
+    and human blocks only, because QML's own blocks are reviewed and golden-tested; 0, 1 and
+    -1 never warn.
     """
     found = Found()
     text = source.decode("utf-8", errors="replace")
@@ -740,7 +765,11 @@ def check_block(pin: str, origin: str, source: bytes, where: str = "") -> Found:
     tree = ast.parse(text)
     for lineno, detail in _widened(tree):
         message = f"{pin} line {lineno}: {detail}"
-        hint = "a block computes from its evidence; it never loads or evaluates code"
+        hint = (
+            "a block computes from its evidence, imports only "
+            f"{', '.join(sorted(AGENT_IMPORTS))}, and never reaches builtins, a namespace "
+            "or a dunder"
+        )
         if agent:
             found.error("F", ProblemKind.UNSAFE_CODE, where, message, hint)
         else:

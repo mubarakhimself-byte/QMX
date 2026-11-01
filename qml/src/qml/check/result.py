@@ -22,6 +22,10 @@ from qml.numbers.records import InstrumentRecord
 from qml.unit.parse import Problem, ProblemKind
 
 __all__ = [
+    "AGENT_BANNED_ATTRIBUTES",
+    "AGENT_BANNED_NAMES",
+    "AGENT_DUNDER_ASSIGNS",
+    "AGENT_IMPORTS",
     "CHECKER_FORMAT_VERSION",
     "CHECK_SCHEMA",
     "LAYERS",
@@ -35,10 +39,64 @@ __all__ = [
 ]
 
 CHECK_SCHEMA: Final[str] = "qmx.check/1"
-CHECKER_FORMAT_VERSION: Final[int] = 1
+CHECKER_FORMAT_VERSION: Final[int] = 2
 """Bumped by any change that makes a document pass or fail differently."""
 LAYERS: Final[tuple[str, ...]] = ("A", "B", "C", "D", "E", "F")
-AGENT_BANNED: Final[tuple[str, ...]] = ("__import__", "eval", "exec", "importlib")
+AGENT_IMPORTS: Final[frozenset[str]] = frozenset(
+    {
+        "__future__",
+        "bisect",
+        "collections",
+        "collections.abc",
+        "decimal",
+        "fractions",
+        "math",
+        "qmf.core.refusal",
+        "qml.blocks.api",
+        "qml.numbers",
+    }
+)
+"""The only modules an agent-written block may import: those QML's stdlib blocks use."""
+AGENT_BANNED_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        "breakpoint",
+        "builtins",
+        "compile",
+        "delattr",
+        "eval",
+        "exec",
+        "getattr",
+        "globals",
+        "importlib",
+        "input",
+        "locals",
+        "open",
+        "setattr",
+        "sys",
+        "vars",
+    }
+)
+"""Names an agent-written block may not use, besides every dunder name."""
+AGENT_BANNED_ATTRIBUTES: Final[frozenset[str]] = frozenset(
+    {
+        "ag_frame",
+        "cr_frame",
+        "eval",
+        "exec",
+        "f_back",
+        "f_builtins",
+        "f_globals",
+        "f_locals",
+        "gi_frame",
+        "import_module",
+        "tb_frame",
+    }
+)
+"""Attributes an agent-written block may not read, besides every dunder attribute.
+
+The frame attributes reach a module's globals, and so its builtins, without a dunder."""
+AGENT_DUNDER_ASSIGNS: Final[frozenset[str]] = frozenset({"__slots__"})
+"""The dunder names an agent-written block may assign, as QML's stdlib blocks do."""
 
 
 class Verdict(StrEnum):
@@ -60,7 +118,10 @@ def checker_version() -> str:
         "layers": list(LAYERS),
         "kinds": sorted(kind.value for kind in ProblemKind),
         "scan": ast_scan_rules_identity(),
-        "agent_banned": list(AGENT_BANNED),
+        "agent_imports": sorted(AGENT_IMPORTS),
+        "agent_banned_names": sorted(AGENT_BANNED_NAMES),
+        "agent_banned_attributes": sorted(AGENT_BANNED_ATTRIBUTES),
+        "agent_dunder_assigns": sorted(AGENT_DUNDER_ASSIGNS),
     }
     return f"qml-check/{CHECKER_FORMAT_VERSION} {_fp(rules)}"
 
@@ -68,8 +129,9 @@ def checker_version() -> str:
 def entries_snapshot(entries: Mapping[str, bytes], sources: Mapping[str, bytes]) -> str:
     rows = {
         pin: {
-            "entry": fingerprint_bytes(entries[pin]).value if pin in entries else None,
-            "block": fingerprint_bytes(sources[pin]).value if pin in sources else None,
+            key: fingerprint_bytes(given[pin]).value
+            for key, given in (("entry", entries), ("block", sources))
+            if pin in given
         }
         for pin in sorted(set(entries) | set(sources))
     }
