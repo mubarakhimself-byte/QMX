@@ -838,8 +838,8 @@ def own_door(role: Role, port: int) -> str:
 
 def vault_secrets(vault: Path) -> Callable[[str, str], str | None]:
     """An app's declared secret `qmx/<name>`, read from `vault/<name>`. A missing file is None, so
-    the supervisor refuses the start with `missing_secret`. On POSIX a file that its group or
-    others may read is refused. On Windows the mode bits hold no ACL, so the folder's NTFS
+    the supervisor refuses the start with `missing_secret`. On POSIX a file whose mode grants its
+    group or others anything is refused. On Windows the mode bits hold no ACL, so the folder's NTFS
     permissions are what keep it owner-only. No refusal carries the file's content."""
 
     def read(service: str, _username: str) -> str | None:

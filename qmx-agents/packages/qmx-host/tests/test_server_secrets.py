@@ -21,7 +21,7 @@ from qmx_host.host import control_for, vault_secrets
 
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples/apps/exchange-status"
 APP = "exchange-status"
-SERVER = '''import os
+SERVER = """import os
 
 from fastmcp import FastMCP
 
@@ -35,7 +35,7 @@ def holds(value: str) -> dict[str, bool]:
 
 if __name__ == "__main__":
     mcp.run(transport="stdio", show_banner=False)
-'''
+"""
 
 
 @pytest.fixture(autouse=True)
@@ -152,7 +152,8 @@ def test_an_unreadable_vault_file_is_refused_by_name(home: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "service", ["qmx/../outside", "qmx/sub/name", "qmx/sub\\name", "qmx/pairing-key"]
+    "service",
+    ["qmx/../outside", "qmx/sub/name", "qmx/sub\\name", "qmx/pairing-key", "qmx/control-token"],
 )
 def test_a_name_outside_the_apps_vault_is_refused(home: Path, value: str, service: str) -> None:
     vault_file(home, "pairing-key", value)
