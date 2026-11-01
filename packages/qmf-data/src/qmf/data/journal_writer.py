@@ -31,6 +31,7 @@ layout, one partition file per series and month of ``t``.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -192,24 +193,37 @@ class _BundleSink:
 
     def __init__(self, out_dir: Path) -> None:
         self._out = out_dir
-        self._open: dict[str, TypedWriter] = {}
+        self._open: dict[str, tuple[SeriesKey, TypedWriter]] = {}
+        # A failed partition is never reopened: a new writer on its path would overwrite
+        # the rows it already held, so its later rows are refused instead.
+        self._failed: set[str] = set()
 
     def write(
         self, key: SeriesKey, line: Mapping[str, object], row: tuple[object, ...]
     ) -> Result[None]:
-        writer = self._open.get(key.text)
+        if key.text in self._failed:
+            return storage_failure(
+                "this run's journal partition already failed, so its rows are not written",
+                context={"key": key.text},
+            )
+        opened = self._open.get(key.text)
         try:
-            if writer is None:
+            if opened is None:
                 target = _staged_path(self._out, key)
                 target.parent.mkdir(parents=True, exist_ok=True)
-                writer = TypedWriter(
-                    target, key.text, key.rule.columns, row_group_rows=_BUNDLE_ROW_GROUP
+                opened = (
+                    key,
+                    TypedWriter(
+                        target, key.text, key.rule.columns, row_group_rows=_BUNDLE_ROW_GROUP
+                    ),
                 )
-                self._open[key.text] = writer
-            writer.add([row])
+                self._open[key.text] = opened
+            opened[1].add([row])
         except StoreEngineError as exc:
+            self._fail(key)
             return translate_engine_failure(exc)
         except OSError as exc:
+            self._fail(key)
             return storage_failure(
                 "could not write the run's journal partition",
                 context={"key": key.text, "error": str(exc)},
@@ -218,13 +232,27 @@ class _BundleSink:
 
     def close(self) -> Result[tuple[SeriesFile, ...]]:
         files: list[SeriesFile] = []
-        for writer in self._open.values():
+        for key, writer in list(self._open.values()):
             try:
                 files.append(writer.finish())
-            except StoreEngineError as exc:
-                return translate_engine_failure(exc)
+            except (StoreEngineError, OSError):
+                self._fail(key)
         self._open.clear()
+        if self._failed:
+            return storage_failure(
+                "some of the run's journal partitions could not be written",
+                context={"failed": sorted(self._failed)},
+            )
         return Ok(tuple(files))
+
+    def _fail(self, key: SeriesKey) -> None:
+        """Drop a partition whose write failed, with its partial file."""
+        self._failed.add(key.text)
+        opened = self._open.pop(key.text, None)
+        if opened is not None:
+            opened[1].abort()
+        with contextlib.suppress(OSError):
+            _staged_path(self._out, key).unlink(missing_ok=True)
 
 
 class JournalWriter:

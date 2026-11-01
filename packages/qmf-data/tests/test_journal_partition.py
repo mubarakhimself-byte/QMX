@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TypeVar
 
 import pyarrow.parquet as pq
-from qmf.core import Result, is_ok, is_refusal
+from qmf.core import Result, is_ok, is_refusal, is_unpersistable
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import AppendOutcome, JournalWriter, WriterScope, stage
 from qmf.data.series import SeriesKey, SeriesStore, rule_for
@@ -103,3 +103,25 @@ def test_bundle_mode_writes_the_run_journal_as_partition_files(tmp_path: Path) -
     assert repeat.outcome is AppendOutcome.REPEAT
     assert written.rows == 1
     assert written.path == tmp_path / "out/journal-unit/u-dummy/signal/backtest.pc-1/2026-03.parquet"
+
+
+def test_a_refused_bundle_row_fails_its_partition_and_keeps_the_others(tmp_path: Path) -> None:
+    scope = WriterScope(JournalStream.UNIT, "u-dummy", JournalWorld.BACKTEST, "pc-1", "qmb", "b8")
+    writer = _ok(JournalWriter.open_bundle(tmp_path / "out", scope, clock=_clock()))
+    t0 = _START_NS // 1_000_000
+
+    refused = writer.append_series("recorded", "EURUSD", "bar-m1", (t0, 2**63, 2, 0, 1, 1.0))
+    signal = _ok(writer.append("signal", _SIGNAL, _FACTS))
+    again = writer.append_series("recorded", "EURUSD", "bar-m1", (t0 + 60_000, 1, 2, 0, 1, 1.0))
+    closed = writer.close()
+
+    assert is_unpersistable(refused)
+    assert is_unpersistable(again)
+    assert signal.outcome is AppendOutcome.APPENDED
+    assert is_refusal(closed)
+    assert is_unpersistable(closed)
+    assert closed.context["failed"] == ("recorded/EURUSD/bar-m1/-/2026-03",)
+    signal_path = tmp_path / "out/journal-unit/u-dummy/signal/backtest.pc-1/2026-03.parquet"
+    records = [json.loads(str(row[2])) for row in _rows(signal_path)]
+    assert [(record["seq"], record["record_id"]) for record in records] == [(0, "fp1:sha256:aa")]
+    assert list((tmp_path / "out").rglob("bar-m1/*.parquet")) == []
