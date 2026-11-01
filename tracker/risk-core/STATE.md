@@ -11,7 +11,13 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
    - G3 the old system (QMX-discussion)
    - G4 the current Book and BMS (docs, `_docwork`, GitBook/node docs, shipped code)
 3. After grounding: build a timeline of how his risk/sizing thinking evolved (`grounding/G5-timeline.md`): QMX-discussion (old system) → the 10-05 and 10-13 sessions → "Risk & sizing QML redesign" (10-15 to 10-20) → "Agent team for MT5 article analysis" (10-20 to 10-29) → the unit-plan risk pack (10-27 to 11-01). For each stage: what changed, what was dropped, and why. The timeline is for the lead's own understanding; report it to him only briefly.
-4. Landscape given (opinion on both systems). His backstory and first takes are below (2026-11-01). Scenario maths started: `grounding/sims/freq_vs_size.py` (bigger bets vs more bets, ORB losing runs). Next: his reaction to the answers, then the clean starting point (phase 1 on the $500 seed).
+4. Landscape given (opinion on both systems). His backstory and first takes are below (2026-11-01). Scenario maths started: `grounding/sims/freq_vs_size.py` (bigger bets vs more bets, ORB losing runs).
+5. **Grounding round 2 started 2026-11-01 21:20, on his go ("start grounding... we shall ground only"). Stop line: midnight, grounding only.** Three agents:
+   - G6: Book/BMS levels and paper/live (Opus) → `grounding/G6-book-bms-levels-and-paper.md`
+   - G7: what a unit receives from QMB and the MIS, plus instruments and costs (Opus) → `grounding/G7-unit-inputs-qmb-mis-instruments.md`
+   - Seed register from this session's transcript verbatim (**Fable, his explicit ask**) → `seeds/operator-words-2026-11-01.md` and `seeds/SEEDS.md`, including what this STATE file missed or got wrong.
+6. He has not read the lead's long third-round answer and will read it on 2 Nov morning. **Do nothing that needs him to have read it:** no decisions, no research, no generative steps. When the agents finish: check each file, commit, acknowledge in two lines, stop.
+7. Research is not started. Drop prop-firm buffers from the research list; he only used them to explain. The proposed route (seed register → grounding → research → wayfinder → generative round → funnel → maths → architecture → review) waits for his reading.
 
 ## The unit build is not ours to audit (operator, 2026-11-01)
 
