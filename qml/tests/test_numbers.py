@@ -228,6 +228,22 @@ def test_lots_round_down_to_the_step_and_refuse_below_the_minimum() -> None:
     assert "minimum lot of 0.01" in str(below.context["reason"])
 
 
+def test_lots_round_down_exactly_past_28_digits() -> None:
+    sized = lots(Decimal("12345678901234567890123456789.01"), XAUUSD)
+
+    assert sized == Ok(Quantity(1234567890123456789012345678901, "lot", 2))
+
+
+def test_a_range_past_28_digits_is_checked_exactly() -> None:
+    wide = {"min": "0", "max": "100000000000000000000", "step": "0.0000000001"}
+    off = {"min": "0", "max": "100000000000000000000.00000000005", "step": "0.0000000001"}
+
+    assert _errors(_unit(("numbers/target_r/range", wide))) == set()
+    assert _errors(_unit(("numbers/target_r/range", off))) == {
+        ("bad_range", "/numbers/target_r/range/step")
+    }
+
+
 def test_twenty_pips_on_one_eurusd_lot_is_200_dollars() -> None:
     stop = distance(Decimal("20"), Measure.PIPS, EURUSD)
     assert isinstance(stop, Ok)

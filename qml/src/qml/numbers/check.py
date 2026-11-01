@@ -11,6 +11,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
+from fractions import Fraction
 from typing import Final
 
 from qml.numbers.measures import MEASURES, Form, MeasureRule
@@ -126,7 +127,7 @@ def _range(found: _Found, where: str, span: Range, measure: Measure) -> bool:
             "use a step above zero",
         )
         return False
-    if (span.max - span.min) % span.step != 0:
+    if ((Fraction(span.max) - Fraction(span.min)) / Fraction(span.step)).denominator != 1:
         found.error(
             ProblemKind.BAD_RANGE,
             _at(where, "step"),

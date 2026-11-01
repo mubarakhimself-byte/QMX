@@ -87,22 +87,25 @@ def from_atr(multiple: Decimal, atr: PriceDelta) -> Result[PriceDelta]:
 
 def lots(amount: Decimal, record: InstrumentRecord) -> Result[Quantity]:
     """A size in lots rounded down to the record's lot step, refused outside its lot limits."""
-    size = record.lot_step * floor(Fraction(amount) / Fraction(record.lot_step))
-    if size < record.min_lot:
+    step = Fraction(record.lot_step)
+    steps = floor(Fraction(amount) / step)
+    scale = places(record.lot_step)
+    units = steps * int(step * 10**scale)
+    size = Decimal(f"{units}E-{scale}")
+    if steps * step < Fraction(record.min_lot):
         return invalid(
             "lots",
             f"{amount} lots rounds down to {size}, below {record.name}'s minimum lot "
             f"of {record.min_lot}",
             record=record.name,
         )
-    if record.max_lot is not None and size > record.max_lot:
+    if record.max_lot is not None and steps * step > Fraction(record.max_lot):
         return invalid(
             "lots",
             f"{amount} lots is above {record.name}'s largest order of {record.max_lot}",
             record=record.name,
         )
-    scale = places(record.lot_step)
-    return Ok(Quantity(int(size.scaleb(scale)), "lot", scale))
+    return Ok(Quantity(units, "lot", scale))
 
 
 def value_factor(record: InstrumentRecord) -> ValueFactor:
