@@ -14,7 +14,21 @@
           "combination",
           "feature",
           "filter",
-          "labeler"
+          "labeler",
+          "trigger",
+          "exit",
+          "sizer",
+          "motion",
+          "reading",
+          "combiner",
+          "calendar",
+          "context",
+          "structure",
+          "statistic",
+          "model",
+          "entry_order",
+          "halt",
+          "hook"
         ]
       },
       "inputs": {
@@ -28,6 +42,14 @@
       },
       "logic_fingerprint": {
         "type": "string"
+      },
+      "entry": {
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -79,9 +101,20 @@
     "tags",
     "aliases",
     "intent_key",
-    "semver"
+    "semver",
+    "status"
   ],
   "merge": {
     "default": "pick-one"
-  }
+  },
+  "checks": [
+    {
+      "checker": "qml.entry/1",
+      "on": "put",
+      "applies_when": {
+        "pointer": "/entry/schema",
+        "equals": "qmx.entry/1"
+      }
+    }
+  ]
 }

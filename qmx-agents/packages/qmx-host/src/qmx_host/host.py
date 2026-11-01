@@ -108,6 +108,7 @@ from qmx_judge.landing import Stored
 from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
+from qmx_library.kinds import Checker, Problem
 from qmx_library.landing import NOT_PRIMARY
 from qmx_library.port import Draft, LibraryRefused, StoreRole
 from qmx_library.principal import MAIN, Act, Principal
@@ -131,6 +132,7 @@ from qmx_router.server import (
     RouterService,
     node_app,
 )
+from qmx_tools.gather import check_unit, entry_problems
 from uvicorn.config import STARTUP_FAILURE
 
 from qmx_host.backups import Backups, Refusal, backups_router
@@ -149,6 +151,7 @@ from qmx_host.connect import KINDS, Connect, World, connect_router, placement
 from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
+from qmx_host.first_start import land_dummy
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.maintenance import maintenance_router
@@ -185,6 +188,9 @@ DID_NOT_OPEN: Final = 2
 E); `__main__` exits 2 for a folder it refuses before the host starts."""
 PORT_TAKEN: Final = 4
 OPEN_REFUSALS: Final = (StoreRefused, LibraryRefused, EngineLibraryRefused)
+UNIT_CHECKER: Final = "qml.unit/1"
+ENTRY_CHECKER: Final = "qml.entry/1"
+CHECK_FAILED: Final = "check_failed"
 """What a store, the engine's ledger or either Library side raises when it must not open. Two
 classes share the name `LibraryRefused`, one per side of the engine's Library port."""
 
@@ -721,6 +727,54 @@ def recheck_test_runs(home: Path, store: Store) -> None:
         print(f"library: {archived} old items made by test runs archived", file=sys.stderr)
 
 
+def unit_problems(store: Store) -> Checker:
+    """`qml.unit/1`, the `unit` kind's publish check: QML's layers A to F over the document with
+    what `gather` found in this store."""
+
+    def checked(fields: JsonObject) -> list[Problem]:
+        result, warnings = check_unit(store, fields)
+        for line in warnings:
+            print(f"library: {line}", file=sys.stderr)
+        return [
+            Problem(p.message, p.where, CHECK_FAILED, f"{p.layer}/{p.kind.value}")
+            for p in result.errors
+        ]
+
+    return checked
+
+
+def entry_check(fields: JsonObject) -> list[Problem]:
+    """`qml.entry/1`, the put check of a `component` marked `qmx.entry/1`: its face reads as
+    QML's entry. QML names a face problem by its place in the face, under `/entry` here."""
+    return [
+        Problem(
+            p.message,
+            (p.where if p.where == "/component_type" else f"/entry{p.where}".rstrip("/"),),
+            CHECK_FAILED,
+            "entry/face",
+        )
+        for p in entry_problems(fields)
+    ]
+
+
+def register_checkers(store: Store) -> None:
+    """The checkers the Library's kind files name, registered at composition (Part A AD-112)."""
+    store.register_checker(UNIT_CHECKER, unit_problems(store))
+    store.register_checker(ENTRY_CHECKER, entry_check)
+
+
+def land_first_unit(store: Store) -> None:
+    """The dummy unit waits in his Library as a draft from the first start on (AD-118). A store
+    that refuses the put (a replica, a read-only store) is named and the host starts anyway."""
+    try:
+        landed = land_dummy(store)
+    except LibraryRefused as refused:
+        print(f"library: the dummy unit did not land: {refused}", file=sys.stderr)
+        return
+    if landed is not None:
+        print("library: the dummy unit waits in the Library as a draft", file=sys.stderr)
+
+
 def library_line(store: Store) -> DoctorLine:
     """The doctor's Library row: the store's health, its alarms and the line that stopped it."""
     state = store.state
@@ -803,6 +857,9 @@ async def serve(
             floor = floor_bytes(section(control, "engine"), free_bytes(home))
             with open_store(home, root, serving=serving, floor=floor) as store:
                 recheck_test_runs(home, store)
+                register_checkers(store)
+                if not serving:
+                    land_first_unit(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
                 runtime.attach_landers(landers(store, runtime, name))

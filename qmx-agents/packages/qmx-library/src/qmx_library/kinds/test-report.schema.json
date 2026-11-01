@@ -21,6 +21,26 @@
           "string",
           "null"
         ]
+      },
+      "check": {
+        "type": "string"
+      },
+      "compiled_fingerprint": {
+        "type": "string"
+      },
+      "unit_ref": {
+        "type": "object",
+        "properties": {
+          "unit_id": {
+            "type": "string"
+          }
+        }
+      },
+      "safety": {
+        "type": "object"
+      },
+      "behaviour": {
+        "type": "object"
       }
     }
   },

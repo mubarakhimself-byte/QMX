@@ -35,6 +35,7 @@ import sys
 import tempfile
 import threading
 import tomllib
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from copy import deepcopy
@@ -46,7 +47,9 @@ from typing import Any, Final, cast
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictBool
+from qmf.core import is_refusal
+from qmf.core.fingerprint import fingerprint
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.library import UNFINISHED, old_library
 from qmx_control.service import ControlService, kept_word_for_word
@@ -89,6 +92,10 @@ from qmx_home.classes import PER_MACHINE_KEYS
 from qmx_home.files import Busy, Held, copy_file, hold, local_floor
 from qmx_home.rclone import Rclone
 from qmx_home.versions import check_open
+from qmx_library.port import Draft, ObjectId
+from qmx_library.principal import Principal, drafts_ref
+from qmx_library.store import Store
+from qmx_tools.gather import DUMMY, template
 
 from qmx_host.bring_in import (
     BUSY,
@@ -157,6 +164,7 @@ DRIVE_REMOTE: Final = 4
 DRIVE_REMOVABLE: Final = 2
 SYNC_ROOTS_KEY: Final = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\SyncRootManager"
 DRIVEFS_KEY: Final = r"Software\Google\DriveFS"
+OPERATOR: Final = Principal("operator")
 
 
 def default_old() -> Path:
@@ -577,6 +585,30 @@ def make_new(folder: Path, places: Places) -> Layout:
             raise Refused(str(refused)) from None
         write_pointer(layout.root)
     return layout
+
+
+def _fingerprint(value: object) -> str | None:
+    made = fingerprint(value)
+    return None if is_refusal(made) else made.value.value
+
+
+def land_dummy(store: Store) -> ObjectId | None:
+    """The dummy unit as a `unit` draft, once per store (AD-118, R1-A-05), or None when it is there.
+
+    The find-then-put of `qmx_library.migrate.from_apps.once`, keyed by the document's
+    fingerprint: any `dummy-trend-pullback` unit ever placed with that fingerprint, drafts and
+    his later edits' history included, means nothing is written. It puts on the item's draft ref
+    only and never merges onto `main`, so only his yes publishes it."""
+    document = template(DUMMY)
+    key = _fingerprint(document)
+    for object_id in store.with_field("unit", "unit_id", DUMMY):
+        if _fingerprint(store.get(OPERATOR, object_id).fields) == key:
+            return None
+    item = str(uuid.uuid7())
+    title = str(document.get("title") or DUMMY)
+    fields = cast(dict[str, JsonValue], document)
+    draft = Draft("unit", item, title, fields=fields)
+    return store.put(OPERATOR, draft, on=drafts_ref(item), expected_head=None).object_id
 
 
 def open_existing(folder: Path, places: Places) -> Layout:
