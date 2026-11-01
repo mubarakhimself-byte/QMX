@@ -19,7 +19,6 @@ in-process value a test passes is never proof of isolation.
 from __future__ import annotations
 
 import bisect
-import hashlib
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -27,7 +26,7 @@ from decimal import Decimal
 from typing import Final, Protocol, cast
 
 from qmf.core.chrono import Instant
-from qmf.core.fingerprint import Fingerprint, fingerprint
+from qmf.core.fingerprint import Fingerprint, fingerprint, fingerprint_bytes
 from qmf.core.refusal import is_refusal
 from qmf.risk.paper import ExecutionTarget
 
@@ -262,7 +261,7 @@ def _shuffled(bars: Mapping[str, Sequence[QuoteBar]], seed: str) -> dict[str, li
             held = days[day]
             order = sorted(
                 range(len(held)),
-                key=lambda i: hashlib.sha256(f"{seed}:{market}:{day}:{i}".encode()).digest(),
+                key=lambda i: fingerprint_bytes(f"{seed}:{market}:{day}:{i}".encode()).value,
             )
             shuffled += [
                 QuoteBar(held[i].knowable_at, held[j].bid, held[j].ask) for i, j in enumerate(order)
