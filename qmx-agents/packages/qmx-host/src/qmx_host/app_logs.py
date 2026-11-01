@@ -152,6 +152,7 @@ class AppLogs:
             return 0
         room = telemetry.CAPACITY - _held(found)
         handed = 0
+        before = dict(self.cursors)
         files = self._files()
         self.cursors = {name: at for name, at in self.cursors.items() if name in files}
         for name, path in files.items():
@@ -164,18 +165,21 @@ class AppLogs:
         if handed < room:
             handed += self._ship_incidents(found, room - handed)
         self.shipped += handed
-        self._save()
+        if self.cursors != before:
+            self._save()
         return handed
 
     async def run(self) -> None:
         """Ship until cancelled. A pass that fails is skipped; the next one starts where the
         cursors say."""
         while True:
+            every = EVERY_S
             try:
                 await asyncio.to_thread(self.tick)
+                every = self.every_s()
             except (OSError, ValueError) as error:
                 print(f"app logs: a shipping pass was skipped: {error}", file=sys.stderr)
-            await asyncio.sleep(self.every_s())
+            await asyncio.sleep(every)
 
     def doctor_line(self) -> DoctorLine:
         """The doctor's deep-logs row: off as off, or what was shipped and what was lost."""
