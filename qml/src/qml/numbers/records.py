@@ -115,11 +115,9 @@ def _pip(value: object) -> object | None:
     given = cast(dict[str, object], value)
     size = _positive_decimal(given.get("size"))
     source = _text(given.get("source"))
-    if set(given) != {"size", "source"} or not isinstance(size, Decimal):
+    if set(given) != {"size", "source"} or not isinstance(size, Decimal) or source is None:
         return None
-    if not isinstance(source, str):
-        return None
-    return Pip(size, source)
+    return Pip(size, str(source))
 
 
 _WANTS: Final[Mapping[_Reader, str]] = {
