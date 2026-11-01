@@ -58,7 +58,7 @@ He saw the "next" list change between messages. This is the single list; every m
 3. R1, the full review (`R1-full-review.md`); one fix round by fresh agents per part; one fix-check.
 4. P2 (`P2-plan-and-prompts.md`): the build plan checked to 0 problems, the orchestrator prompt, the builder brief, the UI notes, the placeholders list.
 5. The final brief to him, with the paste prompt.
-6. The MIS page for him (an artifact: the research, his visions, what the build ships; ruling 55), after P2 so it can show what ships.
+6. (done 1 Nov) The MIS page: https://claude.ai/artifact/WBq7u4Mwd3XSzzsadX2qou ; source `explainers/mis/mis-field-notes.html`, content `architecture/MIS-PAGE-CONTENT.md`.
 
 ## Operator round 2026-10-31 midday: build the foundation, plan to the orchestrator prompt tonight (binding; outranks 52, 53 and the morning program)
 

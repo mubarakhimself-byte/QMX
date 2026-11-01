@@ -1,0 +1,391 @@
+<title>MIS Field Notes</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column with wide data panels; a trading-desk notebook in teal ink with amber for what is still open */
+:root {
+  --bg: #f3f5f2; --panel: #ffffff; --fg: #16201c; --muted: #58645e; --line: #d6dcd5;
+  --accent: #0e6b61; --accent-soft: #dcefeb; --open: #a8550a; --open-soft: #f8e9da;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1412; --panel: #161d1a; --fg: #e4eae6; --muted: #9aa7a0; --line: #28322e;
+  --accent: #52b9aa; --accent-soft: #15302b; --open: #f0a35a; --open-soft: #33251a; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1412; --panel: #161d1a; --fg: #e4eae6; --muted: #9aa7a0; --line: #28322e;
+  --accent: #52b9aa; --accent-soft: #15302b; --open: #f0a35a; --open-soft: #33251a; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.55; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 64px; display: grid; gap: 56px; }
+.prose { max-width: 66ch; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.1; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2.6rem, 6vw, 4rem); letter-spacing: 0.01em; }
+h2 { font-size: 2rem; margin-bottom: 12px; }
+h3 { font-size: 1.3rem; }
+p { margin: 0 0 12px; }
+.eyebrow { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.lede { font-size: 1.2rem; color: var(--fg); }
+.muted { color: var(--muted); }
+section { display: grid; gap: 16px; }
+
+/* the lane picture */
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.lane { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.lane .tag { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.lane.mis { border-color: var(--accent); background: var(--accent-soft); }
+.lane p { margin: 0; font-size: 0.97rem; }
+.flowline { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); }
+
+/* chart */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-family: var(--mono); font-size: 0.8rem; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.chip:focus-visible, .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chart-scroll { overflow-x: auto; }
+svg text { fill: var(--fg); font-family: var(--mono); font-size: 11px; }
+svg .axis text { fill: var(--muted); }
+svg .grid line { stroke: var(--line); }
+svg .bar { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+svg .dot { fill: var(--accent); }
+svg .ring { fill: var(--panel); stroke: var(--accent); stroke-width: 2; }
+svg .calbox { fill: var(--muted); }
+svg text.caltext { fill: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; background: var(--accent); }
+.legend span.slow::before { background: transparent; border: 2px solid var(--accent); width: 6px; height: 6px; }
+.legend span.cal::before { background: var(--muted); border-radius: 2px; }
+
+/* class tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); }
+.tab { font-family: var(--display); font-size: 1.1rem; font-weight: 600; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted); padding: 8px 10px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.classview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding-top: 12px; }
+.classview ul { margin: 0; padding-left: 18px; }
+.classview li { margin-bottom: 4px; }
+.box-title { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+
+/* visions */
+.filterrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.visions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.vision { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.vision blockquote { margin: 0; padding-left: 12px; border-left: 2px solid var(--line); font-size: 0.98rem; }
+.vision blockquote cite { display: block; font-style: normal; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+.status { justify-self: start; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; border-radius: 4px; padding: 2px 8px; background: var(--accent-soft); color: var(--accent); }
+.status.open { background: var(--open-soft); color: var(--open); }
+.vision .how { font-size: 0.95rem; color: var(--fg); margin: 0; }
+
+/* findings and steps */
+.findings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.finding { border-top: 2px solid var(--accent); padding-top: 10px; min-width: 0; }
+.finding .num { font-family: var(--display); font-size: 1.8rem; font-weight: 600; color: var(--accent); line-height: 1; font-variant-numeric: tabular-nums; }
+.finding p { margin: 6px 0 0; font-size: 0.97rem; }
+.finding .src { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; counter-reset: s; }
+.steps li { counter-increment: s; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; font-size: 0.95rem; min-width: 0; }
+.steps li::before { content: counter(s); display: block; font-family: var(--display); font-weight: 600; font-size: 1.4rem; color: var(--accent); }
+.steps li.his { border-color: var(--open); }
+.steps li.his::before { color: var(--open); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+ul.plain { margin: 0; padding-left: 18px; }
+ul.plain li { margin-bottom: 6px; }
+.questions { margin: 0; padding-left: 22px; }
+.questions li { margin-bottom: 10px; }
+.foot { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+code { font-family: var(--mono); font-size: 0.85em; }
+
+@media (max-width: 760px) {
+  .lanes, .visions, .findings, .classview, .two { grid-template-columns: minmax(0, 1fr); }
+  .steps { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { .chip, .tab { transition: background 120ms ease, color 120ms ease, border-color 120ms ease; } }
+</style>
+
+<div class="wrap">
+
+<header class="prose">
+  <div class="eyebrow">QMX · market information system</div>
+  <h1>MIS Field Notes</h1>
+  <p class="lede">The MIS reads every market QMX trades and publishes what it sees: how volatile a market is against its own usual level, whether it is trending or ranging, how wide the spread is, and which session or event window is open, each stamped with the time it was read.</p>
+  <p>Units pick from these readings if they want them. No unit needs the MIS to trade: if it stops, every unit keeps trading on its own conditions. It starts with plain indicators and simple statistics that need no training, and it takes the models you train later in the Lab without any unit changing.</p>
+</header>
+
+<section aria-labelledby="h-fit">
+  <h2 id="h-fit">Where it sits</h2>
+  <div class="lanes">
+    <div class="lane">
+      <div class="tag">The markets</div>
+      <h3>Live feeds and history</h3>
+      <p>Each trading node's live feed, plus the Library's history that you download.</p>
+    </div>
+    <div class="lane mis">
+      <div class="tag">The MIS</div>
+      <h3>Reads and publishes</h3>
+      <p>On each trading node and on your PC. Every reading lands in the Library with its value, where it sits against usual, a word, and a health word.</p>
+    </div>
+    <div class="lane">
+      <div class="tag">Who reads it</div>
+      <h3>Units, QMB, agents, you</h3>
+      <p>Units pick readings with a fallback. QMB replays the same code. Agents read the logs in the slow lane. You read the MIS tab.</p>
+    </div>
+  </div>
+  <p class="flowline">fast lane: the unit, its fast readings, the kill switches · no agents &nbsp;|&nbsp; slow lane: agents, the session and day readings, journals, the Library</p>
+</section>
+
+<section aria-labelledby="h-speed">
+  <h2 id="h-speed">How fast each reading reacts</h2>
+  <p class="prose muted">Minutes on 1-minute bars, at one false alarm per 10 trading days. The dot is a strong change, the ring a weak one. Numbers come from simulations on made-up bars, so real markets will be somewhat slower. Pick a market class to see which readings it gets.</p>
+  <div class="chips" role="group" aria-label="Market class">
+    <button class="chip" id="cls-all" aria-pressed="true" data-cls="all">All classes</button>
+    <button class="chip" id="cls-forex" aria-pressed="false" data-cls="forex">Forex</button>
+    <button class="chip" id="cls-futures" aria-pressed="false" data-cls="futures">Futures</button>
+    <button class="chip" id="cls-metals" aria-pressed="false" data-cls="metals">Metals</button>
+    <button class="chip" id="cls-cfds" aria-pressed="false" data-cls="cfds">CFDs</button>
+    <button class="chip" id="cls-indices" aria-pressed="false" data-cls="indices">Indices</button>
+    <button class="chip" id="cls-perps" aria-pressed="false" data-cls="perps">Crypto perps</button>
+  </div>
+  <div class="panel">
+    <div class="chart-scroll"><svg id="speed" role="img" aria-label="Reaction time of each default reading, in minutes on a log scale"></svg></div>
+    <div class="legend"><span>strong change</span><span class="slow">weak change</span><span class="cal">known in advance (calendar)</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="h-class">
+  <h2 id="h-class">What each market class gets first</h2>
+  <div class="tabs" role="tablist" aria-label="Market class readings">
+    <button class="tab" role="tab" id="tab-forex" aria-selected="true" data-k="forex">Forex</button>
+    <button class="tab" role="tab" id="tab-futures" aria-selected="false" data-k="futures">Futures</button>
+    <button class="tab" role="tab" id="tab-metals" aria-selected="false" data-k="metals">Metals</button>
+    <button class="tab" role="tab" id="tab-cfds" aria-selected="false" data-k="cfds">CFDs</button>
+    <button class="tab" role="tab" id="tab-indices" aria-selected="false" data-k="indices">Indices</button>
+    <button class="tab" role="tab" id="tab-perps" aria-selected="false" data-k="perps">Crypto perps</button>
+  </div>
+  <div class="classview" role="tabpanel">
+    <div class="panel">
+      <div class="box-title">Every class</div>
+      <ul>
+        <li>Volatility against usual, from bar ranges</li>
+        <li>Volatility state: quiet, normal, elevated, stressed</li>
+        <li>Spread against usual, and spread quality</li>
+        <li>Tick rate against usual (never called volume)</li>
+        <li>Quote gaps, feed state, failing sensors</li>
+        <li>Liquidity stress</li>
+        <li>Small change detectors</li>
+        <li>Efficiency ratio, variance ratio, Hurst (1,000 points at least)</li>
+        <li>Trend against range: your meaning of regime</li>
+        <li>Calendar states: sessions, holidays, dead zones</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="box-title" id="adds-title">Forex adds</div>
+      <ul id="adds"></ul>
+    </div>
+  </div>
+  <p class="muted prose">On your PC only: currency strength, dispersion (how far related markets drift apart), crowding counts (how many units sit on one market), and dated readings between pairs.</p>
+</section>
+
+<section aria-labelledby="h-vis">
+  <h2 id="h-vis">Your visions, in your words</h2>
+  <p class="prose muted">Every quote is yours, checked against the transcripts. Each card says whether the design keeps it or what is still open. On 31 Oct you named two of these as key, more than the research: levels of specificity, and an MIS that works on one market alone.</p>
+  <div class="filterrow" role="group" aria-label="Filter visions">
+    <button class="chip" id="vf-all" aria-pressed="true" data-v="all">All</button>
+    <button class="chip" id="vf-kept" aria-pressed="false" data-v="kept">Kept</button>
+    <button class="chip" id="vf-open" aria-pressed="false" data-v="open">Something open</button>
+  </div>
+  <div class="visions" id="visions"></div>
+</section>
+
+<section aria-labelledby="h-res">
+  <h2 id="h-res">What the research found</h2>
+  <div class="findings" id="findings"></div>
+</section>
+
+<section aria-labelledby="h-runs">
+  <h2 id="h-runs">Where it runs, and what you see</h2>
+  <div class="two">
+    <div class="panel">
+      <div class="box-title">Where it runs</div>
+      <ul class="plain">
+        <li><strong>On each trading node.</strong> The node runs the readings that need every tick: spread, quote gaps, feed state, tick rate, depth, order flow. A small MIS app beside it runs the bar, session and day readings.</li>
+        <li><strong>On your PC.</strong> The slow readings for markets no node trades, the readings that compare markets, the board, and any model in shadow. It works alone on Library history.</li>
+        <li><strong>One writer per reading.</strong> Your PC never recomputes what a node already publishes.</li>
+        <li><strong>Everything comes home</strong> to the Library, so QMB, the copilot and your screens see one history.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <div class="box-title">What you see</div>
+      <ul class="plain">
+        <li><strong>A Readings section on each node's page:</strong> that node's markets, their readings now and recently, each with its health word, and a badge when a unit used a fallback.</li>
+        <li><strong>The MIS tab on your PC:</strong> every market and reading, its version, clock and health word, which units read it, a history chart of each change of state, and a shadow model beside the default with your yes to make it live.</li>
+        <li><strong>The copilot:</strong> ask what the MIS read for a market last week and get the stored answer.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="box-title">How units use it without depending on it</div>
+    <ul class="plain">
+      <li>A unit lists the readings it uses, and for each one a fallback: compute it itself, treat it as absent, or take no new entries.</li>
+      <li>A unit, QMB and the MIS run the same reading code, so a backtest and live trading see the same number. A replay of one recorded day checks it to the last digit.</li>
+      <li>A reading older than its freshness limit counts as absent: 2 seconds for tick readings, one bar, one session or one day for the others.</li>
+      <li>A build test stops the MIS and checks that a dummy unit still trades.</li>
+    </ul>
+  </div>
+  <p class="muted prose">Build order: the MIS on your PC lands in stage 5 of 8, after QML and the dictionary. The MIS beside each node lands with the node in stage 7.</p>
+</section>
+
+<section aria-labelledby="h-later">
+  <h2 id="h-later">Later, through the Lab: how a model replaces a default</h2>
+  <ol class="steps">
+    <li>A model trains in the Lab on Library history, pooled by class or by underlying, never one per market.</li>
+    <li>It lands with its data fingerprint, code version and seed.</li>
+    <li>It runs on your PC beside the default and writes shadow records.</li>
+    <li class="his">You compare the two on the MIS tab and say yes.</li>
+    <li>The reading keeps its name and shape; only its version moves, so no unit changes.</li>
+  </ol>
+  <p class="prose muted">Refits run monthly in shadow. Agents may propose new readings; they run in shadow too and go live only on your yes. To prove the MIS helps a unit, QMB replays it twice: once with readings stamped at entry, once with readings computed afterwards. The gap shows how much a backtest would overstate the MIS.</p>
+</section>
+
+<section aria-labelledby="h-q">
+  <h2 id="h-q">Open questions for later</h2>
+  <ol class="questions prose">
+    <li><strong>Futures data.</strong> Pay for an exchange feed, which gives real futures order flow and lets a gold CFD read the COMEX tape, or stay on broker-side estimates. A placeholder ships either way.</li>
+    <li><strong>The word regime.</strong> It now means trend against range, and the old volatility labels become volatility state. Keep it, or veto it.</li>
+    <li><strong>Your own labels.</strong> May the weekly market labels you and the copilot write train models, in shadow only?</li>
+    <li><strong>One market apart.</strong> When a market behaves unlike its class, does it get its own pack version, or only its own usual levels, which every market already has?</li>
+    <li><strong>The board on the server.</strong> Should units on a node see which of their markets the board favours now? It ships last and optional.</li>
+  </ol>
+</section>
+
+<footer class="foot">Sources: research 22, 23, 37 and the MIS funnel; your words in the 28 to 31 Oct transcripts; the MIS design in the unit-system architecture (Level 0 part P13; part C, MIS). Content file: tracker/risk-sizing/architecture/MIS-PAGE-CONTENT.md on branch plan/unit-system.</footer>
+</div>
+
+<script>
+(function () {
+  var A = ["forex","futures","metals","cfds","indices","perps"];
+  var rows = [
+    {n:"Volatility vs usual (ranges)", c:A, f:8, s:16},
+    {n:"Volatility from closes", c:A, f:27, s:69},
+    {n:"Volatility state", c:A, f:8, s:16},
+    {n:"Change detectors", c:A, f:29, s:61},
+    {n:"Spread vs usual", c:A, f:0.033},
+    {n:"Tick rate vs usual", c:A, f:0.033},
+    {n:"Quote gaps, feed state", c:A, f:0.033},
+    {n:"Liquidity stress", c:A, f:1},
+    {n:"Efficiency ratio", c:A, f:264, s:1530},
+    {n:"Variance ratio", c:A, f:318, s:1072},
+    {n:"Hurst (1-minute points)", c:A, f:1000, s:4000},
+    {n:"Trend against range", c:A, f:264, s:1530},
+    {n:"Depth and imbalance", c:["forex","metals","indices","perps","futures"], f:0.033},
+    {n:"Order-flow pressure", c:A, f:0.033},
+    {n:"Funding state", c:["perps"], f:60, s:480},
+    {n:"Open interest, basis", c:["perps","futures"], f:1, s:1440},
+    {n:"Calendar states", c:A, cal:true},
+    {n:"Roll, expiry, limits", c:["futures","cfds"], cal:true},
+    {n:"London fix windows", c:["metals"], cal:true}
+  ];
+  var NS = "http://www.w3.org/2000/svg";
+  var svg = document.getElementById("speed");
+  var W = 760, L = 190, R = 24, rowH = 24, top = 30;
+  var H = top + rows.length * rowH + 10;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  var lo = Math.log10(0.02), hi = Math.log10(5000);
+  function x(v) { return L + (Math.log10(v) - lo) / (hi - lo) * (W - L - R); }
+  function el(t, a, p) { var e = document.createElementNS(NS, t); for (var k in a) e.setAttribute(k, a[k]); (p || svg).appendChild(e); return e; }
+  var grid = el("g", {"class": "grid axis"});
+  [[0.033,"2 s"],[1,"1 min"],[10,"10 min"],[60,"1 h"],[1440,"1 day"]].forEach(function (t) {
+    el("line", {x1: x(t[0]), x2: x(t[0]), y1: top - 8, y2: H - 6}, grid);
+    var tx = el("text", {x: x(t[0]), y: top - 14, "text-anchor": "middle"}, grid); tx.textContent = t[1];
+  });
+  var rowEls = rows.map(function (r, i) {
+    var g = el("g", {});
+    var y = top + i * rowH + rowH / 2;
+    var lab = el("text", {x: L - 10, y: y + 4, "text-anchor": "end"}, g); lab.textContent = r.n;
+    if (r.cal) {
+      el("rect", {x: L, y: y - 5, width: 10, height: 10, rx: 2, "class": "calbox"}, g);
+      var t = el("text", {x: L + 16, y: y + 4, "class": "caltext"}, g); t.textContent = "known in advance";
+    } else {
+      if (r.s) el("line", {x1: x(r.f), x2: x(r.s), y1: y, y2: y, "class": "bar"}, g);
+      el("circle", {cx: x(r.f), cy: y, r: 5.5, "class": "dot"}, g);
+      if (r.s) el("circle", {cx: x(r.s), cy: y, r: 4.5, "class": "ring"}, g);
+    }
+    return {g: g, r: r};
+  });
+  function filterClass(k) {
+    rowEls.forEach(function (o) { o.g.setAttribute("opacity", (k === "all" || o.r.c.indexOf(k) >= 0) ? "1" : "0.18"); });
+    document.querySelectorAll("[data-cls]").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.cls === k ? "true" : "false"); });
+  }
+  document.querySelectorAll("[data-cls]").forEach(function (b) { b.addEventListener("click", function () { filterClass(b.dataset.cls); }); });
+
+  var adds = {
+    forex: ["Depth against usual and imbalance, from cTrader's broker book", "Order-flow pressure, as a broker-side estimate", "Currency strength across pairs"],
+    futures: ["Roll state, days to expiry, price-limit state", "Sessions in the exchange's own time zone", "Open interest at end of day", "Real depth and order flow once you switch on an exchange feed (a working placeholder reads files you drop in a folder)", "Index futures: the cash-open readings; gold futures: the fix windows"],
+    metals: ["London fix windows, 10:30 and 15:00 London", "Broker depth", "Order-flow estimate", "Gold's price forms at COMEX futures, so a gold CFD can read the futures"],
+    cfds: ["Commodity and stock CFDs take the shared readings", "Stock CFDs add the cash-open readings", "Futures-style CFDs add the roll state"],
+    indices: ["Cash open, opening drive, initial balance, overnight range", "Broker depth and order-flow estimate on index CFDs"],
+    perps: ["Real depth and trade flow, free from Hyperliquid, Binance and Bybit", "Funding state and its extremes", "Open interest change, mark against last, basis", "Activity sessions in place of clock sessions", "Index perps get the cash-open readings; gold perps the fix windows"]
+  };
+  var names = {forex:"Forex", futures:"Futures", metals:"Metals", cfds:"CFDs", indices:"Indices", perps:"Crypto perps"};
+  function showClass(k) {
+    document.getElementById("adds-title").textContent = names[k] + " adds";
+    var ul = document.getElementById("adds"); ul.innerHTML = "";
+    adds[k].forEach(function (a) { var li = document.createElement("li"); li.textContent = a; ul.appendChild(li); });
+    document.querySelectorAll(".tab").forEach(function (t) { t.setAttribute("aria-selected", t.dataset.k === k ? "true" : "false"); });
+  }
+  document.querySelectorAll(".tab").forEach(function (t) { t.addEventListener("click", function () { showClass(t.dataset.k); }); });
+  showClass("forex");
+
+  var V = [
+    {t:"It reads and publishes. Units pick. Nobody depends on it.", q:[["What I wanted was the MIS just reads and outputs.","28 Oct"],["It doesn't mean that if the MIS is not working, it doesn't mean that these bots won't trade. They will, okay?","29 Oct"]], st:"kept", h:"Each unit lists the readings it uses and what to do without them. A build test stops the MIS and checks that a dummy unit still enters a trade."},
+    {t:"It amplifies a unit. It never switches one on or off.", q:[["So in other words, it can be amplified by the MIS.","29 Oct"]], st:"open", h:"The MIS publishes a board of which markets are in which condition now. How much it lifts a given unit is not measured yet; QMB tests it once trades carry the reading they saw at entry."},
+    {t:"Context is what it senses. Find the mean-reverting markets.", q:[["I think context is what the MIS is meant to be sensing","29 Oct"],["the whole point of the MIS, okay, should be to find mean reverting markets at that time","29 Oct"]], st:"kept", h:"Every class gets a trend-against-range reading. On 1 and 5-minute bars it takes hours to show, so it works as a session or day list, not a per-trade signal."},
+    {t:"Style first, then timeframe, then the data a market offers.", q:[["we need a trading style, firstly","29 Oct"],["So it means the MIS for a market that has all that data is different.","29 Oct"]], st:"kept", h:"Every reading states its clock and the least data it needs. A market with less data gets fewer readings, never wrong ones."},
+    {t:"A scalper's MIS holds fast indicators, chosen by research.", q:[["you are not going to put an HMM inside a scalper's MIS","29 Oct"],["The MIS for a scalper should be from the research. We shouldn't assume that the HMM will work.","29 Oct"]], st:"kept", h:"The defaults ship no HMM. Fast readings are ratios against usual plus small change detectors. HMMs belong on the day clock, later, through the Lab."},
+    {t:"Per class, and down to one market.", q:[["we can design an MIS that fits, should I say, a futures market, then an MIS that also fits a Forex market","29 Oct"],["remember, we are literally working with almost every instrument now","31 Oct"]], st:"open", h:"Every class gets its own default pack; each reading compares a market with its own history at the same minute of its session. An MIS for one market is the same MIS set to read one market. Open: whether an odd market gets its own pack version."},
+    {t:"Levels of specificity.", q:[["It means that specificity is simpler.","28 Oct"],["Now I also think there are times whereby we can already attach a specific instrument or specific market to a unit.","29 Oct"]], st:"open", h:"Specificity is a setting: the same code reads everything, one class, or one market. Open: slow-lane agents may propose a more specific variant; making it trade stays your click."},
+    {t:"What goes in decides what comes out.", q:[["the quality of what's processing information inside the MIS is directly proportional to the quality of output","29 Oct"]], st:"kept", h:"Hurst, the variance ratio and the efficiency ratio ship with minimum-history rules; mean-reversion readings use mid prices and a bounce check; every record names the data it used and any fallback."},
+    {t:"Defaults now, your models later. It grows.", q:[["Let's make defaults for the MIS. I'll train the models when I can.","31 Oct"],["grow its own limbs","29 Oct"]], st:"kept", h:"Defaults need no training. Behind each reading sits a slot for a model, trained in the Lab, run in shadow, live only on your yes."},
+    {t:"Agents work in the slow lane and read the MIS's logs.", q:[["They should be using the logs from the MIS. Those are two different things.","31 Oct"]], st:"open", h:"Agents read reading history through one tool, write their own dated reading before a session, and get scored later. Disagreements come to you. Open: whether weekly labels may train models."},
+    {t:"Market state as a source of strategies.", q:[["there is a huge possibility we can discover market inefficiencies with only that","28 Oct"]], st:"open", h:"Real patterns exist (momentum into the close in 60+ futures, extreme perps funding) and fade once known. Each would become a unit through the Lab and QMB, with a watch for decay."},
+    {t:"The node sets it up.", q:[["setting up the MIS, and what everything the unit needs to trade autonomously","31 Oct"]], st:"kept", h:"A trading node installs its MIS in the same one-click setup. Your PC runs its own instance."}
+  ];
+  var box = document.getElementById("visions");
+  var cards = V.map(function (v) {
+    var d = document.createElement("article"); d.className = "vision"; d.dataset.st = v.st;
+    var s = document.createElement("span"); s.className = "status" + (v.st === "open" ? " open" : ""); s.textContent = v.st === "open" ? "kept, something open" : "kept";
+    var h = document.createElement("h3"); h.textContent = v.t;
+    d.appendChild(s); d.appendChild(h);
+    v.q.forEach(function (q) { var b = document.createElement("blockquote"); b.textContent = "“" + q[0] + "”"; var c = document.createElement("cite"); c.textContent = "you, " + q[1]; b.appendChild(c); d.appendChild(b); });
+    var p = document.createElement("p"); p.className = "how"; p.textContent = v.h; d.appendChild(p);
+    box.appendChild(d); return d;
+  });
+  function filterV(k) {
+    cards.forEach(function (c) { c.hidden = !(k === "all" || (k === "open" ? c.dataset.st === "open" : c.dataset.st === "kept")); });
+    document.querySelectorAll("[data-v]").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.v === k ? "true" : "false"); });
+  }
+  document.querySelectorAll("[data-v]").forEach(function (b) { b.addEventListener("click", function () { filterV(b.dataset.v); }); });
+
+  var F = [
+    ["8 bars", "A 50% jump in volatility shows in about 8 bars read from bar ranges, and about 27 from closes.", "research 22"],
+    ["4–5 h", "A strong trend or strong mean reversion takes 4 to 5 hours to show on 1 and 5-minute bars; weak ones a day or more. So it is a session or day list.", "research 22"],
+    ["+76%", "A label computed after the fact claimed a 76% better edge per trade; the honest label, known at entry, gave no gain when states lasted 2 hours. A state must last at least 5 times the reading's window.", "research 22"],
+    ["10–130×", "With heavy bid-ask bounce, price-only mean-reversion readings false-alarm 10 to 130 times more often than designed. Mid prices and a bounce check fix it.", "research 22"],
+    ["1,000", "Hurst means little below about 1,000 points, which is 17 hours of 1-minute bars.", "research 37"],
+    ["30–60 s", "Book and trade-flow pressure predict the next seconds and are gone by 30 to 60 seconds. Spot forex has no tape; its tick count tracks real volume hourly.", "research 37"],
+    ["shared", "Shared market words carry across markets; trained models did not carry from one crypto asset to another.", "research 23"],
+    ["COMEX", "Gold's price forms at COMEX futures, with about a tenth of London's volume, so a gold CFD can read the futures.", "research 37"],
+    ["−58%", "Published stock predictors lose 58% of their returns after publication; forex technical rules faded over about a decade.", "research 37"],
+    ["day clock", "HMMs detect changes fast but switch falsely in short bursts. They belong on the day clock.", "research 37, 22"]
+  ];
+  var fb = document.getElementById("findings");
+  F.forEach(function (f) {
+    var d = document.createElement("div"); d.className = "finding";
+    var n = document.createElement("div"); n.className = "num"; n.textContent = f[0];
+    var p = document.createElement("p"); p.textContent = f[1];
+    var s = document.createElement("div"); s.className = "src"; s.textContent = f[2];
+    d.appendChild(n); d.appendChild(p); d.appendChild(s); fb.appendChild(d);
+  });
+})();
+</script>
