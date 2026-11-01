@@ -263,6 +263,33 @@ def test_two_drives_over_the_real_month_give_the_same_steps() -> None:
     _check_month(_slice(_REAL, ""))
 
 
+def _windows(unit: HostedUnit, market: str) -> dict[str, int]:
+    markets = cast("Mapping[str, Mapping[str, object]]", unit.snapshot()["markets"])
+    blocks = cast("Mapping[str, Mapping[str, list[str]]]", markets[market]["blocks"])
+    return {k: len(v["window"]) for k, v in blocks.items() if k.startswith("derived.")}
+
+
+def test_a_number_both_sides_bind_keeps_one_window_per_side() -> None:
+    mirrored = _document()
+    cast("dict[str, object]", mirrored["logic"])["short"] = {"mirror_of": "long"}
+    del cast("dict[str, object]", mirrored["numbers"])["rsi_high"]
+    bars = _slice()
+    instants = _instants(bars)[:300]
+    plain, both = _host(_compiled(), _surfaces(bars)), _host(_compiled(mirrored), _surfaces(bars))
+    _drive(plain, instants)
+    _drive(both, instants)
+
+    assert _windows(plain, "fx.eurusd") == {
+        "derived.long.rsi_low": 286,
+        "derived.short.rsi_high": 286,
+    }
+    assert _windows(both, "fx.eurusd") == {
+        "derived.long.rsi_low": 286,
+        "derived.short.rsi_low": 286,
+    }
+    assert both.compiled.warm_up == plain.compiled.warm_up
+
+
 def test_a_restored_unit_continues_exactly_where_it_stopped() -> None:
     bars = _slice()
     instants = _instants(bars)

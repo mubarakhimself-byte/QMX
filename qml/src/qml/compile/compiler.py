@@ -14,8 +14,9 @@ What the compiler decides, so the closure stays data plus blocks:
 - An exit binding's use comes from its face. A price ``level`` that reads the position's
   ``stop_price`` is the target; any other price ``level`` is the protective stop; an
   ``exit_action`` runs once per bar for each open position.
-- A derived number's ``motion.source`` names the binding whose output value feeds it, on the
-  side that binds the number. Its mode picks the motion block by the table below.
+- A derived number's ``motion.source`` names the binding whose output value feeds it, on each
+  side that binds the number. A number both sides bind runs one motion instance per side, so
+  each side's window holds one value per bar. Its mode picks the motion block by the table below.
 
 The compiled fingerprint is fp1 over the document's fingerprint, the lock's, the compiler
 format version and the port quantum, so a recompile of the same bytes gives the same value.
@@ -486,7 +487,7 @@ def _warm_up(plan: Plan) -> tuple[int, int]:
                 bound_total += instance.state_bound
     for d in plan.derived:
         instance = d.block.make(d.params, {}, d.side)
-        warm[f"derived.{d.number}"] = (
+        warm[f"derived.{d.side.value}.{d.number}"] = (
             warm.get(f"{d.side.value}.{d.source}", 0) + instance.warm_up_bars
         )
         bound_total += instance.state_bound

@@ -233,13 +233,14 @@ class _Market:
     market_id: str
     record: InstrumentRecord
     instances: dict[str, Instance]
-    derived: dict[str, Decimal]
+    derived: dict[Side, dict[str, Decimal]]
+    """Each side's derived numbers: a number both sides bind moves once per bar per side."""
     last_bar_ns: int | None = None
     bars: int = 0
     timers: dict[str, Instance] = field(default_factory=dict[str, Instance])
     exited: set[str] = field(default_factory=set[str])
-    in_force: dict[str, Decimal] = field(default_factory=dict[str, Decimal])
-    """The numbers this bar's decisions read, taken before the derived numbers update."""
+    in_force: dict[Side, dict[str, Decimal]] = field(default_factory=dict[Side, dict[str, Decimal]])
+    """Each side's numbers this bar's decisions read, taken before the derived numbers update."""
 
 
 class _Core:
@@ -275,11 +276,11 @@ class _Core:
 
     # --- building --------------------------------------------------------------
 
-    def numbers(self, market: _Market) -> dict[str, Decimal]:
-        values = dict(self.plan.defaults)
-        values |= {name: state.value for name, state in self.slow.items()}
-        values |= market.derived
-        return values
+    def settled(self) -> dict[str, Decimal]:
+        return dict(self.plan.defaults) | {name: state.value for name, state in self.slow.items()}
+
+    def numbers(self, market: _Market, side: Side) -> dict[str, Decimal]:
+        return self.settled() | market.derived.get(side, {})
 
     def params(self, bound: BoundBlock, numbers: Mapping[str, Decimal]) -> dict[str, Decimal]:
         out: dict[str, Decimal] = {}
@@ -292,7 +293,7 @@ class _Core:
 
     def market(self, market_id: str, record: InstrumentRecord) -> _Market:
         state = _Market(market_id, record, {}, {})
-        numbers = self.numbers(state)
+        numbers = self.settled()
         for side in self.plan.sides:
             for slot in side.slots:
                 for b in slot.bindings:
@@ -306,7 +307,9 @@ class _Core:
                         self.params(e.binding, numbers), e.binding.inputs, side.side
                     )
         for d in self.plan.derived:
-            state.instances[f"derived.{d.number}"] = d.block.make(d.params, {}, d.side)
+            state.instances[f"derived.{d.side.value}.{d.number}"] = d.block.make(
+                d.params, {}, d.side
+            )
         state.instances["sizer"] = self.plan.sizer.block.make(
             self.params(self.plan.sizer, numbers), self.plan.sizer.inputs
         )
@@ -321,7 +324,10 @@ class _Core:
             markets[m.market_id] = {
                 "last_bar_ns": m.last_bar_ns,
                 "bars": m.bars,
-                "derived": {k: str(v) for k, v in m.derived.items()},
+                "derived": {
+                    side.value: {k: str(v) for k, v in values.items()}
+                    for side, values in m.derived.items()
+                },
                 "blocks": {k: dict(i.export_state()) for k, i in m.instances.items()},
                 "timers": {k: dict(i.export_state()) for k, i in m.timers.items()},
                 "exited": sorted(m.exited),
@@ -350,7 +356,10 @@ class _Core:
             m.last_bar_ns = last if isinstance(last, int) else None
             m.bars = cast("int", saved["bars"])
             m.derived = {
-                k: Decimal(v) for k, v in cast("Mapping[str, str]", saved["derived"]).items()
+                Side(side): {k: Decimal(v) for k, v in values.items()}
+                for side, values in cast(
+                    "Mapping[str, Mapping[str, str]]", saved["derived"]
+                ).items()
             }
             for key, state in cast("Mapping[str, Mapping[str, object]]", saved["blocks"]).items():
                 m.instances[key].import_state(state)
@@ -492,15 +501,16 @@ class _Run:
             self.events.append(StateEvent("warming", m.market_id, f"{self.unit.warm_up} bars"))
         if m.bars == self.unit.warm_up:
             self.events.append(StateEvent("ready", m.market_id))
-        numbers = self.unit.numbers(m)
-        m.in_force = numbers
-        sides = {plan.side: self.side(m, plan, bar, numbers) for plan in self.plan.sides}
+        m.in_force = {plan.side: self.unit.numbers(m, plan.side) for plan in self.plan.sides}
+        sides = {
+            plan.side: self.side(m, plan, bar, m.in_force[plan.side]) for plan in self.plan.sides
+        }
         for side in (Side.LONG, Side.SHORT):
             for e in self.plan.exits:
                 if e.use is ExitUse.STOP and f"{side.value}.{e.binding.key}" in m.instances:
                     instance = m.instances[f"{side.value}.{e.binding.key}"]
                     instance.update(
-                        {"series": bar.bid.fields()} | self.unit.params(e.binding, numbers)
+                        {"series": bar.bid.fields()} | self.unit.params(e.binding, m.in_force[side])
                     )
         return sides
 
@@ -532,12 +542,14 @@ class _Run:
             held[slot.name] = self.combine(slot, conditions)
         for d in self.plan.derived:
             if d.side is plan.side:
-                fed = m.instances[f"derived.{d.number}"].update(
+                fed = m.instances[f"derived.{d.side.value}.{d.number}"].update(
                     {"series": _value(outputs.get(d.source))}
                 )
                 spec = self.unit.compiled.unit.numbers[d.number]
                 if isinstance(fed, Decimal) and spec.range is not None:
-                    m.derived[d.number] = min(spec.range.max, max(spec.range.min, fed))
+                    m.derived.setdefault(d.side, {})[d.number] = min(
+                        spec.range.max, max(spec.range.min, fed)
+                    )
         failing = [f"{name}: {why}" for name, (ok, why) in held.items() if not ok]
         trigger = any(held[s.name][0] for s in plan.slots if s.role is Role.TRIGGER)
         return _Side(not failing, trigger, "; ".join(failing), tuple(trail), order)
@@ -631,7 +643,7 @@ class _Run:
                 side=side,
                 outcome=outcome,
                 slot_trail=trail,
-                numbers_in_force=MappingProxyType(dict(m.in_force)),
+                numbers_in_force=MappingProxyType(dict(m.in_force.get(side, {}))),
                 reason=reason,
             )
         )
@@ -664,7 +676,7 @@ class _Run:
 
     def enter(self, m: _Market, bar: QuoteBar, side: Side, result: _Side, account: object) -> None:
         record = m.record
-        numbers = m.in_force
+        numbers = m.in_force[side]
         reference = bar.ask.close if side is Side.LONG else bar.bid.close
         stop_plan = next((e for e in self.plan.exits if e.use is ExitUse.STOP), None)
         raw_stop = (
