@@ -23,6 +23,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 from qmf.core.chrono import Instant
@@ -35,7 +36,7 @@ from qml.protocol.unit import CalibrationRow, DecisionRow, StateEvent
 from qmb._refuse import invalid
 from qmb.host.unit_handler import Fill, JournalRecord, Skip, UnitTrade
 
-__all__ = ["JournalPart", "JournalReport", "RunJournal", "reason_code"]
+__all__ = ["JournalPart", "JournalReport", "RunJournal"]
 
 WRITER_ROLE: Final[str] = "qmb"
 
@@ -53,14 +54,16 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
 )
 """The reason code of each reason text QML's hosted unit and the handler write, first match wins."""
 
-_OUTCOME_CODES: Final[Mapping[str, str]] = {
-    "no_signal": "no_signal",
-    "suppressed_warming": "warming_up",
-    "suppressed_limit": "max_positions",
-}
+_OUTCOME_CODES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "no_signal": "no_signal",
+        "suppressed_warming": "warming_up",
+        "suppressed_limit": "max_positions",
+    }
+)
 
 
-def reason_code(outcome: str, text: str) -> str | None:
+def _reason_code(outcome: str, text: str) -> str | None:
     """The closed-list code for a decision's reason text, or None when the list has none."""
     return next((code for words, code in _REASON_WORDS if words in text), None) or (
         _OUTCOME_CODES.get(outcome)
@@ -255,7 +258,7 @@ class RunJournal:
             "readings_used": readings,
             "numbers_in_force": {name: str(v) for name, v in row.numbers_in_force.items()},
         }
-        code = reason_code(row.outcome, row.reason)
+        code = _reason_code(row.outcome, row.reason)
         if code is not None:
             body["reason"] = code
         elif row.outcome == "skipped":
@@ -328,7 +331,7 @@ class RunJournal:
         self._write("fill", body, self._facts(fill.market_id))
 
     def _skip(self, skip: Skip) -> None:
-        code = reason_code("blocked", skip.reason)
+        code = _reason_code("blocked", skip.reason)
         if code is None:
             self._refuse(skip.decision_row_id, skip.reason)
             return
