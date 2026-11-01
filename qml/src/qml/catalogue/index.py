@@ -19,7 +19,7 @@ __all__ = ["IndexRow", "Match", "MatchReport", "find", "match", "row", "stem", "
 
 _STOP: Final = frozenset(
     {"a", "an", "the", "of", "to", "in", "on", "at", "by", "for", "and", "or", "is", "are"}
-    | {"be", "it", "its", "as", "with", "from", "this", "that", "when", "then", "than", "one"}
+    | {"be", "it", "its", "as", "with", "from", "this", "that", "when", "then", "than", "one", "s"}
 )
 _USABLE: Final = frozenset({Transfer.NATIVE, Transfer.DIRECT, Transfer.ADAPTED})
 _SENTENCE: Final = re.compile(r"[.!?;\n]+")
