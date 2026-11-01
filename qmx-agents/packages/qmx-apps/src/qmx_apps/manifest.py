@@ -106,8 +106,27 @@ Budget = Isolation
 
 
 class Breaker(StrictModel):
+    """When the supervisor trips an app, and what it does next. `restart = "backoff"` starts a
+    tripped app again by itself (AD-33 change 3): it waits `backoff_seconds` after the first trip
+    and doubles the wait on each further trip up to `backoff_max_seconds`. `never` leaves it down
+    until someone starts it, as every app that sets nothing is."""
+
     max_errors: int = Field(default=3, gt=0)
     heartbeat_timeout: float = Field(default=10, ge=1)
+    restart: Literal["never", "backoff"] = "never"
+    backoff_seconds: float = Field(default=5, gt=0)
+    backoff_max_seconds: float = Field(default=300, gt=0)
+
+    @model_validator(mode="after")
+    def _ordered_backoff(self) -> Breaker:
+        if self.backoff_max_seconds < self.backoff_seconds:
+            raise ValueError("backoff_max_seconds is at least backoff_seconds.")
+        return self
+
+    def backoff(self, trips: int) -> float:
+        """The wait before the restart that follows trip number `trips`, counted from 1."""
+        doublings = min(trips - 1, 64)  # restarts never stop, and 2**n past 1023 overflows a float
+        return min(self.backoff_seconds * 2**doublings, self.backoff_max_seconds)
 
 
 class SuggestedTrigger(StrictModel):

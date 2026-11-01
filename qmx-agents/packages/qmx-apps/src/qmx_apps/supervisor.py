@@ -32,7 +32,7 @@ from qmx_home.versions import open_sqlite
 
 from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
 from qmx_apps.errors import AppError, Document
-from qmx_apps.manifest import Definition, Trust, image_files, image_hash
+from qmx_apps.manifest import Breaker, Definition, Trust, image_files, image_hash
 from qmx_apps.road import PackSink, Road
 from qmx_apps.store import open_store
 from qmx_apps.volume import Lease, Volume, VolumeLease, checksum, snapshot
@@ -40,6 +40,8 @@ from qmx_apps.windows_job import WindowsJob
 
 T = TypeVar("T")
 type EventSink = Callable[[str, Document], None]
+type Wait = Callable[[float, threading.Event], bool]
+"""Wait `seconds` unless the event is set first; true when it was set."""
 
 PARENT_SURFACES: Final = frozenset(
     {
@@ -178,6 +180,23 @@ class Move:
         }
 
 
+def wait(seconds: float, cancel: threading.Event) -> bool:
+    return cancel.wait(seconds)
+
+
+@dataclass
+class Healing:
+    """An opted-in app's restarts since someone last stopped it (AD-33 change 3). `trips`
+    counts the trips and the failed restarts that set the next wait; `cancel` ends the pending
+    wait when he stops the app or the host closes. `thread` is the one restart loop, if any."""
+
+    breaker: Breaker
+    profile: str | None
+    trips: int = 0
+    cancel: threading.Event = field(default_factory=threading.Event)
+    thread: threading.Thread | None = None
+
+
 @dataclass
 class Instance:
     definition: Definition
@@ -256,12 +275,14 @@ class Supervisor:
         call_depth: int | None = None,
         library: LibrarySink | None = None,
         placement: str = "pc",
+        restart_wait: Wait = wait,
     ) -> None:
         """`call_depth` is the host's bound on a ring of asks (AD-64): the longest chain of app
         operations that may sit behind one ask. There is no default number, and a host that sets
         none is unbounded. `library` is where an app's landings go; without one they stay in the
         volume and the index here. `placement` is the machine this store is: the home every app
-        instance here runs on, and the machine a move hands a volume to or takes it from."""
+        instance here runs on, and the machine a move hands a volume to or takes it from.
+        `restart_wait` is how an opted-in app's back-off waits before it starts again."""
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.catalog = self.home / "apps.db"
@@ -277,6 +298,8 @@ class Supervisor:
         self.road = Road(self)
         self._lock = threading.RLock()
         self._instances: dict[str, Instance] = {}
+        self._healing: dict[str, Healing] = {}
+        self.restart_wait = restart_wait
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         with closing(sqlite3.connect(self.catalog, isolation_level=None)) as db:
@@ -572,7 +595,7 @@ class Supervisor:
         try:
             instance.ready.result()
         except Exception as error:
-            self.stop(app_id)
+            self._halt(app_id)
             if isinstance(error, AppError):
                 raise
             raise AppError(
@@ -748,6 +771,13 @@ class Supervisor:
             instance.lease.close()
             with self._lock:
                 self._instances.pop(app_id, None)
+            if (
+                instance.state == "tripped"
+                and manifest.breaker.restart == "backoff"
+                and instance.ready.done()
+                and instance.ready.exception() is None
+            ):
+                self._heal(app_id, manifest.breaker, instance.profile)
 
     def transport(
         self, instance: Instance, config: dict[str, Any], environment: dict[str, str]
@@ -851,14 +881,91 @@ class Supervisor:
         self.kill(instance)
 
     def stop(self, app_id: str) -> Document:
+        """Stop the app and any restart it was waiting for: a stopped app stays down."""
         self._definition(app_id)
+        self._cancel_healing(app_id)
+        self._halt(app_id)
+        self._cancel_healing(app_id)
+        return self.status(app_id)
+
+    def _halt(self, app_id: str) -> None:
         with self._lock:
             instance = self._instances.get(app_id)
         if instance:
             self._submit(self._stop(instance)).result(timeout=10)
             if instance.task:
                 instance.task.result(timeout=30)
-        return self.status(app_id)
+
+    def _heal(self, app_id: str, breaker: Breaker, profile: str | None) -> None:
+        """Count a trip of an opted-in app and start it again after its back-off, on the profile
+        it ran. The restart is a plain `start`, so a `money` app gets only its active signed
+        version (MA-05) and any other app what `restart` would start."""
+        with self._lock:
+            healing = self._healing.setdefault(app_id, Healing(breaker, profile))
+            healing.trips += 1
+            if healing.thread is None:
+                healing.thread = threading.Thread(
+                    target=self._restart_loop,
+                    args=(app_id, healing),
+                    name=f"qmx-app-restart-{app_id}",
+                    daemon=True,
+                )
+                healing.thread.start()
+
+    def _restart_loop(self, app_id: str, healing: Healing) -> None:
+        """Wait, start, and wait longer after each start that fails, until one runs or he stops
+        the app. A refusal (a 4xx, such as a money app with no signed version) ends the loop,
+        because waiting does not change it. A trip that lands while this loop is starting the app
+        is caught by the last check, so no trip is left without its restart."""
+        while True:
+            with self._lock:
+                trips = healing.trips
+            seconds = healing.breaker.backoff(trips)
+            self._log(app_id, "restart_scheduled", {"trips": trips, "wait_seconds": seconds})
+            if self.restart_wait(seconds, healing.cancel) or healing.cancel.is_set():
+                return
+            with self._lock:
+                if app_id in self._instances:
+                    healing.thread = None
+                    return
+            try:
+                started = self.start(app_id, profile=healing.profile)
+            except Exception as error:
+                if healing.cancel.is_set():
+                    return
+                code = error.code if isinstance(error, AppError) else type(error).__name__
+                if isinstance(error, AppError) and error.status < 500:
+                    self._log(app_id, "restart_refused", {"code": code, "trips": trips})
+                    with self._lock:
+                        if self._healing.get(app_id) is healing:
+                            self._healing.pop(app_id)
+                    return
+                self._log(app_id, "restart_failed", {"code": code, "trips": trips})
+                with self._lock:
+                    healing.trips += 1
+                continue
+            if healing.cancel.is_set():
+                self._halt(app_id)
+                return
+            self._log(
+                app_id,
+                "restarted",
+                {
+                    "trips": trips,
+                    "instance_id": started.get("instance_id"),
+                    "definition_hash": started.get("definition_hash"),
+                },
+            )
+            with self._lock:
+                if healing.trips == trips:
+                    healing.thread = None
+                    return
+
+    def _cancel_healing(self, app_id: str) -> None:
+        with self._lock:
+            healing = self._healing.pop(app_id, None)
+        if healing:
+            healing.cancel.set()
 
     def restart(self, app_id: str) -> Document:
         self.stop(app_id)
@@ -1277,6 +1384,8 @@ class Supervisor:
             return [cast(Document, json.loads(line)) for line in deque(file, maxlen=limit)]
 
     def close(self) -> None:
+        for app_id in list(self._healing):
+            self._cancel_healing(app_id)
         for app_id in list(self._instances):
             self.stop(app_id)
         if self._loop:
