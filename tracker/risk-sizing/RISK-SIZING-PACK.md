@@ -392,3 +392,7 @@ His 30 Oct ruling put the book, correlation control, the pod and the account gua
 
 **From the judging research ticket** (`wayfinder/tickets/research-quant-judging.md`):
 - How is the old "radioactive" sizing (enhanced Kelly with house money) replayed when judging a unit? The unit planning's research 26 notes only what QMB must record so this replay is possible later.
+
+## 7. The build's placeholders (added 2026-11-01 by the unit system build plan)
+
+The unit system build ships stand-ins for sizing, exits, halts and the kill switch, each labelled `origin: placeholder` and never refused. `build/RISK-SIZING-PLACEHOLDERS.md` lists all 31, with where each sits, the PR in `build/UNIT-PLAN.md` that puts it there, and what this session must replace or decide. Once the build lands, `tools/qml/placeholders.py` lists every published unit and binding that still uses one, and a replacement block must pass `qml/tests/test_socket_contracts.py`.
