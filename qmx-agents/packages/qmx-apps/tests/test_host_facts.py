@@ -96,6 +96,15 @@ def attach(control: ControlService, home: Path) -> Supervisor:
     return runtime
 
 
+async def watch(control: ControlService) -> asyncio.Task[None]:
+    return asyncio.get_running_loop().create_task(keep_facts(control))
+
+
+async def settled(task: asyncio.Task[None]) -> None:
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
 @pytest.fixture(scope="module")
 def host(tmp_path_factory: pytest.TempPathFactory) -> Generator[tuple[ControlService, Supervisor]]:
     root = tmp_path_factory.mktemp("host-facts")
@@ -105,13 +114,13 @@ def host(tmp_path_factory: pytest.TempPathFactory) -> Generator[tuple[ControlSer
     loop = asyncio.new_event_loop()
     thread = threading.Thread(target=loop.run_forever, daemon=True)
     thread.start()
-    watching = asyncio.run_coroutine_threadsafe(keep_facts(control), loop)
+    watching = asyncio.run_coroutine_threadsafe(watch(control), loop).result(timeout=10)
     try:
         runtime.install(source(root), trust="first_party")
         runtime.start(APP)
         yield control, runtime
     finally:
-        watching.cancel()
+        asyncio.run_coroutine_threadsafe(settled(watching), loop).result(timeout=10)
         loop.call_soon_threadsafe(loop.stop)
         thread.join(timeout=10)
         control.close()
