@@ -116,6 +116,7 @@ RULES: Final[tuple[Rule, ...]] = (
     Rule("data/agent-memory/**", "content", "the CLI's memory per working folder"),
     Rule("data/exports/**", "content", "his chat exports"),
     Rule("data/workspaces/**", "content", "his working folders"),
+    Rule("data/apps/*/data/grants/**", "secret", "a mini app's grants stay on their machine"),
     Rule("data/apps/**", "content", "each mini app's own volume"),
     Rule("data/node/**", "content", "a trading node's state on this PC"),
     Rule("data/migration/pre/**", "content", "a store as it was before a switch"),

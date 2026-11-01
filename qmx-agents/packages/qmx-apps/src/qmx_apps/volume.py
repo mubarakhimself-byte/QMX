@@ -268,7 +268,7 @@ def snapshot(volume: Volume, root: Path) -> None:
             source.name.endswith(("-wal", "-shm", "-journal", ".lock"))
             or source.name == "backup.json.tmp"
             or (relative.parent == Path("data") and source.name.startswith("heartbeat-"))
-            or relative.parts[:2] == ("data", "tmp")
+            or relative.parts[:2] in {("data", "tmp"), ("data", "grants")}
             or relative.parts[0] == "road"
         ):
             continue

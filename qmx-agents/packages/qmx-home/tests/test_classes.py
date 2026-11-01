@@ -9,6 +9,9 @@ from pathlib import Path
 import pytest
 from backup_fixtures import WRITER_APP, filled_folder
 
+from qmx_home import resolve
+from qmx_home.backup.repository import FolderRepository
+from qmx_home.backup.snapshot import make
 from qmx_home.classes import (
     NEVER,
     SENT,
@@ -38,6 +41,8 @@ from qmx_home.classes import (
         ("data/chats/c1.json", None, "content"),
         ("data/apps/demo/app.db", None, "content"),
         ("data/apps/demo/road/steps.jsonl", None, "content"),
+        ("data/apps/trading-node/data/node.sqlite", None, "content"),
+        ("data/apps/trading-node/data/grants/ctrader-node.json", None, "secret"),
         ("data/migration/pre/library.db", None, "content"),
         ("data/a-path-no-rule-names.txt", None, "content"),
         ("data/engine/engine.sqlite", None, "result"),
@@ -207,6 +212,22 @@ def test_a_blob_named_by_several_kinds_travels_with_any_kept_class_of_them(
     save: tuple[Class, ...], expected: bool
 ) -> None:
     assert sent(BLOB, save, ("strategy", "note")) is expected
+
+
+def test_a_backup_copy_leaves_a_node_volumes_grants_on_the_machine(tmp_path: Path) -> None:
+    layout = resolve(tmp_path / "QMX", create=True)
+    node = layout.data / "apps" / "trading-node"
+    (node / "data" / "grants").mkdir(parents=True)
+    (node / "data" / "grants" / "ctrader-node.json").write_text('{"made": "up"}')
+    (node / "data" / "desired.json").write_text('{"units": []}')
+    pool = FolderRepository(layout.backups / "quick")
+
+    copy = make(layout, into=pool, have=pool, previous=None, stamp="20261101T030000000000Z")
+
+    paths = {entry.path for entry in copy.entries}
+    assert "apps/trading-node/data/desired.json" in paths
+    assert not [path for path in paths if "grants" in path]
+    assert not sent("data/apps/trading-node/data/grants/ctrader-node.json", SENT)
 
 
 def test_the_secret_paths_are_the_fixed_secret_rules() -> None:
