@@ -6,6 +6,8 @@ commit into the run's `work/`."""
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -138,6 +140,9 @@ class Workspaces(FakePort):
         self.workspaces.append(workspace)
         return await super().start_chat(workspace=workspace, **rest)
 
+    async def close(self, chat: str) -> None:
+        return None
+
 
 def writer(root: Path, outputs: list[dict[str, Any]]) -> Path:
     step = agent("write", tools=["Write", "Edit"]) | {"outputs": {"files": outputs}}
@@ -165,6 +170,53 @@ def test_only_the_declared_output_commits_and_the_overlay_is_gone(tmp_path: Path
     assert sorted(p.name for p in work.iterdir() if p.is_file()) == ["result.md"]
     assert (work / "result.md").read_text(encoding="utf-8") == "the answer"
     assert [c["paths"] for c in committed] == [["result.md"]]
+
+
+class Living(Workspaces):
+    """A fake port whose chat is a real child process with its cwd in the chat's folder, as the
+    chat CLI is, ended only by `close`."""
+
+    def __init__(self, *answers: Any) -> None:
+        super().__init__(*answers)
+        self.processes: dict[str, subprocess.Popen[bytes]] = {}
+        self.closed: list[str] = []
+
+    async def start_chat(self, *, workspace: Path, **rest: Any) -> str:
+        chat = await super().start_chat(workspace=workspace, **rest)
+        sleep = [sys.executable, "-c", "import time; time.sleep(120)"]
+        self.processes[chat] = subprocess.Popen(sleep, cwd=workspace)
+        return chat
+
+    async def close(self, chat: str) -> None:
+        self.closed.append(chat)
+        self.end(chat)
+
+    def end(self, chat: str) -> None:
+        process = self.processes.pop(chat, None)
+        if process is not None:
+            process.kill()
+            process.wait()
+
+
+def test_the_chat_ends_before_its_overlay_is_deleted(tmp_path: Path) -> None:
+    async def turn(port: FakePort, chat: str) -> Turn:
+        here = cast(Workspaces, port).workspaces[0]
+        (here / "result.md").write_text("the answer", encoding="utf-8")
+        return Turn(CARD)
+
+    port = Living(turn)
+    home = tmp_path / "home"
+    try:
+        outcome = asyncio.run(drive(writer(tmp_path / "wf", [{"path": "result.md"}]), home, port))
+    finally:
+        for chat in list(port.processes):
+            port.end(chat)
+    work = RunZone.of(home, outcome.run_id).work
+
+    assert (outcome.status, outcome.reason) == ("passed", None)
+    assert port.closed == ["chat-1"]
+    assert not port.workspaces[0].exists()
+    assert (work / "result.md").read_text(encoding="utf-8") == "the answer"
 
 
 def test_a_read_only_step_is_born_in_its_workflow_folder_and_commits_nothing(

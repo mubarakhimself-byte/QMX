@@ -168,6 +168,12 @@ class HarnessPort(Protocol):
 
     async def interrupt(self, chat: str) -> None: ...
 
+    async def close(self, chat: str) -> None:
+        """End the chat's CLI process, keeping its record and transcript (H18). An attempt that
+        works in an overlay closes its chat before the overlay goes, since on Windows a folder
+        that is a live process's cwd cannot be removed."""
+        return None
+
     def context(self, chat: str) -> int | None:
         """The context the chat's latest journaled model call read."""
         ...
@@ -325,6 +331,9 @@ class HarnessAdapter:
 
     async def interrupt(self, chat: str) -> None:
         await self.harness.interrupt(SessionId(chat))
+
+    async def close(self, chat: str) -> None:
+        await self.harness.close_chat(SessionId(chat))
 
     def context(self, chat: str) -> int | None:
         calls = model_calls(self._journal(chat))
