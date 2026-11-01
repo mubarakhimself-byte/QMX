@@ -42,6 +42,8 @@ T = TypeVar("T")
 type EventSink = Callable[[str, Document], None]
 type Wait = Callable[[float, threading.Event], bool]
 """Wait `seconds` unless the event is set first; true when it was set."""
+type Facts = Callable[[], Document]
+"""The host's facts as it composes them now, less `at`, which the supervisor stamps on write."""
 
 PARENT_SURFACES: Final = frozenset(
     {
@@ -57,6 +59,9 @@ PARENT_SURFACES: Final = frozenset(
 """The parent-library surfaces a pack's tool may name (AD-2); every other pair is refused."""
 MARKET_STORE: Final = "market"
 """The machine's market-data store under the home, the folder the host's market door opens."""
+HOST_FACTS: Final = "road/host/facts.json"
+"""Where each volume holds its host's facts (AD-33 change 5). The bootstrap refuses app writes
+under `road/`, so only the host writes it."""
 
 
 def refuse_tool(name: str, tool: Document) -> None:
@@ -302,6 +307,8 @@ class Supervisor:
         self._instances: dict[str, Instance] = {}
         self._healing: dict[str, Healing] = {}
         self.restart_wait = restart_wait
+        self._facts: Facts | None = None
+        self._facts_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         with closing(sqlite3.connect(self.catalog, isolation_level=None)) as db:
@@ -316,6 +323,38 @@ class Supervisor:
     def attach_packs(self, sink: PackSink | None) -> None:
         """Give the supervisor the Library a published pack lands in, or take it away."""
         self.road.attach_packs(sink)
+
+    def attach_facts(self, facts: Facts | None) -> None:
+        """Give the supervisor the host's facts, written into each volume before its app starts
+        and again by `refresh_facts`, or take them away."""
+        self._facts = facts
+
+    def refresh_facts(self) -> None:
+        """Rewrite the host's facts in every running app's volume whose copy differs. A stopped
+        app's copy is rewritten when it next starts."""
+        with self._lock:
+            volumes = [instance.volume for instance in self._instances.values()]
+        for volume in volumes:
+            self._write_facts(volume)
+
+    def _write_facts(self, volume: Volume) -> None:
+        if self._facts is None:
+            return
+        facts = self._facts()
+        path = volume.root / HOST_FACTS
+        with self._facts_lock:
+            try:
+                held = cast(Document, json.loads(path.read_text(encoding="utf-8")))
+                held.pop("at", None)
+            except OSError, ValueError, AttributeError:
+                held = None
+            if held == facts:
+                return
+            path.parent.mkdir(parents=True, exist_ok=True)
+            staged = path.with_suffix(".tmp")
+            written = {**facts, "at": datetime.now(UTC).isoformat()}
+            staged.write_text(json.dumps(written), encoding="utf-8")
+            staged.replace(path)
 
     def install(
         self,
@@ -589,6 +628,8 @@ class Supervisor:
                     # The host finishes migrations before handing the writer to the instance.
                     with closing(open_store(volume, migrations)):
                         pass
+                # Before the process exists, so the app's first read already finds them.
+                self._write_facts(volume)
             except BaseException:
                 lease.close()
                 raise

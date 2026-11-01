@@ -146,6 +146,8 @@ LOCK: Final = "engine.lock"
 LIBRARY: Final = "library"
 MARKET: Final = "market"
 """The home's market-data root: the price partitions the door writes, and its handles (AD-28)."""
+FACTS_SCHEMA: Final = "qmx.host.facts/1"
+"""The schema of `road/host/facts.json`, the host facts in every app volume (AD-307)."""
 START_S: Final = 30.0
 HOST_HISTORY: Final = 10
 """The host rows `ops_heartbeats` returns beside the newest row per subject: five minutes at the
@@ -769,6 +771,7 @@ async def serve(
     )
     try:
         door = market_door(home, control, role)
+        control.app_runtime().attach_facts(lambda: host_facts(control, role, name, door))
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
@@ -856,6 +859,7 @@ async def serve(
                         )
                         exporting = asyncio.create_task(harness.idle_exports())
                         holding = asyncio.create_task(asking.hold_all())
+                        refreshing = asyncio.create_task(keep_facts(control))
                         syncing: list[asyncio.Task[None]] = []
                         loop = asyncio.get_running_loop()
 
@@ -878,7 +882,14 @@ async def serve(
                         finally:
                             if server.started:
                                 served.set()
-                            for task in (beating, exporting, holding, *syncing, copying):
+                            for task in (
+                                beating,
+                                exporting,
+                                holding,
+                                refreshing,
+                                *syncing,
+                                copying,
+                            ):
                                 task.cancel()
                                 with suppress(asyncio.CancelledError):
                                     await task
@@ -1178,6 +1189,61 @@ def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor |
         print(f"market-data: {shut_line(built)} {dict(built.context)}", file=sys.stderr)
         return built
     return built.value
+
+
+def host_facts(
+    control: ControlService, role: Role, name: str, door: MarketDoor | TypedRefusal
+) -> Document:
+    """This host's facts as every app volume holds them (AD-307, Part C `CONTRACTS.md` section
+    5), read live from Settings. This PC never reports the trading profile on, whatever `[host]
+    trading_profile` says. This host mounts its chat routes and may place agent steps on every
+    role today, so `chats` and `agent_steps` say so until the bind-live step turns them off."""
+    trading = role != "pc" and section(control, "host").get("trading_profile") is True
+    return {
+        "schema_version": FACTS_SCHEMA,
+        "placement": name,
+        "role": role,
+        "trading_profile": trading,
+        "chats": True,
+        "agent_steps": True,
+        "holdout": holdout_fact(door),
+    }
+
+
+def holdout_fact(door: MarketDoor | TypedRefusal) -> Document:
+    """The Settings `[data]` default seal exactly as the door applies it. A door or `[data]` that
+    cannot be read reports the holdout on with no boundary, so a reader seals every month rather
+    than none."""
+    seal = door.default_seal() if isinstance(door, MarketDoor) else door
+    if is_refusal(seal):
+        return {"on": True}
+    if seal.value is None:
+        return {"on": False}
+    instant = seal.value.seal_boundary.instant
+    if instant is None:
+        return {"on": True, "months": seal.value.holdout_months}
+    start = datetime.fromtimestamp(instant.value_ns // 1_000_000_000, UTC)
+    return {"on": True, "boundary": start.strftime("%Y-%m"), "months": seal.value.holdout_months}
+
+
+def settings_tip(control: ControlService) -> int:
+    """The newest Settings event's position, so a watcher starts after what already happened."""
+    after = 0
+    while page := control.events("settings", after=after, limit=1000):
+        after = cast(int, page[-1]["id"])
+    return after
+
+
+async def keep_facts(control: ControlService) -> None:
+    """Rewrite the host facts in every running app's volume after each Settings write, so a
+    holdout he turns on reaches each app's copy while it runs. Copies already equal stay as
+    they are."""
+    runtime = control.app_runtime()
+    async for _ in control.stream("settings", after=settings_tip(control)):
+        try:
+            await asyncio.to_thread(runtime.refresh_facts)
+        except OSError as error:
+            print(f"host facts not rewritten until the next change: {error}", file=sys.stderr)
 
 
 def shut_line(refusal: TypedRefusal) -> str:
