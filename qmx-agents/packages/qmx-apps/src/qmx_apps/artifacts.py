@@ -5,7 +5,9 @@ An output is a *leave* (AD-64): the app names one of its `[provides]` contracts,
 validated against that contract, stored by hash in the app's volume, and landed in the Library as
 one `artifact` object whose `type` is the provides name. The landing goes through `LibrarySink`,
 the seam the host wires to the Library store it owns; with no sink attached the payload is still
-hashed, validated and registered here, and only the landing waits.
+hashed, validated and registered here, and only the landing waits. An output whose contract
+names a lander skips that sink: it lands through the lander's `close`, against the run the lander
+opened for the job (AD-33 change 2).
 
 `provides.<name>.stale_after` makes an output lose freshness: a read past it returns
 `stale: true`, the age and the declared share, never an error.
@@ -25,7 +27,7 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final, cast
+from typing import Final, Literal, Protocol, cast
 
 from jsonschema import Draft202012Validator, validate
 from jsonschema.exceptions import ValidationError
@@ -47,6 +49,42 @@ class ArtifactRef(BaseModel):
     sha256: str
 
 
+class Ticket(Protocol):
+    """What a lander's `open` hands back. The supervisor reads only the run id it minted."""
+
+    @property
+    def run_id(self) -> str: ...
+
+
+type Ending = Literal["failed", "killed"]
+"""How a run the tester never finished ends: its job raised or its leave was refused (`failed`),
+or the app stopped or died under it (`killed`)."""
+
+
+class Lander(Protocol):
+    """A core lander the host registers by name (AD-33 change 2, Part B CONTRACTS §3). `open`
+    answers None for an app version that lands nothing through it. All three are idempotent by
+    run id, so a retry writes nothing twice."""
+
+    def open(
+        self, app_id: str, version: str, job: str, inputs: Document, principal: str
+    ) -> Ticket | None: ...
+
+    def close(self, landing: Landing) -> str: ...
+
+    def fail(self, ticket: Ticket, reason: str, status: Ending) -> str: ...
+
+
+@dataclass(frozen=True, slots=True)
+class Run:
+    """A job its lander opened: the lander, its ticket and the run folder in the app's volume."""
+
+    name: str
+    lander: Lander
+    ticket: Ticket
+    folder: Path
+
+
 @dataclass(frozen=True, slots=True)
 class Landing:
     """What a Library sink is handed: one artifact, ready to be one `artifact` object."""
@@ -62,6 +100,10 @@ class Landing:
     fields: Document = field(default_factory=dict[str, JsonValue])
     """The Library object's `fields`: its `type` is the provides name and its `metadata` carries
     the reference, so `@app:<id>/<name>` finds it and reads its freshness."""
+    lander: str | None = None
+    """The lander the contract names; such a landing goes to that lander's `close`."""
+    run: Run | None = None
+    """The run the lander opened for the job that left this output."""
 
 
 type LibrarySink = Callable[[Landing], str]
@@ -106,8 +148,19 @@ class Artifacts:
             raise AppError("undeclared_output", "The app did not declare this output.")
         return declared.schema_, declared.stale_after
 
-    def save(self, definition: Definition, output: str, data: JsonValue) -> Document:
+    def save(
+        self, definition: Definition, output: str, data: JsonValue, *, run: Run | None = None
+    ) -> Document:
+        """Validate, store and land one output. An output whose contract names a lander lands
+        only from a job that lander opened, through its `close`; any other lands as today."""
         schema, stale_after = self.contract(definition, output)
+        lander = definition.manifest.provides[output].lander
+        if lander is not None and (run is None or run.name != lander):
+            raise AppError(
+                "lander_required",
+                f"{output} lands only through the {lander} lander, from a job it opened.",
+                409,
+            )
         try:
             validate(data, schema, cls=Draft202012Validator)
         except ValidationError as error:
@@ -141,8 +194,16 @@ class Artifacts:
             stale_after=stale_after,
             at=at,
             fields={TYPE_KEY: output, "metadata": _metadata(ref, stale_after)},
+            lander=lander,
+            run=None if lander is None else run,
         )
-        library_id = self.library(landing) if self.library is not None else None
+        if landing.run is not None:
+            try:
+                library_id = landing.run.lander.close(landing)
+            except ValueError as error:
+                raise AppError("result_refused", str(error), 422) from error
+        else:
+            library_id = self.library(landing) if self.library is not None else None
         with closing(sqlite3.connect(self.index)) as db, db:
             db.execute(
                 "INSERT OR REPLACE INTO artifacts"

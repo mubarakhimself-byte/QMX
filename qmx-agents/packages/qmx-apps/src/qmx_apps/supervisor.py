@@ -15,7 +15,7 @@ import threading
 import time
 import uuid
 from collections import deque
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Mapping
 from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,7 +30,7 @@ from pydantic import JsonValue
 from qmx_home import Layout
 from qmx_home.versions import open_sqlite
 
-from qmx_apps.artifacts import Artifacts, LibrarySink, contract_problems
+from qmx_apps.artifacts import Artifacts, Ending, Lander, LibrarySink, Run, contract_problems
 from qmx_apps.errors import AppError, Document
 from qmx_apps.manifest import Breaker, Definition, Trust, image_files, image_hash
 from qmx_apps.road import PackSink, Road
@@ -44,6 +44,9 @@ type Wait = Callable[[float, threading.Event], bool]
 """Wait `seconds` unless the event is set first; true when it was set."""
 type Facts = Callable[[], Document]
 """The host's facts as it composes them now, less `at`, which the supervisor stamps on write."""
+type Landers = Mapping[str, Lander]
+"""The core landers the host registered, by the name a provides contract gives (AD-33 change 2).
+The host composes each one; the supervisor never imports what lands."""
 
 PARENT_SURFACES: Final = frozenset(
     {
@@ -121,6 +124,9 @@ APPS_SCHEMA: Final = (
 JOB_QUEUE: Final = "data/jobs"
 """Where `run_job` leaves a request and the app's bootstrap leaves its answer, inside the volume."""
 JOB_POLL_SECONDS: Final = 0.25
+RUNS: Final = "runs"
+"""One folder per opened run under the instance's `data/`: `runs/<run_id>`, where the tester writes
+its bundle's files and the lander reads them on close."""
 PROFILES: Final = "profiles"
 """One folder per profile under the app's own `data/` (AD-64). The host's files, the heartbeat
 and the job queue, stay at `data/` because the app's bootstrap writes them there."""
@@ -283,13 +289,15 @@ class Supervisor:
         library: LibrarySink | None = None,
         placement: str = "pc",
         restart_wait: Wait = wait,
+        landers: Landers | None = None,
     ) -> None:
         """`call_depth` is the host's bound on a ring of asks (AD-64): the longest chain of app
         operations that may sit behind one ask. There is no default number, and a host that sets
         none is unbounded. `library` is where an app's landings go; without one they stay in the
         volume and the index here. `placement` is the machine this store is: the home every app
         instance here runs on, and the machine a move hands a volume to or takes it from.
-        `restart_wait` is how an opted-in app's back-off waits before it starts again."""
+        `restart_wait` is how an opted-in app's back-off waits before it starts again. `landers`
+        are the core landers an app's provides may name."""
         self.home = home.resolve()
         self.home.mkdir(parents=True, exist_ok=True)
         self.catalog = self.home / "apps.db"
@@ -307,6 +315,7 @@ class Supervisor:
         self._instances: dict[str, Instance] = {}
         self._healing: dict[str, Healing] = {}
         self.restart_wait = restart_wait
+        self.landers: Landers = dict(landers or {})
         self._facts: Facts | None = None
         self._facts_lock = threading.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -323,6 +332,10 @@ class Supervisor:
     def attach_packs(self, sink: PackSink | None) -> None:
         """Give the supervisor the Library a published pack lands in, or take it away."""
         self.road.attach_packs(sink)
+
+    def attach_landers(self, landers: Landers) -> None:
+        """Register the core landers an app's provides may name, replacing any registered."""
+        self.landers = dict(landers)
 
     def attach_facts(self, facts: Facts | None) -> None:
         """Give the supervisor the host's facts, written into each volume before its app starts
@@ -374,6 +387,13 @@ class Supervisor:
         manifest = definition.manifest
         if expected_id is not None and manifest.id != expected_id:
             raise AppError("id_mismatch", "An update must keep the app id.")
+        if manifest.lander is not None and manifest.lander not in self.landers:
+            raise AppError(
+                "unknown_lander",
+                f"{manifest.id} names the lander {manifest.lander}, which this host has not "
+                "registered.",
+                422,
+            )
         lease = VolumeLease(self.home, manifest.id)
         try:
             return self._install(definition, trust, expected_hash)
@@ -1157,7 +1177,14 @@ class Supervisor:
         `inputs` is what the caller tells the job to do (AD-33 change 1): a feed it names is
         accepted as an operation call's is, and a request without inputs is `{"job": job}` as it
         always was. The job's answer comes back under `result` when it gave one. `principal` is
-        the caller, recorded on the app's log line for the job."""
+        the caller, recorded on the app's log line for the job.
+
+        An answer `{"output": name, "data": ...}` is a leave, saved as a tool's is. For an app
+        whose provides name a lander (AD-33 change 2), the lander opens the run before the job
+        queues and the job's inputs gain its `run_id` and `run_folder`; the job's leave lands
+        through the lander's close, and a job that raises, leaves nothing, or whose app stops or
+        dies first is failed through it. Such a job names its caller, because every try is
+        stamped with who asked."""
         pinned = Pin.parse(pin)
         with self._lock:
             instance = self._instances.get(app_id)
@@ -1182,6 +1209,63 @@ class Supervisor:
                 if feed in given:
                     given[feed] = self.artifacts.accept(instance.definition, feed, given[feed])
             asked["inputs"] = given
+        run = self._open(instance, job, cast(Document, asked.get("inputs", {})), principal)
+        if run is None:
+            return self._job(instance, job, asked, principal, None)
+        asked["inputs"] = {
+            **cast(Document, asked.get("inputs", {})),
+            "run_id": run.ticket.run_id,
+            "run_folder": run.folder.relative_to(instance.volume.root).as_posix(),
+        }
+        try:
+            return self._job(instance, job, asked, principal, run)
+        except BaseException as error:
+            ending: Ending = (
+                "killed"
+                if isinstance(error, AppError) and error.code == "not_running"
+                else "failed"
+            )
+            run.lander.fail(run.ticket, str(error) or type(error).__name__, ending)
+            raise
+
+    def _open(
+        self, instance: Instance, job: str, inputs: Document, principal: str | None
+    ) -> Run | None:
+        """Open the job's run through the lander its app names, or None when it names none."""
+        manifest = instance.definition.manifest
+        name = manifest.lander
+        if name is None:
+            return None
+        lander = self.landers.get(name)
+        if lander is None:
+            raise AppError(
+                "unknown_lander", f"{manifest.id} names {name}, which is not registered.", 409
+            )
+        if principal is None:
+            raise AppError(
+                "principal_required",
+                f"{manifest.id} lands through {name}, so its job names who asked for it.",
+                422,
+            )
+        try:
+            ticket = lander.open(manifest.id, manifest.version, job, inputs, principal)
+        except ValueError as error:
+            raise AppError("run_refused", str(error), 422) from error
+        if ticket is None:
+            return None
+        folder = instance.data / RUNS / ticket.run_id
+        folder.mkdir(parents=True, exist_ok=True)
+        return Run(name, lander, ticket, folder)
+
+    def _job(
+        self,
+        instance: Instance,
+        job: str,
+        asked: Document,
+        principal: str | None,
+        run: Run | None,
+    ) -> Document:
+        app_id = instance.definition.manifest.id
         queue = instance.volume.root / JOB_QUEUE
         queue.mkdir(parents=True, exist_ok=True)
         name = f"{time.time_ns():020d}-{uuid.uuid4().hex}"
@@ -1199,6 +1283,8 @@ class Supervisor:
         logged: Document = {"job": job, "ok": result.get("ok") is True}
         if principal is not None:
             logged["principal"] = principal
+        if run is not None:
+            logged["run_id"] = run.ticket.run_id
         self._log(app_id, "job_completed", logged)
         if result.get("ok") is not True:
             raise AppError("job_failed", f"Job {job} raised {result.get('error')}.", 422)
@@ -1211,6 +1297,26 @@ class Supervisor:
         }
         if "result" in result:
             ran["result"] = result["result"]
+        answer = result.get("result")
+        closed = False
+        if isinstance(answer, dict) and "output" in answer and "data" in answer:
+            output = answer["output"]
+            if not isinstance(output, str):
+                raise AppError("invalid_output", "Output names must be strings.")
+            ran["artifact_ref"] = self.artifacts.save(
+                instance.definition, output, answer["data"], run=run
+            )
+            closed = run is not None and (
+                run.name == instance.definition.manifest.provides[output].lander
+            )
+        if run is not None:
+            if not closed:
+                raise AppError(
+                    "result_missing",
+                    f"Job {job} answered without the result {run.name} lands.",
+                    422,
+                )
+            ran["run_id"] = run.ticket.run_id
         return ran
 
     def read_output(self, app_id: str, output: str) -> Document:
