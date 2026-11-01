@@ -13,9 +13,9 @@ Branch `plan/risk-core` (worktree `D:\QMX-worktrees\risk-plan`), cut from `plan/
 3. After grounding: build a timeline of how his risk/sizing thinking evolved (`grounding/G5-timeline.md`): QMX-discussion (old system) → the 10-05 and 10-13 sessions → "Risk & sizing QML redesign" (10-15 to 10-20) → "Agent team for MT5 article analysis" (10-20 to 10-29) → the unit-plan risk pack (10-27 to 11-01). For each stage: what changed, what was dropped, and why. The timeline is for the lead's own understanding; report it to him only briefly.
 4. Next: synthesis for the operator (the landscape), then his questions and seeds, then scenario math.
 
-## Findings for the unit build (not ours to fix; pass on)
+## The unit build is not ours to audit (operator, 2026-11-01)
 
-- G2: build slice A2's dummy unit writes `risk_fraction` "0.5" meaning 0.5 %, while the contract stores percent as a fraction (so read literally it is 50 %). A3 must fix it. Reported to the operator 2026-11-01.
+The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are placeholders, not decisions: nothing is set for risk or sizing yet, and this session is what sets it. Do not report build-level slips (e.g. the A2 `risk_fraction` "0.5" unit) unless the plan itself makes them persist. The placeholders' values (0.5 %, 2R, 48 bars, empty halts) carry no weight in the design.
 
 ## Operator opening, 2026-11-01
 
