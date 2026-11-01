@@ -32,7 +32,7 @@ from qml.numbers import InstrumentRecord, parse_record
 from qml.unit import parse
 from qml.unit.model import SymbolRef
 from qml.unit.schema import ENTRY_REF_PATTERN
-from qmx_library.principal import MAIN
+from qmx_library.principal import MAIN, state_ref
 
 if TYPE_CHECKING:
     from qmx_library.port import JsonObject
@@ -111,8 +111,10 @@ def _fixtures() -> dict[tuple[str, str], tuple[str, InstrumentRecord]]:
 
 
 def _held(store: Store, ref: SymbolRef) -> list[tuple[str, JsonObject, int]]:
-    """Each `instrument` item whose head on `main` holds `ref`'s venue and symbol: the item, its
-    fields and how many times `main` has moved for it, which is the record's version."""
+    """Each live `instrument` item whose head on `main` holds `ref`'s venue and symbol: the item,
+    its fields and how many times `main` has moved for it, which is the record's version. An
+    archived item is withdrawn (Library AD-6), so it binds nothing and its replacement binds
+    alone."""
     items = {
         store.get(store.engine, object_id).item
         for object_id in store.with_field("instrument", "symbol", ref.symbol)
@@ -120,7 +122,8 @@ def _held(store: Store, ref: SymbolRef) -> list[tuple[str, JsonObject, int]]:
     held: list[tuple[str, JsonObject, int]] = []
     for item in sorted(items):
         head = store.head(item, MAIN)
-        if head is None:
+        state = store.head(item, state_ref(item))
+        if head is None or (state is not None and state[0] == "archived"):
             continue
         fields = store.get(store.engine, head[0]).fields
         if fields.get("venue") == ref.venue and fields.get("symbol") == ref.symbol:

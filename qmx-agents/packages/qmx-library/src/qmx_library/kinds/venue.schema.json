@@ -9,6 +9,15 @@
     "type": "object",
     "additionalProperties": false,
     "required": ["venue"],
+    "allOf": [{"$ref": "#/$defs/no_secrets"}],
+    "$defs": {
+      "no_secrets": {
+        "description": "no key at any depth names a credential (key, token, secret, password, auth), so the open sub-objects can never hold one",
+        "propertyNames": {"not": {"pattern": "[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Aa][Uu][Tt][Hh]"}},
+        "additionalProperties": {"$ref": "#/$defs/no_secrets"},
+        "items": {"$ref": "#/$defs/no_secrets"}
+      }
+    },
     "properties": {
       "venue": {"type": "string", "minLength": 1},
       "rate_limits": {"type": "object"},

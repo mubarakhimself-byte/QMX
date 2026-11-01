@@ -179,8 +179,14 @@ def test_the_instrument_kind_holds_every_key_part_a_reads_and_the_one_class_enum
         ("account", {"venue": "hyperliquid", "account_id": "a1", "world": "demo",
                      "token": "never-here"}, ""),
         ("account", {"venue": "ctrader", "account_id": "a1", "world": "paper"}, "/world"),
+        ("venue", {"venue": "binance", "rate_limits": {"api_key": "never-here"}}, "/rate_limits"),
+        ("instrument", record("perp", "v", "BTC", "btc", measured={"spread": {"Token": "x"}}),
+         "/measured/spread"),
+        ("instrument", record("fx", "v", "EURUSD", "eurusd",
+                              leverage={"version": 1, "tiers": [], "grant": "x"}), "/leverage"),
     ],
-    ids=["roll-rule", "class-spelling", "decimal-comma", "account-secret", "account-world"],
+    ids=["roll-rule", "class-spelling", "decimal-comma", "account-secret", "account-world",
+         "venue-api-key", "instrument-nested-token", "leverage-closed"],
 )  # fmt: skip
 def test_a_key_outside_the_kinds_or_a_wrong_spelling_is_refused_at_put(
     store: Store, kind: str, fields: dict[str, Any], pointer: str
@@ -291,3 +297,17 @@ def test_two_items_for_one_symbol_or_an_item_missing_a_fact_bind_nothing_and_say
         "metal.xauusd: the instrument item instrument:icmarkets-ctrader:XAUUSD is not a full "
         "record: /value_per_point: the required key is missing",
     )
+
+
+def test_an_archived_item_binds_nothing_and_its_replacement_binds_alone(store: Store) -> None:
+    land(store, ONE_PER_CLASS[0], "eur-main")
+    land(store, ONE_PER_CLASS[1], "gold-main")
+    store.archive(OPERATOR, "eur-main", "withdrawn")
+    store.archive(OPERATOR, "gold-main", "withdrawn")
+    land(store, ONE_PER_CLASS[0], "eur-main-2")
+    land(store, ONE_PER_CLASS[0] | {"swap": {"long": "-7.1", "short": "1.0"}}, "eur-main-2")
+
+    gathered = gather(store, template())
+
+    assert gathered.context.records["fx.eurusd"].name == "icmarkets-ctrader:EURUSD@2"
+    assert gathered.warnings == (f"{FIXTURE_WARNING}: metal.xauusd reads xauusd.json",)

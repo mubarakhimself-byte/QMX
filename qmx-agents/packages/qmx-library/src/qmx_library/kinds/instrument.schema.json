@@ -9,7 +9,14 @@
     "type": "object",
     "additionalProperties": false,
     "required": ["venue", "symbol", "market_id", "class", "currency", "status"],
+    "allOf": [{"$ref": "#/$defs/no_secrets"}],
     "$defs": {
+      "no_secrets": {
+        "description": "no key at any depth names a credential (key, token, secret, password, auth), so the open sub-objects can never hold one",
+        "propertyNames": {"not": {"pattern": "[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Aa][Uu][Tt][Hh]"}},
+        "additionalProperties": {"$ref": "#/$defs/no_secrets"},
+        "items": {"$ref": "#/$defs/no_secrets"}
+      },
       "decimal": {"type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
       "signed_decimal": {"type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$"},
       "data_levels": {
@@ -102,6 +109,7 @@
       "funding_source": {"type": "string", "minLength": 1},
       "leverage": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["version", "tiers"],
         "properties": {
           "version": {"type": "integer", "minimum": 1},
