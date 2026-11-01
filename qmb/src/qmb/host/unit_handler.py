@@ -5,25 +5,37 @@ node's runtime both drive a unit through this file. The host builds the ``Hosted
 read surfaces this handler serves (``UnitSliceHandler.start`` takes the host's own
 ``construct_unit`` or resume call), and injects the execution and journal ports.
 
-Per slice, in ``run_slice``'s order: a resting entry or close fills against the new bar
+Per slice, in ``run_slice``'s order: a resting entry or exit fills against the new bar
 (``execute_resting``); the bar becomes readable and a held position's stop or target is checked
 against it (``update_closed_data``); then the unit steps once for the slice's instant and its
 intents rest for the next bar (``mint_intents``). A fill's quantity is the sizer receipt's
 rounded down to the market's lot step; below the minimum lot the entry is skipped with its
-reason. The handler closes only positions this compiled fingerprint opened.
+reason. The handler closes only positions this compiled fingerprint opened. An exit acts by its
+kind: ``close_full`` closes the position, ``close_partial`` closes its lot-rounded quantity and
+keeps the rest held, and ``amend_protection`` moves the held stop and target, tightening only.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
 from typing import Final, Protocol, TypeVar, cast
 
 from qmf.core.chrono import Instant
+from qmf.core.exact import Price
 from qmf.core.fingerprint import Fingerprint
+from qmf.core.identity import Instrument
 from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.risk.unit_intent import (
+    AmendProtection,
+    CloseFull,
+    ClosePartial,
+    UnitExitIntent,
+    check_amendment_tightens,
+    parse_unit_intent,
+)
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots
 from qml.protocol.unit import (
@@ -67,13 +79,18 @@ class FillKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class HeldPosition:
-    """A position the handler holds, with the protection its entry intent carried."""
+    """A position the handler holds, with its live protection and what its entry fixed."""
 
     position: OwnPosition
     stop: Decimal
     target: Decimal | None
     decision_row_id: str
     entry_stamps: Mapping[str, Decimal]
+    entry_stop: Decimal
+    risk: Decimal
+    """The money the whole entry quantity risked at its entry stop: the trade's 1 R."""
+    realized_r: Decimal = Decimal(0)
+    """The R the position's partial closes already took."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +111,7 @@ class Fill:
 
 @dataclass(frozen=True, slots=True)
 class Skip:
-    """An entry the host did not fill, with its reason and the lots rounding left out."""
+    """An entry or partial close the host did not fill, with its reason and the R left out."""
 
     instant: Instant
     market_id: str
@@ -105,6 +122,8 @@ class Skip:
 
 @dataclass(frozen=True, slots=True)
 class UnitTrade:
+    """One closing fill. A partial close and the close of its rest are two trades."""
+
     trade_id: str
     market_id: str
     side: Side
@@ -113,10 +132,12 @@ class UnitTrade:
     entry_price: Decimal
     exit_price: Decimal
     stop: Decimal
+    """The entry stop, the level 1 R is measured against."""
     quantity: Decimal
     exit_kind: FillKind
     money: Decimal
     r: Decimal
+    """``money`` over the whole entry's risk, so a position's trades add up to its R."""
 
 
 JournalRecord = DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade
@@ -205,6 +226,16 @@ def _stamps(row: DecisionRow | None) -> dict[str, Decimal]:
     return stamps
 
 
+def _decimal(value: int, scale: int) -> Decimal:
+    return Decimal(value).scaleb(-scale)
+
+
+def _price(level: Decimal, instrument: Instrument) -> Price:
+    exponent = level.as_tuple().exponent
+    scale = -exponent if isinstance(exponent, int) and exponent < 0 else 0
+    return Price(int(level.scaleb(scale)), instrument, scale)
+
+
 class UnitSliceHandler:
     """``run_slice``'s five hooks over one hosted unit. Stream ids are the unit's market ids."""
 
@@ -235,6 +266,7 @@ class UnitSliceHandler:
         self._trades: list[UnitTrade] = []
         self._fills: list[Fill] = []
         self._stepped: tuple[int, UnitStep] | None = None
+        self._entry_stamps: dict[str, dict[str, Decimal]] = {}
         self._entries = 0
 
     @classmethod
@@ -333,9 +365,9 @@ class UnitSliceHandler:
         if wire.get("intent_family") == "entry":
             self._fill_entry(intent.stream_id, wire, bar, frontier)
         else:
-            closed = self._fill_close(intent.stream_id, wire, bar, frontier)
-            if is_refusal(closed):
-                return closed
+            exited = self._fill_exit(intent.stream_id, wire, bar, frontier)
+            if is_refusal(exited):
+                return exited
         return Ok(True)
 
     def update_closed_data(
@@ -366,6 +398,10 @@ class UnitSliceHandler:
             if is_refusal(made):
                 return made
             minted.append(made.value)
+            if wire["intent_family"] == "entry":
+                row_id = cast("str", wire["decision_row_id"])
+                row = next((d for d in step.value.decisions if d.row_id == row_id), None)
+                self._entry_stamps[row_id] = _stamps(row)
         return Ok(tuple(minted))
 
     def _step(self, frontier: Instant) -> Result[UnitStep]:
@@ -397,15 +433,11 @@ class UnitSliceHandler:
             ),
         )
 
-    def _decision(self, row_id: str) -> DecisionRow | None:
-        if self._stepped is None:
-            return None
-        return next((d for d in self._stepped[1].decisions if d.row_id == row_id), None)
-
     def _fill_entry(
         self, market: str, wire: Mapping[str, object], bar: QuoteBar, frontier: Instant
     ) -> None:
         row_id = cast("str", wire["decision_row_id"])
+        stamps = self._entry_stamps.pop(row_id, {})
         record = self._records[market]
         receipt = Decimal(cast("str", wire["quantity"]))
         if self._position(market) is not None:
@@ -416,11 +448,12 @@ class UnitSliceHandler:
             reason = str(sized.context.get("reason"))
             self._journal.append(Skip(frontier, market, row_id, reason, Decimal(1)))
             return
-        quantity = Decimal(sized.value.value).scaleb(-sized.value.scale)
+        quantity = _decimal(sized.value.value, sized.value.scale)
         residue_r = ((receipt - quantity) / receipt).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)
         side = Side(cast("str", wire["direction"]))
         protection = cast("Mapping[str, object]", wire["protection"])
         targets = cast("Sequence[Mapping[str, object]]", protection.get("targets", ()))
+        stop = Decimal(cast("str", protection["stop"]))
         price = self._execution.entry_price(side, bar)
         self._entries += 1
         position = OwnPosition(
@@ -433,10 +466,12 @@ class UnitSliceHandler:
         )
         self._held[market] = HeldPosition(
             position,
-            Decimal(cast("str", protection["stop"])),
+            stop,
             Decimal(cast("str", targets[0]["price"])) if targets else None,
             row_id,
-            _stamps(self._decision(row_id)),
+            stamps,
+            stop,
+            _money(side, price, stop, quantity, record).copy_abs(),
         )
         fill = Fill(
             frontier,
@@ -453,21 +488,56 @@ class UnitSliceHandler:
         self._fills.append(fill)
         self._journal.append(fill)
 
-    def _fill_close(
+    def _fill_exit(
         self, market: str, wire: Mapping[str, object], bar: QuoteBar, frontier: Instant
     ) -> Result[None]:
-        ref = cast("Mapping[str, object]", wire["position_ref"])
+        parsed = parse_unit_intent(wire)
+        if is_refusal(parsed):
+            return parsed
+        exit_ = parsed.value
+        if not isinstance(exit_, UnitExitIntent):
+            return invalid("intent_family", "an exit rests as a format-3 exit intent")
         held = self._held.get(market)
-        if held is None or held.position.position_id != ref["position_id"]:
+        if held is None or held.position.position_id != exit_.position_ref.position_id:
             return policy(
                 "position_ref",
                 "a unit closes only a position its own compiled fingerprint opened",
-                position_id=str(ref["position_id"]),
+                position_id=exit_.position_ref.position_id,
             )
+        row_id = exit_.decision_row_id
         price = self._execution.close_price(held.position.side, bar)
-        self._close(
-            market, held, FillKind.CLOSE, price, frontier, cast("str", wire["decision_row_id"])
-        )
+        match exit_.action:
+            case CloseFull():
+                self._close(market, held, FillKind.CLOSE, price, frontier, row_id)
+            case ClosePartial(quantity=asked):
+                sized = lots(_decimal(asked.value, asked.scale), self._records[market])
+                if is_refusal(sized):
+                    reason = str(sized.context.get("reason"))
+                    self._journal.append(Skip(frontier, market, row_id, reason, Decimal(0)))
+                    return Ok(None)
+                quantity = _decimal(sized.value.value, sized.value.scale)
+                if quantity > held.position.quantity:
+                    return policy(
+                        "quantity",
+                        "a partial close closes at most the quantity the position holds",
+                        asked=str(quantity),
+                        held=str(held.position.quantity),
+                    )
+                self._close(market, held, FillKind.CLOSE, price, frontier, row_id, quantity)
+            case AmendProtection(stop=stop, targets=targets):
+                current = _price(held.stop, exit_.position_ref.instrument)
+                tightens = check_amendment_tightens(
+                    exit_, direction=held.position.side.value, current_stop=current
+                )
+                if is_refusal(tightens):
+                    return tightens
+                self._held[market] = replace(
+                    held,
+                    stop=_decimal(stop.value, stop.scale),
+                    target=_decimal(targets[0].price.value, targets[0].price.scale)
+                    if targets
+                    else None,
+                )
         return Ok(None)
 
     def _close(
@@ -478,15 +548,18 @@ class UnitSliceHandler:
         price: Decimal,
         frontier: Instant,
         row_id: str,
+        quantity: Decimal | None = None,
     ) -> None:
+        """Close ``quantity`` of the held position, or all of it; the rest stays held."""
         record = self._records[market]
         position = held.position
-        del self._held[market]
-        money = _money(position.side, position.entry_price, price, position.quantity, record)
-        risk = _money(
-            position.side, position.entry_price, held.stop, position.quantity, record
-        ).copy_abs()
-        r = (money / risk).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN) if risk else Decimal(0)
+        closed = position.quantity if quantity is None else quantity
+        money = _money(position.side, position.entry_price, price, closed, record)
+        r = (
+            (money / held.risk).quantize(_R_PLACES, rounding=ROUND_HALF_EVEN)
+            if held.risk
+            else Decimal(0)
+        )
         fill = Fill(
             frontier,
             market,
@@ -494,7 +567,7 @@ class UnitSliceHandler:
             kind,
             position.side,
             price,
-            position.quantity,
+            closed,
             None,
             Decimal(0),
             row_id,
@@ -507,8 +580,8 @@ class UnitSliceHandler:
             frontier,
             position.entry_price,
             price,
-            held.stop,
-            position.quantity,
+            held.entry_stop,
+            closed,
             kind,
             money,
             r,
@@ -517,6 +590,15 @@ class UnitSliceHandler:
         self._trades.append(trade)
         self._journal.append(fill)
         self._journal.append(trade)
+        rest = position.quantity - closed
+        if rest:
+            self._held[market] = replace(
+                held,
+                position=replace(position, quantity=rest),
+                realized_r=held.realized_r + trade.r,
+            )
+            return
+        del self._held[market]
         self._closed.append(
             ClosedTrade(
                 trade_id=position.position_id,
@@ -525,7 +607,7 @@ class UnitSliceHandler:
                 side=position.side,
                 market_id=market,
                 world="replay",
-                r_after_costs=r,
+                r_after_costs=held.realized_r + trade.r,
                 entry_stamps=held.entry_stamps,
             )
         )

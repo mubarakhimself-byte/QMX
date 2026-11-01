@@ -1,7 +1,7 @@
 """The shared unit handler: lot rounding at the fill, own positions only, no bot door (B5b).
 
-A stand-in unit answers one fixed step so a test can name the sizer receipt's quantity. The
-handler is driven the way QMB and the node drive it, through ``run_slice``.
+A stand-in unit answers scripted steps so a test can name the sizer receipt's quantity and
+each exit. The handler is driven the way QMB and the node drive it, through ``run_slice``.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import json
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 
 from qmb.host.unit_handler import (
     Fill,
@@ -32,18 +33,31 @@ from qmb.runloop.loop import (
 from qmf.core.chrono import Instant
 from qmf.core.fingerprint import Fingerprint
 from qmf.core.refusal import Ok, RefusalCategory, Result, TypedRefusal, is_refusal
-from qml.numbers import parse_record
-from qml.protocol.unit import OHLC, OwnPosition, QuoteBar, UnitStep, accept_unit_intents
+from qmf.risk.unit_intent import UnitIntent
+from qml.motion import ClosedTrade
+from qml.numbers import InstrumentRecord, parse_record
+from qml.protocol.unit import (
+    OHLC,
+    DecisionRow,
+    OwnPosition,
+    QuoteBar,
+    SlotOutput,
+    UnitStep,
+    accept_unit_intents,
+)
 from qml.unit.model import Side
 from test_unit_runner import make_run_folder, request
 
 _REPO = Path(__file__).resolve().parents[2]
-_RECORD = _REPO / "qml" / "tests" / "fixtures" / "records" / "eurusd.json"
+_RECORDS = _REPO / "qml" / "tests" / "fixtures" / "records"
 _HOST = _REPO / "qmb" / "src" / "qmb" / "host"
 _MINE = Fingerprint("fp1:sha256:" + "a" * 64)
 _OTHER = Fingerprint("fp1:sha256:" + "b" * 64)
 _M = "fx.eurusd"
-_T0, _T1 = 1_741_000_000_000_000_000, 1_741_000_900_000_000_000
+_X = "metal.xauusd"
+_RECORD_FILE = {_M: "eurusd.json", _X: "xauusd.json"}
+_OWN = "aaaaaaaaaaaa-1"
+_T0, _T1, _T2, _T3 = (1_741_000_000_000_000_000 + i * 900_000_000_000 for i in range(4))
 
 
 def _bar(at: int, mid: str) -> QuoteBar:
@@ -76,48 +90,72 @@ def _entry(quantity: str) -> dict[str, object]:
     }
 
 
-def _close(position_id: str) -> dict[str, object]:
+def _exit(
+    position_id: str,
+    kind: str = "close_full",
+    row_id: str = "row-2",
+    opened_by: Fingerprint = _OTHER,
+    **action: object,
+) -> dict[str, object]:
     return {
         "contract_format_version": 3,
         "intent_family": "exit",
-        "kind": "close_full",
+        "kind": kind,
         "position_ref": {
             "position_id": position_id,
             "instrument": {"venue": "icmarkets-ctrader", "symbol": "EURUSD"},
-            "opened_by": _OTHER.value,
+            "opened_by": opened_by.value,
         },
         "reason_code": {"code": "time-exit", "book_family": "unit"},
-        "decision_row_id": "row-2",
+        "decision_row_id": row_id,
+        **action,
     }
 
 
-class _OneStep:
-    """A unit that emits ``wire`` at the first instant and nothing after."""
+def _own_exit(kind: str, row_id: str, **action: object) -> dict[str, object]:
+    return _exit(_OWN, kind, row_id, _MINE, **action)
 
-    def __init__(self, wire: Mapping[str, object]) -> None:
-        intents = accept_unit_intents([wire])
-        assert not isinstance(intents, TypedRefusal), intents
-        self._intents = intents.value
-        self._first = True
+
+Script = Mapping[int, tuple[Sequence[Mapping[str, object]], Sequence[DecisionRow]]]
+
+
+class _Scripted:
+    """A unit that answers each scripted instant with its intents and decision rows."""
+
+    def __init__(self, script: Script) -> None:
+        self._steps: dict[int, tuple[tuple[UnitIntent, ...], tuple[DecisionRow, ...]]] = {}
+        for at, (wires, rows) in script.items():
+            intents = accept_unit_intents(wires)
+            assert not isinstance(intents, TypedRefusal), intents
+            self._steps[at] = (intents.value, tuple(rows))
 
     def on_instant(self, instant: object, /) -> Result[UnitStep]:
         assert isinstance(instant, Instant)
-        intents, self._first = (self._intents if self._first else ()), False
-        return Ok(UnitStep(instant, intents, (), (), ()))
+        intents, rows = self._steps.get(instant.value_ns, ((), ()))
+        return Ok(UnitStep(instant, intents, rows, (), ()))
+
+
+def _at_start(wire: Mapping[str, object]) -> Script:
+    return {_T0: ([wire], ())}
 
 
 def _drive(
-    wire: Mapping[str, object], seeded: Mapping[str, OwnPosition] | None = None
+    script: Script,
+    bars: Mapping[str, Mapping[int, QuoteBar]] | None = None,
+    seeded: Mapping[str, OwnPosition] | None = None,
 ) -> tuple[UnitSliceHandler, ListJournal, Sequence[Result[SliceOutcome]]]:
-    record = parse_record(json.loads(_RECORD.read_text("utf-8")))
-    assert not isinstance(record, TypedRefusal)
+    bars = bars or {_M: {_T0: _bar(_T0, "1.08500"), _T1: _bar(_T1, "1.08520")}}
+    records: dict[str, InstrumentRecord] = {}
+    for market in bars:
+        record = parse_record(json.loads((_RECORDS / _RECORD_FILE[market]).read_text("utf-8")))
+        assert not isinstance(record, TypedRefusal)
+        records[market] = record.value
     journal = ListJournal()
-    bars = {_T0: _bar(_T0, "1.08500"), _T1: _bar(_T1, "1.08520")}
     started = UnitSliceHandler.start(
-        lambda _surfaces: Ok(_OneStep(wire)),
+        lambda _surfaces: Ok(_Scripted(script)),
         stream="m15",
-        records={_M: record.value},
-        bars={_M: bars},
+        records=records,
+        bars=bars,
         opened_by=_MINE,
         equity=Decimal("10000.00"),
         execution=NextOpenExecution(),
@@ -125,13 +163,13 @@ def _drive(
         seeded=seeded,
     )
     assert not isinstance(started, TypedRefusal), started
-    streams = StreamSet((DeclaredStream(_M, _M),))
+    streams = StreamSet(tuple(DeclaredStream(m, m) for m in bars))
     resting: tuple[RestingIntent, ...] = ()
     outcomes: list[Result[SliceOutcome]] = []
     frontier: Instant | None = None
-    for at in bars:
+    for at in sorted({at for market in bars.values() for at in market}):
         outcome = run_slice(
-            [SliceObservation(_M, Instant(at))],
+            [SliceObservation(m, Instant(at)) for m in bars if at in bars[m]],
             stream_set=streams,
             current_frontier=frontier,
             handler=started.value,
@@ -145,7 +183,7 @@ def _drive(
 
 
 def test_a_receipt_of_0_037_lots_fills_0_03_and_journals_the_0_007_residue_in_r() -> None:
-    handler, journal, _ = _drive(_entry("0.037"))
+    handler, journal, _ = _drive(_at_start(_entry("0.037")))
 
     assert [
         (f.kind, f.quantity, f.receipt_quantity, f.residue_r, f.price) for f in handler.fills
@@ -156,7 +194,7 @@ def test_a_receipt_of_0_037_lots_fills_0_03_and_journals_the_0_007_residue_in_r(
 
 
 def test_a_receipt_of_0_004_lots_is_below_the_minimum_lot_and_skips() -> None:
-    handler, journal, _ = _drive(_entry("0.004"))
+    handler, journal, _ = _drive(_at_start(_entry("0.004")))
 
     skips = [r for r in journal.records if isinstance(r, Skip)]
     assert handler.fills == ()
@@ -171,7 +209,7 @@ def test_a_close_for_a_position_the_unit_did_not_open_is_refused_and_it_stays_op
         )
     }
 
-    handler, _, outcomes = _drive(_close("foreign-1"), seeded)
+    handler, _, outcomes = _drive(_at_start(_exit("foreign-1")), seeded=seeded)
 
     refused = outcomes[-1]
     assert is_refusal(refused)
@@ -179,6 +217,98 @@ def test_a_close_for_a_position_the_unit_did_not_open_is_refused_and_it_stays_op
     assert refused.context["field"] == "position_ref"
     assert handler.open_positions == seeded
     assert handler.fills == ()
+
+
+def test_an_entry_keeps_its_minting_rows_stamps_when_another_market_steps_the_unit_first() -> None:
+    minting_row = DecisionRow(
+        "row-1",
+        Instant(_T0),
+        _M,
+        Side.LONG,
+        "enter",
+        (SlotOutput("trigger", "trend", "1.08510"), SlotOutput("filter", "label", "up")),
+        {},
+        "test",
+    )
+    bars = {
+        _M: {_T0: _bar(_T0, "1.08500"), _T2: _bar(_T2, "1.08520"), _T3: _bar(_T3, "1.07990")},
+        _X: {at: _bar(at, "2900.00") for at in (_T0, _T1, _T2, _T3)},
+    }
+
+    handler, _, outcomes = _drive({_T0: ([_entry("0.50")], [minting_row])}, bars)
+
+    assert all(not is_refusal(o) for o in outcomes)
+    closed = cast("Sequence[ClosedTrade]", handler.read_surfaces()["own_journal"].at(Instant(_T3)))
+    assert [(t.trade_id, t.market_id, t.entry_stamps) for t in closed] == [
+        (_OWN, _M, {"trend": Decimal("1.08510")})
+    ]
+    assert [(f.kind, f.instant.value_ns) for f in handler.fills] == [
+        (FillKind.ENTRY, _T2),
+        (FillKind.STOP, _T3),
+    ]
+
+
+def _four_bars(t2_mid: str, t3_mid: str = "1.08400") -> dict[str, dict[int, QuoteBar]]:
+    mids = {_T0: "1.08500", _T1: "1.08520", _T2: t2_mid, _T3: t3_mid}
+    return {_M: {at: _bar(at, mid) for at, mid in mids.items()}}
+
+
+def test_a_partial_close_closes_its_lot_rounded_quantity_and_the_rest_stays_held() -> None:
+    script: Script = {
+        _T0: ([_entry("0.50")], ()),
+        _T1: ([_own_exit("close_partial", "row-2", quantity="0.207")], ()),
+        _T2: ([_own_exit("close_full", "row-3")], ()),
+    }
+
+    handler, _, outcomes = _drive(script, _four_bars("1.08600"))
+
+    assert all(not is_refusal(o) for o in outcomes)
+    assert [(f.kind, f.quantity, f.price, f.decision_row_id) for f in handler.fills] == [
+        (FillKind.ENTRY, Decimal("0.50"), Decimal("1.08530"), "row-1"),
+        (FillKind.CLOSE, Decimal("0.20"), Decimal("1.08600"), "row-2"),
+        (FillKind.CLOSE, Decimal("0.30"), Decimal("1.08400"), "row-3"),
+    ]
+    assert [(t.quantity, t.money, t.r) for t in handler.trades] == [
+        (Decimal("0.20"), Decimal("14.00"), Decimal("0.0528")),
+        (Decimal("0.30"), Decimal("-39.00"), Decimal("-0.1472")),
+    ]
+    closed = cast("Sequence[ClosedTrade]", handler.read_surfaces()["own_journal"].at(Instant(_T3)))
+    assert [(t.trade_id, t.r_after_costs) for t in closed] == [(_OWN, Decimal("-0.0944"))]
+
+
+def test_a_tightened_stop_is_held_and_fills_without_closing_at_the_amendment() -> None:
+    script: Script = {
+        _T0: ([_entry("0.50")], ()),
+        _T1: ([_own_exit("amend_protection", "row-2", stop="1.08400", targets=[])], ()),
+    }
+
+    handler, _, outcomes = _drive(script, _four_bars("1.08405"))
+
+    assert all(not is_refusal(o) for o in outcomes)
+    assert [(f.kind, f.quantity, f.price) for f in handler.fills] == [
+        (FillKind.ENTRY, Decimal("0.50"), Decimal("1.08530")),
+        (FillKind.STOP, Decimal("0.50"), Decimal("1.08400")),
+    ]
+    assert [(t.stop, t.money, t.r) for t in handler.trades] == [
+        (Decimal("1.08000"), Decimal("-65.00"), Decimal("-0.2453"))
+    ]
+
+
+def test_an_amendment_that_widens_the_stop_is_refused_and_the_position_stays_open() -> None:
+    script: Script = {
+        _T0: ([_entry("0.50")], ()),
+        _T1: ([_own_exit("amend_protection", "row-2", stop="1.07900", targets=[])], ()),
+    }
+
+    handler, _, outcomes = _drive(script, _four_bars("1.08405"))
+
+    refused = outcomes[2]
+    assert is_refusal(refused)
+    assert refused.category is RefusalCategory.POLICY_REJECTION
+    assert refused.context["violation"] == "widen-stop"
+    assert "from 1.08000 to 1.07900" in str(refused.context["reason"])
+    assert [(f.kind, f.quantity) for f in handler.fills] == [(FillKind.ENTRY, Decimal("0.50"))]
+    assert handler.open_positions[_M].quantity == Decimal("0.50")
 
 
 def test_the_dummy_never_closes_a_seeded_position_it_did_not_open(tmp_path: Path) -> None:
