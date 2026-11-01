@@ -560,7 +560,13 @@ def compile_unit(
         raise ValueError(json.dumps(dict(compiled_fp.context), default=str))
     bound_all = [b for s in sides for slot in s.slots for b in slot.bindings]
     bound_all += [e.binding for e in exits] + [sizer]
-    placeholders = tuple(dict.fromkeys(b.name for b in bound_all if b.face.origin == "placeholder"))
+    placeholders = tuple(
+        dict.fromkeys(
+            b.name
+            for b in bound_all
+            if b.face.origin == "placeholder"  # mock-data-scan: allow (the origin label)
+        )
+    )
     return CompiledUnit(
         unit=unit,
         plan=plan,

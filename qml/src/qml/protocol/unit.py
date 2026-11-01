@@ -802,7 +802,7 @@ class _Run:
                 },
                 "protection": protection,
                 "not_before": bar.knowable_at.value_ns,
-                "placeholder_labels": list(compiled.placeholders),
+                "placeholder_labels": list(compiled.placeholders),  # mock-data-scan: allow (field)
                 "decision_row_id": row,
             }
         )

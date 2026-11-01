@@ -61,7 +61,7 @@ REASON_CODES: Final[frozenset[str]] = frozenset(
         "spec_change_pause",
         "risk_stop",
         "health_stop",
-        "placeholder_refusal_never",
+        "placeholder_refusal_never",  # mock-data-scan: allow (refusal kind, domain word)
     }
 )
 """Why a decision was ``skipped`` or ``blocked``. Closed and appendable: add, never redefine."""
