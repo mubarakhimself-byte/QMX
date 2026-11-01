@@ -73,3 +73,32 @@ The build has just started (about 12 of 73 PRs). Its risk and sizing pieces are 
 - He'll aim for better than 55 % wins on scalpers. Strategy sources stay private for now (YouTube and social media); use demo units and placeholders with ranges.
 
 **His questions:** why does 1 % x 16 a day show 0 % ruin; why "half the edge" if paper is just demo; would a portfolio manager test at half edge, and how should this system handle it; half or full Kelly; isn't this all tuned for scalpers.
+
+## His third round, 2026-11-01 night
+
+**Rulings / positions:**
+- **The Book/BMS system is the skeleton.** "Everything is sort of falling into place inside the book system": enhance and rebuild it, don't replace it. This session is building a better Book overall.
+- **Risk management works at several levels:** unit, cluster (e.g. all mean-reverting scalpers), methodology, and portfolio, with overlaps. Matches bot rules → Book rules → BMS rules. Units self-configure; a Book is a cluster; the BMS holds the portfolio (splits capital, can shut units off; house money placement open).
+- **Each unit type gets its own sizing template** with self-configuring defaults, each with a reason. Example: a mean-reverting scalper should not take 6 straight full-size losses; brake at about 3 or at a pattern (like reverse house money). Not every scalper can hold several positions. Quote: "Yes, the idea makes sense, true, but I don't think it will hold up across all those different variants."
+- **Design the baseline first**, then grow. Agents and research fill the per-type templates later.
+- **Luck is not a variable.** QMB's workflows prove or enhance the edge before a unit reaches demo. Don't use luck as an argument. Picking which units to promote is not this session's domain.
+- **Floor:** the system should almost never touch it, only in a black swan or a real system failure. BMS keeps a buffer before the floor, as prop-firm traders do with a 5 % daily limit. Losing $200 in a day is "stupid". This is his answer to "how often would you accept touching the floor".
+- The floor/cushion is user-configured; much else is self-configured. He'd rather give units part of the seed ($100-200 of $500) and let them grow than leave $300 idle. Open: how trading restarts the next day; whether the sweep cap returns.
+- Daily brakes: 10/5/3 % made no sense at $500 (3 % = $15, less than a trade). There must be more than one brake, at unit and portfolio level, and each must say what is breaking. He mentions the 3-5-7 rule as the portfolio-manager standard.
+- Every change in size needs a stated reason (his volleyball picture: why spike from that angle).
+- Units of measure are open: dollars or percent. He recalls the kill line as a percentage.
+- Aggressive is not the same as nuclear: accelerators make it aggressive, and brakes make sure it never loses stupidly.
+- Adaptation is key; brakes first, accelerators second (agreed).
+
+**New ideas (rough):**
+- **Split QMX into demo and live** so a unit trades identically on both and only the account differs. He asks whether slippage can be measured on demo.
+- Session opens need a protection or caution window, like news.
+- Sniping windows: how are they found, by agents or deterministically? Findings go to the library as artifacts for copilot jobs.
+- Microstructure: he doesn't recall what it is; he imagined agents summarising it per session or market for units.
+- He'll ask the unit-plan agent whether market physics and relative volume are in the build.
+- Sessions and overlaps (Tokyo, London, New York) across FX, crypto perpetuals and futures at once: how units avoid contradicting themselves. Design for complexity, not a complex system.
+- Indices are an instrument class too; don't think only in FX.
+- An ORB unit getting frequency through breadth (each session's and market's opening range): he called it brilliant.
+- He disagrees strongly that a great month is only +50 %.
+
+**Workflow:** he wants to use the planning workflow from memory with many agents: seeds → BMad CIS, brainstorming, party mode (trader personas or techniques) → architecture. Agree the route first. Ground on the skills (poteto-mode, wayfinder, etc.).
