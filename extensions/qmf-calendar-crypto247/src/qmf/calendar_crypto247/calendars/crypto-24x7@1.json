@@ -1,0 +1,33 @@
+{
+  "schema": "qmx.calendar/1",
+  "calendar_ref": "crypto-24x7@1",
+  "name": "Crypto perpetuals and spot, which trade around the clock",
+  "zone": "UTC",
+  "issued": "2026-11-02",
+  "max_age_days": 31,
+  "source": "Exchanges list no session or holiday for perpetuals and spot; funding times from each venue's funding documentation, where a record's own funding_interval wins",
+  "sessions": "always",
+  "closures": [],
+  "funding": [
+    {
+      "venue": "hyperliquid",
+      "every": "PT1H",
+      "anchor": "00:00"
+    },
+    {
+      "venue": "binance",
+      "every": "PT8H",
+      "anchor": "00:00"
+    },
+    {
+      "venue": "bybit",
+      "every": "PT8H",
+      "anchor": "00:00"
+    },
+    {
+      "venue": "okx",
+      "every": "PT8H",
+      "anchor": "00:00"
+    }
+  ]
+}

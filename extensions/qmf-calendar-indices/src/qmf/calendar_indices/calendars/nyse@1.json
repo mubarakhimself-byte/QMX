@@ -1,0 +1,103 @@
+{
+  "schema": "qmx.calendar/1",
+  "calendar_ref": "nyse@1",
+  "name": "NYSE and Nasdaq cash session",
+  "zone": "America/New_York",
+  "issued": "2026-11-02",
+  "max_age_days": 31,
+  "source": "NYSE core trading 09:30 to 16:00 New York time on weekdays, shut on the NYSE holidays; the 13:00 early closes are not modelled in version 1",
+  "sessions": [
+    {
+      "open": "mon 09:30",
+      "close": "mon 16:00"
+    },
+    {
+      "open": "tue 09:30",
+      "close": "tue 16:00"
+    },
+    {
+      "open": "wed 09:30",
+      "close": "wed 16:00"
+    },
+    {
+      "open": "thu 09:30",
+      "close": "thu 16:00"
+    },
+    {
+      "open": "fri 09:30",
+      "close": "fri 16:00"
+    }
+  ],
+  "closures": [
+    {
+      "from": "2026-01-01T00:00",
+      "to": "2026-01-02T00:00",
+      "why": "New Year's Day"
+    },
+    {
+      "from": "2026-01-19T00:00",
+      "to": "2026-01-20T00:00",
+      "why": "Martin Luther King Jr. Day"
+    },
+    {
+      "from": "2026-02-16T00:00",
+      "to": "2026-02-17T00:00",
+      "why": "Washington's Birthday"
+    },
+    {
+      "from": "2026-04-03T00:00",
+      "to": "2026-04-04T00:00",
+      "why": "Good Friday"
+    },
+    {
+      "from": "2026-05-25T00:00",
+      "to": "2026-05-26T00:00",
+      "why": "Memorial Day"
+    },
+    {
+      "from": "2026-06-19T00:00",
+      "to": "2026-06-20T00:00",
+      "why": "Juneteenth"
+    },
+    {
+      "from": "2026-07-03T00:00",
+      "to": "2026-07-04T00:00",
+      "why": "Independence Day, observed"
+    },
+    {
+      "from": "2026-09-07T00:00",
+      "to": "2026-09-08T00:00",
+      "why": "Labor Day"
+    },
+    {
+      "from": "2026-11-26T00:00",
+      "to": "2026-11-27T00:00",
+      "why": "Thanksgiving Day"
+    },
+    {
+      "from": "2026-12-25T00:00",
+      "to": "2026-12-26T00:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2027-01-01T00:00",
+      "to": "2027-01-02T00:00",
+      "why": "New Year's Day"
+    },
+    {
+      "from": "2027-01-18T00:00",
+      "to": "2027-01-19T00:00",
+      "why": "Martin Luther King Jr. Day"
+    },
+    {
+      "from": "2027-02-15T00:00",
+      "to": "2027-02-16T00:00",
+      "why": "Washington's Birthday"
+    },
+    {
+      "from": "2027-03-26T00:00",
+      "to": "2027-03-27T00:00",
+      "why": "Good Friday"
+    }
+  ]
+}

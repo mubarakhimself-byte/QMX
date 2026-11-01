@@ -1,0 +1,78 @@
+{
+  "schema": "qmx.calendar/1",
+  "calendar_ref": "de-index-cfd@1",
+  "name": "German index CFDs (DE40), which follow Eurex's DAX futures",
+  "zone": "Europe/Berlin",
+  "issued": "2026-11-02",
+  "max_age_days": 31,
+  "source": "Eurex FDAX: 01:10 to 22:00 Frankfurt time on weekdays, shut on the Eurex holidays; early closes before holidays are not modelled in version 1",
+  "sessions": [
+    {
+      "open": "mon 01:10",
+      "close": "mon 22:00"
+    },
+    {
+      "open": "tue 01:10",
+      "close": "tue 22:00"
+    },
+    {
+      "open": "wed 01:10",
+      "close": "wed 22:00"
+    },
+    {
+      "open": "thu 01:10",
+      "close": "thu 22:00"
+    },
+    {
+      "open": "fri 01:10",
+      "close": "fri 22:00"
+    }
+  ],
+  "closures": [
+    {
+      "from": "2026-04-03T00:00",
+      "to": "2026-04-04T00:00",
+      "why": "Good Friday"
+    },
+    {
+      "from": "2026-04-06T00:00",
+      "to": "2026-04-07T00:00",
+      "why": "Easter Monday"
+    },
+    {
+      "from": "2026-05-01T00:00",
+      "to": "2026-05-02T00:00",
+      "why": "Labour Day"
+    },
+    {
+      "from": "2026-12-24T00:00",
+      "to": "2026-12-25T00:00",
+      "why": "Christmas Eve"
+    },
+    {
+      "from": "2026-12-25T00:00",
+      "to": "2026-12-26T00:00",
+      "why": "Christmas Day"
+    },
+    {
+      "from": "2026-12-31T00:00",
+      "to": "2027-01-01T00:00",
+      "why": "New Year's Eve"
+    },
+    {
+      "from": "2027-01-01T00:00",
+      "to": "2027-01-02T00:00",
+      "why": "New Year's Day"
+    },
+    {
+      "from": "2027-03-26T00:00",
+      "to": "2027-03-27T00:00",
+      "why": "Good Friday"
+    },
+    {
+      "from": "2027-03-29T00:00",
+      "to": "2027-03-30T00:00",
+      "why": "Easter Monday"
+    }
+  ]
+}
