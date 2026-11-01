@@ -41,3 +41,6 @@ Every PR keeps the shipped tests green (`just ci`), so QMX keeps its few errors 
 
 ## Size and the unstable internet
 The three parts hold about 70 slices, so the plan is long. Keep one PR per slice unless two slices are too small to stand alone. If the plan passes about 3,000 lines, write each phase as its own file under `build/plan-parts/` and assemble `UNIT-PLAN.md` with a small script, then run the checker on the assembled file. The operator's internet is unstable today: write each file early with its headings and save as each section is done, so a cut loses little.
+
+## Disk (fix-check G4, checked)
+His C: drive is 98% full (about 6.9 GB free). The shipped backup round keeps a tenth of a drive free, so 106 `qmx-home` backup tests go red on this PC when temp files land on C:, with no fault in the code (FC1 item 3: 343 passed, 0 failed with that rule off). Put one line in the orchestrator prompt and the builder brief: before `just ci` on This PC, set `TEMP` and `TMP` to `D:/Temp` and `UV_CACHE_DIR` to `D:/Caches/uv` (as `PROMPT-DATA.md` rule 12 does), work only on D:, and treat 106 red `qmx-home` backup tests on a full C: as the disk, never the PR. Tell him in the attention list that freeing C: past about 33 GB clears it for good.
