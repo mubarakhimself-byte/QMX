@@ -1,25 +1,28 @@
 """A14's probe: the core plugin's PostToolUse hook under the harness's own chat launch.
 
-Opt in with `QMX_TEST_LIVE=1`; without it both tests skip, so the package suite never starts a
-model. The chat starts through `Harness.start_chat` on a QMX home with a plan login, so the CLI
-loads `qmx-agents/plugin/` with `setting_sources=[]`, exactly as every chat does. Model turns run
-on `haiku`. No API key is read and nothing is spent. The run holds the engine lane lock, because
+The model test opts in with `QMX_TEST_LIVE=1`; without it it skips, so the package suite never
+starts a model. The command test needs no model and runs in the package suite. The chat starts
+through `Harness.start_chat` on a QMX home with a plan login, so the CLI loads
+`qmx-agents/plugin/` with `setting_sources=[]`, exactly as every chat does. Model turns run on
+`haiku`. No API key is read and nothing is spent. The run holds the engine lane lock, because
 `Harness.open` kills every CLI tree it finds for its home.
 
 - `test_the_hook_reaches_the_model`. One chat writes a broken unit, edits a passing unit into a
   broken one, edits it back, and writes a JSON file that is not a unit. PASS when the hook's
   `additionalContext` is in the transcript after the two broken saves only, and the model repeats
   each broken save's `problem_set`, which it can only know from the hook.
-- `test_the_hook_command_alone`. The shipped command run by hand on a failing unit, a passing
-  unit, a non-unit JSON file and a TOML file, timed. PASS when only the failing unit gets an answer
-  and every run ends inside `HOOK_BUDGET_S`.
+- `test_the_hook_command_alone`. The shipped command run by hand, in the shell the CLI runs it
+  in, on a failing unit, a passing unit, a unit whose market only a Library record could settle,
+  a non-unit JSON file and a TOML file, timed. PASS when only the failing unit gets an answer and
+  every run ends inside `HOOK_BUDGET_S`.
 
 From `qmx-agents/` on This PC, with the agents venv:
 `QMX_TEST_LIVE=1 uv run --no-sync pytest -p no:xdist -s <this file>`, where the file is
 `packages/qma-harness/tests/live/test_unit_hook_probe.py`.
-Writes `<A14_EVIDENCE>/<A14_LOG_PREFIX>a14-<windows|linux>.log` and `...a14-time.log`. On another
-host set `A14_HOME` (a QMX home whose `claude/` holds a plan login), `A14_LOCK`, `A14_EVIDENCE`,
-`A14_WORK` and `QMA_LIVE_SCRATCH`.
+The model test writes `<A14_EVIDENCE>/<A14_LOG_PREFIX>a14-<windows|linux>.log`. The command test
+writes `a14-time.log` there when `A14_EVIDENCE` is set, and in its own temporary folder otherwise.
+On another host set `A14_HOME` (a QMX home whose `claude/` holds a plan login), `A14_LOCK`,
+`A14_EVIDENCE`, `A14_WORK` and `QMA_LIVE_SCRATCH`.
 """
 
 from __future__ import annotations
@@ -44,7 +47,8 @@ REPO: Final = Path(__file__).resolve().parents[5]
 PLUGIN: Final = REPO / "qmx-agents" / "plugin"
 HOME: Final = Path(os.environ.get("A14_HOME", "D:/QMX-worktrees/qma-ship/home"))
 LOCK: Final = Path(os.environ.get("A14_LOCK", "D:/QMX-worktrees/.engine-lane-lock"))
-EVIDENCE: Final = Path(os.environ.get("A14_EVIDENCE", "D:/QMX-worktrees/unit-ship/evidence/a14"))
+GIVEN_EVIDENCE: Final = os.environ.get("A14_EVIDENCE")
+EVIDENCE: Final = Path(GIVEN_EVIDENCE or "D:/QMX-worktrees/unit-ship/evidence/a14")
 WORK: Final = Path(os.environ.get("A14_WORK", "D:/QMX-worktrees/unit-ship/homes/a14-probe"))
 HOST: Final = "windows" if os.name == "nt" else "linux"
 TOLD: Final = "QMX unit check of "
@@ -59,15 +63,11 @@ ASK: Final = (
     "told of none."
 )
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("QMX_TEST_LIVE") != "1", reason="opt-in live probe on the plan login"
-)
-
 
 class Log:
-    def __init__(self, slug: str) -> None:
-        EVIDENCE.mkdir(parents=True, exist_ok=True)
-        self.path = EVIDENCE / f"{os.environ.get('A14_LOG_PREFIX', '')}{slug}.log"
+    def __init__(self, slug: str, folder: Path = EVIDENCE) -> None:
+        folder.mkdir(parents=True, exist_ok=True)
+        self.path = folder / f"{os.environ.get('A14_LOG_PREFIX', '')}{slug}.log"
         self.path.write_text("", encoding="utf-8")
         self.failed: list[str] = []
 
@@ -244,6 +244,9 @@ async def chat_probe(say: Log, work: Path) -> None:
     )
 
 
+@pytest.mark.skipif(
+    os.environ.get("QMX_TEST_LIVE") != "1", reason="opt-in live probe on the plan login"
+)
 def test_the_hook_reaches_the_model() -> None:
     say = Log(f"a14-{HOST}")
     live = live_qma()
@@ -259,19 +262,41 @@ def test_the_hook_reaches_the_model() -> None:
     say.verdict()
 
 
-def test_the_hook_command_alone() -> None:
-    say = Log("a14-time")
-    work = fresh("alone")
+def hook_shell() -> str | None:
+    """The shell the CLI runs a hook command in. On Windows that is Git Bash, found beside git as
+    the CLI finds it, since the `bash` on PATH there can be WSL's."""
+    given = os.environ.get("CLAUDE_CODE_GIT_BASH_PATH")
+    if given:
+        return given
+    if os.name != "nt":
+        return shutil.which("bash")
+    git = shutil.which("git")
+    shells = [folder / "bin" / "bash.exe" for folder in Path(git).resolve().parents] if git else []
+    found = [shell for shell in shells if shell.is_file()]
+    return str(found[0]) if found else None
+
+
+def test_the_hook_command_alone(tmp_path: Path) -> None:
+    shell = hook_shell()
+    if shell is None:
+        pytest.skip("the hook command runs under bash (Git Bash on Windows), and none was found")
+    say = Log("a14-time", Path(GIVEN_EVIDENCE) if GIVEN_EVIDENCE else tmp_path)
+    work = tmp_path / "work"
+    work.mkdir()
     passing = template()
     broken = json.loads(json.dumps(passing))
     broken["numbers"]["ema_period"]["default"] = "999"
+    library_only = json.loads(json.dumps(passing))
+    library_only["markets"][0]["instrument_ref"]["symbol"] = "GBPUSD"
+    blind = cast("list[dict[str, Any]]", checked(None, library_only)["errors"])
+    assert [problem["kind"] for problem in blind] == ["no_record"]
     files = {
         "broken.json": json.dumps(broken, indent=2),
         "unit.json": json.dumps(passing, indent=2),
+        "gbpusd.json": json.dumps(library_only, indent=2),
         "notes.json": '{"schema": "qmx.workflow/1"}',
         "pyproject.toml": '[project]\nname = "x"\n',
     }
-    shell = os.environ.get("CLAUDE_CODE_GIT_BASH_PATH") or shutil.which("bash") or "bash"
     say(f"shell {shell}; python {shutil.which('python')}")
     answers: dict[str, str] = {}
     for name, body in files.items():
@@ -308,10 +333,10 @@ def test_the_hook_command_alone() -> None:
         and problem_set(broken) in told["additionalContext"],
         told["additionalContext"][:200],
     )
+    quiet = ("unit.json", "gbpusd.json", "notes.json", "pyproject.toml")
     say.check(
-        "unit.json, notes.json and pyproject.toml get no answer",
-        [answers[name] for name in ("unit.json", "notes.json", "pyproject.toml")] == ["", "", ""],
+        f"{', '.join(quiet)} get no answer",
+        [answers[name] for name in quiet] == ["", "", "", ""],
         answers,
     )
-    shutil.rmtree(work, ignore_errors=True)
     say.verdict()
