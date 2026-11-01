@@ -25,6 +25,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
+from itertools import pairwise
 from types import MappingProxyType
 from typing import Final, Protocol, cast
 
@@ -48,12 +49,14 @@ from qml.compile.compiler import (
     SidePlan,
     SlotPlan,
 )
+from qml.environment import current_environment
 from qml.motion.engine import ClosedTrade, SlowState, calibrate
 from qml.numbers.records import InstrumentRecord
 from qml.unit.model import CombinerKind, Role, Side, ValueParam
 
 __all__ = [
     "OHLC",
+    "SEAM_JUMP_SCALE",
     "STATE_SCHEMA_VERSION",
     "Account",
     "CalibrationRow",
@@ -62,6 +65,7 @@ __all__ = [
     "MotionSwitch",
     "OwnPosition",
     "QuoteBar",
+    "SeamCheck",
     "SlotOutput",
     "StateEvent",
     "TraceLevel",
@@ -71,9 +75,13 @@ __all__ = [
     "accept_unit_intents",
     "construct_unit",
     "restore_unit",
+    "seam_check",
 ]
 
-STATE_SCHEMA_VERSION: Final[int] = 1
+STATE_SCHEMA_VERSION: Final[int] = 2
+"""2 records the interpreter the snapshot was taken under (UT-09, QML-25)."""
+SEAM_JUMP_SCALE: Final[Decimal] = Decimal(3)
+"""The setting ``seam_jump_scale``: a seam flags past this many typical warm-up bar moves."""
 
 UnitIntent = UnitEntryIntent | UnitExitIntent
 
@@ -344,6 +352,7 @@ class _Core:
         return {
             "state_schema_version": STATE_SCHEMA_VERSION,
             "compiled_fingerprint": self.compiled.compiled_fingerprint.value,
+            "environment": {"python": current_environment().python},
             "markets": markets,
             "slow": slow,
         }
@@ -885,24 +894,64 @@ def restore_unit(
     trace_level: TraceLevel = TraceLevel.EVENTS,
     motion: MotionSwitch = MotionSwitch.ON,
 ) -> Result[HostedUnit]:
-    """Resume from ``snapshot``. A snapshot of another compiled fingerprint or state schema
-    starts the unit cold, and its first step carries a ``cold_start`` event with the reason."""
+    """Resume from ``snapshot``. A snapshot of another state schema, compiled fingerprint or
+    interpreter starts the unit cold, and its first step carries a ``cold_start`` event with
+    the reason, so a restart never silently changes what the unit does."""
     built = _core(
         compiled, read_surfaces, scope_id, execution_target, assignment, trace_level, motion
     )
     if is_refusal(built):
         return built
     core = built.value
+    reason = _cold_reason(snapshot, compiled)
+    if reason is None:
+        core.load(snapshot)
+    else:
+        core.pending.extend(StateEvent("cold_start", m.market_id, reason) for m in core.markets)
+    return Ok(HostedUnit(core))
+
+
+def _cold_reason(snapshot: Mapping[str, object], compiled: CompiledUnit) -> str | None:
+    """Why ``snapshot`` cannot resume ``compiled`` here, or ``None`` when it can."""
     found = snapshot.get("state_schema_version")
     if found != STATE_SCHEMA_VERSION:
-        reason = f"state schema {found!r}, this door reads {STATE_SCHEMA_VERSION}"
-    elif snapshot.get("compiled_fingerprint") != compiled.compiled_fingerprint.value:
-        reason = "the snapshot belongs to another compiled fingerprint"
-    else:
-        core.load(snapshot)
-        return Ok(HostedUnit(core))
-    core.pending.extend(StateEvent("cold_start", m.market_id, reason) for m in core.markets)
-    return Ok(HostedUnit(core))
+        return f"state schema {found!r}, this door reads {STATE_SCHEMA_VERSION}"
+    if snapshot.get("compiled_fingerprint") != compiled.compiled_fingerprint.value:
+        return "the snapshot belongs to another compiled fingerprint"
+    saved = cast("Mapping[str, object]", snapshot.get("environment") or {}).get("python")
+    running = current_environment().python
+    if saved != running:
+        return f"the snapshot was taken under Python {saved}, this is Python {running}"
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class SeamCheck:
+    """``jump`` is the seam's gap in typical warm-up bar moves; ``flag`` is ``jump > scale``."""
+
+    flag: bool
+    jump: Decimal
+
+
+def seam_check(
+    warmup_tail: Sequence[QuoteBar], live_head: QuoteBar, scale: Decimal = SEAM_JUMP_SCALE
+) -> Result[SeamCheck]:
+    """Compare where the warm-up ended with where live data starts (UT-11).
+
+    The gap is the live head's bid open less the tail's last bid close, measured in the
+    median absolute close-to-close move of the tail. The host journals a flag as
+    ``seam_flag {stream, jump}``.
+    """
+    closes = [bar.bid.close for bar in warmup_tail]
+    moves = sorted(abs(b - a) for a, b in pairwise(closes))
+    if not moves:
+        return invalid("warmup_tail", "a seam is measured against at least two warm-up bars")
+    middle = len(moves) // 2
+    typical = moves[middle] if len(moves) % 2 else (moves[middle - 1] + moves[middle]) / 2
+    if typical == 0:
+        return invalid("warmup_tail", "the warm-up tail never moved, so it cannot scale a gap")
+    jump = abs(live_head.bid.open - closes[-1]) / typical
+    return Ok(SeamCheck(flag=jump > scale, jump=jump))
 
 
 @dataclass(frozen=True, slots=True)
