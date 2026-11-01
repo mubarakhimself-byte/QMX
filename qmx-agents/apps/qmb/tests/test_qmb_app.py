@@ -246,18 +246,32 @@ def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
 
 def test_a_run_longer_than_the_wait_answers_its_run_id_and_lands_later(world: World) -> None:
     world.backtest["backtest_run"](unit=world.dummy, window=MARCH)
-    world.control.settings_put(
-        "qmb", {"bars": world.control.settings_get("qmb")["bars"], "agent_wait_s": 1}
-    )
+    world.control.settings_put("qmb", {"agent_wait_s": 1})
     try:
         answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
     finally:
-        world.control.settings_put("qmb", {"bars": world.control.settings_get("qmb")["bars"]})
+        world.control.settings_put("qmb", {"remove": ["agent_wait_s"]})
     status = world.backtest["backtest_status"]
 
     until(lambda: status(run_id=answer["run_id"])["result"]["state"] == "landed", "the run lands")
     assert (answer["status"], answer["result_id"], answer["waited_s"]) == ("running", None, 1.0)
     assert answer["run_id"].startswith("qmbr-pc-")
+
+
+def test_a_blank_and_a_dummy_library_search_answer_the_draft_and_the_try_rows(
+    world: World,
+) -> None:
+    run_id = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]["run_id"]
+
+    found = {str(row["id"]): row for row in world.control.library_search("", limit=1000)}
+    named = [str(row["id"]) for row in world.control.library_search("dummy")]
+
+    draft = found[world.dummy]
+    assert (draft["kind"], draft["sha256"], draft["ref"], draft["size"]) == ("unit", None, None, 0)
+    assert cast("dict[str, Any]", draft["content"])["unit_id"] == DUMMY
+    assert world.dummy in named
+    try_rows = [found[i] for i in world.store.with_field("try", "run_id", run_id)]
+    assert [(row["kind"], row["size"]) for row in try_rows] == [("try", 0), ("try", 0)]
 
 
 def test_a_fingerprint_mismatch_lands_a_failed_result_and_counts_no_job_error(
@@ -357,7 +371,7 @@ def test_a_crash_that_trips_the_breaker_fails_the_run_and_qmb_starts_again(
     assert after["status"] == "finished"
 
 
-def test_the_first_start_click_enables_qmb_once(
+def test_the_first_start_click_keeps_qmb_running_at_every_host_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     profile = tmp_path / "profile"
@@ -374,8 +388,14 @@ def test_the_first_start_click_enables_qmb_once(
         try:
             first = enable_first_party(layout.home, runtime)
             again = enable_first_party(layout.home, runtime)
-            status = runtime.status("qmb")["status"]
         finally:
             runtime.close()
+        next_start = Supervisor(layout.home)
+        next_start.attach_landers(landers(store, next_start, "pc"))
+        try:
+            started = enable_first_party(layout.home, next_start)
+            status = next_start.status("qmb")["status"]
+        finally:
+            next_start.close()
 
-    assert (first, again, status) == (["qmb"], [], "running")
+    assert (first, again, started, status) == (["qmb"], ["qmb"], ["qmb"], "running")

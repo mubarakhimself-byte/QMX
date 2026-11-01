@@ -772,8 +772,9 @@ def register_checkers(store: Store) -> None:
 
 
 def enable_apps(home: Path, runtime: Supervisor) -> None:
-    """The first start's one click: the apps the card's new folder asked for, QMB first, are
-    installed and started beside the host, which does not wait for their environments."""
+    """The first start's one click, kept at every start: the first-party apps enabled in this
+    folder, QMB first, are installed if missing and started beside the host, which does not wait
+    for their environments."""
     try:
         enabled = enable_first_party(home, runtime)
     except (AppError, OSError, ValueError) as refused:
@@ -783,7 +784,7 @@ def enable_apps(home: Path, runtime: Supervisor) -> None:
         )
         return
     if enabled:
-        print(f"apps: {', '.join(enabled)} enabled on the first start", file=sys.stderr)
+        print(f"apps: {', '.join(enabled)} started", file=sys.stderr)
 
 
 def land_first_unit(store: Store) -> None:
