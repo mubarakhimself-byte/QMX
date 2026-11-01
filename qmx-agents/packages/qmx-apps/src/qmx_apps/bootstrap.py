@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import inspect
 import io
 import json
 import os
@@ -192,7 +193,10 @@ def main() -> None:
     declared = cast("list[str]", config["jobs"])
     queue = volume / "data" / "jobs"
 
-    def run_job(job: str) -> dict[str, Any]:
+    def run_job(job: str, inputs: dict[str, Any] | None) -> dict[str, Any]:
+        """Run one job. A `run(inputs)` gets the request's inputs, `{}` when it carried none; a
+        `run()` is called exactly as before. What `run` returns is the answer's `result`, so it
+        must be JSON."""
         with lock:
             counts["job_runs"] += 1
         try:
@@ -202,13 +206,17 @@ def main() -> None:
             run = namespace.get("run")
             if not callable(run):
                 raise ValueError("A job script must define run().")
-            run()
+            takes = bool(inspect.signature(run).parameters)
+            returned = run({} if inputs is None else inputs) if takes else run()
+            answer: dict[str, Any] = {"ok": True}
+            if returned is not None:
+                answer["result"] = json.loads(json.dumps(returned))
         except Exception as error:
             with lock:
                 counts["job_errors"] += 1
             print(json.dumps({"event": "job_error", "job": job}), file=sys.stderr)
             return {"ok": False, "error": type(error).__name__}
-        return {"ok": True}
+        return answer
 
     def jobs() -> None:
         """Answer the host's job requests one at a time, oldest first; the host's engine
@@ -217,10 +225,10 @@ def main() -> None:
             time.sleep(0.25)
             for request in sorted(queue.glob("*.request.json")) if queue.is_dir() else []:
                 try:
-                    job = str(json.loads(request.read_text(encoding="utf-8"))["job"])
+                    asked = json.loads(request.read_text(encoding="utf-8"))
                 except OSError:
                     continue  # The host withdrew it.
-                answer = run_job(job)
+                answer = run_job(str(asked["job"]), asked.get("inputs"))
                 name = request.name.removesuffix(".request.json")
                 staged = queue / f"{name}.answer"
                 staged.write_text(json.dumps(answer), encoding="utf-8")

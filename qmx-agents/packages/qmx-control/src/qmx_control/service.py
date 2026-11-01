@@ -1668,12 +1668,17 @@ class ControlService:
         *,
         pin: Document | None = None,
         profile: str | None = None,
+        inputs: Document | None = None,
+        principal: str | None = None,
     ) -> Document:
         """Run one of an app's jobs in its supervised process; the engine's `app_op` node
         calls this when the app's trigger fires (engine AD-57). The supervisor revalidates a
-        `pin` and refuses a run aimed at another `profile` (AD-64)."""
+        `pin` and refuses a run aimed at another `profile` (AD-64). `inputs` tell the job what
+        to do and its `result` comes back; `principal` is the caller the app's log records."""
         try:
-            return self.app_runtime().run_job(app_id, job, pin=pin, profile=profile)
+            return self.app_runtime().run_job(
+                app_id, job, pin=pin, profile=profile, inputs=inputs, principal=principal
+            )
         except AppError as error:
             raise ControlError(error.code, str(error), error.status) from error
 

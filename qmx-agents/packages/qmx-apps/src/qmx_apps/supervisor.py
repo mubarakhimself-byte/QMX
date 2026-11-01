@@ -990,13 +990,20 @@ class Supervisor:
         *,
         pin: Pin | Document | None = None,
         profile: str | None = None,
+        inputs: Document | None = None,
+        principal: str | None = None,
     ) -> Document:
         """Run one job entrypoint in the app's supervised process, after the jobs queued before
         it: the app's own queue is the only capacity a job takes (engine AD-58). The engine's
         `app_op` node calls this when a trigger fires; the supervisor schedules nothing itself.
         It waits as long as the job runs and fails with the supervisor's reason when the app
         stops first. `pin` revalidates the run's `(pack, version)` and `profile` names the
-        partition it must write; a job aimed at another profile is refused."""
+        partition it must write; a job aimed at another profile is refused.
+
+        `inputs` is what the caller tells the job to do (AD-33 change 1): a feed it names is
+        accepted as an operation call's is, and a request without inputs is `{"job": job}` as it
+        always was. The job's answer comes back under `result` when it gave one. `principal` is
+        the caller, recorded on the app's log line for the job."""
         pinned = Pin.parse(pin)
         with self._lock:
             instance = self._instances.get(app_id)
@@ -1014,12 +1021,19 @@ class Supervisor:
                 )
         if job not in instance.definition.manifest.entrypoints.jobs:
             raise AppError("job_not_found", f"The app declares no job {job}.", 404)
+        asked: Document = {"job": job}
+        if inputs is not None:
+            given = dict(inputs)
+            for feed in instance.definition.manifest.feeds:
+                if feed in given:
+                    given[feed] = self.artifacts.accept(instance.definition, feed, given[feed])
+            asked["inputs"] = given
         queue = instance.volume.root / JOB_QUEUE
         queue.mkdir(parents=True, exist_ok=True)
         name = f"{time.time_ns():020d}-{uuid.uuid4().hex}"
         request, done = queue / f"{name}.request.json", queue / f"{name}.done.json"
         staged = queue / f"{name}.tmp"
-        staged.write_text(json.dumps({"job": job}), encoding="utf-8")
+        staged.write_text(json.dumps(asked), encoding="utf-8")
         staged.replace(request)
         while not done.exists():
             if instance.state != "running":
@@ -1028,16 +1042,22 @@ class Supervisor:
             time.sleep(JOB_POLL_SECONDS)
         result = cast(Document, json.loads(done.read_text(encoding="utf-8")))
         done.unlink()
-        self._log(app_id, "job_completed", {"job": job, "ok": result.get("ok") is True})
+        logged: Document = {"job": job, "ok": result.get("ok") is True}
+        if principal is not None:
+            logged["principal"] = principal
+        self._log(app_id, "job_completed", logged)
         if result.get("ok") is not True:
             raise AppError("job_failed", f"Job {job} raised {result.get('error')}.", 422)
-        return {
+        ran: Document = {
             "app_id": app_id,
             "instance_id": instance.id,
             "job": job,
             "version": instance.definition.manifest.version,
             "profile": instance.profile,
         }
+        if "result" in result:
+            ran["result"] = result["result"]
+        return ran
 
     def read_output(self, app_id: str, output: str) -> Document:
         """Read the newest artifact `app_id` landed under `output`, with its freshness: its
