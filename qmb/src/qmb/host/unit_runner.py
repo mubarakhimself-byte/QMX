@@ -13,7 +13,9 @@ The runner compiles the document through QML's compiler, whose one block loader 
 pin's fingerprint, refuses a compiled fingerprint other than the request's before the first
 bar, hosts the unit with ``construct_unit``, and drives the shared unit handler through
 ``run_slice`` one bar instant at a time. The result carries every trade in money and R, every
-fill against its sizer receipt, and the ``zero_trades`` label when nothing closed.
+fill against its sizer receipt, and the ``zero_trades`` label when nothing closed. Given a
+``RunJournal``, every row the run makes is also written to the unit journal, with each slice's
+instant and every hole in a market's bars (B9).
 """
 
 from __future__ import annotations
@@ -33,7 +35,14 @@ from qmf.core.refusal import Ok, Result, is_refusal
 from qmf.risk.paper import ExecutionTarget
 from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qml.numbers import InstrumentRecord, parse_record
-from qml.protocol.unit import OHLC, MotionSwitch, OwnPosition, QuoteBar, construct_unit
+from qml.protocol.unit import (
+    OHLC,
+    MotionSwitch,
+    OwnPosition,
+    QuoteBar,
+    TraceLevel,
+    construct_unit,
+)
 
 from qmb._refuse import invalid, policy
 from qmb.host.unit_handler import (
@@ -45,6 +54,7 @@ from qmb.host.unit_handler import (
     UnitSliceHandler,
     UnitTrade,
 )
+from qmb.results.journal import RunJournal
 from qmb.runloop.loop import DeclaredStream, RestingIntent, SliceObservation, StreamSet, run_slice
 
 __all__ = [
@@ -54,6 +64,7 @@ __all__ = [
     "UnitRunResult",
     "load_unit_folder",
     "parse_unit_run_request",
+    "run_loaded",
     "run_unit",
 ]
 
@@ -70,6 +81,7 @@ class UnitRunRequest:
     equity: Decimal
     execution_target: ExecutionTarget
     motion: MotionSwitch = MotionSwitch.ON
+    trace: TraceLevel = TraceLevel.EVENTS
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,7 +144,11 @@ def parse_unit_run_request(body: object) -> Result[UnitRunRequest]:
         motion = MotionSwitch(str(fields.get("motion", "on")))
     except ValueError:
         return invalid("motion", "motion is on or off", given=repr(fields.get("motion")))
-    return Ok(UnitRunRequest(run_id, fp, amount, made.value, motion))
+    try:
+        trace = TraceLevel(str(fields.get("trace", "events")))
+    except ValueError:
+        return invalid("trace", "trace is events or every_bar", given=repr(fields.get("trace")))
+    return Ok(UnitRunRequest(run_id, fp, amount, made.value, motion, trace))
 
 
 def _bar_seconds(stream: str) -> int | None:
@@ -243,7 +259,19 @@ def run_unit(
     loaded = load_unit_folder(folder)
     if is_refusal(loaded):
         return loaded
-    compiled = loaded.value.compiled
+    return run_loaded(loaded.value, request, execution=execution, seeded=seeded)
+
+
+def run_loaded(
+    loaded: LoadedUnit,
+    request: UnitRunRequest,
+    *,
+    execution: ExecutionPort | None = None,
+    seeded: Mapping[str, OwnPosition] | None = None,
+    journal: RunJournal | None = None,
+) -> Result[UnitRunResult]:
+    """Trade a loaded unit; ``journal`` also receives every row, and is left open."""
+    compiled = loaded.compiled
     if compiled.compiled_fingerprint.value != request.compiled_fingerprint:
         return policy(
             "compiled_fingerprint",
@@ -251,7 +279,7 @@ def run_unit(
             pinned=request.compiled_fingerprint,
             compiled=compiled.compiled_fingerprint.value,
         )
-    journal = ListJournal()
+    kept = ListJournal()
     handler = UnitSliceHandler.start(
         lambda surfaces: construct_unit(
             compiled,
@@ -259,19 +287,25 @@ def run_unit(
             scope_id=request.run_id,
             execution_target=request.execution_target,
             motion=request.motion,
+            trace_level=request.trace,
         ),
         stream=compiled.plan.stream,
-        records=loaded.value.records,
-        bars={m: {b.knowable_at.value_ns: b for b in s} for m, s in loaded.value.bars.items()},
+        records=loaded.records,
+        bars={m: {b.knowable_at.value_ns: b for b in s} for m, s in loaded.bars.items()},
         opened_by=compiled.compiled_fingerprint,
         equity=request.equity,
         execution=execution if execution is not None else NextOpenExecution(),
-        journal=journal,
+        journal=kept if journal is None else _Both(kept, journal),
         seeded=seeded,
     )
     if is_refusal(handler):
         return handler
-    driven = _drive(handler.value, loaded.value.bars)
+    seconds = _bar_seconds(compiled.plan.stream)
+    if seconds is None:
+        return invalid(
+            "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
+        )
+    driven = _drive(handler.value, loaded.bars, seconds * 1_000_000_000, journal)
     if is_refusal(driven):
         return driven
     trades = handler.value.trades
@@ -281,7 +315,7 @@ def run_unit(
             compiled_fingerprint=compiled.compiled_fingerprint.value,
             trades=trades,
             fills=handler.value.fills,
-            journal=tuple(journal.records),
+            journal=tuple(kept.records),
             open_positions=handler.value.open_positions,
             net_money=sum((t.money for t in trades), Decimal(0)),
             total_r=sum((t.r for t in trades), Decimal(0)),
@@ -290,7 +324,22 @@ def run_unit(
     )
 
 
-def _drive(handler: UnitSliceHandler, bars: Mapping[str, Sequence[QuoteBar]]) -> Result[None]:
+@dataclass(frozen=True, slots=True)
+class _Both:
+    kept: ListJournal
+    run: RunJournal
+
+    def append(self, record: JournalRecord, /) -> None:
+        self.kept.append(record)
+        self.run.append(record)
+
+
+def _drive(
+    handler: UnitSliceHandler,
+    bars: Mapping[str, Sequence[QuoteBar]],
+    bar_ns: int,
+    journal: RunJournal | None,
+) -> Result[None]:
     streams = StreamSet.try_create([DeclaredStream(market, market) for market in bars])
     if is_refusal(streams):
         return streams
@@ -300,7 +349,15 @@ def _drive(handler: UnitSliceHandler, bars: Mapping[str, Sequence[QuoteBar]]) ->
             at.setdefault(bar.knowable_at.value_ns, []).append(market)
     frontier: Instant | None = None
     resting: tuple[RestingIntent, ...] = ()
+    last: dict[str, int] = {}
     for ns in sorted(at):
+        if journal is not None:
+            journal.at(Instant(ns))
+            for market in at[ns]:
+                before = last.get(market, ns)
+                if (missing := (ns - before) // bar_ns - 1) > 0:
+                    journal.data_gap(market, Instant(before), Instant(ns), missing)
+                last[market] = ns
         observed = [SliceObservation(market, Instant(ns)) for market in at[ns]]
         outcome = run_slice(
             observed,
