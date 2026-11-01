@@ -473,6 +473,15 @@ CATALOG: Final[tuple[Template, ...]] = (
         folder="extract-source",
         test_inputs={"fixture": True},
     ),
+    Template(
+        "refresh-ccxt-records",
+        "Refresh crypto instrument and venue records from public market lists",
+        card("16", "T3"),
+        "C-02",
+        folder="refresh-ccxt-records",
+        triggers=(Cron("0 4 * * *", "UTC"),),
+        test_inputs={"fixture": True},
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {

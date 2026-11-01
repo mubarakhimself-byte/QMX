@@ -1,0 +1,48 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "refresh-ccxt-records",
+  "name": "Refresh crypto instrument records",
+  "inputs": {
+    "type": "object",
+    "description": "which exchanges to read, all of them by default, from CCXT's public market lists with no key",
+    "properties": {
+      "exchanges": {
+        "type": "array",
+        "items": {"enum": ["hyperliquid", "binance"]},
+        "description": "the exchanges to refresh; every exchange with a record profile when left out"
+      },
+      "conversion_tolerance": {
+        "type": "string",
+        "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+        "description": "how far two ways of computing value per point may differ before a record is suspect; 0.001 (0.1%) when left out"
+      },
+      "fixture": {"type": "boolean", "description": "read the template's recorded market lists instead of the network"}
+    }
+  },
+  "outputs": {
+    "type": "object",
+    "description": "per exchange, how many records were written and what was skipped and why, and the seconds the refresh took"
+  },
+  "settings": {
+    "timezone": "UTC",
+    "on_error": "park",
+    "caller_policy": "any",
+    "memory": {"scopes": ["workflow"]}
+  },
+  "nodes": [
+    {"id": "start", "name": "Daily at 04:00 UTC", "type": "trigger", "typeVersion": 1,
+     "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
+    {"id": "refresh", "name": "Instrument and venue records", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "retry": {"max_tries": 2, "backoff_seconds": [900], "retry_on": ["script_exit"]},
+     "parameters": {"script": "scripts/refresh.py",
+                    "artifacts": ["library/instruments/", "library/venues/"],
+                    "binance_fixture_ref": "fixtures/binance.json",
+                    "hyperliquid_fixture_ref": "fixtures/hyperliquid.json"}}
+  ],
+  "connections": {
+    "Daily at 04:00 UTC": {"main": [[{"node": "Instrument and venue records", "port": "in",
+                                     "map": "one"}]]}
+  },
+  "meta": {"template": "refresh-ccxt-records"}
+}
