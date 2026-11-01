@@ -47,6 +47,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
 
+import keyring
 from fastapi import APIRouter, Depends
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
@@ -113,9 +114,16 @@ def parse_environment_document(values: Document, _current: Document) -> Document
     return {"keep": list[JsonValue](sorted(names))}
 
 
-def control_service(home: QmxHome) -> ControlService:
+def control_service(
+    home: QmxHome,
+    *,
+    secret_getter: Callable[[str, str], str | None] = keyring.get_password,
+) -> ControlService:
+    """`secret_getter` is where an app's declared secrets come from: the OS keyring unless the
+    host names its own reader."""
     return ControlService(
         home.root,
+        secret_getter=secret_getter,
         settings_parsers={
             "claude": parse_claude_document,
             "environment": parse_environment_document,

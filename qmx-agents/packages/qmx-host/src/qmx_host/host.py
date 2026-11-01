@@ -31,6 +31,7 @@ import asyncio
 import dataclasses
 import json
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -190,6 +191,11 @@ SYNC_INTERVAL_S: Final = 30.0
 """How often the PC asks the Library server what moved since its last sequence (AD-10). The
 `[library] sync_interval` setting raises or lowers it."""
 PAIRING_KEY: Final = "vault/pairing-key"
+APP_SECRET: Final = re.compile(r"qmx/[a-zA-Z0-9_-]+")
+"""The secret names a manifest may declare (`qmx_apps.manifest`), checked again before a path."""
+HOST_VAULT: Final = frozenset({"pairing-key", "control-token"})
+"""The host's own files in `<home>/vault/`, which no app may read: the home's pairing key, which
+signs every run pass, and the control token a flat home kept there."""
 DELIVERY_HEADERS: Final = ("X-QMX-Delivery", "X-GitHub-Delivery", "Idempotency-Key", "X-Request-Id")
 DID_NOT_OPEN: Final = 2
 """`serve`'s exit when a store, the engine or the Library refused to open (loose strings Appendix
@@ -830,6 +836,44 @@ def own_door(role: Role, port: int) -> str:
     return f"http://{address}:{port}" if address else ""
 
 
+def vault_secrets(vault: Path) -> Callable[[str, str], str | None]:
+    """An app's declared secret `qmx/<name>`, read from `vault/<name>`. A missing file is None, so
+    the supervisor refuses the start with `missing_secret`. On POSIX a file that its group or
+    others may read is refused. On Windows the mode bits hold no ACL, so the folder's NTFS
+    permissions are what keep it owner-only. No refusal carries the file's content."""
+
+    def read(service: str, _username: str) -> str | None:
+        name = service.removeprefix("qmx/")
+        if not APP_SECRET.fullmatch(service) or name in HOST_VAULT:
+            raise AppError("vault_refused", f"{service!r} is not a secret an app may declare.")
+        path = vault / name
+        try:
+            if os.name == "posix" and path.stat().st_mode & 0o077:
+                raise AppError(
+                    "vault_refused",
+                    f"The vault file for {service} is readable by others; chmod 600 it.",
+                )
+            return path.read_text(encoding="utf-8").strip()
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeDecodeError) as error:
+            raise AppError(
+                "vault_refused",
+                f"The vault file for {service} cannot be read ({type(error).__name__}).",
+            ) from None
+
+    return read
+
+
+def control_for(role: Role, home: QmxHome) -> ControlService:
+    """The host's control service. On role `server` an app's declared secrets come from the home's
+    owner-only vault, because a headless server's keyring has no backend (AD-33 change 6). This
+    PC and a node keep the OS keyring, Credential Manager on Windows."""
+    if role == "server":
+        return control_service(home, secret_getter=vault_secrets(home.root / "vault"))
+    return control_service(home)
+
+
 async def serve(
     home: Path,
     sock: socket.socket,
@@ -847,7 +891,7 @@ async def serve(
     is set once uvicorn has served, so a refusal after that is not named a start that failed."""
     port: int = sock.getsockname()[1]
     qmx_home = QmxHome(home)
-    control = control_service(qmx_home)
+    control = control_for(role, qmx_home)
     name = placement_name(control, role, place)
     serving = role == "server"
     # Computed once, so the REST gate, the door's restamp and the Library routes share one bearer.
