@@ -1,16 +1,18 @@
 """The copilot sees what every agent sees (Part A AD-117, A8): the unit doors are on the default
-copilot surface, and a Library refusal reaches the model with every problem it named."""
+copilot surface, a Library refusal reaches the model with every problem it named, and the
+model's merge of a unit onto `main` is refused because publishing is his click."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 from pathlib import Path
-from typing import cast
+from types import SimpleNamespace
+from typing import Any, cast
 
 from qmx_broker.service import BrokerService
-from qmx_control.service import ControlService
-from qmx_library.kinds import Problem
+from qmx_control.service import ControlService, WorkflowEngine
+from qmx_library.kinds import Checker, Problem
 from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import Principal, drafts_ref
 from qmx_tools.gather import template
@@ -89,26 +91,56 @@ def two_problems(fields: JsonObject) -> list[Problem]:
     ]
 
 
-def test_a_publish_refusal_reaches_the_model_with_every_problem(tmp_path: Path) -> None:
-    home = QmxHome(tmp_path / "home")
-    control, defs = served(home)
-    merge = next(tool for tool in defs if tool.name == "library_merge")
+def no_runs(workflow_id: str | None) -> list[object]:
+    return []
+
+
+def a_unit_draft(control: ControlService, checker: Checker, principal: str) -> str:
+    """A unit draft on `u`'s draft ref, with the engine door's caller reader naming `principal`."""
+    caller = SimpleNamespace(principal=principal)
+    door = SimpleNamespace(principal=lambda: caller, workflow_runs_list=no_runs)
+    control.attach_workflow_engine(cast("WorkflowEngine", door))
     store = control.library.store
-    store.register_checker("qml.unit/1", two_problems)
+    store.register_checker("qml.unit/1", checker)
     fields = cast("JsonObject", {**template(), "unit_id": "u"})
     draft = Draft("unit", "u", "u", fields=fields)
-    saved = store.put(Principal("operator"), draft, on=drafts_ref("u"), expected_head=None)
+    return store.put(Principal("operator"), draft, on=drafts_ref("u"), expected_head=None).object_id
+
+
+def merged_by_the_model(control: ControlService, defs: list[ToolDef], saved: str) -> dict[str, Any]:
+    merge = next(tool for tool in defs if tool.name == "library_merge")
     try:
-        answer = asyncio.run(
-            merge.call({"artifact_id": saved.object_id, "from_ref": drafts_ref("u")})
-        )
+        answer = asyncio.run(merge.call({"artifact_id": saved, "from_ref": drafts_ref("u")}))
+        head = control.library.store.head("u", "main")
     finally:
         control.close()
-
-    error = json.loads(answer["content"][0]["text"])["error"]
     assert answer["is_error"] is True
-    assert (error["code"], error["message"]) == (
+    return {"error": json.loads(answer["content"][0]["text"])["error"], "main": head}
+
+
+def test_the_models_merge_of_a_unit_draft_is_refused_as_his_click(tmp_path: Path) -> None:
+    control, defs = served(QmxHome(tmp_path / "home"))
+    saved = a_unit_draft(control, lambda fields: [], "agent:chat-1")
+
+    found = merged_by_the_model(control, defs, saved)
+
+    assert (found["error"]["code"], found["error"]["message"]) == (
+        "his_click",
+        "publishing a unit onto main is his click; agent:chat-1 writes unit drafts only, and he "
+        "publishes them from his own door",
+    )
+    assert found["main"] is None
+
+
+def test_a_refusal_reaches_the_tool_error_with_every_problem_it_named(tmp_path: Path) -> None:
+    control, defs = served(QmxHome(tmp_path / "home"))
+    saved = a_unit_draft(control, two_problems, "operator")
+
+    found = merged_by_the_model(control, defs, saved)
+
+    assert (found["error"]["code"], found["error"]["message"]) == (
         "check_failed",
         "unit: ema@1 is not in the unit's pins",
     )
-    assert [p["where"] for p in error["problems"]] == [["/logic/long"], ["/markets"]]
+    assert [p["where"] for p in found["error"]["problems"]] == [["/logic/long"], ["/markets"]]
+    assert found["main"] is None

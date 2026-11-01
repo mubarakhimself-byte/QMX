@@ -4,6 +4,8 @@ through `library_merge` unchecked, and a mini app's provides component still lan
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from pydantic import JsonValue
@@ -12,7 +14,7 @@ from qmx_library.port import Draft
 from qmx_library.principal import Principal, drafts_ref
 
 from qmx_control.models import ControlError
-from qmx_control.service import ControlService
+from qmx_control.service import ControlService, WorkflowEngine
 
 UNIT: dict[str, JsonValue] = {
     "schema": "qmx.unit/1",
@@ -33,6 +35,8 @@ UNIT: dict[str, JsonValue] = {
 
 def test_a_unit_merge_onto_main_refuses_on_a_store_with_no_checker(tmp_path: Path) -> None:
     service = ControlService(tmp_path)
+    his_door = SimpleNamespace(principal=lambda: SimpleNamespace(principal="operator"))
+    service.attach_workflow_engine(cast("WorkflowEngine", his_door))
     store = service.library.store
     draft = Draft("unit", "u", "u", fields=UNIT)
     saved = store.put(Principal("operator"), draft, on=drafts_ref("u"), expected_head=None)
