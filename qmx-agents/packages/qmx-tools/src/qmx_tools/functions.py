@@ -305,8 +305,15 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
     """The `unit` rows (Part A AD-117). They write `unit` drafts on an item's draft ref and
     nothing else: no `bot` or `strategy`, nothing on `main`, no test, no order."""
 
-    def put(item: str, document: dict[str, Any], title: str, head: ObjectId | None) -> str:
-        draft = Draft(UNIT_KIND, item, title, fields=cast("JsonObject", document))
+    def put(
+        item: str,
+        document: dict[str, Any],
+        title: str,
+        head: ObjectId | None,
+        parents: list[ObjectId] | None = None,
+    ) -> str:
+        fields = cast("JsonObject", document)
+        draft = Draft(UNIT_KIND, item, title, fields=fields, parents=parents)
         return ctx.library.store.put(
             OPERATOR, draft, on=drafts_ref(item), expected_head=head
         ).object_id
@@ -352,10 +359,13 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
         if item is not None:
             before = draft(item)
             head = ctx.library.store.head(item, drafts_ref(item))
+            # With no draft ref yet, `before` is main's head: the draft descends from it, so his
+            # publish fast-forwards instead of conflicting on every changed field.
+            parents = [before.object_id] if head is None else None
             try:
                 saved = {
                     "object_id": put(
-                        item, document, before.title, None if head is None else head[0]
+                        item, document, before.title, None if head is None else head[0], parents
                     ),
                     "refused": [],
                 }

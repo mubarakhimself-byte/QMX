@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from qmx_library.principal import MAIN, drafts_ref
+from qmx_library.port import Draft
+from qmx_library.principal import MAIN, Principal, drafts_ref
 
 from qmx_tools.functions import domain_functions
 from qmx_tools.gather import template
@@ -57,6 +58,27 @@ def test_a_unit_from_the_dummy_checks_clean_and_saves_only_as_its_draft(
     assert head[0] == result["saved"]["object_id"]
     assert store.get(store.engine, head[0]).title == "Gold pullback"
     assert store.head(made["item"], MAIN) is None
+
+
+def test_a_draft_of_a_unit_only_on_main_publishes_as_a_fast_forward(
+    context: DomainContext,
+) -> None:
+    store, his, variant = context.library.store, Principal("operator"), "refs/variants/u"
+    store.register_checker("qml.unit/1", lambda fields: [])
+    first = store.put(
+        his, Draft("unit", "u", "Gold", fields=template()), on=variant, expected_head=None
+    ).object_id
+    store.merge(his, "u", from_ref=variant, into=MAIN)
+    changed = {**template(), "title": "Gold, tighter"}
+
+    saved = domain_functions(context)["unit"]["unit_check"](document=changed, item="u")
+    merged = store.merge(his, "u", from_ref=drafts_ref("u"), into=MAIN)
+
+    assert store.get(his, saved["saved"]["object_id"]).parents == (first,)
+    assert (merged.outcome, store.head("u", MAIN)) == (
+        "fast-forward",
+        (saved["saved"]["object_id"], 2),
+    )
 
 
 def test_a_broken_unit_names_every_problem_and_a_repeat_says_no_progress(

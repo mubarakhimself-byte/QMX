@@ -601,6 +601,7 @@ def test_the_gate_denies_a_dropped_servers_tools_for_the_rest_of_the_chat(
 QMX_SERVERS = {
     "qmx_apps_admin",
     "qmx_backtest",
+    "qmx_blocks",
     "qmx_broker_read",
     "qmx_data",
     "qmx_delegate",
@@ -609,6 +610,7 @@ QMX_SERVERS = {
     "qmx_ops",
     "qmx_research",
     "qmx_settings_read",
+    "qmx_unit",
     "qmx_workflows",
 }
 
