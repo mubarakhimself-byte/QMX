@@ -52,6 +52,11 @@ from qma.harness.home import DoctorLine
 from qma.harness.tools import HostRead
 from qma.telemetry import THIS_PC, configured, target
 from qmf.core import TypedRefusal, is_refusal
+from qmx_apps.artifacts import Ending, Lander
+from qmx_apps.artifacts import Landing as AppLanding
+from qmx_apps.artifacts import Ticket as AppTicket
+from qmx_apps.manifest import Definition
+from qmx_apps.supervisor import Supervisor
 from qmx_broker.credentials import CredentialManager, KeyStore
 from qmx_control.models import Document
 from qmx_control.node import PLACE, library_primary
@@ -98,10 +103,13 @@ from qmx_home.files import Busy, Held, hold
 from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
+from qmx_judge.landing import Lander as RunLander
+from qmx_judge.landing import Stored
+from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
 from qmx_library.adapter import EngineLibraryAdapter
 from qmx_library.client import OwnerTable
 from qmx_library.landing import NOT_PRIMARY
-from qmx_library.port import LibraryRefused, StoreRole
+from qmx_library.port import Draft, LibraryRefused, StoreRole
 from qmx_library.principal import MAIN, Act, Principal
 from qmx_library.store import Store
 from qmx_memory.engine import RecallEngine
@@ -796,6 +804,8 @@ async def serve(
             with open_store(home, root, serving=serving, floor=floor) as store:
                 recheck_test_runs(home, store)
                 control.attach_library(store)
+                runtime = control.app_runtime()
+                runtime.attach_landers(landers(store, runtime, name))
                 harness.doctor_from(lambda: library_line(store))
                 backups = Backups(
                     Layout.from_home(home),
@@ -1276,6 +1286,86 @@ def settings_tip(control: ControlService) -> int:
     while page := control.events("settings", after=after, limit=1000):
         after = cast(int, page[-1]["id"])
     return after
+
+
+QMB_RUN: Final = "qmb-run"
+"""The one core lander today (Level 0 AD-34): a tester's provides name it to land its runs."""
+
+
+class LanderLibrary:
+    """The lander's Library port over the host's store: each record onto `main`, written once by
+    the principal the lander names, and each edge kept once by the store."""
+
+    def __init__(self, store: Store) -> None:
+        self.store = store
+
+    def find(self, item: str) -> str | None:
+        head = self.store.head(item, MAIN)
+        return None if head is None else head[0]
+
+    def put(
+        self,
+        kind: str,
+        fields: Mapping[str, object],
+        blobs: Mapping[str, bytes],
+        *,
+        item: str | None,
+        title: str,
+        summary: str,
+        principal: str,
+    ) -> Stored:
+        draft = Draft(
+            kind, item, title, summary, fields=cast(JsonObject, dict(fields)), blobs=dict(blobs)
+        )
+        commit = self.store.put(Principal.parse(principal), draft, on=MAIN, expected_head=None)
+        return Stored(commit.object_id)
+
+    def link(self, from_id: str, relation: str, to_id: str, *, principal: str) -> str:
+        return self.store.relate(Principal.parse(principal), from_id, relation, to_id)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class QmbRun:
+    """`qmb-run` as the apps supervisor's lander port: qmx-judge's lander, with the tester's
+    leave read as its `qmx.qmb.result-bundle/1` and its files read from the run folder."""
+
+    lander: RunLander
+
+    def open(
+        self, app_id: str, version: str, job: str, inputs: Document, principal: str
+    ) -> Ticket | None:
+        return self.lander.open(app_id, version, job, inputs, principal)
+
+    def close(self, landing: AppLanding) -> str:
+        run, data = landing.run, landing.data
+        if run is None or not isinstance(data, dict):
+            raise BundleRefused(["the result is a qmx.qmb.result-bundle/1 object from a run"])
+        ticket = cast(Ticket, run.ticket)
+        return self.lander.close(Landing(ticket, parse_bundle(data), run.folder))
+
+    def fail(self, ticket: AppTicket, reason: str, status: Ending) -> str:
+        return self.lander.fail(cast(Ticket, ticket), reason, status=status)
+
+
+def landers(store: Store, runtime: Supervisor, machine: str) -> dict[str, Lander]:
+    """The core landers this host registers: `qmb-run`, writing as the operator, the one
+    principal who puts records on `main`, and minting run ids named for this machine."""
+
+    def provides_of(app_id: str, version: str) -> set[str]:
+        for row in runtime.versions(app_id):
+            if row["version"] == version:
+                image = runtime.home / "definitions" / str(row["definition_hash"])
+                return set(Definition.load(image).manifest.provides)
+        return set()
+
+    lander = RunLander(
+        LanderLibrary(store),
+        writer="operator",
+        machine=machine,
+        provides_of=provides_of,
+        clock=lambda: datetime.now(UTC),
+    )
+    return {QMB_RUN: QmbRun(lander)}
 
 
 async def keep_facts(control: ControlService) -> None:
