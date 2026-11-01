@@ -25,6 +25,7 @@ pyarrow ships no type stubs; the unknown-type rules are disabled at file scope h
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import multiprocessing
 import os
@@ -173,10 +174,8 @@ class TypedWriter:
             return
         self._closed = True
         self._pending = []
-        try:
+        with contextlib.suppress(OSError, pa.ArrowException):
             self._writer.close()
-        except (OSError, pa.ArrowException):
-            pass
 
     def finish(self) -> SeriesFile:
         """Flush, close, fsync the file, and return what was written."""

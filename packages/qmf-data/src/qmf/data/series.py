@@ -146,7 +146,7 @@ RULES: Final[dict[str, KindRule]] = {
 _DERIVED_RULE: Final[KindRule] = KindRule(FreezeKind.CHECKSUM, VALUE_COLUMNS)
 JOURNAL_SOURCE_PREFIX: Final[str] = "journal-"
 JOURNAL_SETTLE_DAYS: Final[int] = 1
-"""The starting default of ``[journals] settle_days``: late rows from a machine whose clock was off."""
+"""The starting default of ``[journals] settle_days``, for late rows from an unproven clock."""
 _JOURNAL_RULE: Final[KindRule] = KindRule(
     FreezeKind.MONTH_END, JOURNAL_COLUMNS, JOURNAL_SETTLE_DAYS
 )
