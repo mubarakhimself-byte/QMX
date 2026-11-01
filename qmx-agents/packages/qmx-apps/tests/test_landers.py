@@ -58,6 +58,7 @@ def run(inputs):
             "status": "finished",
             "tester": {"app": "tester"},
             "measures": {"trades": 2},
+            "consumed": inputs.get("consumed", []),
             "files": [
                 {
                     "slot": "report",
@@ -289,12 +290,19 @@ def test_refusals_come_before_any_try_opens(
         bare.close()
     supervisor.install(source, trust="first_party")
     supervisor.start(APP)
+    pinned = unit(store)
 
     with pytest.raises(AppError) as nameless:
-        supervisor.run_job(APP, "job.py", inputs={"unit": unit(store)})
+        supervisor.run_job(APP, "job.py", inputs={"unit": pinned})
     with pytest.raises(AppError) as minted:
         supervisor.run_job(
-            APP, "job.py", inputs={"unit": "u", "run_id": "mine"}, principal="operator"
+            APP, "job.py", inputs={"unit": pinned, "run_id": "mine"}, principal="operator"
+        )
+    with pytest.raises(AppError) as unpinned:
+        supervisor.run_job(APP, "job.py", inputs={"unit": "no-such-pin"}, principal="operator")
+    with pytest.raises(AppError) as unstudied:
+        supervisor.run_job(
+            APP, "job.py", inputs={"unit": pinned, "study": "no-such-study"}, principal="operator"
         )
     with pytest.raises(AppError) as by_tool:
         supervisor.artifacts.save(
@@ -312,5 +320,32 @@ def test_refusals_come_before_any_try_opens(
         "run_refused",
         "run_id is minted by the lander, never by the request",
     )
+    assert [(it.value.code, str(it.value)) for it in (unpinned, unstudied)] == [
+        ("run_refused", "unit no-such-pin names no object in the Library"),
+        ("run_refused", "study no-such-study names no object in the Library"),
+    ]
     assert by_tool.value.code == "lander_required"
     assert opened_runs(store) == []
+
+
+def test_a_close_the_library_refuses_still_ends_the_run(
+    tmp_path: Path, supervisor: Supervisor, store: Store
+) -> None:
+    supervisor.install(app(tmp_path, TESTER_JOB, TESTER), trust="first_party")
+    supervisor.start(APP)
+    pinned = unit(store)
+
+    with pytest.raises(AppError) as refused:
+        supervisor.run_job(
+            APP,
+            "job.py",
+            inputs={"unit": pinned, "consumed": ["no-such-card"]},
+            principal="operator",
+        )
+
+    (run,) = opened_runs(store)
+    assert (refused.value.code, str(refused.value)) == (
+        "result_refused",
+        "not_found: no object no-such-card",
+    )
+    assert tries(store, run) == ["opened", "failed"]

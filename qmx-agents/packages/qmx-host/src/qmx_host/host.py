@@ -1323,6 +1323,9 @@ class LanderLibrary:
     def link(self, from_id: str, relation: str, to_id: str, *, principal: str) -> str:
         return self.store.relate(Principal.parse(principal), from_id, relation, to_id)
 
+    def holds(self, object_id: str) -> bool:
+        return self.store.catalog.row(object_id) is not None
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class QmbRun:
@@ -1330,10 +1333,20 @@ class QmbRun:
     leave read as its `qmx.qmb.result-bundle/1` and its files read from the run folder."""
 
     lander: RunLander
+    library: LanderLibrary
 
     def open(
         self, app_id: str, version: str, job: str, inputs: Document, principal: str
     ) -> Ticket | None:
+        """Refuse a unit or study pin that names no Library object before any try lands: the
+        result's `uses` and `tests` edges point at them, so such a run could never close."""
+        unknown = [
+            f"{name} {pin} names no object in the Library"
+            for name in ("unit", "study")
+            if isinstance(pin := inputs.get(name), str) and pin and not self.library.holds(pin)
+        ]
+        if unknown:
+            raise BundleRefused(unknown)
         return self.lander.open(app_id, version, job, inputs, principal)
 
     def close(self, landing: AppLanding) -> str:
@@ -1341,10 +1354,17 @@ class QmbRun:
         if run is None or not isinstance(data, dict):
             raise BundleRefused(["the result is a qmx.qmb.result-bundle/1 object from a run"])
         ticket = cast(Ticket, run.ticket)
-        return self.lander.close(Landing(ticket, parse_bundle(data), run.folder))
+        bundle = parse_bundle(data)
+        try:
+            return self.lander.close(Landing(ticket, bundle, run.folder))
+        except LibraryRefused as refused:
+            raise BundleRefused([str(refused)]) from refused
 
     def fail(self, ticket: AppTicket, reason: str, status: Ending) -> str:
-        return self.lander.fail(cast(Ticket, ticket), reason, status=status)
+        try:
+            return self.lander.fail(cast(Ticket, ticket), reason, status=status)
+        except LibraryRefused as refused:
+            raise BundleRefused([str(refused)]) from refused
 
 
 def landers(store: Store, runtime: Supervisor, machine: str) -> dict[str, Lander]:
@@ -1358,14 +1378,15 @@ def landers(store: Store, runtime: Supervisor, machine: str) -> dict[str, Lander
                 return set(Definition.load(image).manifest.provides)
         return set()
 
+    library = LanderLibrary(store)
     lander = RunLander(
-        LanderLibrary(store),
+        library,
         writer="operator",
         machine=machine,
         provides_of=provides_of,
         clock=lambda: datetime.now(UTC),
     )
-    return {QMB_RUN: QmbRun(lander)}
+    return {QMB_RUN: QmbRun(lander, library)}
 
 
 async def keep_facts(control: ControlService) -> None:
