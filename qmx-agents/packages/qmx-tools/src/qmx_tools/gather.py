@@ -3,9 +3,11 @@
 QML's verbs read no file and no Library, so the host hands them a `CompileContext`: each pinned
 block's entry face and source, and each market's instrument record. Blocks come from QML's own
 package files first and from the Library's `component` entries otherwise. Instrument records are
-QML's test fixtures until Part C's `instrument` kind lands (C-02); every check that reads them says
-so in a warning. A record is handed to the checker under a unit's market only when its venue and
-symbol are the ones the market's `instrument_ref` names, so a record is never bound by file name.
+the Library's `instrument` items on `main` (C-02), each read at its head with the Library's own
+version as `record_version`. A market no item holds falls back to QML's test fixtures, which exist
+only in a checkout, and every check that reads one says so in a warning. A record is handed to the
+checker under a unit's market only when its venue and symbol are the ones the market's
+`instrument_ref` names, so a record is never bound by item or file name.
 """
 
 from __future__ import annotations
@@ -30,8 +32,10 @@ from qml.numbers import InstrumentRecord, parse_record
 from qml.unit import parse
 from qml.unit.model import SymbolRef
 from qml.unit.schema import ENTRY_REF_PATTERN
+from qmx_library.principal import MAIN
 
 if TYPE_CHECKING:
+    from qmx_library.port import JsonObject
     from qmx_library.store import Store
 
 ENTRY_SCHEMA: Final = "qmx.entry/1"
@@ -106,6 +110,51 @@ def _fixtures() -> dict[tuple[str, str], tuple[str, InstrumentRecord]]:
     return found
 
 
+def _held(store: Store, ref: SymbolRef) -> list[tuple[str, JsonObject, int]]:
+    """Each `instrument` item whose head on `main` holds `ref`'s venue and symbol: the item, its
+    fields and how many times `main` has moved for it, which is the record's version."""
+    items = {
+        store.get(store.engine, object_id).item
+        for object_id in store.with_field("instrument", "symbol", ref.symbol)
+    }
+    held: list[tuple[str, JsonObject, int]] = []
+    for item in sorted(items):
+        head = store.head(item, MAIN)
+        if head is None:
+            continue
+        fields = store.get(store.engine, head[0]).fields
+        if fields.get("venue") == ref.venue and fields.get("symbol") == ref.symbol:
+            held.append((item, fields, head[1]))
+    return held
+
+
+def _record(
+    store: Store | None,
+    ref: SymbolRef,
+    market_id: str,
+    fixtures: dict[tuple[str, str], tuple[str, InstrumentRecord]],
+) -> tuple[InstrumentRecord | None, str | None]:
+    """The record a market reads and the warning that comes with it, if any."""
+    held = [] if store is None else _held(store, ref)
+    if len(held) > 1:
+        items = ", ".join(item for item, _, _ in held)
+        return None, (
+            f"{market_id}: {len(held)} instrument items hold {ref.venue}:{ref.symbol} "
+            f"({items}), so the check reads none of them"
+        )
+    if held:
+        item, fields, version = held[0]
+        parsed = parse_record({**fields, "record_version": version})
+        if is_refusal(parsed):
+            reason = parsed.context.get("reason")
+            return None, f"{market_id}: the instrument item {item} is not a full record: {reason}"
+        return parsed.value, None
+    matched = fixtures.get((ref.venue, ref.symbol))
+    if matched is None:
+        return None, None
+    return matched[1], f"{FIXTURE_WARNING}: {market_id} reads {matched[0]}"
+
+
 def gather(store: Store | None, document: object) -> Gathered:
     """The check context of `document`: the blocks its pins name and its markets' records. A
     document whose shape does not hold gets an empty context, since only layer A runs on it."""
@@ -125,10 +174,13 @@ def gather(store: Store | None, document: object) -> Gathered:
         fixtures = _fixtures()
         for market in unit.markets:
             ref = market.instrument_ref
-            matched = fixtures.get((ref.venue, ref.symbol)) if isinstance(ref, SymbolRef) else None
-            if matched is not None:
-                records[market.market_id] = matched[1]
-                warnings.append(f"{FIXTURE_WARNING}: {market.market_id} reads {matched[0]}")
+            if not isinstance(ref, SymbolRef):
+                continue
+            record, warning = _record(store, ref, market.market_id, fixtures)
+            if record is not None:
+                records[market.market_id] = record
+            if warning is not None:
+                warnings.append(warning)
     return Gathered(CompileContext(sources, entries, records), tuple(warnings))
 
 

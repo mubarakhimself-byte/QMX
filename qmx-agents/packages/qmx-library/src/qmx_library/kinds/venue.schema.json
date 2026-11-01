@@ -1,0 +1,62 @@
+{
+  "kind": "venue",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "description": "One venue's own rules as versioned facts (Level 0 AD-26, Part C AD-312, RECORDS.md section 2): its limits, what survives a disconnect, how stops trigger, what it offers.",
+  "fields": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["venue"],
+    "properties": {
+      "venue": {"type": "string", "minLength": 1},
+      "rate_limits": {"type": "object"},
+      "rationed_actions": {"type": "array", "items": {"type": "object"}},
+      "cancel_on_disconnect": {"type": "boolean"},
+      "protective_stop_form": {"type": "object"},
+      "trigger_basis": {"enum": ["mark", "last"]},
+      "heartbeat_bound_s": {"type": "number", "minimum": 0},
+      "history_limits": {"type": "object"},
+      "retention_measured": {"type": "object"},
+      "maintenance_calendar_ref": {"type": "string", "minLength": 1},
+      "unattended": {"enum": ["allowed", "manual_login", "server_banned"]},
+      "needs_desktop_app": {"type": "boolean"},
+      "sandbox": {"enum": ["demo", "testnet", "none"]},
+      "data_levels": {
+        "description": "what the venue offers, in qmx.data-level/1 (the instrument kind's data_levels shape)",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["levels"],
+        "properties": {
+          "schema": {"const": "qmx.data-level/1"},
+          "levels": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "integer", "minimum": 0, "maximum": 6}
+          },
+          "volume": {"enum": ["exchange", "taker_split", "tick_count", "venue"]},
+          "depth": {"enum": ["top", "by_price", "by_order"]},
+          "derivatives_clock": {"enum": ["end_of_day", "five_minutes", "live"]},
+          "history": {"enum": ["complete", "sampled", "provider_limited"]},
+          "licence": {"type": "string"}
+        }
+      },
+      "region": {"type": "string", "minLength": 1}
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": ["trigger_basis", "cancel_on_disconnect", "sandbox", "unattended", "data_levels"],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {"tab": "Facts", "renderer": "json", "source": "fields"},
+      {"tab": "History", "renderer": "table", "source": "computed:history"}
+    ]
+  },
+  "annotations": ["tags", "aliases", "intent_key", "notes"],
+  "merge": {"default": "pick-one"}
+}
