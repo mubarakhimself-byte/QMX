@@ -43,6 +43,10 @@ He saw the "next" list change between messages. This is the single list; every m
 
 **1 Nov morning:** R1 done and committed (`architecture/review/R1-findings.md`: 40 findings, 7 high; every clash settled; one merged build order; two screen words for his veto). The fix round runs as three fresh fixers with disjoint folders (`briefs/X1-0A-fix.md`, `X1-B-fix.md`, `X1-C-fix.md`); each writes `architecture/review/R1-FIXES-<id>.md`. If a fixer was cut off, rerun its brief fresh. Then the fix-check (`briefs/FC1-fix-check.md`), then P2.
 
+**How standing order 7 reads (lead's call LC-B-30, kept after the fix-check):** the judge may label a unit tested or parked by itself, because those are verdicts inside research and neither state trades. Every move toward paper or live is his click. The only automatic move in trading is a risk rule stopping a unit, logged.
+
+**Fix-check done (FC1):** ready for the build plan after ten text edits (G1-G10), applied by agent X2; G4 (his C: drive is 98% full, which turns 106 backup tests red) is a rule in the P2 brief. Merged build order: 69 slices in 8 stages, in `architecture/review/FC1-fix-check.md`.
+
 **How to resume (a fresh session reads this):**
 1. Check each part folder: it is finished only if it holds `ARCHITECTURE-SPINE.md` that lints to 0 (`bmad-architecture`'s `lint_spine.py`), `CONTRACTS.md`, `BUILD-SLICES.md`, `UI-NEEDS.md`, `RISK-SIZING-POINTS.md` and `LEAD-CALLS.md`, and its commit is on `plan/unit-system`.
 2. Any part not finished (for example the power cut it off): move its partial folder aside to `architecture/parts/_partial-<date>/` and rerun that part's brief with a fresh poteto-agent on Opus. Never resume an old agent.
