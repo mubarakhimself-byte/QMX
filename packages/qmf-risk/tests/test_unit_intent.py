@@ -192,6 +192,22 @@ def test_quantity_is_an_exact_positive_decimal_string(quantity: object) -> None:
     assert refusal.context["field"] == "quantity"
 
 
+def test_a_4400_digit_quantity_is_refused_not_raised() -> None:
+    wire = _full_entry()
+    wire["quantity"] = "1" * 4400
+    refusal = _refusal(wire)
+    assert refusal.category is RefusalCategory.INVALID_INPUT
+    assert refusal.context["field"] == "quantity"
+
+
+def test_a_4400_digit_ratio_is_refused_not_raised() -> None:
+    wire = _full_entry()
+    cast("dict[str, object]", wire["sizer_receipt"])["rounding_residue_r"] = "1" * 4400 + "/3"
+    refusal = _refusal(wire)
+    assert refusal.category is RefusalCategory.INVALID_INPUT
+    assert refusal.context["field"] == "sizer_receipt.rounding_residue_r"
+
+
 def test_a_long_stop_above_the_order_price_is_refused() -> None:
     wire = _full_entry()
     cast("dict[str, object]", wire["protection"])["stop"] = "1.08500"

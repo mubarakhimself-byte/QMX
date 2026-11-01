@@ -74,8 +74,13 @@ StopLevel: TypeAlias = Price | NoneDeclared
 
 _T = TypeVar("_T")
 
-_DECIMAL: Final = re.compile(r"-?(0|[1-9][0-9]*)(\.[0-9]+)?")
-_RATIONAL: Final = re.compile(r"(-?[0-9]+)/([1-9][0-9]*)")
+# Real lots, prices and the ratios built from them need far fewer digits per run. The
+# bound keeps every numeral under CPython's int-string limit, so a long one is refused.
+_MAX_DIGITS: Final = 64
+_DECIMAL: Final = re.compile(
+    rf"-?(0|[1-9][0-9]{{0,{_MAX_DIGITS - 1}}})(\.[0-9]{{1,{_MAX_DIGITS}}})?"
+)
+_RATIONAL: Final = re.compile(rf"(-?[0-9]{{1,{_MAX_DIGITS}}})/([1-9][0-9]{{0,{_MAX_DIGITS - 1}}})")
 
 
 class OrderType(StrEnum):
