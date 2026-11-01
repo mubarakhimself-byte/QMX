@@ -77,9 +77,9 @@ from qmx_engine.triggers.claims import (
 from qmx_engine.triggers.cron import instant, stamp
 from qmx_engine.triggers.event import drain
 from qmx_engine.triggers.preflight import (
-    MARKET_OPEN,
     Blocked,
-    market_shut_until,
+    is_market_check,
+    market_shut,
     placement_wait,
     preflight,
     quarantined_input,
@@ -353,10 +353,14 @@ class Scheduler:
                 ledger.write(hold(fire, until))
                 return
             inputs = self._inputs(fire, trigger)
-            if trigger.precheck_ref == MARKET_OPEN:
-                shut = market_shut_until(self.ctx.clock.now(), trigger.zone, self._holidays())
+            if is_market_check(trigger.precheck_ref):
+                now = self.ctx.clock.now()
+                shut = market_shut(now, trigger.precheck_ref, trigger.zone, self.engine.settings)
+                if isinstance(shut, Blocked):
+                    self._blocked(fire, trigger, shut)
+                    return
                 if shut is not None:
-                    ledger.write(hold(fire, stamp(shut), f"the market is shut in {trigger.zone}"))
+                    ledger.write(hold(fire, stamp(shut.until), shut.reason))
                     return
             elif trigger.precheck_ref is not None:
                 seen = await self._precheck(trigger, workflow, bundle, fire)
@@ -415,11 +419,6 @@ class Scheduler:
             except ValidationError:
                 self.workflows[object_id] = None
         return self.workflows[object_id]
-
-    def _holidays(self) -> tuple[str, ...]:
-        found = self.engine.settings.get("market.holidays")
-        days = cast(tuple[object, ...], found) if isinstance(found, tuple) else ()
-        return tuple(str(day) for day in days)
 
     def _blocked(self, fire: Fire, trigger: Trigger, blocked: Blocked) -> None:
         at = self.ctx.at()
@@ -595,7 +594,7 @@ class Scheduler:
                 version_state=state,
                 incident=self.incidents.open_incident(trigger_id),
                 tick_seconds=self.setting("scheduler.tick", 60),
-                holidays=self._holidays(),
+                settings=self.engine.settings,
             )
             return explain_trigger(reader.connection, trigger_id, facts)
 

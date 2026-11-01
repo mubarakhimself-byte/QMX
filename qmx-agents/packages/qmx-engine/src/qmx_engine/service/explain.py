@@ -13,6 +13,7 @@ covers a ledger written before the seam, since a failure message is quoted verba
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Final, cast
@@ -28,7 +29,7 @@ from qmx_engine.service.runs import status_of
 from qmx_engine.trace_export import totals
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.cron import instant, stamp
-from qmx_engine.triggers.preflight import MARKET_OPEN, market_shut_until
+from qmx_engine.triggers.preflight import Shut, is_market_check, market_shut
 
 ENDINGS: Final = {"node_finished": "ok", "node_failed": "failed", "node_waiting": "waiting"}
 STALE_TICKS: Final = 3
@@ -145,7 +146,7 @@ class TriggerFacts:
     version_state: str
     incident: Incident | None
     tick_seconds: float
-    holidays: tuple[str, ...]
+    settings: Mapping[str, object]
 
 
 def explain_trigger(
@@ -160,8 +161,9 @@ def explain_trigger(
     age = None if beat is None else (facts.now - instant(str(beat[0]))).total_seconds()
     held = next((f for f in recent if f.status == "held"), None)
     shut = None
-    if trigger.precheck_ref == MARKET_OPEN:
-        shut = market_shut_until(facts.now, trigger.zone, facts.holidays)
+    if is_market_check(trigger.precheck_ref):
+        found = market_shut(facts.now, trigger.precheck_ref, trigger.zone, facts.settings)
+        shut = found if isinstance(found, Shut) else None
     incident = facts.incident
     document: JsonObject = {
         "trigger_id": trigger.id,
@@ -200,7 +202,7 @@ def verdict(
     facts: TriggerFacts,
     age: float | None,
     held: rows.Fire | None,
-    shut: datetime | None,
+    shut: Shut | None,
 ) -> str:
     if facts.paused:
         return "paused: autonomy.paused is set, so no fire is claimed on this host until cleared"
@@ -215,7 +217,7 @@ def verdict(
     if age is None or age > STALE_TICKS * facts.tick_seconds:
         return "the ticker has not ticked recently, so nothing is claimed"
     if shut is not None:
-        return f"the market is shut in {trigger.zone} until {stamp(shut)}"
+        return f"{shut.reason} until {stamp(shut.until)}"
     match trigger.spec:
         case rows.Webhook():
             return "it fires once for each new webhook delivery"
