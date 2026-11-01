@@ -40,8 +40,10 @@ from qmf.data.store.engines import SeriesFile, StoreEngineError
 __all__ = [
     "BAR_COLUMNS",
     "FLOAT_COLUMNS",
+    "JOURNAL_COLUMNS",
     "PRICE_SCALE",
     "ROW_GROUP_ROWS",
+    "TEXT_COLUMNS",
     "TICK_COLUMNS",
     "VALUE_COLUMNS",
     "TypedWriter",
@@ -57,16 +59,25 @@ TICK_COLUMNS: Final[tuple[str, ...]] = ("t", "bid", "ask", "bid_volume", "ask_vo
 BAR_COLUMNS: Final[tuple[str, ...]] = ("t", "open", "high", "low", "close", "volume")
 VALUE_COLUMNS: Final[tuple[str, ...]] = ("t", "value")
 FLOAT_COLUMNS: Final[frozenset[str]] = frozenset({"bid_volume", "ask_volume", "volume", "value"})
+TEXT_COLUMNS: Final[frozenset[str]] = frozenset({"record"})
+"""A journal record is its canonical JSON text (AD-209)."""
+JOURNAL_COLUMNS: Final[tuple[str, ...]] = ("t", "seq", "record")
 _HEADER: Final[bytes] = b"qmf-series-v1\n"
 _INT64_MIN: Final[int] = -(2**63)
 _INT64_MAX: Final[int] = 2**63 - 1
 
 
 def schema_for(columns: Sequence[str]) -> pa.Schema:
-    """The typed schema of a partition: int64 ``t``, int64 prices, float64 the rest."""
-    return pa.schema(
-        [pa.field(name, pa.float64() if name in FLOAT_COLUMNS else pa.int64()) for name in columns]
-    )
+    """The typed schema of a partition: int64 ``t``, int64 prices, float64 volumes, text records."""
+    return pa.schema([pa.field(name, _column_type(name)) for name in columns])
+
+
+def _column_type(name: str) -> pa.DataType:
+    if name in TEXT_COLUMNS:
+        return pa.large_string()
+    if name in FLOAT_COLUMNS:
+        return pa.float64()
+    return pa.int64()
 
 
 def _cell(value: object) -> bytes:
@@ -135,24 +146,47 @@ class TypedWriter:
         return self._rows
 
     def add(self, rows: Iterable[Sequence[object]]) -> TypedWriter:
-        """Accept a stream of rows; one row group is written per ``row_group_rows``."""
+        """Accept a stream of rows; one row group is written per ``row_group_rows``.
+
+        A refused row closes the file before the refusal is raised, so the caller can
+        remove it: Windows will not unlink a file a writer still holds (WinError 32).
+        """
         if self._closed:
             raise ValueError("the writer is finished")
-        for row in rows:
-            values = self._checked(row)
-            self._hasher.update(b"\n")
-            self._hasher.update(b",".join(_cell(value) for value in values))
-            self._pending.append(values)
-            self._rows += 1
-            if len(self._pending) >= self._row_group_rows:
-                self._flush()
+        try:
+            for row in rows:
+                values = self._checked(row)
+                self._hasher.update(b"\n")
+                self._hasher.update(b",".join(_cell(value) for value in values))
+                self._pending.append(values)
+                self._rows += 1
+                if len(self._pending) >= self._row_group_rows:
+                    self._flush()
+        except BaseException:
+            self.abort()
+            raise
         return self
+
+    def abort(self) -> None:
+        """Close the file without finishing it; the caller removes what was written."""
+        if self._closed:
+            return
+        self._closed = True
+        self._pending = []
+        try:
+            self._writer.close()
+        except (OSError, pa.ArrowException):
+            pass
 
     def finish(self) -> SeriesFile:
         """Flush, close, fsync the file, and return what was written."""
         if self._closed:
             raise ValueError("the writer is finished")
-        self._flush()
+        try:
+            self._flush()
+        except BaseException:
+            self.abort()
+            raise
         self._closed = True
         try:
             self._writer.close()
@@ -190,6 +224,15 @@ class TypedWriter:
             )
         values: list[object] = []
         for name, value in zip(self._columns, row, strict=True):
+            if name in TEXT_COLUMNS:
+                if not isinstance(value, str):
+                    raise StoreEngineError(
+                        f"{name} takes text, not {type(value).__name__}",
+                        engine="typed",
+                        retryable=False,
+                    )
+                values.append(value)
+                continue
             if name in FLOAT_COLUMNS:
                 if value is not None and not isinstance(value, int | float):
                     raise StoreEngineError(

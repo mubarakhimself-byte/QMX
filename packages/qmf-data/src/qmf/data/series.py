@@ -43,6 +43,7 @@ from qmf.core import Ok, Result, Retryability
 from qmf.data.store.engines import SeriesFile, StoreEngineError
 from qmf.data.store.engines.typed import (
     BAR_COLUMNS,
+    JOURNAL_COLUMNS,
     TICK_COLUMNS,
     VALUE_COLUMNS,
     TypedWriter,
@@ -61,6 +62,8 @@ __all__ = [
     "BOOK_KIND",
     "GAP_MAX_MS",
     "GAP_MIN_MS",
+    "JOURNAL_SETTLE_DAYS",
+    "JOURNAL_SOURCE_PREFIX",
     "OPEN_NAME",
     "RULES",
     "STATE_NAME",
@@ -141,6 +144,12 @@ RULES: Final[dict[str, KindRule]] = {
     BOOK_KIND: KindRule(FreezeKind.CHECKSUM, BOOK_COLUMNS),
 }
 _DERIVED_RULE: Final[KindRule] = KindRule(FreezeKind.CHECKSUM, VALUE_COLUMNS)
+JOURNAL_SOURCE_PREFIX: Final[str] = "journal-"
+JOURNAL_SETTLE_DAYS: Final[int] = 1
+"""The starting default of ``[journals] settle_days``: late rows from a machine whose clock was off."""
+_JOURNAL_RULE: Final[KindRule] = KindRule(
+    FreezeKind.MONTH_END, JOURNAL_COLUMNS, JOURNAL_SETTLE_DAYS
+)
 
 
 def rule_for(source: str, kind: str) -> KindRule:
@@ -148,10 +157,14 @@ def rule_for(source: str, kind: str) -> KindRule:
 
     A derived series is ``source = derived, kind = <component>-v<version>`` (for example
     ``rsi-v1``), so its columns are ``t`` and ``value`` whatever the component is, and it
-    freezes on the checksum of the component version that produced it.
+    freezes on the checksum of the component version that produced it. A journal series
+    (``source = journal-<stream>``) holds ``t``, ``seq`` and the record's canonical JSON
+    whatever its kind, and its month freezes at its end plus a settlement day (AD-209).
     """
     if source == DERIVED_SOURCE:
         return _DERIVED_RULE
+    if source.startswith(JOURNAL_SOURCE_PREFIX):
+        return _JOURNAL_RULE
     return RULES.get(kind, _DERIVED_RULE)
 
 
