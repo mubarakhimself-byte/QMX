@@ -61,6 +61,53 @@ class ProblemKind(StrEnum):
     NO_RECORD = "no_record"
     NO_PIP = "no_pip"
     UNSETTLED_ORIGIN = "unsettled_origin"
+    MEASURE_MISMATCH = "measure_mismatch"
+    PERCENT_LOOKS_WHOLE = "percent_looks_whole"
+    # Layer B, the references (qml.check)
+    PIN_UNRESOLVED = "pin_unresolved"
+    PIN_FINGERPRINT = "pin_fingerprint"
+    ENTRY_FACE = "entry_face"
+    BLOCK_SOURCE_MISSING = "block_source_missing"
+    BLOCK_NOT_PINNED = "block_not_pinned"
+    PARAMETER_MISSING = "parameter_missing"
+    UNKNOWN_PARAMETER = "unknown_parameter"
+    UNKNOWN_INPUT = "unknown_input"
+    UNKNOWN_PORT = "unknown_port"
+    INPUT_MISSING = "input_missing"
+    UNKNOWN_MARKET = "unknown_market"
+    UNKNOWN_STREAM = "unknown_stream"
+    DUPLICATE_NAME = "duplicate_name"
+    BAD_MIRROR = "bad_mirror"
+    BAD_COMBINER = "bad_combiner"
+    # Layer D, data levels and calendars
+    DATA_LEVEL_MISSING = "data_level_missing"
+    DATA_LEVELS_UNKNOWN = "data_levels_unknown"
+    CALENDAR_NOT_HELD = "calendar_not_held"
+    # Layer E, completeness
+    NO_MARKET = "no_market"
+    SIDE_MISSING = "side_missing"
+    SIDE_UNUSED = "side_unused"
+    NO_TRIGGER = "no_trigger"
+    NO_EXIT = "no_exit"
+    SIZER_MISSING = "sizer_missing"
+    NO_SOURCE = "no_source"
+    NO_ROLL = "no_roll"
+    PLACEHOLDER = "placeholder"  # mock-data-scan: allow (the risk session's label, AD-116)
+    NO_HALTS = "no_halts"
+    NO_TIME_EXIT = "no_time_exit"
+    # Layer F, code safety
+    BLOCK_SYNTAX = "block_syntax"
+    UNSAFE_CODE = "unsafe_code"
+    LITERAL_IN_COMPARISON = "literal_in_comparison"
+    # Across layers: a layer that could not run, and what only the compiler refuses
+    LAYER_SKIPPED = "layer_skipped"
+    NOT_COMPILED = "not_compiled"
+    # Layer G's behaviour report, warnings only
+    NO_TRADES = "no_trades"
+    ONE_SIDE_ONLY = "one_side_only"
+    EXITS_UNFIRED = "exits_unfired"
+    SIGNAL_CONSTANT = "signal_constant"
+    SHUFFLED_DAY_MATCHES = "shuffled_day_matches"
 
 
 @dataclass(frozen=True)
@@ -72,6 +119,7 @@ class Problem:
     message: str
     hint: str
     layer: str = "A"
+    nearest: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
