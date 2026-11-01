@@ -1,0 +1,28 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "market-next-open",
+  "version": 1,
+  "family": "entry-order",
+  "component_type": "entry_order",
+  "definition": "Enter with a market order at the next bar's open.",
+  "eligible_roles": [
+    "entry_order"
+  ],
+  "inputs": [],
+  "output": {
+    "type": "entry_order",
+    "measure": null
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "origin": "qml",
+  "fingerprint": "fp1:sha256:f95d99d7c9081c78186bb04ef36ba6bfac263067cc5e66a716672b2bfb366637"
+}

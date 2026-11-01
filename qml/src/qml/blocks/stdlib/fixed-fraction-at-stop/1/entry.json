@@ -1,0 +1,58 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "fixed-fraction-at-stop",
+  "version": 1,
+  "family": "fixed-fractional",
+  "component_type": "sizer",
+  "definition": "Risk a fraction of equity at the stop, rounded down to the lot step; skip with a reason below the minimum lot.",
+  "eligible_roles": [
+    "sizer"
+  ],
+  "inputs": [
+    {
+      "port": "equity",
+      "stream_kind": "account",
+      "measure": "money",
+      "data_level": null
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "stop_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null,
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "quantity",
+    "measure": "lots"
+  },
+  "parameters": {
+    "fraction": {
+      "measure": "percent"
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "fingerprint": "fp1:sha256:e965437208a8db07e44c579d463d8c8c789d826451089097a8290fdd63cd90bf"
+}

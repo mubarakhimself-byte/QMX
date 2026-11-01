@@ -1,0 +1,34 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "time-exit-bars",
+  "version": 1,
+  "family": "time-exit",
+  "component_type": "exit",
+  "definition": "Close the position after it has been held a number of bars.",
+  "eligible_roles": [
+    "exit",
+    "timeout"
+  ],
+  "inputs": [],
+  "output": {
+    "type": "exit_action",
+    "measure": "bars"
+  },
+  "parameters": {
+    "bars": {
+      "measure": "bars"
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 1
+  },
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "fingerprint": "fp1:sha256:f19fa95dab6ce35827e90d82d2e1f41ffbdb1f53dadf601c3d74213db0430dc5"
+}

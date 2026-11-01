@@ -1,0 +1,46 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "target-r-multiple",
+  "version": 1,
+  "family": "profit-target",
+  "component_type": "exit",
+  "definition": "Profit target a multiple of R from the entry, R being the entry-to-stop distance.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "inputs": [
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "stop_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "multiple": {
+      "measure": "r"
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "origin": "placeholder",
+  "owner": "risk-session",
+  "fingerprint": "fp1:sha256:24236124fd2b0d83a6d41db124d9a1de1cbdf5c029c138338605be2e5356ca5e"
+}

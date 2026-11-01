@@ -1,0 +1,54 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "rsi-cross-back",
+  "version": 1,
+  "family": "oscillator",
+  "component_type": "trigger",
+  "definition": "Wilder's RSI crossing back above a level (long) or below it (short).",
+  "eligible_roles": [
+    "trigger",
+    "confirmation"
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "event",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars"
+    },
+    "level": {
+      "measure": "ratio"
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 4
+  },
+  "golden": {
+    "reference": "talib.RSI 0.7.1",
+    "cases": "qml/tests/golden/talib-0.7.1.json"
+  },
+  "settle_bars": {
+    "params": {
+      "period": "14"
+    },
+    "bars": 285,
+    "tolerance": "1e-9"
+  },
+  "origin": "qml",
+  "fingerprint": "fp1:sha256:dd94e7693df3f3c0e9020be6784d3fb23682ea1fbb033f44a2aaa1975593a4c2"
+}

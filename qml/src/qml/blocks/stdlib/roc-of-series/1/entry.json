@@ -1,0 +1,47 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "roc-of-series",
+  "version": 1,
+  "family": "rate-of-change",
+  "component_type": "context",
+  "definition": "Rate of change of a series over a lookback, as a fraction; holds when at least the floor (long) or at most minus the floor (short).",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "percent"
+  },
+  "parameters": {
+    "lookback": {
+      "measure": "bars"
+    },
+    "floor": {
+      "measure": "percent"
+    }
+  },
+  "warm_up": {
+    "rule": "lookback + 1",
+    "bars": null
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "lookback + 1",
+    "observations": null
+  },
+  "golden": {
+    "reference": "talib.ROCP 0.7.1",
+    "cases": "qml/tests/golden/talib-0.7.1.json"
+  },
+  "origin": "qml",
+  "fingerprint": "fp1:sha256:1b66c16724b58cf7e43db0f4b5ceaf691d0bbe7e56e89bc3f7718026adde3a00"
+}
