@@ -47,6 +47,8 @@ He saw the "next" list change between messages. This is the single list; every m
 
 **Fix-check done (FC1):** ready for the build plan after ten text edits (G1-G10), applied by agent X2; G4 (his C: drive is 98% full, which turns 106 backup tests red) is a rule in the P2 brief. Merged build order: 69 slices in 8 stages, in `architecture/review/FC1-fix-check.md`.
 
+**1 Nov, planning done (about 10:45 UTC):** P2 wrote `build/UNIT-PLAN.md` (73 PRs in 7 phases; `check-plan.mjs`: "73 PR sections, 0 problems", rerun by the lead), `build/PROMPT-ORCHESTRATOR.md` (the paste prompt is at its end; a DeepSeek variant beside it), `build/BRIEF-BUILDER.md`, `build/UI-NOTES-UNITS.md`, `build/RISK-SIZING-PLACEHOLDERS.md`, and a pointer in `RISK-SIZING-PACK.md` section 7. The repo ignores `build/` folders, so they were committed with `git add -f`. The MIS page is published. What waits on him: pasting the prompt; two screen words (defaults taken); later, a cTrader demo sign-in, an optional Hyperliquid testnet wallet, and his go on server lanes. The build stops near 96% of his weekly limit.
+
 **How to resume (a fresh session reads this):**
 1. Check each part folder: it is finished only if it holds `ARCHITECTURE-SPINE.md` that lints to 0 (`bmad-architecture`'s `lint_spine.py`), `CONTRACTS.md`, `BUILD-SLICES.md`, `UI-NEEDS.md`, `RISK-SIZING-POINTS.md` and `LEAD-CALLS.md`, and its commit is on `plan/unit-system`.
 2. Any part not finished (for example the power cut it off): move its partial folder aside to `architecture/parts/_partial-<date>/` and rerun that part's brief with a fresh poteto-agent on Opus. Never resume an old agent.
@@ -56,7 +58,7 @@ He saw the "next" list change between messages. This is the single list; every m
 1. (done) R0's fix.
 2. (done) Level 1, three agents at once: A (`L1-A-qml-dictionary-unit.md`), B (`L1-B-qmb-journals-workflows.md`), C (`L1-C-node-mis-external.md`: the node, the MIS in depth, external connections, DevOps, clocks, networking).
 3. R1, the full review (`R1-full-review.md`); one fix round by fresh agents per part; one fix-check.
-4. P2 (`P2-plan-and-prompts.md`): the build plan checked to 0 problems, the orchestrator prompt, the builder brief, the UI notes, the placeholders list.
+4. (done) P2 (`P2-plan-and-prompts.md`): the build plan checked to 0 problems, the orchestrator prompt, the builder brief, the UI notes, the placeholders list.
 5. The final brief to him, with the paste prompt.
 6. (done 1 Nov) The MIS page: https://claude.ai/artifact/WBq7u4Mwd3XSzzsadX2qou ; source `explainers/mis/mis-field-notes.html`, content `architecture/MIS-PAGE-CONTENT.md`.
 
