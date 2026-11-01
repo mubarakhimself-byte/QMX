@@ -1,6 +1,6 @@
 # Part B contracts: every shape this part owns or consumes
 
-Every shape is JSON Schema 2020-12 and carries `schema_version` (Level 0 AD-6): fields may be added, meanings never change; readers read every version they support and keep reading an old version for the overlap window (setting, default 90 days). Version rules are the connections master's codes (`01-connections.md` "Version rules"): V-S shape, V-K Library kind, V-P pinned app call. Field types: `str`, `int` (exact integer), `dec` (exact decimal as a string), `ns` (int64 UTC nanoseconds), `ts` (ISO-8601 UTC text), `pin` (`id@version`), `fp` (`fp1:sha256:...`), `R` (a dec in multiples of initial risk), `money` (exact integer in the account's money digits plus currency).
+Every shape is JSON Schema 2020-12 and carries `schema_version` (Level 0 AD-6): fields may be added, meanings never change; readers read every version they support and keep reading an old version for the overlap window (setting, default 90 days). Version rules are the connections master's codes (`01-connections.md` "Version rules"): V-S shape, V-K Library kind, V-P pinned app call. Field types: `str`, `int` (exact integer), `dec` (exact decimal as a string), `ns` (int64 UTC nanoseconds), `ts` (ISO-8601 UTC text), `pin` (`id@version`), `fp` (`fp1:sha256:...`), `R` (a dec in multiples of initial risk), `money` (exact integer in the account's money digits plus currency). Amended after R1 (`architecture/review/R1-FIXES-X1-B.md`).
 
 ## 1. The QMB contract `qmb/1` (owner: part B; carried by app manifests and jobs)
 
@@ -10,13 +10,14 @@ A tester app implements `qmb/1` when its `app.toml` has:
 | --- | --- | --- |
 | `risk` | `runs` | no tester is `money` |
 | `kind` | `headless` (or `both` once a screen folder exists) | |
-| `entrypoints.jobs` | one script per run kind it supports, `jobs/<kind>.py`, each `def run(inputs)` | kinds: `backtest`, `sweep`, `walk_forward`, `robustness`, `optimize`, `whatif`, `replay_check`, `behaviour_check`, `conformance`; `backtest` and `conformance` are required |
+| `entrypoints.jobs` | one script per run kind it supports, `jobs/<kind>.py`, each `def run(inputs)` | kinds: `backtest`, `sweep`, `walk_forward`, `robustness`, `optimize`, `whatif`, `replay_check`, `behaviour_check`, `conformance`; `backtest`, `behaviour_check` and `conformance` are required; a job returns a `failed` bundle for every domain failure and raises only on a crash (AD-204) |
 | `operations.capabilities` | `approval = "read"`, `state = "none"` | output below |
-| `operations.instruments` | `approval = "read"`, `state = "none"` | output: the instrument classes and data levels it can replay (it reads no Library; the core joins this with the records) |
+| `operations.instruments` | `approval = "read"`, `state = "none"` | output: the instrument classes and fidelities it can replay (it reads no Library; the core joins this with the records) |
 | `provides.backtest-result` | schema `qmx.qmb.result-bundle/1`, `lander = "qmb-run"`, no `stale_after` | namespaced by app id (`<app>/backtest-result`) |
+| `breaker` | `restart = "backoff"` (Part C's core change 3); `max_errors` left at the shipped 3 | a crash heals; a domain failure never counts (AD-201) |
 | `capabilities.secrets`, `capabilities.network` | none | a tester needs no key and no network |
 
-`capabilities` output (V-S, `qmx.qmb.capabilities/1`): `schema_version`, `contract` (`qmb/1`), `tester` (`app`, `version`), `run_kinds[]`, `data_levels[]` (`quotes`, `trades`, `bars`), `fill_models[]`, `cost_adapters[]`, `carry_adapters[]`, `margin_models[]`, `instrument_classes[]` (`fx`, `metal`, `index_cfd`, `commodity_cfd`, `crypto_spot`, `perp`, `future`), `whatif_scenarios[]` (each `name`, `direction`: `worsen_only` or `may_improve`).
+`capabilities` output (V-S, `qmx.qmb.capabilities/1`): `schema_version`, `contract` (`qmb/1`), `tester` (`app`, `version`), `run_kinds[]`, `fidelities[]` (`quotes`, `trades`, `bars`; mapped onto Part A's `qmx.data-level/1` as `bars` 1, `quotes` 2, `trades` 4), `fill_models[]`, `cost_adapters[]`, `carry_adapters[]`, `margin_models[]`, `instrument_classes[]` (values of the one instrument class enum in Part C's records, which match Part A CONTRACTS §2.3: `fx`, `metal`, `index_cfd`, `commodity_cfd`, `stock_cfd`, `future`, `perp`, `spot_crypto`, `stock`), `whatif_scenarios[]` (each `name`, `direction`: `worsen_only` or `may_improve`).
 
 ## 2. A run: request, bundle and the landed result
 
@@ -32,7 +33,7 @@ A tester app implements `qmb/1` when its `app.toml` has:
 | `study` | pin | a `study-spec` version; **core** makes an implicit one when absent |
 | `markets[]` | pin | instrument record versions (Part C's records) |
 | `window` | object | `start`, `end` as ts; any start allowed |
-| `data[]` | object | `series_key`, `level` (`quotes`, `trades`, `bars`), `card` (dataset pin), `files[]` (**core**: run-folder paths with fp) |
+| `data[]` | object | `series_key`, `fidelity` (`quotes`, `trades`, `bars`), `card` (dataset pin), `files[]` (**core**: run-folder paths with fp) |
 | `execution` | object | `fill_model`, `cost_profile` (a Library `artifact` pin or `study_default`), `slippage`, `carry`, `margin`, each `name@version` from `capabilities` |
 | `seed` | int | |
 | `purpose` | str | `exploration`, `validation`, `stress`, `replay_check`, `conformance` (stress runs stamp world `stress`) |
@@ -48,7 +49,7 @@ A tester app implements `qmb/1` when its `app.toml` has:
 | --- | --- | --- |
 | `schema_version`, `run_id`, `request_fp` | int, str, fp | `run_id` must equal the request's |
 | `tester` | object | `app`, `version`, `contract` (`qmb/1`) |
-| `status` | str | `finished` or `failed` (a tester never writes `killed`; the core does) |
+| `status` | str | `finished` or `failed` (a tester never writes `killed`; the core does); a domain failure is a `failed` bundle, never a raise |
 | `reason` | str | when failed |
 | `measures` | object | money: the 27 shipped measures; R: `trades`, `expectancy_r`, `win_rate`, `payoff_r`, `max_drawdown_r`, `mae_median_r`, `mfe_median_r`, `exit_capture`, `entry_edge_ratio` |
 | `labels` | object | `zero_trades` (bool), `costs_uncalibrated` (bool), `fidelity` (`quotes`, `trades`, `bars`), `placeholders[]` (block pins with `origin: placeholder`), `data_seams[]`, `gaps[]`, `motion` |
@@ -59,6 +60,8 @@ A tester app implements `qmb/1` when its `app.toml` has:
 ### `backtest-result` kind, `schema_version` 2 (owner: Library kind file, written only by the lander; V-K)
 
 Fields kept: `memo_key`, `world`, `claim_class`, `role`, `fidelity`, `provenance`, `outcome`. Added (all optional, so version 1 items stay valid): `run_id`, `status` (`finished`, `failed`, `killed`), `reason`, `kind` (the run kind), `tester` (`app`, `version`), `unit` (pin), `compiled_fp`, `study` (pin), `markets[]`, `window`, `seed`, `motion`, `measures`, `labels`, `principal`, `place` (engine AD-72), `model_cutoff`, `versions`, `request_fp`. Blob slots: `report` (kept), `trades`, `equity`, `journal/*`, `daily_r`, `slices`, `receipts` (Parquet, `application/vnd.apache.parquet`). Edges: `consumed` to each card version, `uses` to the unit version, `tests` to the study spec. Page tabs added: "Journal" (blobs `journal/*`), "Slices", "Who ran it" (`principal`, `place`, `tester`, `run_id`).
+
+The G record a run needs is Part A's `test-report` (CONTRACTS A §3.3: `check = "qml-g/1"`, `compiled_fingerprint`, `unit_ref`, `safety`, `behaviour`, `run_id`), landed by the lander from a `behaviour_check` job.
 
 ## 3. The judge's records (owner: part B, `qmx-judge`; all record class; V-K)
 
@@ -72,7 +75,9 @@ Fields kept: `memo_key`, `world`, `claim_class`, `role`, `fidelity`, `provenance
 | `death-certificate` | `unit` (pin), `cause` (from the appendable list: `no_signal`, `costs`, `overfit`, `decay`, `no_trades`, `data`, `behaviour`), `classifier_version`, `explanation` (blob), `memory_row` (id) |
 | `forecast` | `market` (pin), `call` (`direction`, `state` or `range`), `horizon` (ts), `confidence` (dec), `written_at`, `written_by` (principal), `scored_at`, `score` (dec), `scorer_version` |
 
-**The lander port** (owner: `qmx-judge`; injected into the apps supervisor; in-process, no schema on the wire): `open(app_id, version, job, inputs, principal) -> Ticket | None` (None for an app whose provides name no lander), `close(landing) -> result_id`, `fail(ticket, reason) -> result_id`. All three are idempotent by run id.
+**The lander port** (owner: `qmx-judge`; injected into the apps supervisor; in-process, no schema on the wire): `open(app_id, version, job, inputs, principal) -> Ticket | None` (None for an app whose provides name no lander), `close(landing) -> result_id`, `fail(ticket, reason) -> result_id`. All three are idempotent by run id. The host composes the lander with one more callable, `run_job(app_id, job, inputs, principal)`, the supervisor's own: on a run whose unit has no G record for its compiled fingerprint, `open` first runs `behaviour_check` on the same tester through it, lands the `test-report` and a `check` try, and returns the run's ticket only on a passing safety verdict (else it refuses with the report linked). The supervisor never learns why; a `behaviour_check` request needs no G record, so `open` never recurses.
+
+**The host's lifecycle writer** (owner: part B, `qmx_host/lifecycle.py`; in process on This PC): `record_move(event) -> event_id`, where `event` is Part A's `qmx.lifecycle/1` body; it refuses a move Part A's `fold` rejects, and appends a legal one as a unit-journal `lifecycle` row whose record id is the `event_id`. Callers: the verdict landing (the judge's draft-to-tested or draft-to-parked move, `by.kind = judge`) and Part C's promote action (his clicks, `by.kind = his_click`, principal `operator`).
 
 ## 4. Journals (owner: part B, the writer library in `packages/qmf-data`; V-S)
 
@@ -80,12 +85,12 @@ Fields kept: `memo_key`, `world`, `claim_class`, `role`, `fidelity`, `provenance
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `record_id` | str | `<writer_id>/<seq>`, or `<venue>:<deal id>` for `fill` |
+| `record_id` | str | the row's own id where a re-run can write it again: Part A's `row_id` for `signal` and `calibration`; fp1 over scope id, instant and ordinal in the step for `state`; the `event_id` for `lifecycle`; `<venue>:<deal id>` for `fill`; `<venue>:<closing deal id>` for `trade`; otherwise `<writer_id>/<seq>`. A repeat is dropped; a repeat with a different body is kept out and answered with a `determinism_break` warning |
 | `stream` | str | `unit`, `market`, `node`, `readings` |
 | `kind` | str | the body's kind |
 | `schema_version` | int | the kind's |
-| `writer_id` | str | one writer per stream (CT-13 `WriterId`) |
-| `seq` | int | gapless per writer |
+| `writer_id` | str | one writer per partition (CT-13 `WriterId`) |
+| `seq` | int | gapless per writer; a dropped repeat takes none |
 | `ts_venue` | ns or null | where the venue gives one (cTrader gives none) |
 | `ts_recv`, `ts_write` | ns | always |
 | `clock_ok` | bool | false while the machine's offset is unproven (Level 0 AD-10) |
@@ -101,11 +106,13 @@ Fields kept: `memo_key`, `world`, `claim_class`, `role`, `fidelity`, `provenance
 | `build` | str | the writer's build |
 | `links[]` | object | `rel`, `ref` (a record id, a partition key plus seq, or a Library id) |
 
-Kind bodies are `qmx.journal.<stream>.<kind>/1`; their fields are listed in `journals.md` §3. Reason codes are a closed, appendable list (`journals.md` §3).
+Kind bodies are `qmx.journal.<stream>.<kind>/1`; their fields are listed in `journals.md` §3. Unit-journal `signal`, `calibration`, `state` and `lifecycle` bodies are Part A's shapes (A CONTRACTS §4.2, §8); the node journal's start and stop kind is `node_lifecycle`; the reading body is Part C's `qmx.reading/1` and carries `source` (`node` or `mis`). Reason codes are a closed, appendable list (`journals.md` §3).
+
+**Series rows** (the writer library's second form): a store kind's own typed row (`bar-*`, `ticks`, as `qmf-data/src/qmf/data/series.py` declares them) under its series key, appended to the app's stream with the same one-writer and fsync rules. Part C's recorder writes the feed it records this way, so the harvester needs nothing else.
 
 ### Journal partitions (owner: part B; on each machine's market-data store; V-K through the store's version)
 
-Key `journal-<stream> / <subject> / <kind> / <world>.<machine> / <yyyy>-<mm>`, the month being that of the row's `t`; columns `t` (int64 epoch milliseconds, the writer's monotonic stamp), `seq` (int64), `record` (large string, the canonical JSON); freeze `month-end` plus `[journals] settle_days`. One dataset card per journal series, `source = journal-<stream>`, `licence = own`.
+Key `journal-<stream> / <subject> / <kind> / <world>.<machine> / <yyyy>-<mm>`, the month being that of the row's `t`. Subject: the unit id, market id or node identity; for `journal-readings`, `<source>.<market id>`. The `lifecycle` kind's variant adds the writer's role, `<world>.<machine>.host` or `.node`. Every part is a store token (`[A-Za-z0-9_.+-]{1,64}`, `series.py:106`); the writer library maps any other id by one rule: `@` and `/` become `+`, any other character `_`, and past 64 characters the token ends in a 12-character fingerprint. Columns `t` (int64 epoch milliseconds, the writer's monotonic stamp), `seq` (int64), `record` (large string, the canonical JSON); freeze `month-end` plus `[journals] settle_days`. One dataset card per journal series, `source = journal-<stream>`, `licence = own`. The harvester stages each partition in the door's own staging layout (`<source>/<subject>/<kind>/<variant>/<YYYY-MM>.parquet`, `qmx_host/market_data.py:101-102`, `:572-578`) and commits it with `born_on = node`.
 
 ## 5. Amended Library kinds (owner: part B; additive; V-K, `schema_version` raised by one)
 
@@ -118,7 +125,7 @@ Key `journal-<stream> / <subject> / <kind> / <world>.<machine> / <yyyy>-<mm>`, t
 
 ## 6. The records host job (owner: part B, `qmx_host/records.py`)
 
-Settings `[records] on`, `interval_s`, `node_retention_days`. Each round lands one Library `artifact` with `fields.type = maintenance-result` (the built maintenance shape, `qmx_host/maintenance.py:1-15`) and body `job = records`, `nodes[]` (`node`, `reached`, `partitions`, `bytes`, `oldest_unshipped`, `refusals[]`), `at`. Per node state (watermarks) lives in This PC's QMX folder beside the backup record.
+Settings `[records] on` (true), `interval_s` (300, the pull's round), `open_harvest_s` (60), `tick_harvest_s` (3,600), `open_pull_s` (3,600), `tick_pull_s` (86,400). No retention setting: nothing prunes a node's store in this build. Each round lands one Library `artifact` with `fields.type = maintenance-result` (the built maintenance shape, `qmx_host/maintenance.py:1-15`) and body `job = records`, `harvest` (`streams`, `partitions`, `skipped_unchanged`, `refusals[]`), `nodes[]` (`node`, `reached`, `partitions`, `open_fetched`, `bytes`, `confirmed`, `still_pinned`, `oldest_unshipped`, `refusals[]`), `at`. Per node state (the watermark and the fingerprints to confirm next round) lives in This PC's QMX folder beside the backup record.
 
 ## 7. Catalog rows (owner: part B; core toolsets; `<toolset>_<op>`; V-S row schemas)
 
@@ -132,7 +139,7 @@ Settings `[records] on`, `interval_s`, `node_retention_days`. Each round lands o
 | `journal_query` (new) | `research` | `read` | `stream`, `window` (required), filters, `view`, `format`, `include_backfilled` | rows, a view or a digest; "data stops at" when past it |
 | `notes_write` (new) | `research` | `domain_write` | a `note` body | the note id |
 
-All are on the default copilot surface by construction (core toolsets, `qma-harness/src/qma/harness/surface.py:484-489`), and a test pins it (Level 0 AD-31).
+All are on the default copilot surface by construction (core toolsets, `qma-harness/src/qma/harness/surface.py:484-489`), and a test pins it (Level 0 AD-31). The shipped per-server count test (`qmx-tools/tests/test_tools.py:374-376`, CHECKED) changes on purpose in the slices that add rows: `backtest` 4 to 5 (B13), `research` 3 to 5 (B15); B6 reshapes rows and keeps 4.
 
 ## 8. The mini-app core's job shapes (owner: part B; in `qmx-apps`; V-S on disk)
 
@@ -148,14 +155,15 @@ All are on the default copilot surface by construction (core toolsets, `qma-harn
 | Shape | Owner | What part B reads or writes |
 | --- | --- | --- |
 | Unit document `qmx.unit/1`, its pinned blocks | Part A | the lander copies them into the run folder; QMB compiles through A's loader |
-| Check result and the G verdict and behaviour report | Part A | the lander requires a recorded G verdict for the compiled fingerprint; `behaviour_check` produces one |
-| CT-23 format 3 sized intent; the risk socket's slots | Part A | QMB's unit runner hosts the socket in replay |
-| The read surface protocol a windowed reader implements | Part A (QML) | QMB's reader serves a window, not whole history |
-| Identity table, lifecycle machine | Part A | `state` journal rows record his moves; proposal cards ask for them |
-| Instrument, venue and account records, calendars, the market id | Part C | QMB's execution and carry; the calendar-open check; the data-quality check |
-| Stamped reading `qmx.reading/1`, the board | Part C | `signal` rows' readings; templates read reading history and the board |
-| AD-46 verbs `data.list`, `data.fetch`, `apps.job`, `apps.ask` (`journal_tail`, `status`), `heartbeats` | Part C | the records host job; remote QMB jobs; the node watcher |
-| Node operations and node journal writers | Part C | the node writes unit and node journal kinds through part B's writer library |
+| The unit door: `construct_unit`, `HostedUnit.on_instant -> UnitStep`, the read surfaces | Part A (A CONTRACTS §4.1, §4.2, §4.5) | B5b's shared handler drives it for QMB and the node |
+| Check result, the behaviour report, the `test-report` G fields | Part A | the lander requires a recorded G verdict for the compiled fingerprint; `behaviour_check` produces one |
+| CT-23 format 3 sized intent; the risk socket's slots | Part A | QMB's unit runner hosts the socket in replay; fills carry the sizer's quantity after lot rounding |
+| `ReadSurface.at(instant)` | QML (EXISTS, `qml/src/qml/protocol/__init__.py:112`) | QMB's windowed reader serves a window through it, not whole history |
+| Identity table, lifecycle body `qmx.lifecycle/1` and `fold` | Part A | `lifecycle` journal rows record moves; proposal cards ask for them |
+| Instrument, venue and account records, the one class enum, calendars, the market id | Part C | QMB's execution and carry; the calendar-open check; the data-quality check |
+| Stamped reading `qmx.reading/1` (with `source`), the board, `readings_query` | Part C | `signal` rows' readings; templates read reading history and the board |
+| AD-46 verbs `data.list` (with `confirmed`), `data.fetch`, `apps.job` (with `inputs`), `apps.ask` (`journal_tail`, `status`), `heartbeats` | Part C | the records host job; remote QMB jobs; the node watcher |
+| Node operations, node journal writers, the recorder | Part C | the node writes unit and node journal kinds, and the recorder its feed, through part B's writer library; the node runtime imports B5b's handler |
 | CT-13 events, CT-19 commands, CT-20 events, CT-29 exit records | `packages/qmf-data`, `qmf-venue`, `qmf-risk` (EXISTS) | `order`, `fill` and `trade` bodies wrap them |
 
 ## 10. Matched against `01-connections.md`
@@ -167,33 +175,33 @@ All are on the default copilot surface by construction (core toolsets, `qma-harn
 | C9 the Lab to QMB app | yes | default adapter `app_op` |
 | C10 QMB app to core landing | yes, with change 3 | the door is the supervisor's job path and the lander |
 | C11 QMB app to market-data door | changed (change 4) | the core materialises on the run's behalf |
-| C12 apps to compiled units and blocks | yes | through Part A's loader |
-| C13 apps to journal writer | yes | the writer library in `qmf-data`; QMB's records in the result's blobs |
+| C12 apps to compiled units and blocks | changed (R1 A-C3) | units hosted through Part A's unit door by the one shared handler |
+| C13 apps to journal writer | changed (change 12) | the writer library in `qmf-data`; the host harvests every app's streams; QMB's records in the result's blobs |
 | C14 judge to Library | changed (change 11) | verdict, baseline and proposal cards land as records, not governed drafts |
 | C15 templates and agents to journals, readings, records | yes | `journal_query` here; `readings_query`, `instrument_get` are Part C's rows |
 | C16 agents to notes | yes | `notes_write` row, `note` 2 |
 | C17 Library ref log to templates | yes | the loop guard is content (producer filter and intent key) |
 | C19 downloaders to the door | yes | plus the stamp check and seams |
-| X3 the pull | yes, with change 7 | a host job; watermark confirmation |
+| X3 the pull | changed (change 7) | a host job; Part C's `confirmed` fingerprint list; open months pulled when due |
 | X7 agents and the node watcher reading a node | yes | |
 | §5 "Study spec, verdict, baseline card, try ledger row" | yes, with change 5 | the try ledger row is the `try` kind |
 | §5 "QMB operations and the `backtest-result` extension" | changed (change 6) | jobs plus two operations; status, results, compare are core rows |
 | §5 "Journal envelope and kinds" | yes | |
-| §6 "The `qmb` app does not exist" | closed by slice B5 | |
+| §6 "The `qmb` app does not exist" | closed by slice B6 | |
 
 ## Contract changes
 
-Proposed for the connections master's writer to fold in; part B does not edit `01-connections.md`.
+Proposed for the connections master's writer to fold in; part B does not edit `01-connections.md`. Each carries R1's settlement.
 
-1. **C7.** "the call waits up to `qmb_tool_wait_s` (default 600 s)" becomes "`[qmb] agent_wait_s`, default 240 s, below the prompt cache's five minutes (WF-07); workflows wait for the whole job". Changes LC-A0-21's number.
-2. **C8.** `app_op` takes `parameters.inputs` (merged over its `in` port) and its answer carries the job's `result`; the job runs with those inputs.
-3. **C10.** Door: "the apps supervisor's job path, which opens and closes the run through the lander `qmb-run` that the tester's manifest names (`qmx-judge`, absorbing PR 204's `land`)", not a `backtest_and_land` call per door.
-4. **C11.** From "QMB app" to "the core lander, on the run's behalf, into the run folder of the tester's volume"; QMB reads files only.
-5. **§5.** Add the row "`try` item | P3 (the lander and the judge's writers) | Library kind | Level 1 B".
-6. **§5 and Level 0 AD-34.** QMB's contract is run kinds as jobs plus `capabilities` and `instruments`; `status`, `results` and `compare` are the core's `backtest` rows over the core's records.
-7. **X3.** "a job on This PC" is the records host job beside backups (not an engine workflow); `data.list(after = watermark)` doubles as the confirmation of a verified copy; the node deletes confirmed partitions after `[records] node_retention_days`.
-8. **AD-46 `apps.job` (Part C).** Carries `inputs` and the caller's principal; a job counts as `domain_write` for the principal rule.
-9. **C22 and C24 (Part C).** Reading history rows ride the journal envelope and the journal partition layout (`journal-readings` source); the body stays Part C's `qmx.reading/1`.
-10. **New row C30.** "Apps supervisor to the core lander | in-process in the host | run request in; run id and the run folder out; result bundle in on close | the `Landers` port injected by the host (NEW) | ask | V-S | a lander refusal refuses the job before it queues".
-11. **C14.** Verdicts, baseline cards and proposal cards land as records (class `record`), not governed drafts: scripts write them and nothing promotes through them; his click acts on the unit's lifecycle (Part A's machine), which stays the only path toward live.
-12. **C13 (Part C consumes).** The committer of a node's closed months is that machine's host (the records job's local half), reading the sealed files from the node app's volume; the node app never opens the door. The before-dispatch write stays the node's in-process append store.
+1. **C7.** "the call waits up to `qmb_tool_wait_s` (default 600 s)" becomes "`[qmb] agent_wait_s`, default 240 s, below the prompt cache's five minutes (WF-07); workflows wait for the whole job". Changes LC-A0-21's number. R1: accepted (B-D6).
+2. **C8.** `app_op` takes `parameters.inputs` (merged over its `in` port) and its answer carries the job's `result`; the job runs with those inputs. R1: accepted (B-D3).
+3. **C10.** Door: "the apps supervisor's job path, which opens and closes the run through the lander `qmb-run` that the tester's manifest names (`qmx-judge`, absorbing PR 204's `land`)", not a `backtest_and_land` call per door. R1: accepted (B-D4).
+4. **C11.** From "QMB app" to "the core lander, on the run's behalf, into the run folder of the tester's volume"; QMB reads files only. R1: accepted (B-D5).
+5. **§5.** Add the row "`try` item | P3 (the lander and the judge's writers) | Library kind | Level 1 B". R1: accepted (B-CC5).
+6. **§5 and Level 0 AD-34.** QMB's contract is run kinds as jobs plus `capabilities` and `instruments`; `status`, `results` and `compare` are the core's `backtest` rows over the core's records. R1: accepted (B-D1).
+7. **X3.** "a job on This PC" is the records host job beside backups (not an engine workflow); confirmation is Part C's `confirmed` fingerprint list on `data.list` (the server's door pins node-born partitions until listed); open months of bars and reading history are pulled when due; nothing prunes a node's store in this build. R1: partly accepted (B-CC7); the watermark proof and the retention delete were withdrawn here.
+8. **AD-46 `apps.job` (Part C).** Carries `inputs` and the caller's principal; a job counts as `domain_write` for the principal rule; `apps.job` refuses an agent on a `money` app. R1: accepted with that guard (B-CC8, R1-C-12).
+9. **C22 and C24 (Part C).** Reading history rows ride the journal envelope and the journal partition layout (`journal-readings` source, subject `<source>.<market id>`); the body stays Part C's `qmx.reading/1` and carries `source`. R1: accepted (B-CC9, R1-B-07).
+10. **New row C30.** "Apps supervisor to the core lander | in-process in the host | run request in; run id and the run folder out; result bundle in on close | the `Landers` port injected by the host (NEW) | ask | V-S | a lander refusal refuses the job before it queues". R1: accepted as C30; Part C's rows become C31 and C32 (B-CC10).
+11. **C14.** Verdicts, baseline cards and proposal cards land as records (class `record`), not governed drafts: scripts write them and nothing promotes through them; his click acts on the unit's lifecycle (Part A's machine), which stays the only path toward live. R1: accepted (B-CC11).
+12. **C13 and C23 (Part C consumes).** The host of each machine is the one harvester of every app's append streams there, reading them read-only and committing through its own door: closed months once, open months of bars and reading history every `[records] open_harvest_s` (60), ticks every `[records] tick_harvest_s` (3,600), and on This PC journals' open month too; an app never opens the door; the before-dispatch write stays the node's in-process append store. R1: accepted and widened (B-CC12, C-CC9, R1-B-02).

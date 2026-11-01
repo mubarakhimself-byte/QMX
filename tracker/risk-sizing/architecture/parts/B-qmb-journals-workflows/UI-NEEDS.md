@@ -9,12 +9,12 @@ QMB ships `headless`; this screen arrives when the UI session adds QMB's `ui` fo
 - **Runs list.** One row per run, newest first: when; who ran it (a copilot chat, a workflow run, him), linking to that chat or run; the unit and version; the tester (app and version); the markets; the window; the status (queued, running, finished, failed, killed); the verdict word if judged; the family's try count. Filters: unit, family, tester, status, who. Source: `try` items and `backtest-result` fields (`principal`, `place`, `tester`, `status`).
 - **A run's page.** The `backtest-result` kind's tabs: Summary, Equity (in R and in money, a toggle), Trades (with MAE and MFE in R, costs split, the context receipt), Robustness (three-word readouts plus numbers), Journal (new: signals taken and skipped with reasons), Slices (new: by session and by readings state), Data used (cards, seams crossed), Comparable runs, Who ran it (new), History. Labels shown as banners, never hidden: "costs uncalibrated", "no trades", "placeholders in this unit" (with the list), "crosses a data seam".
 - **Versions and variants panel.** Installed testers, which is the default, each one's last conformance result (pass, or the diff), and a parity diff between two testers on one request. Changing the default is a setting that refuses a tester without a passing check; the panel says why.
-- **Queue and health.** The app's own logs already hold `job_completed`, `tool_error` and `breaker_open` with reasons (`qmx_apps/supervisor.py`); the screen shows the running and queued runs and the last health stop in plain words ("QMB stopped after 3 errors at 14:02; restart"). A health stop is never shown as a risk stop.
+- **Queue and health.** The app's own logs already hold `job_completed`, `tool_error` and `breaker_open` with reasons (`qmx_apps/supervisor.py`); the screen shows the running and queued runs and the last health stop in plain words ("QMB stopped after 3 errors at 14:02 and started again at 14:02:05"; it restarts itself with back-off). A failed run is a result with its reason, never a health stop. A health stop is never shown as a risk stop.
 
 ## 2. The unit's journal, preview and detail
 
 - **Preview card** (the `unit` kind's card, Part A's kind; part B supplies the journal facts): state per market, today's trades and R, a one-line "why it didn't trade" when it skipped, the tries behind its verdict, a spark line of its last 30 trades in R.
-- **Detail page tabs** (proposal; Part A owns the `unit` page): Journal (by world: backtest, stress, paper, demo, live, with a world filter that never mixes paper into live figures), Markets (per market: lifecycle state, record in R, the readings range it earned in), Calibrations (each move of a calibrated number with its receipt), Runs (QMB results), Notes and proposals (agents' notes rendered with their receipts; proposal cards with his click), Lineage (source to unit to version to result), History.
+- **Detail page tabs** (proposal; Part A owns the `unit` page): Journal (by world: backtest, stress, paper, demo, live, with a world filter that never mixes paper into live figures), Markets (per market: lifecycle state with who moved it last, the judge or his click or a risk rule, record in R, the readings range it earned in), Calibrations (each move of a calibrated number with its receipt), Runs (QMB results), Notes and proposals (agents' notes rendered with their receipts; proposal cards with his click), Lineage (source to unit to version to result), History.
 - **"Why didn't it trade?"** One sentence from the latest `signal` rows: the reason code in plain words, the gate, and the market minute it points at ("Skipped: spread was 2.4 pips against its 1.5 limit at 08:01 London").
 
 ## 3. The judge and his click
@@ -25,7 +25,7 @@ QMB ships `headless`; this screen arrives when the UI session adds QMB's `ui` fo
 
 ## 4. Journals home and data health
 
-- **Maintenance list** (built screen, `GET /api/maintenance`): add "Bring node records home" with its off switch, the last round's counts per node, and "oldest month still on the node".
+- **Maintenance list** (built screen, `GET /api/maintenance`): add "Bring node records home" with its off switch, the last round's counts per node, "oldest month still on the node", and how many months each node keeps pinned until This PC confirms them.
 - **Daily data note.** Gaps, clock flags, fetch failures, seams and cross-source offsets per market, as a short list with links to the cards.
 
 ## 5. Workflow outputs

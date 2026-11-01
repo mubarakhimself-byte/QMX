@@ -5,7 +5,7 @@ Every place risk and sizing plugs into QMB, the judge, the journals and the temp
 | Plug-in point | Where in part B | Today's placeholder | What the risk session decides |
 | --- | --- | --- | --- |
 | The unit's risk socket in replay (sizer, exit set, halts, cross-unit hook) | QMB's unit runner hosts the socket exactly as the node does (AD-5, AD-24) | Part A's placeholder blocks: 0.5% of equity at risk at the stop, a stop beyond the last swing plus a buffer, a 2R target, a 48-bar time-out, no halts, a hook that passes every order | the blocks |
-| Rounding to the lot step and the minimum lot | the unit runner (QB-08, RS-01) | round down; skip below the minimum with a reason; residue journaled in R | the rule for small accounts |
+| Rounding to the lot step and the minimum lot | the unit runner (QB-08, RS-01) | round down; skip below the minimum with a reason; residue journaled in R; a test asserts every fill carries the sizer receipt's quantity after rounding, so a door that drops the size fails the build (CA-03, slices B5b and B6) | the rule for small accounts |
 | A gap through the stop | the fill model's gap rule (QB-07, RS-13) | fill at the first tradable price; the loss recorded in R as it fell, never capped at 1R; `gap_through_stop` flagged on the trade | how the sizer treats gap risk |
 | Margin and liquidation | QMB's margin port | values from the account and instrument records; liquidation at the record's maintenance level on mark price | margin per session (RS-09), leverage policy (RS-18) |
 | Perps funding as a cost | QMB's carry adapter | funding at each funding time from recorded rates | whether funding changes size (RS-14) |

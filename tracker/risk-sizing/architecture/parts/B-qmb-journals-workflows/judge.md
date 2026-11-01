@@ -1,6 +1,6 @@
 # The judge, the try ledger and the study spec
 
-Part B, sub-area 2. Decisions: spine AD-202 (open and close), AD-206 (conformance), AD-207 (the judge). Shapes: `CONTRACTS.md` §3. Slices: `BUILD-SLICES.md` B3, B13, B14.
+Part B, sub-area 2. Decisions: spine AD-202 (open and close), AD-206 (conformance), AD-207 (the judge). Shapes: `CONTRACTS.md` §3. Slices: `BUILD-SLICES.md` B3, B6, B13, B14. Amended after R1 (`architecture/review/R1-FIXES-X1-B.md`).
 
 **In plain words.** QMX counts every test anyone runs. Before a unit is tested, the rules of the test are written down: which markets, which dates, what record counts as enough. Every market is judged by the same rule, and a market that looks best is pulled back toward how the unit did everywhere, so luck does not reach his card. Scripts give the verdict; an agent explains it; he decides.
 
@@ -17,7 +17,7 @@ The judge, the run records, the try rows, study specs, verdicts and baseline car
 **Open** (from the supervisor's job path, AD-202). The lander `qmb-run`:
 1. parses the run request against `qmx.qmb.run-request/1`; a schema problem refuses with every problem (AD-11);
 2. resolves the study spec (`study-spec` item, pinned version); a request with no study gets an implicit spec built from its fields and marked `origin = quick`;
-3. resolves the unit version and its compiled fingerprint; looks up the recorded G verdict for that fingerprint (Part A's home; a `test-report` keyed by the fingerprint until A names another); with none recorded, the run is preceded by a `behaviour_check` run of the same unit, itself a try of kind `check`;
+3. resolves the unit version and its compiled fingerprint; looks up the recorded G verdict for that fingerprint (Part A's `test-report` with `check = "qml-g/1"`, A CONTRACTS §3.3); with none recorded, it first runs a `behaviour_check` job of the same unit on the same tester through the `run_job` callable the host injects into the lander, lands that `test-report` and a try of kind `check`, and goes on only on a passing safety verdict (a failing one refuses the run with the report linked); a `behaviour_check` request itself needs no G record;
 4. copies the model that built the unit and its training cutoff from the unit's lineage into the request (QB-11);
 5. resolves the data recipe through the market-data door with the study's holdout and materialises the partitions into `data/runs/<run_id>/in/` of the tester's volume (hard link where store and volume share a drive, else copy; INFERRED, checked in the slice); a missing month refuses, naming it and the template that downloads it (LD-06);
 6. copies the unit document, its pinned block sources, the instrument snapshots and the cost profile into the same folder;
@@ -84,7 +84,8 @@ The tester declares each scenario's direction in `capabilities`; the lander refu
 
 - **Verdict** (`verdict` kind): the chain's outcome per market and overall, the effective try count, the preset, the judge version, the checker version, the tester, the study version. A new judge version judges again beside the old verdict, never over it (WF-12).
 - **Baseline card** (`baseline-card` kind): frozen when a unit passes: its record in R, its Monte Carlo cone, its cost and fill assumptions, its trade rate, the readings range seen when its settings were earned. The decay check compares live against it: CUSUM on R, the cone, cost and fill drift, trade-rate drift, readings drift; the answer is OK, Watch or Alarm, and it informs only (the action after an alarm is the risk session's).
-- **Proposal card** (`proposal-card` kind): what waits for his click (paper, live, a new market), with the verdict, the try count, the preset, the placeholders still in the unit, and the evidence links. It never moves a unit; his click does (Part A's lifecycle machine).
+- **Proposal card** (`proposal-card` kind): what waits for his click (paper, live, a new market), with the verdict, the try count, the preset, the placeholders still in the unit, and the evidence links. It never moves a unit; his click does (Part A's lifecycle machine, recorded by Part C's promote action through the host's lifecycle writer).
+- **The judge's own lifecycle move.** When a verdict on a `draft` unit lands, This PC's host writes the move `draft` to `tested` (pass) or `draft` to `parked` (fail) through `qmx_host/lifecycle.py`, with `by.kind = judge` and the judge run's principal (R1-B-06). The judge never moves a unit toward paper or live.
 - **Forecast** (`forecast` kind): a dated call written before a session (market, direction or state, horizon, confidence), scored after it by a script against the market's recorded data (WF-11). The forecaster never marks its own call.
 - **Death certificate** (`death-certificate` kind): a typed cause of death from an appendable list, classified by a script first, then explained; it also writes a `dead_end` memory row (engine AD-18) so agents do not repeat it.
 

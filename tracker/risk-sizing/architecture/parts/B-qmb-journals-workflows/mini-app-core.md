@@ -1,8 +1,8 @@
 # The mini-app core: two fixes that truly block QMB, and the examples in CI
 
-Part B, sub-area 6. Decision: spine AD-203. Slices: `BUILD-SLICES.md` B1, B2, B5.
+Part B, sub-area 6. Decision: spine AD-203. Slices: `BUILD-SLICES.md` B1, B2, B5, and B6 where QMB opts into Part C's restart. Amended after R1 (`architecture/review/R1-FIXES-X1-B.md`).
 
-**In plain words.** The mini-app core works and stays as built. Two small things stop QMB from being a proper app on it: a workflow cannot tell an app's job what to do, and an app's result cannot be filed through QMX's own scorer. This part fixes exactly those two, keeps everything else (the breaker, the limits he sets, the signature for the money app), and makes sure the example apps actually run.
+**In plain words.** The mini-app core works and stays as built. Two small things stop QMB from being a proper app on it: a workflow cannot tell an app's job what to do, and an app's result cannot be filed through QMX's own scorer. This part fixes exactly those two, keeps everything else (the breaker, the limits he sets, the signature for the money app), and makes sure the example apps actually run. They are two of the six core changes Level 0 now lists in one place; the other four are Part C's.
 
 His words: "So the reason why mini apps are like that is because of the logging and monitoring." (T3:1562); "Literally, a mini app can have a server of its own." (T3:1562). STATE midday rulings 46 (fix where it truly blocks) and 53 (handle the core with care, from the intent of how it was built).
 
@@ -21,7 +21,7 @@ From the workflow-engine spine (engine AD-64, CHECKED) and the code: things talk
 | An output lands as a plain `artifact` | `qmx_apps/artifacts.py:109-151` (`save` validates, hashes and hands a `Landing` to the host's `LibrarySink`) | a QMB result would bypass the run id, the try row and the `backtest-result` shape |
 | No running example app works in two of four cases | `macro-daily-bias/macro_bias.py`, `weekend-watcher/server.py` import the deleted `qmx_agents` and LangChain (G4b §1.7) | a newcomer's first app crashes (MA-03) |
 
-## 3. The two fixes
+## 3. The two fixes (changes 1 and 2 of Level 0 AD-33's six, R1 CF-4)
 
 **Fix 1: jobs take inputs and return a result.**
 
@@ -56,11 +56,11 @@ The one fact fix 1 is safe because of: **a request without inputs is byte-identi
 
 ## 6. What stays exactly as built
 
-The breaker and its default of 3 errors (Level 0 AD-33 adds the node's opt-in restart, Part C's); `isolation` unset by default; the money signature gate; the 30 s operation timeout; pins and profiles; homes and the volume lease; the artifact index and `stale_after`.
+The breaker and its default of 3 errors, for every app that sets no value of its own; `isolation` unset by default; the money signature gate; the 30 s operation timeout; pins and profiles; homes and the volume lease; the artifact index and `stale_after`. Level 0 AD-33's change 3, the opt-in restart with back-off, is Part C's; QMB, the node and the MIS opt in. The breaker counts a job only when it raises, over the whole process life (`qmx_apps/bootstrap.py:195-211`, `supervisor.py:797`, `:817`, CHECKED), so QMB's jobs return `failed` bundles for domain failures and raise only on a crash (R1-B-09). One interaction is tested in B6: after a crash trips the breaker, the lander still fails the job that was running, and the restarted app takes the next job.
 
 ## 7. Cases handled here
 
-MA-03 (examples in CI), MA-01 (a research app's breaker trip is a health stop; only the node sends orders), MA-04 (versioned provides with the built consumer check), MA-06 (QMB exists as an app), MA-07 (the default tester setting), MA-08 (a memory kill lands as killed with the limit), MA-09 (outputs read offline from the Library, built), MA-10 (provides namespaced by app id). MA-02 and MA-05 are Part C's.
+MA-03 (examples in CI), MA-01 (a research app's breaker trip is a health stop and QMB restarts with back-off; only the node sends orders), MA-04 (versioned provides with the built consumer check), MA-06 (QMB exists as an app), MA-07 (the default tester setting), MA-08 (a memory kill lands as killed with the limit), MA-09 (outputs read offline from the Library, built), MA-10 (provides namespaced by app id). MA-02 and MA-05 are Part C's.
 
 ## 8. Growth seam
 

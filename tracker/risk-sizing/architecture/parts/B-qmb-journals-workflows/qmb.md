@@ -1,6 +1,6 @@
 # QMB: the first mini app, and what happens inside it
 
-Part B, sub-area 1. Decisions: spine AD-201, AD-202, AD-204, AD-205, AD-206, AD-215. Shapes: `CONTRACTS.md` §1 and §2. Slices: `BUILD-SLICES.md` B3 to B12.
+Part B, sub-area 1. Decisions: spine AD-201, AD-202, AD-204, AD-205, AD-206, AD-215. Shapes: `CONTRACTS.md` §1 and §2. Slices: `BUILD-SLICES.md` B3 to B12 (with B5b) and B14. Amended after R1 (`architecture/review/R1-FIXES-X1-B.md`).
 
 **In plain words.** QMB is an app inside QMX. An agent, a workflow or he asks it to test a unit on chosen markets and dates, and waits for the answer, the way a test suite runs. QMX itself issues the run's number, counts it as a try, hands QMB exactly the data the study allows, and files the result. He can install a second QMB beside the first and compare them; the score never depends on which one ran.
 
@@ -66,9 +66,10 @@ state = "none"
 lander = "qmb-run"
 [breaker]
 max_errors = 3
+restart = "backoff"
 ```
 
-The `[provides.backtest-result]` schema is `qmx.qmb.result-bundle/1`. It declares no `stale_after`, because a result never goes stale (the field is optional and must be above zero when given, `qmx_apps/manifest.py` `Contract`, CHECKED). `lander` is the one new manifest field (`mini-app-core.md` §3).
+The `[provides.backtest-result]` schema is `qmx.qmb.result-bundle/1`. It declares no `stale_after`, because a result never goes stale (the field is optional and must be above zero when given, `qmx_apps/manifest.py` `Contract`, CHECKED). `lander` is part B's one new manifest field (`mini-app-core.md` §3); `restart = "backoff"` is Part C's core change 3, which QMB opts into (R1-B-09): the breaker counts every raised job over the process life (`qmx_apps/bootstrap.py:195-211`, `supervisor.py:817`, CHECKED), so QMB's jobs return a `failed` bundle for every domain failure and raise only on a crash, and a crash heals by restart instead of stopping research until someone clicks.
 
 **Doors.**
 
@@ -86,23 +87,24 @@ The rows `backtest_status`, `backtest_results` and `backtest_compare` are reshap
 
 ## 4. Inside QMB: rebuild, extend, keep
 
-Every row names the files it touches and the check that proves it. "Unit" means a compiled unit from Part A's compiler through the structural `BotFactory` seam (CHECKED accepted by `construct_bot` unchanged, Level 0 `blast-radius.md` item 2).
+Every row names the files it touches and the check that proves it. "Unit" means a compiled unit hosted through Part A's unit door (`construct_unit`, `HostedUnit.on_instant -> UnitStep`), never `construct_bot`, which refuses a unit's format 3 intent (Part A BR-A4, run; R1 A-C3).
 
 | Part | Verdict | What it does | Touches | Check |
 | --- | --- | --- | --- | --- |
 | Typed-partition entry into the trading replay | **new** | `execute_recorded_replay_request` takes the run folder's typed partitions (by fingerprint) as its source, beside today's CT-10 receipts path | `qmb/host/replay_execution.py:68`, `:120`, `:762-806` | a fixture bot trades over two typed months and its trade list equals the receipts path's on the same rows |
 | Execution inputs as data | **new** | the run request names fill, cost, slippage, carry and margin adapters with versions, and the instrument records; QMB builds `BoundExecution` from them; `BookAdmissionContext` stays for the Book path only | `qmb/execution/binder.py`, `adapters.py`; `host/replay_request.py` | the 38 fixture tests still pass; a request built only from JSON trades the fixture bot |
-| Runner that trades a unit | **rebuild** (replaces `silent`) | loads the unit document and pinned blocks from the run folder through Part A's one block loader (AD-47), compiles, checks the compiled fingerprint equals the request's, runs it through `run_slice` with the unit's risk socket | `qmb/host/` new `unit_runner.py`; `runloop/loop.py` unchanged | the dummy unit trades a recorded month and lands; a fingerprint mismatch refuses at start |
+| The shared unit handler | **new** | one run-slice handler over a `HostedUnit`: `run_slice`'s five hooks feed the read surfaces, call `on_instant`, pass intents to the host's execution port and rows to the journal writer; the node runtime imports the same file (R1-L0-02) | `qmb/host/` new `unit_handler.py`; `runloop/loop.py` unchanged | the dummy trades through it in QMB; Part C's runtime tests drive the same handler |
+| Runner that trades a unit | **rebuild** (replaces `silent`) | loads the unit document and pinned blocks from the run folder through Part A's one block loader (AD-47), compiles, checks the compiled fingerprint equals the request's, builds the `HostedUnit` with `construct_unit` and drives the shared handler with the unit's risk socket | `qmb/host/` new `unit_runner.py` | the dummy unit trades a recorded month and lands; a fingerprint mismatch lands a `failed` result |
 | Windowed reader | **rebuild** | per stream a window of the unit's derived warm-up (`derive_horizon`) plus its declared lookback; frames are views into the window, never whole-history copies; no step cap | `qmb/host/replay.py:540-606`; Part A's read surface (`qml` `MappingReadSurface`, `evidence.py:875-885`) | peak memory (tracemalloc) for 10,000 and 200,000 steps differs by less than a setting (default 10%); a 20-year 1-minute run completes on This PC |
-| Data levels | **extend** | quotes (ticks, or a bid and an ask bar series), trades (prints with aggressor side, a declared spread model, label `fidelity = trades`), bars (a declared spread model and a bar-path fill rule, label `fidelity = bars`) | `replay.py:608-626`; `runloop/bars.py` | one golden per level on the dummy unit |
+| Fidelity | **extend** | quotes (ticks, or a bid and an ask bar series), trades (prints with aggressor side, a declared spread model, label `fidelity = trades`), bars (a declared spread model and a bar-path fill rule, label `fidelity = bars`); "fidelity" is what QMB replays and maps onto Part A's data levels as bars 1, quotes 2, trades 4 (R1-B-11) | `replay.py:608-626`; `runloop/bars.py` | one golden per fidelity on the dummy unit |
 | Bars from ticks in the venue's day | **new** | daily and higher bars close at the instrument record's day boundary (for example 17:00 New York at most FX CFD brokers) | `runloop/bars.py` | a week of ticks gives the venue's daily closes, not UTC midnight ones |
 | Gap fills | **new rule** | a stop or limit that a gap jumps fills at the first tradable price after the gap; the loss is the R it was | `qmb/execution/fill.py` | a weekend-gap fixture records -1.7R where the stop was 1R away |
-| Lot rounding | **change** | round down to the lot step; below the minimum lot the order is skipped with a reason; the residue is journaled in R | the unit socket host in QMB; `book_handler.py` sizing path untouched for the Book | a size of 0.037 lots with step 0.01 trades 0.03 and journals the 0.007 residue; 0.004 lots skips |
+| Lot rounding | **change** | round down to the lot step; below the minimum lot the order is skipped with a reason; the residue is journaled in R; the filled quantity always equals the sizer receipt's quantity after this rounding (CA-03) | the unit socket host in QMB; `book_handler.py` sizing path untouched for the Book | a size of 0.037 lots with step 0.01 trades 0.03 and journals the 0.007 residue; 0.004 lots skips; every fill of the dummy's run equals its receipt's quantity after rounding (B5b, B6) |
 | Costs | **extend** | cost profile per (broker, account type, instrument, hour of week) read from the market journal's `minute` rows; with fewer than a setting's fills (default 50) the result is labelled `costs_uncalibrated` | `qmb/execution/cost.py`, `spread.py`, `slippage.py` | two runs on the same data with two profiles differ only in costs; the label appears with an empty journal |
 | Carry | **new** | swap long and short with the triple day, index financing, perps funding at each funding time from recorded rates, index dividends: scheduled cash events at venue time from the instrument record and the funding series | `qmb/execution/financing.py`; a funding source on the data recipe | a held position through a Wednesday rollover carries three days of swap; a perp held 24 h pays three 8-hour fundings |
 | Futures | **new** | replay contract by contract from the card's stitching record; the roll is a `data_event` the unit sees and acts on with its exits; at expiry the instrument record's action applies (Part C's records) | `replay.py`, `runloop/stream.py` | a two-contract fixture shows the roll event and no back-adjusted price |
 | Margin and liquidation | **new port** | buying power from the account record's leverage; a position past maintenance margin on mark price is liquidated at the venue's rule; values from records | `qmb/execution/risk.py` (port) | a perp fixture liquidates at the record's maintenance level |
-| Data holes | **new** | a preflight counts missing minutes per read against the instrument's calendar; a hole longer than a setting (default 3 bars of the unit's bar spec) inside open time refuses the run unless the study allows gaps, and then the unit sees a `data_event` gap and the result lists it | `qmb/data/gap_check.py` (EXISTS), the runner | a three-day hole in an open market refuses by default and runs with `allow_gaps` |
+| Data holes | **new** | a preflight counts missing minutes per read against the instrument's calendar; a hole longer than a setting (default 3 bars of the unit's bar spec) inside open time fails the run (a `failed` bundle naming the hole) unless the study allows gaps, and then the unit sees a `data_event` gap and the result lists it | `qmb/data/gap_check.py` (EXISTS), the runner | a three-day hole in an open market fails by default and runs with `allow_gaps` |
 | Results | **extend** | per trade: money, R, MAE and MFE in R, costs split, entry and exit receipts (reading ids, versions and ages), tuned values in force, placeholder blocks used; per run: measures in money and R, slices by session and by readings state, the daily R stream, `zero_trades`, `costs_uncalibrated` | `qmb/results/measures.py`, `ct29.py`, `ct32.py` | the 27 money measures are unchanged on the fixture; R measures match CT-29's `realized_r` |
 | Motion | **wire** | calibrated numbers move inside the replay exactly as live; `motion = both` runs twice and reports both | runner; Part A's motion engine | the dummy unit's one moving number moves in the journal's `calibration` rows |
 | Synthetic series | **extend** | the generator takes the instrument record's class | `qmb/data/generate.py:175` | a crypto perp request no longer gets the forex-CFD generator |
@@ -110,7 +112,7 @@ Every row names the files it touches and the check that proves it. "Unit" means 
 | Priority | **new, in the app** | the app lowers its own process priority at start | `apps/qmb/server.py` and each job's start | the process's priority class reads below normal on Windows |
 | Optimiser, robustness, sweeps, walk-forward, what-if computations, ledger lines, fingerprints | **keep, wrap as jobs** | each becomes a job over the same request shape; every candidate, cell or rerun that can improve a result is its own counted try | `qmb/optimize/`, `robustness/`, `sweep/`, `analysis/` | existing tests pass; a sweep of 6 cells lands 6 try rows |
 
-**The behaviour check job** (`behaviour_check`, Part A's checker layer G, R0-03). It runs QML's unchanged `evaluate_layer2` in QMB's sandbox runner and the behaviour report beside it (trade count or the declared "may not trade on this slice", each exit kind fired or unfired, a constant signal, a shuffled-day control) on a recorded slice of at least the derived warm-up plus a margin (setting, default 20% more). Its result lands as a `test-report` item (`fields.status`, the report in a blob) linked `tests` to the unit version and keyed by the compiled fingerprint, unless Part A names another home (R0-12 is Part A's).
+**The behaviour check job** (`behaviour_check`, Part A's checker layer G, R0-03; slices B5b and B6, R1-B-01). It runs QML's unchanged `evaluate_layer2` in QMB's sandbox runner and the behaviour report beside it (trade count or the declared "may not trade on this slice", each exit kind fired or unfired, a constant signal, a shuffled-day control) on a recorded slice of at least the derived warm-up plus a margin (setting, default 20% more). Its result lands as Part A's `test-report` (`check = "qml-g/1"`, `compiled_fingerprint`, `safety`, `behaviour`, `run_id`; A CONTRACTS §3.3) linked `tests` to the unit version. The lander runs it first, on the same tester, whenever a run's unit has no such record for its compiled fingerprint, and opens the run only on a passing safety verdict (`CONTRACTS.md` §3, the lander port).
 
 **The nightly live-day replay** (`replay_check`, QB-23). Inputs: a unit deployment, a day, the quotes and bars the node recorded for its markets (pulled home by the records job, AD-210). It replays the day through the same compiled unit and returns a per-decision diff against the unit journal's `signal` rows: matched, live only, replay only, with the reason codes. A workflow template runs it after each market's session close (`workflows.md` §3).
 
@@ -127,7 +129,7 @@ QB-01, QB-02, QB-03, QB-04, QB-05, QB-07, QB-08, QB-14, QB-15, QB-16, QB-17, QB-
 
 ## 7. What must not break
 
-- QMB's own test suite (`pytest qmb` in `just ci`), its house rules (`test_qmb_scaffold.py`) and the node's loop over `run_slice` (`qmn/src/qmn/loop/driver.py`), which must keep driving the same `run_slice` unforked.
+- QMB's own test suite (`pytest qmb` in `just ci`), its house rules (`test_qmb_scaffold.py`, whose banned words include `snapshot`, so the handler leaves `restore_unit` to the node) and the node's loop over `run_slice` (`qmn/src/qmn/loop/driver.py`), which must keep driving the same `run_slice` unforked, now through the shared unit handler.
 - The Book path (`BookAdmissionContext`, formats 1 and 2) stays for the risk session.
 - The `backtest-result` objects already landed stay readable (schema version 1 readers keep working; AD-6).
 
@@ -144,9 +146,9 @@ QB-01, QB-02, QB-03, QB-04, QB-05, QB-07, QB-08, QB-14, QB-15, QB-16, QB-17, QB-
 | `[qmb] g_slice_margin` | 20% beyond the derived warm-up | AD-17 |
 | `[qmb] window_memory_tolerance` | 10% | the windowed reader's test |
 | app memory | unset (unlimited) | `qmx_apps/manifest.py:86-104` |
-| breaker `max_errors` | 3 (shipped default) | by design, for monitoring (T3:1562) |
+| breaker `max_errors` | 3 (shipped default), with `restart = "backoff"` (5 s doubling to 300 s, Part C's defaults) | by design, for monitoring (T3:1562); restart so a crash heals (R1-B-09) |
 | conformance match | identical trade list for the same request fingerprint | determinism |
 
 ## 9. Growth seams
 
-A new run kind is a job plus a field in the request's `params` (addable, AD-6). A new data level, fill model or carry adapter is an adapter QMB registers and lists in `capabilities`. A new tester is an app implementing `qmb/1` that passes the pack. A faster engine (a GA sampler, a compiled path) is a variant, never an edit to the core.
+A new run kind is a job plus a field in the request's `params` (addable, AD-6). A new fidelity, fill model or carry adapter is an adapter QMB registers and lists in `capabilities`. A new tester is an app implementing `qmb/1` that passes the pack. A faster engine (a GA sampler, a compiled path) is a variant, never an edit to the core.
