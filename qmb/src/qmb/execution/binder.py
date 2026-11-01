@@ -311,6 +311,15 @@ def bind_execution_ports(config: object) -> Result[BoundExecution]:
 _EXECUTION_FIELDS: Final[frozenset[str]] = frozenset(
     {"fill_model", "fill_basis", "slippage", "cost_profile", "carry", "margin"}
 )
+_REQUESTED_EXECUTION_KEYS: Final[tuple[str, ...]] = (
+    FILL_ADAPTER_KEY,
+    FILL_BASIS_KEY,
+    SLIPPAGE_ADAPTER_KEY,
+    SLIPPAGE_CALIBRATION_KEY,
+    COST_ADAPTER_KEY,
+    COST_CALIBRATION_KEY,
+    FINANCING_SCHEDULE_KEY,
+)
 
 
 def execution_keys_from_request(inputs: object) -> Result[Mapping[str, object]]:
@@ -390,7 +399,9 @@ def require_requested_execution(config: object, inputs: object) -> Result[Resolv
     if is_refusal(keys):
         return keys
     differing = sorted(
-        key for key, value in keys.value.items() if resolved.value.keys.get(key) != value
+        key
+        for key in _REQUESTED_EXECUTION_KEYS
+        if resolved.value.keys.get(key) != keys.value.get(key)
     )
     if differing:
         return policy(
