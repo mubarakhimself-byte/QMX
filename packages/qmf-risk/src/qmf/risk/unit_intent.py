@@ -379,16 +379,11 @@ def parse_unit_intent(raw: object) -> Result[UnitIntent]:
 
 
 def _require_format_3(version: object) -> None:
-    _unwrap_version(
-        coerce_contract_format_version(
-            version,
-            known=frozenset({UNIT_INTENT_FORMAT_VERSION}),
-            reader_format_version=UNIT_INTENT_FORMAT_VERSION,
-        )
+    resolved = coerce_contract_format_version(
+        version,
+        known=frozenset({UNIT_INTENT_FORMAT_VERSION}),
+        reader_format_version=UNIT_INTENT_FORMAT_VERSION,
     )
-
-
-def _unwrap_version(resolved: int | TypedRefusal) -> None:
     if isinstance(resolved, TypedRefusal):
         raise _Refused(resolved)
 

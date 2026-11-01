@@ -6,8 +6,8 @@ still drops an unknown key and still refuses a format-3 stamp.
 
 from __future__ import annotations
 
-import copy
 from fractions import Fraction
+from typing import cast
 
 import pytest
 from qmf.core import (
@@ -174,9 +174,9 @@ def test_unknown_key_is_refused_never_dropped(
     path: tuple[str, ...], key: str, expect_field: str
 ) -> None:
     wire = _full_entry()
-    part: dict[str, object] = wire
+    part = wire
     for step in path:
-        part = part[step]  # type: ignore[assignment]
+        part = cast("dict[str, object]", part[step])
     part[key] = "1"
     refusal = _refusal(wire)
     assert refusal.category is RefusalCategory.INVALID_INPUT
@@ -193,8 +193,8 @@ def test_quantity_is_an_exact_positive_decimal_string(quantity: object) -> None:
 
 
 def test_a_long_stop_above_the_order_price_is_refused() -> None:
-    wire = copy.deepcopy(_full_entry())
-    wire["protection"]["stop"] = "1.08500"  # type: ignore[index]
+    wire = _full_entry()
+    cast("dict[str, object]", wire["protection"])["stop"] = "1.08500"
     assert _refusal(wire).context["field"] == "protection.stop"
 
 
@@ -258,11 +258,13 @@ def test_an_amendment_that_tightens_or_adds_a_stop_passes(
 
 
 def _book_entry() -> EntryIntent:
+    target = ExecutionTarget.try_create("live", VenueId(value="ctrader"), "acct-1")
+    assert is_ok(target)
     result = EntryIntent.try_create(
         _eurusd(),
         Direction.LONG,
         ReasonCode(code="momentum-break", book_family="scalper-v1"),
-        ExecutionTarget.try_create("live", VenueId(value="ctrader"), "acct-1").value,  # type: ignore[union-attr]
+        target.value,
     )
     assert is_ok(result)
     return result.value
