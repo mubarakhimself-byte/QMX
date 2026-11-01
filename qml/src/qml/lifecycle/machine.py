@@ -202,10 +202,14 @@ def _refusal(
 def fold(events: Iterable[Event], *, auto_paper: bool = False) -> Folded:
     """The current state of every unit version on every market, and every refused move.
 
-    An event id seen twice is applied once, so a replayed journal folds to the same answer."""
+    An event id seen twice is applied once, so a replayed journal folds to the same answer.
+    A stop always applies, but it becomes the latest stop only when its sequence is above every
+    stop already seen from its own writer on that market, because a writer's clock can step back
+    and its sequence cannot. Between two writers, the later stop in fold order is the latest."""
     seen: set[str] = set()
     states: dict[MarketKey, State] = {}
     stops: dict[MarketKey, str] = {}
+    newest_stop: dict[tuple[MarketKey, str], int] = {}
     markets: dict[tuple[str, str], dict[str, State]] = {}
     applied: list[Event] = []
     rejected: list[Rejected] = []
@@ -221,7 +225,9 @@ def fold(events: Iterable[Event], *, auto_paper: bool = False) -> Folded:
             rejected.append(Rejected(event, *refused))
             continue
         states[key] = versions[key.version_ref] = event.to_state
-        if event.to_state is State.STOPPED:
+        writer_key = (key, event.writer)
+        if event.to_state is State.STOPPED and event.sequence > newest_stop.get(writer_key, -1):
+            newest_stop[writer_key] = event.sequence
             stops[key] = event.event_id
         applied.append(event)
     return Folded(states, stops, tuple(applied), tuple(rejected))

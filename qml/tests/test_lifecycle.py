@@ -177,6 +177,39 @@ def test_a_later_stop_stays_in_force_whatever_the_two_clocks_say(node_clock: tim
     assert folded.latest_stop[KEY] == later.event_id
 
 
+@pytest.mark.parametrize(("clears", "refusals", "state"), [
+    ("e10-v1", [Refusal.STOP_NOT_CLEARED], S.STOPPED),
+    ("e12-v1", [], S.LIVE),
+])
+def test_the_latest_stop_from_one_writer_is_its_highest_sequence_when_its_clock_steps_back(
+    clears: str, refusals: list[Refusal], state: State
+) -> None:
+    """Stop B (sequence 12) is stamped 5 seconds before stop A (sequence 10) by the same node."""
+    live = _path(S.LIVE)
+    first = _event(10, S.LIVE, S.STOPPED, RISK, writer="node")
+    later = _event(12, S.LIVE, S.STOPPED, RISK, writer="node", at=first.at - timedelta(seconds=5))
+    resume = _event(13, S.STOPPED, S.LIVE, HIM, clears=clears)
+    folded = fold([*live, first, later, resume])
+
+    assert folded.latest_stop[KEY] == "e12-v1"
+    assert [r.refusal for r in folded.rejected] == refusals
+    assert folded.state(KEY) is state
+
+
+def test_between_two_writers_the_later_stop_in_fold_order_is_the_latest() -> None:
+    live = _path(S.LIVE)
+    one = _event(10, S.LIVE, S.STOPPED, RISK, writer="node-1")
+    two = _event(11, S.STOPPED, S.STOPPED, RISK, writer="node-2")
+    stale = _event(13, S.STOPPED, S.LIVE, HIM, clears=one.event_id)
+    resume = _event(14, S.STOPPED, S.LIVE, HIM, clears=two.event_id)
+
+    refused, resumed = fold([*live, one, two, stale]), fold([*live, one, two, resume])
+
+    assert (refused.state(KEY), refused.latest_stop[KEY]) == (S.STOPPED, "e11-v1")
+    assert [r.refusal for r in refused.rejected] == [Refusal.STOP_NOT_CLEARED]
+    assert (resumed.state(KEY), resumed.rejected) == (S.LIVE, ())
+
+
 def test_a_resume_must_name_the_latest_stop() -> None:
     stopped = _path(S.STOPPED)
     stale = _event(10, S.STOPPED, S.LIVE, HIM, clears="e0-v1")
