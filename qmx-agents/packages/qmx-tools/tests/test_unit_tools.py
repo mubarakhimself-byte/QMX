@@ -8,10 +8,10 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
-from qmx_library.port import Draft
+from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import MAIN, Principal, drafts_ref
 
 from qmx_tools.functions import domain_functions
@@ -65,9 +65,8 @@ def test_a_draft_of_a_unit_only_on_main_publishes_as_a_fast_forward(
 ) -> None:
     store, his, variant = context.library.store, Principal("operator"), "refs/variants/u"
     store.register_checker("qml.unit/1", lambda fields: [])
-    first = store.put(
-        his, Draft("unit", "u", "Gold", fields=template()), on=variant, expected_head=None
-    ).object_id
+    dummy = Draft("unit", "u", "Gold", fields=cast("JsonObject", template()))
+    first = store.put(his, dummy, on=variant, expected_head=None).object_id
     store.merge(his, "u", from_ref=variant, into=MAIN)
     changed = {**template(), "title": "Gold, tighter"}
 
