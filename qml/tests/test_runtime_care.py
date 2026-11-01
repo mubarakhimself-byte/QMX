@@ -6,9 +6,10 @@ from __future__ import annotations
 import copy
 import dataclasses
 import json
-from collections.abc import Mapping
+from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 from qmf.core.chrono import Instant
@@ -36,10 +37,49 @@ _QML = Path(__file__).resolve().parents[1]
 # --- restore -------------------------------------------------------------------------------
 
 
-def _changed(snapshot: Mapping[str, object], key: str, value: object) -> dict[str, object]:
-    changed = copy.deepcopy(dict(snapshot))
-    changed[key] = value
-    return changed
+Edit = Callable[[dict[str, Any]], None]
+
+
+def _put(value: object, *path: str) -> Edit:
+    def edit(snapshot: dict[str, Any]) -> None:
+        node = snapshot
+        for step in path[:-1]:
+            node = node[step]
+        node[path[-1]] = value
+
+    return edit
+
+
+def _drop(*path: str) -> Edit:
+    def edit(snapshot: dict[str, Any]) -> None:
+        node = snapshot
+        for step in path[:-1]:
+            node = node[step]
+        del node[path[-1]]
+
+    return edit
+
+
+def _empty_every_blocks(snapshot: dict[str, Any]) -> None:
+    for market in snapshot["markets"].values():
+        market["blocks"] = {}
+
+
+_SHAPE = "the snapshot does not hold this unit's state"
+_EURUSD_BLOCKS = (
+    "derived.long.rsi_low, derived.short.rsi_high, long.exit.swing_stop, long.exit.target_2r, "
+    "long.next_open, long.rsi_cross, long.strength, long.trend, short.exit.swing_stop, "
+    "short.exit.target_2r, short.next_open, short.rsi_cross, short.strength, short.trend, sizer"
+)
+_DROPPED_BLOCKS = (
+    "long.trend",
+    "long.rsi_cross",
+    "short.trend",
+    "short.strength",
+    "short.rsi_cross",
+    "derived.long.rsi_low",
+    "derived.short.rsi_high",
+)
 
 
 def _without_cold_start(steps: list[UnitStep]) -> list[UnitStep]:
@@ -52,28 +92,83 @@ def _without_cold_start(steps: list[UnitStep]) -> list[UnitStep]:
 
 
 @pytest.mark.parametrize(
-    ("change", "reason"),
+    ("edit", "reason"),
     [
-        ("fingerprint", "the snapshot belongs to another compiled fingerprint"),
-        ("schema", "state schema 1, this door reads 2"),
-        ("python", "the snapshot was taken under Python 3.13, this is Python 3.14"),
+        pytest.param(None, "the snapshot belongs to another compiled fingerprint", id="fingerprint"),
+        pytest.param(
+            _put(1, "state_schema_version"), "state schema 1, this door reads 2", id="schema"
+        ),
+        pytest.param(
+            _put({"python": "3.13"}, "environment"),
+            "the snapshot was taken under Python 3.13, this is Python 3.14",
+            id="python",
+        ),
+        pytest.param(
+            _put("3.14", "environment"),
+            "the snapshot does not record its interpreter, this is Python 3.14",
+            id="string-environment",
+        ),
+        *(
+            pytest.param(
+                _drop("markets", "fx.eurusd", "blocks", key),
+                f"{_SHAPE} (markets.fx.eurusd.blocks lacks {key})",
+                id=f"missing-{key}",
+            )
+            for key in _DROPPED_BLOCKS
+        ),
+        pytest.param(
+            _empty_every_blocks,
+            f"{_SHAPE} (markets.fx.eurusd.blocks lacks {_EURUSD_BLOCKS})",
+            id="emptied-blocks",
+        ),
+        pytest.param(
+            _put({}, "markets", "fx.eurusd", "blocks", "long.extra"),
+            f"{_SHAPE} (markets.fx.eurusd.blocks has unknown long.extra)",
+            id="unknown-block",
+        ),
+        pytest.param(
+            _drop("slow", "min_trend_strength"),
+            f"{_SHAPE} (slow lacks min_trend_strength)",
+            id="missing-slow-entry",
+        ),
+        pytest.param(_put({}, "slow"), f"{_SHAPE} (slow lacks min_trend_strength)", id="no-slow"),
+        pytest.param(_drop("markets"), f"{_SHAPE} (it lacks markets)", id="missing-markets"),
+        pytest.param(
+            _drop("markets", "metal.xauusd"),
+            f"{_SHAPE} (markets lacks metal.xauusd)",
+            id="missing-market",
+        ),
+        pytest.param(
+            _drop("markets", "fx.eurusd", "exited"),
+            f"{_SHAPE} (markets.fx.eurusd lacks exited)",
+            id="missing-exited",
+        ),
+        pytest.param(
+            _put({"middle": {}}, "markets", "fx.eurusd", "derived"),
+            f"{_SHAPE} (markets.fx.eurusd.derived has unknown middle)",
+            id="unknown-derived-side",
+        ),
+        pytest.param(
+            _put({"pos-1": {}}, "markets", "fx.eurusd", "timers"),
+            f"{_SHAPE} (markets.fx.eurusd.timers.pos-1 lacks held)",
+            id="malformed-timer",
+        ),
     ],
 )
-def test_a_snapshot_that_differs_restores_cold_with_its_reason(change: str, reason: str) -> None:
+def test_a_snapshot_that_differs_restores_cold_with_its_reason(
+    edit: Edit | None, reason: str
+) -> None:
     bars = _slice()
     instants = _instants(bars)
     compiled = _compiled()
     head = _host(compiled, _surfaces(bars))
     _drive(head, instants[:300])
-    snapshot = head.snapshot()
+    snapshot = copy.deepcopy(dict(head.snapshot()))
     target = compiled
-    match change:
-        case "fingerprint":
-            target = _compiled(_with_default("ema_period", "99"))
-        case "schema":
-            snapshot = _changed(snapshot, "state_schema_version", 1)
-        case _:
-            snapshot = _changed(snapshot, "environment", {"python": "3.13"})
+    if edit is None:
+        target = _compiled(_with_default("ema_period", "99"))
+    else:
+        edit(snapshot)
 
     cold = _ok(
         restore_unit(
