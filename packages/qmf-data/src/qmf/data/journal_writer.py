@@ -227,13 +227,6 @@ class _BundleSink:
         return Ok(tuple(files))
 
 
-@dataclass(slots=True)
-class _Seen:
-    """The ids this writer has seen in one series, with each body's fingerprint."""
-
-    bodies: dict[str, str]
-
-
 class JournalWriter:
     """Appends journal records and series rows for one :class:`WriterScope`."""
 
@@ -243,7 +236,7 @@ class JournalWriter:
         self._clock = clock
         self._next_seq = 0
         self._last_t = 0
-        self._seen: dict[str, _Seen] = {}
+        self._seen: dict[str, dict[str, str]] = {}  # series -> record id -> body fingerprint
         self._series_last_t: dict[str, int] = {}
         self._root: Path | None = None
         self._closed = False
@@ -316,8 +309,8 @@ class JournalWriter:
         record_id = _record_id(spec, native.value, facts, self._scope.writer_id, seq)
         if is_refusal(record_id):
             return record_id
-        seen = self._seen.setdefault(series.value.series, _Seen({}))
-        earlier = seen.bodies.get(record_id.value)
+        seen = self._seen.setdefault(series.value.series, {})
+        earlier = seen.get(record_id.value)
         if earlier is not None:
             return Ok(
                 self._repeat(record_id.value, series.value.series, earlier, body_print.value.value)
@@ -348,7 +341,7 @@ class JournalWriter:
             return written
         self._next_seq = seq + 1
         self._last_t = t
-        seen.bodies[record_id.value] = body_print.value.value
+        seen[record_id.value] = body_print.value.value
         return Ok(AppendReceipt(AppendOutcome.APPENDED, record_id.value, key.series, seq, t))
 
     def append_series(
@@ -452,7 +445,7 @@ class JournalWriter:
                 if is_refusal(printed):
                     return printed
                 bodies[str(line.record["record_id"])] = printed.value.value
-            self._seen[series.value.series] = _Seen(bodies)
+            self._seen[series.value.series] = bodies
         return Ok(None)
 
     def _series_last(self, key: SeriesKey) -> Result[int]:
