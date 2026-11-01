@@ -30,7 +30,6 @@ from qmf.core import fingerprint_bytes
 from qmx_judge.runs import (
     BundleRefused,
     Landing,
-    RunId,
     RunStatus,
     Ticket,
     mint_run_id,
@@ -162,16 +161,44 @@ RESULT_KIND: Final = "backtest-result"
 
 CHECK_JOB: Final = "behaviour_check"
 
-REQUEST_FIELDS: Final = (
-    "compiled_fp",
-    "markets",
-    "window",
-    "seed",
-    "motion",
-    "place",
-    "model_cutoff",
-)
-"""Run request fields a result carries as the core received them."""
+
+def _text(value: object) -> bool:
+    return isinstance(value, str)
+
+
+def _texts(value: object) -> bool:
+    return isinstance(value, list) and all(isinstance(entry, str) for entry in value)  # pyright: ignore[reportUnknownVariableType]
+
+
+def _text_map(*keys: str) -> Callable[[object], bool]:
+    def check(value: object) -> bool:
+        if not isinstance(value, Mapping):
+            return False
+        entries: Mapping[object, object] = value  # pyright: ignore[reportUnknownVariableType]
+        return all(isinstance(entries.get(key, ""), str) for key in keys)
+
+    return check
+
+
+def _integer(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _motion(value: object) -> bool:
+    return value in ("on", "off", "both")
+
+
+REQUEST_FIELDS: Final[Mapping[str, tuple[Callable[[object], bool], str]]] = {
+    "compiled_fp": (_text, "compiled_fp is text"),
+    "markets": (_texts, "markets is a list of text"),
+    "window": (_text_map("start", "end"), "window is an object of text start and end"),
+    "seed": (_integer, "seed is an integer"),
+    "motion": (_motion, "motion is one of on, off, both"),
+    "place": (_text, "place is text"),
+    "model_cutoff": (_text_map("model", "cutoff"), "model_cutoff is an object of text"),
+}
+"""Run request fields a result carries as the core received them, each with the check `open`
+makes before any try lands, so `close` and `fail` always build a result the kind accepts."""
 
 
 class LanderPort(LandingPort, Protocol):
@@ -202,17 +229,22 @@ class Lander:
         if RESULT_KIND not in self.provides_of(app_id, version):
             return None
         unit, study = inputs.get("unit"), inputs.get("study")
-        family, given = inputs.get("family", unit), inputs.get("run_id")
-        checks = (
+        family = inputs.get("family", unit)
+        checks = [
             (isinstance(unit, str) and bool(unit), "unit is the pin of the unit version"),
             (study is None or isinstance(study, str), "study is the pin of a study spec"),
             (isinstance(family, str), "family is the root item of the unit's lineage"),
-            (given is None or isinstance(given, str), "run_id is one the core minted"),
-        )
+            ("run_id" not in inputs, "run_id is minted by the lander, never by the request"),
+        ]
+        checks += [
+            (check(inputs[name]), message)
+            for name, (check, message) in REQUEST_FIELDS.items()
+            if name in inputs
+        ]
         problems = [message for ok, message in checks if not ok]
         if problems:
             raise BundleRefused(problems)
-        run_id = RunId(str(given)) if given is not None else mint_run_id(self.machine, self.mint())
+        run_id = mint_run_id(self.machine, self.mint())
         place = inputs.get("place")
         opened = Try(
             kind="check" if job == CHECK_JOB else "run",

@@ -240,3 +240,28 @@ def test_a_bundle_names_every_problem_at_once() -> None:
         "status is finished or failed; only the core stamps killed",
         "consumed is a list of pins",
     )
+
+
+def test_a_request_that_names_its_own_run_id_is_refused_and_lands_nothing() -> None:
+    library = FakeLibrary()
+
+    with pytest.raises(BundleRefused) as refused:
+        lander(library).open("qmb", "0.2.0", "backtest", {**INPUTS, "run_id": "unit"}, "agent:1")
+
+    assert refused.value.problems == ("run_id is minted by the lander, never by the request",)
+    assert library.state() == ({}, set())
+
+
+def test_a_request_field_the_result_kind_would_refuse_is_refused_before_any_try() -> None:
+    library = FakeLibrary()
+    inputs = {**INPUTS, "seed": "7", "motion": "sideways", "markets": ["EURUSD", 3]}
+
+    with pytest.raises(BundleRefused) as refused:
+        lander(library).open("qmb", "0.2.0", "backtest", inputs, "agent:1")
+
+    assert refused.value.problems == (
+        "markets is a list of text",
+        "seed is an integer",
+        "motion is one of on, off, both",
+    )
+    assert library.state() == ({}, set())
