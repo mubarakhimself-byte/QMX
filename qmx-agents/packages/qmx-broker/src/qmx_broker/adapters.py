@@ -424,28 +424,25 @@ class CCXTAdapter:
         }
 
     async def positions(self) -> list[Document]:
-        """Spot holdings, then the open perpetual and futures positions when the exchange reads
-        them. A position's `quantity` counts contracts; `contract_size` converts to the base."""
         state = await self.account_state()
-        holdings: list[Document] = [
+        return [
             {"asset": asset, "quantity": str(quantity), "market_type": "spot"}
             for asset, quantity in state["balances"]["total"].items()
             if quantity is not None and Decimal(str(quantity)) != 0
         ]
-        return holdings + await self._contract_positions()
 
-    async def _contract_positions(self) -> list[Document]:
-        import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
-
+    async def contract_positions(self) -> list[Document]:
+        """Open perpetual and dated futures positions. A read apart from `positions`, so a spot
+        account's read never depends on the exchange's contract endpoints (Coinbase, for one,
+        refuses `fetch_positions` without a portfolio). `quantity` counts contracts, and
+        `contract_size` converts them to the base."""
         has: object = getattr(self.exchange, "has", None)
-        if not isinstance(has, dict):
-            return []
-        if cast("dict[str, object]", has).get("fetchPositions") is not True:
-            return []
-        try:
-            found = cast("list[Document]", await asyncio.to_thread(self.exchange.fetch_positions))
-        except ccxt.NotSupported:
-            return []
+        if (
+            not isinstance(has, dict)
+            or cast("dict[str, object]", has).get("fetchPositions") is not True
+        ):
+            raise ValueError("This exchange reads no contract positions through CCXT")
+        found = cast("list[Document]", await asyncio.to_thread(self.exchange.fetch_positions))
         markets = cast("dict[str, Document]", self.exchange.markets)
         rows: list[Document] = []
         for position in found:

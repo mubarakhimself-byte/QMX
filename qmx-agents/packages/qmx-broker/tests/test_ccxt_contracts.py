@@ -179,13 +179,16 @@ def test_a_perps_book_and_contract_facts_read() -> None:
     )
 
 
-def test_open_perp_positions_follow_spot_holdings() -> None:
-    """The exchange is set up as `open_adapter` sets every CCXT session up, spot by default."""
-    read = adapter(
-        "hyperliquid", SYNTHETIC_ACCOUNT, walletAddress=WALLET, options={"defaultType": "spot"}
-    )
-    assert asyncio.run(read.positions()) == [
-        {"asset": "USDC", "quantity": "250.5", "market_type": "spot"},
+def test_open_perp_positions_read_on_their_own_beside_spot_holdings() -> None:
+    """The exchange is set up as `open_adapter` sets every CCXT session up, spot by default.
+    The spot read is answered without the perps account, so it never asks for it."""
+    spot_only = {key: answer for key, answer in SYNTHETIC_ACCOUNT.items() if "spot" in key[2]}
+    config: dict[str, Any] = {"walletAddress": WALLET, "options": {"defaultType": "spot"}}
+    assert asyncio.run(adapter("hyperliquid", spot_only, **config).positions()) == [
+        {"asset": "USDC", "quantity": "250.5", "market_type": "spot"}
+    ]
+    read = adapter("hyperliquid", SYNTHETIC_ACCOUNT, **config)
+    assert asyncio.run(read.contract_positions()) == [
         {
             "symbol": "BTC/USDC:USDC",
             "market_type": "swap",
