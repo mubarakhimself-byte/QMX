@@ -34,6 +34,7 @@ from qmx_broker.models import ReadStamp
 from qmx_broker.service import BrokerService
 from qmx_control.catalog import (
     CORE_TOOLSETS,
+    DOMAIN_ROWS,
     TOOLSET_WIRE,
     CatalogError,
     OperationSpec,
@@ -197,18 +198,21 @@ NEXT_STEPS: Final[Mapping[str, str]] = MappingProxyType(
 DEFAULT_NEXT_STEP: Final = "read the message; call again only after changing what it names"
 
 
-def failure(code: str, message: str) -> dict[str, Any]:
-    """The tool error shape: a code, the message and a next step, never a raw exception."""
+def failure(code: str, message: str, problems: object = None) -> dict[str, Any]:
+    """The tool error shape: a code, the message and a next step, never a raw exception. A
+    refusal that names several problems carries every one of them."""
     next_step = NEXT_STEPS.get(code, DEFAULT_NEXT_STEP)
-    body = {"error": {"code": code, "message": message, "next_step": next_step}}
-    return {"content": [{"type": "text", "text": json.dumps(body)}], "is_error": True}
+    body: dict[str, object] = {"code": code, "message": message, "next_step": next_step}
+    if problems:
+        body["problems"] = problems
+    return {"content": [{"type": "text", "text": json.dumps({"error": body})}], "is_error": True}
 
 
 def _failure_of(error: Exception) -> dict[str, Any]:
     """A control error arrives as its JSON document; anything else is named by its type."""
     with contextlib.suppress(ValueError, TypeError, KeyError):
         found = json.loads(str(error))["error"]
-        return failure(str(found["code"]), str(found["message"]))
+        return failure(str(found["code"]), str(found["message"]), found.get("problems"))
     if type(error).__name__ in ("ValidationError", "ToolError") and "validation" in str(error):
         return failure("invalid_arguments", str(error))
     return failure(type(error).__name__, str(error))
@@ -665,7 +669,8 @@ async def tool_defs(
     ]
 
 
-DOMAIN_GROUPS: Final = ("data", "backtest", "research", "node")
+DOMAIN_GROUPS: Final = tuple(dict.fromkeys(row.toolset for row in DOMAIN_ROWS))
+"""The domain functions' groups, read from their rows so a new domain toolset reaches chats."""
 
 
 type Delegate = Callable[[str, str], Awaitable[str]]

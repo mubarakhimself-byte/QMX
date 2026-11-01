@@ -61,6 +61,8 @@ CORE_TOOLSETS: Final = (
     "ops",
     "router",
     "lab",
+    "unit",
+    "blocks",
 )
 CORE_PACK: Final = "qmx"
 APP_PREFIX: Final = "app:"
@@ -222,6 +224,11 @@ def _row(
     )
 
 
+BLOCKS_LATER: Final = (
+    "Not built yet: the block tools arrive with the dictionary's new form (A11), and until then"
+    " this answers with that reason. To see which blocks a unit uses, call `unit_explain`."
+)
+
 BROKER_ROWS: Final = (
     _row("broker_read", "accounts", "broker", "list_accounts", "read"),
     _row(
@@ -317,10 +324,44 @@ DOMAIN_ROWS: Final = (
     ),
     _row("research", "qml_run", "domain_fn", "qml_run", "read"),
     _row("node", "state", "domain_fn", "node_state", "read"),
+    _row(
+        "unit",
+        "new",
+        "domain_fn",
+        "unit_new",
+        "domain_write",
+        "Start a new trading unit from a template, the dummy trend pullback by default, with"
+        " `overrides` set by JSON pointer. It saves the document as a new unit draft in his"
+        " Library and returns its `item`; nothing is published, tested or traded.",
+    ),
+    _row(
+        "unit",
+        "check",
+        "domain_fn",
+        "unit_check",
+        "domain_write",
+        "Check a unit document at layers A to F and get every problem at once, each with where"
+        " it is and a hint. Pass `item` to save the document as that unit's draft first, and"
+        " `previous_problem_set` to learn `no_progress`. Fix every error and check again.",
+    ),
+    _row(
+        "unit",
+        "explain",
+        "domain_fn",
+        "unit_explain",
+        "read",
+        "Explain a unit in plain lines: what it trades, its slots and blocks, its exits, sizer"
+        " and numbers, and its check counts. Pass a `document` or a unit draft's `item`.",
+    ),
+    _row("blocks", "find", "domain_fn", "blocks_find", "read", BLOCKS_LATER),
+    _row("blocks", "get", "domain_fn", "blocks_get", "read", BLOCKS_LATER),
+    _row("blocks", "check", "domain_fn", "blocks_check", "read", BLOCKS_LATER),
+    _row("blocks", "match", "domain_fn", "blocks_match", "read", BLOCKS_LATER),
 )
 """`qmx_tools.functions.domain_functions` by name. Its `library_search`, `library_save` and
 `propose_order` stay stdio doors only: the library rows and the broker's `propose_order` serve
-the same stores."""
+the same stores. The `unit` rows write unit drafts and nothing else: no row here publishes,
+promotes, deploys or sends an order (Part A AD-117)."""
 
 HOST_ROWS: Final = (
     _row(

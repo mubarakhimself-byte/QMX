@@ -24,7 +24,7 @@ from typing import Final, cast
 
 from pydantic import JsonValue
 from qmx_apps.artifacts import Landing
-from qmx_library.kinds import kind
+from qmx_library.kinds import KindRefused, kind
 from qmx_library.port import Commit, Draft, JsonObject, LibraryRefused, ObjectId, ObjectView
 from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
@@ -118,10 +118,25 @@ def slot_of(view: ObjectView) -> str:
     return SLOTS.get(view.kind) or next(iter(view.blobs), "")
 
 
+class ProblemsRefused(ControlError):
+    """A kind's refusal at the control door: the first problem's message, and every problem."""
+
+    def __init__(self, code: str, message: str, status: int, problems: list[JsonValue]) -> None:
+        super().__init__(code, message, status)
+        self.problems = problems
+
+    def document(self) -> Document:
+        return {"error": {"code": self.code, "message": str(self), "problems": self.problems}}
+
+
 def refused(error: LibraryRefused) -> ControlError:
-    """The store's refusal as the control door's error."""
+    """The store's refusal as the control door's error. A kind's refusal keeps every problem it
+    named beside the first one's message (Part A AD-117)."""
     message = str(error).split(": ", 1)[-1]
-    return ControlError(error.code, message, ERRORS.get(error.code, 400))
+    status = ERRORS.get(error.code, 400)
+    if isinstance(error, KindRefused) and error.problems:
+        return ProblemsRefused(error.code, message, status, [p.as_json() for p in error.problems])
+    return ControlError(error.code, message, status)
 
 
 class Library:
