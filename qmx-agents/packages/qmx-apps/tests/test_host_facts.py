@@ -20,9 +20,14 @@ from typing import Any, cast
 
 import psutil
 import pytest
-from qmx_control.service import ControlService
-from qmx_host.host import host_facts, keep_facts, market_door, placement_name
 from qma.harness import QmxHome, control_service
+from qmx_control.service import ControlService
+from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
+    host_facts,
+    keep_facts,
+    market_door,
+    placement_name,
+)
 
 from qmx_apps.errors import AppError
 from qmx_apps.supervisor import Supervisor
