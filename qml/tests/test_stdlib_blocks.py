@@ -13,10 +13,11 @@ from typing import Any, cast
 
 import pytest
 from qmf.core.refusal import Ok
-
 from qml.blocks.api import Block, EntryFace, EntryOrder, Instance, Side, Signal, Size, parse_entry
 from qml.catalogue import Loaded, LockEntry, load
 from qml.numbers import InstrumentRecord, parse_record
+from qml.unit import parse_text
+from qml.unit.model import Binding, NumberParam, SlotsSide
 
 _QML = Path(__file__).resolve().parents[1]
 _STDLIB = _QML / "src" / "qml" / "blocks" / "stdlib"
@@ -322,7 +323,8 @@ def test_the_sizer_risks_half_a_percent_at_the_stop_and_skips_below_the_minimum_
     assert odd == Size(lots=Decimal("0.25"))
     assert small == Size(
         lots=None,
-        skip_reason="0.0025 lots rounds down to 0.00, below icmarkets-ctrader:EURUSD@1's minimum lot of 0.01",
+        skip_reason="0.0025 lots rounds down to 0.00, "
+        "below icmarkets-ctrader:EURUSD@1's minimum lot of 0.01",
     )
 
 
@@ -352,3 +354,27 @@ def test_the_trend_floor_moves_one_step_toward_its_shrunk_edge_after_20_trades()
     assert twenty == Decimal("0.0001")
     assert settled == Decimal("0.0002")
     assert all_good == Decimal("0")
+
+
+def test_every_dummy_binding_names_a_stdlib_block_whose_port_measure_matches_its_number() -> None:
+    dummy = _QML / "src" / "qml" / "unit" / "templates" / "dummy-trend-pullback.json"
+    unit = parse_text(dummy.read_text("utf-8")).unit
+    assert unit is not None
+    bindings: list[Binding] = [*unit.exit_set]
+    if unit.sizer is not None:
+        bindings.append(unit.sizer)
+    for side in (unit.logic.long, unit.logic.short):
+        assert isinstance(side, SlotsSide)
+        bindings += [b for slot in side.slots.values() for b in slot.bindings]
+
+    bound = [
+        (b.block.entry_id, port, unit.numbers[p.number].measure)
+        for b in bindings
+        for port, p in b.params.items()
+        if isinstance(p, NumberParam)
+    ]
+    mismatched = [(e, port) for e, port, m in bound if _face(e).parameter_measure(port) is not m]
+
+    assert {str(b.block) for b in bindings} <= set(_blocks())
+    assert len(bound) == 14
+    assert mismatched == []

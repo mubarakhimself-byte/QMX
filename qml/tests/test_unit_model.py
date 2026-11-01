@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import pytest
 from qml.unit import ProblemKind, parse, parse_text, schema
-from qml.unit.model import MirrorSide, Origin, Side
+from qml.unit.model import NumberParam, Origin, SlotsSide
 
 _UNIT = Path(__file__).resolve().parents[1] / "src" / "qml" / "unit"
 _DUMMY_TEXT = (_UNIT / "templates" / "dummy-trend-pullback.json").read_text("utf-8")
@@ -30,7 +30,8 @@ def test_the_dummy_parses_with_zero_problems() -> None:
     assert unit.unit_id == "dummy-trend-pullback"
     assert [market.market_id for market in unit.markets] == ["fx.eurusd", "metal.xauusd"]
     assert unit.streams[0].bar.size == Decimal("900")
-    assert unit.logic.short == MirrorSide(mirror_of=Side.LONG)
+    assert isinstance(unit.logic.short, SlotsSide)
+    assert unit.logic.short.slots["trigger"].bindings[0].params["level"] == NumberParam("rsi_high")
     assert unit.sizer is not None and str(unit.sizer.block) == "fixed-fraction-at-stop@1"
     assert [str(binding.block) for binding in unit.exit_set] == [
         "swing-stop-buffer@1",

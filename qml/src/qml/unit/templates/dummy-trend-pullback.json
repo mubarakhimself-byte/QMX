@@ -45,7 +45,32 @@
         }
       }
     },
-    "short": {"mirror_of": "long"}
+    "short": {
+      "slots": {
+        "context": {
+          "role": "context",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "trend", "block": "ema@1", "params": {"period": {"number": "ema_period"}}, "inputs": {"series": "m15.close"}},
+            {"name": "strength", "block": "roc-of-series@1", "params": {"lookback": {"number": "roc_lookback"}, "floor": {"number": "min_trend_strength"}}, "inputs": {"series": "trend"}}
+          ]
+        },
+        "trigger": {
+          "role": "trigger",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "rsi_cross", "block": "rsi-cross-back@1", "params": {"period": {"number": "rsi_period"}, "level": {"number": "rsi_high"}}, "inputs": {"series": "m15.close"}}
+          ]
+        },
+        "entry_order": {
+          "role": "entry_order",
+          "combiner": {"kind": "all", "when_inputs_absent": "no_signal"},
+          "bindings": [
+            {"name": "next_open", "block": "market-next-open@1", "params": {}, "inputs": {}}
+          ]
+        }
+      }
+    }
   },
   "exit_set": [
     {"name": "swing_stop", "scope": "position", "block": "swing-stop-buffer@1", "params": {"buffer": {"number": "stop_buffer"}}, "inputs": {"series": "m15"}},
