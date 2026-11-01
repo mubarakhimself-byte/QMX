@@ -68,9 +68,9 @@ def _keyed(
     changed: EditLabel,
     same: Callable[[str, _T, _T], None],
 ) -> None:
-    for name in old.keys() - new.keys() | new.keys() - old.keys():
+    for name in sorted(old.keys() ^ new.keys()):
         add(changed, f"{path}/{name}")
-    for name in old.keys() & new.keys():
+    for name in sorted(old.keys() & new.keys()):
         same(f"{path}/{name}", old[name], new[name])
 
 
@@ -90,7 +90,7 @@ def _binding(add: _Add, path: str, old: Binding, new: Binding) -> None:
         add(EditLabel.BLOCK_SWAP, f"{path}/block")
     elif old.block.version != new.block.version:
         add(EditLabel.BLOCK_FIX, f"{path}/block")
-    for name in old.params.keys() | new.params.keys():
+    for name in sorted(old.params.keys() | new.params.keys()):
         _param(add, f"{path}/params/{name}", old.params.get(name), new.params.get(name))
     if old.inputs != new.inputs:
         add(EditLabel.STRUCTURE_CHANGE, f"{path}/inputs")
@@ -130,11 +130,11 @@ def _logic(add: _Add, old: Logic, new: Logic) -> None:
         a: SlotsSide | MirrorSide | None = getattr(old, side)
         b: SlotsSide | MirrorSide | None = getattr(new, side)
         if isinstance(a, SlotsSide) and isinstance(b, SlotsSide):
-            for name in a.slots.keys() - b.slots.keys():
+            for name in sorted(a.slots.keys() - b.slots.keys()):
                 add(EditLabel.ROLE_REMOVED, f"{path}/slots/{name}")
-            for name in b.slots.keys() - a.slots.keys():
+            for name in sorted(b.slots.keys() - a.slots.keys()):
                 add(EditLabel.ROLE_ADDED, f"{path}/slots/{name}")
-            for name in a.slots.keys() & b.slots.keys():
+            for name in sorted(a.slots.keys() & b.slots.keys()):
                 was, now, where = a.slots[name], b.slots[name], f"{path}/slots/{name}"
                 if was.role != now.role:
                     add(EditLabel.ROLE_REMOVED, f"{where}/role")
@@ -192,7 +192,8 @@ def _moved(spec: NumberSpec) -> EditLabel:
 
 
 def diff(old: Unit, new: Unit) -> tuple[Edit, ...]:
-    """Every change from ``old`` to ``new``, each with its label and pointer, in document order."""
+    """Every change from ``old`` to ``new`` with its label and pointer, fields in model order
+    and names sorted, so the same pair always gives the same list."""
     edits: list[Edit] = []
 
     def add(label: EditLabel, path: str) -> None:

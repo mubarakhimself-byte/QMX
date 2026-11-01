@@ -156,13 +156,21 @@ class Folded:
         return self.states.get(key, State.DRAFT)
 
 
+_ROWS: Final = {
+    move: tuple(r for r in TRANSITIONS if (r.from_state, r.to_state, r.actor) == move)
+    for move in {(r.from_state, r.to_state, r.actor) for r in TRANSITIONS}
+}
+
+
 def _refusal(
     event: Event,
     current: State,
-    folded: Folded,
-    states: Mapping[MarketKey, State],
+    latest_stop: str | None,
+    versions: Mapping[str, State],
     auto_paper: bool,
 ) -> tuple[Refusal, str] | None:
+    """Why ``event`` cannot apply, or None. ``versions`` holds this unit's versions on the
+    event's market."""
     to, actor = event.to_state, event.by
     if actor.kind is ActorKind.HIS_CLICK and actor.principal != OPERATOR:
         return Refusal.NOT_OPERATOR, f"a click by {actor.principal!r} is not his click"
@@ -172,9 +180,7 @@ def _refusal(
     is_stop = actor.kind is ActorKind.RISK_RULE and to is State.STOPPED
     if not is_stop and event.from_state is not current:
         return Refusal.FROM_MISMATCH, f"the market is {current}, not {event.from_state}"
-    rows = [
-        r for r in TRANSITIONS if (r.from_state, r.to_state, r.actor) == (current, to, actor.kind)
-    ]
+    rows = _ROWS.get((current, to, actor.kind), ())
     if not rows:
         return Refusal.NOT_IN_TABLE, f"{actor.kind} cannot move {current} to {to}"
     if all(r.needs_auto_paper for r in rows) and not auto_paper:
@@ -182,34 +188,15 @@ def _refusal(
             Refusal.AUTO_PAPER_OFF,
             "lifecycle.auto_paper is off, so tested to paper is his click",
         )
-    if current is State.STOPPED and to is not State.STOPPED:
-        latest = folded.latest_stop.get(event.key)
-        if event.clears != latest:
-            return Refusal.STOP_NOT_CLEARED, f"the latest stop is {latest}, not {event.clears}"
+    if current is State.STOPPED and to is not State.STOPPED and event.clears != latest_stop:
+        return Refusal.STOP_NOT_CLEARED, f"the latest stop is {latest_stop}, not {event.clears}"
     if to in TRADING:
-        for key, state in states.items():
-            same = (key.unit_id, key.market_id) == (event.unit_id, event.market_id)
-            if same and key.version_ref != event.version_ref and state in TRADING:
+        for version, state in versions.items():
+            if version != event.version_ref and state in TRADING:
                 return Refusal.SECOND_VERSION, (
-                    f"{key.version_ref} is {state} on {key.market_id}; park or retire it first"
+                    f"{version} is {state} on {event.market_id}; park or retire it first"
                 )
     return None
-
-
-def _apply(folded: Folded, event: Event, auto_paper: bool) -> Folded:
-    states = dict(folded.states)
-    current = folded.state(event.key)
-    refused = _refusal(event, current, folded, states, auto_paper)
-    if refused is not None:
-        rejected = Rejected(event, *refused)
-        return Folded(
-            folded.states, folded.latest_stop, folded.applied, (*folded.rejected, rejected)
-        )
-    states[event.key] = event.to_state
-    stops = dict(folded.latest_stop)
-    if event.to_state is State.STOPPED:
-        stops[event.key] = event.event_id
-    return Folded(states, stops, (*folded.applied, event), folded.rejected)
 
 
 def fold(events: Iterable[Event], *, auto_paper: bool = False) -> Folded:
@@ -217,10 +204,24 @@ def fold(events: Iterable[Event], *, auto_paper: bool = False) -> Folded:
 
     An event id seen twice is applied once, so a replayed journal folds to the same answer."""
     seen: set[str] = set()
-    folded = Folded()
+    states: dict[MarketKey, State] = {}
+    stops: dict[MarketKey, str] = {}
+    markets: dict[tuple[str, str], dict[str, State]] = {}
+    applied: list[Event] = []
+    rejected: list[Rejected] = []
     for event in sorted(events, key=lambda e: (e.at, e.writer, e.sequence)):
         if event.event_id in seen:
             continue
         seen.add(event.event_id)
-        folded = _apply(folded, event, auto_paper)
-    return folded
+        key = event.key
+        versions = markets.setdefault((key.unit_id, key.market_id), {})
+        current = states.get(key, State.DRAFT)
+        refused = _refusal(event, current, stops.get(key), versions, auto_paper)
+        if refused is not None:
+            rejected.append(Rejected(event, *refused))
+            continue
+        states[key] = versions[key.version_ref] = event.to_state
+        if event.to_state is State.STOPPED:
+            stops[key] = event.event_id
+        applied.append(event)
+    return Folded(states, stops, tuple(applied), tuple(rejected))
