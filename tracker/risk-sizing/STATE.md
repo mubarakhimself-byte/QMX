@@ -41,6 +41,8 @@ He saw the "next" list change between messages. This is the single list; every m
 
 **Level 1 finished before the stop:** all three part folders are written and committed: `architecture/parts/A-qml-dictionary-unit/` (AD-101 to AD-120, slices A0 to A15), `B-qmb-journals-workflows/` (AD-201 to AD-216, slices B1 to B21), `C-node-mis-external/` (AD-301 to AD-323, slices C-01 to C-22). Each spine lints to 0. The parts raise clashes with Level 0 for R1 rather than override it (A: six findings; B: six disagreements and 12 contract changes; C: CF-1 to CF-7 and three more mini-app core fixes). Nothing is running.
 
+**1 Nov morning:** R1 done and committed (`architecture/review/R1-findings.md`: 40 findings, 7 high; every clash settled; one merged build order; two screen words for his veto). The fix round runs as three fresh fixers with disjoint folders (`briefs/X1-0A-fix.md`, `X1-B-fix.md`, `X1-C-fix.md`); each writes `architecture/review/R1-FIXES-<id>.md`. If a fixer was cut off, rerun its brief fresh. Then the fix-check (`briefs/FC1-fix-check.md`), then P2.
+
 **How to resume (a fresh session reads this):**
 1. Check each part folder: it is finished only if it holds `ARCHITECTURE-SPINE.md` that lints to 0 (`bmad-architecture`'s `lint_spine.py`), `CONTRACTS.md`, `BUILD-SLICES.md`, `UI-NEEDS.md`, `RISK-SIZING-POINTS.md` and `LEAD-CALLS.md`, and its commit is on `plan/unit-system`.
 2. Any part not finished (for example the power cut it off): move its partial folder aside to `architecture/parts/_partial-<date>/` and rerun that part's brief with a fresh poteto-agent on Opus. Never resume an old agent.
