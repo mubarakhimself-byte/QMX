@@ -9,11 +9,11 @@ sends only its payload. Every span carries the digest of the surface the chat la
 A node that declares no write tool is read-only. One that declares a write tool works in its
 attempt overlay (AGW, AD-60, AD-51): the chat is born there, its file writes are allowed only
 under it, and when the attempt ends `ok` only the node's declared `outputs.files` commit into the
-run's `work/`; the chat's CLI is closed and the overlay deleted however the attempt ends. An agent has no turn, tool-call or
-run-time ceiling (AD-40): the runner's stuck detector (AD-16) reads `look` every tick and calls
-`stop` when the attempt stopped moving, loops or does not converge. A stopped chat is
-interrupted; a looping or flailing one then gets one summary turn and ends `stalled` with that
-summary.
+run's `work/`; the chat's CLI is closed and the overlay deleted however the attempt ends. An
+agent has no turn, tool-call or run-time ceiling (AD-40): the runner's stuck detector (AD-16)
+reads `look` every tick and calls `stop` when the attempt stopped moving, loops or does not
+converge. A stopped chat is interrupted; a looping or flailing one then gets one summary turn and
+ends `stalled` with that summary.
 
 The warm-first gate is the runner's, at dispatch (AD-9): `hold` returns the event a chunk waits on
 before it starts, so a held chunk writes no `node_started` and is never an idle attempt. The first

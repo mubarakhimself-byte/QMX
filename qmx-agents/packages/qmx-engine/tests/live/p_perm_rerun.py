@@ -9,10 +9,12 @@ run on `haiku` through the ship home's plan login under `D:/QMX-worktrees/.engin
   writes outside it, A3 asks for `echo a3-undeclared` and A3W for a Bash write into the overlay.
   Chat B declares `Bash` too, and B1 writes into its overlay with Bash. PASS when A offers no shell,
   A1 and B1 write, A2 is refused with the policy's reason, and A3 and A3W cannot run.
-- `outputs` (lane 3): one agent step declares `result.md` as its only output and is asked to
-  write `result.md` and `extra.md`. PASS when only `result.md` commits. Logs the step's seconds.
-- `overlay` (lane 4): one agent step is asked to write outside its overlay and to report what
-  happened. PASS when the file is absent, the tool call carries the refusal and the step says so.
+- `outputs` (lane 3): one agent step declares `result.md` as its only output and is asked, in
+  the run's input, to write `result.md` and `extra.md`. PASS when only `result.md` commits. Logs
+  the step's seconds.
+- `overlay` (lane 4): one agent step is asked to write into a plain folder under `D:/Temp`,
+  outside its overlay and every QMX folder, and to report what happened. PASS when the file is
+  absent, the tool call carries the refusal and the step says so.
 
 From `qmx-agents/` with the agents venv:
 `uv run --no-sync python packages/qmx-engine/tests/live/p_perm_rerun.py pperm`
@@ -48,6 +50,12 @@ SHELLS: Final = ("Bash", "PowerShell")
 HAIKU: Final = {**DEFAULTS, "roles.reader": ("claude/haiku",)}
 TAIL: Final = " Make exactly one tool call. If it is refused, do not retry; reply with the refusal."
 OUTSIDE: Final = "is refused: this step writes only under its attempt folder"
+PLAIN: Final = Path("D:/Temp")
+"""Lane 4's outside target lives here, in no QMX folder, so the policy is what refuses it."""
+BRIEF: Final = (
+    "Do the task the user gives you, with the tools you have. Then reply with the JSON document "
+    '{"report": "<what you did and what happened>"} only.'
+)
 
 
 def live_common() -> Any:
@@ -85,11 +93,12 @@ class Log:
         return 0 if self.passed else 1
 
 
-def fresh(slug: str) -> Path:
-    root = HOMES / f"b17-{slug}"
+def fresh(slug: str, under: Path = HOMES) -> Path:
+    root = under / f"b17-{slug}"
     if not root.as_posix().startswith("D:/"):
         raise SystemExit(f"BLOCKED: {root} is not on D:")
-    shutil.rmtree(root, ignore_errors=True)
+    if root.exists():
+        shutil.rmtree(root)
     root.mkdir(parents=True)
     return root
 
@@ -211,9 +220,11 @@ def write_flow(root: Path, brief: str, outputs: list[str]) -> Path:
     return root
 
 
-async def run_step(say: Log, opened: Any, slug: str, brief: str) -> tuple[Any, Path]:
+async def run_step(say: Log, opened: Any, slug: str, task: str) -> tuple[Any, Path]:
+    """Runs one agent step whose task is the run's input, so it reaches the chat as the user turn;
+    the brief only says to do it."""
     root = fresh(slug)
-    flow = write_flow(root / "wf", brief, ["result.md"])
+    flow = write_flow(root / "wf", BRIEF, ["result.md"])
     found = checked(flow)
     if isinstance(found, list):
         raise SystemExit(f"BLOCKED: the lane's workflow does not validate: {found}")
@@ -221,7 +232,7 @@ async def run_step(say: Log, opened: Any, slug: str, brief: str) -> tuple[Any, P
     started = time.perf_counter()
     with Ledger.open(engine_home) as ledger:
         engine = Engine(engine_home, ledger, settings=HAIKU, harness=HarnessAdapter(opened.harness))
-        outcome = await engine.start(flow, found[1], mode="live", inputs=["go"])
+        outcome = await engine.start(flow, found[1], mode="live", inputs=[task])
     say(f"run {outcome.run_id}: {outcome.status} {outcome.reason or ''}")
     say(f"seconds for the run with one agent step: {time.perf_counter() - started:.1f}")
     return outcome, engine_home
@@ -241,12 +252,11 @@ def seconds(span: Any) -> float | None:
 
 
 async def outputs(say: Log, opened: Any) -> None:
-    brief = (
+    task = (
         "In your working folder, use the Write tool twice: create result.md containing the word "
-        "answer, then create extra.md containing the word extra. Then reply with the JSON "
-        'document {"report": "<what you wrote>"} only.'
+        "answer, then create extra.md containing the word extra."
     )
-    outcome, engine_home = await run_step(say, opened, "outputs", brief)
+    outcome, engine_home = await run_step(say, opened, "outputs", task)
     events, spans = events_and_spans(engine_home, outcome.run_id)
     work = RunZone.of(engine_home, outcome.run_id).work
     files = sorted(p.name for p in work.iterdir() if p.is_file()) if work.is_dir() else []
@@ -265,13 +275,13 @@ async def outputs(say: Log, opened: Any) -> None:
 
 
 async def overlay(say: Log, opened: Any) -> None:
-    outside = HOMES / "b17-overlay" / "outside.md"
-    brief = (
+    outside = fresh("outside", PLAIN) / "outside.md"
+    task = (
         f"Use the Write tool once to create {outside.as_posix()} containing the word x. Do not "
-        "retry. Then reply with the JSON document "
-        '{"report": "<refused or written, and the reason you were given>"} only.'
+        "retry. In your report say whether it was refused or written, and the reason you were "
+        "given."
     )
-    outcome, engine_home = await run_step(say, opened, "overlay", brief)
+    outcome, engine_home = await run_step(say, opened, "overlay", task)
     events, spans = events_and_spans(engine_home, outcome.run_id)
     tools = [(s.name, s.error) for s in spans if s.kind == "tool"]
     finished = [
@@ -286,6 +296,7 @@ async def overlay(say: Log, opened: Any) -> None:
         tools,
     )
     say.check("the step reports the refusal", "refus" in report.lower(), report)
+    shutil.rmtree(outside.parent)
 
 
 LANES: Final = {"pperm": pperm, "outputs": outputs, "overlay": overlay}

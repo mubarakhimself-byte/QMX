@@ -172,7 +172,7 @@ class HarnessPort(Protocol):
         """End the chat's CLI process, keeping its record and transcript (H18). An attempt that
         works in an overlay closes its chat before the overlay goes, since on Windows a folder
         that is a live process's cwd cannot be removed."""
-        return None
+        ...
 
     def context(self, chat: str) -> int | None:
         """The context the chat's latest journaled model call read."""

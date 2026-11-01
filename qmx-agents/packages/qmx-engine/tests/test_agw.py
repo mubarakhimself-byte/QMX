@@ -140,9 +140,6 @@ class Workspaces(FakePort):
         self.workspaces.append(workspace)
         return await super().start_chat(workspace=workspace, **rest)
 
-    async def close(self, chat: str) -> None:
-        return None
-
 
 def writer(root: Path, outputs: list[dict[str, Any]]) -> Path:
     step = agent("write", tools=["Write", "Edit"]) | {"outputs": {"files": outputs}}

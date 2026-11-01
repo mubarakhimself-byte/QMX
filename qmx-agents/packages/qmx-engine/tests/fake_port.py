@@ -158,6 +158,8 @@ class FakePort:
         self.interrupted.append(chat)
         self.halted(chat).set()
 
+    async def close(self, chat: str) -> None: ...
+
     def halted(self, chat: str) -> asyncio.Event:
         return self.halts.setdefault(chat, asyncio.Event())
 
