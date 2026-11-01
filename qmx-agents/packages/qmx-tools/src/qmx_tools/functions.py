@@ -368,7 +368,7 @@ def unit_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any]
     ) -> dict[str, Any]:
         """Explain a unit in plain lines, from a document or a unit in the Library."""
         if (document is None) == (item is None):
-            raise ValueError("pass a document or the item of a unit in the Library, not both")
+            raise ValueError("pass exactly one of a document and the item of a unit in the Library")
         given: object = document if document is not None else draft(str(item)).fields
         found = gather(ctx.library.store, given)
         return {"lines": list(explain(given, found.context)), "notes": list(found.warnings)}
