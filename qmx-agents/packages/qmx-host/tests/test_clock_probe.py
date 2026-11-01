@@ -3,13 +3,18 @@ No test here reaches a real time server or reads or changes this machine's time 
 
 from __future__ import annotations
 
+import asyncio
 import socket
 import threading
 from collections.abc import Callable, Iterator
 from datetime import date
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from qmx_engine.heartbeat import ClockFacts, TimeService
+from qma.harness.home import DoctorLine
+from qmx_engine.heartbeat import ClockBand, ClockFacts, Heartbeat, HeartbeatLog, TimeService
 
 from qmx_host.clock_probe import (
     NTP_EPOCH_S,
@@ -21,6 +26,7 @@ from qmx_host.clock_probe import (
     query,
     tzdata_line,
 )
+from qmx_host.host import clock_doctor, heartbeats_read, host_row
 
 SENT = 1_800_000_000.0
 BACK = SENT + 0.010
@@ -168,3 +174,48 @@ def test_the_next_london_and_new_york_mismatch_week() -> None:
     )
     assert now.ok is False
     assert now.detail.startswith("London and New York are in a mismatch week now, 2027-03-14")
+
+
+def machine_row(host_id: str, offset_ms: int, band: ClockBand) -> Heartbeat:
+    return Heartbeat(
+        subject="host",
+        id=host_id,
+        at="2026-11-01T09:00:00+00:00",
+        cpu_seconds=0.0,
+        rss_bytes=0,
+        machine_minutes=0.0,
+        qmx_version="0.0.0",
+        kinds_digest="none",
+        paused=False,
+        clock=ClockFacts(
+            zone="UTC",
+            offset_ms=offset_ms,
+            delay_ms=20,
+            source=f"{host_id}-src",
+            source_kind="w32time",
+            synced=True,
+            tzdata="2026a",
+            band=band,
+            probed_at="2026-11-01T09:00:00+00:00",
+        ),
+    )
+
+
+def test_a_server_home_holding_the_pcs_row_shows_its_own_clock(tmp_path: Path) -> None:
+    HeartbeatLog(tmp_path, 7).write([machine_row("pc", 3, "ok")])
+    HeartbeatLog(tmp_path, 7).write([machine_row("server", 400, "no_new_entry")])
+    rows: list[Callable[[], DoctorLine]] = []
+
+    clock_doctor(cast("Any", SimpleNamespace(doctor_from=rows.append)), tmp_path, "server", {})
+    read = asyncio.run(heartbeats_read(tmp_path, "server")({}))
+
+    assert (rows[0]().ok, rows[0]().detail) == (
+        False,
+        "Clock 400 ms off server-src (round trip 20 ms), band no_new_entry; zone UTC; "
+        "probed 2026-11-01T09:00:00+00:00; Windows Time is running",
+    )
+    clock = cast("dict[str, object]", read["clock"])
+    assert (clock["offset_ms"], clock["source"]) == (400, "server-src")
+    pc = host_row(tmp_path, "pc")
+    assert pc is not None and pc.clock is not None
+    assert (pc.id, pc.clock.offset_ms, pc.clock.source) == ("pc", 3, "pc-src")

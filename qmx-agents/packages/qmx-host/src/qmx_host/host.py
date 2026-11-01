@@ -460,7 +460,7 @@ class HubGateway:
 
 
 def remote_worker(
-    home: Path, core: Engine, authority: PassAuthority, own_door: str = ""
+    home: Path, core: Engine, authority: PassAuthority, own_door: str = "", *, host_id: str = ""
 ) -> PlacementWorker | None:
     """The `node` role's worker: an attempt placed on another owned machine runs there (AD-20).
 
@@ -518,7 +518,7 @@ def remote_worker(
         settings=settings,
         mint=mint,
         remote=providers,
-        live=lambda: host_row(home),
+        live=lambda: host_row(home, host_id),
         doors=doors,
     )
 
@@ -534,10 +534,11 @@ def data_scope_of(node_definition: Mapping[str, Any]) -> tuple[str, ...]:
     )
 
 
-def host_row(home: Path) -> Heartbeat | None:
-    """The newest heartbeat row this home wrote for its own machine, or None before the first
-    beat. A dispatched attempt's resources and session count read it (D-11)."""
-    return next((row for row in latest(home).values() if row.subject == "host"), None)
+def host_row(home: Path, host_id: str) -> Heartbeat | None:
+    """The newest heartbeat row of the machine `host_id`, or None before its first beat. A home
+    that also runs the Hub holds every machine's row, so it is read by id, never the first host
+    row found. A dispatched attempt's resources and session count read it (D-11)."""
+    return latest(home).get(f"host:{host_id}")
 
 
 def hindsight_runs(control: ControlService, role: Role) -> bool:
@@ -786,7 +787,7 @@ async def serve(
         harness = await RecordedHarness.open(
             qmx_home,
             control=control,
-            host_reads=host_reads(qmx_home, control),
+            host_reads=host_reads(qmx_home, control, name),
             market=door if isinstance(door, MarketDoor) else None,
         )
         harness.adopt_passes(passes)
@@ -823,7 +824,7 @@ async def serve(
                     ) as engine:
                         core = engine.svc.ctx.engine
                         placed = (
-                            remote_worker(home, core, passes, own_door(role, port))
+                            remote_worker(home, core, passes, own_door(role, port), host_id=name)
                             if role in ("node", "server")
                             else None
                         )
@@ -857,7 +858,7 @@ async def serve(
                         )
                         upgrade_moment_ended(Layout.from_home(home))
                         server = uvicorn.Server(uvicorn.Config(app))
-                        clock_doctor(harness, home, core.settings)
+                        clock_doctor(harness, home, name, core.settings)
                         beating = asyncio.create_task(
                             heartbeats(
                                 home,
@@ -1124,15 +1125,17 @@ async def heartbeats(
         await asyncio.sleep(setting(core.settings, "heartbeat.interval", INTERVAL_S))
 
 
-def clock_doctor(harness: Harness, home: Path, settings: Mapping[str, object]) -> None:
-    """The doctor's clock, `tzdata` and mismatch week rows. The clock row reads the newest host
+def clock_doctor(
+    harness: Harness, home: Path, host_id: str, settings: Mapping[str, object]
+) -> None:
+    """The doctor's clock, `tzdata` and mismatch week rows. The clock row reads this host's newest
     row, so opening the doctor never waits on a time source."""
 
     def today() -> date:
         return datetime.now(UTC).date()
 
     def clock() -> DoctorLine:
-        row = host_row(home)
+        row = host_row(home, host_id)
         return clock_line(None if row is None else row.clock)
 
     max_age = setting(settings, "clock.tzdata_max_age_days", TZDATA_MAX_AGE_DAYS)
@@ -1349,10 +1352,10 @@ def drain_router(core: Engine) -> APIRouter:
     return router
 
 
-def host_reads(home: QmxHome, control: ControlService) -> dict[str, HostRead]:
+def host_reads(home: QmxHome, control: ControlService, host_id: str) -> dict[str, HostRead]:
     """The reads this host serves to a chat's `agent_tool` rows, by target."""
     return {
-        "heartbeats": heartbeats_read(home.root),
+        "heartbeats": heartbeats_read(home.root, host_id),
         "provider_rows": provider_rows_read(home.root),
         "provider_test": provider_test_read(home),
         "mark": mark_read(control),
@@ -1415,8 +1418,9 @@ def mark_read(control: ControlService) -> HostRead:
     return read
 
 
-def heartbeats_read(home: Path) -> HostRead:
-    """The `ops_heartbeats` read: the newest row per subject and the host's last rows."""
+def heartbeats_read(home: Path, host_id: str) -> HostRead:
+    """The `ops_heartbeats` read: the newest row per subject, the host's last rows, and the clock
+    of `host_id`, this machine."""
 
     async def read(_arguments: dict[str, Any]) -> Mapping[str, object]:
         def load() -> Mapping[str, object]:
@@ -1424,7 +1428,8 @@ def heartbeats_read(home: Path) -> HostRead:
             since = datetime.now(UTC) - timedelta(hours=1)
             found = HeartbeatLog(home, 1).rows(since)
             hosts = [row for row in found if row.subject == "host"][-HOST_HISTORY:]
-            clock = next((row.clock for row in newest.values() if row.subject == "host"), None)
+            own = newest.get(f"host:{host_id}")
+            clock = None if own is None else own.clock
             return {
                 "latest": {key: row.model_dump(mode="json") for key, row in newest.items()},
                 "host_history": [row.model_dump(mode="json") for row in hosts],
