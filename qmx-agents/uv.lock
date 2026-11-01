@@ -16,6 +16,7 @@ members = [
     "qmx-home",
     "qmx-host",
     "qmx-hub",
+    "qmx-judge",
     "qmx-ledger",
     "qmx-library",
     "qmx-memory",
@@ -4212,6 +4213,41 @@ dev = [
 ]
 
 [[package]]
+name = "qmx-judge"
+version = "0.1.0"
+source = { editable = "packages/qmx-judge" }
+dependencies = [
+    { name = "qmf-core" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "poethepoet" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-xdist" },
+    { name = "qmx-library" },
+    { name = "ruff" },
+    { name = "types-jsonschema" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "qmf-core", editable = "../packages/qmf-core" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "poethepoet", specifier = "==0.48.0" },
+    { name = "pyright", specifier = "==1.1.411" },
+    { name = "pytest", specifier = ">=9,<10" },
+    { name = "pytest-cov", specifier = ">=7,<8" },
+    { name = "pytest-xdist", specifier = ">=3.8,<4" },
+    { name = "qmx-library", editable = "packages/qmx-library" },
+    { name = "ruff", specifier = "==0.16.5" },
+    { name = "types-jsonschema" },
+]
+
+[[package]]
 name = "qmx-ledger"
 version = "0.1.0"
 source = { editable = "packages/qmx-ledger" }
@@ -4432,6 +4468,7 @@ dependencies = [
     { name = "qmn" },
     { name = "qmx-control" },
     { name = "qmx-home" },
+    { name = "qmx-judge" },
 ]
 
 [package.dev-dependencies]
@@ -4454,6 +4491,7 @@ requires-dist = [
     { name = "qmn", editable = "../qmn" },
     { name = "qmx-control", editable = "packages/qmx-control" },
     { name = "qmx-home", editable = "packages/qmx-home" },
+    { name = "qmx-judge", editable = "packages/qmx-judge" },
 ]
 
 [package.metadata.requires-dev]

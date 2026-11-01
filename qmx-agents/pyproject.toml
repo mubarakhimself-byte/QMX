@@ -8,7 +8,7 @@ requires-python = ">=3.14,<3.15"
 dependencies = []
 
 [tool.uv.workspace]
-members = ["packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub", "packages/qmx-home"]
+members = ["packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub", "packages/qmx-home", "packages/qmx-judge"]
 
 [tool.uv.sources]
 qmx-tools = { workspace = true }
@@ -25,6 +25,7 @@ qmx-router = { workspace = true }
 qmx-memory = { workspace = true }
 qmx-hub = { workspace = true }
 qmx-home = { workspace = true }
+qmx-judge = { workspace = true }
 # Parent QMF roster packages — path edges into the enclosing QMX workspace.
 qmf-core = { workspace = ".." }
 qmf-registry = { workspace = ".." }
@@ -56,7 +57,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-n auto --dist worksteal --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control --ignore=packages/qmx-ledger --ignore=packages/qma-harness --ignore=packages/qmx-engine --ignore=packages/qmx-host --ignore=packages/qmx-library --ignore=packages/qmx-router --ignore=packages/qmx-memory --ignore=packages/qmx-hub --ignore=packages/qmx-home"
+addopts = "-n auto --dist worksteal --ignore=packages/qmx-tools --ignore=packages/qmx-broker --ignore=packages/qmx-remote --ignore=packages/qmx-apps --ignore=packages/qmx-control --ignore=packages/qmx-ledger --ignore=packages/qma-harness --ignore=packages/qmx-engine --ignore=packages/qmx-host --ignore=packages/qmx-library --ignore=packages/qmx-router --ignore=packages/qmx-memory --ignore=packages/qmx-hub --ignore=packages/qmx-home --ignore=packages/qmx-judge"
 markers = ["serial: requires exclusive access to shared resources"]
 testpaths = ["packages"]
 pythonpath = [
@@ -72,7 +73,7 @@ pythonpath = [
 
 [tool.ruff]
 line-length = 100
-extend-exclude = [".venv", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub", "packages/qmx-home"]
+extend-exclude = [".venv", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub", "packages/qmx-home", "packages/qmx-judge"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "S", "C4", "SIM", "RUF", "PL"]
@@ -95,7 +96,7 @@ ignore = [
 
 [tool.pyright]
 include = ["packages", "examples"]
-exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub", "packages/qmx-home"]
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "packages/qma-ui-contract", "packages/qmx-tools", "packages/qmx-broker", "packages/qmx-remote", "packages/qmx-apps", "packages/qmx-control", "packages/qmx-ledger", "packages/qma-harness", "packages/qmx-engine", "packages/qmx-host", "packages/qmx-library", "packages/qmx-router", "packages/qmx-memory", "packages/qmx-hub", "packages/qmx-home", "packages/qmx-judge"]
 extraPaths = [
     "../packages/qmf-core/src",
     "../packages/qmf-data/src",

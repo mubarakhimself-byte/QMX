@@ -137,6 +137,14 @@ def main() -> int:
     )
     suites.append(
         (
+            "qmx-judge",
+            ROOT / "qmx-agents/packages/qmx-judge",
+            ["python", "-m", "pytest", "tests", "-q"],
+            ["tests"],
+        )
+    )
+    suites.append(
+        (
             "qmx-library",
             ROOT / "qmx-agents/packages/qmx-library",
             ["python", "-m", "pytest", "tests", "-q"],

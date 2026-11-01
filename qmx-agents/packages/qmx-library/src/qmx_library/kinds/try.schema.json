@@ -1,0 +1,107 @@
+{
+  "kind": "try",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "type": "string",
+        "enum": [
+          "run",
+          "check",
+          "spec_edit",
+          "shortlist",
+          "paper_pick",
+          "whatif_rerun"
+        ]
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "opened",
+          "landed",
+          "failed",
+          "recorded"
+        ]
+      },
+      "run_id": {
+        "type": "string"
+      },
+      "family": {
+        "type": "string"
+      },
+      "unit": {
+        "type": "string"
+      },
+      "study": {
+        "type": "string"
+      },
+      "market": {
+        "type": "string"
+      },
+      "tester": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "principal": {
+        "type": "string"
+      },
+      "place": {
+        "type": "string"
+      },
+      "at": {
+        "type": "string"
+      },
+      "links": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": [
+      "kind",
+      "state",
+      "run_id",
+      "family",
+      "at"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

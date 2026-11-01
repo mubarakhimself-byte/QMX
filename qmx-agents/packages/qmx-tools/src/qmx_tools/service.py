@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import Any, Final, Literal, Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from qmb.host.library_landing import BacktestResult, LandingPort, land
 from qmf.core import Result, is_refusal
 from qml.protocol import HostedBot
 from qmn.doors.api import DoorRuntime
 from qmx_control.library import Library
 from qmx_control.models import ControlError, LibraryInput
 from qmx_control.service import ControlService
+from qmx_judge.landing import BacktestResult, LandingPort, land
 
 ResponseFormat = Literal["concise", "detailed"]
 

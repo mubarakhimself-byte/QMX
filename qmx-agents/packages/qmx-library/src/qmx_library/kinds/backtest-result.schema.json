@@ -1,6 +1,6 @@
 {
   "kind": "backtest-result",
-  "schema_version": 1,
+  "schema_version": 2,
   "class": "record",
   "retired": false,
   "identity": "manifest",
@@ -32,12 +32,124 @@
           "refutes",
           "inconclusive"
         ]
+      },
+      "run_id": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "finished",
+          "failed",
+          "killed"
+        ]
+      },
+      "reason": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "tester": {
+        "type": "object",
+        "properties": {
+          "app": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "unit": {
+        "type": "string"
+      },
+      "compiled_fp": {
+        "type": "string"
+      },
+      "study": {
+        "type": "string"
+      },
+      "markets": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "window": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          }
+        }
+      },
+      "seed": {
+        "type": "integer"
+      },
+      "motion": {
+        "type": "string",
+        "enum": [
+          "on",
+          "off",
+          "both"
+        ]
+      },
+      "measures": {
+        "type": "object"
+      },
+      "labels": {
+        "type": "object"
+      },
+      "principal": {
+        "type": "string"
+      },
+      "place": {
+        "type": "string"
+      },
+      "model_cutoff": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "cutoff": {
+            "type": "string"
+          }
+        }
+      },
+      "versions": {
+        "type": "object"
+      },
+      "request_fp": {
+        "type": "string"
       }
     }
   },
   "blobs": {
     "report": {
       "media_type": "application/octet-stream"
+    },
+    "trades": {
+      "media_type": "application/vnd.apache.parquet"
+    },
+    "equity": {
+      "media_type": "application/vnd.apache.parquet"
+    },
+    "journal/*": {
+      "media_type": "application/vnd.apache.parquet"
+    },
+    "daily_r": {
+      "media_type": "application/vnd.apache.parquet"
+    },
+    "slices": {
+      "media_type": "application/vnd.apache.parquet"
+    },
+    "receipts": {
+      "media_type": "application/vnd.apache.parquet"
     }
   },
   "card": {
@@ -87,6 +199,21 @@
         "tab": "History",
         "renderer": "table",
         "source": "computed:history"
+      },
+      {
+        "tab": "Journal",
+        "renderer": "table",
+        "source": "blobs.journal/*"
+      },
+      {
+        "tab": "Slices",
+        "renderer": "table",
+        "source": "blobs.slices"
+      },
+      {
+        "tab": "Who ran it",
+        "renderer": "json",
+        "source": "fields"
       }
     ]
   },
