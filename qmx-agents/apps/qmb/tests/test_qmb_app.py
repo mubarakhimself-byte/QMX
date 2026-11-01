@@ -244,6 +244,22 @@ def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
     assert (compared["same_trades"], compared["measures"]) == (True, {})
 
 
+def test_a_run_longer_than_the_wait_answers_its_run_id_and_lands_later(world: World) -> None:
+    world.backtest["backtest_run"](unit=world.dummy, window=MARCH)
+    world.control.settings_put(
+        "qmb", {"bars": world.control.settings_get("qmb")["bars"], "agent_wait_s": 1}
+    )
+    try:
+        answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+    finally:
+        world.control.settings_put("qmb", {"bars": world.control.settings_get("qmb")["bars"]})
+    status = world.backtest["backtest_status"]
+
+    until(lambda: status(run_id=answer["run_id"])["result"]["state"] == "landed", "the run lands")
+    assert (answer["status"], answer["result_id"], answer["waited_s"]) == ("running", None, 1.0)
+    assert answer["run_id"].startswith("qmbr-pc-")
+
+
 def test_a_fingerprint_mismatch_lands_a_failed_result_and_counts_no_job_error(
     world: World,
 ) -> None:

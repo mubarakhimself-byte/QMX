@@ -315,13 +315,18 @@ class DomainContext:
         return dict(self.library.store.get(OPERATOR, object_id).fields)
 
     def _opened(self, principal: str, unit: str, since: str) -> str | None:
-        """The newest run this principal opened on `unit` since `since` that has not closed."""
+        """The newest run (not a check) this principal opened on `unit` since `since` that has
+        not closed."""
         store = self.library.store
         newest: tuple[str, str] | None = None
         for object_id in store.with_field(TRY_KIND, "principal", principal):
             fields = self._fields(object_id)
             run_id, at = str(fields.get("run_id")), str(fields.get("at", ""))
-            if fields.get("state") != "opened" or fields.get("unit") != unit or at < since:
+            if (fields.get("kind"), fields.get("state"), fields.get("unit")) != (
+                "run",
+                "opened",
+                unit,
+            ) or at < since:
                 continue
             if store.head(try_item(run_id, "landed"), MAIN) is None and (
                 newest is None or at > newest[1]
