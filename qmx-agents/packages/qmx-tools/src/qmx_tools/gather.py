@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Final, cast
 import qml
 from qmf.core import is_refusal
 from qml.blocks.api import FaceProblem, parse_entry
+from qml.catalogue.entry import EntryProblem, check_entry
 from qml.check import CheckResult
 from qml.compile import CompileContext
 from qml.compile.compiler import DERIVED_BLOCKS
@@ -55,17 +56,22 @@ class Gathered:
     warnings: tuple[str, ...]
 
 
+def entry_face(fields: Mapping[str, object]) -> dict[str, object]:
+    """A `component` item's entry with its `component_type` beside it, as QML reads an entry."""
+    entry = cast(dict[str, object], fields.get("entry") or {})
+    return {"component_type": fields.get("component_type"), **entry}
+
+
 def entry_bytes(fields: Mapping[str, object]) -> bytes:
     """A `component` item's entry face as QML reads an `entry.json`."""
-    entry = cast(dict[str, object], fields.get("entry") or {})
-    face = {"component_type": fields.get("component_type"), **entry}
-    return json.dumps(face, sort_keys=True).encode()
+    return json.dumps(entry_face(fields), sort_keys=True).encode()
 
 
-def entry_problems(fields: Mapping[str, object]) -> tuple[FaceProblem, ...]:
-    """The put check of a `component` marked `qmx.entry/1`: its face reads as QML's entry."""
-    found = parse_entry(entry_bytes(fields))
-    return (found,) if isinstance(found, FaceProblem) else ()
+def entry_problems(fields: Mapping[str, object]) -> tuple[EntryProblem, ...]:
+    """The put check of a `component` marked `qmx.entry/1`: QML's entry checker over its face,
+    every problem at once. Only items carrying that marker reach it (the kind file's
+    `applies_when`), so every other `component` item saves as before."""
+    return check_entry(entry_face(fields))
 
 
 def _own(pin: str) -> tuple[bytes, bytes] | None:

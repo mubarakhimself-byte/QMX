@@ -11,6 +11,7 @@ from typing import cast
 
 import pytest
 from qmf.core.refusal import is_refusal
+from qml.catalogue.entry import Status, compute_status, corpus_problems
 from qml.catalogue.loader import block_fingerprint
 from qml.check import CheckResult, check, check_block
 from qml.compile import CompileContext, CompiledUnit
@@ -223,7 +224,7 @@ def test_a_market_without_the_data_level_a_block_reads_is_an_error() -> None:
 
 def _session(calendar_ref: str) -> dict[str, object]:
     return {
-        "name": calendar_ref.split("@")[0],
+        "name": calendar_ref.split("@", maxsplit=1)[0],
         "calendar_ref": calendar_ref,
         "zone": "Europe/London",
         "windows": [{"from": "08:00", "to": "16:00"}],
@@ -249,8 +250,7 @@ def test_a_session_on_a_calendar_no_market_holds_is_one_error() -> None:
         (
             "calendar_not_held",
             ("/sessions/1/calendar_ref",),
-            "crypto-24x7@1 is not a calendar any market's record holds "
-            "(fx-24x5@1, metals-24x5@1)",
+            "crypto-24x7@1 is not a calendar any market's record holds (fx-24x5@1, metals-24x5@1)",
         )
     ]
 
@@ -464,3 +464,31 @@ def test_corpus_block_has_no_error(folder: str) -> None:
     found = check_block(f"{folder}@1", str(entry["origin"]), source)
 
     assert (found.errors, entry["fingerprint"]) == ([], block_fingerprint(source).value)
+
+
+def test_corpus_entries_pass_the_entry_checker_and_compute_implemented() -> None:
+    golden = json.loads((_QML / "tests" / "golden" / "talib-0.7.1.json").read_text("utf-8"))
+    folders = sorted(p for p in _STDLIB.iterdir() if (p / "1" / "entry.json").is_file())
+    entries = {f.name: json.loads((f / "1" / "entry.json").read_text("utf-8")) for f in folders}
+
+    computed = {
+        f"{name}@1": compute_status(entry, (_STDLIB / name / "1" / "block.py").read_bytes(), golden)
+        for name, entry in entries.items()
+    }
+
+    assert {pin: (c.status, c.problems, c.missing) for pin, c in computed.items()} == dict.fromkeys(
+        (
+            "ema@1",
+            "fixed-fraction-at-stop@1",
+            "market-next-open@1",
+            "percentile-of-own-history@1",
+            "roc-of-series@1",
+            "rsi-cross-back@1",
+            "swing-stop-buffer@1",
+            "target-r-multiple@1",
+            "time-exit-bars@1",
+            "trend-floor-from-record@1",
+        ),
+        (Status.IMPLEMENTED, (), ()),
+    )
+    assert corpus_problems(list(entries.values())) == ()

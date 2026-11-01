@@ -29,27 +29,6 @@ def _ids() -> list[str]:
     return sorted(p.name for p in _STDLIB.iterdir() if (p / "1" / "entry.json").is_file())
 
 
-def test_the_ten_qml_blocks_compute_implemented_with_no_problem() -> None:
-    computed = {i: compute_status(_entry(i), _source(i), _GOLDEN) for i in _ids()}
-
-    assert {i: (c.status, c.problems, c.missing) for i, c in computed.items()} == dict.fromkeys(
-        (
-            "ema",
-            "fixed-fraction-at-stop",
-            "market-next-open",
-            "percentile-of-own-history",
-            "roc-of-series",
-            "rsi-cross-back",
-            "swing-stop-buffer",
-            "target-r-multiple",
-            "time-exit-bars",
-            "trend-floor-from-record",
-        ),
-        (Status.IMPLEMENTED, (), ()),
-    )
-    assert corpus_problems([_entry(i) for i in _ids()]) == ()
-
-
 def test_an_entry_claiming_native_with_no_source_is_refused_with_the_reason() -> None:
     entry = _entry("ema") | {"transfer": {"fx": "native"}}
     del entry["sources"]

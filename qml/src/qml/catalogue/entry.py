@@ -490,18 +490,21 @@ def _rules(raw: Mapping[str, object], found: _Found) -> None:
 
 def check_entry(raw: Mapping[str, object]) -> tuple[EntryProblem, ...]:
     """Every problem of one entry, in field order: a field of the wrong shape, a word outside
-    the vocabulary, a claim with no evidence. An empty answer lets the entry save."""
+    the vocabulary, a claim with no evidence. An entry that lacks a field every entry names is
+    one problem listing them, and its claims are checked once those are written. An empty
+    answer lets the entry save."""
     found = _Found()
-    for name in _REQUIRED:
-        if raw.get(name) is None:
-            found.add(f"/{name}", f"the entry has no {name}", "every entry names it")
+    lacking = [name for name in _REQUIRED if raw.get(name) is None]
+    if lacking:
+        found.add("", f"the entry has no {', '.join(lacking)}", "every entry names these")
     for name, value in raw.items():
         check = _FIELDS.get(name)
         if check is None:
             found.add(f"/{name}", f"{name} is not a field of {ENTRY_SCHEMA}", "remove it")
         elif value is not None:
             check(value, f"/{name}", found)
-    _rules(raw, found)
+    if not lacking:
+        _rules(raw, found)
     return tuple(found.problems)
 
 
