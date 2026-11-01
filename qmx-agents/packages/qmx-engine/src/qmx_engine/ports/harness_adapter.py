@@ -8,6 +8,11 @@ which answers its asks in-process, and the `engine` hook sink. All three and `co
 the chat record, so a chat reloaded after a host restart keeps them (H19). Every prompt goes as
 `InjectedText`. A turn ends when its handle's `result()` resolves: nothing polls.
 
+A chat whose node declares a write tool is born in its attempt overlay, so `workspace` is that
+overlay and the policy reads it as `policy_args["overlay"]` (AGW, AD-60). `Bash` and `PowerShell`
+are deny rules on every chat whose node does not declare them, so even a CLI that offered them
+could not run them (probe P-PERM, A3).
+
 While a turn runs, its events feed `activity`, which the stuck detector reads: the tool calls so
 far with their results, whether the turn still runs, and the chat's CLI process, whose children run
 its tools. `queued` tells it a send that waits for a slot, so that wait is never judged idle.
@@ -41,7 +46,7 @@ from qma.harness import (
 from qma.launcher import pid_path, read_pid_record
 from qmx_router.registry import KeyCheck, usable
 
-from qmx_engine.policy import engine_policy
+from qmx_engine.policy import SHELLS, WRITES, engine_policy
 from qmx_engine.sink import ENGINE, EngineSink, Listener
 
 CONTEXT_FIELDS: Final = ("input_tokens", "cache_read_tokens", "cache_write_tokens")
@@ -274,8 +279,8 @@ class HarnessAdapter:
                 skills=skills,
                 append_system_prompt=system,
                 hook_sink=ENGINE,
-                permissions=ChatPermissions(policy=ENGINE),
-                policy_args={"tools": list(tools)},
+                permissions=ChatPermissions(policy=ENGINE, deny=undeclared_shells(tools)),
+                policy_args=policy_args(tools, workspace),
             )
             return str(await self.harness.start_chat(spec))
         except LaunchRefused as refused:
@@ -355,6 +360,17 @@ class HarnessAdapter:
             return path.read_text(encoding="utf-8").splitlines()
         except OSError:
             return []
+
+
+def undeclared_shells(tools: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(sorted(SHELLS - set(tools)))
+
+
+def policy_args(tools: tuple[str, ...], workspace: Path) -> JsonObject:
+    found: JsonObject = {"tools": list(tools)}
+    if WRITES & set(tools):
+        found["overlay"] = str(workspace.resolve())
+    return found
 
 
 def turn_of(result: TurnResult, cost: float | None, *, timed_out: bool = False) -> Turn:
