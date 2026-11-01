@@ -60,6 +60,7 @@ from qml.numbers import InstrumentRecord, parse_record
 from qmx_apps.artifacts import Ending, Lander
 from qmx_apps.artifacts import Landing as AppLanding
 from qmx_apps.artifacts import Ticket as AppTicket
+from qmx_apps.errors import AppError
 from qmx_apps.manifest import Definition
 from qmx_apps.supervisor import MARKET_STORE, RUNS, Supervisor
 from qmx_apps.volume import Volume
@@ -158,7 +159,7 @@ from qmx_host.connect import KINDS, Connect, World, connect_router, placement
 from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
-from qmx_host.first_start import land_dummy
+from qmx_host.first_start import enable_first_party, land_dummy
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.maintenance import maintenance_router
@@ -770,6 +771,21 @@ def register_checkers(store: Store) -> None:
     store.register_checker(ENTRY_CHECKER, entry_check)
 
 
+def enable_apps(home: Path, runtime: Supervisor) -> None:
+    """The first start's one click: the apps the card's new folder asked for, QMB first, are
+    installed and started beside the host, which does not wait for their environments."""
+    try:
+        enabled = enable_first_party(home, runtime)
+    except (AppError, OSError, ValueError) as refused:
+        print(
+            f"apps: the first-party apps did not start, again next start: {refused}",
+            file=sys.stderr,
+        )
+        return
+    if enabled:
+        print(f"apps: {', '.join(enabled)} enabled on the first start", file=sys.stderr)
+
+
 def land_first_unit(store: Store) -> None:
     """The dummy unit waits in his Library as a draft from the first start on (AD-118). A store
     that refuses the put (a replica, a read-only store) is named and the host starts anyway."""
@@ -872,6 +888,9 @@ async def serve(
                 runtime.attach_landers(
                     landers(store, runtime, name, settings=lambda: control.settings_get("qmb"))
                 )
+                threading.Thread(
+                    target=enable_apps, args=(home, runtime), name="qmx-first-apps", daemon=True
+                ).start()
                 harness.doctor_from(lambda: library_line(store))
                 backups = Backups(
                     Layout.from_home(home),

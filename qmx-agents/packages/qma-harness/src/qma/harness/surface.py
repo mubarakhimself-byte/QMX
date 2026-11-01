@@ -481,12 +481,16 @@ def _table(value: object) -> Mapping[str, object]:
     return cast("Mapping[str, object]", value) if isinstance(value, Mapping) else {}
 
 
-def home_preset(home: Home, settings: Mapping[str, object]) -> tuple[str, ...]:
-    """`[agents] home_toolsets.<kind>`, else every core toolset (Claude's default: the hub has
-    every enabled toolset, and he narrows a home in Settings)."""
+def home_preset(
+    home: Home, settings: Mapping[str, object], running: Sequence[str] = ()
+) -> tuple[str, ...]:
+    """`[agents] home_toolsets.<kind>`, else every core toolset and each running app's
+    `app:<id>` in `running` (Claude's default: the hub has every enabled toolset, so the
+    copilot reaches QMB's operations from the first start, LC-A0-17; he narrows a home in
+    Settings)."""
     table = _table(settings.get("home_toolsets"))
     found = _names(table.get(home.kind))
-    return CORE_TOOLSETS if found is None else found
+    return (*CORE_TOOLSETS, *sorted(running)) if found is None else found
 
 
 def budgets(settings: Mapping[str, object]) -> dict[SlotName, int | None]:
@@ -591,7 +595,8 @@ def _toolsets(
     elif parent is not None:
         asked = parent.toolsets
     else:
-        asked = home_preset(home, supply.settings)
+        running = {tool.toolset for tool in supply.tools if tool.toolset.startswith(APP_PREFIX)}
+        asked = home_preset(home, supply.settings, tuple(running))
     served = {tool.toolset for tool in supply.tools} | {f"{APP_PREFIX}{app_id}" for app_id in apps}
     keep = served - denied_toolsets(kind)
     if parent is not None:

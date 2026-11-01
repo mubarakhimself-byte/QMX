@@ -29,7 +29,13 @@ from qmx_control.service import ControlError, ControlService, WorkflowEngine
 from qmx_engine.ledger import redact
 from qmx_engine.nodes.app_op import AppOp
 from qmx_engine.nodes.base import NodeJob, Ok
-from qmx_host.first_start import land_dummy  # pyright: ignore[reportMissingTypeStubs]
+from qmx_host import first_start  # pyright: ignore[reportMissingTypeStubs]
+from qmx_host.first_start import (  # pyright: ignore[reportMissingTypeStubs]
+    Places,
+    enable_first_party,
+    land_dummy,
+    make_new,
+)
 from qmx_host.host import LanderLibrary, landers  # pyright: ignore[reportMissingTypeStubs]
 from qmx_library.port import Draft
 from qmx_library.principal import Principal, drafts_ref
@@ -333,3 +339,27 @@ def test_a_crash_that_trips_the_breaker_fails_the_run_and_qmb_starts_again(
     assert [getattr(error, "code", None) for error in failed] == ["not_running"]
     assert len(killed) == 1
     assert after["status"] == "finished"
+
+
+def test_the_first_start_click_enables_qmb_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = tmp_path / "profile"
+    with monkeypatch.context() as scoped:
+        for name, part in (("APPDATA", "Roaming"), ("LOCALAPPDATA", "Local")):
+            (profile / part).mkdir(parents=True)
+            scoped.setenv(name, str(profile / part))
+        scoped.setattr(first_start, "_fixed_drives", list)
+        layout = make_new(tmp_path / "QMX", Places({"APPDATA": str(profile / "Roaming")}))
+    assert (profile / "Roaming" / "QMX" / "home.toml").is_file()
+    runtime = Supervisor(layout.home)
+    with Store.open(layout.home / "library", redactor=redact, wall=Clock()) as store:
+        runtime.attach_landers(landers(store, runtime, "pc"))
+        try:
+            first = enable_first_party(layout.home, runtime)
+            again = enable_first_party(layout.home, runtime)
+            status = runtime.status("qmb")["status"]
+        finally:
+            runtime.close()
+
+    assert (first, again, status) == (["qmb"], [], "running")
