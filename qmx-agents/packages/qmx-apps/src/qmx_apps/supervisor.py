@@ -469,12 +469,15 @@ class Supervisor:
             }
         }
         environment["UV_PROJECT_ENVIRONMENT"] = str(self.environments / definition.hash)
+        # The image holds this lock byte for byte, but a lock's relative path sources (QMB's QMX
+        # libraries) resolve only from the folder the definition was installed from.
+        source = definition.root if image_hash(definition.root) == definition.hash else image
         result = subprocess.run(
             [
                 uv,
                 "sync",
                 "--project",
-                str(image),
+                str(source),
                 "--locked",
                 "--no-dev",
                 "--no-editable",
