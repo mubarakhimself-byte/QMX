@@ -1,0 +1,635 @@
+{
+ "provenance": "Recorded from hyperliquid's public API with CCXT 4.5.85, no key: the markets in CCXT's unified shape and the raw HTTP answers to each read, asset contexts trimmed to BTC and ETH. Built by evidence/c07/owner-build-fixtures.py.",
+ "exchange": "hyperliquid",
+ "markets": [
+  {
+   "id": "0",
+   "lowercaseId": null,
+   "symbol": "BTC/USDC:USDC",
+   "base": "BTC",
+   "quote": "USDC",
+   "settle": "USDC",
+   "baseId": "0",
+   "quoteId": "USDC",
+   "settleId": "USDC",
+   "type": "swap",
+   "spot": false,
+   "margin": null,
+   "swap": true,
+   "future": false,
+   "option": false,
+   "index": null,
+   "active": true,
+   "contract": true,
+   "linear": true,
+   "inverse": false,
+   "subType": "linear",
+   "taker": 0.00045,
+   "maker": 0.00015,
+   "contractSize": 1.0,
+   "expiry": null,
+   "expiryDatetime": null,
+   "strike": null,
+   "optionType": null,
+   "precision": {
+    "amount": 1e-05,
+    "price": 1.0
+   },
+   "limits": {
+    "leverage": {
+     "min": null,
+     "max": 40
+    },
+    "amount": {
+     "min": null,
+     "max": null
+    },
+    "price": {
+     "min": null,
+     "max": null
+    },
+    "cost": {
+     "min": 10.0,
+     "max": null
+    }
+   },
+   "marginModes": {
+    "cross": null,
+    "isolated": null
+   },
+   "created": null,
+   "info": {
+    "szDecimals": 5,
+    "name": "BTC",
+    "maxLeverage": 40,
+    "marginTableId": 56,
+    "funding": "0.0000125",
+    "openInterest": "39816.81788",
+    "prevDayPx": "77499.0",
+    "dayNtlVlm": "812719300.682679534",
+    "premium": "-0.0001766626",
+    "oraclePx": "78115.0",
+    "markPx": "78091.0",
+    "midPx": "78096.0",
+    "impactPxs": [
+     "78093.0",
+     "78101.2"
+    ],
+    "dayBaseVlm": "10434.98587",
+    "baseId": 0
+   },
+   "tierBased": null,
+   "percentage": null,
+   "baseName": "BTC"
+  }
+ ],
+ "responses": [
+  {
+   "method": "POST",
+   "url": "https://api.hyperliquid.xyz/info",
+   "body": "{\"type\":\"metaAndAssetCtxs\"}",
+   "response": [
+    {
+     "universe": [
+      {
+       "szDecimals": 5,
+       "name": "BTC",
+       "maxLeverage": 40,
+       "marginTableId": 56
+      },
+      {
+       "szDecimals": 4,
+       "name": "ETH",
+       "maxLeverage": 25,
+       "marginTableId": 55
+      }
+     ],
+     "marginTables": [
+      [
+       50,
+       {
+        "description": "",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 50
+         }
+        ]
+       }
+      ],
+      [
+       51,
+       {
+        "description": "tiered 10x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 10
+         },
+         {
+          "lowerBound": "3000000.0",
+          "maxLeverage": 5
+         }
+        ]
+       }
+      ],
+      [
+       52,
+       {
+        "description": "tiered 10x (2)",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 10
+         },
+         {
+          "lowerBound": "20000000.0",
+          "maxLeverage": 5
+         }
+        ]
+       }
+      ],
+      [
+       53,
+       {
+        "description": "tiered 20x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 20
+         },
+         {
+          "lowerBound": "40000000.0",
+          "maxLeverage": 10
+         }
+        ]
+       }
+      ],
+      [
+       54,
+       {
+        "description": "tiered 20x (2)",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 20
+         },
+         {
+          "lowerBound": "70000000.0",
+          "maxLeverage": 10
+         }
+        ]
+       }
+      ],
+      [
+       55,
+       {
+        "description": "tiered 25x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 25
+         },
+         {
+          "lowerBound": "100000000.0",
+          "maxLeverage": 15
+         }
+        ]
+       }
+      ],
+      [
+       56,
+       {
+        "description": "tiered 40x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 40
+         },
+         {
+          "lowerBound": "150000000.0",
+          "maxLeverage": 20
+         }
+        ]
+       }
+      ]
+     ],
+     "collateralToken": 0
+    },
+    [
+     {
+      "funding": "0.0000125",
+      "openInterest": "39810.71082",
+      "prevDayPx": "77499.0",
+      "dayNtlVlm": "813123634.6442593336",
+      "premium": "-0.0002725831",
+      "oraclePx": "78141.3",
+      "markPx": "78118.0",
+      "midPx": "78119.5",
+      "impactPxs": [
+       "78119.0",
+       "78120.0"
+      ],
+      "dayBaseVlm": "10440.1839"
+     },
+     {
+      "funding": "0.0000125",
+      "openInterest": "971010.1387999997",
+      "prevDayPx": "2253.1",
+      "dayNtlVlm": "309047070.2448099852",
+      "premium": "-0.0003564121",
+      "oraclePx": "2272.65",
+      "markPx": "2271.78",
+      "midPx": "2271.75",
+      "impactPxs": [
+       "2271.7",
+       "2271.84"
+      ],
+      "dayBaseVlm": "136453.4322000001"
+     }
+    ]
+   ]
+  },
+  {
+   "method": "POST",
+   "url": "https://api.hyperliquid.xyz/info",
+   "body": "{\"type\":\"metaAndAssetCtxs\"}",
+   "response": [
+    {
+     "universe": [
+      {
+       "szDecimals": 5,
+       "name": "BTC",
+       "maxLeverage": 40,
+       "marginTableId": 56
+      },
+      {
+       "szDecimals": 4,
+       "name": "ETH",
+       "maxLeverage": 25,
+       "marginTableId": 55
+      }
+     ],
+     "marginTables": [
+      [
+       50,
+       {
+        "description": "",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 50
+         }
+        ]
+       }
+      ],
+      [
+       51,
+       {
+        "description": "tiered 10x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 10
+         },
+         {
+          "lowerBound": "3000000.0",
+          "maxLeverage": 5
+         }
+        ]
+       }
+      ],
+      [
+       52,
+       {
+        "description": "tiered 10x (2)",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 10
+         },
+         {
+          "lowerBound": "20000000.0",
+          "maxLeverage": 5
+         }
+        ]
+       }
+      ],
+      [
+       53,
+       {
+        "description": "tiered 20x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 20
+         },
+         {
+          "lowerBound": "40000000.0",
+          "maxLeverage": 10
+         }
+        ]
+       }
+      ],
+      [
+       54,
+       {
+        "description": "tiered 20x (2)",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 20
+         },
+         {
+          "lowerBound": "70000000.0",
+          "maxLeverage": 10
+         }
+        ]
+       }
+      ],
+      [
+       55,
+       {
+        "description": "tiered 25x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 25
+         },
+         {
+          "lowerBound": "100000000.0",
+          "maxLeverage": 15
+         }
+        ]
+       }
+      ],
+      [
+       56,
+       {
+        "description": "tiered 40x",
+        "marginTiers": [
+         {
+          "lowerBound": "0.0",
+          "maxLeverage": 40
+         },
+         {
+          "lowerBound": "150000000.0",
+          "maxLeverage": 20
+         }
+        ]
+       }
+      ]
+     ],
+     "collateralToken": 0
+    },
+    [
+     {
+      "funding": "0.0000125",
+      "openInterest": "39810.71082",
+      "prevDayPx": "77499.0",
+      "dayNtlVlm": "813123634.6442593336",
+      "premium": "-0.0002725831",
+      "oraclePx": "78141.3",
+      "markPx": "78118.0",
+      "midPx": "78119.5",
+      "impactPxs": [
+       "78119.0",
+       "78120.0"
+      ],
+      "dayBaseVlm": "10440.1839"
+     },
+     {
+      "funding": "0.0000125",
+      "openInterest": "971054.1547999997",
+      "prevDayPx": "2253.1",
+      "dayNtlVlm": "309096808.6236000061",
+      "premium": "-0.000352012",
+      "oraclePx": "2272.65",
+      "markPx": "2271.78",
+      "midPx": "2271.75",
+      "impactPxs": [
+       "2271.7",
+       "2271.85"
+      ],
+      "dayBaseVlm": "136475.4491000001"
+     }
+    ]
+   ]
+  },
+  {
+   "method": "POST",
+   "url": "https://api.hyperliquid.xyz/info",
+   "body": "{\"type\":\"l2Book\",\"coin\":\"BTC\"}",
+   "response": {
+    "coin": "BTC",
+    "time": 1793574787320,
+    "levels": [
+     [
+      {
+       "px": "78119.0",
+       "sz": "0.00397",
+       "n": 3
+      },
+      {
+       "px": "78118.0",
+       "sz": "0.07262",
+       "n": 1
+      },
+      {
+       "px": "78116.0",
+       "sz": "0.12801",
+       "n": 1
+      },
+      {
+       "px": "78114.0",
+       "sz": "0.01658",
+       "n": 1
+      },
+      {
+       "px": "78112.0",
+       "sz": "0.12801",
+       "n": 1
+      },
+      {
+       "px": "78111.0",
+       "sz": "0.0029",
+       "n": 2
+      },
+      {
+       "px": "78110.0",
+       "sz": "0.18285",
+       "n": 4
+      },
+      {
+       "px": "78109.0",
+       "sz": "0.00172",
+       "n": 1
+      },
+      {
+       "px": "78108.0",
+       "sz": "0.05367",
+       "n": 2
+      },
+      {
+       "px": "78105.0",
+       "sz": "0.89778",
+       "n": 4
+      },
+      {
+       "px": "78104.0",
+       "sz": "1.77709",
+       "n": 4
+      },
+      {
+       "px": "78103.0",
+       "sz": "0.49152",
+       "n": 4
+      },
+      {
+       "px": "78102.0",
+       "sz": "0.32051",
+       "n": 1
+      },
+      {
+       "px": "78101.0",
+       "sz": "0.2635",
+       "n": 2
+      },
+      {
+       "px": "78100.0",
+       "sz": "3.85036",
+       "n": 5
+      },
+      {
+       "px": "78099.0",
+       "sz": "4.80435",
+       "n": 6
+      },
+      {
+       "px": "78098.0",
+       "sz": "0.10499",
+       "n": 2
+      },
+      {
+       "px": "78097.0",
+       "sz": "0.87172",
+       "n": 2
+      },
+      {
+       "px": "78096.0",
+       "sz": "2.04298",
+       "n": 5
+      },
+      {
+       "px": "78095.0",
+       "sz": "7.9266",
+       "n": 6
+      }
+     ],
+     [
+      {
+       "px": "78120.0",
+       "sz": "12.49506",
+       "n": 34
+      },
+      {
+       "px": "78121.0",
+       "sz": "1.50979",
+       "n": 11
+      },
+      {
+       "px": "78122.0",
+       "sz": "2.4432",
+       "n": 9
+      },
+      {
+       "px": "78123.0",
+       "sz": "3.49373",
+       "n": 14
+      },
+      {
+       "px": "78124.0",
+       "sz": "2.93739",
+       "n": 9
+      },
+      {
+       "px": "78125.0",
+       "sz": "3.15147",
+       "n": 10
+      },
+      {
+       "px": "78126.0",
+       "sz": "2.15104",
+       "n": 8
+      },
+      {
+       "px": "78127.0",
+       "sz": "6.97632",
+       "n": 10
+      },
+      {
+       "px": "78128.0",
+       "sz": "3.92367",
+       "n": 11
+      },
+      {
+       "px": "78129.0",
+       "sz": "8.65108",
+       "n": 10
+      },
+      {
+       "px": "78130.0",
+       "sz": "3.1435",
+       "n": 8
+      },
+      {
+       "px": "78131.0",
+       "sz": "9.30694",
+       "n": 10
+      },
+      {
+       "px": "78132.0",
+       "sz": "19.26658",
+       "n": 9
+      },
+      {
+       "px": "78133.0",
+       "sz": "5.64586",
+       "n": 12
+      },
+      {
+       "px": "78134.0",
+       "sz": "1.06346",
+       "n": 9
+      },
+      {
+       "px": "78135.0",
+       "sz": "2.44994",
+       "n": 9
+      },
+      {
+       "px": "78136.0",
+       "sz": "0.39461",
+       "n": 6
+      },
+      {
+       "px": "78137.0",
+       "sz": "0.84301",
+       "n": 6
+      },
+      {
+       "px": "78138.0",
+       "sz": "6.38451",
+       "n": 7
+      },
+      {
+       "px": "78139.0",
+       "sz": "7.13076",
+       "n": 11
+      }
+     ]
+    ]
+   }
+  }
+ ]
+}

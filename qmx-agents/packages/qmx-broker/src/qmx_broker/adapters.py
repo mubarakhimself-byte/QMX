@@ -1,12 +1,13 @@
-"""Read-only CCXT spot and cTrader Open API adapters."""
+"""Read-only CCXT (spot, perpetual and dated futures) and cTrader Open API adapters."""
 
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 from qmf.core import is_refusal
 from qmf.venue.spot import SpotMarket
@@ -301,9 +302,49 @@ class CTraderAdapter:
         ][:limit]
 
 
+type MarketKind = Literal["spot", "swap", "future"]
+MARKET_NAMES: dict[MarketKind, str] = {
+    "spot": "spot",
+    "swap": "perpetual",
+    "future": "dated futures",
+}
+
+
+def market_kind(market: Document) -> MarketKind | None:
+    """The one kind CCXT classes an active market as, or None for an inactive market and for
+    one whose flags disagree or that is neither spot, perpetual nor dated futures (an option)."""
+    if market.get("active") is not True:
+        return None
+    if market.get("spot") is True and market.get("contract") is False:
+        return "spot"
+    kind = market.get("type")
+    if (
+        market.get("contract") is True
+        and market.get("spot") is False
+        and kind in ("swap", "future")
+        and market.get(kind) is True
+    ):
+        return cast("MarketKind", kind)
+    return None
+
+
+def text(value: object) -> str | None:
+    """A CCXT number as decimal text. CCXT parses the venue's decimal text into a float whose
+    shortest repr gives that text back, so this reads the repr, never the binary value."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise ValueError("Expected a number from the exchange")
+    return format(Decimal(str(value)), "f")
+
+
 class CCXTAdapter:
-    def __init__(self, exchange: Any) -> None:
+    """Reads only: spot, perpetual and dated futures markets, and never an order call (Level 0
+    blast-radius item 8)."""
+
+    def __init__(self, exchange: Any, clock: Callable[[], int] = time.time_ns) -> None:
         self.exchange = exchange
+        self.clock = clock
 
     @property
     def is_live(self) -> bool:
@@ -327,26 +368,35 @@ class CCXTAdapter:
             return None
         return limit
 
-    async def _market(self, symbol: str) -> Document:
+    async def _market(self, symbol: str, *kinds: MarketKind) -> Document:
+        """The market `symbol` names when CCXT classes it, active, as one of `kinds` (any kind
+        when none is named)."""
         markets = cast("dict[str, Document]", await asyncio.to_thread(self.exchange.load_markets))
         market = markets.get(symbol)
-        if (
-            not market
-            or market.get("spot") is not True
-            or market.get("contract") is not False
-            or market.get("active") is not True
-        ):
-            raise ValueError("Select an explicitly active, non-contract spot symbol")
+        allowed = kinds or tuple(MARKET_NAMES)
+        if market is None or market_kind(market) not in allowed:
+            names = [MARKET_NAMES[kind] for kind in allowed]
+            named = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " or " + names[-1]
+            raise ValueError(f"Select an explicitly active {named} symbol")
         return market
 
     async def symbol_info(self, symbol: str) -> Document:
         import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
 
         market = await self._market(symbol)
+        market_type = market_kind(market)
         result: Document = {
             key: market.get(key) for key in ("id", "symbol", "base", "quote", "precision", "limits")
         }
-        if self.exchange.precisionMode == ccxt.TICK_SIZE:
+        result["market_type"] = market_type
+        if market_type != "spot":
+            result["contract"] = {
+                "settle": market.get("settle"),
+                "contract_size": text(market.get("contractSize")),
+                "linear": market.get("linear"),
+                "expiry_ms": market.get("expiry"),
+            }
+        elif self.exchange.precisionMode == ccxt.TICK_SIZE:
             # CCXT metadata uses floats. These are display-only round-trip decimal
             # representations, never order authority or a precision upgrade.
             normalized = {
@@ -374,12 +424,103 @@ class CCXTAdapter:
         }
 
     async def positions(self) -> list[Document]:
+        """Spot holdings, then the open perpetual and futures positions when the exchange reads
+        them. A position's `quantity` counts contracts; `contract_size` converts to the base."""
         state = await self.account_state()
-        return [
+        holdings: list[Document] = [
             {"asset": asset, "quantity": str(quantity), "market_type": "spot"}
             for asset, quantity in state["balances"]["total"].items()
             if quantity is not None and Decimal(str(quantity)) != 0
         ]
+        return holdings + await self._contract_positions()
+
+    async def _contract_positions(self) -> list[Document]:
+        import ccxt  # pyright: ignore[reportMissingTypeStubs] # noqa: PLC0415 - untyped upstream
+
+        has: object = getattr(self.exchange, "has", None)
+        if not isinstance(has, dict):
+            return []
+        if cast("dict[str, object]", has).get("fetchPositions") is not True:
+            return []
+        try:
+            found = cast("list[Document]", await asyncio.to_thread(self.exchange.fetch_positions))
+        except ccxt.NotSupported:
+            return []
+        markets = cast("dict[str, Document]", self.exchange.markets)
+        rows: list[Document] = []
+        for position in found:
+            if not position.get("contracts"):
+                continue
+            market = markets.get(str(position.get("symbol")), {})
+            size = position.get("contractSize") or market.get("contractSize")
+            rows.append(
+                {
+                    "symbol": position.get("symbol"),
+                    "market_type": market.get("type"),
+                    "side": position.get("side"),
+                    "quantity": text(position.get("contracts")),
+                    "contract_size": text(size),
+                    "entry_price": text(position.get("entryPrice")),
+                    "notional": text(position.get("notional")),
+                    "unrealized_pnl": text(position.get("unrealizedPnl")),
+                    "liquidation_price": text(position.get("liquidationPrice")),
+                    "leverage": text(position.get("leverage")),
+                    "margin_mode": position.get("marginMode"),
+                    "venue_time_ms": position.get("timestamp"),
+                }
+            )
+        return rows
+
+    async def funding(self, symbol: str) -> Document:
+        """A perpetual's current funding rate and when it is paid. `venue_time_ms` is the venue's
+        own stamp, None when it sends none (Hyperliquid); `read_at_ms` is this machine's clock
+        when the answer arrived."""
+        await self._market(symbol, "swap")
+        rate = cast(Document, await asyncio.to_thread(self.exchange.fetch_funding_rate, symbol))
+        return {
+            "symbol": symbol,
+            "rate": text(rate.get("fundingRate")),
+            "interval": rate.get("interval"),
+            "pays_at_ms": rate.get("fundingTimestamp"),
+            "mark_price": text(rate.get("markPrice")),
+            "index_price": text(rate.get("indexPrice")),
+            "venue_time_ms": rate.get("timestamp"),
+            "read_at_ms": self.clock() // 1_000_000,
+        }
+
+    async def open_interest(self, symbol: str) -> Document:
+        """A perpetual's or dated future's open interest, `amount` in contracts as the venue
+        counts them, with the venue's stamp (None when it sends none) and `read_at_ms`."""
+        await self._market(symbol, "swap", "future")
+        interest = cast(
+            Document, await asyncio.to_thread(self.exchange.fetch_open_interest, symbol)
+        )
+        return {
+            "symbol": symbol,
+            "amount": text(interest.get("openInterestAmount")),
+            "value": text(interest.get("openInterestValue")),
+            "venue_time_ms": interest.get("timestamp"),
+            "read_at_ms": self.clock() // 1_000_000,
+        }
+
+    async def book(self, symbol: str, depth: int | None) -> Document:
+        """The top `depth` levels a side (the venue's default when None), bids then asks, named
+        as the data route's `book` event names them."""
+        await self._market(symbol)
+        book = cast(
+            Document, await asyncio.to_thread(self.exchange.fetch_order_book, symbol, depth)
+        )
+        return {
+            "instrument": symbol,
+            "levels": [
+                {"side": side, "price": text(level[0]), "size": text(level[1])}
+                for side, key in (("bid", "bids"), ("ask", "asks"))
+                for level in book[key]
+            ],
+            "kind": "snapshot",
+            "venue_time_ms": book.get("timestamp"),
+            "read_at_ms": self.clock() // 1_000_000,
+        }
 
     async def quotes(self, symbol: str) -> Document:
         await self._market(symbol)

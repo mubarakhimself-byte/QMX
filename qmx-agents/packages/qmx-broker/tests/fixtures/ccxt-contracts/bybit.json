@@ -1,0 +1,437 @@
+{
+ "provenance": "Recorded from bybit's public API with CCXT 4.5.85, no key: the markets in CCXT's unified shape and the raw HTTP answers to each read. Built by evidence/c07/owner-build-fixtures.py.",
+ "exchange": "bybit",
+ "markets": [
+  {
+   "id": "BTCUSDT",
+   "lowercaseId": null,
+   "symbol": "BTC/USDT:USDT",
+   "base": "BTC",
+   "quote": "USDT",
+   "settle": "USDT",
+   "baseId": "BTC",
+   "quoteId": "USDT",
+   "settleId": "USDT",
+   "type": "swap",
+   "spot": false,
+   "margin": null,
+   "swap": true,
+   "future": false,
+   "option": false,
+   "index": null,
+   "active": true,
+   "contract": true,
+   "linear": true,
+   "inverse": false,
+   "subType": "linear",
+   "taker": 0.0006,
+   "maker": 0.0001,
+   "contractSize": 1.0,
+   "expiry": null,
+   "expiryDatetime": null,
+   "strike": null,
+   "optionType": null,
+   "precision": {
+    "amount": 0.001,
+    "price": 0.1
+   },
+   "limits": {
+    "leverage": {
+     "min": 1.0,
+     "max": 150.0
+    },
+    "amount": {
+     "min": 0.001,
+     "max": 1500.0
+    },
+    "price": {
+     "min": 0.1,
+     "max": 1999999.8
+    },
+    "cost": {
+     "min": 5.0,
+     "max": null
+    }
+   },
+   "marginModes": {
+    "cross": null,
+    "isolated": null
+   },
+   "created": 1584230400000,
+   "info": {
+    "symbol": "BTCUSDT",
+    "contractType": "LinearPerpetual",
+    "status": "Trading",
+    "baseCoin": "BTC",
+    "quoteCoin": "USDT",
+    "launchTime": "1584230400000",
+    "deliveryTime": "0",
+    "deliveryFeeRate": "",
+    "priceScale": "2",
+    "leverageFilter": {
+     "minLeverage": "1",
+     "maxLeverage": "150.00",
+     "leverageStep": "0.01"
+    },
+    "priceFilter": {
+     "minPrice": "0.10",
+     "maxPrice": "1999999.80",
+     "tickSize": "0.10"
+    },
+    "lotSizeFilter": {
+     "maxOrderQty": "1500.000",
+     "minOrderQty": "0.001",
+     "qtyStep": "0.001",
+     "postOnlyMaxOrderQty": "1500.000",
+     "maxMktOrderQty": "150.000",
+     "minNotionalValue": "5"
+    },
+    "unifiedMarginTrade": true,
+    "fundingInterval": 480,
+    "settleCoin": "USDT",
+    "copyTrading": "both",
+    "upperFundingRate": "0.00333",
+    "lowerFundingRate": "-0.00333",
+    "isPreListing": false,
+    "preListingInfo": null,
+    "riskParameters": {
+     "priceLimitRatioX": "0.01",
+     "priceLimitRatioY": "0.02"
+    },
+    "displayName": "BTCUSDT",
+    "symbolType": "",
+    "forbidUplWithdrawal": false,
+    "symbolId": 5,
+    "fullName": "Bitcoin",
+    "marketRegion": "",
+    "underlyingTicker": "",
+    "tags": []
+   },
+   "tierBased": true,
+   "percentage": true,
+   "feeSide": "get"
+  }
+ ],
+ "responses": [
+  {
+   "method": "GET",
+   "url": "https://api.bybit.com/v5/market/tickers?symbol=BTCUSDT&category=linear",
+   "body": "",
+   "response": {
+    "retCode": 0,
+    "retMsg": "OK",
+    "result": {
+     "category": "linear",
+     "list": [
+      {
+       "symbol": "BTCUSDT",
+       "lastPrice": "78110.90",
+       "indexPrice": "78144.16",
+       "markPrice": "78110.80",
+       "prevPrice24h": "77481.60",
+       "price24hPcnt": "0.008121",
+       "highPrice24h": "78227.10",
+       "lowPrice24h": "77446.00",
+       "prevPrice1h": "77777.90",
+       "openInterest": "68139.481",
+       "openInterestValue": "5322429372.49",
+       "singleOpenInterest": "34069.741",
+       "singleOpenInterestValue": "2661214725.30",
+       "turnover24h": "1430438202.2367",
+       "volume24h": "18366.9680",
+       "fundingRate": "0.0001",
+       "nextFundingTime": "1793577600000",
+       "predictedDeliveryPrice": "",
+       "basisRate": "",
+       "deliveryFeeRate": "",
+       "deliveryTime": "0",
+       "ask1Size": "0.459",
+       "bid1Price": "78110.80",
+       "ask1Price": "78110.90",
+       "bid1Size": "10.892",
+       "basis": "",
+       "preOpenPrice": "",
+       "preQty": "",
+       "curPreListingPhase": "",
+       "fundingIntervalHour": "8",
+       "basisRateYear": "",
+       "fundingCap": "0.00333",
+       "timestamp": 1793574804042
+      }
+     ]
+    },
+    "retExtInfo": {},
+    "time": 1793574804042
+   }
+  },
+  {
+   "method": "GET",
+   "url": "https://api.bybit.com/v5/market/open-interest?symbol=BTCUSDT&intervalTime=1h&category=linear",
+   "body": "",
+   "response": {
+    "retCode": 0,
+    "retMsg": "OK",
+    "result": {
+     "symbol": "BTCUSDT",
+     "category": "linear",
+     "list": [
+      {
+       "openInterest": "68202.97800000",
+       "singleOpenInterest": "34101.489",
+       "timestamp": "1793574000000",
+       "nextPageCursor": "lastid%3D13060916%26lasttime%3D1793397600"
+      },
+      {
+       "openInterest": "68325.96900000",
+       "singleOpenInterest": "34162.985",
+       "timestamp": "1793570400000"
+      },
+      {
+       "openInterest": "68338.81800000",
+       "singleOpenInterest": "34169.409",
+       "timestamp": "1793566800000"
+      },
+      {
+       "openInterest": "68396.69800000",
+       "singleOpenInterest": "34198.349",
+       "timestamp": "1793563200000"
+      },
+      {
+       "openInterest": "68654.31299999",
+       "singleOpenInterest": "34327.157",
+       "timestamp": "1793559600000"
+      },
+      {
+       "openInterest": "68975.11800000",
+       "singleOpenInterest": "34487.559",
+       "timestamp": "1793556000000"
+      },
+      {
+       "openInterest": "69090.19400000",
+       "singleOpenInterest": "34545.097",
+       "timestamp": "1793552400000"
+      },
+      {
+       "openInterest": "69018.95400000",
+       "singleOpenInterest": "34509.477",
+       "timestamp": "1793548800000"
+      },
+      {
+       "openInterest": "68993.08100000",
+       "singleOpenInterest": "34496.541",
+       "timestamp": "1793545200000"
+      },
+      {
+       "openInterest": "68780.70600000",
+       "singleOpenInterest": "34390.353",
+       "timestamp": "1793541600000"
+      },
+      {
+       "openInterest": "68636.38000000",
+       "singleOpenInterest": "34318.19",
+       "timestamp": "1793538000000"
+      },
+      {
+       "openInterest": "68875.83199999",
+       "singleOpenInterest": "34437.916",
+       "timestamp": "1793534400000"
+      },
+      {
+       "openInterest": "69056.95200000",
+       "singleOpenInterest": "34528.476",
+       "timestamp": "1793530800000"
+      },
+      {
+       "openInterest": "69129.92100000",
+       "singleOpenInterest": "34564.961",
+       "timestamp": "1793527200000"
+      },
+      {
+       "openInterest": "68854.51200000",
+       "singleOpenInterest": "34427.256",
+       "timestamp": "1793523600000"
+      },
+      {
+       "openInterest": "68692.18300000",
+       "singleOpenInterest": "34346.092",
+       "timestamp": "1793520000000"
+      },
+      {
+       "openInterest": "68862.07000000",
+       "singleOpenInterest": "34431.035",
+       "timestamp": "1793516400000"
+      },
+      {
+       "openInterest": "68756.33000000",
+       "singleOpenInterest": "34378.165",
+       "timestamp": "1793512800000"
+      },
+      {
+       "openInterest": "68680.47900000",
+       "singleOpenInterest": "34340.24",
+       "timestamp": "1793509200000"
+      },
+      {
+       "openInterest": "68646.52099999",
+       "singleOpenInterest": "34323.261",
+       "timestamp": "1793505600000"
+      },
+      {
+       "openInterest": "68661.41000000",
+       "singleOpenInterest": "34330.705",
+       "timestamp": "1793502000000"
+      },
+      {
+       "openInterest": "68784.16800000",
+       "singleOpenInterest": "34392.084",
+       "timestamp": "1793498400000"
+      },
+      {
+       "openInterest": "68856.28400000",
+       "singleOpenInterest": "34428.142",
+       "timestamp": "1793494800000"
+      },
+      {
+       "openInterest": "68870.58700000",
+       "singleOpenInterest": "34435.294",
+       "timestamp": "1793491200000"
+      },
+      {
+       "openInterest": "68979.72100000",
+       "singleOpenInterest": "34489.861",
+       "timestamp": "1793487600000"
+      },
+      {
+       "openInterest": "68967.65700000",
+       "singleOpenInterest": "34483.829",
+       "timestamp": "1793484000000"
+      },
+      {
+       "openInterest": "68898.00599999",
+       "singleOpenInterest": "34449.003",
+       "timestamp": "1793480400000"
+      },
+      {
+       "openInterest": "68878.08199999",
+       "singleOpenInterest": "34439.041",
+       "timestamp": "1793476800000"
+      },
+      {
+       "openInterest": "68996.97500000",
+       "singleOpenInterest": "34498.488",
+       "timestamp": "1793473200000"
+      },
+      {
+       "openInterest": "69011.42000000",
+       "singleOpenInterest": "34505.71",
+       "timestamp": "1793469600000"
+      },
+      {
+       "openInterest": "68978.15399999",
+       "singleOpenInterest": "34489.077",
+       "timestamp": "1793466000000"
+      },
+      {
+       "openInterest": "69046.45000000",
+       "singleOpenInterest": "34523.225",
+       "timestamp": "1793462400000"
+      },
+      {
+       "openInterest": "69017.19400000",
+       "singleOpenInterest": "34508.597",
+       "timestamp": "1793458800000"
+      },
+      {
+       "openInterest": "69063.47000000",
+       "singleOpenInterest": "34531.735",
+       "timestamp": "1793455200000"
+      },
+      {
+       "openInterest": "69150.16499999",
+       "singleOpenInterest": "34575.083",
+       "timestamp": "1793451600000"
+      },
+      {
+       "openInterest": "69197.21799999",
+       "singleOpenInterest": "34598.609",
+       "timestamp": "1793448000000"
+      },
+      {
+       "openInterest": "69035.90300000",
+       "singleOpenInterest": "34517.952",
+       "timestamp": "1793444400000"
+      },
+      {
+       "openInterest": "68923.17999999",
+       "singleOpenInterest": "34461.59",
+       "timestamp": "1793440800000"
+      },
+      {
+       "openInterest": "68883.21000000",
+       "singleOpenInterest": "34441.605",
+       "timestamp": "1793437200000"
+      },
+      {
+       "openInterest": "68763.58800000",
+       "singleOpenInterest": "34381.794",
+       "timestamp": "1793433600000"
+      },
+      {
+       "openInterest": "68765.19800000",
+       "singleOpenInterest": "34382.599",
+       "timestamp": "1793430000000"
+      },
+      {
+       "openInterest": "68624.89599999",
+       "singleOpenInterest": "34312.448",
+       "timestamp": "1793426400000"
+      },
+      {
+       "openInterest": "68511.57799999",
+       "singleOpenInterest": "34255.789",
+       "timestamp": "1793422800000"
+      },
+      {
+       "openInterest": "68578.91400000",
+       "singleOpenInterest": "34289.457",
+       "timestamp": "1793419200000"
+      },
+      {
+       "openInterest": "68694.81200000",
+       "singleOpenInterest": "34347.406",
+       "timestamp": "1793415600000"
+      },
+      {
+       "openInterest": "68730.38300000",
+       "singleOpenInterest": "34365.192",
+       "timestamp": "1793412000000"
+      },
+      {
+       "openInterest": "68604.90500000",
+       "singleOpenInterest": "34302.453",
+       "timestamp": "1793408400000"
+      },
+      {
+       "openInterest": "68555.58199999",
+       "singleOpenInterest": "34277.791",
+       "timestamp": "1793404800000"
+      },
+      {
+       "openInterest": "68364.64599999",
+       "singleOpenInterest": "34182.323",
+       "timestamp": "1793401200000"
+      },
+      {
+       "openInterest": "68281.63099999",
+       "singleOpenInterest": "34140.816",
+       "timestamp": "1793397600000"
+      }
+     ],
+     "nextPageCursor": "lastid%3D13060916%26lasttime%3D1793397600"
+    },
+    "retExtInfo": {},
+    "time": 1793574804492
+   }
+  }
+ ]
+}
