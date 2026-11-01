@@ -5,7 +5,8 @@
 (`[engine.retry] backoff = [...]` is `retry.backoff`); a key the engine does not know is ignored,
 and `true` or `false` reads as 1 or 0 (`[engine.autonomy] paused = true`). Every
 `[engine.placement.<name>]` row is kept whatever its name, because those rows are the place list
-he builds (AD-30, AD-72) and no default names them.
+he builds (AD-30, AD-72) and no default names them. Every `[engine.market.<id>] calendar` row
+is kept too, because it routes a `market_open:<id>` check to that market's calendar.
 `[roles]` maps a role name to its candidate list, so the operator may add a role. Nothing here
 reads chat slots, which the harness slot table alone counts (AD-58), or a background share or a
 budget, since QMX sets no usage limit (ruling 106).
@@ -19,7 +20,7 @@ from typing import Protocol, cast
 from pydantic import JsonValue
 from qmx_control.service import ControlService
 
-from qmx_engine.settings import DEFAULTS, Setting, place_of
+from qmx_engine.settings import DEFAULTS, Setting, market_of, place_of
 
 
 class SettingsPort(Protocol):
@@ -42,7 +43,7 @@ class ControlSettings:
         merged: dict[str, Setting] = dict(DEFAULTS)
         engine = self.control.settings_get("engine")
         for key, value in flatten(engine, ""):
-            known = key in DEFAULTS or place_of(key) is not None
+            known = key in DEFAULTS or place_of(key) is not None or market_of(key) is not None
             if known and (found := setting(value)) is not None:
                 merged[key] = found
         roles = self.control.settings_get("roles")

@@ -9,8 +9,10 @@ from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import pytest
+from qmx_control.service import ControlService
 from scheduled import Clock, Flags, enabled, fires_of
 
+from qmx_engine.ports.settings import ControlSettings
 from qmx_engine.service.context import OPERATOR
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.cron import Cron
@@ -155,6 +157,21 @@ def test_a_market_with_no_calendar_row_or_an_unshipped_one_is_a_configuration_fa
     )
     assert check("tsla", utc(2026, 3, 14, 12)) == Blocked(
         "config", "calendar_unknown", "tsla: calendar nasdaq@9 is not shipped"
+    )
+
+
+def test_a_calendar_row_he_saves_reaches_the_engine_through_the_hosts_settings(
+    tmp_path: Path,
+) -> None:
+    control = ControlService(tmp_path)
+    control.settings_put("engine", {"market": {"btc": {"calendar": "crypto-24x7@1"}}})
+    settings = ControlSettings(control).values()
+    saturday = utc(2026, 3, 14, 12)
+
+    assert settings["market.btc.calendar"] == "crypto-24x7@1"
+    assert market_shut(saturday, "market_open:btc", "UTC", settings) is None
+    assert market_shut(saturday, "market_open:gold", "UTC", settings) == Blocked(
+        "config", "market_unknown", "gold: no market.gold.calendar row names its calendar"
     )
 
 
