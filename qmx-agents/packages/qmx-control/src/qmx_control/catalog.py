@@ -224,11 +224,6 @@ def _row(
     )
 
 
-BLOCKS_LATER: Final = (
-    "Not built yet: the block tools arrive with the dictionary's new form (A11), and until then"
-    " this answers with that reason. To see which blocks a unit uses, call `unit_explain`."
-)
-
 BROKER_ROWS: Final = (
     _row("broker_read", "accounts", "broker", "list_accounts", "read"),
     _row(
@@ -357,10 +352,43 @@ DOMAIN_ROWS: Final = (
         "Explain a unit in plain lines: what it trades, its slots and blocks, its exits, sizer"
         " and numbers, and its check counts. Pass a `document` or a unit draft's `item`.",
     ),
-    _row("blocks", "find", "domain_fn", "blocks_find", "read", BLOCKS_LATER),
-    _row("blocks", "get", "domain_fn", "blocks_get", "read", BLOCKS_LATER),
-    _row("blocks", "check", "domain_fn", "blocks_check", "read", BLOCKS_LATER),
-    _row("blocks", "match", "domain_fn", "blocks_match", "read", BLOCKS_LATER),
+    _row(
+        "blocks",
+        "find",
+        "domain_fn",
+        "blocks_find",
+        "read",
+        "Search the dictionary before you write a block: one line per entry with its pin, type,"
+        " output, data level and status, best match first. Narrow by `role`, `data_level` or"
+        " `market_class`.",
+    ),
+    _row(
+        "blocks",
+        "get",
+        "domain_fn",
+        "blocks_get",
+        "read",
+        "Read one dictionary entry in full: its trader words, machine spec, code and status."
+        " The newest version unless you name one.",
+    ),
+    _row(
+        "blocks",
+        "check",
+        "domain_fn",
+        "blocks_check",
+        "read",
+        "Check a new entry and its block source before saving it: every problem at once, the"
+        " status it would earn, what the next status lacks, and the fingerprint of the source.",
+    ),
+    _row(
+        "blocks",
+        "match",
+        "domain_fn",
+        "blocks_match",
+        "read",
+        "Match each sentence of a source to the dictionary entry it states. A sentence no entry"
+        " covers comes back as an append request; never invent an entry for it silently.",
+    ),
 )
 """`qmx_tools.functions.domain_functions` by name. Its `library_search`, `library_save` and
 `propose_order` stay stdio doors only: the library rows and the broker's `propose_order` serve

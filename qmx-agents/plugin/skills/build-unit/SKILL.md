@@ -24,8 +24,8 @@ decide that it is right; the check does.
    `{"/title": "Gold pullback"}`. Keep the `item` it returns.
 2. Read what you started from. Call `unit_explain` with the `item`. It lists the markets, the
    slots and their blocks, the exits, the sizer and every number.
-3. Change the document to fit his request. Use blocks that the template or `unit_explain`
-   already shows. Keep every block you use in `pins`.
+3. Change the document to fit his request. Before you write any block, search the dictionary
+   for one that already does the job (see Blocks). Keep every block you use in `pins`.
 4. Check it. Call `unit_check` with the whole `document` and the `item`. It saves the document
    as the unit's draft, then checks it at layers A to F.
 5. Read every problem. Each one has a `layer`, a `kind`, `where` (the JSON pointers), a
@@ -44,8 +44,22 @@ hold. The draft keeps its last good version. Fix those problems first.
 
 ## Blocks
 
-`blocks_find`, `blocks_get`, `blocks_check` and `blocks_match` are not built yet. They answer
-with that reason. Until they arrive, build from the blocks the templates use.
+The dictionary holds every block a unit can bind. Search it before you write code.
+
+1. Call `blocks_find` with the trader's words, for example `"trend filter"`. Pass `role` to keep
+   blocks that can fill the slot you need. Each row is one line: the pin, the type, the output,
+   the data level it needs and its status.
+2. Call `blocks_get` on a row to read the entry in full: what a trader means by it, its inputs,
+   its parameters with their defaults, and its code.
+3. Bind only a block whose status is `implemented` or above. A `named` or `specified` entry has
+   no code yet.
+4. When his request is a source or a written idea, call `blocks_match` on its text. Each sentence
+   comes back with the entry it states, or as an append request. Tell him about every append
+   request. Never invent an entry for it silently.
+5. Write a new block only when no entry does the job. Call `blocks_check` with the entry and its
+   source, fix every error, and write the `fingerprint` it returns into the entry. No row saves
+   a new entry yet, so show him the checked entry and its source, and say a unit can bind it
+   only once it is saved and published.
 
 ## When you are done
 

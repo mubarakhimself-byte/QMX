@@ -139,13 +139,6 @@ def test_explain_reads_a_saved_unit_in_plain_lines(context: DomainContext) -> No
     assert lines[-1] == "check: 0 errors, 4 warnings"
 
 
-def test_the_block_rows_answer_that_they_arrive_with_a11(context: DomainContext) -> None:
-    find = domain_functions(context)["blocks"]["blocks_find"]
-
-    with pytest.raises(ValueError, match=r"^blocks_find: Not built yet: .*\(A11\)"):
-        find(words="ema")
-
-
 def run(document: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "qmx_tools.unit_check", str(document)],
