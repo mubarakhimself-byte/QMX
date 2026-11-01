@@ -1,0 +1,22 @@
+{
+  "venue": "icmarkets-ctrader",
+  "symbol": "USDJPY",
+  "market_id": "usdjpy",
+  "class": "fx",
+  "currency": "JPY",
+  "digits": 3,
+  "tick_size": "0.001",
+  "pip": {"size": "0.01", "source": "fixture: cTrader symbol pip position 2"},
+  "contract_size": "100000",
+  "value_per_point": "100000",
+  "lot_step": "0.01",
+  "min_lot": "0.01",
+  "calendar_ref": "fx-24x5@1",
+  "zone": "America/New_York",
+  "day_boundary": "17:00",
+  "data_levels": {"levels": [0, 1, 2], "volume": "tick_count"},
+  "leverage": {"version": 1, "tiers": [{"up_to_lots": "1000", "leverage": "30"}]},
+  "margin": {"intraday": "0.0333", "overnight": "0.0333"},
+  "record_version": 1,
+  "status": "specified"
+}

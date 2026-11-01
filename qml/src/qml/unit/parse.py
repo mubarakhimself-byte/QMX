@@ -48,11 +48,24 @@ class ProblemKind(StrEnum):
     BAD_FORMAT = "bad_format"
     TOO_SMALL = "too_small"
     NO_SHAPE_MATCHES = "no_shape_matches"
+    # Layer C, the numbers (qml.numbers.check)
+    MOTION_NOT_ALLOWED = "motion_not_allowed"
+    MOTION_INCOMPLETE = "motion_incomplete"
+    RANGE_MISSING = "range_missing"
+    RANGE_NOT_ALLOWED = "range_not_allowed"
+    BAD_RANGE = "bad_range"
+    OUTSIDE_RANGE = "outside_range"
+    OUTSIDE_MEASURE = "outside_measure"
+    NOT_IN_MEASURE = "not_in_measure"
+    UNDECLARED_NUMBER = "undeclared_number"
+    NO_RECORD = "no_record"
+    NO_PIP = "no_pip"
+    UNSETTLED_ORIGIN = "unsettled_origin"
 
 
 @dataclass(frozen=True)
 class Problem:
-    """One layer A problem, in the Problem shape of ``qmx.check/1`` (CONTRACTS.md 3.1)."""
+    """One check problem, in the Problem shape of ``qmx.check/1`` (CONTRACTS.md 3.1)."""
 
     kind: ProblemKind
     where: tuple[str, ...]
