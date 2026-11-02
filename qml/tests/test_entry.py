@@ -80,6 +80,17 @@ def test_a_warm_up_value_of_zero_instead_of_missing_keeps_the_block_specified() 
     )
 
 
+def test_an_entry_the_compiler_cannot_read_stays_specified_with_the_compiler_problem() -> None:
+    entry = _entry("ema") | {"settle_bars": {"bars": 3}}
+
+    computed = compute_status(entry, _source("ema"), _GOLDEN)
+
+    assert (computed.status, computed.problems) == (
+        Status.SPECIFIED,
+        (EntryProblem("/settle_bars/params", "expected an object", "the compiler reads this face"),),
+    )
+
+
 def test_an_entry_with_only_its_trader_face_saves_as_named() -> None:
     entry: Entry = {
         "schema": "qmx.entry/1",

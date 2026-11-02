@@ -132,6 +132,33 @@ def test_check_refuses_a_native_claim_with_no_source_and_a_name_another_entry_ho
     assert result["fingerprint"] == entry("time-exit-bars")["fingerprint"]
 
 
+def test_check_refuses_a_draft_that_reuses_a_held_pin_with_different_content(
+    blocks: dict[str, Row],
+) -> None:
+    code = source("ema").decode()
+    changed = entry("ema") | {"definition": "A different average under the same pin."}
+
+    result = blocks["blocks_check"](entry=changed, source=code)
+
+    assert (result["verdict"], result["status"]) == ("fail", None)
+    assert [(e["where"], e["message"]) for e in result["errors"]] == [
+        ("ema@1", "ema@1 is held by two different entries"),
+    ]
+
+
+def test_check_finds_no_corpus_problem_for_the_held_entry_itself_or_its_next_version(
+    blocks: dict[str, Row],
+) -> None:
+    code = source("ema").decode()
+    same = blocks["blocks_check"](entry=entry("ema"), source=code)
+    newer = blocks["blocks_check"](entry=entry("ema") | {"version": 2}, source=code)
+
+    assert [(r["errors"], r["status"]) for r in (same, newer)] == [
+        ([], "specified"),
+        ([], "specified"),
+    ]
+
+
 def test_the_put_check_refuses_a_wrong_entry_and_every_unmarked_component_saves_as_before(
     store: Store,
 ) -> None:
