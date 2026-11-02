@@ -408,7 +408,8 @@ class Verdict:
         if self.overall == "no_trades":
             head += " A result with no trades never passes."
         markets = "; ".join(m.says(self.min_trades) for m in self.per_market)
-        tries = f"Behind it: {_count(self.raw_tries, 'try', 'tries')}, {self.effective_tries} effective."
+        raw = _count(self.raw_tries, "try", "tries")
+        tries = f"Behind it: {raw}, {self.effective_tries} effective."
         return " ".join(part for part in (head, f"{markets}." if markets else "", tries) if part)
 
     def fields(self) -> dict[str, object]:

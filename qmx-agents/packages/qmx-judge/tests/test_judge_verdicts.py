@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import math
 import random
+import subprocess
+import sys
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -13,6 +16,7 @@ from typing import cast
 
 import pytest
 from qmx_engine.ledger import redact
+from qmx_engine.templates.catalog import SHARED
 from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import Principal
 from qmx_library.store import Store
@@ -299,3 +303,44 @@ def test_a_weak_edge_that_fails_lands_a_death_certificate_with_its_cause(store: 
 
     assert sorted(landed_judgement.cards) == ["death-certificate"]
     assert (death["cause"], death["unit"]) == ("no_signal", unit)
+
+
+def test_the_judge_block_decides_by_script_what_the_judge_decides() -> None:
+    lucky = result(1, markets(24, 20, 0.06))
+    rows = [
+        {
+            "result_id": lucky.result_id,
+            "fields": {
+                "run_id": lucky.run_id,
+                "status": "finished",
+                "unit": lucky.unit,
+                "tester": {"app": "qmb", "version": "0.1.0"},
+                "measures": {name: dict(found) for name, found in EVIDENCE.items()},
+            },
+            "trades": [
+                {"market_id": t.market, "closed_at": t.closed_at, "r": str(t.r)}
+                for t in lucky.trades
+            ],
+        }
+    ]
+    asked = {
+        "spec": dict(SPEC.fields),
+        "study": "study-v1",
+        "results": rows,
+        "tries": opened(lucky),
+        "principal": "agent:chat",
+        "checker": "qml 0.1.0",
+    }
+    ran = subprocess.run(
+        [sys.executable, "-I", str(SHARED / "judge" / "scripts" / "judge.py")],
+        input=json.dumps({"in": asked}),
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    printed = json.loads(ran.stdout)
+
+    assert printed["verdict"]["overall"] == "fail"
+    assert printed["item"] == verdict_of(lucky).item
+    assert printed["says"].endswith("Behind it: 20 tries, 20 effective.")
