@@ -32,7 +32,8 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# The seven roster packages, in SemVer lockstep (AR-09; DEC-0103).
+# The roster packages, in SemVer lockstep (AR-09; DEC-0103). qmf-readings joined as
+# the eighth when the reading blocks left qmn (C-08, Level 0 LC-A0-09).
 ROSTER_PACKAGES: frozenset[str] = frozenset(
     {
         "qmf-core",
@@ -42,6 +43,7 @@ ROSTER_PACKAGES: frozenset[str] = frozenset(
         "qmf-structure",
         "qmf-venue",
         "qmf-risk",
+        "qmf-readings",
     }
 )
 
@@ -78,7 +80,9 @@ EXPECTED_APPLICATION_DEPS: dict[str, frozenset[str]] = {
             "qmf-risk",
         }
     ),
-    "qmn": frozenset({"qmf-core", "qmf-data", "qmf-registry", "qmf-risk", "qmf-venue"}),
+    "qmn": frozenset(
+        {"qmf-core", "qmf-data", "qmf-readings", "qmf-registry", "qmf-risk", "qmf-venue"}
+    ),
 }
 
 # Application-layer workspace peers (not roster, not third-party). qmb hosts
@@ -100,12 +104,13 @@ EXPECTED_APPLICATION_THIRD_PARTY: dict[str, frozenset[str]] = {
 }
 
 # The expected roster dependency map (workspace deps only). qmf-core depends on
-# nothing; qmf-registry additionally depends on qmf-data; the rest depend only on
-# qmf-core. This is the contract the direction test compares against (AR-06; L30).
+# nothing; qmf-registry and qmf-readings additionally depend on qmf-data; the rest
+# depend only on qmf-core. This is the contract the direction test compares against (AR-06; L30).
 EXPECTED_ROSTER_DEPS: dict[str, frozenset[str]] = {
     "qmf-core": frozenset(),
     "qmf-data": frozenset({"qmf-core"}),
     "qmf-indicators": frozenset({"qmf-core"}),
+    "qmf-readings": frozenset({"qmf-core", "qmf-data"}),
     "qmf-registry": frozenset({"qmf-core", "qmf-data"}),
     "qmf-risk": frozenset({"qmf-core"}),
     "qmf-structure": frozenset({"qmf-core"}),
