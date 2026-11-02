@@ -38,6 +38,7 @@ from qmx_control.models import Document
 from qmx_engine.admission import setting
 from qmx_engine.control_door import PRINCIPAL
 from qmx_engine.nodes.app_op import Placements
+from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.forward import PASS_HEADER, mint_host_pass, owned_instances, placement_rows
 
 NODE_APP: Final = "trading-node"
@@ -358,7 +359,15 @@ class NodeLink:
         self, app: str, operation: str, arguments: Document, *, principal: str, op_id: str
     ) -> Change:
         """Queue one `manage` change for `app`'s home and send what waits there now. A repeated
-        op id answers the first change's state."""
+        op id answers the first change's state. Only the operator changes a node, so another
+        principal is refused before the outbox holds anything, wherever the node is homed."""
+        if principal != OPERATOR.principal:
+            raise AppError(
+                "refused_principal",
+                f"{operation} on {app} is a manage operation and answers only to the operator,"
+                f" not {principal}",
+                403,
+            )
         home = self.home_of(app)
         issued_at = wall(self.clock())
         stamped: Document = {**arguments, "op_id": op_id, "issued_at": issued_at}
