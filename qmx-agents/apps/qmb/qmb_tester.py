@@ -54,6 +54,9 @@ def unit_body(asked: Mapping[str, object], run_id: str) -> Document:
         "equity": asked.get("equity"),
         "execution_target": asked.get("execution_target"),
         "motion": asked.get("motion", "on"),
+        "allow_gaps": asked.get("allow_gaps", False),
+        "gap_bars_refuse": asked.get("gap_bars_refuse"),
+        "calibrated_min_fills": asked.get("calibrated_min_fills"),
     }
 
 

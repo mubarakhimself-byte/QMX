@@ -6,6 +6,12 @@ carries each trade in money and R, each fill against its sizer receipt, the meas
 run's unit journal as `journal/<kind>/<YYYY-MM>` files (B9). A request with `motion = both` runs
 the unit twice, motion on and motion off, and reports both: the off run's trades and measures
 under `motion_off`, its journal under `journal/motion_off/`.
+
+The report lists the run's cash events (swap, financing, funding, dividends, commission) and the
+holes it ran over with `allow_gaps`; `net_money` holds the trades' money and the cash. The labels
+say `costs_uncalibrated` until a market's costs come from enough real fills, and
+`holes_unchecked` while a market's calendar is not one QMB reads (B10). A hole past the request's
+`gap_bars_refuse` lands a `failed` result naming it.
 """
 
 from __future__ import annotations
@@ -16,6 +22,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from qmb.data.gap_check import HOLES_UNCHECKED
+from qmb.execution.cost import COSTS_UNCALIBRATED
+from qmb.execution.financing import CashEvent
 from qmb.host.unit_handler import Fill, UnitTrade
 from qmb.host.unit_runner import (
     LoadedUnit,
@@ -58,6 +67,17 @@ def _trade(trade: UnitTrade) -> dict[str, object]:
         "exit_kind": trade.exit_kind.value,
         "money": str(trade.money),
         "r": str(trade.r),
+    } | ({"gap_through_stop": True} if trade.gap_through_stop else {})
+
+
+def _cash(event: CashEvent) -> dict[str, object]:
+    return {
+        "instant": event.instant.value_ns,
+        "market_id": event.market_id,
+        "position_id": event.position_id,
+        "kind": event.kind.value,
+        "money": str(event.money),
+        "detail": event.detail,
     }
 
 
@@ -139,6 +159,17 @@ def _run(run: Path, loaded: LoadedUnit, body: dict[str, object], journal_slot: s
         "run_id": result.run_id,
         "trades": trades,
         "fills": [_fill(fill) for fill in result.fills],
+        "cash_events": [_cash(event) for event in result.cash_events],
+        "holes": [
+            {
+                "market_id": hole.market_id,
+                "after": hole.after_ns,
+                "before": hole.before_ns,
+                "bars_missing": hole.bars_missing,
+            }
+            for hole in result.holes
+        ],
+        "holes_unchecked": list(result.unchecked),
         "open_positions": sorted(result.open_positions),
         "journal": {
             "rows": dict(sorted(journal.rows.items())),
@@ -179,6 +210,8 @@ def run(inputs: Mapping[str, object]) -> dict[str, object]:
         measures=measured,
         labels={
             "zero_trades": not main.result.trades,
+            "costs_uncalibrated": COSTS_UNCALIBRATED in main.result.labels,
+            "holes_unchecked": HOLES_UNCHECKED in main.result.labels,
             "fidelity": "bars",
             "motion": asked.get("motion", "on"),
         },

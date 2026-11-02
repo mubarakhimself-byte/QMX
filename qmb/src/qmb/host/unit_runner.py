@@ -60,7 +60,7 @@ from qmb.execution.fill import BarExecution
 from qmb.execution.financing import (
     CarrySchedule,
     CashEvent,
-    CashKind,
+    ReplayCash,
     carry_schedule,
     read_funding_rates,
 )
@@ -453,7 +453,7 @@ def run_loaded(
         else BarExecution(loaded.bar_ns, loaded.costs, loaded.margins),
         journal=_Unkept() if journal is None else journal,
         seeded=seeded,
-        cash=_ReplayCash(loaded.carry, loaded.costs, loaded.bar_ns),
+        cash=ReplayCash(loaded.carry, loaded.costs, loaded.bar_ns),
     )
     if is_refusal(handler):
         return handler
@@ -524,35 +524,6 @@ def _preflight(
             holes=[(h.market_id, h.after_ns, h.before_ns, h.bars_missing) for h in holes],
         )
     return Ok((tuple(holes), tuple(unchecked)))
-
-
-@dataclass(frozen=True, slots=True)
-class _ReplayCash:
-    """The handler's cash port in a replay: each market's carry and each fill's commission."""
-
-    carry: Mapping[str, CarrySchedule]
-    costs: Mapping[str, CostProfile]
-    bar_ns: int
-
-    def held(
-        self, market: str, position: OwnPosition, since: Instant, until: Instant, bar: QuoteBar, /
-    ) -> Result[tuple[CashEvent, ...]]:
-        schedule = self.carry.get(market)
-        return Ok(()) if schedule is None else schedule.held(position, since, until, bar)
-
-    def filled(self, fill: Fill, /) -> tuple[CashEvent, ...]:
-        profile = self.costs.get(fill.market_id)
-        if profile is None:
-            return ()
-        money = profile.commission(fill.quantity, fill.instant.value_ns - self.bar_ns)
-        if not money:
-            return ()
-        detail = f"{fill.quantity} lots on {fill.kind.value}"
-        return (
-            CashEvent(
-                fill.instant, fill.market_id, fill.position_id, CashKind.COMMISSION, money, detail
-            ),
-        )
 
 
 class _Unkept:

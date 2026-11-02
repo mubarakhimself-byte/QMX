@@ -36,7 +36,7 @@ from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from enum import StrEnum
 from fractions import Fraction
 from types import MappingProxyType
-from typing import Final, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
 from qmf.core.chrono import Instant, TradingDate, WriterId
 from qmf.core.exact import MONEY_STORAGE_SCALE, Money, Quantity
@@ -49,12 +49,16 @@ from qml.protocol.unit import OwnPosition, QuoteBar
 from qml.unit.model import Side
 
 from qmb._refuse import clean_token, invalid, policy, unavailable
+from qmb.execution.cost import CostProfile
 from qmb.execution.fidelity import FidelityIdentity, stamp_fidelity
 from qmb.execution.ports import (
     COMPOSITION_VERSION,
     FINANCING_IS_ORDER_FILL,
     TAINT_OPTIMISTIC,
 )
+
+if TYPE_CHECKING:
+    from qmb.host.unit_handler import Fill
 
 __all__ = [
     "COST_COMPONENT_FINANCING",
@@ -81,6 +85,7 @@ __all__ = [
     "FinancingRollover",
     "FinancingScheduler",
     "OpenPosition",
+    "ReplayCash",
     "RolloverCalendar",
     "SwapCalibration",
     "SwapCharge",
@@ -1227,6 +1232,35 @@ class CarrySchedule:
             kind,
             money.quantize(_CENT, rounding=ROUND_HALF_EVEN),
             detail,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayCash:
+    """The unit handler's cash port in a replay: each market's carry and each fill's commission."""
+
+    carry: Mapping[str, CarrySchedule]
+    costs: Mapping[str, CostProfile]
+    bar_ns: int
+
+    def held(
+        self, market: str, position: OwnPosition, since: Instant, until: Instant, bar: QuoteBar, /
+    ) -> Result[tuple[CashEvent, ...]]:
+        schedule = self.carry.get(market)
+        return Ok(()) if schedule is None else schedule.held(position, since, until, bar)
+
+    def filled(self, fill: Fill, /) -> tuple[CashEvent, ...]:
+        profile = self.costs.get(fill.market_id)
+        if profile is None:
+            return ()
+        money = profile.commission(fill.quantity, fill.instant.value_ns - self.bar_ns)
+        if not money:
+            return ()
+        detail = f"{fill.quantity} lots on {fill.kind.value}"
+        return (
+            CashEvent(
+                fill.instant, fill.market_id, fill.position_id, CashKind.COMMISSION, money, detail
+            ),
         )
 
 
