@@ -247,14 +247,14 @@ def kept(found: JsonValue, expected: JsonValue) -> JsonValue:
     return found
 
 
-def qmb_job(kind: str, **asked: JsonValue) -> Run:
+def qmb_job(kind: str, **request: JsonValue) -> Run:
     """One QMB job over the dummy and March, answered by what its run landed."""
 
     def run(host: Host) -> JsonValue:
         ran = host.control.app_job(
             "qmb",
             f"jobs/{kind}.py",
-            inputs={"unit": host.dummy, **MARCH, **asked},
+            inputs={"unit": host.dummy, **MARCH, **request},
             principal=CHAT,
         )
         return host.landed(str(ran["run_id"]))
@@ -290,12 +290,14 @@ def daily_bias(host: Host) -> JsonValue:
         encoding="utf-8",
     )
     ran = host.runtime.run_job("macro-daily-bias", "daily.py")
-    [asked] = host.fakes.asked
+    [request] = host.fakes.asked
+    system, user = cast(list[Document], request["messages"])
     return {
         "job": ran["job"],
-        "model": asked["model"],
-        "response_format": asked["response_format"],
-        "snapshot": json.loads(str(cast(list[Document], asked["messages"])[1]["content"])),
+        "model": request["model"],
+        "response_format": request["response_format"],
+        "prompt": str(system["content"]).splitlines()[0],
+        "snapshot": json.loads(str(user["content"])),
         "bias": host.runtime.call("macro-daily-bias", "bias", {})["result"],
     }
 
@@ -371,6 +373,7 @@ EXAMPLES: Mapping[str, Shipped] = {
                     "job": "daily.py",
                     "model": "fixture-model",
                     "response_format": {"type": "json_object"},
+                    "prompt": "Summarise the macro drivers in the supplied qmx-data snapshot.",
                     "snapshot": {
                         "as_of": "2026-10-30",
                         "bars": [{"close": "1.0850"}],
@@ -522,6 +525,10 @@ EXAMPLES: Mapping[str, Shipped] = {
 }
 
 
+def asked(app: str) -> set[str]:
+    return {ask.operation for ask in EXAMPLES[app].asks}
+
+
 def install_and_start(host: Host, folder: Path) -> Definition:
     definition = Definition.load(folder)
     manifest = definition.manifest
@@ -539,7 +546,9 @@ def test_each_shipped_app_installs_starts_answers_and_runs_each_job_once(
     definition = install_and_start(host, folder)
     app = definition.manifest.id
     shipped = EXAMPLES[app]
+    [tools] = [entry["tools"] for entry in host.runtime.registry() if entry["app_id"] == app]
 
+    assert {str(tool["name"]) for tool in cast(list[Document], tools)} == asked(app)
     for ask in shipped.asks:
         arguments = ask.arguments(host) if callable(ask.arguments) else ask.arguments
         answer = host.runtime.call(app, ask.operation, arguments)["result"]
@@ -553,7 +562,7 @@ def test_each_shipped_app_installs_starts_answers_and_runs_each_job_once(
     assert (status["status"], cast(Document, status["metrics"])["errors"]) == ("running", 0)
 
 
-def test_the_walk_finds_seven_apps_and_each_has_an_example_for_every_tool_and_job() -> None:
+def test_the_walk_finds_seven_apps_with_an_example_for_every_operation_and_job() -> None:
     found = {folder.name: Definition.load(folder).manifest for folder in folders()}
     skipped = {
         (app, job.path): job.skipped
@@ -572,23 +581,12 @@ def test_the_walk_finds_seven_apps_and_each_has_an_example_for_every_tool_and_jo
         "weekend-watcher",
     ]
     assert all(manifest.id == name for name, manifest in found.items())
-    assert {app: sorted(ask.operation for ask in EXAMPLES[app].asks) for app in found} == {
-        app: sorted({*manifest.operations, *SERVED_BEYOND_OPERATIONS.get(app, ())})
-        for app, manifest in found.items()
-    }
+    unasked = {app: sorted(set(found[app].operations) - asked(app)) for app in found}
+    assert unasked == {app: [] for app in found}
     assert {app: [job.path for job in EXAMPLES[app].jobs] for app in found} == {
         app: manifest.entrypoints.jobs for app, manifest in found.items()
     }
     assert list(skipped) == [("mql5-articles", "jobs/daily.py")]
-
-
-SERVED_BEYOND_OPERATIONS: Mapping[str, tuple[str, ...]] = {
-    "exchange-status": ("record", "snapshot"),
-    "mql5-articles": ("status", "seed_library", "article"),
-    "weekend-watcher": ("summarize",),
-}
-"""The tools a server serves that its manifest declares no `[operations]` row for. The host
-serves them to the Apps screen and the supervisor, not to chats as catalog rows."""
 
 
 def separators(name: str) -> str:
