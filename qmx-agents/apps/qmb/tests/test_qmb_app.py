@@ -400,7 +400,8 @@ def test_a_study_that_allows_gaps_runs_the_month_the_hole_rule_fails(world: Worl
         study,
     )
     holes = report(world.store, allowed["result_id"])["holes"]
-    assert [(hole["market_id"], hole["bars_missing"]) for hole in holes] == [("fx.eurusd", 4)] * 4
+    # The Sundays of 9, 16 and 23 March: the month's last bar opens on Friday 28 March.
+    assert [(hole["market_id"], hole["bars_missing"]) for hole in holes] == [("fx.eurusd", 4)] * 3
 
 
 def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -> None:
