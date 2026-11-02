@@ -71,6 +71,8 @@ type SettingsSection = Literal[
     "data",
     "units",
     "qmb",
+    "records",
+    "journals",
 ]
 type SettingsParser = Callable[[Document, Document], Document]
 """(values written, section stored now) -> the section to store."""
@@ -328,6 +330,23 @@ warm-up and 20% more; the windowed reader's peak memory at 200,000 steps stays w
 peak at 10,000; a run's costs count as calibrated from 50 of QMX's own fills; a hole of more than
 3 bars of the unit's stream in open time fails a run unless its study allows gaps. The default
 tester is the shipped QMB, and it moves only to a tester whose conformance check passed."""
+
+
+RECORDS_DEFAULTS: Final[Document] = {
+    "on": True,
+    "interval_s": 300,
+    "open_harvest_s": 60,
+    "tick_harvest_s": 3_600,
+    "open_pull_s": 3_600,
+    "tick_pull_s": 86_400,
+}
+"""`[records]` with every default (Part B CONTRACTS section 6): the host files the open month of
+bars, reading history and, on This PC, journals every 60 s and ticks every hour; the pull from a
+server runs every 300 s and fetches open bars and readings hourly and ticks daily."""
+
+JOURNALS_DEFAULTS: Final[Document] = {"settle_days": 1}
+"""`[journals]` with its harvest default: a journal month closes a day after it ends, for late rows
+from a machine whose clock was off."""
 
 
 UNITS_DEFAULTS: Final[Document] = {
@@ -983,6 +1002,10 @@ class ControlService:
                 values = _merged(UNITS_DEFAULTS, values)
             if section == "qmb":
                 values = _merged(QMB_DEFAULTS, values)
+            if section == "records":
+                values = _merged(RECORDS_DEFAULTS, values)
+            if section == "journals":
+                values = _merged(JOURNALS_DEFAULTS, values)
             return values
 
     def _stored(self, section: str) -> Document:

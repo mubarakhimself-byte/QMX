@@ -113,6 +113,7 @@ from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
 from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, spec_edit, spec_problems
+from qmx_judge.paper import PaperRule
 from qmx_judge.landing import (
     G_CHECK,
     RESULT_KIND,
@@ -187,6 +188,7 @@ from qmx_host.keys import keys_router
 from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
+from qmx_host.records import Cadence, Harvester, Projection, Records, append_roots
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.publish_collection import publish_collection_router
@@ -1112,6 +1114,7 @@ async def serve(
                     floor=floor,
                     store=store,
                 )
+                records = records_job(home, control, role, door, store)
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
@@ -1161,7 +1164,9 @@ async def serve(
                         )
                         answering.append(templates_router(engine))
                         answering.append(backups_router(backups))
-                        answering.append(maintenance_router(backups, triggers_of(control)))
+                        answering.append(
+                            maintenance_router(backups, triggers_of(control), records)
+                        )
                         answering.append(publish_collection_router(control))
                         answering.extend(dialog_routers(connect, control))
                         answering.append(
@@ -1210,6 +1215,7 @@ async def serve(
 
                         backups.when_carried_on(lambda: loop.call_soon_threadsafe(sync))
                         copying = asyncio.create_task(backups.run())
+                        harvesting = [] if records is None else [asyncio.create_task(records.run())]
                         # Uvicorn logs no started line for a socket it was handed.
                         address, _ = sock.getsockname()
                         print(f"qmx_host serves on http://{address}:{port}", file=sys.stderr)
@@ -1231,6 +1237,7 @@ async def serve(
                                 shipping,
                                 *syncing,
                                 copying,
+                                *harvesting,
                             ):
                                 task.cancel()
                                 with suppress(asyncio.CancelledError):
@@ -1599,6 +1606,31 @@ def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor |
         print(f"market-data: {shut_line(built)} {dict(built.context)}", file=sys.stderr)
         return built
     return built.value
+
+
+def records_job(
+    home: Path, control: ControlService, role: Role, door: MarketDoor | TypedRefusal, store: Store
+) -> Records | None:
+    """The records job's local half on this machine: the one harvester of every app's append
+    streams, through this machine's own door (Part B AD-209). This PC also projects round trips
+    into `trade` items and scores paper lanes, since its Library is where they land. A door that
+    did not open leaves the job out; its refusal is already on stderr."""
+    if not isinstance(door, MarketDoor):
+        return None
+    folder = home / "records"
+    harvester = Harvester(lambda: append_roots(home), door, folder, journals_open=role == "pc")
+    projection = (
+        Projection(store, folder, rule=lambda: PaperRule.of(section(control, "judge")))
+        if role == "pc"
+        else None
+    )
+    return Records(
+        harvester,
+        lambda: Cadence.of(section(control, "records"), section(control, "journals")),
+        clock=lambda: datetime.now(UTC),  # ambient-scan: allow (the host is the composition root)
+        projection=projection,
+        store=store,
+    )
 
 
 def host_facts(
