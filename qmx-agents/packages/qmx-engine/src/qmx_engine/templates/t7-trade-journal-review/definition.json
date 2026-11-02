@@ -1,66 +1,42 @@
 {
   "schema": "qmx.workflow/1",
   "id": "t7-trade-journal-review",
-  "name": "Review my trade journal in risk units",
+  "name": "Review each unit's day: what it traded, skipped and missed, and why",
+  "inputs": {
+    "type": "object",
+    "properties": {
+      "day": {"type": "string", "description": "the UTC day to review, YYYY-MM-DD; the day before the run by default"},
+      "units": {"type": "array", "items": {"type": "string"}, "description": "the unit ids to review; every unit with rows that day by default"},
+      "world": {"enum": ["paper", "demo", "live", "backtest"], "description": "one world only; every world by default"}
+    }
+  },
   "outputs": {
     "type": "object",
-    "description": "slice stats in R that pass the significance filter, and at most three lessons"
+    "description": "one note on each unit's day, every number held by the read step's receipt, landed as a proposal on the run's own ref"
   },
-  "settings": {
-    "timezone": "Europe/London",
-    "on_error": "park",
-    "caller_policy": "any",
-    "memory": {"scopes": ["workflow", "operator"]}
-  },
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
   "nodes": [
-    {"id": "start", "name": "Saturday at 09:00", "type": "trigger", "typeVersion": 1,
+    {"id": "start", "name": "Each day at 00:15 UTC", "type": "trigger", "typeVersion": 1,
      "position": [0, 0], "parameters": {"kinds": ["cron", "manual"]}},
-    {"id": "journal", "name": "Load the R journal", "type": "script", "typeVersion": 1,
-     "position": [220, 0], "effect": "none",
-     "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "parameters": {"script": "scripts/journal.py"}},
-    {"id": "enough", "name": "At least 20 new trades?", "type": "rule", "typeVersion": 1,
-     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.new_trades >= 20"}},
-    {"id": "too_few", "name": "Too few trades", "type": "script", "typeVersion": 1,
-     "position": [660, 120], "effect": "none", "parameters": {"script": "scripts/too_few.py"}},
-    {"id": "slices", "name": "Stats by slice", "type": "script", "typeVersion": 1,
-     "position": [660, -120], "effect": "none", "parameters": {"script": "scripts/slices.py"}},
-    {"id": "lessons", "name": "Draft lessons", "type": "llm", "typeVersion": 1,
-     "position": [880, -120], "role": "synthesiser", "effect": "none",
-     "parameters": {"prompt_ref": "prompts/lessons.md", "schema_ref": "schemas/lessons.json"}},
-    {"id": "judge", "name": "Judge each lesson", "type": "llm", "typeVersion": 1,
-     "position": [1100, -120], "role": "judge", "effect": "none",
-     "parameters": {"prompt_ref": "prompts/judge.md", "schema_ref": "schemas/verdicts.json"}},
-    {"id": "assemble", "name": "Explainer", "type": "script", "typeVersion": 1,
-     "position": [1320, -120], "effect": "none", "parameters": {"script": "scripts/assemble.py"}},
-    {"id": "grade", "name": "Render and grade", "type": "grader", "typeVersion": 1,
-     "position": [1540, 0], "effect": "none",
-     "parameters": {"mode": "deterministic", "script": "scripts/render_and_grade.py",
-                    "schema_ref": "schemas/output.json"}},
-    {"id": "deliver", "name": "Deliver", "type": "script", "typeVersion": 1,
-     "position": [1760, 0], "effect": "none", "parameters": {"script": "scripts/deliver.py"}},
-    {"id": "stop", "name": "Stop on a failed check", "type": "script", "typeVersion": 1,
-     "position": [1760, 120], "effect": "none", "retry": {"max_tries": 1},
-     "parameters": {"script": "scripts/stop.py"}}
+    {"id": "read", "name": "Count each unit's day", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/read.py", "door_ref": "scripts/door.py"}},
+    {"id": "quiet", "name": "Nothing to review?", "type": "rule", "typeVersion": 1,
+     "position": [440, 0], "effect": "none", "parameters": {"expr": "items.quiet"}},
+    {"id": "write", "name": "Write the review", "type": "llm", "typeVersion": 1,
+     "position": [660, 120], "role": "writer", "effect": "none",
+     "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/note.json"}},
+    {"id": "check", "name": "Check every number's receipt", "type": "subworkflow",
+     "typeVersion": 1, "position": [880, 120], "parameters": {"workflow": "receipts-grader"}},
+    {"id": "land", "name": "Land the note as a proposal", "type": "script", "typeVersion": 1,
+     "position": [1100, 0], "effect": "none", "parameters": {"script": "scripts/land.py"}}
   ],
   "connections": {
-    "Saturday at 09:00": {"main": [[{"node": "Load the R journal", "port": "in", "map": "one"}]]},
-    "Load the R journal": {"main": [[{"node": "At least 20 new trades?", "port": "in",
-                                      "map": "one"},
-                                     {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "At least 20 new trades?": {"true": [[{"node": "Stats by slice", "port": "in", "map": "one"}]],
-                                "false": [[{"node": "Too few trades", "port": "in",
-                                            "map": "one"}]]},
-    "Stats by slice": {"main": [[{"node": "Draft lessons", "port": "in", "map": "one"},
-                                 {"node": "Judge each lesson", "port": "in", "map": "one"},
-                                 {"node": "Explainer", "port": "in", "map": "one"}]]},
-    "Draft lessons": {"main": [[{"node": "Judge each lesson", "port": "in", "map": "one"},
-                                {"node": "Explainer", "port": "in", "map": "one"}]]},
-    "Judge each lesson": {"main": [[{"node": "Explainer", "port": "in", "map": "one"}]]},
-    "Explainer": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Too few trades": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Render and grade": {"pass": [[{"node": "Deliver", "port": "in", "map": "one"}]],
-                         "fail": [[{"node": "Stop on a failed check", "port": "in",
-                                    "map": "one"}]]}
+    "Each day at 00:15 UTC": {"main": [[{"node": "Count each unit's day", "port": "in", "map": "one"}]]},
+    "Count each unit's day": {"main": [[{"node": "Nothing to review?", "port": "in", "map": "one"},
+                                        {"node": "Land the note as a proposal", "port": "in", "map": "one"}]]},
+    "Nothing to review?": {"false": [[{"node": "Write the review", "port": "in", "map": "one"}]]},
+    "Write the review": {"main": [[{"node": "Check every number's receipt", "port": "in", "map": "one"}]]},
+    "Check every number's receipt": {"main": [[{"node": "Land the note as a proposal", "port": "in", "map": "one"}]]}
   },
-  "meta": {"template": "trade-journal-in-risk-units", "needs": ["trading-node"]}
+  "meta": {"template": "trade-journal-in-risk-units"}
 }

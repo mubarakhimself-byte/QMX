@@ -12,12 +12,15 @@ import shutil
 import subprocess
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 from fake_library import fake_service
 from fake_port import TOKENS, FakePort
+from qmf.core import is_refusal
+from qmf.data.series import SeriesKey, SeriesStore
 from qmx_home import resolve
 from qmx_library.store import Store
 
@@ -28,6 +31,7 @@ from qmx_engine.ledger import redact
 from qmx_engine.ledger.store import Reader
 from qmx_engine.ports.harness_adapter import Turn
 from qmx_engine.ports.library import Bundle, drafts_ref
+from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.service.context import OPERATOR, Refused
 from qmx_engine.templates.catalog import ALIASES, CATALOG, PACK, SHARED, find
 from qmx_engine.templates.install import install, listing
@@ -1152,3 +1156,139 @@ def test_b_asks_qmb_for_a_walk_forward_only_when_the_run_names_ranges() -> None:
     }
     assert plain["walk_forward"] is None
     assert (asked["ok"], asked["window"]) == (True, {"start": "2020-01-01", "end": "2023-01-01"})
+
+
+T7 = PACK / "t7-trade-journal-review"
+DAY = datetime(2025, 1, 2, tzinfo=UTC)
+
+
+def journal(
+    home: Path, stream: str, subject: str, kind: str, rows: list[tuple[int, dict[str, Any]]]
+) -> None:
+    """One month of a journal as the records job files it: each row its minute after midnight on
+    2 January 2025 and its record."""
+    key = SeriesKey.try_create(f"journal-{stream}", subject, kind, 2025, 1, "paper.this-pc")
+    assert not is_refusal(key)
+    committed = SeriesStore(home / "market" / "series").commit(
+        key.value,
+        [
+            (int((DAY + timedelta(minutes=minute)).timestamp()) * 1_000, seq, json.dumps(record))
+            for seq, (minute, record) in enumerate(rows)
+        ],
+    )
+    assert not is_refusal(committed)
+
+
+def unit_row(kind: str, n: int, market: str, body: dict[str, Any], **envelope: Any) -> Any:
+    return {
+        "kind": kind,
+        "record_id": f"node@this-pc/{kind}-{n}",
+        "world": "paper",
+        "machine": "this-pc",
+        "unit_id": "dummy",
+        "market_id": market,
+        "backfilled": False,
+        "body": body,
+    } | envelope
+
+
+def dummy_day(home: Path) -> None:
+    """The dummy's 2 January: four decisions and three trades on two markets."""
+    eurusd, gold = "fx.eurusd", "metal.xauusd"
+    journal(home, "unit", "dummy", "signal", [
+        (480, unit_row("signal", 1, eurusd, {"outcome": "taken"})),
+        (495, unit_row("signal", 2, eurusd, {"outcome": "skipped", "reason": "spread_wide"})),
+        (540, unit_row("signal", 3, eurusd, {"outcome": "blocked", "reason": "max_positions"})),
+        (720, unit_row("signal", 4, gold, {"outcome": "taken"})),
+    ])  # fmt: skip
+    journal(home, "unit", "dummy", "trade", [
+        (600, unit_row("trade", 1, eurusd, {"r": "1.5"})),
+        (660, unit_row("trade", 2, eurusd, {"r": "-0.5"})),
+        (780, unit_row("trade", 3, gold, {"r": "2.0"})),
+    ])  # fmt: skip
+
+
+def slow_run(
+    home: Path, folder: Path, inputs: Any, planted: dict[str, Any] | None = None
+) -> tuple[Any, dict[str, Any]]:
+    """`folder` test-run with `inputs`, each model turn answered by `planted` by its prompt's first
+    words: its report and what each step printed, by node id."""
+    port = answers(planted={k: json.dumps(v) for k, v in (planted or {}).items()})
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(folder.name, Bundle.read(folder), 0, caller=OPERATOR).item
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+    with Reader.open(home) as reader:
+        printed = {
+            str(e.data["node_id"]): cast(dict[str, Any], e.data["outputs"])["main"]
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished" and "main" in cast(dict[str, Any], e.data["outputs"])
+        }
+    return report, printed
+
+
+def landed(home: Path) -> list[tuple[str, dict[str, Any]]]:
+    """The type and metadata of every artifact the runs landed, without the runner's
+    `write_key`."""
+    with LibraryFake.open(home) as library:
+        stored = [library.get(e.object_id) for e in library.events()]
+    return [
+        (
+            str(s.fields["type"]),
+            {k: v for k, v in cast(dict[str, Any], s.fields["metadata"]).items() if k != "write_key"},
+        )
+        for s in stored
+        if s.kind == "artifact" and s.fields["type"] not in ("run-file", "trace")
+    ]
+
+
+def failure(home: Path, run_id: str) -> str:
+    """Why the run's first failed step failed."""
+    with Reader.open(home) as reader:
+        return next(
+            str(e.data["message"]) for e in reader.events(run_id) if e.kind == "node_failed"
+        )
+
+
+UNIT_NOTE = {
+    "title": "The units on 2 January",
+    "text": "dummy traded 2 of its 4 decisions, skipped 1 for a wide spread and missed 1 at "
+    "max positions. Its 3 trades made 3.0R: 1.0R on fx.eurusd and 2.0R on metal.xauusd.",
+    "receipts": ["read"],
+}
+
+
+def test_the_unit_review_says_what_each_unit_traded_skipped_and_missed(home: Path) -> None:
+    dummy_day(home)
+
+    report, printed = slow_run(
+        home, T7, {"day": "2025-01-02"}, {"You write QMX's unit review": UNIT_NOTE}
+    )
+
+    assert report.status == "passed", report.reason
+    [unit] = printed["read"]["findings"]["units"]
+    assert {k: v for k, v in unit.items() if k != "markets"} == {
+        "unit": "dummy", "decisions": 4, "traded": 2, "skipped": 1, "missed": 1,
+        "trades": 3, "r": "3.0",
+    }  # fmt: skip
+    assert [(m["market"], m["missed"], m["reasons"], m["r"]) for m in unit["markets"]] == [
+        ("fx.eurusd", 1, {"max_positions": 1, "spread_wide": 1}, "1.0"),
+        ("metal.xauusd", 0, {}, "2.0"),
+    ]
+    [note] = [m for t, m in landed(home) if t == "note"]
+    assert (note["text"], note["receipts"], note["proposal"]) == (UNIT_NOTE["text"], ["read"], True)
+    assert note["author"] == "agent:t7-trade-journal-review"
+    assert {t for t, _ in landed(home)} == {"note", "unit-review"}
+
+
+def test_a_unit_review_with_a_number_no_step_printed_fails_and_lands_no_note(home: Path) -> None:
+    dummy_day(home)
+    invented = UNIT_NOTE | {"text": UNIT_NOTE["text"] + " It would have made 4.5R more."}
+
+    report, _ = slow_run(home, T7, {"day": "2025-01-02"}, {"You write QMX's unit review": invented})
+
+    assert report.status == "failed"
+    assert (
+        "node stop failed: qmx_failure: the note fails its receipts: no cited receipt holds 4.5;"
+        in failure(home, report.run_id)
+    )
+    assert [t for t, _ in landed(home) if t == "note"] == []

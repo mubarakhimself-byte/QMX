@@ -178,11 +178,12 @@ CATALOG: Final[tuple[Template, ...]] = (
     ),
     Template(
         "trade-journal-in-risk-units",
-        "Review my trade journal in risk units",
+        "Review each unit's day: what it traded, skipped and missed, and why",
         card("16", "T7"),
-        "TP3",
-        NODE,
+        "B20",
         folder="t7-trade-journal-review",
+        triggers=(Cron("15 0 * * *", "UTC"),),
+        test_inputs={"day": "2025-01-02"},
     ),
     Template(
         "trading-guards-alive",
