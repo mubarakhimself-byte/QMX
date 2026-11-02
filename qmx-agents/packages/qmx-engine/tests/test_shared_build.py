@@ -188,7 +188,7 @@ def test_a_proposal_lands_as_one_card_on_the_runs_own_ref_and_moves_nothing(
     assert outcome.status == "passed"
     assert metadata(card) == {**proposal, "made_by": f"run:{outcome.run_id}"}
     assert {s.ref for s in everything} == {f"refs/runs/{outcome.run_id}"}
-    assert [s.kind for s in everything if s.kind == "artifact"] == ["artifact"]
+    assert [s.kind for s in everything].count("artifact") == 1
 
 
 def test_a_proposal_missing_its_ask_and_evidence_names_both_and_lands_nothing(
