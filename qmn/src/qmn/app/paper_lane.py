@@ -23,6 +23,7 @@ from qmf.core import Account, Ok, Result
 from qml.unit.model import Side
 
 from qmn.app import runtime
+from qmn.app.attribution import ReadBack
 from qmn.app.feed_keeper import Bar
 from qmn.venue import SubmissionOutcome
 
@@ -127,3 +128,7 @@ class PaperAccount:
 
     def closed(self, position: str, /) -> runtime.VenueClose | None:
         return self._closed.get(position)
+
+    def read_back(self) -> Result[ReadBack]:
+        """A paper lane holds nothing at the venue. The node reconciles the binding."""
+        return Ok(ReadBack((), ()))
