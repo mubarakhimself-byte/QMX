@@ -115,6 +115,14 @@ def test_every_operation_answers_inside_two_seconds_with_no_errors(supervisor: S
         "schema_version": "qmx.node.deployment/1",
         "deployment_id": "dep-1",
         "node": {"tag": tag},
+        "unit": {"id": "dummy", "version": 1},
+        "unit_document": {},
+        "compiled_fingerprint": "fp1:sha256:" + "a" * 64,
+        "g_record": {"compiled_fingerprint": "fp1:sha256:" + "a" * 64},
+        "files": [],
+        "account": {"id": "demo-1"},
+        "snapshots": [],
+        "lane": "paper",
     }
     good: dict[str, Document] = {**GOOD, "deploy": {"deployment": deployment}}
     answered: dict[str, list[object]] = {}

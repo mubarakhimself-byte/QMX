@@ -553,7 +553,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     reasons.extend(f"Paused at {scope}." for scope in target.pauses())
     if word == "Trading":
         headline = f"Trading, {trading} unit{'' if trading == 1 else 's'}"
-    elif word == "Ready" and not units:
+    elif word == "Ready" and all(state in {"refused", "stopped"} for state in states):
         headline = "Ready, no units yet"
     else:
         headline = word

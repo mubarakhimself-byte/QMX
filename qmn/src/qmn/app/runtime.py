@@ -305,6 +305,7 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
         {"path": item.path, "fingerprint": item.fingerprint, "kind": item.kind}
         for item in deployment.files
     ]
+    folder.mkdir(parents=True, exist_ok=True)
     (folder.parent / "lock.json").write_text(json.dumps(lock, sort_keys=True), "utf-8")
     return None
 

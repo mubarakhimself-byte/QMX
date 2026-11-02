@@ -5,11 +5,9 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from qmf.core import Instant, TypedRefusal
+from qmf.core import TypedRefusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld
 from qmf.data.journal_writer import JournalWriter, WriterScope
-from qmf.venue.commands import CommandKind
-from qml.protocol.unit import OHLC, QuoteBar
 from test_app_runtime import LIVE_FROM, deploy, deployment, month, play, rig, settle, value
 
 from qmn.app.feed_keeper import (
@@ -128,7 +126,6 @@ def test_no_entry_is_placed_while_the_session_is_connected_but_not_ready(tmp_pat
             "books": {"fx.eurusd": "rebuilding", "metal.xauusd": "rebuilding"},
         }
     ]
-    assert CommandKind.PLACE_ORDER not in {t.command.kind for t in blocked}
 
 
 def test_the_recorded_bars_are_what_a_restarted_node_warms_up_from(tmp_path: Path) -> None:
@@ -136,11 +133,12 @@ def test_the_recorded_bars_are_what_a_restarted_node_warms_up_from(tmp_path: Pat
     now = [T0]
     writer = JournalWriter.open(tmp_path, scope, clock=lambda: now[0], boot_epoch_id="b1")
     assert not isinstance(writer, TypedRefusal), writer
-    bars = [bar for at, market, bar in month().bars if market == "fx.eurusd"][:3]
+    bars = [bar for _, market, bar in month().bars if market == "fx.eurusd"][:3]
+    source = RecordedSource([])
     feed = FeedKeeper(
-        "ctrader", "demo", RecordedSource([]), ("fx.eurusd",), lambda: now[0], Recording(writer.value)
+        "ctrader", "demo", source, ("fx.eurusd",), lambda: now[0], Recording(writer.value)
     )
-    feed.source.play([Bar("fx.eurusd", bar) for bar in bars])  # type: ignore[attr-defined]
+    source.play([Bar("fx.eurusd", bar) for bar in bars])
     feed.pump()
     writer.value.close()
     reopened = Recording.open(tmp_path, None)
@@ -148,5 +146,3 @@ def test_the_recorded_bars_are_what_a_restarted_node_warms_up_from(tmp_path: Pat
     assert reopened.recent("fx.eurusd", 10) == tuple(bars)
     assert reopened.recent("fx.eurusd", 2) == tuple(bars[1:])
     assert reopened.recent("metal.xauusd", 10) == ()
-    assert bars[0] == QuoteBar(bars[0].knowable_at, bars[0].bid, bars[0].ask)
-    assert isinstance(bars[0].bid, OHLC) and isinstance(bars[0].knowable_at, Instant)

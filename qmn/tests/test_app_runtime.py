@@ -365,14 +365,14 @@ def test_deploy_answers_before_a_40_second_compile(tmp_path: Path) -> None:
     answered = time.monotonic() - started
     time.sleep(0.5)
     shown = value(node.node.call("status", {}))
-    listed = node.node.call("deployments", {})
+    compiling = node.node.call("deployments", {})
     killed = node.node.call("kill", {"op_id": "op-kill", "level": "YELLOW", "scope": "all"})
     release.set()
     node.runtime.stop()
 
     assert answered < 2.0
     assert value(accepted)["state"] == "accepted"
-    assert [(d["state"], d["detail"]) for d in cast("list[dict[str, Json]]", listed["value"])] == [
+    assert [(d["state"], d["detail"]) for d in cast("list[dict[str, Json]]", compiling["value"])] == [
         ("compiling", "compiling after the answer")
     ]
     assert shown["headline"] == "Ready"
@@ -410,13 +410,15 @@ def test_a_missing_or_changed_staged_file_refuses_deploy_by_name_and_32_mb_deplo
     assert answered < 2.0
     lock = json.loads((node.data / "deployments" / "dep-heavy" / "lock.json").read_text("utf-8"))
     assert {"fingerprint": fingerprint(weights), "kind": "weights", "path": "weights/model.bin"} in lock
-    assert [d["deployment_id"] for d in cast("list[dict[str, Json]]", value_list(node))] == ["dep-heavy"]
+    assert [d["deployment_id"] for d in cast("list[dict[str, Json]]", listed(node))] == [
+        "dep-heavy"
+    ]
 
 
-def value_list(node: Rig) -> list[Json]:
-    listed = node.node.call("deployments", {})
-    assert listed["ok"] is True
-    return cast("list[Json]", listed["value"])
+def listed(node: Rig) -> list[Json]:
+    answer = node.node.call("deployments", {})
+    assert answer["ok"] is True
+    return cast("list[Json]", answer["value"])
 
 
 def test_a_unit_that_compiles_to_another_fingerprint_than_its_g_record_never_trades(
@@ -429,7 +431,7 @@ def test_a_unit_that_compiles_to_another_fingerprint_than_its_g_record_never_tra
     play(node, LIVE_FROM + DAY)
 
     assert phase == "refused"
-    assert value_list(node) == [
+    assert listed(node) == [
         {
             "deployment_id": "dep-1",
             "unit": {"id": "dummy-trend-pullback", "version": 1},

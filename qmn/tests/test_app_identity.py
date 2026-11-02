@@ -39,6 +39,13 @@ def deployment(tag: Json, deployment_id: str) -> dict[str, Json]:
             "deployment_id": deployment_id,
             "node": {"tag": tag},
             "unit": {"id": "dummy", "version": "1.0.0"},
+            "unit_document": {},
+            "compiled_fingerprint": "fp1:sha256:" + "a" * 64,
+            "g_record": {"compiled_fingerprint": "fp1:sha256:" + "a" * 64},
+            "files": [],
+            "account": {"id": "demo-1"},
+            "snapshots": [],
+            "lane": "paper",
         },
     }
 
