@@ -422,3 +422,40 @@ def test_b_lands_a_dead_end_from_the_verdict_of_its_judge_child(tmp_path: Path, 
         "effective_tries": 20,
     }
     assert card["dead_end"]["says"].endswith("Behind it: 20 tries, 20 effective.")
+
+
+@pytest.mark.parametrize(
+    ("overall", "dead_end"),
+    [
+        (
+            "fail",
+            {
+                "tag": "negative_result",
+                "verdict": "fail",
+                "says": "Did not hold.",
+                "tries": 7,
+                "effective_tries": 5,
+            },
+        ),
+        (
+            "no_trades",
+            {
+                "tag": "negative_result",
+                "verdict": "no_trades",
+                "says": "Did not hold.",
+                "tries": 7,
+                "effective_tries": 5,
+            },
+        ),
+        ("incomplete", None),
+        ("too_thin", None),
+    ],
+)
+def test_b_files_a_dead_end_only_for_an_outcome_the_judge_certifies_dead(
+    overall: str, dead_end: dict[str, Any] | None
+) -> None:
+    verdict = {"overall": overall, "says": "Did not hold.", "raw_tries": 7, "effective_tries": 5}
+
+    out = script(B, "card.py", {"Judge the results": {"main": {"verdict": verdict}}})
+
+    assert out == {"card": None, "dead_end": dead_end}

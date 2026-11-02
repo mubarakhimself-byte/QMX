@@ -41,7 +41,7 @@ PRESETS: Final[dict[str, Preset]] = {
     for preset in (
         Preset(
             name="shipped",
-            origin="the shipped b-build-and-prove template (scripts/gates.py)",
+            origin="the shipped templates' judge block (_shared/judge)",
             min_trades=100,
             walk_forward_efficiency=Decimal("0.5"),
             monte_carlo_p5_above=Decimal(0),

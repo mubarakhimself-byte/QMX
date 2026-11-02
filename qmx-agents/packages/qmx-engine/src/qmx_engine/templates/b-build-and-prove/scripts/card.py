@@ -1,6 +1,7 @@
 """Funnel stage 12: a passing verdict gets a "start paper trial?" card for his click, with the
-demo-only minimal risk profile (fixed small r, tighten-only). Anything else becomes a dead-end row
-with the judge's outcome, its plain words and the tries behind it, kept for R6. The verdict is the
+demo-only minimal risk profile (fixed small r, tighten-only). A `fail` or `no_trades` verdict, the
+two the judge certifies dead, becomes a dead-end row with the judge's outcome, its plain words and
+the tries behind it, kept for R6. `incomplete` and `too_thin` get neither: the verdict waits. The
 `judge` block's, decided by script; the block hands on its child's outputs nested, so the verdict
 is found by its key. Nothing starts here; the trial is his act.
 """
@@ -28,7 +29,7 @@ if verdict["overall"] == "pass":
         "risk_profile": {"r": "fixed, the smallest step", "changes": "tighten-only"},
     }
     print(json.dumps({"card": card, "dead_end": None}))
-else:
+elif verdict["overall"] in ("fail", "no_trades"):
     dead_end = {
         "tag": "negative_result",
         "verdict": verdict["overall"],
@@ -37,3 +38,5 @@ else:
         "effective_tries": verdict["effective_tries"],
     }
     print(json.dumps({"card": None, "dead_end": dead_end}))
+else:
+    print(json.dumps({"card": None, "dead_end": None}))
