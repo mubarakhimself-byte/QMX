@@ -384,7 +384,7 @@ class RunJournal:
 
     def _cash(self, event: CashEvent) -> None:
         body: dict[str, object] = {
-            "deal_id": f"{event.position_id}.{event.kind.value}.{event.instant.value_ns}",
+            "deal_id": f"{event.position_id}.{event.line}",
             "position_id": event.position_id,
             "instant": event.instant.value_ns,
             "kind": event.kind.value,

@@ -1119,6 +1119,8 @@ class CashEvent:
     kind: CashKind
     money: Decimal
     detail: str
+    line: str
+    """The line's id at its position: the carry and its venue time, or the fill it charges."""
 
 
 class VenueClock(Protocol):
@@ -1232,6 +1234,7 @@ class CarrySchedule:
             kind,
             money.quantize(_CENT, rounding=ROUND_HALF_EVEN),
             detail,
+            f"{kind.value}.{at}",
         )
 
 
@@ -1256,10 +1259,15 @@ class ReplayCash:
         money = profile.commission(fill.quantity, fill.instant.value_ns - self.bar_ns)
         if not money:
             return ()
-        detail = f"{fill.quantity} lots on {fill.kind.value}"
         return (
             CashEvent(
-                fill.instant, fill.market_id, fill.position_id, CashKind.COMMISSION, money, detail
+                fill.instant,
+                fill.market_id,
+                fill.position_id,
+                CashKind.COMMISSION,
+                money,
+                f"{fill.quantity} lots on {fill.kind.value}",
+                f"commission.{fill.kind.value}.{fill.instant.value_ns}",
             ),
         )
 

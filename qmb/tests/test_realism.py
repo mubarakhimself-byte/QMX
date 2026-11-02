@@ -26,7 +26,7 @@ from typing import cast
 import pyarrow.parquet as pq
 import pytest
 from qmb.data.generate import build_generation_grid, resolve_generator_config
-from qmb.execution.cost import CostProfile
+from qmb.execution.cost import CostProfile, parse_cost_profile
 from qmb.execution.fill import BarExecution, FillKind
 from qmb.execution.financing import (
     CashKind,
@@ -183,6 +183,7 @@ def _drive(
     *,
     journal: JournalPort | None = None,
     rates: Mapping[str, Sequence[str]] | None = None,
+    costs: Mapping[str, CostProfile] | None = None,
 ) -> UnitSliceHandler:
     """Trade ``script`` over ``bars`` with the ports the unit runner builds from each record."""
     records: dict[str, InstrumentRecord] = {}
@@ -214,7 +215,6 @@ def _drive(
         if rule.value is not None:
             margins[market] = rule.value
     windows = {market: BarWindow(64) for market in bars}
-    costs: dict[str, CostProfile] = {}
     started = UnitSliceHandler.start(
         lambda _surfaces: Ok(_Scripted(script)),
         stream="m15",
@@ -222,9 +222,9 @@ def _drive(
         bars=windows,
         opened_by=_MINE,
         equity=Decimal("10000.00"),
-        execution=BarExecution(_M15, costs, margins),
+        execution=BarExecution(_M15, costs or {}, margins),
         journal=journal or ListJournal(),
-        cash=ReplayCash(carry, costs, _M15),
+        cash=ReplayCash(carry, costs or {}, _M15),
     )
     assert not isinstance(started, TypedRefusal), started
     driven = replay_windowed(started.value, {m: iter(b) for m, b in bars.items()}, windows)
@@ -314,6 +314,50 @@ def test_a_stop_the_bar_reaches_inside_it_still_fills_at_the_stop_for_minus_1_r(
         Decimal("-1.0000"),
         False,
     )
+
+
+def test_a_cost_profile_slips_market_fills_and_charges_commission_on_each_fill(
+    loaded: LoadedUnit, tmp_path: Path
+) -> None:
+    profile = parse_cost_profile(
+        {
+            "schema": "qmx.qmb.cost-profile/1",
+            "broker": "icmarkets",
+            "account_type": "raw",
+            "market_id": "eurusd",
+            "fills": 12,
+            "hours": [
+                {"hour_of_week": hour, "slippage": "0.00002", "commission_per_lot": "3.50"}
+                for hour in range(168)
+            ],
+        }
+    )
+    assert not isinstance(profile, TypedRefusal), profile
+    bars = [
+        _bar("2025-01-07T10:00", ("1.08500",) * 4, "0.00010"),
+        _bar("2025-01-07T10:15", ("1.08500", "1.08500", "1.07900", "1.07950"), "0.00010"),
+    ]
+    journal = _journal(loaded, tmp_path)
+
+    handler = _drive(
+        {_FX: _fixture_record("eurusd.json")},
+        {_FX: bars},
+        {_close_of("2025-01-07T10:00"): [_entry(_FX, "EURUSD", "0.10", "1.08000", "row-1")]},
+        journal=journal,
+        costs={_FX: profile.value},
+    )
+
+    assert [(f.kind, f.price) for f in handler.fills] == [
+        (FillKind.ENTRY, Decimal("1.08512")),
+        (FillKind.STOP, Decimal("1.07998")),
+    ]
+    assert _trade(handler)[2:4] == (Decimal("-51.40"), Decimal("-1.0039"))
+    assert [(kind, money, detail) for kind, _, money, detail in _cash(handler)] == [
+        (CashKind.COMMISSION, Decimal("-0.35"), "0.10 lots on entry"),
+        (CashKind.COMMISSION, Decimal("-0.35"), "0.10 lots on stop"),
+    ]
+    assert [r["money"] for r in _rows(journal)["cash"]] == ["-0.35", "-0.35"]
+    assert profile.value.calibrated(50) is False
 
 
 def test_0_037_lots_trades_0_03_with_the_residue_journaled_and_0_004_skips(
