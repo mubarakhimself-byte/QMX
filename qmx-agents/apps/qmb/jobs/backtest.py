@@ -54,7 +54,7 @@ class _Ran:
 
 
 def _trade(trade: UnitTrade) -> dict[str, object]:
-    return {
+    row: dict[str, object] = {
         "trade_id": trade.trade_id,
         "market_id": trade.market_id,
         "side": trade.side.value,
@@ -67,7 +67,10 @@ def _trade(trade: UnitTrade) -> dict[str, object]:
         "exit_kind": trade.exit_kind.value,
         "money": str(trade.money),
         "r": str(trade.r),
-    } | ({"gap_through_stop": True} if trade.gap_through_stop else {})
+    }
+    if trade.gap_through_stop:
+        row["gap_through_stop"] = True
+    return row
 
 
 def _cash(event: CashEvent) -> dict[str, object]:

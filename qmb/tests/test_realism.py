@@ -12,13 +12,15 @@ made up to the tick, not evidence.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import ModuleType
 from typing import cast
 
 import pyarrow.parquet as pq
@@ -43,7 +45,6 @@ from qmf.core.refusal import Ok, Result, TypedRefusal
 from qmf.risk.unit_intent import UnitIntent
 from qml.numbers import InstrumentRecord, parse_record
 from qml.protocol.unit import OHLC, QuoteBar, UnitStep, accept_unit_intents
-from test_run_journal import _backtest_job, _text
 from test_unit_runner import make_run_folder
 
 _REPO = Path(__file__).resolve().parents[2]
@@ -60,7 +61,24 @@ def _ns(text: str) -> int:
     return int(datetime.fromisoformat(text).replace(tzinfo=UTC).timestamp()) * 1_000_000_000
 
 
-def _bar(opened: str, bid: tuple[str, str, str, str], spread: str) -> QuoteBar:
+def _text(points: int, decimals: int) -> str:
+    whole, part = divmod(points, 10**decimals)
+    return f"{whole}.{part:0{decimals}d}"
+
+
+def _backtest_job() -> Callable[[Mapping[str, object]], dict[str, object]]:
+    """The QMB app's backtest job, loaded the way the supervisor's bootstrap runs it."""
+    sys.path.insert(0, str(_APP))
+    spec = importlib.util.spec_from_file_location("qmb_app_backtest_b10", _APP / "jobs/backtest.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module: ModuleType = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return cast("Callable[[Mapping[str, object]], dict[str, object]]", module.run)
+
+
+def _bar(opened: str, bid: tuple[str, ...], spread: str) -> QuoteBar:
     """An M15 bar opening at ``opened``, stamped at its close, its ask the bid plus ``spread``."""
     sides = [Decimal(v) for v in bid]
     ask = [v + Decimal(spread) for v in sides]

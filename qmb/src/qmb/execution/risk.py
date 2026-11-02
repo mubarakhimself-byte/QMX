@@ -14,7 +14,6 @@ rounded down. A record with no liquidation rule has no liquidation level.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
 from typing import Final
@@ -84,7 +83,7 @@ def margin_rule(record: InstrumentRecord, liquidation_rule: object) -> Result[Ma
         return Ok(None)
     rule = str(liquidation_rule)
     maintenance = _share(rule.removeprefix(_MAINTENANCE)) if rule.startswith(_MAINTENANCE) else None
-    initial = _share(record.margin.get("intraday")) if isinstance(record.margin, Mapping) else None
+    initial = _share(record.margin.get("intraday"))
     if maintenance is None or initial is None or maintenance >= initial:
         return invalid(
             "liquidation_rule",

@@ -878,7 +878,9 @@ def parse_cost_profile(document: object) -> Result[CostProfile]:
         return invalid("cost_profile", "a cost profile lists its hours of the week")
     hours: dict[int, HourCost] = {}
     for row in cast("list[object]", rows):
-        cell = cast("Mapping[str, object]", row) if isinstance(row, Mapping) else {}
+        cell: Mapping[str, object] = (
+            cast("Mapping[str, object]", row) if isinstance(row, Mapping) else {}
+        )
         hour = cell.get("hour_of_week")
         slippage = _amount(cell.get("slippage"))
         commission = _amount(cell.get("commission_per_lot"))

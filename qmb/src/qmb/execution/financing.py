@@ -1281,7 +1281,9 @@ def _weekday(value: object) -> int | None:
 def _nightly(kind: CashKind, terms: object, *, yearly: bool) -> Result[_Nightly | None]:
     if terms is None:
         return Ok(None)
-    given = cast("Mapping[str, object]", terms) if isinstance(terms, Mapping) else {}
+    given: Mapping[str, object] = (
+        cast("Mapping[str, object]", terms) if isinstance(terms, Mapping) else {}
+    )
     long, short = _signed(given.get("long")), _signed(given.get("short"))
     per_year = _signed(given.get("days_per_year")) if yearly else None
     triple = given.get("triple_day")
@@ -1295,7 +1297,7 @@ def _nightly(kind: CashKind, terms: object, *, yearly: bool) -> Result[_Nightly 
         return invalid(
             kind.value,
             f"{kind.value} terms are {wants} as decimal text and an optional triple_day weekday",
-            given=repr(terms),
+            given=repr(cast(object, terms)),
         )
     return Ok(_Nightly(kind, long, short, _weekday(triple), per_year))
 
@@ -1320,7 +1322,9 @@ def _dividends(events: object, day: VenueClock) -> Result[tuple[_Dividend, ...]]
     found: list[_Dividend] = []
     rows = cast("Sequence[object]", events) if isinstance(events, list) else ()
     for row in rows:
-        event = cast("Mapping[str, object]", row) if isinstance(row, Mapping) else {}
+        event: Mapping[str, object] = (
+            cast("Mapping[str, object]", row) if isinstance(row, Mapping) else {}
+        )
         if event.get("kind") != "dividend":
             continue
         at, amount, side = (
@@ -1332,7 +1336,7 @@ def _dividends(events: object, day: VenueClock) -> Result[tuple[_Dividend, ...]]
             return invalid(
                 "events",
                 "a dividend is {kind, at: an ex-date or a zoned instant, amount_per_lot, side}",
-                given=repr(row),
+                given=repr(cast(object, row)),
             )
         found.append(_Dividend(at, None if side is None else Side(side), amount))
     return Ok(tuple(found))
