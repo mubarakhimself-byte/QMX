@@ -32,7 +32,6 @@ layout, one partition file per series and month of ``t``.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import os
 import re
@@ -50,6 +49,7 @@ from qmf.core import (
     WriterId,
     canonical_bytes,
     fingerprint,
+    fingerprint_bytes,
     is_refusal,
 )
 from qmf.data.journal_envelope import (
@@ -107,7 +107,7 @@ def key_token(identifier: str) -> str:
     mapped = _TOKEN_CHAR.sub("_", identifier.replace("@", "+").replace("/", "+"))
     if len(mapped) <= _TOKEN_MAX:
         return mapped
-    digest = hashlib.sha256(identifier.encode("utf-8")).hexdigest()[:_TOKEN_PRINT]
+    digest = fingerprint_bytes(identifier.encode("utf-8")).digest[:_TOKEN_PRINT]
     return f"{mapped[: _TOKEN_MAX - _TOKEN_PRINT - 1]}-{digest}"
 
 
@@ -640,7 +640,7 @@ def _decode(name: str, cell: str) -> object:
 def _folder_name(series: str) -> str:
     """The CT-13 stream folder of one series: readable, case-free and unique."""
     source, _subject, kind, *_rest = series.split("/")
-    digest = hashlib.sha256(series.encode("utf-8")).hexdigest()[:16]
+    digest = fingerprint_bytes(series.encode("utf-8")).digest[:16]
     return _FOLDER_CHAR.sub("_", f"{source}.{kind}.{digest}".lower())
 
 

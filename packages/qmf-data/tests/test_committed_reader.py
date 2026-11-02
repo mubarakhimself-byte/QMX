@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import itertools
 from pathlib import Path
 
@@ -14,11 +13,8 @@ from qmf.data.journal_writer import JournalWriter, WriterScope
 _START_NS = 1_772_409_600_000_000_000
 
 
-def _digest(folder: Path) -> dict[str, str]:
-    return {
-        entry.name: hashlib.sha256(entry.read_bytes()).hexdigest()
-        for entry in sorted(folder.iterdir())
-    }
+def _contents(folder: Path) -> dict[str, bytes]:
+    return {entry.name: entry.read_bytes() for entry in sorted(folder.iterdir())}
 
 
 def test_a_line_in_flight_is_left_alone_and_the_committed_lines_are_read(tmp_path: Path) -> None:
@@ -32,7 +28,7 @@ def test_a_line_in_flight_is_left_alone_and_the_committed_lines_are_read(tmp_pat
     folder = next(path for path in stream_folders(tmp_path) if "feed_health" in path.name)
     with (folder / "000000.jsonl").open("ab") as handle:
         handle.write(b'{"series":"journal-node/node-1/feed_health/demo.pc-1","t":1')
-    before = _digest(folder)
+    before = _contents(folder)
 
     read = read_committed(folder)
 
@@ -40,5 +36,5 @@ def test_a_line_in_flight_is_left_alone_and_the_committed_lines_are_read(tmp_pat
     assert [line.record["kind"] for line in read.value if isinstance(line, JournalLine)] == [
         "feed_health"
     ]
-    assert _digest(folder) == before
+    assert _contents(folder) == before
     assert not list(folder.glob("*.torn"))
