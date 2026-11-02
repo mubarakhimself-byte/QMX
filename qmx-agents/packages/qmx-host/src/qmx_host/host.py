@@ -160,12 +160,13 @@ from qmx_host.connect import KINDS, Connect, World, connect_router, placement
 from qmx_host.connect_logs import Logs, NeedsAdmin, OpenObserveProcess
 from qmx_host.disk import MIB, floor_bytes, free_bytes, give_way
 from qmx_host.door import PrincipalDoor, templates_router
-from qmx_host.first_start import enable_first_party, land_dummy
+from qmx_host.first_start import enable_first_party, land_dummy, land_port
 from qmx_host.jobs import Jobs, Stopped
 from qmx_host.keys import keys_router
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.process_record import STATE, recorded_host
+from qmx_host.publish_collection import publish_collection_router
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 
@@ -806,6 +807,19 @@ def land_first_unit(store: Store) -> None:
         print("library: the dummy unit waits in the Library as a draft", file=sys.stderr)
 
 
+def land_ported_dictionary(store: Store) -> None:
+    """The 239 ported dictionary entries wait in his Library as drafts in one collection from the
+    first start on (AD-114). A store that refuses the put, or a QMX that runs without its seed
+    folder, is named and the host starts anyway; the next start tries again."""
+    try:
+        landed = land_port(store)
+    except (LibraryRefused, OSError, ValueError) as refused:
+        print(f"library: the ported dictionary did not land: {refused}", file=sys.stderr)
+        return
+    if landed is not None:
+        print(f"library: the ported dictionary waits in the Library: {landed}", file=sys.stderr)
+
+
 def library_line(store: Store) -> DoctorLine:
     """The doctor's Library row: the store's health, its alarms and the line that stopped it."""
     state = store.state
@@ -929,6 +943,7 @@ async def serve(
                 register_checkers(store)
                 if not serving:
                     land_first_unit(store)
+                    land_ported_dictionary(store)
                 control.attach_library(store)
                 runtime = control.app_runtime()
                 runtime.attach_landers(
@@ -981,6 +996,7 @@ async def serve(
                         answering.append(templates_router(engine))
                         answering.append(backups_router(backups))
                         answering.append(maintenance_router(backups, triggers_of(control)))
+                        answering.append(publish_collection_router(control))
                         answering.extend(dialog_routers(connect, control))
                         answering.append(
                             market_router(door)
