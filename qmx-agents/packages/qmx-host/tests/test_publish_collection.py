@@ -164,7 +164,11 @@ def test_a_member_the_unit_checker_refuses_is_refused_as_his_single_publish_refu
         resolve(tmp_path / "QMX", create=True).home, secret_getter=lambda _s, _n: None
     )
     control.attach_library(store)
-    his_door = SimpleNamespace(principal=lambda: Caller("user"), workflow_runs_list=lambda _w: [])
+
+    def no_runs(_workflow: str) -> list[dict[str, JsonValue]]:
+        return []
+
+    his_door = SimpleNamespace(principal=lambda: Caller("user"), workflow_runs_list=no_runs)
     control.attach_workflow_engine(cast(WorkflowEngine, his_door))
     app = FastAPI()
     app.include_router(publish_collection_router(control))

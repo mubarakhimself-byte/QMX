@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import weakref
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import UTC, datetime
@@ -15,7 +16,6 @@ from typing import Any, Final, Literal, Protocol, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from qmf.core import Result, is_refusal
 from qml.protocol import HostedBot
-from qmn.doors.api import DoorRuntime
 from qmx_control.library import OPERATOR, Library
 from qmx_control.models import ControlError, LibraryInput
 from qmx_control.service import ControlService
@@ -28,6 +28,27 @@ type Document = dict[str, Any]
 QMB_APP: Final = "qmb"
 QMB_BACKTEST: Final = "jobs/backtest.py"
 """The tester and its `backtest` job every door starts: the default tester (`qmb.md` section 5)."""
+
+
+class NodeReads(Protocol):
+    """The host's node link as the core `node` rows see it (Part C AD-303)."""
+
+    def node_read(self, operation: str, arguments: dict[str, Any]) -> Any:
+        """The trading node's answer to one of its reads, or None when no node is set up yet."""
+        ...
+
+
+NODES: Final[weakref.WeakKeyDictionary[ControlService, NodeReads]] = weakref.WeakKeyDictionary()
+
+
+def attach_node(control: ControlService, reads: NodeReads | None) -> None:
+    """Give the `node` rows of `control`'s home the host's node link, or take it away. The
+    harness builds its own domain context over the same control service, so the host attaches
+    the link to that service rather than to a context."""
+    if reads is None:
+        NODES.pop(control, None)
+    else:
+        NODES[control] = reads
 
 
 class SeriesRow(Protocol):
@@ -174,7 +195,6 @@ class DomainContext:
     root: Path
     market: MarketPort | None = None
     bots: dict[str, HostedBot] = field(default_factory=dict[str, HostedBot])
-    node: DoorRuntime | None = None
     inline_bytes: int = 16_000
     library: Library = field(init=False)
     control: ControlService = field(init=False)
@@ -182,6 +202,11 @@ class DomainContext:
     def __post_init__(self) -> None:
         self.control = ControlService(self.root)
         self.library = self.control.library
+
+    @property
+    def node(self) -> NodeReads | None:
+        """The node link the host attached to this home's control service, if any."""
+        return NODES.get(self.control)
 
     def save(self, artifact: Artifact) -> dict[str, Any]:
         saved = self.control.library_save(
