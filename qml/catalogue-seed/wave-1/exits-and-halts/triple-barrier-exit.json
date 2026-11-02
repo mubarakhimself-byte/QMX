@@ -45,7 +45,7 @@
     "upper_width": {
       "measure": "atr_multiple",
       "default": "1",
-      "origin": "builder_chosen",
+      "origin": "placeholder",
       "range": {
         "min": "0",
         "max": "100",
@@ -55,7 +55,7 @@
     "lower_width": {
       "measure": "atr_multiple",
       "default": "1",
-      "origin": "builder_chosen",
+      "origin": "placeholder",
       "range": {
         "min": "0",
         "max": "100",
@@ -65,7 +65,7 @@
     "max_bars": {
       "measure": "bars",
       "default": "20",
-      "origin": "builder_chosen",
+      "origin": "placeholder",
       "range": {
         "min": "1",
         "max": "10000",
@@ -75,7 +75,7 @@
     "volatility_span": {
       "measure": "bars",
       "default": "100",
-      "origin": "builder_chosen",
+      "origin": "placeholder",
       "range": {
         "min": "2",
         "max": "10000",

@@ -56,7 +56,7 @@
     "margin": {
       "measure": "ratio",
       "default": "0",
-      "origin": "builder_chosen",
+      "origin": "placeholder",
       "range": {
         "min": "0",
         "max": "1",

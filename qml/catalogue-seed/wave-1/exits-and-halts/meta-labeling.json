@@ -40,7 +40,7 @@
     "take_above": {
       "measure": "ratio",
       "default": "0.5",
-      "origin": "builder_chosen",
+      "origin": "placeholder",
       "range": {
         "min": "0",
         "max": "1",
