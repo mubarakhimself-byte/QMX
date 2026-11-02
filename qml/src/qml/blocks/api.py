@@ -19,35 +19,53 @@ its slots explicitly with the same blocks.
 
 Values that leave a block through a port are exact ``Decimal`` values quantised to
 ``port_quantum_significant_digits``; a block may compute in floats inside.
+
+The risk socket (Part A AD-116, CONTRACTS.md section 4.3) is four slots: ``SizerInstance``,
+``ExitInstance``, ``HaltInstance`` and the host's ``CrossUnitHook``. Today's blocks in them are
+placeholders the risk session replaces; ``qml/tests/test_socket_contracts.py`` holds the
+contract every block in a slot must pass.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import ROUND_HALF_EVEN, Context, Decimal, InvalidOperation
 from enum import StrEnum
-from typing import Final, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Final, Protocol, cast, runtime_checkable
 
-from qml.unit.model import Measure, Side
+from qml.unit.model import Measure, Scope, Side
+
+if TYPE_CHECKING:
+    from qmf.risk.unit_intent import UnitIntent
+
+    from qml.protocol.unit import OwnPosition
 
 __all__ = [
+    "PASS_EVERY_ORDER",
     "PORT_QUANTUM_SIGNIFICANT_DIGITS",
     "Block",
+    "CrossUnitHook",
     "EntryFace",
     "EntryOrder",
+    "ExitInstance",
     "FaceProblem",
+    "Halt",
+    "HaltAction",
+    "HaltInstance",
     "Instance",
     "Mirroring",
     "Output",
     "OutputType",
     "Parameter",
     "Port",
+    "Refuse",
     "Settle",
     "Side",
     "Signal",
     "Size",
+    "SizerInstance",
     "parse_entry",
     "quantise",
 ]
@@ -127,6 +145,77 @@ class Block(Protocol):
     def make(
         self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
     ) -> Instance: ...
+
+
+class SizerInstance(Instance, Protocol):
+    """The sizer slot. The host passes ``equity``, ``entry_price`` and ``stop_price`` as exact
+    ``Decimal`` values, ``record`` as the market's ``InstrumentRecord``, and the sizer's own
+    parameters. The answer is a ``Size``: exact lots on the record's lot step, never more than
+    the lot rule (``qml.numbers.lots``) gives at his risk ceiling, or a skip with its reason."""
+
+    def update(self, evidence: Mapping[str, object]) -> Size | None: ...
+
+
+class ExitInstance(Instance, Protocol):
+    """An exit slot. A stop reads ``series`` bars and answers its price level; a target reads
+    ``entry_price`` and ``stop_price`` and answers its price level; a per-bar exit answers a
+    ``Signal`` that closes the position while it holds. Levels are exact ``Decimal`` prices."""
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal | Signal | None: ...
+
+
+class HaltAction(StrEnum):
+    NO_NEW_ENTRIES = "no_new_entries"
+    FLATTEN = "flatten"
+
+
+@dataclass(frozen=True, slots=True)
+class Halt:
+    """A halt that holds: what it does, at which scope, and why."""
+
+    action: HaltAction
+    scope: Scope
+    reason: str
+
+
+class HaltInstance(Instance, Protocol):
+    """A halt slot, read from unit and account statistics and his limits. ``None`` is the
+    contract's ``none``: nothing is halted. No host runs halts yet."""
+
+    def update(self, evidence: Mapping[str, object]) -> Halt | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class Refuse:
+    """The cross-unit hook's refusal of one order, with its reason."""
+
+    reason: str
+
+
+class CrossUnitHook(Protocol):
+    """What the host calls before every order, across every unit on the account. ``None``
+    passes the order. No host calls it yet."""
+
+    def before_order(
+        self,
+        intent: UnitIntent,
+        open_positions: Sequence[OwnPosition],
+        dispersion: Decimal | None,
+    ) -> Refuse | None: ...
+
+
+class _PassEveryOrder:
+    def before_order(
+        self,
+        intent: UnitIntent,
+        open_positions: Sequence[OwnPosition],
+        dispersion: Decimal | None,
+    ) -> Refuse | None:
+        return None
+
+
+PASS_EVERY_ORDER: Final[CrossUnitHook] = _PassEveryOrder()
+"""The cross-unit hook's placeholder, owned by the risk session: every order passes."""
 
 
 class OutputType(StrEnum):
