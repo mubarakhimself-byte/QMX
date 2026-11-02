@@ -267,6 +267,37 @@ def test_pasting_the_app_id_ticks_the_waiting_step_and_its_later_steps_run(host:
     assert again["needs"]["card"] == "sign-in"
 
 
+class Killed(Exception):
+    """The host dying in the middle of a step."""
+
+
+def test_a_kill_between_folding_the_secret_and_deleting_it_leaves_no_second_copy(
+    host: Host, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host.through()
+    host.keys.replace(APP_SECRET, STAGED_VALUE)
+    delete = host.keys.delete
+
+    def killed_once(name: str) -> None:
+        monkeypatch.setattr(host.keys, "delete", delete)
+        raise Killed(name)
+
+    monkeypatch.setattr(host.keys, "delete", killed_once)
+    with pytest.raises(Killed):
+        host.run({"fields": {"client_id": CLIENT_ID}})
+    host.restart()
+
+    ended = host.run()
+
+    assert host.keys.read(APP_SECRET) is None
+    assert host.keys_document() == {
+        "schema_version": "qmx.node.keys/1",
+        "ctrader": {"client_id": CLIENT_ID, "client_secret": STAGED_VALUE},
+    }
+    assert ended["needs"]["card"] == "sign-in"
+    assert STAGED_VALUE not in json.dumps(ended)
+
+
 def test_a_wrong_signature_publishes_nothing_and_a_restart_needs_no_new_one(host: Host) -> None:
     host.run()
     refused = host.run({"fields": {"signature": "0" * 64}})
@@ -307,6 +338,7 @@ def test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row(
         "client_id": CLIENT_ID,
         "client_secret": STAGED_VALUE,
     }
+    assert host.keys.read(APP_SECRET) is None
     assert host.status()["headline"] == "Ready, no units yet"
     listed = cast("list[dict[str, Any]]", host.apps.list())
     assert [row["definition"]["id"] for row in listed] == [NODE_APP]
