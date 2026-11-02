@@ -1,4 +1,4 @@
-"""session-loss-limit-halt@1: flatten and stop the unit for the session once it has lost ``limit`` R.
+"""session-loss-limit-halt@1: flatten and stop the unit for the session once it lost ``limit`` R.
 
 TradingView's ``strategy.risk.max_intraday_loss`` closes the open position and stops trading
 until the end of the session once the day's losses reach its threshold. Here the loss is the

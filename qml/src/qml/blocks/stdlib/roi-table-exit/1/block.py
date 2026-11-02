@@ -71,7 +71,7 @@ class _Block:
     ) -> _RoiTable:
         table = [(0, params["roi_0"])]
         table += [(int(params[f"bars_{k}"]), params[f"roi_{k}"]) for k in range(1, _STEPS + 1)]
-        if any(later[0] <= earlier[0] for earlier, later in zip(table, table[1:], strict=False)):
+        if any(table[k][0] <= table[k - 1][0] for k in range(1, len(table))):
             raise ValueError("roi-table-exit@1 needs 0 < bars_1 < bars_2 < bars_3")
         return _RoiTable(tuple(table), side)
 

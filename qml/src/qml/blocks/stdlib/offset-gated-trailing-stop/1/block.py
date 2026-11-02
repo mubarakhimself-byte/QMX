@@ -1,4 +1,4 @@
-"""offset-gated-trailing-stop@1: trail a fixed share below the best rate, once in profit by an offset.
+"""offset-gated-trailing-stop@1: trail a fixed share below the best rate once ``offset`` in profit.
 
 freqtrade's ``trailing_stop_positive`` with ``trailing_only_offset_is_reached = True`` keeps the
 configured stop until the rate reaches the entry plus ``trailing_stop_positive_offset``, then

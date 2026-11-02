@@ -70,12 +70,15 @@ class _Block:
     def make(
         self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
     ) -> _SteppedStop:
-        steps = tuple(
-            (params[f"trigger_{k}"], params[f"lock_{k}"]) for k in range(1, _STEPS + 1)
+        steps = tuple((params[f"trigger_{k}"], params[f"lock_{k}"]) for k in range(1, _STEPS + 1))
+        rising = all(
+            steps[k - 1][0] < steps[k][0] and steps[k - 1][1] < steps[k][1]
+            for k in range(1, len(steps))
         )
-        rising = all(a[0] < b[0] and a[1] < b[1] for a, b in zip(steps, steps[1:], strict=False))
         if not rising or any(lock >= trigger for trigger, lock in steps):
-            raise ValueError("stepped-profit-stop@1 needs rising steps, each lock below its trigger")
+            raise ValueError(
+                "stepped-profit-stop@1 needs rising steps, each lock below its trigger"
+            )
         return _SteppedStop(steps, side)
 
 

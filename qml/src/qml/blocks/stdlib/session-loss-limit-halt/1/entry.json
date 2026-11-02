@@ -67,6 +67,6 @@
     "rule": "constant",
     "observations": 0
   },
-  "fingerprint": "fp1:sha256:1fcbfd0c324f4c4be96d545ee25d7c388a1adf5b8f2fce7ef35794bdd021c2a5",
+  "fingerprint": "fp1:sha256:58e16a1ae91f87201e8f2cd83b1ca1ae6c6c35ea1b4ba3a4dc3bc3dc81117560",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }

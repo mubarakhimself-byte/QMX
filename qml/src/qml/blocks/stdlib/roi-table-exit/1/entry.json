@@ -10,7 +10,7 @@
   ],
   "same_word_as": [
     "target-reference@1",
-    "time-stop@1"
+    "exits.time-stop@1"
   ],
   "origin": "qml",
   "component_type": "exit",
@@ -147,6 +147,6 @@
     "rule": "constant",
     "observations": 2
   },
-  "fingerprint": "fp1:sha256:9dab0a7607ab526b552b1eda03bc812714e23d8eea4363fbe8a8a0ec8e50a7c8",
+  "fingerprint": "fp1:sha256:f1c087756a9f46753f88b0cb14c61ba66140fba879c865c9e0723881a68a08ff",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }

@@ -43,7 +43,9 @@ class _DailyLoss:
         result = equity / start - 1
         if result > -self._limit:
             return None
-        reason = f"the account is down {quantise(-result)} today, at or past the {self._limit} limit"
+        reason = (
+            f"the account is down {quantise(-result)} today, at or past the {self._limit} limit"
+        )
         return Halt(HaltAction.FLATTEN, Scope.ACCOUNT, reason)
 
     def export_state(self) -> Mapping[str, object]:
