@@ -23,7 +23,7 @@ import heapq
 import re
 import tempfile
 from collections import OrderedDict
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -75,6 +75,7 @@ __all__ = [
     "PinnedInstrumentPriceMetadata",
     "Print",
     "RecordedReplaySource",
+    "SliceHook",
     "Tick",
     "TypedPartitionRef",
     "VenueDay",
@@ -1029,9 +1030,10 @@ class Tick:
 
 @dataclass(frozen=True, slots=True)
 class BarPair:
-    """A bid bar and an ask bar of one stretch that opens at ``open_ms``."""
+    """A bid bar and an ask bar of one stretch that opens at ``open_ms`` and lasts ``seconds``."""
 
     open_ms: int
+    seconds: int
     bid: OHLC
     ask: OHLC
 
@@ -1047,14 +1049,15 @@ class Print:
 
 @dataclass(frozen=True, slots=True)
 class Bar:
-    """One bid-side bar that opens at ``open_ms``."""
+    """One bid-side bar that opens at ``open_ms`` and lasts ``seconds``."""
 
     open_ms: int
+    seconds: int
     price: OHLC
 
 
 Row = Tick | BarPair | Print | Bar
-_Timed = tuple[int, str, QuoteBar]
+_Timed = tuple[int, int, str, QuoteBar]
 _ROWS: Final[Mapping[Fidelity, tuple[type, ...]]] = MappingProxyType(
     {Fidelity.QUOTES: (Tick, BarPair), Fidelity.TRADES: (Print,), Fidelity.BARS: (Bar,)}
 )
@@ -1108,15 +1111,23 @@ class DataCard:
         spread = self.spread or Decimal(0)
         match row:
             case Tick(ms=ms, bid=bid, ask=ask):
-                return Ok(Piece(ms * _NS_PER_MS, _flat(bid), _flat(ask)))
-            case BarPair(open_ms=ms, bid=bid, ask=ask):
-                return Ok(Piece(ms * _NS_PER_MS, bid, ask))
+                return Ok(_instant(ms, _flat(bid), _flat(ask)))
+            case BarPair(open_ms=ms, seconds=seconds, bid=bid, ask=ask):
+                return Ok(_stretch(ms, seconds, bid, ask))
             case Print(ms=ms, price=price, aggressor=Aggressor.BUY):
-                return Ok(Piece(ms * _NS_PER_MS, _flat(price - spread), _flat(price)))
+                return Ok(_instant(ms, _flat(price - spread), _flat(price)))
             case Print(ms=ms, price=price):
-                return Ok(Piece(ms * _NS_PER_MS, _flat(price), _flat(price + spread)))
-            case Bar(open_ms=ms, price=price):
-                return Ok(Piece(ms * _NS_PER_MS, price, _shifted(price, spread)))
+                return Ok(_instant(ms, _flat(price), _flat(price + spread)))
+            case Bar(open_ms=ms, seconds=seconds, price=price):
+                return Ok(_stretch(ms, seconds, price, _shifted(price, spread)))
+
+
+def _instant(ms: int, bid: OHLC, ask: OHLC) -> Piece:
+    return Piece(ms * _NS_PER_MS, ms * _NS_PER_MS, bid, ask)
+
+
+def _stretch(open_ms: int, seconds: int, bid: OHLC, ask: OHLC) -> Piece:
+    return Piece(open_ms * _NS_PER_MS, (open_ms + seconds * 1_000) * _NS_PER_MS, bid, ask)
 
 
 def replay_feed(
@@ -1124,11 +1135,15 @@ def replay_feed(
     rows: Iterable[Row | TypedRefusal],
     builder: BarBuilder,
     *,
-    until_ns: int,
+    until_ns: int = 0,
 ) -> Iterator[QuoteBar | TypedRefusal]:
-    """One market's closed bars, built row by row; the data reaches ``until_ns``.
+    """One market's closed bars, built row by row.
 
-    The feed holds one forming bar, never the rows behind it. A refusal ends the feed.
+    The data reaches ``until_ns`` or the end of its last row, whichever is later. A file of
+    whole bars needs no ``until_ns``: its last bar closes with its last row. Ticks and prints
+    end where they start, so their last bar closes only when ``until_ns`` reaches its end,
+    which is the request's end. The feed holds one forming bar, never the rows behind it. A
+    refusal ends the feed.
     """
     for row in rows:
         if isinstance(row, TypedRefusal):
@@ -1171,14 +1186,14 @@ def _csv_bars(path: Path) -> Iterator[tuple[int, OHLC] | TypedRefusal]:
         )
 
 
-def read_bar_csv(path: Path) -> Iterator[Bar | TypedRefusal]:
-    """Stream one side's bar file, as the Dukascopy download template saves it."""
+def read_bar_csv(path: Path, seconds: int) -> Iterator[Bar | TypedRefusal]:
+    """Stream one side's file of ``seconds`` bars, as the Dukascopy download template saves it."""
     for item in _csv_bars(path):
-        yield item if isinstance(item, TypedRefusal) else Bar(*item)
+        yield item if isinstance(item, TypedRefusal) else Bar(item[0], seconds, item[1])
 
 
-def read_bar_pair_csv(bid: Path, ask: Path) -> Iterator[BarPair | TypedRefusal]:
-    """Stream a bid file and an ask file together, keeping the stretches both sides have.
+def read_bar_pair_csv(bid: Path, ask: Path, seconds: int) -> Iterator[BarPair | TypedRefusal]:
+    """Stream a bid file and an ask file of ``seconds`` bars, keeping stretches both sides have.
 
     Half a pair is never a quote, so a minute only one file holds is skipped.
     """
@@ -1189,7 +1204,7 @@ def read_bar_pair_csv(bid: Path, ask: Path) -> Iterator[BarPair | TypedRefusal]:
             yield cast("TypedRefusal", left if isinstance(left, TypedRefusal) else right)
             return
         if left[0] == right[0]:
-            yield BarPair(left[0], left[1], right[1])
+            yield BarPair(left[0], seconds, left[1], right[1])
             left, right = next(bids, None), next(asks, None)
         elif left[0] < right[0]:
             left = next(bids, None)
@@ -1224,41 +1239,52 @@ def window_size(compiled: CompiledUnit, lookback: int = 0) -> int:
     return max(1, compiled.warm_up.get(compiled.plan.stream, 0) + lookback)
 
 
+SliceHook = Callable[[Instant, Sequence[str]], None]
+"""Told each slice's instant and the markets whose bar closed there, before the slice runs."""
+
+
 def replay_windowed(
     handler: UnitSliceHandler,
     feeds: Mapping[str, Iterable[QuoteBar | TypedRefusal]],
     windows: Mapping[str, BarWindow],
+    *,
+    on_slice: SliceHook | None = None,
 ) -> Result[int]:
     """Drive ``handler`` one bar instant at a time over every market's feed; answer the steps.
 
     ``windows`` are the bars the handler was started with, so each bar enters its market's
-    window just before the slice that observes it.
+    window just before the slice that observes it. A slice lists its markets in ``feeds``'
+    order.
     """
     streams = StreamSet.try_create([DeclaredStream(market, market) for market in feeds])
     if is_refusal(streams):
         return streams
     failed: list[TypedRefusal] = []
 
-    def timed(market: str, feed: Iterable[QuoteBar | TypedRefusal]) -> Iterator[_Timed]:
+    def timed(order: int, market: str, feed: Iterable[QuoteBar | TypedRefusal]) -> Iterator[_Timed]:
         for item in feed:
             if isinstance(item, TypedRefusal):
                 failed.append(item)
                 return
-            yield item.knowable_at.value_ns, market, item
+            yield item.knowable_at.value_ns, order, market, item
 
-    merged = heapq.merge(*(timed(m, f) for m, f in feeds.items()), key=lambda t: (t[0], t[1]))
+    merged = heapq.merge(
+        *(timed(i, m, f) for i, (m, f) in enumerate(feeds.items())), key=lambda t: (t[0], t[1])
+    )
     frontier: Instant | None = None
     resting: tuple[RestingIntent, ...] = ()
     steps = 0
     for ns, group in groupby(merged, key=lambda t: t[0]):
-        observed: list[SliceObservation] = []
-        for _, market, bar in group:
+        markets: list[str] = []
+        for _, _, market, bar in group:
             windows[market].push(bar)
-            observed.append(SliceObservation(market, Instant(ns)))
+            markets.append(market)
         if failed:
             return failed[0]
+        if on_slice is not None:
+            on_slice(Instant(ns), markets)
         outcome = run_slice(
-            observed,
+            [SliceObservation(market, Instant(ns)) for market in markets],
             stream_set=streams.value,
             current_frontier=frontier,
             handler=handler,

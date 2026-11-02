@@ -37,7 +37,7 @@ def _minutes(count: int) -> Iterator[Bar]:
     for step in range(count):
         level = Decimal(108_000 + (step * 7) % 61 - 30).scaleb(-5)
         tick = Decimal("0.00001")
-        yield Bar(_START_MS + step * 60_000, OHLC(level, level + tick, level - tick, level))
+        yield Bar(_START_MS + step * 60_000, 60, OHLC(level, level + tick, level - tick, level))
 
 
 def _read(steps: int, window: MutableMapping[int, QuoteBar] | BarWindow) -> tuple[int, int]:

@@ -12,53 +12,56 @@ A run folder holds what the core gathered for one run:
 The runner compiles the document through QML's compiler, whose one block loader checks every
 pin's fingerprint, refuses a compiled fingerprint other than the request's before the first
 bar, hosts the unit with ``construct_unit``, and drives the shared unit handler through
-``run_slice`` one bar instant at a time. The result carries every trade in money and R, every
+``run_slice`` one bar instant at a time. The bars stream from the files through the windowed
+reader (B7): each market keeps the unit's derived warm-up in memory, never the run behind it,
+and its bars close in the venue's day. The result carries every trade in money and R, every
 fill against its sizer receipt, and the ``zero_trades`` label when nothing closed. Given a
-``RunJournal``, every row the run makes is also written to the unit journal, with each slice's
-instant and every hole in a market's bars (B9).
+``RunJournal``, every row the run makes is written to the unit journal on disk, with each
+slice's instant and every hole in a market's bars (B9).
 """
 
 from __future__ import annotations
 
-import csv
-import io
 import json
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final, cast
 
 from qmf.core.chrono import Instant
 from qmf.core.identity import AccountRole, VenueId
-from qmf.core.refusal import Ok, Result, is_refusal
+from qmf.core.refusal import Ok, Result, TypedRefusal, is_refusal
 from qmf.risk.paper import ExecutionTarget
 from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qml.numbers import InstrumentRecord, parse_record
-from qml.protocol.unit import (
-    OHLC,
-    MotionSwitch,
-    OwnPosition,
-    QuoteBar,
-    TraceLevel,
-    construct_unit,
-)
+from qml.protocol.unit import MotionSwitch, OwnPosition, QuoteBar, TraceLevel, construct_unit
 
 from qmb._refuse import invalid, policy
+from qmb.host.replay import (
+    BarWindow,
+    DataCard,
+    Fidelity,
+    VenueDay,
+    read_bar_pair_csv,
+    replay_feed,
+    replay_windowed,
+    window_size,
+)
 from qmb.host.unit_handler import (
     ExecutionPort,
     Fill,
     JournalRecord,
-    ListJournal,
     NextOpenExecution,
     UnitSliceHandler,
     UnitTrade,
 )
 from qmb.results.journal import RunJournal
-from qmb.runloop.loop import DeclaredStream, RestingIntent, SliceObservation, StreamSet, run_slice
+from qmb.runloop.bars import BarBuilder
 
 __all__ = [
     "ZERO_TRADES",
+    "BarFeed",
     "LoadedUnit",
     "UnitRunRequest",
     "UnitRunResult",
@@ -69,7 +72,11 @@ __all__ = [
 ]
 
 ZERO_TRADES: Final[str] = "zero_trades"
-_NS_PER_MS: Final[int] = 1_000_000
+_NS_PER_SEC: Final[int] = 1_000_000_000
+_QUOTES: Final[DataCard] = DataCard(Fidelity.QUOTES)
+
+BarFeed = Callable[[], Iterator[QuoteBar | TypedRefusal]]
+"""Opens one market's closed bars afresh, read from its files as the run asks for them."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +93,28 @@ class UnitRunRequest:
 
 @dataclass(frozen=True, slots=True)
 class LoadedUnit:
-    """A run folder's unit compiled, its block sources and its bars by market id."""
+    """A run folder's unit compiled, its block sources, and a bar feed per market id.
+
+    A feed opens the market's files each time it is called, so one load serves every run of it
+    (``motion = both`` runs the unit twice).
+    """
 
     compiled: CompiledUnit
     sources: Mapping[str, bytes]
     records: Mapping[str, InstrumentRecord]
-    bars: Mapping[str, tuple[QuoteBar, ...]]
+    feeds: Mapping[str, BarFeed]
+
+    def bars(self) -> Result[dict[str, tuple[QuoteBar, ...]]]:
+        """Every market's bars held whole, for a short recorded slice; a run streams them."""
+        held: dict[str, tuple[QuoteBar, ...]] = {}
+        for market, feed in self.feeds.items():
+            bars: list[QuoteBar] = []
+            for item in feed():
+                if isinstance(item, TypedRefusal):
+                    return item
+                bars.append(item)
+            held[market] = tuple(bars)
+        return Ok(held)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,7 +123,6 @@ class UnitRunResult:
     compiled_fingerprint: str
     trades: tuple[UnitTrade, ...]
     fills: tuple[Fill, ...]
-    journal: tuple[JournalRecord, ...]
     open_positions: Mapping[str, OwnPosition]
     net_money: Decimal
     total_r: Decimal
@@ -166,46 +188,38 @@ def _bar_seconds(stream: str) -> int | None:
             return None
 
 
-def _side(path: Path) -> Result[dict[int, OHLC]]:
-    if not path.is_file():
-        return invalid("bars", "a market's bars are a bid and an ask file", missing=str(path))
-    rows: dict[int, OHLC] = {}
-    try:
-        for row in csv.DictReader(io.StringIO(path.read_text(encoding="utf-8"))):
-            rows[int(row["timestamp"])] = OHLC(
-                Decimal(row["open"]),
-                Decimal(row["high"]),
-                Decimal(row["low"]),
-                Decimal(row["close"]),
-            )
-    except (KeyError, ValueError, InvalidOperation) as error:
-        return invalid(
-            "bars",
-            "a bar row is timestamp, open, high, low, close",
-            file=str(path),
-            error=str(error),
-        )
-    return Ok(rows)
+@dataclass(frozen=True, slots=True)
+class _BarFiles:
+    """One market's bid and ask files of the unit's stream, built into bars in the venue's day."""
+
+    bid: Path
+    ask: Path
+    seconds: int
+    day: VenueDay
+
+    def __call__(self) -> Iterator[QuoteBar | TypedRefusal]:
+        rows = read_bar_pair_csv(self.bid, self.ask, self.seconds)
+        return replay_feed(_QUOTES, rows, BarBuilder(self.day.span, self.seconds))
 
 
-def _bars(folder: Path, market: str, seconds: int) -> Result[tuple[QuoteBar, ...]]:
-    bid = _side(folder / "bars" / market / "bid.csv")
-    if is_refusal(bid):
-        return bid
-    ask = _side(folder / "bars" / market / "ask.csv")
-    if is_refusal(ask):
-        return ask
-    length_ns = seconds * 1_000_000_000
-    return Ok(
-        tuple(
-            QuoteBar(Instant(ms * _NS_PER_MS + length_ns), bid.value[ms], ask.value[ms])
-            for ms in sorted(bid.value.keys() & ask.value.keys())
-        )
-    )
+def _bar_files(
+    folder: Path, market: str, record: InstrumentRecord, seconds: int
+) -> Result[_BarFiles]:
+    bid, ask = folder / "bars" / market / "bid.csv", folder / "bars" / market / "ask.csv"
+    for path in (bid, ask):
+        if not path.is_file():
+            return invalid("bars", "a market's bars are a bid and an ask file", missing=str(path))
+    day = VenueDay.try_create(record.zone, record.day_boundary)
+    if is_refusal(day):
+        return day
+    builder = BarBuilder.try_create(day.value.span, seconds)
+    if is_refusal(builder):
+        return builder
+    return Ok(_BarFiles(bid, ask, seconds, day.value))
 
 
 def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
-    """Compile the folder's unit from its pinned blocks and read its markets' bars."""
+    """Compile the folder's unit from its pinned blocks and open a bar feed per market."""
     try:
         document: object = json.loads((folder / "unit.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
@@ -238,14 +252,14 @@ def load_unit_folder(folder: Path) -> Result[LoadedUnit]:
         return invalid(
             "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
         )
-    bars: dict[str, tuple[QuoteBar, ...]] = {}
-    for market, _ in compiled.plan.markets:
-        read = _bars(folder, market.market_id, seconds)
-        if is_refusal(read):
-            return read
-        bars[market.market_id] = read.value
+    feeds: dict[str, BarFeed] = {}
+    for market, record in compiled.plan.markets:
+        files = _bar_files(folder, market.market_id, record, seconds)
+        if is_refusal(files):
+            return files
+        feeds[market.market_id] = files.value
     unit_records = {m.market_id: record for m, record in compiled.plan.markets}
-    return Ok(LoadedUnit(compiled, sources, unit_records, bars))
+    return Ok(LoadedUnit(compiled, sources, unit_records, feeds))
 
 
 def run_unit(
@@ -270,7 +284,7 @@ def run_loaded(
     seeded: Mapping[str, OwnPosition] | None = None,
     journal: RunJournal | None = None,
 ) -> Result[UnitRunResult]:
-    """Trade a loaded unit; ``journal`` also receives every row, and is left open."""
+    """Trade a loaded unit; ``journal`` receives every row and is left open."""
     compiled = loaded.compiled
     if compiled.compiled_fingerprint.value != request.compiled_fingerprint:
         return policy(
@@ -279,7 +293,12 @@ def run_loaded(
             pinned=request.compiled_fingerprint,
             compiled=compiled.compiled_fingerprint.value,
         )
-    kept = ListJournal()
+    seconds = _bar_seconds(compiled.plan.stream)
+    if seconds is None:
+        return invalid(
+            "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
+        )
+    windows = {market: BarWindow(window_size(compiled)) for market in loaded.feeds}
     handler = UnitSliceHandler.start(
         lambda surfaces: construct_unit(
             compiled,
@@ -291,21 +310,21 @@ def run_loaded(
         ),
         stream=compiled.plan.stream,
         records=loaded.records,
-        bars={m: {b.knowable_at.value_ns: b for b in s} for m, s in loaded.bars.items()},
+        bars=windows,
         opened_by=compiled.compiled_fingerprint,
         equity=request.equity,
         execution=execution if execution is not None else NextOpenExecution(),
-        journal=kept if journal is None else _Both(kept, journal),
+        journal=_Unkept() if journal is None else journal,
         seeded=seeded,
     )
     if is_refusal(handler):
         return handler
-    seconds = _bar_seconds(compiled.plan.stream)
-    if seconds is None:
-        return invalid(
-            "stream", "QMB replays minute, hour or day bars", stream=compiled.plan.stream
-        )
-    driven = _drive(handler.value, loaded.bars, seconds * 1_000_000_000, journal)
+    driven = replay_windowed(
+        handler.value,
+        {market: feed() for market, feed in loaded.feeds.items()},
+        windows,
+        on_slice=None if journal is None else _JournalSlices(journal, seconds * _NS_PER_SEC),
+    )
     if is_refusal(driven):
         return driven
     trades = handler.value.trades
@@ -315,7 +334,6 @@ def run_loaded(
             compiled_fingerprint=compiled.compiled_fingerprint.value,
             trades=trades,
             fills=handler.value.fills,
-            journal=tuple(kept.records),
             open_positions=handler.value.open_positions,
             net_money=sum((t.money for t in trades), Decimal(0)),
             total_r=sum((t.r for t in trades), Decimal(0)),
@@ -324,49 +342,26 @@ def run_loaded(
     )
 
 
-@dataclass(frozen=True, slots=True)
-class _Both:
-    kept: ListJournal
-    run: RunJournal
+class _Unkept:
+    """The journal port of a run with no journal: its rows are not kept."""
 
     def append(self, record: JournalRecord, /) -> None:
-        self.kept.append(record)
-        self.run.append(record)
+        del record
 
 
-def _drive(
-    handler: UnitSliceHandler,
-    bars: Mapping[str, Sequence[QuoteBar]],
-    bar_ns: int,
-    journal: RunJournal | None,
-) -> Result[None]:
-    streams = StreamSet.try_create([DeclaredStream(market, market) for market in bars])
-    if is_refusal(streams):
-        return streams
-    at: dict[int, list[str]] = {}
-    for market, series in bars.items():
-        for bar in series:
-            at.setdefault(bar.knowable_at.value_ns, []).append(market)
-    frontier: Instant | None = None
-    resting: tuple[RestingIntent, ...] = ()
-    last: dict[str, int] = {}
-    for ns in sorted(at):
-        if journal is not None:
-            journal.at(Instant(ns))
-            for market in at[ns]:
-                before = last.get(market, ns)
-                if (missing := (ns - before) // bar_ns - 1) > 0:
-                    journal.data_gap(market, Instant(before), Instant(ns), missing)
-                last[market] = ns
-        observed = [SliceObservation(market, Instant(ns)) for market in at[ns]]
-        outcome = run_slice(
-            observed,
-            stream_set=streams.value,
-            current_frontier=frontier,
-            handler=handler,
-            resting=resting,
-        )
-        if is_refusal(outcome):
-            return outcome
-        frontier, resting = outcome.value.frontier, outcome.value.resting
-    return Ok(None)
+@dataclass
+class _JournalSlices:
+    """Sets each slice's instant on the journal and writes a gap row where a market's bars skip."""
+
+    journal: RunJournal
+    bar_ns: int
+    last: dict[str, int] = field(default_factory=dict[str, int])
+
+    def __call__(self, instant: Instant, markets: Sequence[str]) -> None:
+        self.journal.at(instant)
+        ns = instant.value_ns
+        for market in markets:
+            before = self.last.get(market, ns)
+            if (missing := (ns - before) // self.bar_ns - 1) > 0:
+                self.journal.data_gap(market, Instant(before), instant, missing)
+            self.last[market] = ns

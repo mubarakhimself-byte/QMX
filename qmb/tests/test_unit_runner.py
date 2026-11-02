@@ -147,10 +147,12 @@ def test_no_entry_fills_before_the_derived_warm_up(tmp_path: Path) -> None:
     loaded = load_unit_folder(folder)
     assert not isinstance(loaded, TypedRefusal)
     warm = loaded.value.compiled.warm_up["m15"]
+    bars = loaded.value.bars()
+    assert not isinstance(bars, TypedRefusal), bars
     result = _run(folder)
 
     for fill in (f for f in result.fills if f.kind is FillKind.ENTRY):
-        stamps = [b.knowable_at for b in loaded.value.bars[fill.market_id]]
+        stamps = [b.knowable_at for b in bars.value[fill.market_id]]
         assert stamps.index(fill.instant) >= warm
 
 

@@ -3,7 +3,7 @@
 The data is QML's synthetic EURUSD and XAUUSD month (``qml/tests/fixtures/slices``), whose
 ask is the bid plus a fixed spread. So the same month written as bid and ask bars (quotes),
 as prints with their aggressor side (trades), and as bid bars with the declared spread (bars)
-must trade the one golden list below, which is also the list the shipped runner trades over
+must trade the one golden list below, which is also the list the backtest runner trades over
 the same files.
 """
 
@@ -29,11 +29,11 @@ from qmb.host.replay import (
     replay_windowed,
     window_size,
 )
-from qmb.host.unit_handler import ListJournal, NextOpenExecution, UnitSliceHandler
-from qmb.host.unit_runner import load_unit_folder
+from qmb.host.unit_handler import ListJournal, NextOpenExecution, UnitSliceHandler, UnitTrade
+from qmb.host.unit_runner import load_unit_folder, run_unit
 from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
-from qml.protocol.unit import QuoteBar, construct_unit
+from qml.protocol.unit import OHLC, QuoteBar, construct_unit
 from test_unit_runner import make_run_folder, request
 
 _UNTIL_NS = 1_743_465_600_000_000_000
@@ -67,11 +67,11 @@ def _as_prints(rows: Iterable[Bar | TypedRefusal], spread: Decimal) -> Iterator[
 def _rows(fidelity: Fidelity, files: Path, spread: Decimal) -> Iterable[Row | TypedRefusal]:
     match fidelity:
         case Fidelity.QUOTES:
-            return read_bar_pair_csv(files / "bid.csv", files / "ask.csv")
+            return read_bar_pair_csv(files / "bid.csv", files / "ask.csv", 900)
         case Fidelity.TRADES:
-            return _as_prints(read_bar_csv(files / "bid.csv"), spread)
+            return _as_prints(read_bar_csv(files / "bid.csv", 900), spread)
         case Fidelity.BARS:
-            return read_bar_csv(files / "bid.csv")
+            return read_bar_csv(files / "bid.csv", 900)
 
 
 def _trade_list(tmp_path: Path, fidelity: Fidelity) -> list[tuple[object, ...]]:
@@ -114,6 +114,10 @@ def _trade_list(tmp_path: Path, fidelity: Fidelity) -> list[tuple[object, ...]]:
     steps = replay_windowed(handler.value, feeds, windows)
     assert not isinstance(steps, TypedRefusal), steps
     assert steps.value == 1920
+    return _listed(handler.value.trades)
+
+
+def _listed(trades: Iterable[UnitTrade]) -> list[tuple[object, ...]]:
     return [
         (
             t.market_id,
@@ -124,7 +128,7 @@ def _trade_list(tmp_path: Path, fidelity: Fidelity) -> list[tuple[object, ...]]:
             str(t.exit_price),
             str(t.money),
         )
-        for t in handler.value.trades
+        for t in trades
     ]
 
 
@@ -142,6 +146,15 @@ def test_bars_replay_one_side_with_the_declared_spread_into_the_golden_trades(
     tmp_path: Path,
 ) -> None:
     assert _trade_list(tmp_path, Fidelity.BARS) == _GOLDEN
+
+
+def test_the_backtest_runner_streams_the_files_into_the_golden_trades(tmp_path: Path) -> None:
+    folder = make_run_folder(tmp_path)
+
+    result = run_unit(folder, request(folder))
+
+    assert not isinstance(result, TypedRefusal), result
+    assert _listed(result.value.trades) == _GOLDEN
 
 
 def _daily_closes(zone: str, boundary: str, ticks: Iterable[Tick]) -> list[int]:
@@ -190,3 +203,55 @@ def test_a_week_of_ticks_closes_its_daily_bars_at_the_venues_day_boundary() -> N
         1741651200,
         1741737600,
     ]
+
+
+_FEB_4_MS = 1_738_627_200_000
+"""2025-02-04T00:00Z."""
+
+
+def _new_york_days() -> BarBuilder:
+    day = VenueDay.try_create("America/New_York", "17:00")
+    assert not isinstance(day, TypedRefusal), day
+    builder = BarBuilder.try_create(day.value.span, 86_400)
+    assert not isinstance(builder, TypedRefusal), builder
+    return builder.value
+
+
+def _bar(open_ms: int, seconds: int, close: str) -> Bar:
+    price = Decimal(close)
+    return Bar(open_ms, seconds, OHLC(price, price, price, price))
+
+
+def test_a_utc_daily_bar_that_crosses_the_venues_day_is_refused_not_closed_early() -> None:
+    card = DataCard.try_create("bars", Decimal(0))
+    assert not isinstance(card, TypedRefusal), card
+    closes = ("1.05", "1.15", "1.25")
+    utc_days = [_bar(_FEB_4_MS + day * 86_400_000, 86_400, c) for day, c in enumerate(closes)]
+
+    fed = list(replay_feed(card.value, utc_days, _new_york_days(), until_ns=0))
+
+    assert len(fed) == 1
+    refusal = fed[0]
+    assert isinstance(refusal, TypedRefusal), refusal
+    assert refusal.context == {
+        "field": "pieces",
+        "reason": "a source bar crosses the venue's day; use bars on the venue's clock or a "
+        "finer resolution",
+        "start_ns": 1_738_627_200_000_000_000,
+        "end_ns": 1_738_713_600_000_000_000,
+        "bar_end_ns": 1_738_706_400_000_000_000,
+    }
+
+
+def test_minute_bars_into_the_same_daily_builder_still_close_at_the_venues_boundary() -> None:
+    card = DataCard.try_create("bars", Decimal(0))
+    assert not isinstance(card, TypedRefusal), card
+    first_ms = _FEB_4_MS + (21 * 60 + 57) * 60_000  # 21:57Z, three minutes before 17:00 New York
+    minutes = [_bar(first_ms + i * 60_000, 60, f"1.0{i}") for i in range(6)]
+
+    fed = list(replay_feed(card.value, minutes, _new_york_days(), until_ns=0))
+
+    assert [(b.knowable_at.value_ns, str(b.bid.close)) for b in fed if isinstance(b, QuoteBar)] == [
+        (1_738_706_400_000_000_000, "1.02")
+    ]
+    assert len(fed) == 1

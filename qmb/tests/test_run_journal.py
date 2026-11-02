@@ -168,7 +168,7 @@ def test_the_window_closes_min_count_trades_on_each_market(
 def test_every_kind_lands_in_monthly_partitions_with_its_own_ids(
     journaled: tuple[UnitRunResult, JournalReport],
 ) -> None:
-    result, report = journaled
+    _, report = journaled
 
     assert report.rows == {
         "calibration": 6,
@@ -184,8 +184,9 @@ def test_every_kind_lands_in_monthly_partitions_with_its_own_ids(
         ("signal", "2025-03"),
     ]
     signals = _records(report, "signal")
-    decisions = [r for r in result.journal if isinstance(r, DecisionRow)]
-    assert sorted(str(s["record_id"]) for s in signals) == sorted(d.row_id for d in decisions)
+    ids = [str(s["record_id"]) for s in signals]
+    assert ids == [cast("dict[str, str]", s["body"])["row_id"] for s in signals]
+    assert len(set(ids)) == len(ids) == 407
     assert {s["world"] for s in signals} == {"backtest"}
     assert report.repeats == 0
     assert report.warnings == ()
@@ -287,7 +288,9 @@ def test_rsi_low_is_in_force_on_every_bar_and_follows_the_rsi(
         and not cast("dict[str, str]", r["body"])["detail"].startswith("time exit")
     ]
     levels = [cast("dict[str, str]", b["numbers_in_force"])["rsi_low"] for b in long_rows]
-    bars = len(loaded.bars["fx.eurusd"])
+    held = loaded.bars()
+    assert not isinstance(held, TypedRefusal), held
+    bars = len(held.value["fx.eurusd"])
 
     changed = sum(1 for before, after in pairwise(levels) if before != after)
 
