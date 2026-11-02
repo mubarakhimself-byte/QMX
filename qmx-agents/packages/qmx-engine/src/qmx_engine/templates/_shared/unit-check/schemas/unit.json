@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "required": ["unit"],
+  "properties": {
+    "unit": {"type": "object", "description": "the whole unit document, fixed"}
+  }
+}
