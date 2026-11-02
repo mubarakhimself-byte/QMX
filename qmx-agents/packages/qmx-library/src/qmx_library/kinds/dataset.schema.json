@@ -189,10 +189,8 @@
     "facts": [
       "source",
       "subject",
-      "kind",
       "source_clock",
       "seams",
-      "coverage",
       "quality"
     ],
     "thumbnail": "computed:coverage-strip",
