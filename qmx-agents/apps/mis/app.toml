@@ -1,0 +1,38 @@
+id = "mis"
+name = "MIS"
+version = "1.0.0"
+risk = "shows"
+kind = "headless"
+
+[entrypoints]
+mcp = "server.py"
+
+[capabilities]
+data_reads = ["market"]
+
+[breaker]
+restart = "backoff"
+
+[operations.configure]
+description = "Set the markets this MIS reads, each with its instrument snapshot, the packs that apply and the readings that run in shadow."
+approval = "domain_write"
+reversibility = "reversible"
+state = "instance"
+
+[operations.status]
+description = "The runner's state, each market's last computed time and the health of each of its readings."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.round]
+description = "Read every configured market now and publish each reading that has a newer input."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
+
+[operations.board]
+description = "The board: each market's reading words and their freshness, one entry per tier."
+approval = "domain_write"
+reversibility = "none"
+state = "instance"
