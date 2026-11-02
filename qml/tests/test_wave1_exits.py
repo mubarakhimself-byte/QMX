@@ -196,8 +196,13 @@ def test_an_exit_answers_only_for_a_position_it_is_given_and_forgets_it_after(
     assert (long.retained(), short.retained()) == (0, 0)
 
 
-_POSITION_HELD = ("profit-fraction-trailing-stop", "offset-gated-trailing-stop")
-_POSITION_HELD += ("stepped-profit-stop", "peak-holdings-giveback-exit", "roi-table-exit")
+_POSITION_HELD = (
+    "profit-fraction-trailing-stop",
+    "offset-gated-trailing-stop",
+    "stepped-profit-stop",
+    "peak-holdings-giveback-exit",
+    "roi-table-exit",
+)
 
 
 @pytest.mark.parametrize("entry_id", _POSITION_HELD)
