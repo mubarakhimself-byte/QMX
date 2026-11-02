@@ -2,12 +2,12 @@
 
 Its inputs are the match step's answer and the agent's `entries` (each `{for, entry, code}`) and
 `already_held`. Each draft is checked by QML's own checker, `compute_status`, with its code, and
-against the whole catalogue and the drafts that passed before it in this run by `corpus_problems`,
-so a name another entry or an earlier draft holds is refused. The status is the script's; an agent never types one. A draft that passes lands as one `entry-draft`
-artifact on the run's own ref with its computed status and fingerprint: a governed draft, never
-published here. A draft that fails lands nothing and is listed under `refused` with every
-problem. A sentence the agent says an entry already holds is listed under `already_held`; its
-append request stands.
+by `corpus_problems` against the whole catalogue and the drafts that passed before it in this run,
+so a name another entry or an earlier draft holds is refused. The status is the script's; an
+agent never types one. A draft that passes lands as one `entry-draft` artifact on the run's own
+ref with its computed status and fingerprint: a governed draft, never published here. A draft
+that fails lands nothing and is listed under `refused` with every problem. A sentence the agent
+says an entry already holds is listed under `already_held`; its append request stands.
 """
 
 import json
