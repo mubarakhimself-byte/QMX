@@ -1515,6 +1515,7 @@ class Runtime:
             boot_epoch_id=boot_epoch_id,
             clock_ns=clock_ns,
             free_bytes=lambda: shutil.disk_usage(context.data).free,
+            on_alarm=self.alarms.append,
         )
         self._paper_journal: JournalWriter | None = None
 
@@ -1736,7 +1737,8 @@ class Runtime:
     def risk_stop(self, deployment_id: str, market_id: str, rule: str, reason: str) -> str | None:
         """A risk rule stops a hosted unit on one market (standing order 7): one ``lifecycle``
         event by ``risk_rule``, and no entry there until his resume. Answers its event id, or
-        None when the deployment is not trading or the row could not be written."""
+        None when the deployment is not trading or the row could not be written; the stop holds
+        in the second case, with an alarm."""
         hosted = self.hosted.get(deployment_id)
         unit = None if hosted is None else hosted.unit
         if hosted is None or unit is None or market_id not in unit.records:

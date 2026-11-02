@@ -9,7 +9,7 @@ is kept back. A risk stop is the one automatic move in trading: one ``lifecycle`
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import groupby
@@ -459,6 +459,7 @@ def test_a_health_stop_clears_only_after_its_cause_stays_gone_its_named_time(
     now = [LIVE_FROM]
     offset: list[int | None] = [600_000_000]
     free = [50 * 1024**3]
+    alarms: list[Mapping[str, object]] = []
     scope = WriterScope(JournalStream.NODE, "a4dqobyh", JournalWorld.DEMO, "pc", "node", "0.1.0")
     journal = JournalWriter.open(tmp_path, scope, clock=lambda: now[0], boot_epoch_id="e1")
     assert not isinstance(journal, TypedRefusal), journal
@@ -470,6 +471,7 @@ def test_a_health_stop_clears_only_after_its_cause_stays_gone_its_named_time(
         boot_epoch_id="e1",
         clock_ns=lambda: now[0],
         free_bytes=lambda: free[0],
+        on_alarm=alarms.append,
         clock_offset_ns=lambda: offset[0],
     )
     seen: list[list[str]] = []

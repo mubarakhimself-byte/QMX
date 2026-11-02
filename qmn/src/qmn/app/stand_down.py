@@ -260,7 +260,8 @@ class StandDowns:
     """The stand-downs this node holds, journalled as they start and clear.
 
     ``free_bytes`` and ``clock_offset_ns`` are the node's probes: the volume's free space and
-    the clock's offset from its time source, None while no probe has read one.
+    the clock's offset from its time source, None while no probe has read one. ``on_alarm``
+    takes the alarm a risk stop raises when its ``lifecycle`` row cannot be written.
     """
 
     def __init__(
@@ -273,6 +274,7 @@ class StandDowns:
         boot_epoch_id: str,
         clock_ns: Callable[[], int],
         free_bytes: Callable[[], int],
+        on_alarm: Callable[[Mapping[str, object]], None],
         clock_offset_ns: Callable[[], int | None] = lambda: None,
     ) -> None:
         self.journal = journal
@@ -282,6 +284,7 @@ class StandDowns:
         self.boot_epoch_id = boot_epoch_id
         self.clock_ns = clock_ns
         self.free_bytes = free_bytes
+        self.on_alarm = on_alarm
         self.clock_offset_ns = clock_offset_ns
         self.held: dict[tuple[Kind, str], Held] = {}
         self._lifecycle: dict[tuple[str, JournalWorld], JournalWriter] = {}
@@ -365,8 +368,9 @@ class StandDowns:
     ) -> str | None:
         """A risk rule stops ``subject``: one ``lifecycle`` row, ``by: risk_rule``, and the
         unit's entries on that market held until his resume. A rule firing again while the
-        stop holds lands nothing. Answers the stop's event id, or None when its row could not
-        be written."""
+        stop holds lands nothing. The hold starts even when the row cannot be written, with
+        the ``risk_stop_unrecorded`` alarm. Answers the stop's event id, or None when its row
+        did not land."""
         scope = f"unit:{subject.deployment_id}:{subject.market_id}"
         held = self.held.get((Kind.RISK_STOP, scope))
         if held is not None:
@@ -375,8 +379,7 @@ class StandDowns:
         event_id = _event_id("risk_stop", subject.deployment_id, subject.market_id, rule, str(now))
         body = self._move(subject, event_id, subject.lane, "stopped", now, reason=reason)
         body["by"] = {"kind": "risk_rule", "principal": rule}
-        if not self._land(subject, body):
-            return None
+        landed = self._land(subject, body)
         self._start(
             Held(
                 Kind.RISK_STOP,
@@ -385,14 +388,28 @@ class StandDowns:
                 f"{rule}: {reason}",
                 frozenset({"all", *covers}),
                 subject=subject,
-                event_id=event_id,
+                event_id=event_id if landed else None,
             )
         )
+        if not landed:
+            self.on_alarm(
+                {
+                    "alarm": "risk_stop_unrecorded",
+                    "deployment_id": subject.deployment_id,
+                    "market_id": subject.market_id,
+                    "rule": rule,
+                    "action": "no_new_entries",
+                    "why": "the stop's lifecycle row could not be written, so only the node shows"
+                    " it",
+                }
+            )
+            return None
         return event_id
 
     def resumes(self, changes: Sequence[Change]) -> None:
         """His ``resume`` clears each stand-down waiting for him that it covers and that
-        started before he issued it. A cleared risk stop lands his move back to its lane. The
+        started before he issued it and before it reached the node, since ``issued_at`` may
+        run ahead of the node's clock. A cleared risk stop lands his move back to its lane. The
         spec-change card's click reaches the node as his resume at the instrument."""
         for change in changes:
             if change.kind != "resume" or change.outcome is not Outcome.ACCEPTED:
@@ -400,7 +417,8 @@ class StandDowns:
             scope = str(change.args.get("scope"))
             for held in list(self.held.values()):
                 waits = held.row.clears is not Clears.ITSELF
-                if waits and scope in held.covers and change.issued_at_ns > held.since_ns:
+                after = min(change.issued_at_ns, change.arrived_at_ns) > held.since_ns
+                if waits and scope in held.covers and after:
                     self._resumed(held, change)
 
     def _resumed(self, held: Held, change: Change) -> None:
@@ -449,8 +467,10 @@ class StandDowns:
         return not is_refusal(writer.append("lifecycle", body, facts))
 
     def _writer(self, subject: Subject) -> JournalWriter | None:
-        """The node's lifecycle stream of one unit in one world: its own partition, which no
-        other writer on this machine holds (the host's is role ``host``)."""
+        """The node's lifecycle stream of one unit in one world. The unit's run journal opens
+        the same scope for its other kinds, so both writers are ``node@<machine>`` with their
+        own sequence counters; each kind is its own series, so neither holds the other's
+        partition. The host's lifecycle stream is role ``host``."""
         key = (subject.unit_id, subject.world)
         found = self._lifecycle.get(key)
         if found is None:
