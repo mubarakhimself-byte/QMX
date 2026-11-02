@@ -77,11 +77,12 @@ def _binding(
     )
 
 
-def test_venue_client_kind_enum_is_exactly_three_members() -> None:
+def test_venue_client_kind_enum_is_exactly_four_members() -> None:
     assert tuple(member.value for member in VenueClientKind) == (
         "ctrader",
         "replay",
         "conformance",
+        "ccxt",
     )
 
 
