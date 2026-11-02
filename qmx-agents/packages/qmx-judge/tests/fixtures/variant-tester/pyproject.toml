@@ -1,0 +1,32 @@
+[project]
+name = "qmb-cents-down"
+version = "1.0.0"
+description = "A second tester for the conformance tests: QMB's runner with money cut down to the cent"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "fastmcp==4.0.11",
+    "qmb",
+    "qml",
+    "qmf-core",
+    "qmf-data",
+    "qmf-indicators",
+    "qmf-registry",
+    "qmf-risk",
+    "qmf-structure",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = []
+
+[tool.uv.sources]
+qmb = { path = "../../../../../../qmb", editable = true }
+qml = { path = "../../../../../../qml", editable = true }
+qmf-core = { path = "../../../../../../packages/qmf-core", editable = true }
+qmf-data = { path = "../../../../../../packages/qmf-data", editable = true }
+qmf-indicators = { path = "../../../../../../packages/qmf-indicators", editable = true }
+qmf-registry = { path = "../../../../../../packages/qmf-registry", editable = true }
+qmf-risk = { path = "../../../../../../packages/qmf-risk", editable = true }
+qmf-structure = { path = "../../../../../../packages/qmf-structure", editable = true }
