@@ -391,23 +391,29 @@ def test_0_037_lots_trades_0_03_with_the_residue_journaled_and_0_004_skips(
     ]
 
 
-def test_a_wednesday_rollover_carries_three_nights_of_swap() -> None:
+@pytest.mark.parametrize(
+    ("zone", "boundary"), [("America/New_York", "17:00"), ("Etc/GMT-2", "00:00")]
+)
+def test_a_wednesday_rollover_carries_three_nights_of_swap(zone: str, boundary: str) -> None:
     eurusd = _fixture_record("eurusd.json") | {
-        "swap": {"long": "-6.5", "short": "1.2", "triple_day": "wednesday"}
+        "zone": zone,
+        "day_boundary": boundary,
+        "swap": {"long": "-6.5", "short": "1.2", "triple_day": "wednesday"},
     }
 
     handler = _drive(
         {_FX: eurusd},
-        {_FX: _flat("2025-01-07T09:30", "2025-01-09T10:30", "1.08500", "0.00010")},
+        {_FX: _flat("2025-01-07T09:30", "2025-01-10T10:30", "1.08500", "0.00010")},
         {
             _close_of("2025-01-07T09:30"): [_entry(_FX, "EURUSD", "0.10", "1.00000", "row-1")],
-            _close_of("2025-01-09T09:30"): [_exit("EURUSD")],
+            _close_of("2025-01-10T09:30"): [_exit("EURUSD")],
         },
     )
 
     assert _cash(handler) == [
         (CashKind.SWAP, _ns("2025-01-07T22:00"), Decimal("-0.65"), "1 night at -6.5"),
         (CashKind.SWAP, _ns("2025-01-08T22:00"), Decimal("-1.95"), "3 nights at -6.5"),
+        (CashKind.SWAP, _ns("2025-01-09T22:00"), Decimal("-0.65"), "1 night at -6.5"),
     ]
     assert handler.trades[0].money == Decimal("-1.00")
 

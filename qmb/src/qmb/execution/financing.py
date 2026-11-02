@@ -1177,11 +1177,13 @@ class CarrySchedule:
         events: list[CashEvent] = []
         rollover = self.day.span(after)[1]
         if rollover <= upto:
-            weekday = (_EPOCH + timedelta(microseconds=rollover // _NS_PER_US)).astimezone(
+            # The night is named by the venue day the boundary closes, so a day ending at 00:00
+            # names the day before the boundary's own date.
+            closed = (_EPOCH + timedelta(microseconds=(rollover - 1) // _NS_PER_US)).astimezone(
                 self.day.zone
             )
             for night in self.nightly:
-                nights = 3 if night.triple_day == weekday.weekday() else 1
+                nights = 3 if night.triple_day == closed.weekday() else 1
                 rate = night.long if long else night.short
                 money = (
                     rate * position.quantity * nights
