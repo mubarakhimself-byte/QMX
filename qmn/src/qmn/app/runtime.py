@@ -95,8 +95,10 @@ from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.protocol.unit import HostedUnit, OwnPosition, QuoteBar, Surface, construct_unit
 from qml.unit.model import Side
 
+from qmn.app.attribution import OrderState, ReadBack, VenueOrder, VenuePosition
 from qmn.app.feed_keeper import Bar, FeedKeeper
 from qmn.app.operations import Answer, Context, Target, refused
+from qmn.app.reconciler import Reconciler
 from qmn.app.store import Json
 from qmn.journal_dispatch import enact_command
 from qmn.loop.accumulator import RecordingAccumulator
@@ -130,6 +132,7 @@ __all__ = [
     "Runtime",
     "Sent",
     "Ticket",
+    "Unknown",
     "Unprotected",
     "Venue",
     "VenueAccount",
@@ -390,6 +393,10 @@ class VenueAccount(Protocol):
 
     def equity(self) -> Decimal: ...
 
+    def read_back(self) -> Result[ReadBack]:
+        """Every order and position the venue holds on the account, as reconcile reads them."""
+        ...
+
 
 @dataclass
 class _Held:
@@ -398,6 +405,7 @@ class _Held:
     quantity: Decimal
     entry: Decimal
     stop: Decimal | None
+    label: str | None = None
 
 
 @dataclass
@@ -408,14 +416,18 @@ class ConformanceAccount:
     included. Beside it this keeps what a broker keeps: positions, the stop each one holds as
     the order's distance from its fill, and the broker firing that stop on the feed's bars.
     ``received`` is every ticket that reached the venue. With ``holds_stops`` false the venue
-    answers but never holds a stop, which the protection escalation is tested against.
+    answers but never holds a stop, which the protection escalation is tested against. The next
+    ``lose_answers`` entries are carried out and their answers lost on the way back, as when the
+    network cuts after a send (TN-01).
     """
 
     double: ConformanceDouble
     venue_account: Account
     starting_equity: Decimal
     holds_stops: bool = True
+    lose_answers: int = 0
     received: list[Ticket] = field(default_factory=list[Ticket])
+    _orders: list[VenueOrder] = field(default_factory=list[VenueOrder])
     _positions: dict[str, _Held] = field(default_factory=dict[str, _Held])
     _closed: dict[str, VenueClose] = field(default_factory=dict[str, VenueClose])
     _quotes: dict[str, tuple[Decimal, Decimal]] = field(
@@ -483,9 +495,16 @@ class ConformanceAccount:
             if distance is not None and self.holds_stops:
                 gap = Decimal(distance.value).scaleb(-distance.scale)
                 stop = price - gap if long else price + gap
-            self._positions[ticket.tags.client_order_id] = _Held(
-                ticket.market_id, ticket.side, ticket.quantity, price, stop
+            name, label = ticket.tags.client_order_id, ticket.tags.label
+            self._positions[name] = _Held(
+                ticket.market_id, ticket.side, ticket.quantity, price, stop, label
             )
+            self._orders.append(
+                VenueOrder(name, label, ticket.market_id, OrderState.FILLED, name, price)
+            )
+            if self.lose_answers > 0:
+                self.lose_answers -= 1
+                return Ok(Sent(SubmissionOutcome.UNKNOWN))
             return Ok(Sent(result.outcome, price))
         position = ticket.position
         if position is None or position not in self._positions:
@@ -513,6 +532,35 @@ class ConformanceAccount:
         """The account's balance as the venue states it. The conformance venue keeps its
         starting balance; it models fills and stops, not money."""
         return self.starting_equity
+
+    def read_back(self) -> Result[ReadBack]:
+        positions = tuple(
+            VenuePosition(
+                name,
+                held.label,
+                held.market_id,
+                held.side.value,
+                held.quantity,
+                held.entry,
+                held.stop,
+            )
+            for name, held in self._positions.items()
+        )
+        return Ok(ReadBack(tuple(self._orders), positions))
+
+    def opened_elsewhere(self, order: VenueOrder, position: VenuePosition | None = None) -> None:
+        """An order, and the position it opened, that reached the account from somewhere other
+        than this node: his own trade, another node's, or a twin's."""
+        self._orders.append(order)
+        if position is not None:
+            self._positions[position.position] = _Held(
+                position.market_id,
+                Side(position.side),
+                position.quantity,
+                position.entry_price,
+                position.stop,
+                position.label,
+            )
 
     def positions(self) -> dict[str, tuple[str, str, Decimal, Decimal | None]]:
         """Every open position: market, side, quantity and the stop the venue holds."""
@@ -549,6 +597,14 @@ class Unprotected(Blocked):
     the venue, and closed by the node until the venue shows it closed."""
 
     price: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class Unknown(Blocked):
+    """The venue's answer to an entry was lost: the order may or may not be at the venue. It
+    stays resting for the unit until the reconciler reads the venue (TN-01)."""
+
+    client_order_id: str
 
 
 def ulid(at_ms: int, seed: str) -> str:
@@ -616,8 +672,9 @@ class OrderPath:
     confirm_ns: int = PROTECT_CONFIRM_NS
     retry_max: int = PROTECT_RETRY_MAX
     close_refusals_alarm: int = CLOSE_REFUSALS_ALARM
-    unknown: bool = False
-    """An earlier order's outcome is unknown: no entry until it resolves (TN-01, C-12b)."""
+    unknown: dict[str, str] = field(default_factory=dict[str, str])
+    """Each entry whose outcome is unknown, by client order id, with its market: no entry on
+    that market until the reconciler resolves it (TN-01). Nothing is ever resent."""
     unprotected: set[str] = field(default_factory=set[str])
     """Positions the venue filled without holding their stop, which the node closes on every
     tick until the venue shows them closed."""
@@ -677,15 +734,15 @@ class OrderPath:
     ) -> Placed | Blocked:
         if blocked_by is not None:
             return Blocked(blocked_by)
-        if self.unknown:
-            return Blocked(
-                "venue answer unknown for an earlier order, so no entry until it resolves"
-            )
         kind = cast("Mapping[str, object]", wire["order"]).get("type")
         if kind != "market":
             return Blocked(f"the venue cannot take a {kind} entry from this node yet")
         side = Side(str(wire["direction"]))
         market = str(wire["market_id"])
+        if market in self.unknown.values():
+            return Blocked(
+                "venue answer unknown for an earlier order, so no entry until it resolves"
+            )
         stop = Decimal(str(cast("Mapping[str, object]", wire["protection"])["stop"]))
         quote = self.venue.feed.quote(market)
         reference = (
@@ -777,9 +834,9 @@ class OrderPath:
                     "the venue cannot hold this order's stop, so the node closes it", sent.price
                 )
             case SubmissionOutcome.UNKNOWN:
-                self.unknown = True
+                self.unknown[client_order_id] = ticket.market_id
                 self._note(client_order_id, "unknown", {"step": "unknown"})
-                return Blocked("venue answer unknown for this order")
+                return Unknown("venue answer unknown for this order", client_order_id)
             case _:
                 self._note(
                     client_order_id, "rejected", {"step": "rejected", "code": sent.code or ""}
@@ -1051,6 +1108,8 @@ class NodeUnit:
         """Each entry the venue filled, by client order id: market, side and fill price, its
         stop held or not."""
         self._orders: dict[str, Placed | Blocked] = {}
+        self._unknown: dict[str, tuple[str, str, Side]] = {}
+        """Each entry whose outcome is unknown, by client order id: its intent, market, side."""
         self._done: set[str] = set()
         self._execution = _Execution(self)
         self._port = _Journal(self, journal)
@@ -1128,6 +1187,8 @@ class NodeUnit:
             return Ok(True)
         placed = self._orders.get(intent.intent_id)
         wire = cast("Mapping[str, object]", intent.order)
+        if isinstance(placed, Unknown):
+            return Ok(False)
         if not isinstance(placed, Placed):
             reason = "warming up" if placed is None else placed.reason
             if wire.get("intent_family") == "entry":
@@ -1183,8 +1244,34 @@ class NodeUnit:
             )
             if isinstance(placed, Placed | Unprotected):
                 self.placed[named] = (market, Side(str(wire["direction"])), placed.price)
+            if isinstance(placed, Unknown):
+                self._unknown[named] = (intent.intent_id, market, Side(str(wire["direction"])))
             return placed
         return self._exit(intent.stream_id, wire)
+
+    def resolve(self, client_order_id: str, price: Decimal | None, *, protected: bool) -> bool:
+        """Settle an entry whose outcome was unknown, from what the reconciler read at the
+        venue: filled at ``price``, so the next closed bar books the fill, or never taken. A
+        fill whose stop the venue does not hold is closed by the node, as any unprotected one."""
+        pending = self._unknown.pop(client_order_id, None)
+        if pending is None:
+            return False
+        intent_id, market, side = pending
+        self.orders.unknown.pop(client_order_id, None)
+        if price is None:
+            self._orders[intent_id] = Blocked(
+                "the venue never took the order, so it is not sent again"
+            )
+            return True
+        self.placed[client_order_id] = (market, side, price)
+        if protected:
+            self._orders[intent_id] = Placed(price)
+        else:
+            self.orders.unprotected.add(client_order_id)
+            self._orders[intent_id] = Unprotected(
+                "the venue does not hold this order's stop", price
+            )
+        return True
 
     def _exit(self, market: str, wire: Mapping[str, object]) -> Placed | Blocked:
         parsed = parse_unit_intent(wire)
@@ -1419,6 +1506,9 @@ class Runtime:
         self._shown: dict[str, str] = {}
         self._target = Target()
         self.paused_by_black = False
+        self.reconciler = Reconciler(
+            journal, context.journal_root, context.standing().tag, clock_ns, self.alarms.append
+        )
 
     # --- the thread ---
 
@@ -1459,11 +1549,24 @@ class Runtime:
             return
         self._protect(self._kill(target))
         self._deployments(target)
-        for venue in self.venues.values():
+        for account, venue in self.venues.items():
             bars = venue.feed.pump()
+            self._reconcile(account, venue)
             if bars:
                 self._drive(venue, bars)
         self._observe()
+
+    def _reconcile(self, account: str, venue: Venue) -> None:
+        """Reconcile once per venue session and after an UNKNOWN, before any bar is driven."""
+        path = self._paths.get(account)
+        unknown = {} if path is None else path.unknown
+        if venue.feed.ready and self.reconciler.due(account, venue.feed.reconnects, unknown):
+            units = [
+                hosted.unit
+                for hosted in self.hosted.values()
+                if hosted.unit is not None and hosted.deployment.account_id == account
+            ]
+            self.reconciler.run(account, venue.feed.reconnects, venue.client, unknown, units)
 
     def _path(self, account: str) -> OrderPath | None:
         venue = self.venues.get(account)
@@ -1591,7 +1694,7 @@ class Runtime:
             if venue is None or not venue.feed.ready:
                 reason = "no session" if venue is None else venue.feed.reason
                 return f"venue not ready: {reason}"
-            return None
+            return self.reconciler.holds(hosted.deployment.account_id, venue.feed.reconnects)
 
         return check
 
@@ -1793,6 +1896,7 @@ class Runtime:
             )
             if unit is not None:
                 positions.extend(unit.positions())
+        positions.extend(self.reconciler.shown())
         kill = {
             scope: PLACEHOLDER_KILL_EFFECTS[level].document()
             for scope, level in self.applied.items()
