@@ -5,6 +5,7 @@ The square root of the mean of ``ln(high / low) ** 2 / (4 ln 2)``, which reads t
 instead of its close. Per bar and not annualised; missing for a bar with a price of zero or
 below. The first value comes at update ``window``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
@@ -12,7 +13,6 @@ import math
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -22,8 +22,7 @@ def _bar(evidence: Mapping[str, object]) -> tuple[float, float, float, float] | 
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in ("open", "high", "low", "close")]
+    found = [bar.get(name) for name in ("open", "high", "low", "close")]
     prices = [float(v) for v in found if isinstance(v, Decimal) and v > 0]
     if len(prices) != len(found):
         return None

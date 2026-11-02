@@ -121,7 +121,7 @@
       }
     }
   },
-  "fingerprint": "fp1:sha256:a47addc9144c53132acd12bfe7d8d0db13f65fddd49f401ee0a61cf69e3d494c",
+  "fingerprint": "fp1:sha256:83298f0377e5b260d8106642799a1438eb9fe0db07952b734218852e08a3a9c2",
   "golden": {
     "reference": "the formula of the cited page, numpy 2.5.4",
     "cases": "qml/tests/golden/statistics/reference.json"

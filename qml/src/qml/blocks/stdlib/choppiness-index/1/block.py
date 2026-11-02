@@ -5,6 +5,7 @@ LEAN's ChoppinessIndex computes it: the first bar's true range is its high less 
 window with no range at all reads 100. Near 100 when the bars overlap, lower when they travel.
 The first value comes at update ``period``.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
@@ -12,7 +13,6 @@ import math
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -22,8 +22,7 @@ def _bar(evidence: Mapping[str, object]) -> tuple[float, float, float] | None:
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    fields = cast("Mapping[str, object]", bar)
-    found = [fields.get(name) for name in ("high", "low", "close")]
+    found = [bar.get(name) for name in ("high", "low", "close")]
     prices = [float(v) for v in found if isinstance(v, Decimal)]
     if len(prices) != len(found):
         return None
