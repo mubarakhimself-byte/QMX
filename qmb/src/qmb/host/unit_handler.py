@@ -5,14 +5,20 @@ node's runtime both drive a unit through this file. The host builds the ``Hosted
 read surfaces this handler serves (``UnitSliceHandler.start`` takes the host's own
 ``construct_unit`` or resume call), and injects the execution and journal ports.
 
-Per slice, in ``run_slice``'s order: a resting entry or exit fills against the new bar
-(``execute_resting``); the bar becomes readable and a held position's stop or target is checked
-against it (``update_closed_data``); then the unit steps once for the slice's instant and its
-intents rest for the next bar (``mint_intents``). A fill's quantity is the sizer receipt's
-rounded down to the market's lot step; below the minimum lot the entry is skipped with its
-reason. The handler closes only positions this compiled fingerprint opened. An exit acts by its
-kind: ``close_full`` closes the position, ``close_partial`` closes its lot-rounded quantity and
-keeps the rest held, and ``amend_protection`` moves the held stop and target, tightening only.
+Per slice, in ``run_slice``'s order: a held position's scheduled cash events since its market's
+last bar are booked (``scheduled_position_event``); a resting entry or exit fills against the
+new bar (``execute_resting``); the bar becomes readable and a held position's stop, target or
+liquidation level is checked against it (``update_closed_data``); then the unit steps once for
+the slice's instant and its intents rest for the next bar (``mint_intents``). A fill's quantity
+is the sizer receipt's rounded down to the market's lot step; below the minimum lot the entry is
+skipped with its reason. The handler closes only positions this compiled fingerprint opened. An
+exit acts by its kind: ``close_full`` closes the position, ``close_partial`` closes its
+lot-rounded quantity and keeps the rest held, and ``amend_protection`` moves the held stop and
+target, tightening only.
+
+Cash that moves with no fill (swap, financing, funding, dividends, commission) comes from the
+host's cash port as ``CashEvent`` rows and changes the account the unit reads. The node passes
+no cash port, because its venue books those itself.
 """
 
 from __future__ import annotations
@@ -20,7 +26,6 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from decimal import ROUND_HALF_EVEN, Decimal
-from enum import StrEnum
 from typing import Final, Protocol, TypeVar, cast
 
 from qmf.core.chrono import Instant
@@ -50,9 +55,14 @@ from qml.protocol.unit import (
 from qml.unit.model import Side
 
 from qmb._refuse import invalid, policy
+from qmb.execution.fill import FillKind, Reached
+from qmb.execution.financing import CashEvent, CashKind
 from qmb.runloop.loop import RestingIntent, SliceObservation
 
 __all__ = [
+    "CashEvent",
+    "CashKind",
+    "CashPort",
     "ExecutionPort",
     "Fill",
     "FillKind",
@@ -60,7 +70,7 @@ __all__ = [
     "JournalPort",
     "JournalRecord",
     "ListJournal",
-    "NextOpenExecution",
+    "Reached",
     "Skip",
     "UnitSliceHandler",
     "UnitTrade",
@@ -68,13 +78,6 @@ __all__ = [
 
 _CENT: Final[Decimal] = Decimal("0.01")
 _R_PLACES: Final[Decimal] = Decimal("0.0001")
-
-
-class FillKind(StrEnum):
-    ENTRY = "entry"
-    STOP = "stop"
-    TARGET = "target"
-    CLOSE = "close"
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,9 +141,11 @@ class UnitTrade:
     money: Decimal
     r: Decimal
     """``money`` over the whole entry's risk, so a position's trades add up to its R."""
+    gap_through_stop: bool = False
+    """The price jumped the stop and it filled at the first tradable price, past 1 R."""
 
 
-JournalRecord = DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade
+JournalRecord = DecisionRow | CalibrationRow | StateEvent | Fill | Skip | UnitTrade | CashEvent
 
 
 class JournalPort(Protocol):
@@ -160,37 +165,27 @@ class ListJournal:
 class ExecutionPort(Protocol):
     """Where a fill happens. QMB's bar replay and the node's venue client each provide one."""
 
-    def entry_price(self, side: Side, bar: QuoteBar, /) -> Decimal: ...
+    def entry_price(self, market: str, side: Side, bar: QuoteBar, /) -> Decimal: ...
 
-    def close_price(self, side: Side, bar: QuoteBar, /) -> Decimal: ...
+    def close_price(self, market: str, side: Side, bar: QuoteBar, /) -> Decimal: ...
 
-    def protective(self, held: HeldPosition, bar: QuoteBar, /) -> tuple[FillKind, Decimal] | None:
-        """The stop or target this bar reaches, the stop first when it reaches both."""
+    def protective(self, market: str, held: HeldPosition, bar: QuoteBar, /) -> Reached | None:
+        """The stop, liquidation or target this bar reaches, the loss side first."""
         ...
 
 
-@dataclass(frozen=True, slots=True)
-class NextOpenExecution:
-    """Bars fidelity: an order fills at the next bar's open on its side of the quote."""
+class CashPort(Protocol):
+    """The cash a replay books with no fill. The node passes none: its venue books its own."""
 
-    def entry_price(self, side: Side, bar: QuoteBar, /) -> Decimal:
-        return bar.ask.open if side is Side.LONG else bar.bid.open
+    def held(
+        self, market: str, position: OwnPosition, since: Instant, until: Instant, bar: QuoteBar, /
+    ) -> Result[tuple[CashEvent, ...]]:
+        """What holding ``position`` from its market's bar at ``since`` to ``bar`` moved."""
+        ...
 
-    def close_price(self, side: Side, bar: QuoteBar, /) -> Decimal:
-        return bar.bid.open if side is Side.LONG else bar.ask.open
-
-    def protective(self, held: HeldPosition, bar: QuoteBar, /) -> tuple[FillKind, Decimal] | None:
-        if held.position.side is Side.LONG:
-            if bar.bid.low <= held.stop:
-                return FillKind.STOP, held.stop
-            if held.target is not None and bar.bid.high >= held.target:
-                return FillKind.TARGET, held.target
-            return None
-        if bar.ask.high >= held.stop:
-            return FillKind.STOP, held.stop
-        if held.target is not None and bar.ask.low <= held.target:
-            return FillKind.TARGET, held.target
-        return None
+    def filled(self, fill: Fill, /) -> tuple[CashEvent, ...]:
+        """What a fill costs on top of its price, such as commission."""
+        ...
 
 
 class SteppingUnit(Protocol):
@@ -250,6 +245,7 @@ class UnitSliceHandler:
         execution: ExecutionPort,
         journal: JournalPort,
         seeded: Mapping[str, OwnPosition] | None = None,
+        cash: CashPort | None = None,
     ) -> None:
         self._stream = stream
         self._records = records
@@ -258,6 +254,7 @@ class UnitSliceHandler:
         self._equity = equity
         self._execution = execution
         self._journal = journal
+        self._cash_port = cash
         self._unit: SteppingUnit | None = None
         self._latest: dict[str, QuoteBar] = {}
         self._held: dict[str, HeldPosition] = {}
@@ -265,6 +262,8 @@ class UnitSliceHandler:
         self._closed: list[ClosedTrade] = []
         self._trades: list[UnitTrade] = []
         self._fills: list[Fill] = []
+        self._cash: list[CashEvent] = []
+        self._carried: dict[str, Instant] = {}
         self._stepped: tuple[int, UnitStep] | None = None
         self._entry_stamps: dict[str, dict[str, Decimal]] = {}
         self._entries = 0
@@ -282,6 +281,7 @@ class UnitSliceHandler:
         execution: ExecutionPort,
         journal: JournalPort,
         seeded: Mapping[str, OwnPosition] | None = None,
+        cash: CashPort | None = None,
     ) -> Result[UnitSliceHandler]:
         """A handler whose unit ``host`` built from this handler's read surfaces.
 
@@ -297,6 +297,7 @@ class UnitSliceHandler:
             execution=execution,
             journal=journal,
             seeded=seeded,
+            cash=cash,
         )
         unit = host(handler.read_surfaces())
         if is_refusal(unit):
@@ -317,7 +318,8 @@ class UnitSliceHandler:
         return surfaces
 
     def _account(self) -> Account:
-        return Account(self._equity + sum((t.money for t in self._trades), Decimal(0)))
+        traded = sum((t.money for t in self._trades), Decimal(0))
+        return Account(self._equity + traded + sum((c.money for c in self._cash), Decimal(0)))
 
     def _position(self, market: str) -> OwnPosition | None:
         held = self._held.get(market)
@@ -330,6 +332,10 @@ class UnitSliceHandler:
     @property
     def fills(self) -> tuple[Fill, ...]:
         return tuple(self._fills)
+
+    @property
+    def cash_events(self) -> tuple[CashEvent, ...]:
+        return tuple(self._cash)
 
     @property
     def open_positions(self) -> Mapping[str, OwnPosition]:
@@ -352,8 +358,24 @@ class UnitSliceHandler:
         return Ok(None)
 
     def scheduled_position_event(self, stream_id: str, frontier: Instant) -> Result[None]:
-        del stream_id, frontier
+        bar = self._bars.get(stream_id, {}).get(frontier.value_ns)
+        if bar is None:
+            return Ok(None)
+        since = self._carried.get(stream_id)
+        self._carried[stream_id] = frontier
+        held = self._held.get(stream_id)
+        if self._cash_port is None or held is None or since is None:
+            return Ok(None)
+        booked = self._cash_port.held(stream_id, held.position, since, frontier, bar)
+        if is_refusal(booked):
+            return booked
+        for event in booked.value:
+            self._book(event)
         return Ok(None)
+
+    def _book(self, event: CashEvent) -> None:
+        self._cash.append(event)
+        self._journal.append(event)
 
     def execute_resting(
         self, intent: RestingIntent, observation: SliceObservation | None, frontier: Instant
@@ -377,9 +399,17 @@ class UnitSliceHandler:
         self._latest[stream_id] = bar
         held = self._held.get(stream_id)
         if held is not None:
-            reached = self._execution.protective(held, bar)
+            reached = self._execution.protective(stream_id, held, bar)
             if reached is not None:
-                self._close(stream_id, held, reached[0], reached[1], frontier, held.decision_row_id)
+                self._close(
+                    stream_id,
+                    held,
+                    reached.kind,
+                    reached.price,
+                    frontier,
+                    held.decision_row_id,
+                    gapped=reached.gap,
+                )
         return Ok(None)
 
     def mint_intents(self, stream_id: str, frontier: Instant) -> Result[object]:
@@ -454,7 +484,7 @@ class UnitSliceHandler:
         protection = cast("Mapping[str, object]", wire["protection"])
         targets = cast("Sequence[Mapping[str, object]]", protection.get("targets", ()))
         stop = Decimal(cast("str", protection["stop"]))
-        price = self._execution.entry_price(side, bar)
+        price = self._execution.entry_price(market, side, bar)
         self._entries += 1
         position = OwnPosition(
             f"{self._opened_by.value[-12:]}-{self._entries}",
@@ -485,8 +515,13 @@ class UnitSliceHandler:
             residue_r,
             row_id,
         )
+        self._record_fill(fill)
+
+    def _record_fill(self, fill: Fill) -> None:
         self._fills.append(fill)
         self._journal.append(fill)
+        for event in () if self._cash_port is None else self._cash_port.filled(fill):
+            self._book(event)
 
     def _fill_exit(
         self, market: str, wire: Mapping[str, object], bar: QuoteBar, frontier: Instant
@@ -505,7 +540,7 @@ class UnitSliceHandler:
                 position_id=exit_.position_ref.position_id,
             )
         row_id = exit_.decision_row_id
-        price = self._execution.close_price(held.position.side, bar)
+        price = self._execution.close_price(market, held.position.side, bar)
         match exit_.action:
             case CloseFull():
                 self._close(market, held, FillKind.CLOSE, price, frontier, row_id)
@@ -549,6 +584,8 @@ class UnitSliceHandler:
         frontier: Instant,
         row_id: str,
         quantity: Decimal | None = None,
+        *,
+        gapped: bool = False,
     ) -> None:
         """Close ``quantity`` of the held position, or all of it; the rest stays held."""
         record = self._records[market]
@@ -585,10 +622,10 @@ class UnitSliceHandler:
             kind,
             money,
             r,
+            gap_through_stop=gapped and kind is FillKind.STOP,
         )
-        self._fills.append(fill)
+        self._record_fill(fill)
         self._trades.append(trade)
-        self._journal.append(fill)
         self._journal.append(trade)
         rest = position.quantity - closed
         if rest:

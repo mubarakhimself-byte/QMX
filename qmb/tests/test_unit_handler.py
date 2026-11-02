@@ -13,11 +13,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
+from qmb.execution.fill import BarExecution
 from qmb.host.unit_handler import (
     Fill,
     FillKind,
     ListJournal,
-    NextOpenExecution,
     Skip,
     UnitSliceHandler,
 )
@@ -158,7 +158,7 @@ def _drive(
         bars=bars,
         opened_by=_MINE,
         equity=Decimal("10000.00"),
-        execution=NextOpenExecution(),
+        execution=BarExecution(900_000_000_000),
         journal=journal,
         seeded=seeded,
     )

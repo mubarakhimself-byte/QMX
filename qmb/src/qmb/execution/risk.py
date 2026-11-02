@@ -3,9 +3,21 @@
 QMB does not redefine AD-29..41. Sizing, R-freeze, and exits consume qmf-risk
 contracts: CT-23 inbound intent, CT-29 exits, and the AD-40 full-loss price
 required before any open (B-3, B-6, DEC-0160, DEC-0158).
+
+A unit run's margin port reads the instrument record (AD-35): the share of notional a position
+posts (``margin.intraday``) and the maintenance share below which the venue liquidates it
+(``liquidation_rule`` written ``maintenance:<share>``). QMB margins each position on its own, so
+the liquidation price depends only on the entry: a long goes at ``entry * (1 - initial) / (1 -
+maintenance)``, rounded up to the tick, a short at ``entry * (1 + initial) / (1 + maintenance)``,
+rounded down. A record with no liquidation rule has no liquidation level.
 """
 
 from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal, InvalidOperation
+from typing import Final
 
 from qmf.core.fingerprint import World
 from qmf.core.refusal import Ok, Result, is_refusal
@@ -23,16 +35,64 @@ from qmf.risk.exit_record import (
     ExitResultLabel,
     mint_exit_record,
 )
+from qml.numbers import InstrumentRecord
+from qml.unit.model import Side
 
 from qmb._refuse import invalid, policy
 from qmb.config.replay import ReplayBinding
 
 __all__ = [
+    "MarginRule",
     "admit_open",
     "evaluate_exit",
+    "margin_rule",
     "mint_replay_exit",
     "require_full_loss_before_open",
 ]
+
+_MAINTENANCE: Final[str] = "maintenance:"
+
+
+@dataclass(frozen=True, slots=True)
+class MarginRule:
+    """One market's isolated margin: the initial and maintenance shares of notional."""
+
+    initial: Decimal
+    maintenance: Decimal
+    tick: Decimal
+
+    def liquidation_price(self, side: Side, entry: Decimal) -> Decimal:
+        """Where the position's loss leaves only its maintenance margin posted."""
+        if side is Side.LONG:
+            level = entry * (1 - self.initial) / (1 - self.maintenance)
+            return (level / self.tick).to_integral_value(ROUND_CEILING) * self.tick
+        level = entry * (1 + self.initial) / (1 + self.maintenance)
+        return (level / self.tick).to_integral_value(ROUND_FLOOR) * self.tick
+
+
+def _share(value: object) -> Decimal | None:
+    try:
+        share = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return share if share.is_finite() and 0 < share < 1 else None
+
+
+def margin_rule(record: InstrumentRecord, liquidation_rule: object) -> Result[MarginRule | None]:
+    """The record's margin rule, or None when the record states no liquidation rule."""
+    if liquidation_rule is None:
+        return Ok(None)
+    rule = str(liquidation_rule)
+    maintenance = _share(rule.removeprefix(_MAINTENANCE)) if rule.startswith(_MAINTENANCE) else None
+    initial = _share(record.margin.get("intraday")) if isinstance(record.margin, Mapping) else None
+    if maintenance is None or initial is None or maintenance >= initial:
+        return invalid(
+            "liquidation_rule",
+            "a liquidation rule is maintenance:<share> below the record's intraday margin",
+            record=record.name,
+            given=rule,
+        )
+    return Ok(MarginRule(initial, maintenance, record.tick_size))
 
 
 def require_full_loss_before_open(declared_full_loss_price: object) -> Result[object]:

@@ -176,4 +176,6 @@ SPECS: Final[tuple[KindSpec, ...]] = (
     KindSpec(JournalStream.UNIT, "risk_event", IdRule.SEQUENCE),
     KindSpec(JournalStream.UNIT, "would_have", IdRule.SEQUENCE),
     KindSpec(JournalStream.UNIT, "data_event", IdRule.SEQUENCE),
+    # A replay's swap, financing, funding, dividend or commission line (B10, QB-04, QB-03).
+    KindSpec(JournalStream.UNIT, "cash", IdRule.FILL, ("deal_id", "kind", "money")),
 )

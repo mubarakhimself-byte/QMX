@@ -6,11 +6,18 @@ gaps as ``(start, end, expected, present)``. Calendar-closed absence is
 closure, not a gap. Missing or unresolvable calendar is ``unavailable
 dependency`` (CT-04) — never silently treated as always-open. Never writes
 interior fill (Epic 23 / ``world=simulated``; policy rejection until GAP-0048).
+
+A unit run's preflight (QB-18) counts the bars missing between each two bars a market's stream
+holds, inside the open time of the market's calendar (``calendar_ref`` on its instrument
+record). A hole longer than ``[qmb] gap_bars_refuse`` bars fails the run unless the study
+allows gaps. QMB reads the open time of a ``*-24x7`` calendar itself; any other calendar
+waits for its market's calendar (C-03), so its holes are not counted and the run says
+``holes_unchecked`` rather than guess a session.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,15 +34,25 @@ from qmb._refuse import clean_token, invalid, policy, unavailable
 from qmb.data.ports import DOWNLOAD_SIDES, DownloadSide
 
 __all__ = [
+    "GAP_BARS_REFUSE",
     "GAP_CHECK_KIND",
+    "HOLES_UNCHECKED",
     "AlwaysOpenCalendar",
     "GapCheckReport",
     "GapCheckRequest",
+    "Hole",
+    "OpenTime",
     "ReportedGap",
+    "find_holes",
     "gap_check",
     "gap_check_identity",
+    "open_time",
     "parse_gap_check_request",
 ]
+
+GAP_BARS_REFUSE: Final[int] = 3
+"""``[qmb] gap_bars_refuse``: the most bars of the unit's stream a hole in open time may miss."""
+HOLES_UNCHECKED: Final[str] = "holes_unchecked"
 
 GAP_CHECK_KIND: Final[str] = "qmb-data-gap-check"
 _RAW_ARCHIVE: Final[str] = "immutable-raw-archive"
@@ -760,3 +777,51 @@ def _optional_ticks(value: object) -> Result[tuple[Mapping[str, object], ...] | 
             )
         rows.append(cast("Mapping[str, object]", item))
     return Ok(tuple(rows))
+
+
+# --- a unit run's preflight (QB-18) -------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Hole:
+    """Bars a market's stream misses inside open time, between two bars it holds."""
+
+    market_id: str
+    after_ns: int
+    """The open of the last bar before the hole."""
+    before_ns: int
+    """The open of the first bar after it."""
+    bars_missing: int
+
+
+class OpenTime(Protocol):
+    def open_ns(self, start_ns: int, end_ns: int) -> int:
+        """How much of ``[start, end)`` the market is open, in ns."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class _AlwaysOpen:
+    def open_ns(self, start_ns: int, end_ns: int) -> int:
+        return max(0, end_ns - start_ns)
+
+
+def open_time(calendar_ref: str) -> OpenTime | None:
+    """The open time of a calendar QMB can read, or None until the market's calendar ships."""
+    name = calendar_ref.partition("@")[0]
+    return _AlwaysOpen() if name.endswith("-24x7") else None
+
+
+def find_holes(
+    market_id: str, opens: Iterable[int], *, bar_ns: int, hours: OpenTime, refuse_bars: int
+) -> tuple[Hole, ...]:
+    """Every hole longer than ``refuse_bars`` between the bar opens of one market's stream."""
+    holes: list[Hole] = []
+    last: int | None = None
+    for at in opens:
+        if last is not None:
+            missing = hours.open_ns(last + bar_ns, at) // bar_ns
+            if missing > refuse_bars:
+                holes.append(Hole(market_id, last, at, missing))
+        last = at
+    return tuple(holes)

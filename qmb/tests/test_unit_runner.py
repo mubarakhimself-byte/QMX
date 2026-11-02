@@ -139,7 +139,7 @@ def test_the_dummy_trades_the_month_and_every_fill_is_its_receipt_after_lot_roun
     )
     assert result.net_money == Decimal("-114.97")
     assert result.total_r == Decimal("-2.2597")
-    assert result.labels == ()
+    assert result.labels == ("costs_uncalibrated", "holes_unchecked")
 
 
 def test_no_entry_fills_before_the_derived_warm_up(tmp_path: Path) -> None:
@@ -177,7 +177,7 @@ def test_a_unit_that_never_trades_is_labelled_zero_trades(tmp_path: Path) -> Non
     result = _run(make_run_folder(tmp_path, document))
 
     assert result.trades == ()
-    assert result.labels == (ZERO_TRADES,)
+    assert result.labels == (ZERO_TRADES, "costs_uncalibrated", "holes_unchecked")
 
 
 def test_a_request_with_a_float_equity_is_refused() -> None:
