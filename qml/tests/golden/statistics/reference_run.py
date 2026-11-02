@@ -243,7 +243,8 @@ def _sanity() -> dict[str, Any]:
         last = 0.5 * last + e
         persistent.append(persistent[-1] * math.exp(last))
         reverting.append(1.1 + 0.8 * (reverting[-1] - 1.1) + e)
-    series = {"random_walk": random_walk, "persistent": persistent, "reverting": reverting}
+    written = {"random_walk": random_walk, "persistent": persistent, "reverting": reverting}
+    series = {k: [float(f"{v:.6f}") for v in values] for k, values in written.items()}
     bounds = {
         "hurst-exponent@1 window=1000 max_lag=20": {
             "random_walk": ["0.45", "0.55"],

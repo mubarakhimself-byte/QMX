@@ -9039,14 +9039,14 @@
  },
  "reference_reading_at_last_bar": {
   "hurst-exponent@1 window=1000 max_lag=20": {
-   "random_walk": "0.5001660592503515",
-   "persistent": "0.6218960907952225",
-   "reverting": "0.1844194968330221"
+   "random_walk": "0.5001696543921537",
+   "persistent": "0.6218965850939705",
+   "reverting": "0.18441846679224597"
   },
   "variance-ratio@1 window=1000 horizon=4": {
-   "random_walk": "1.024392431226065",
-   "persistent": "2.07800121501258",
-   "reverting": "0.7633055026622965"
+   "random_walk": "1.0243836018660424",
+   "persistent": "2.078000633912531",
+   "reverting": "0.7633059568328614"
   }
  }
 }
