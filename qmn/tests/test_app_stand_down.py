@@ -20,8 +20,10 @@ import pytest
 from qmf.core import TypedRefusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld
 from qmf.data.journal_writer import JournalWriter, WriterScope
+from qmf.data.store.refusals import storage_failure
 from qmf.venue.commands import CommandKind
 from qml.lifecycle import Actor, ActorKind, Event, Folded, MarketKey, State, fold
+from qmn.app import stand_down
 from qmn.app.feed_keeper import Bar, Quote
 from qmn.app.runtime import NodeUnit
 from qmn.app.stand_down import Kind, StandDowns
@@ -383,6 +385,71 @@ def test_a_risk_stop_lands_one_lifecycle_event_and_waits_for_his_resume(tmp_path
     assert moves.rejected == ()
     assert moves.state(key) is State.LIVE
     assert node.runtime.stand_downs.document() == []
+    node.runtime.stop()
+
+
+class RefusedWriter:
+    """A journal whose lifecycle stream will not open, as a full or locked volume answers."""
+
+    @staticmethod
+    def open(*args: object, **kwargs: object) -> TypedRefusal:
+        del args, kwargs
+        return storage_failure("the fixture's volume refuses the lifecycle stream")
+
+
+def held_now(node: Rig) -> list[tuple[object, object]]:
+    return [(h["stand_down"], h.get("lifecycle_event")) for h in node.runtime.stand_downs.document()]
+
+
+def test_a_risk_stop_whose_row_cannot_land_still_holds_entries_and_raises_an_alarm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = rig(tmp_path)
+    probes = Probes()
+    deploy(node, deployment(node.data))
+    settle(node)
+    played(node, probes, at(5570))
+    monkeypatch.setattr(stand_down, "JournalWriter", RefusedWriter)
+    sent = len(node.account.received)
+    stop = node.runtime.risk_stop("dep-1", "fx.eurusd", "kill-line", "the kill line is crossed")
+    played(node, probes, at(5730))
+    entries = [t for t in tickets(node, sent) if t[0] is CommandKind.PLACE_ORDER]
+    guards = [row["detail"] for row in unit_rows(node, "guard")]
+
+    assert stop is None
+    assert held_now(node) == [("risk_stop", None)]
+    assert len(entries) == 0
+    assert guards == [CASES[-1].detail]
+    assert lifecycle_rows(node) == []
+    assert node.runtime.alarms == [
+        {
+            "alarm": "risk_stop_unrecorded",
+            "deployment_id": "dep-1",
+            "market_id": "fx.eurusd",
+            "rule": "kill-line",
+            "action": "no_new_entries",
+            "why": "the stop's lifecycle row could not be written, so only the node shows it",
+        }
+    ]
+    node.runtime.stop()
+
+
+def test_a_resume_he_sent_before_a_risk_stop_does_not_clear_it(tmp_path: Path) -> None:
+    node = rig(tmp_path)
+    probes = Probes()
+    deploy(node, deployment(node.data))
+    settle(node)
+    played(node, probes, at(5570))
+    arrived = node.now[0]
+    ahead = datetime.fromtimestamp(arrived // 1_000_000_000 + 4, UTC).isoformat()
+    early = node.node.call("resume", {"op_id": "op-resume-early", "scope": "all", "issued_at": ahead})
+    node.now[0] = arrived + 1_000_000_000
+    stop = node.runtime.risk_stop("dep-1", "fx.eurusd", "kill-line", "the kill line is crossed")
+    node.runtime.tick()
+
+    assert early["ok"] is True
+    assert stop is not None
+    assert held_now(node) == [("risk_stop", stop)]
     node.runtime.stop()
 
 
