@@ -490,6 +490,58 @@ CATALOG: Final[tuple[Template, ...]] = (
         triggers=(Cron("0 4 * * *", "UTC"),),
         test_inputs={"fixture": True},
     ),
+    Template(
+        "run-a-unit-on-every-market",
+        "Run a unit on every market it trades",
+        card("17", "D4"),
+        "B19",
+        folder="u1-run-on-every-market",
+        test_inputs={
+            "unit": "unit-object-fixture",
+            "window": {"start": "2025-01-01", "end": "2025-03-31"},
+            "markets": ["fx.eurusd", "metal.xauusd"],
+            "fixture": "recorded",
+        },
+    ),
+    Template(
+        "where-a-failed-unit-still-holds",
+        "Find where a failed unit's rules still hold",
+        card("15", "R6"),
+        "B19",
+        folder="u2-where-its-rules-hold",
+        test_inputs={
+            "unit": "unit-object-fixture",
+            "window": {"start": "2025-01-01", "end": "2025-03-31"},
+            "markets": ["fx.eurusd", "fx.gbpusd"],
+            "sessions": [{"from": 7, "to": 16}],
+            "fixture": "recorded",
+        },
+    ),
+    Template(
+        "expand-the-dictionary-from-a-source",
+        "Expand the dictionary from a source",
+        card("15", "R2"),
+        "B19",
+        folder="u3-dictionary-expansion",
+        test_inputs={
+            "source": {
+                "title": "A fixture note on trend timing",
+                "date": "2026-11-02",
+                "text": (
+                    "Wait for the EMA to turn up. Time the turn with the smoothed close fixture. "
+                    "Enter when the Wolfe wave completes its fifth point."
+                ),
+            }
+        },
+    ),
+    Template(
+        "find-repeated-code-and-gaps-in-the-dictionary",
+        "Find repeated code, clashing names and gaps in the dictionary",
+        card("17", "D1"),
+        "B19",
+        folder="u4-librarian",
+        test_inputs={},
+    ),
 )
 
 ALIASES: Final[dict[str, str]] = {

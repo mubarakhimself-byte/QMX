@@ -1,0 +1,17 @@
+{
+  "recorded": {
+    "sweep": {
+      "app_id": "qmb",
+      "job": "jobs/sweep.py",
+      "version": "1.0.0",
+      "run_id": "qmbr-pc-recorded-sweep",
+      "result": {
+        "output": "backtest-result",
+        "data": {
+          "run_id": "qmbr-pc-recorded-sweep",
+          "status": "finished"
+        }
+      }
+    }
+  }
+}

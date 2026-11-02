@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["verdict"],
+  "properties": {
+    "verdict": {
+      "type": "object",
+      "required": ["verdict_id", "overall", "says", "raw_tries", "effective_tries", "result_ids", "per_market"],
+      "properties": {
+        "verdict_id": {"type": "string"},
+        "overall": {"enum": ["pass", "fail", "too_thin", "no_trades", "incomplete"]},
+        "says": {"type": "string"},
+        "raw_tries": {"type": "integer"},
+        "effective_tries": {"type": "integer"},
+        "result_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "cards": {"type": "object"},
+        "per_market": {"type": "array", "items": {"type": "object"}}
+      }
+    }
+  }
+}

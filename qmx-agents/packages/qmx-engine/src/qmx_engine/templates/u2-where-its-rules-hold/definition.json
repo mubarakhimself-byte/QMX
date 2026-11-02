@@ -1,0 +1,63 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "u2-where-its-rules-hold",
+  "name": "Find where a failed unit's rules still hold",
+  "inputs": {
+    "type": "object",
+    "required": ["unit", "window", "markets"],
+    "properties": {
+      "unit": {"type": "string", "description": "the failed unit's Library pin, the object id of the version that died"},
+      "window": {
+        "type": "object",
+        "required": ["start", "end"],
+        "description": "the data range, start and end dates; QMB must hold each market's bars",
+        "properties": {"start": {"type": "string"}, "end": {"type": "string"}}
+      },
+      "markets": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "the markets to try it on, each one the unit trades"},
+      "sessions": {
+        "type": "array",
+        "description": "the sessions to try it in, each {from, to} in UTC hours, as his calendars give them",
+        "items": {
+          "type": "object",
+          "required": ["from", "to"],
+          "properties": {"from": {"type": "integer", "minimum": 0, "maximum": 23}, "to": {"type": "integer", "minimum": 1, "maximum": 24}}
+        }
+      },
+      "fixture": {"enum": ["recorded"], "description": "test runs only: replay recorded QMB runs instead of asking QMB"}
+    }
+  },
+  "outputs": {"type": "object", "description": "the markets where the rules hold and where they fail, by one verdict over every context tried, and the proposal to admit those that hold"},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "route", "name": "Route the run", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/route.py"}, "effect": "none"},
+    {"id": "replay", "name": "Recorded runs?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.recorded is not None"}, "effect": "none"},
+    {"id": "recorded", "name": "Replay the recorded runs", "type": "script", "typeVersion": 1, "position": [660, 240], "parameters": {"script": "scripts/recorded.py", "fixture_ref": "fixtures/qmb.json"}, "effect": "none"},
+    {"id": "ask_sweep", "name": "The market sweep QMB runs", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/ask_sweep.py"}, "effect": "none"},
+    {"id": "sessions", "name": "Sessions named?", "type": "rule", "typeVersion": 1, "position": [660, 120], "parameters": {"expr": "items.whatif is not None"}, "effect": "none"},
+    {"id": "ask_whatif", "name": "The session scenarios QMB runs", "type": "script", "typeVersion": 1, "position": [880, 120], "parameters": {"script": "scripts/ask_whatif.py"}, "effect": "none"},
+    {"id": "sweep", "name": "Sweep the markets on QMB", "type": "app_op", "typeVersion": 1, "position": [1100, 0], "parameters": {"app": "qmb", "job": "jobs/sweep.py", "inputs": {}}},
+    {"id": "whatif", "name": "Try the sessions on QMB", "type": "app_op", "typeVersion": 1, "position": [1100, 120], "parameters": {"app": "qmb", "job": "jobs/whatif.py", "inputs": {}}},
+    {"id": "referee", "name": "Ask the referee", "type": "agent", "typeVersion": 1, "toolsets": ["backtest"], "position": [1320, 0], "role": "judge", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/referee.md", "output_schema_ref": "schemas/referee.json", "tools": []}, "effect": "none"},
+    {"id": "holds", "name": "Where the rules hold", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/holds.py"}, "effect": "none"},
+    {"id": "held", "name": "Held anywhere?", "type": "rule", "typeVersion": 1, "position": [1760, 0], "parameters": {"expr": "items.proposal is not None"}, "effect": "none"},
+    {"id": "propose", "name": "Propose admitting those markets", "type": "subworkflow", "typeVersion": 1, "position": [1980, 0], "parameters": {"workflow": "proposal-card"}},
+    {"id": "report", "name": "Report", "type": "script", "typeVersion": 1, "position": [2200, 0], "parameters": {"script": "scripts/report.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Route the run", "port": "in", "map": "one"}]]},
+    "Route the run": {"main": [[{"node": "Recorded runs?", "port": "in", "map": "one"}, {"node": "Where the rules hold", "port": "in", "map": "one"}]]},
+    "Recorded runs?": {"true": [[{"node": "Replay the recorded runs", "port": "in", "map": "one"}]], "false": [[{"node": "The market sweep QMB runs", "port": "in", "map": "one"}, {"node": "Sessions named?", "port": "in", "map": "one"}]]},
+    "Sessions named?": {"true": [[{"node": "The session scenarios QMB runs", "port": "in", "map": "one"}]]},
+    "The market sweep QMB runs": {"main": [[{"node": "Sweep the markets on QMB", "port": "in", "map": "one"}]]},
+    "The session scenarios QMB runs": {"main": [[{"node": "Try the sessions on QMB", "port": "in", "map": "one"}]]},
+    "Sweep the markets on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Try the sessions on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Replay the recorded runs": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
+    "Ask the referee": {"main": [[{"node": "Where the rules hold", "port": "in", "map": "one", "required": true}]]},
+    "Where the rules hold": {"main": [[{"node": "Held anywhere?", "port": "in", "map": "one"}, {"node": "Report", "port": "in", "map": "one"}]]},
+    "Held anywhere?": {"true": [[{"node": "Propose admitting those markets", "port": "in", "map": "one", "required": true}]]},
+    "Propose admitting those markets": {"main": [[{"node": "Report", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "where-a-failed-unit-still-holds"}
+}

@@ -1,0 +1,38 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "u3-dictionary-expansion",
+  "name": "Expand the dictionary from a source",
+  "inputs": {
+    "type": "object",
+    "required": ["source"],
+    "properties": {
+      "source": {
+        "type": "object",
+        "required": ["title", "text"],
+        "description": "the source to read: its title and text, and its url and date when it has them",
+        "properties": {
+          "title": {"type": "string"},
+          "text": {"type": "string"},
+          "url": {"type": "string"},
+          "date": {"type": "string"}
+        }
+      }
+    }
+  },
+  "outputs": {"type": "object", "description": "each sentence's entry, an append request per unmatched sentence, and the entry drafts that pass the checker, none published"},
+  "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any"},
+  "nodes": [
+    {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
+    {"id": "match", "name": "Match each sentence", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/match.py"}, "effect": "none"},
+    {"id": "unmatched", "name": "Anything unmatched?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.append_requests != []"}, "effect": "none"},
+    {"id": "draft", "name": "Draft the new entries", "type": "agent", "typeVersion": 1, "toolsets": ["blocks"], "position": [660, 0], "role": "extractor", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/draft.md", "output_schema_ref": "schemas/drafts.json", "tools": []}, "effect": "none"},
+    {"id": "check", "name": "Check every draft", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/check.py"}, "effect": "none"}
+  ],
+  "connections": {
+    "On request": {"main": [[{"node": "Match each sentence", "port": "in", "map": "one"}]]},
+    "Match each sentence": {"main": [[{"node": "Anything unmatched?", "port": "in", "map": "one"}, {"node": "Check every draft", "port": "in", "map": "one"}]]},
+    "Anything unmatched?": {"true": [[{"node": "Draft the new entries", "port": "in", "map": "one"}]]},
+    "Draft the new entries": {"main": [[{"node": "Check every draft", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"template": "expand-the-dictionary-from-a-source"}
+}
