@@ -16,13 +16,13 @@ import sys
 import zipfile
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from flows import run_folder
+from pydantic import JsonValue
 from qmf.core import is_ok
-from qmf.data.series import SeriesKey
+from qmf.data.series import SeriesKey, SeriesStore
 from qmx_home import resolve
-from qmx_host.market_data import MarketDoor
 
 from qmx_engine.templates.catalog import PACK, SHARED
 
@@ -37,7 +37,7 @@ def bucket(
     """One trade print a minute for every day of a month, in the bucket's own layout."""
     day = date(year, month, 1)
     while day.month == month:
-        lines = []
+        lines: list[str] = []
         moment = datetime(day.year, day.month, day.day, tzinfo=UTC)
         for index in range(1440):
             at = moment + index * MINUTE
@@ -57,19 +57,21 @@ def bucket(
         day += timedelta(days=1)
 
 
-def download(home: Path, base: Path, month: str, **source: object) -> dict[str, Any]:
-    inputs = {
-        "source": {"dataset": "trades", "symbol": "BTCUSDT", "month": month, "base": str(base)}
-        | source
+def download(home: Path, base: Path, month: str, **source: JsonValue) -> dict[str, Any]:
+    named: dict[str, JsonValue] = {
+        "dataset": "trades",
+        "symbol": "BTCUSDT",
+        "month": month,
+        "base": str(base),
     }
-    outcome, events = run_folder(BINANCE, home, inputs)
+    outcome, events = run_folder(BINANCE, home, {"source": named | source})
     assert outcome.status == "passed", outcome
     found = next(
         e.data["outputs"]
         for e in events
         if e.kind == "node_finished" and e.data["node_id"] == "download"
     )
-    return found["main"]
+    return cast("dict[str, Any]", found)["main"]
 
 
 def test_a_microsecond_month_after_a_millisecond_month_lands_with_its_seam(tmp_path: Path) -> None:
@@ -93,9 +95,7 @@ def test_a_microsecond_month_after_a_millisecond_month_lands_with_its_seam(tmp_p
     ]
     key = SeriesKey.try_create("binance", "BTCUSDT", "trades", 2025, 1)
     assert is_ok(key)
-    door = MarketDoor.open(home / "market", {})
-    assert is_ok(door)
-    read = door.value.series_store().read(key.value, end_ns=1_735_689_720_000_000_000)
+    read = SeriesStore(home / "market" / "series").read(key.value, end_ns=1_735_689_720_000_000_000)
     assert is_ok(read)
     assert [row["t"] for row in read.value.rows] == [1_735_689_600_000, 1_735_689_660_000]
 
