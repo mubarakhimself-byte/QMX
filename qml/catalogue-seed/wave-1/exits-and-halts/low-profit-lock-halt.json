@@ -9,7 +9,7 @@
   ],
   "origin": "qml",
   "component_type": "halt",
-  "definition": "Stop new entries on a market for stop_duration_bars when its trades in the last lookback_bars bars made less than required_profit as a ratio.",
+  "definition": "Stop new entries on a market for stop_duration_bars when its trades in the last lookback_bars bars, at least trade_limit of them, made less than required_profit as a ratio.",
   "boundaries": "It needs the unit's closed trades on that market with their profit ratios and bars, which no host passes a block yet, so it has no code. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
   "recognition": "A market that has stopped paying is set aside for a while.",
   "eligible_roles": [
@@ -38,8 +38,18 @@
   "parameters": {
     "lookback_bars": {
       "measure": "bars",
-      "default": "1440",
-      "origin": "builder_chosen",
+      "default": "6",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    },
+    "trade_limit": {
+      "measure": "count",
+      "default": "2",
+      "origin": "source_stated",
       "range": {
         "min": "1",
         "max": "10000",
@@ -48,8 +58,8 @@
     },
     "required_profit": {
       "measure": "ratio",
-      "default": "0",
-      "origin": "builder_chosen",
+      "default": "0.02",
+      "origin": "source_stated",
       "range": {
         "min": "-1",
         "max": "10",
@@ -59,7 +69,7 @@
     "stop_duration_bars": {
       "measure": "bars",
       "default": "60",
-      "origin": "builder_chosen",
+      "origin": "source_stated",
       "range": {
         "min": "1",
         "max": "10000",
