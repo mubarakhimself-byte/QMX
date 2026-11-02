@@ -7,8 +7,10 @@ raises, because a tool exception counts toward the supervisor's breaker and a ca
 timeout stops the app (``qmx_apps/supervisor.py`` ``call``). The FastMCP wiring lives in the app
 folder's ``server.py`` (``qmx-agents/apps/trading-node``), so this package needs no MCP library.
 
-The runtime thread that reconciles ``desired`` with the venues arrives with C-12a; until then no
-venue is set up, nothing trades, and the node reads "Ready, no units yet".
+:attr:`Node.runtime` is the thread that reconciles ``desired`` with the venues (C-12a). The node
+the supervisor starts has no venue set up until his setup steps register one (C-11), so it trades
+nothing and reads "Ready, no units yet"; a composition with venues, such as the conformance venue,
+trades the units it is asked to deploy.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from qmn.app.operations import (
     answer_read,
     refused,
 )
+from qmn.app.runtime import Runtime, Venue, deploy_preflight
 from qmn.app.store import Json, Store, StoreBusyError
 
 __all__ = ["BUILD", "OPERATIONS", "ROLE", "WORLD", "Node", "from_environment", "open_node"]
@@ -53,9 +56,21 @@ HOST_FACTS: Final = Path("road/host/facts.json")
 class Node:
     """One running node: every operation answers here."""
 
-    def __init__(self, context: Context, journal: JournalWriter | None) -> None:
+    def __init__(
+        self, context: Context, journal: JournalWriter | None, runtime: Runtime | None
+    ) -> None:
         self.context = context
         self.journal = journal
+        self.runtime = runtime
+
+    def start(self) -> None:
+        """Start the runtime thread; the operations answer whether it runs or not."""
+        if self.runtime is not None:
+            self.runtime.start()
+
+    def stop(self) -> None:
+        if self.runtime is not None:
+            self.runtime.stop()
 
     def call(self, name: str, arguments: object) -> Answer:
         try:
@@ -92,12 +107,18 @@ def open_node(
     here: str | None,
     machine: str,
     clock_ns: Callable[[], int] = time.time_ns,
+    monotonic_ns: Callable[[], int] = time.monotonic_ns,
+    sleep: Callable[[float], None] = time.sleep,
     random_bytes: Callable[[int], bytes] = _os_random,
+    venues: Mapping[str, Venue] | Callable[[JournalWriter, str], Mapping[str, Venue]] | None = None,
 ) -> Node:
     """Compose the node in ``data`` (the volume's ``data/``) on the machine ``here`` names.
 
     The clock and the random source are read here and nowhere below: every op id, the boot
-    epoch and the install id minted on first start come from ``random_bytes``.
+    epoch and the install id minted on first start come from ``random_bytes``. ``venues`` are
+    the account bindings the runtime trades on, keyed by account id, or a factory given the
+    node journal and the boot epoch. The runtime is built but not started; ``Node.start``
+    starts it.
     """
     store = Store(data / "node.sqlite")
     started = clock_ns()
@@ -109,9 +130,8 @@ def open_node(
     )
     journal_root = data / "journal"
     scope = WriterScope(JournalStream.NODE, standing.tag, WORLD, machine, ROLE, BUILD)
-    opened = JournalWriter.open(
-        journal_root, scope, clock=clock_ns, boot_epoch_id=random_bytes(6).hex()
-    )
+    boot_epoch = random_bytes(6).hex()
+    opened = JournalWriter.open(journal_root, scope, clock=clock_ns, boot_epoch_id=boot_epoch)
     journal: JournalWriter | None = None
     problem: str | None = None
     if is_refusal(opened):
@@ -124,6 +144,12 @@ def open_node(
             problem = f"the start row was refused ({written.category.value})"
     store.observe("journal_problem", problem, started)
     store.observe("journal_write", None if problem else started, started)
+    waker: list[Runtime] = []
+
+    def wake() -> None:
+        for runtime in waker:
+            runtime.wake()
+
     context = Context(
         store=store,
         here=here,
@@ -133,8 +159,25 @@ def open_node(
         clock_ns=clock_ns,
         new_id=lambda: random_bytes(16).hex(),
         started_ns=started,
+        wake=wake,
+        deploy_preflight=lambda document: deploy_preflight(data, document),
     )
-    return Node(context, journal)
+    runtime: Runtime | None = None
+    if journal is not None:
+        bound = venues(journal, boot_epoch) if callable(venues) else venues
+        runtime = Runtime(
+            context,
+            journal,
+            bound or {},
+            machine=machine,
+            build=BUILD,
+            clock_ns=clock_ns,
+            monotonic_ns=monotonic_ns,
+            sleep=sleep,
+            boot_epoch_id=boot_epoch,
+        )
+        waker.append(runtime)
+    return Node(context, journal, runtime)
 
 
 def from_environment() -> Node:
@@ -151,4 +194,6 @@ def from_environment() -> Node:
             machine = placement
     except (KeyError, OSError, ValueError):
         pass
-    return open_node(data, here=machine_fingerprint(), machine=machine)
+    node = open_node(data, here=machine_fingerprint(), machine=machine)
+    node.start()
+    return node

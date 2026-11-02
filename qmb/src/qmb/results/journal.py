@@ -54,8 +54,19 @@ _REASON_WORDS: Final[tuple[tuple[str, str], ...]] = (
     ("no account facts", "reading_absent"),
     ("the sizer answered nothing", "reading_absent"),
     ("sizer: ", "sizer_skip"),
+    ("kill switch", "kill_switch"),
+    ("paused at", "kill_switch"),
+    ("withdrawn", "kill_switch"),
+    ("venue not ready", "health_stop"),
+    ("cannot prove", "health_stop"),
+    ("node journal", "health_stop"),
+    ("venue refused", "health_stop"),
+    ("venue answer unknown", "health_stop"),
+    ("venue cannot", "health_stop"),
+    ("widens the stop", "stop_wrong_side"),
 )
-"""The reason code of each reason text QML's hosted unit and the handler write, first match wins."""
+"""The reason code of each reason text QML's hosted unit, the handler and the trading node's
+order path write, first match wins."""
 
 _OUTCOME_CODES: Final[Mapping[str, str]] = MappingProxyType(
     {
@@ -154,6 +165,29 @@ class RunJournal:
         if is_refusal(writer):
             return writer
         return Ok(cls(writer.value, clock, compiled, run_id))
+
+    @classmethod
+    def open_live(
+        cls,
+        root: Path,
+        compiled: CompiledUnit,
+        *,
+        scope_id: str,
+        world: JournalWorld,
+        machine: str,
+        role: str,
+        build: str,
+        boot_epoch_id: str,
+    ) -> Result[RunJournal]:
+        """A trading host's unit journal: one fsynced line under ``root`` per row, as it is
+        made, in the host's own world (the trading node, Part C slice C-12a). ``scope_id`` is
+        the deployment id; the rows keep the shapes a QMB run writes."""
+        scope = WriterScope(JournalStream.UNIT, compiled.unit.unit_id, world, machine, role, build)
+        clock = _ReplayClock()
+        writer = JournalWriter.open(root, scope, clock=clock, boot_epoch_id=boot_epoch_id)
+        if is_refusal(writer):
+            return writer
+        return Ok(cls(writer.value, clock, compiled, scope_id))
 
     def at(self, instant: Instant) -> None:
         """The replay instant every row until the next call is written at."""

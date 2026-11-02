@@ -1,11 +1,17 @@
-"""Compile ``registry:ksa_effect_matrix`` cells — shape only, no values (Story 26.1).
+"""Compile ``registry:ksa_effect_matrix`` cells, and the node's placeholder effect per level.
 
 Each cell declares one CT-30 effect from ``suspend_new | drain | flatten``, a typed
 subject scope, one closed AD-36 satisfaction predicate, and
 ``routes-to-paper | blocks-paper``. Blank or provisional-evidence cells block
-``role = live`` and soak as declared. This module supplies **no** matrix numeric
-or severity-mapping values — the operator ratifies cell contents before soak
-(GAP-0050; FTR-07; AR-87; DEC-0192, DEC-0231, DEC-0237).
+``role = live`` and soak as declared. The compiler supplies **no** ratified matrix
+value; the operator ratifies cell contents before soak (GAP-0050; FTR-07; AR-87;
+DEC-0192, DEC-0231, DEC-0237).
+
+:data:`PLACEHOLDER_KILL_EFFECTS` is what the trading node does at each level until the risk
+session sets the real values (Part C lead's call LC-C-28, ``RISK-SIZING-PLACEHOLDERS.md``
+row 18). Every effect carries ``origin = "placeholder"`` and the provisional status, so it
+blocks ``role = live`` like any unratified cell. Levels only escalate, and only his resume
+brings one down.
 """
 
 from __future__ import annotations
@@ -33,11 +39,14 @@ __all__ = [
     "EFFECT_MATRIX_BLANK_EFFECTS",
     "KSA_EFFECT_KINDS",
     "KSA_EFFECT_MATRIX_REGISTRY_KEY",
+    "PLACEHOLDER_KILL_EFFECTS",
+    "PLACEHOLDER_ORIGIN",
     "VALUE_STATUSES",
     "VALUE_STATUS_BLANK",
     "VALUE_STATUS_PROVISIONAL",
     "VALUE_STATUS_RATIFIED",
     "CompiledEffectMatrix",
+    "KillEffect",
     "KsaEffectMatrixCell",
     "ValueStatus",
     "cell_blocks_role_live",
@@ -80,6 +89,61 @@ _REQUIRED_PREDICATE: Final[Mapping[ControlActionKind, SatisfactionPredicate]] = 
         ControlActionKind.FLATTEN: SatisfactionPredicate.SCOPE_FLAT_AT_RECONCILED_VERDICT,
     }
 )
+
+
+PLACEHOLDER_ORIGIN: Final[str] = "placeholder"
+
+
+@dataclass(frozen=True, slots=True)
+class KillEffect:
+    """What one kill-switch level does at the scope it was raised for.
+
+    Each level adds to the one below it: stop new entries, then cancel resting entry orders,
+    then close the scope's positions reduce-only. ``close_all_and_pause`` closes every
+    position on the node, whatever the scope, and pauses the node.
+    """
+
+    level: KsaLevel
+    stop_entries: bool
+    cancel_resting_entries: bool
+    close_positions: bool
+    close_all_and_pause: bool
+    origin: str = PLACEHOLDER_ORIGIN
+    value_status: ValueStatus = "provisional-evidence"
+
+    @property
+    def effects(self) -> tuple[ControlActionKind, ...]:
+        """The CT-30 kinds this level enacts, mildest first."""
+        kinds = (
+            (self.stop_entries, ControlActionKind.SUSPEND_NEW),
+            (self.cancel_resting_entries, ControlActionKind.DRAIN),
+            (self.close_positions, ControlActionKind.FLATTEN),
+        )
+        return tuple(kind for on, kind in kinds if on)
+
+    def document(self) -> dict[str, object]:
+        return {
+            "level": self.level.value,
+            "stop_entries": self.stop_entries,
+            "cancel_resting_entries": self.cancel_resting_entries,
+            "close_positions": self.close_positions,
+            "close_all_and_pause": self.close_all_and_pause,
+            "effects": [kind.value for kind in self.effects],
+            "origin": self.origin,
+            "value_status": self.value_status,
+        }
+
+
+PLACEHOLDER_KILL_EFFECTS: Final[Mapping[KsaLevel, KillEffect]] = MappingProxyType(
+    {
+        KsaLevel.GREEN: KillEffect(KsaLevel.GREEN, False, False, False, False),
+        KsaLevel.YELLOW: KillEffect(KsaLevel.YELLOW, True, False, False, False),
+        KsaLevel.ORANGE: KillEffect(KsaLevel.ORANGE, True, True, False, False),
+        KsaLevel.RED: KillEffect(KsaLevel.RED, True, True, True, False),
+        KsaLevel.BLACK: KillEffect(KsaLevel.BLACK, True, True, True, True),
+    }
+)
+"""LC-C-28's labelled placeholders, one per level, for the risk session to replace."""
 
 
 @dataclass(frozen=True, slots=True)
