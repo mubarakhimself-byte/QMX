@@ -26,6 +26,7 @@ from typing import Final, cast
 
 from fastapi import APIRouter, Request
 from pydantic import JsonValue
+from qmf.core import is_refusal
 from qmf.data.series import OPEN_NAME, STATE_NAME
 from qmx_apps.errors import AppError
 from qmx_control.models import Document
@@ -33,6 +34,7 @@ from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.forward import PASS_HEADER, ForwardRefused, verify_host_pass
 from starlette.responses import FileResponse, JSONResponse, Response
 
+from qmx_host.market_data import MarketDoor
 from qmx_host.node_link import ROUTE_PATH, SCHEMA, NodeLink
 
 HOST_ROUTE: Final = ("POST", ROUTE_PATH)
@@ -113,16 +115,23 @@ class Answers:
             )
 
 
+def _no_door() -> MarketDoor | None:
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class Answering:
     """What one host answers with: its node link (its place name, its supervisor and where each
-    app is homed), its pairing key read per call, its heartbeat read and its price store."""
+    app is homed), its pairing key read per call, its heartbeat read and its price store. ``door``
+    is the price store's market-data door, whose `verify` clears the pins This PC confirms; a host
+    without one lists its partitions and clears nothing."""
 
     link: NodeLink
     key: Callable[[], str | None]
     heartbeats: Callable[[], Awaitable[Mapping[str, object]]]
     store_root: Callable[[], Path | None]
     answers: Answers
+    door: Callable[[], MarketDoor | None] = _no_door
 
 
 def _text(args: Mapping[str, JsonValue], name: str) -> str:
@@ -260,10 +269,21 @@ class HostRoute:
         return found
 
     def listed(self, args: Document) -> Document:
+        """The partitions committed here after the watermark. The fingerprints This PC lists as
+        `confirmed` first go to the door's `verify`, and the answer says what it unpinned and
+        what the door still pins; a door that cannot verify leaves `unpinned` out, so This PC
+        confirms them again."""
         after = _table(args, "after") or {}
         mark = str(after.get("committed_at") or "")
         kinds, subjects = _strings(args, "kinds"), _strings(args, "subjects")
-        _strings(args, "confirmed")
+        confirmed = _strings(args, "confirmed") or []
+        door = self.answering.door()
+        pins: Document = {}
+        if door is not None:
+            cleared = door.verify(confirmed)
+            if not is_refusal(cleared):
+                pins["unpinned"] = list(cleared.value)
+            pins["pinned"] = list(door.pinned())
         rows: list[JsonValue] = []
         newest = mark
         for folder, state in self.states():
@@ -286,7 +306,7 @@ class HostRoute:
                     "committed_at": at,
                 }
             )
-        return answered({"partitions": rows, "watermark": {"committed_at": newest}})
+        return answered({"partitions": rows, "watermark": {"committed_at": newest}, **pins})
 
     def fetched(self, args: Document) -> Response:
         fingerprint = _text(args, "fingerprint")

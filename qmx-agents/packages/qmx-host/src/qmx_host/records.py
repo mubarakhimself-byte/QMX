@@ -1,4 +1,5 @@
-"""The records host job, its local half: the one harvester of this machine (Part B AD-209, AD-210).
+"""The records host job: the one harvester of this machine, and on This PC the pull that brings
+every node's records home (Part B AD-209, AD-210; Level 0 AD-28).
 
 Every app on this machine only appends: journal records and series rows go through the writer
 library into one-writer streams under its volume (`apps/<id>/data/journal`), and the host's own
@@ -24,6 +25,11 @@ The same round projects each closed paper, demo and live round trip into one Lib
 named by account, position id and world, so a re-projection lands nothing new, and scores each
 paper lane's trades with the judge's paper scoring into its `paper-run` item. Nothing here writes
 a `bot` or a `strategy`, and nothing here sends, changes or cancels an order.
+
+The remote half (`Pull`) runs on This PC every `[records] interval_s` (300): per node, by the host
+route, `data.list` after the node's watermark with the frozen fingerprints already home as
+`confirmed`, then `data.fetch` of what is not home yet. The node's door keeps each `node`-born
+partition pinned until This PC confirms it, and a confirmed one stays on the node, unpinned.
 """
 
 # pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
@@ -34,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -43,10 +50,15 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
+import httpx
+from pydantic import JsonValue
 from qmf.core import TypedRefusal, canonical_bytes, fingerprint, fingerprint_bytes, is_refusal
 from qmf.data.journal_reader import CommittedLine, JournalLine, read_committed
-from qmf.data.series import JOURNAL_SOURCE_PREFIX, TICKS_KIND, SeriesKey
+from qmf.data.journal_writer import key_token
+from qmf.data.series import JOURNAL_SOURCE_PREFIX, TICKS_KIND, CommitReceipt, SeriesKey
+from qmf.data.store.engines import StoreEngineError
 from qmf.data.store.engines.typed import FLOAT_COLUMNS, TypedWriter
+from qmx_engine.service.forward import PASS_HEADER, mint_host_pass
 from qmx_judge.paper import (
     PAPER_RUN_KIND,
     PaperLane,
@@ -58,8 +70,18 @@ from qmx_judge.paper import (
 from qmx_library.port import Draft, JsonObject, LibraryRefused
 from qmx_library.principal import MAIN, Principal
 
-from qmx_host.maintenance import landed
-from qmx_host.market_data import MarketDoor, Placement
+from qmx_host.maintenance import RESULT, landed
+from qmx_host.market_data import MarketDoor, Placement, rows_of
+from qmx_host.node_link import (
+    CALL_TIMEOUT_S,
+    NODE_APP,
+    ROUTE_PATH,
+    SCHEMA,
+    Place,
+    Post,
+    Unreachable,
+    post_json,
+)
 
 if TYPE_CHECKING:
     from qmx_library.store import Store
@@ -70,7 +92,11 @@ __all__ = [
     "Harvest",
     "HarvestRound",
     "Harvester",
+    "Listed",
+    "NodeRound",
+    "Outcome",
     "Projection",
+    "Pull",
     "Records",
     "append_roots",
     "harvest_class",
@@ -127,6 +153,8 @@ class Cadence:
     tick_s: int = 3_600
     interval_s: int = 300
     settle_days: int = 1
+    open_pull_s: int = 3_600
+    tick_pull_s: int = 86_400
 
     @classmethod
     def of(cls, records: Mapping[str, object], journals: Mapping[str, object]) -> Cadence:
@@ -137,10 +165,16 @@ class Cadence:
             tick_s=_positive(records, "tick_harvest_s", 3_600),
             interval_s=_positive(records, "interval_s", 300),
             settle_days=settle if isinstance(settle, int) and settle >= 0 else 1,
+            open_pull_s=_positive(records, "open_pull_s", 3_600),
+            tick_pull_s=_positive(records, "tick_pull_s", 86_400),
         )
 
     def every(self, harvest: Harvest) -> int:
         return self.tick_s if harvest is Harvest.TICKS else self.open_s
+
+    def pull_every(self, harvest: Harvest) -> int:
+        """How often a node's open month of this class is fetched whole."""
+        return self.tick_pull_s if harvest is Harvest.TICKS else self.open_pull_s
 
 
 def append_roots(home: Path) -> tuple[Path, ...]:
@@ -786,13 +820,485 @@ class Projection:
         _write_json(self._folder / LANES_NAME, dict(starts))
 
 
+# --- the remote half: records come home from the nodes -------------------------------------------
+
+
+HOME_JOB: Final = "records-home"
+HOME_NAME: Final = "Bring node records home"
+PULL_NAME: Final = "pull.json"
+TAIL_FOLDER: Final = "tail"
+FETCH_READ_S: Final = 60.0
+"""Seconds a partition fetch waits for its next bytes, so a month of any size streams in whole
+and only a stalled line ends it."""
+
+type Fetch = Callable[[str, Mapping[str, JsonValue], Mapping[str, str], Path], int]
+"""One `data.fetch` POST: the answer's body streams into the path, and its HTTP status comes
+back. A host that does not answer at all raises `Unreachable`."""
+
+
+def fetch_file(
+    url: str, body: Mapping[str, JsonValue], headers: Mapping[str, str], into: Path
+) -> int:
+    try:
+        with httpx.stream(
+            "POST",
+            url,
+            json=dict(body),
+            headers=dict(headers),
+            timeout=httpx.Timeout(FETCH_READ_S, connect=CALL_TIMEOUT_S),
+        ) as answer:
+            with into.open("wb") as handle:
+                for chunk in answer.iter_bytes():
+                    handle.write(chunk)
+            return answer.status_code
+    except httpx.TransportError as error:
+        raise Unreachable(f"{type(error).__name__}: {error}") from error
+
+
+class Outcome(StrEnum):
+    """What one listed partition came to in a round; the watermark stops at the first failure."""
+
+    HOME = "home"
+    """Committed here now, or already here with the listed fingerprint."""
+    WAITING = "waiting"
+    """An open month whose class is not due yet; it is listed again after its next harvest."""
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class Listed:
+    """One partition a node's `data.list` named."""
+
+    key: SeriesKey
+    fingerprint: str
+    bytes: int
+    frozen: bool
+    committed_at: str
+
+    @classmethod
+    def parse(cls, row: Mapping[str, object]) -> Listed | None:
+        text, printed, size = row.get("key"), row.get("fingerprint"), row.get("bytes")
+        frozen, at = row.get("frozen"), row.get("committed_at")
+        if not (
+            isinstance(text, str)
+            and isinstance(printed, str)
+            and isinstance(size, int)
+            and isinstance(frozen, bool)
+            and isinstance(at, str)
+        ):
+            return None
+        parts = text.split("/")
+        month = re.fullmatch(r"(\d{4})-(\d{2})", parts[-1])
+        if len(parts) != 5 or month is None:
+            return None
+        source, subject, kind, variant = parts[:4]
+        made = SeriesKey.try_create(
+            source,
+            subject,
+            kind,
+            int(month.group(1)),
+            int(month.group(2)),
+            "" if variant == "-" else variant,
+        )
+        return None if is_refusal(made) else cls(made.value, printed, size, frozen, at)
+
+    @property
+    def month(self) -> str:
+        return f"{self.key.year:04d}-{self.key.month:02d}"
+
+
+@dataclass(frozen=True, slots=True)
+class NodeRound:
+    """One node's part of a pull round, as the `maintenance-result` carries it."""
+
+    node: str
+    reached: bool
+    partitions: int = 0
+    """Partitions committed here this round, closed and open."""
+    open_fetched: int = 0
+    already_home: int = 0
+    waiting: int = 0
+    bytes: int = 0
+    confirmed: int = 0
+    """Fingerprints this round's `data.list` confirmed, so the node's door unpinned them."""
+    still_pinned: tuple[str, ...] = ()
+    oldest_unshipped: str | None = None
+    tail_rows: int = 0
+    refusals: tuple[Mapping[str, object], ...] = ()
+
+    def document(self) -> dict[str, object]:
+        return {
+            "node": self.node,
+            "reached": self.reached,
+            "partitions": self.partitions,
+            "open_fetched": self.open_fetched,
+            "already_home": self.already_home,
+            "waiting": self.waiting,
+            "bytes": self.bytes,
+            "confirmed": self.confirmed,
+            "still_pinned": list(self.still_pinned),
+            "oldest_unshipped": self.oldest_unshipped,
+            "tail_rows": self.tail_rows,
+            "refusals": [dict(item) for item in self.refusals],
+        }
+
+
+@dataclass(slots=True)
+class _Node:
+    """What This PC keeps of one node between rounds, in `records/pull.json`."""
+
+    watermark: str = ""
+    """The `committed_at` past which every partition the node listed is home or waiting."""
+    confirm: list[str] = field(default_factory=list[str])
+    """Fingerprints of frozen partitions home here, for the next `data.list` to confirm."""
+    opened: dict[str, int] = field(default_factory=dict[str, int])
+    """Each open month's key and when it was last fetched, in epoch seconds."""
+    last: dict[str, object] | None = None
+
+    def document(self) -> dict[str, object]:
+        return {
+            "watermark": self.watermark,
+            "confirm": self.confirm,
+            "opened": dict(sorted(self.opened.items())),
+            "last": self.last,
+        }
+
+    @classmethod
+    def parse(cls, value: Mapping[str, object]) -> _Node:
+        watermark, confirm = value.get("watermark"), value.get("confirm")
+        opened, last = value.get("opened"), value.get("last")
+        return cls(
+            watermark if isinstance(watermark, str) else "",
+            [str(item) for item in cast("list[object]", confirm)]
+            if isinstance(confirm, list)
+            else [],
+            {str(k): int(v) for k, v in cast("dict[str, int]", opened).items()}
+            if isinstance(opened, dict)
+            else {},
+            cast("dict[str, object]", last) if isinstance(last, dict) else None,
+        )
+
+
+@dataclass(slots=True)
+class _Tally:
+    partitions: int = 0
+    open_fetched: int = 0
+    already_home: int = 0
+    waiting: int = 0
+    bytes: int = 0
+    oldest: str | None = None
+
+    def unshipped(self, listed: Listed) -> None:
+        self.oldest = listed.month if self.oldest is None else min(self.oldest, listed.month)
+
+
+class _Missed(Exception):
+    """A node that did not answer an ask, or refused it; the message names why."""
+
+
+def _advanced(mark: str, outcomes: Sequence[tuple[str, Outcome]]) -> str:
+    """The watermark past every partition that came home or waits on its cadence, and never past
+    one that failed: it is listed again next round, with whatever followed it."""
+    failed = [at for at, outcome in outcomes if outcome is Outcome.FAILED]
+    first = min(failed, default=None)
+    passed = [
+        at
+        for at, outcome in outcomes
+        if outcome is not Outcome.FAILED and (first is None or at < first)
+    ]
+    return max([mark, *passed])
+
+
+class Pull:
+    """The records job's remote half, on This PC only (Part B AD-210, Level 0 AD-28).
+
+    Each round asks every owned node its `data.list` after its watermark, confirming the frozen
+    partitions the last round brought home, so the node's door unpins them and keeps them. It
+    fetches each listed partition this door does not hold with that fingerprint: a frozen one at
+    once, an open one only when its class is due. The fetched rows are fingerprinted before the
+    commit, so a partition whose rows differ from what the node listed never lands. A partition
+    is named by its key, and one this door holds with its fingerprint is home already, so a
+    resend lands nothing. Nothing here pushes into This PC or prunes a node.
+    """
+
+    def __init__(
+        self,
+        door: MarketDoor,
+        folder: Path,
+        *,
+        here: str,
+        places: Callable[[], Mapping[str, Place]],
+        key: Callable[[], str | None],
+        post: Post = post_json,
+        fetch: Fetch = fetch_file,
+    ) -> None:
+        self._door = door
+        self._folder = folder
+        self._here = here
+        self._places = places
+        self._key = key
+        self._post = post
+        self._fetch = fetch
+
+    @property
+    def staging(self) -> Path:
+        return self._folder / "pull-staging"
+
+    def round(self, now: datetime, cadence: Cadence) -> tuple[NodeRound, ...]:
+        """One pull round at ``now`` over every owned node."""
+        at = int(now.timestamp())
+        state = self._read()
+        rounds: list[NodeRound] = []
+        for name, place in sorted(self._places().items()):
+            node = state.setdefault(name, _Node())
+            found = self._node(place, node, at, cadence)
+            node.last = {**found.document(), "at": now.isoformat()}
+            rounds.append(found)
+        self._write(state)
+        return tuple(rounds)
+
+    def entry(self, on: bool) -> dict[str, object]:
+        """Its row on the maintenance list: each node's last round and what it still pins."""
+        nodes = [node.last for _, node in sorted(self._read().items()) if node.last is not None]
+        return {
+            "id": HOME_JOB,
+            "kind": "host",
+            "name": HOME_NAME,
+            "on": on,
+            "switch": {"section": "records", "key": "on"},
+            "running": [],
+            "output": RESULT,
+            "nodes": nodes,
+        }
+
+    def _node(self, place: Place, node: _Node, at: int, cadence: Cadence) -> NodeRound:
+        sent = list(node.confirm)
+        after: dict[str, JsonValue] = {"committed_at": node.watermark} if node.watermark else {}
+        try:
+            value = self._ask(
+                place,
+                "data.list",
+                {"after": after, "confirmed": cast("list[JsonValue]", sent)},
+            )
+        except _Missed as missed:
+            known = node.last or {}
+            pinned = known.get("still_pinned")
+            return NodeRound(
+                place.name,
+                reached=False,
+                still_pinned=tuple(cast("list[str]", pinned)) if isinstance(pinned, list) else (),
+                refusals=({"node": place.name, "reason": str(missed)},),
+            )
+        listing = cast("Mapping[str, object]", value) if isinstance(value, dict) else {}
+        confirmed = 0
+        if "unpinned" in listing:
+            node.confirm, confirmed = [], len(sent)
+        pinned = listing.get("pinned")
+        rows = listing.get("partitions")
+        tally, refusals = _Tally(), list[Mapping[str, object]]()
+        outcomes: list[tuple[str, Outcome]] = []
+        for row in cast("list[object]", rows) if isinstance(rows, list) else []:
+            table = cast("Mapping[str, object]", row) if isinstance(row, dict) else {}
+            listed = Listed.parse(table)
+            if listed is None:
+                refusals.append({"node": place.name, "reason": f"not a partition: {row!r}"})
+                outcomes.append((str(table.get("committed_at", "")), Outcome.FAILED))
+                continue
+            outcome = self._one(place, listed, node, at, cadence, tally, refusals)
+            outcomes.append((listed.committed_at, outcome))
+        node.watermark = _advanced(node.watermark, outcomes)
+        tail = self._tail(place, refusals) if NODE_APP in place.apps else 0
+        return NodeRound(
+            place.name,
+            reached=True,
+            partitions=tally.partitions,
+            open_fetched=tally.open_fetched,
+            already_home=tally.already_home,
+            waiting=tally.waiting,
+            bytes=tally.bytes,
+            confirmed=confirmed,
+            still_pinned=tuple(str(item) for item in cast("list[object]", pinned))
+            if isinstance(pinned, list)
+            else (),
+            oldest_unshipped=tally.oldest,
+            tail_rows=tail,
+            refusals=tuple(refusals),
+        )
+
+    def _one(
+        self,
+        place: Place,
+        listed: Listed,
+        node: _Node,
+        at: int,
+        cadence: Cadence,
+        tally: _Tally,
+        refusals: list[Mapping[str, object]],
+    ) -> Outcome:
+        key = listed.key
+        held = self._door.series_store().state(key)
+        if (
+            held is not None
+            and held.fingerprint == listed.fingerprint
+            and (held.frozen or not listed.frozen)
+        ):
+            tally.already_home += 1
+            if listed.frozen:
+                self._confirm(node, listed.fingerprint)
+            return Outcome.HOME
+        if not listed.frozen:
+            last = node.opened.get(key.text)
+            every = cadence.pull_every(harvest_class(key.source, key.kind))
+            if last is not None and at - last < every:
+                tally.waiting += 1
+                tally.unshipped(listed)
+                return Outcome.WAITING
+        brought = self._bring(place, listed)
+        if isinstance(brought, str):
+            refusals.append({"node": place.name, "key": key.text, "reason": brought})
+            tally.unshipped(listed)
+            return Outcome.FAILED
+        tally.partitions += 1
+        tally.bytes += listed.bytes
+        if not listed.frozen:
+            node.opened[key.text] = at
+            tally.open_fetched += 1
+            return Outcome.HOME
+        node.opened.pop(key.text, None)
+        if not brought.frozen:
+            reason = "home, but not frozen on This PC yet; it is fetched again next round"
+            refusals.append({"node": place.name, "key": key.text, "reason": reason})
+            tally.unshipped(listed)
+            return Outcome.FAILED
+        self._confirm(node, listed.fingerprint)
+        return Outcome.HOME
+
+    def _bring(self, place: Place, listed: Listed) -> CommitReceipt | str:
+        """Fetch one partition, check its rows have the listed fingerprint, and commit it here
+        with `born_on = node`; the receipt, or why it did not land. A month the node froze is
+        committed a second time when the first left it open here: the same rows again are the
+        one re-fetch the store's freeze rule asks for."""
+        key = listed.key
+        target = self.staging.joinpath(*key.series.split("/"), f"{listed.month}.parquet")
+        fetched = target.with_name(f".{target.name}.fetched")
+        written = target.with_name(f".{target.name}.incoming")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            asked: dict[str, JsonValue] = {
+                "schema_version": SCHEMA,
+                "verb": "data.fetch",
+                "args": {"fingerprint": listed.fingerprint},
+            }
+            try:
+                status = self._fetch(f"{place.url}{ROUTE_PATH}", asked, self._pass(place), fetched)
+            except Unreachable as error:
+                return f"{place.name} did not answer the fetch: {error}"
+            if status != 200:
+                said = fetched.read_text(encoding="utf-8", errors="replace")[:300]
+                return f"{place.name} refused the fetch (HTTP {status}): {said}"
+            rule = key.rule
+            made = (
+                TypedWriter(written, key.text, rule.columns, hole_bounds=rule.hole_bounds)
+                .add(rows_of(fetched, rule.columns))
+                .finish()
+            )
+            if made.fingerprint != listed.fingerprint:
+                return (
+                    f"the fetched rows have fingerprint {made.fingerprint}, not the listed "
+                    f"{listed.fingerprint}"
+                )
+            os.replace(written, target)
+            receipt = self._commit(target)
+            if not isinstance(receipt, str) and listed.frozen and not receipt.frozen:
+                receipt = self._commit(target)
+            if not isinstance(receipt, str) and receipt.fingerprint != listed.fingerprint:
+                return f"This PC holds {receipt.fingerprint} for it, not {listed.fingerprint}"
+            return receipt
+        except _Missed as missed:
+            return str(missed)
+        except (OSError, ValueError, StoreEngineError) as error:
+            return f"could not stage the fetched partition: {error}"
+        finally:
+            for path in (fetched, written, target):
+                path.unlink(missing_ok=True)
+
+    def _commit(self, target: Path) -> CommitReceipt | str:
+        receipts = self._door.commit([target], staging=self.staging, born_on=Placement.NODE)
+        return _reason(receipts) if is_refusal(receipts) else receipts.value[0]
+
+    def _tail(self, place: Place, refusals: list[Mapping[str, object]]) -> int:
+        """The node's newest committed journal rows, kept whole in This PC's tail file for that
+        node until the next round replaces it; the harvester never reads it."""
+        asked: dict[str, JsonValue] = {
+            "app": NODE_APP,
+            "operation": "journal_tail",
+            "arguments": {},
+        }
+        try:
+            value = self._ask(place, "apps.ask", asked)
+        except _Missed as missed:
+            refusals.append({"node": place.name, "tail": str(missed)})
+            return 0
+        found = cast("Mapping[str, object]", value) if isinstance(value, dict) else {}
+        inner = found.get("value") if found.get("ok") is True else found
+        rows = cast("Mapping[str, object]", inner).get("rows") if isinstance(inner, dict) else None
+        if not isinstance(rows, list):
+            refusals.append({"node": place.name, "tail": "journal_tail answered no rows"})
+            return 0
+        tail = self._folder / TAIL_FOLDER / f"{key_token(place.name)}.json"
+        _write_json(tail, {"node": place.name, "rows": rows})
+        return len(cast("list[object]", rows))
+
+    def _confirm(self, node: _Node, printed: str) -> None:
+        if printed not in node.confirm:
+            node.confirm.append(printed)
+
+    def _pass(self, place: Place) -> dict[str, str]:
+        key = self._key()
+        if not key:
+            raise _Missed("this home holds no pairing key, so it asks no node")
+        held = mint_host_pass(
+            key, source=self._here, target=place.name, principal=f"host:{self._here}"
+        )
+        return {PASS_HEADER: held}
+
+    def _ask(self, place: Place, verb: str, args: Mapping[str, JsonValue]) -> JsonValue:
+        body: dict[str, JsonValue] = {"schema_version": SCHEMA, "verb": verb, "args": dict(args)}
+        try:
+            answer = self._post(f"{place.url}{ROUTE_PATH}", body, self._pass(place), CALL_TIMEOUT_S)
+        except Unreachable as error:
+            raise _Missed(f"{place.name} did not answer: {error}") from error
+        found = cast("Mapping[str, JsonValue]", answer) if isinstance(answer, dict) else {}
+        if found.get("ok") is not True:
+            code, said = found.get("code", "no answer"), found.get("message", "")
+            raise _Missed(f"{place.name} refused {verb}: {code}: {said}")
+        return found.get("value")
+
+    def _read(self) -> dict[str, _Node]:
+        try:
+            raw = json.loads((self._folder / PULL_NAME).read_text(encoding="utf-8"))
+        except OSError, ValueError:
+            return {}
+        nodes = raw.get("nodes", {}) if isinstance(raw, dict) else {}
+        return {
+            str(name): _Node.parse(cast("Mapping[str, object]", value))
+            for name, value in cast("dict[str, object]", nodes).items()
+            if isinstance(value, dict)
+        }
+
+    def _write(self, state: Mapping[str, _Node]) -> None:
+        nodes = {name: node.document() for name, node in sorted(state.items())}
+        _write_json(self._folder / PULL_NAME, {"nodes": nodes})
+
+
 # --- the host job -------------------------------------------------------------------------------
 
 
 class Records:
     """The records host job beside the backup rounds: a harvest round every `open_harvest_s`
-    on its own thread, and one `maintenance-result` per `interval_s` with the counts since the
-    last one, landed only when a round committed, projected or refused something."""
+    on its own thread, and every `interval_s` the pull round from the nodes, when This PC has
+    the remote half, and one `maintenance-result` with the counts since the last one. It lands
+    when a round committed, projected or refused something, or asked any node."""
 
     def __init__(
         self,
@@ -802,12 +1308,14 @@ class Records:
         clock: Callable[[], datetime],
         projection: Projection | None = None,
         store: Store | None = None,
+        pull: Pull | None = None,
     ) -> None:
         self.harvester = harvester
         self.settings = settings
         self.clock = clock
         self.projection = projection
         self.store = store
+        self.pull = pull
         self._since: list[HarvestRound] = []
         self._reported: datetime | None = None
 
@@ -832,10 +1340,11 @@ class Records:
             )
         self._since.append(counts)
         if self._reported is None or (now - self._reported).total_seconds() >= cadence.interval_s:
-            self._report(now)
+            nodes = () if self.pull is None else self.pull.round(now, cadence)
+            self._report(now, nodes)
         return counts
 
-    def _report(self, now: datetime) -> None:
+    def _report(self, now: datetime, nodes: Sequence[NodeRound] = ()) -> None:
         rounds, self._since, self._reported = self._since, [], now
         total = {
             "rounds": len(rounds),
@@ -847,21 +1356,39 @@ class Records:
             "trades": sum(r.trades for r in rounds),
             "paper_runs": sum(r.paper_runs for r in rounds),
         }
-        worth = total["partitions"] or total["refusals"] or total["trades"] or total["paper_runs"]
+        worth = (
+            total["partitions"]
+            or total["refusals"]
+            or total["trades"]
+            or total["paper_runs"]
+            or nodes
+        )
         if self.store is None or not worth:
             return
-        state = "refused" if total["refusals"] else "ok"
+        refused = total["refusals"] or any(node.refusals for node in nodes)
         line = (
             f"{total['partitions']} partitions filed from {total['streams']} streams, "
             f"{total['trades']} trades projected, {len(cast('list[object]', total['refusals']))} "
             "refusals"
         )
+        if nodes:
+            skipped = [node.node for node in nodes if not node.reached]
+            line += (
+                f"; {len(nodes) - len(skipped)} of {len(nodes)} nodes reached, "
+                f"{sum(node.partitions for node in nodes)} partitions brought home"
+            )
+            if skipped:
+                line += f", {', '.join(skipped)} skipped"
         landed(
             self.store,
             JOB,
-            state,
+            "refused" if refused else "ok",
             line,
-            extra={"harvest": total, "nodes": [], "at": now.isoformat()},
+            extra={
+                "harvest": total,
+                "nodes": [node.document() for node in nodes],
+                "at": now.isoformat(),
+            },
         )
 
     async def run(self) -> None:
