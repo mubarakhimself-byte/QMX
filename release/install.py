@@ -35,6 +35,7 @@ PRODUCT_DISTRIBUTIONS = frozenset(
         "qmf_structure",
         "qmf_risk",
         "qmf_venue",
+        "qmf_readings",
         "qmf_calendar_forex",
         "qml",
         "qmb",
