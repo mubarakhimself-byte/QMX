@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, Protocol, cast, runtime_checkable
 from zoneinfo import ZoneInfo
 
@@ -801,17 +802,20 @@ _EXTENSIONS: Final = Path(__file__).resolve().parents[4] / "extensions"
 _EPOCH_UTC: Final = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _WEEK_DAYS: Final = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 _DAY_MINUTES: Final = 24 * 60
-_FOREX_WEEK: Final[Mapping[str, object]] = {
-    "calendar_ref": "fx-24x5@1",
-    "zone": "America/New_York",
-    "sessions": [{"open": "sun 17:00", "close": "fri 17:00"}],
-    "closures": [
-        {"from": "2026-12-24T17:00", "to": "2026-12-27T17:00"},
-        {"from": "2026-12-31T17:00", "to": "2027-01-03T17:00"},
-    ],
-}
-"""``fx-24x5@1`` as the workflow engine carries it (``qmx_engine.triggers.preflight``), because
-``qmf-calendar-forex`` holds its rule as code and ships no file. QMB cannot import the engine."""
+_FOREX_WEEK: Final[Mapping[str, object]] = MappingProxyType(
+    {
+        "calendar_ref": "fx-24x5@1",
+        "zone": "America/New_York",
+        "sessions": ({"open": "sun 17:00", "close": "fri 17:00"},),
+        "closures": (
+            {"from": "2026-12-24T17:00", "to": "2026-12-27T17:00"},
+            {"from": "2026-12-31T17:00", "to": "2027-01-03T17:00"},
+        ),
+    }
+)
+"""``fx-24x5@1`` as the workflow runner's market precheck carries it
+(``qmx_engine.triggers.preflight``), because ``qmf-calendar-forex`` holds its rule as code and
+ships no file. QMB cannot import that package."""
 
 
 @dataclass(frozen=True, slots=True)
