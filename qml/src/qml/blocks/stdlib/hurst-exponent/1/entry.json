@@ -149,7 +149,7 @@
       }
     }
   },
-  "fingerprint": "fp1:sha256:1a6b04e9436c79bf0c06ff4559a81787e07f37d95096ff5f7111f67c78d07e1b",
+  "fingerprint": "fp1:sha256:d06fc2f415cf69b8b76383cbfef916e123b5a32b247c6eb0e64af565e101477a",
   "golden": {
     "reference": "QuantConnect LEAN HurstExponent.cs formula, numpy 2.5.4",
     "cases": "qml/tests/golden/statistics/reference.json"

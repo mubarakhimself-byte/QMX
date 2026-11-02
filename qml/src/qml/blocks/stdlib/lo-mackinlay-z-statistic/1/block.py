@@ -1,4 +1,4 @@
-"""variance-ratio-z-statistic@1: how many standard errors Lo and MacKinlay's variance ratio of
+"""lo-mackinlay-z-statistic@1: how many standard errors Lo and MacKinlay's variance ratio of
 the last ``window`` prices at a ``horizon`` of bars stands from 1.
 
 The ratio is variance-ratio@1's. Its standard error is the one that holds when returns have one
@@ -49,7 +49,11 @@ class _VarianceRatioZ:
         y, q = list(self._window), self._q
         ones = [y[i] - y[i - 1] for i in range(1, len(y))]
         longs = [y[i] - y[i - q] for i in range(q, len(y))]
-        self._sums = [sum(r * r for r in ones), sum(longs), sum(x * x for x in longs)]
+        self._sums = [
+            sum((r * r for r in ones), 0.0),
+            sum(longs, 0.0),
+            sum((x * x for x in longs), 0.0),
+        ]
         self._since = 0
 
     def update(self, evidence: Mapping[str, object]) -> Decimal | None:
@@ -95,9 +99,9 @@ class _VarianceRatioZ:
     def import_state(self, state: Mapping[str, object]) -> None:
         since = state["since"]
         if not isinstance(since, int):
-            raise ValueError("variance-ratio-z-statistic@1 state needs since")
+            raise ValueError("lo-mackinlay-z-statistic@1 state needs since")
         self._window = deque(_floats(state["window"], "window"), maxlen=self._window.maxlen)
-        self._sums = _floats(state["sums"], "variance-ratio-z-statistic@1 state's sums")
+        self._sums = _floats(state["sums"], "lo-mackinlay-z-statistic@1 state's sums")
         self._since = since
 
 
@@ -107,9 +111,7 @@ class _Block:
     ) -> _VarianceRatioZ:
         window, horizon = int(params["window"]), int(params["horizon"])
         if horizon < 2 or window <= 2 * horizon:
-            raise ValueError(
-                "variance-ratio-z-statistic@1 needs horizon 2 or more, window above 2q"
-            )
+            raise ValueError("lo-mackinlay-z-statistic@1 needs horizon 2 or more, window above 2q")
         return _VarianceRatioZ(window, horizon)
 
 

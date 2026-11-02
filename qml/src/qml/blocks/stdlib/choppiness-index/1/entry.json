@@ -129,7 +129,7 @@
       }
     }
   },
-  "fingerprint": "fp1:sha256:fa0c66d363dec7eaee72370a22953b2be310d16e9ac79e9eba20bfd8daa3f4e0",
+  "fingerprint": "fp1:sha256:f3423a341735072e8dfd1e76090ec456d276b7cc4e290282d2f75dc2f6100601",
   "golden": {
     "reference": "QuantConnect LEAN ChoppinessIndex.cs formula, numpy 2.5.4",
     "cases": "qml/tests/golden/statistics/reference.json"

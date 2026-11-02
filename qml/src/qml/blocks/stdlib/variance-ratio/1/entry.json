@@ -149,7 +149,7 @@
       }
     }
   },
-  "fingerprint": "fp1:sha256:71449244e3fe0cf31c685c4c0d4e6aa99153e411374e8873990adac190500cf2",
+  "fingerprint": "fp1:sha256:6313c438d166402dc6d4e654d9616840e0ad3b43328da4251b6306072a01d17a",
   "golden": {
     "reference": "arch 8.0.0 VarianceRatio.vr",
     "cases": "qml/tests/golden/statistics/reference.json"

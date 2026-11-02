@@ -12,6 +12,7 @@ import math
 from collections import deque
 from collections.abc import Mapping
 from decimal import Decimal
+from typing import cast
 
 from qml.blocks.api import Side, quantise
 
@@ -21,7 +22,8 @@ def _bar(evidence: Mapping[str, object]) -> tuple[float, float, float] | None:
     bar = evidence.get("series")
     if not isinstance(bar, Mapping):
         return None
-    found = [bar.get(name) for name in ("high", "low", "close")]
+    fields = cast("Mapping[str, object]", bar)
+    found = [fields.get(name) for name in ("high", "low", "close")]
     prices = [float(v) for v in found if isinstance(v, Decimal)]
     if len(prices) != len(found):
         return None

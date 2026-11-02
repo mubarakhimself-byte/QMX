@@ -50,7 +50,11 @@ class _VarianceRatio:
         y, q = list(self._window), self._q
         ones = [y[i] - y[i - 1] for i in range(1, len(y))]
         longs = [y[i] - y[i - q] for i in range(q, len(y))]
-        self._sums = [sum(r * r for r in ones), sum(longs), sum(x * x for x in longs)]
+        self._sums = [
+            sum((r * r for r in ones), 0.0),
+            sum(longs, 0.0),
+            sum((x * x for x in longs), 0.0),
+        ]
         self._since = 0
 
     def update(self, evidence: Mapping[str, object]) -> Decimal | None:

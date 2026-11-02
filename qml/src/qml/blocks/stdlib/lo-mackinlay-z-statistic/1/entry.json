@@ -1,6 +1,6 @@
 {
   "schema": "qmx.entry/1",
-  "entry_id": "variance-ratio-z-statistic",
+  "entry_id": "lo-mackinlay-z-statistic",
   "version": 1,
   "family": "statistics",
   "aliases": [
@@ -140,7 +140,7 @@
       }
     }
   },
-  "fingerprint": "fp1:sha256:517a5c4b72b748d28cd3927dbcb699880df4cce908c0b065d64893878d70e19c",
+  "fingerprint": "fp1:sha256:df4e8b4736753ed809d29aaf1cf4a537020f0f3d1675f4d6a6f314bc32394429",
   "golden": {
     "reference": "arch 8.0.0 VarianceRatio.stat, robust=False",
     "cases": "qml/tests/golden/statistics/reference.json"

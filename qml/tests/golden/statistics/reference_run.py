@@ -297,7 +297,7 @@ def main() -> int:
         add(f"variance-ratio@1 window=1000 horizon={horizon}", vr, "arch 8.0.0 VarianceRatio.vr")
     for horizon in (2, 16):
         z = _rolling(closes, 1000, _variance_ratio(horizon, z=True))
-        name = f"variance-ratio-z-statistic@1 window=1000 horizon={horizon}"
+        name = f"lo-mackinlay-z-statistic@1 window=1000 horizon={horizon}"
         add(name, z, "arch 8.0.0 VarianceRatio.stat, robust=False")
     for period in (10, 30):
         er = _rolling(closes, period + 1, _efficiency_ratio)

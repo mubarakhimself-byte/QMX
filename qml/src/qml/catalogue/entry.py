@@ -441,9 +441,9 @@ def _state(value: object, where: str, found: _Found) -> None:
     state = cast("Mapping[str, object]", value)
     if "signal" in state:
         if _object(state["signal"], f"{where}/signal", found):
-            words = cast("Mapping[str, object]", state["signal"])
+            said = cast("Mapping[str, object]", state["signal"])
             for name in ("holds", "clear"):
-                _text(words.get(name), f"{where}/signal/{name}", found)
+                _text(said.get(name), f"{where}/signal/{name}", found)
         return
     cuts = _list(state.get("cuts"), f"{where}/cuts", found)
     if not cuts:

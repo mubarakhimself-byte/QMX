@@ -54,8 +54,8 @@ class _Hurst:
         prices = list(self._window)
         for i, lag in enumerate(self._lags):
             diffs = [prices[j + lag] - prices[j] for j in range(len(prices) - lag)]
-            self._sums[i] = sum(diffs)
-            self._squares[i] = sum(d * d for d in diffs)
+            self._sums[i] = sum(diffs, 0.0)
+            self._squares[i] = sum((d * d for d in diffs), 0.0)
         self._since = 0
 
     def update(self, evidence: Mapping[str, object]) -> Decimal | None:

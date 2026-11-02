@@ -49,12 +49,13 @@ class _Cusum:
         if before is None:
             return None
         move, history = new - before, self._returns
-        full = len(history) == history.maxlen
-        if full:
-            mean = sum(history) / len(history)
-            spread = math.sqrt(sum((r - mean) ** 2 for r in history) / (len(history) - 1))
+        if len(history) < (history.maxlen or 0):
+            history.append(move)
+            return None
+        mean = sum(history) / len(history)
+        spread = math.sqrt(sum((r - mean) ** 2 for r in history) / (len(history) - 1))
         history.append(move)
-        if not full or spread == 0.0:
+        if spread == 0.0:
             return None
         z = (move - mean) / spread
         x = z if self._moment == 1 else z * z - 1.0
