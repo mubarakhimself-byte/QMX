@@ -154,11 +154,14 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         compiled_fp: str | None = None,
         seed: int | None = None,
         motion: Literal["on", "off"] = "on",
+        allow_gaps: bool | None = None,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
         """Backtest a unit on QMB over `window` (`{"start": "2025-03-01", "end": "2025-04-01"}`)
         and land its result in the Library. Answers the run id, and the result id when it
-        finished within the wait; otherwise read it later with backtest_status."""
+        finished within the wait; otherwise read it later with backtest_status. A hole in the
+        bars longer than `[qmb] gap_bars_refuse` fails the run unless `allow_gaps` is true;
+        left out, the study's `allow_gaps` decides."""
         asked = {
             "unit": unit,
             "window": window,
@@ -167,6 +170,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
             "compiled_fp": compiled_fp,
             "seed": seed,
             "motion": motion,
+            "allow_gaps": allow_gaps,
         }
         request = {name: value for name, value in asked.items() if value is not None}
         return ctx.backtest(request, response_format)

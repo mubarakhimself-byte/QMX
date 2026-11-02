@@ -36,7 +36,12 @@ from qmx_host.first_start import (  # pyright: ignore[reportMissingTypeStubs]
     land_dummy,
     make_new,
 )
-from qmx_host.host import LanderLibrary, landers  # pyright: ignore[reportMissingTypeStubs]
+from qmx_host.host import (  # pyright: ignore[reportMissingTypeStubs]
+    STUDY_CHECKER,
+    LanderLibrary,
+    landers,
+    study_check,
+)
 from qmx_library.port import Draft
 from qmx_library.principal import Principal, drafts_ref
 from qmx_library.store import Store
@@ -49,6 +54,13 @@ REPO = APP.parents[2]
 SLICES = REPO / "qml" / "tests" / "fixtures" / "slices"
 OPERATOR = Principal("operator")
 MARCH: dict[str, Any] = {"start": "2025-03-01", "end": "2025-04-01"}
+GAPS: dict[str, Any] = {"window": MARCH, "allow_gaps": True}
+"""The synthetic month opens the forex week at 22:00 UTC, an hour late on Sundays after the 9 March
+clock change: a 4-bar hole each week on `fx-24x5@1`, one more than `[qmb] gap_bars_refuse`."""
+SUNDAY_HOLE = (
+    "data: fx.eurusd misses 4 bars in open time after the bar opening 2025-03-07 21:45 UTC, more "
+    "than the 3 a run allows unless its study allows gaps"
+)
 CHAT = "agent:chat-7"
 SETTLE_SECONDS = 120.0
 """Test bound: how long a test waits for QMB to start again after a crash trips its breaker."""
@@ -142,7 +154,7 @@ def report(store: Store, result_id: str) -> dict[str, Any]:
 
 
 def asked(unit: str, window: dict[str, Any]) -> Document:
-    return cast("Document", {"unit": unit, "window": window})
+    return cast("Document", {"unit": unit, **GAPS, "window": window})
 
 
 def until(check: Callable[[], bool], what: str) -> None:
@@ -168,8 +180,8 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
 ) -> None:
     before = len(reports(world.store))
 
-    answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
-    again = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
+    again = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
 
     run_id, result_id = answer["run_id"], answer["result_id"]
     landed = fields(world.store, result_id)
@@ -190,7 +202,7 @@ def test_the_copilot_backtests_the_dummy_after_its_behaviour_check_and_lands_mon
 
 
 def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: World) -> None:
-    answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
 
     fills = report(world.store, answer["result_id"])["fills"]
     entries = [fill for fill in fills if fill["kind"] == "entry"]
@@ -205,7 +217,7 @@ def test_every_fill_is_its_sizer_receipt_rounded_down_to_the_lot_step(world: Wor
 def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
     world: World,
 ) -> None:
-    by_chat = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+    by_chat = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
     node = NodeJob(
         run_id="wf1",
         node_id="a",
@@ -221,7 +233,7 @@ def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
                 "parameters": {
                     "app": "qmb",
                     "job": "jobs/backtest.py",
-                    "inputs": {"unit": world.dummy, "window": MARCH},
+                    "inputs": {"unit": world.dummy, **GAPS},
                 },
             },
         ),
@@ -245,10 +257,10 @@ def test_a_workflow_app_op_lands_the_same_trades_and_the_rows_read_the_core(
 
 
 def test_a_run_longer_than_the_wait_answers_its_run_id_and_lands_later(world: World) -> None:
-    world.backtest["backtest_run"](unit=world.dummy, window=MARCH)
+    world.backtest["backtest_run"](unit=world.dummy, **GAPS)
     world.control.settings_put("qmb", {"agent_wait_s": 1})
     try:
-        answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+        answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
     finally:
         world.control.settings_put("qmb", {"remove": ["agent_wait_s"]})
     status = world.backtest["backtest_status"]
@@ -261,7 +273,7 @@ def test_a_run_longer_than_the_wait_answers_its_run_id_and_lands_later(world: Wo
 def test_a_blank_and_a_dummy_library_search_answer_the_draft_and_the_try_rows(
     world: World,
 ) -> None:
-    run_id = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]["run_id"]
+    run_id = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]["run_id"]
 
     found = {str(row["id"]): row for row in world.control.library_search("", limit=1000)}
     named = [str(row["id"]) for row in world.control.library_search("dummy")]
@@ -279,9 +291,7 @@ def test_a_fingerprint_mismatch_lands_a_failed_result_and_counts_no_job_error(
 ) -> None:
     wrong = "fp1:sha256:" + "0" * 64
 
-    answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH, compiled_fp=wrong)[
-        "result"
-    ]
+    answer = world.backtest["backtest_run"](unit=world.dummy, **GAPS, compiled_fp=wrong)["result"]
 
     landed = fields(world.store, answer["result_id"])
     assert (answer["status"], landed["status"], landed["compiled_fp"]) == (
@@ -333,7 +343,7 @@ def test_a_month_with_no_bars_is_refused_by_name_before_any_try(world: World) ->
 def test_a_crash_that_trips_the_breaker_fails_the_run_and_qmb_starts_again(
     world: World,
 ) -> None:
-    world.backtest["backtest_run"](unit=world.dummy, window=MARCH)
+    world.backtest["backtest_run"](unit=world.dummy, **GAPS)
     queue = Volume(world.runtime.home, "qmb").root / "data" / "jobs"
     failed: list[BaseException] = []
 
@@ -356,7 +366,7 @@ def test_a_crash_that_trips_the_breaker_fails_the_run_and_qmb_starts_again(
         process.kill()
     started.join(SETTLE_SECONDS)
     until(lambda: world.runtime.status("qmb")["status"] == "running", "QMB starts again")
-    after = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+    after = world.backtest["backtest_run"](unit=world.dummy, **GAPS)["result"]
 
     killed = [
         row
@@ -369,6 +379,42 @@ def test_a_crash_that_trips_the_breaker_fails_the_run_and_qmb_starts_again(
     assert [getattr(error, "code", None) for error in failed] == ["not_running"]
     assert len(killed) == 1
     assert after["status"] == "finished"
+
+
+def test_a_study_that_allows_gaps_runs_the_month_the_hole_rule_fails(world: World) -> None:
+    spec = {"origin": "written", "preset": "shipped", "markets": "admitted", "allow_gaps": True}
+    draft = Draft("study-spec", "study-gaps", "gaps allowed", fields=cast("Any", spec))
+    world.store.register_checker(STUDY_CHECKER, study_check)
+    study = world.store.put(OPERATOR, draft, on="main", expected_head=None).object_id
+    run = world.backtest["backtest_run"]
+
+    refused = run(unit=world.dummy, window=MARCH)["result"]
+    allowed = run(unit=world.dummy, window=MARCH, study=study)["result"]
+
+    assert (refused["status"], fields(world.store, refused["result_id"])["reason"]) == (
+        "failed",
+        SUNDAY_HOLE,
+    )
+    assert (allowed["status"], fields(world.store, allowed["result_id"])["study"]) == (
+        "finished",
+        study,
+    )
+    holes = report(world.store, allowed["result_id"])["holes"]
+    assert [(hole["market_id"], hole["bars_missing"]) for hole in holes] == [("fx.eurusd", 4)] * 4
+
+
+def test_the_hole_limit_and_fill_count_in_settings_reach_the_run(world: World) -> None:
+    world.control.settings_put("qmb", {"gap_bars_refuse": 4, "calibrated_min_fills": 7})
+    try:
+        answer = world.backtest["backtest_run"](unit=world.dummy, window=MARCH)["result"]
+    finally:
+        world.control.settings_put("qmb", {"remove": ["gap_bars_refuse", "calibrated_min_fills"]})
+
+    run = Volume(world.runtime.home, "qmb").root / "data" / "runs" / answer["run_id"]
+    written = json.loads((run / "in" / "request.json").read_text("utf-8"))
+    assert answer["status"] == "finished"
+    assert report(world.store, answer["result_id"])["holes"] == []
+    assert (written["gap_bars_refuse"], written["calibrated_min_fills"]) == (4, 7)
 
 
 def test_the_first_start_click_keeps_qmb_running_at_every_host_start(
