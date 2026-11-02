@@ -2,7 +2,7 @@
   "schema": "qmx.entry/1",
   "entry_id": "volume-kind",
   "version": 1,
-  "family": "futures-calendar",
+  "family": "market-data",
   "aliases": [
     "volume by class",
     "what volume counts"
