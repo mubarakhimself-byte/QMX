@@ -132,7 +132,7 @@ def fixture_app(root: Path, app_id: str, risk: str) -> Path:
 def price_store(root: Path) -> Path:
     month = root / "series/dukascopy/EURUSD/bar-1m/-/2025-01"
     month.mkdir(parents=True)
-    state = {
+    state: dict[str, object] = {
         "key": "dukascopy/EURUSD/bar-1m/-/2025-01",
         "fingerprint": "fp-recorded",
         "rows": 3,
@@ -263,7 +263,7 @@ def test_heartbeats_answer_across_two_hosts(hosts: Hosts) -> None:
 
 
 def test_an_agent_pass_on_a_manage_operation_is_refused(hosts: Hosts) -> None:
-    args = {
+    args: dict[str, Any] = {
         "app": "trading-node",
         "operation": "pause",
         "arguments": {"op_id": "op-agent", "issued_at": "2026-11-02T00:00:00+00:00", "scope": {}},
