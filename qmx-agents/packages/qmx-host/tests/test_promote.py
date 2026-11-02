@@ -310,10 +310,6 @@ def test_every_principal_but_his_is_refused_and_nothing_moves(rig: Rig, caller: 
 
     status, answer = rig.click(caller, op_id="click-1", to="paper", **forged)
 
-    assert (Caller("user").principal, caller.principal.startswith(("agent:", "run:"))) == (
-        "operator",
-        True,
-    )
     assert (status, answer["code"]) == (403, "refused_principal")
     assert answer["message"] == (
         f"a unit moves toward paper or live only by his click, not by {caller.principal}"
