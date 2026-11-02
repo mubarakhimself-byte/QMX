@@ -15,8 +15,16 @@ import pytest
 _ROOT = Path(__file__).resolve().parents[2]
 
 
+class _Entry(Protocol):
+    fields: Mapping[str, str]
+
+
+class _Record(Protocol):
+    entry: _Entry
+
+
 class _Port(Protocol):
-    records: tuple[object, ...]
+    records: tuple[_Record, ...]
     unmapped: dict[str, list[str]]
 
     def faces(self) -> list[dict[str, object]]: ...
@@ -87,7 +95,7 @@ def test_no_field_of_any_record_is_lost() -> None:
     missing = [
         (face["entry_id"], name)
         for record, face in zip(MADE.records, faces, strict=True)
-        for name, text in cast("Mapping[str, str]", getattr(record, "entry").fields).items()
+        for name, text in record.entry.fields.items()
         if text
         and text not in face.values()
         and text not in [s["quote"] for s in cast("list[dict[str, str]]", face["sources"])]

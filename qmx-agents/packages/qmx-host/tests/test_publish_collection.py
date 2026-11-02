@@ -12,6 +12,8 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import JsonValue
+from qmx_control.models import ControlError
 from qmx_control.service import ControlService
 from qmx_engine.control_door import PRINCIPAL, UNNAMED
 from qmx_engine.service.context import Caller
@@ -20,6 +22,7 @@ from qmx_library.port import Draft
 from qmx_library.principal import MAIN, Principal, drafts_ref
 from qmx_library.store import Store
 from qmx_tools.functions import write_entry_statuses
+from qmx_tools.gather import template
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from qmx_host.first_start import PORT_SEED, land_port
@@ -137,3 +140,45 @@ def test_only_his_click_publishes_the_collection_and_a_second_click_changes_noth
     )
     mains = [cast(tuple[str, int], store.head(i, MAIN))[0] for i in ITEMS]
     assert mains == [cast(tuple[str, int], store.head(i, drafts_ref(i)))[0] for i in ITEMS]
+
+
+def test_a_member_his_single_publish_refuses_is_refused_with_the_same_words(
+    tmp_path: Path, store: Store
+) -> None:
+    unit = cast(dict[str, JsonValue], template())
+    cast(dict[str, dict[str, object]], unit["numbers"])["ema_period"]["default"] = "500"
+    store.put(
+        OPERATOR, Draft("unit", "u-1", "u", fields=unit), on=drafts_ref("u-1"), expected_head=None
+    )
+    first = PORT["drafts"][0]
+    store.put(
+        OPERATOR,
+        Draft("component", first["item"], "e", fields=first["fields"]),
+        on=drafts_ref(first["item"]),
+        expected_head=None,
+    )
+    members = Draft("collection", "c-1", "c", fields={"items": ["u-1", first["item"]]})
+    store.put(OPERATOR, members, on=MAIN, expected_head=None)
+    control = ControlService(
+        resolve(tmp_path / "QMX", create=True).home, secret_getter=lambda _s, _n: None
+    )
+    control.attach_library(store)
+    app = FastAPI()
+    app.include_router(publish_collection_router(control))
+
+    answer = (
+        TestClient(as_caller(app, Caller("user")))
+        .post("/api/library/collections/c-1/publish")
+        .json()
+    )
+    with pytest.raises(ControlError) as single:
+        control.library_merge(
+            cast(tuple[str, int], store.head("u-1", drafts_ref("u-1")))[0],
+            from_ref=drafts_ref("u-1"),
+        )
+
+    assert (answer["published"], answer["refused"]) == (
+        [first["item"]],
+        [{"item": "u-1", "code": single.value.code, "message": str(single.value)}],
+    )
+    assert store.head("u-1", MAIN) is None
