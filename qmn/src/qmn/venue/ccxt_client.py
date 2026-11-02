@@ -790,15 +790,14 @@ class CcxtClient:
         }
         for name, held in list(self._held.items()):
             if held.symbol in open_symbols:
-                stop = next(
+                held.stop = next(
                     (
                         _number(o.get("triggerPrice"))
                         for o in resting
-                        if _protective(o) and o.get("symbol") == held.symbol
+                        if o.get("triggerPrice") is not None and o.get("symbol") == held.symbol
                     ),
                     None,
                 )
-                held.stop = stop
                 continue
             price = self._last_close_price(held)
             if price is None:
@@ -845,7 +844,7 @@ class CcxtClient:
         if size == 0:
             return Decimal(0), Decimal(0)
         if size is None or price is None:
-            self._alarm(call, "venue_answer_unread", type(order).__name__)
+            self._alarm(call, "venue_answer_unread", "an order answer with no fill size or price")
             return None
         return size, price
 
