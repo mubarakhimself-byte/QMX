@@ -23,8 +23,8 @@ import statistics
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from functools import partial
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
@@ -213,7 +213,9 @@ def _published(apps: Supervisor, app: str) -> bool:
     if found is None:
         return False
     active = cast("dict[str, Any]", found.get("road") or {}).get("active")
-    return isinstance(active, dict) and active.get("definition_hash") == found["definition_hash"]
+    if not isinstance(active, dict):
+        return False
+    return cast("dict[str, Any]", active).get("definition_hash") == found["definition_hash"]
 
 
 def _ask(run: Run, operation: str) -> dict[str, Any]:
@@ -235,10 +237,12 @@ def _keys(run: Run) -> dict[str, Any] | None:
     if held is None:
         return None
     try:
-        found = json.loads(held)
+        found = cast("object", json.loads(held))
     except ValueError:
         found = None
-    if not isinstance(found, dict) or found.get("schema_version") != KEYS_SCHEMA:
+    if not isinstance(found, dict) or cast("dict[str, Any]", found).get("schema_version") != (
+        KEYS_SCHEMA
+    ):
         raise Stopped(
             f"keys: {NODE_KEYS} holds something that is not a {KEYS_SCHEMA} document; remove it "
             "in Credential Manager, then set up the node again"
@@ -313,7 +317,9 @@ def _clock(ports: Ports, run: Run) -> Card | None:
     facts = ports.clock(_engine(run))
     run.facts["clock"] = facts
     line = clock_line(facts)
-    run.say(f"clock: {line.detail}" + ("" if line.ok else "; the node will not enter on a bad clock"))
+    run.say(
+        f"clock: {line.detail}" + ("" if line.ok else "; the node will not enter on a bad clock")
+    )
     return None
 
 
@@ -326,7 +332,9 @@ def _install(ports: Ports, run: Run) -> Card | None:
     apps = _apps(run)
     for app, folder in ports.apps.items():
         try:
-            found = _installed(apps, app) or apps.install(folder, trust="first_party")
+            found = _installed(apps, app) or cast(
+                "dict[str, Any]", apps.install(folder, trust="first_party")
+            )
             ports.prove(apps, app, str(found["definition_hash"]))
         except AppError as error:
             raise Stopped(f"install: {app} did not install or pass its proof: {error}") from None
@@ -355,7 +363,9 @@ def _sign(run: Run) -> Card | None:
                 raise Stopped(f"signature: the node was not published: {error}") from None
             again = " That signature is not this version's; sign it again."
         else:
-            run.say(f"signature: trading-node {definition_hash[:12]} is published with your signature")
+            run.say(
+                f"signature: trading-node {definition_hash[:12]} is published with your signature"
+            )
             return None
     asked = f"definition_hash={definition_hash}" + (f"&expected_active={active}" if active else "")
     version = found["definition"]["version"]
@@ -502,8 +512,8 @@ def _row_of(run: Run) -> dict[str, Any]:
 
 
 def _row_written(ports: Ports, run: Run) -> bool:
-    listed = _row_of(run).get("apps") or []
-    return set(_apps_here(ports, run)) <= set(cast("list[str]", listed))
+    listed = cast("list[str]", _row_of(run).get("apps") or [])
+    return set(_apps_here(ports, run)) <= set(listed)
 
 
 def _write_row(ports: Ports, run: Run) -> Card | None:

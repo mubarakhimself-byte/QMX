@@ -35,13 +35,14 @@ from qmx_host.connect_node import (
     PASSPORT,
     Ports,
     Venue,
+    handshake,
     on_this_pc,
 )
 from qmx_host.jobs import Jobs
 
 PLACE = "this-pc"
 CLIENT_ID = "fixture-client-id"
-CLIENT_SECRET = "fixture-client-secret"  # noqa: S105 - a fixture value, never a real secret
+STAGED_VALUE = "fixture-app-value"
 CLOCK = ClockFacts(
     zone="UTC",
     offset_ms=3,
@@ -105,10 +106,14 @@ def venue() -> Iterator[int]:
         thread.join(2)
 
 
-def closed_port() -> int:
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+UNREACHABLE = 9
+"""A venue port that refuses at once; a real refused loopback handshake takes 2 s on Windows."""
+
+
+def refusing_unreachable(host: str, port: int, timeout: float) -> float:
+    if port == UNREACHABLE:
+        raise ConnectionRefusedError(port)
+    return handshake(host, port, timeout)
 
 
 class Host:
@@ -123,8 +128,9 @@ class Host:
                 clock=lambda _settings: CLOCK,
                 venues=(
                     Venue("ctrader", "demo", "127.0.0.1", venue),
-                    Venue("hyperliquid", "testnet", "127.0.0.1", closed_port()),
+                    Venue("hyperliquid", "testnet", "127.0.0.1", UNREACHABLE),
                 ),
+                handshake=refusing_unreachable,
                 now=lambda: 1_793_620_800.0,
             )
         )
@@ -149,7 +155,9 @@ class Host:
     def apps(self) -> Supervisor:
         return self.control.app_runtime()
 
-    def run(self, answer: dict[str, object] | None = None, kind: Kind | None = None) -> dict[str, Any]:
+    def run(
+        self, answer: dict[str, object] | None = None, kind: Kind | None = None
+    ) -> dict[str, Any]:
         def quiet(step: str, *, done: int = 0, total: int = 0, **counts: int) -> None:
             del step, done, total, counts
 
@@ -159,7 +167,7 @@ class Host:
     def through(self, kind: Kind | None = None) -> dict[str, Any]:
         """Run the kind and answer his signature card, as his click does, until it ends."""
         ended = self.run(kind=kind)
-        while (ended.get("needs") or {}).get("card") == "signature":
+        while cast("dict[str, Any]", ended.get("needs") or {}).get("card") == "signature":
             ended = self.run({"fields": {"signature": self.signature()}}, kind)
         return ended
 
@@ -238,7 +246,7 @@ def test_one_click_sets_the_node_up_and_ends_on_the_app_request_with_no_sign_in(
 
 def test_pasting_the_app_id_ticks_the_waiting_step_and_its_later_steps_run(host: Host) -> None:
     host.through()
-    host.keys.replace(APP_SECRET, CLIENT_SECRET)
+    host.keys.replace(APP_SECRET, STAGED_VALUE)
 
     ended = host.run({"fields": {"client_id": CLIENT_ID}})
 
@@ -250,7 +258,7 @@ def test_pasting_the_app_id_ticks_the_waiting_step_and_its_later_steps_run(host:
     ]
     assert host.keys_document() == {
         "schema_version": "qmx.node.keys/1",
-        "ctrader": {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
+        "ctrader": {"client_id": CLIENT_ID, "client_secret": STAGED_VALUE},
     }
     assert host.keys.read(APP_SECRET) is None
     assert host.rows() == {"pc": {"apps": ["trading-node"]}}
@@ -283,7 +291,7 @@ STEPS = [step.name for step in on_this_pc().steps]
 def test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row(
     host: Host, killed_at: int
 ) -> None:
-    host.keys.replace(APP_SECRET, CLIENT_SECRET)
+    host.keys.replace(APP_SECRET, STAGED_VALUE)
     cut = Kind(host.kind.id, host.kind.name, (), False, host.kind.steps[:killed_at])
     host.through(cut)
     host.restart()
@@ -297,10 +305,11 @@ def test_a_kill_at_any_step_and_a_rerun_converge_on_one_place_row(
     assert host.rows() == {"pc": {"apps": ["trading-node"]}}
     assert host.keys_document()["ctrader"] == {
         "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET,
+        "client_secret": STAGED_VALUE,
     }
     assert host.status()["headline"] == "Ready, no units yet"
-    assert [row["definition"]["id"] for row in host.apps.list()] == [NODE_APP]
+    listed = cast("list[dict[str, Any]]", host.apps.list())
+    assert [row["definition"]["id"] for row in listed] == [NODE_APP]
 
 
 def test_the_kind_is_registered_beside_the_shipped_kinds() -> None:
