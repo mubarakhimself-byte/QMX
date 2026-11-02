@@ -1,5 +1,6 @@
-"""The fair comparison (card D4 steps 7 and 8 and its gates). Its inputs, the runs and the deflated
-Sharpe over the variant set, are told apart by shape.
+"""The fair comparison (card D4 steps 7 and 8 and its gates). Its inputs, the runs and the `judge`
+block's verdict over the variant set, are told apart by shape; the verdict is found by its key
+inside the child's nested outputs.
 
 A comparison only on identical windows and costs: a mixed set is refused, never compared. Each
 variant's metrics, the correlation of every pair's daily returns, and the luck warning when the
@@ -11,9 +12,20 @@ import json
 import sys
 from statistics import correlation, median
 
+
+def judged(value):
+    if isinstance(value, dict):
+        if isinstance(value.get("verdict"), dict):
+            return value["verdict"]
+        value = list(value.values())
+    if isinstance(value, list):
+        return next((found for v in value if (found := judged(v)) is not None), None)
+    return None
+
+
 given = json.load(sys.stdin)["in"]
 ran = next(v for v in given if "runs" in v)
-deflated = next(v for v in given if "deflated_sharpe" in v)["deflated_sharpe"]
+verdict = judged([v for v in given if v is not ran])
 done = [r for r in ran["runs"] if not r.get("failed")]
 failed = [{"variant": r["variant"], "why": r["failed"]} for r in ran["runs"] if r.get("failed")]
 mixed = len({json.dumps([r["windows"], r["costs"]], sort_keys=True) for r in done}) > 1
@@ -27,7 +39,7 @@ if mixed or len(done) < 2:
                 "correlations": [],
                 "failed": failed,
                 "luck_warning": None,
-                "deflated_sharpe": deflated,
+                "judge": verdict,
                 "trials": len(ran["runs"]),
             }
         )
@@ -64,7 +76,7 @@ print(
             "edge_over_median": edge,
             "failed": failed,
             "luck_warning": luck,
-            "deflated_sharpe": deflated,
+            "judge": verdict,
             "trials": len(ran["runs"]),
         }
     )

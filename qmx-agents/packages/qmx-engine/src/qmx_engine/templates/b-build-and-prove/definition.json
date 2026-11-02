@@ -24,19 +24,29 @@
       },
       "family": {
         "type": "object",
-        "description": "holdout, used windows, trial Sharpes"
+        "description": "the family's sealed holdout and the windows it used, read when the study turns the holdout on"
+      },
+      "study": {
+        "type": "object",
+        "description": "the study settings, his choice per study; each one left out takes its default",
+        "properties": {
+          "holdout": {"type": "boolean", "default": false, "description": "seal a holdout: the family's own, else the last holdout_share of the range"},
+          "holdout_share": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.2, "description": "the share of the range a new holdout takes"},
+          "split": {"type": "boolean", "default": false, "description": "split the range into in-sample and walk-forward validation folds"},
+          "in_sample_share": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1, "default": 0.6, "description": "the share of the range that is in-sample when split"},
+          "folds": {"type": "integer", "minimum": 1, "default": 3, "description": "the validation folds after in-sample when split"}
+        }
       }
     }
   },
-  "outputs": {"type": "object", "description": "the funnel scorecard: the sealed spec, every overfit gate, the verdict and the paper card"},
+  "outputs": {"type": "object", "description": "the funnel scorecard: the sealed spec, the judge's verdict and the paper card"},
   "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
     {"id": "spec", "name": "Seal the experiment spec", "type": "script", "typeVersion": 1, "position": [220, 0], "parameters": {"script": "scripts/spec.py"}, "effect": "none"},
     {"id": "sealed", "name": "Spec checks pass?", "type": "rule", "typeVersion": 1, "position": [440, 0], "parameters": {"expr": "items.ok"}, "effect": "none"},
     {"id": "qmb", "name": "Register and backtest on QMB", "type": "script", "typeVersion": 1, "position": [660, 0], "parameters": {"script": "scripts/qmb.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
-    {"id": "dsr", "name": "Deflated Sharpe over the family", "type": "script", "typeVersion": 1, "position": [880, 0], "parameters": {"script": "scripts/deflated_sharpe.py"}, "effect": "none"},
-    {"id": "gates", "name": "Overfit gates", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/gates.py"}, "effect": "none"},
+    {"id": "judge", "name": "Judge the results", "type": "subworkflow", "typeVersion": 1, "position": [880, 0], "parameters": {"workflow": "judge"}},
     {"id": "card", "name": "Paper card or dead end", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/card.py"}, "effect": "none"},
     {"id": "write", "name": "Write the scorecard", "type": "llm", "typeVersion": 1, "position": [1540, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
     {"id": "assemble", "name": "Assemble the scorecard", "type": "script", "typeVersion": 1, "position": [1760, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
@@ -49,9 +59,8 @@
     "On request": {"main": [[{"node": "Seal the experiment spec", "port": "in", "map": "one"}, {"node": "Write the lineage edges", "port": "in", "map": "one"}]]},
     "Seal the experiment spec": {"main": [[{"node": "Spec checks pass?", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Spec checks pass?": {"true": [[{"node": "Register and backtest on QMB", "port": "in", "map": "one"}]]},
-    "Register and backtest on QMB": {"main": [[{"node": "Deflated Sharpe over the family", "port": "in", "map": "one"}, {"node": "Overfit gates", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Deflated Sharpe over the family": {"main": [[{"node": "Overfit gates", "port": "in", "map": "one"}]]},
-    "Overfit gates": {"main": [[{"node": "Paper card or dead end", "port": "in", "map": "one"}, {"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Register and backtest on QMB": {"main": [[{"node": "Judge the results", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Judge the results": {"main": [[{"node": "Paper card or dead end", "port": "in", "map": "one"}, {"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
     "Paper card or dead end": {"main": [[{"node": "Write the scorecard", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Write the scorecard": {"main": [[{"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Assemble the scorecard": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},

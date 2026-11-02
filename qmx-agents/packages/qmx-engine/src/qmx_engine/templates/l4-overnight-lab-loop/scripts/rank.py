@@ -1,6 +1,7 @@
 """The end of the night (card L4 steps 12, 14 and 17 and its gates). Every gate is a script; no
-model grades a result. Its inputs, the night's last state, the holdout runs and the deflated Sharpe,
-are told apart by shape.
+model grades a result. Its inputs, the night's last state, the holdout runs and the `judge`
+block's verdict, are told apart by shape; the verdict is found by its key inside the child's
+nested outputs.
 
 Survivors are ranked by validated score. A survivor whose holdout score falls outside its
 validation Monte Carlo band "did not hold" and is kept as a dead end, tagged `negative_result`
@@ -12,10 +13,22 @@ Two decisions at most, each with a recommendation.
 import json
 import sys
 
+
+def judged(value):
+    if isinstance(value, dict):
+        if isinstance(value.get("verdict"), dict):
+            return value["verdict"]
+        value = list(value.values())
+    if isinstance(value, list):
+        return next((found for v in value if (found := judged(v)) is not None), None)
+    return None
+
+
 given = json.load(sys.stdin)["in"]
 state = next(v for v in given if "ledger" in v)
-holdout = {h["spec_hash"]: h for h in next(v for v in given if "holdout" in v)["holdout"]}
-deflated = next(v for v in given if "deflated_sharpe" in v)["deflated_sharpe"]
+touched = next(v for v in given if "holdout" in v)
+holdout = {h["spec_hash"]: h for h in touched["holdout"]}
+verdict = judged([v for v in given if v is not state and v is not touched])
 passed = [t for t in state["ledger"] if not t.get("error") and not t["failed"]]
 ranked = sorted(passed, key=lambda t: -t["validated"])
 survivors, dead_ends = [], []
@@ -47,7 +60,7 @@ if held:
     decisions.append(
         {"decision": f"send {held[0]['spec_hash'][:8]} to D3 to improve", "recommended": "yes"}
     )
-if held and deflated["passes"]:
+if held and verdict is not None and verdict["overall"] == "pass":
     decisions.append(
         {
             "decision": f"check {held[0]['spec_hash'][:8]} against the book in P1",
@@ -60,7 +73,7 @@ print(
             "silent": not state["ledger"],
             "trials_tonight": state["trials_tonight"],
             "trials_family": state["trials_family"],
-            "deflated_sharpe": deflated,
+            "judge": verdict,
             "survivors": survivors[:10],
             "dead_ends": [d | {"tag": "negative_result"} for d in dead_ends],
             "moves": [

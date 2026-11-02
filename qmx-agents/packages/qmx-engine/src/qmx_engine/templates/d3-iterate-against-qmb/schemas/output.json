@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "required": ["parent", "verdict", "survivor", "validated", "holdout", "deflated_sharpe",
+  "required": ["parent", "verdict", "survivor", "validated", "holdout", "judge",
                "generations", "tree", "trials", "summary"],
   "x-prose": ["summary"],
   "properties": {
@@ -9,8 +9,8 @@
     "survivor": {"type": ["string", "null"]},
     "validated": {"type": "number"},
     "holdout": {"type": ["number", "null"]},
-    "deflated_sharpe": {"type": "object"},
-    "generations": {"type": "integer", "maximum": 3},
+    "judge": {"type": ["object", "null"]},
+    "generations": {"type": "integer", "minimum": 0},
     "tree": {"type": "array"},
     "trials": {"type": "integer"},
     "summary": {"type": "string"}

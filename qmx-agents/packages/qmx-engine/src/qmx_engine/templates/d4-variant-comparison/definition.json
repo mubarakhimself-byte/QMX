@@ -16,10 +16,11 @@
       "request": {
         "type": "string",
         "description": "try this on GBPUSD and on 15 minutes ..."
-      }
+      },
+      "variants": {"type": "integer", "minimum": 1, "default": 12, "description": "the variants one run compares, a starting default he changes, never a cap"}
     }
   },
-  "outputs": {"type": "object", "description": "the head-to-head page: variant cards, correlation grid, deflated Sharpe, luck warning"},
+  "outputs": {"type": "object", "description": "the head-to-head page: variant cards, correlation grid, the judge's verdict, luck warning"},
   "settings": {"timezone": "UTC", "on_error": "park", "caller_policy": "any", "memory": {"scopes": ["workflow"]}},
   "nodes": [
     {"id": "start", "name": "On request", "type": "trigger", "typeVersion": 1, "position": [0, 0], "parameters": {"kinds": ["manual"]}},
@@ -28,7 +29,7 @@
     {"id": "any", "name": "Any variant to build?", "type": "rule", "typeVersion": 1, "position": [660, 0], "parameters": {"expr": "items.build != []"}, "effect": "none"},
     {"id": "build", "name": "Build the structural variants", "type": "agent", "typeVersion": 1, "toolsets": ["library", "backtest", "data"], "position": [880, 0], "role": "builder", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/build.md", "output_schema_ref": "schemas/build.json", "tools": []}, "effect": "none"},
     {"id": "runs", "name": "Compile and run every variant", "type": "script", "typeVersion": 1, "position": [1100, 0], "parameters": {"script": "scripts/runs.py"}, "retry": {"max_tries": 3, "backoff_seconds": [300, 900], "retry_on": ["script_exit"]}, "effect": "none"},
-    {"id": "dsr", "name": "Deflated Sharpe over the variants", "type": "script", "typeVersion": 1, "position": [1320, 0], "parameters": {"script": "scripts/deflated_sharpe.py"}, "effect": "none"},
+    {"id": "judge", "name": "Judge the results", "type": "subworkflow", "typeVersion": 1, "position": [1320, 0], "parameters": {"workflow": "judge"}},
     {"id": "compare", "name": "Compare on identical windows", "type": "script", "typeVersion": 1, "position": [1540, 0], "parameters": {"script": "scripts/compare.py"}, "effect": "none"},
     {"id": "write", "name": "Write the comparison", "type": "llm", "typeVersion": 1, "position": [1760, 0], "role": "writer", "parameters": {"prompt_ref": "prompts/write.md", "schema_ref": "schemas/prose.json"}, "effect": "none"},
     {"id": "assemble", "name": "Assemble the head-to-head page", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/assemble.py"}, "effect": "none"},
@@ -43,8 +44,8 @@
     "Identity rule and caps": {"main": [[{"node": "Any variant to build?", "port": "in", "map": "one"}, {"node": "Compile and run every variant", "port": "in", "map": "one"}, {"node": "Assemble the head-to-head page", "port": "in", "map": "one"}]]},
     "Any variant to build?": {"true": [[{"node": "Build the structural variants", "port": "in", "map": "one"}]]},
     "Build the structural variants": {"main": [[{"node": "Compile and run every variant", "port": "in", "map": "one"}]]},
-    "Compile and run every variant": {"main": [[{"node": "Deflated Sharpe over the variants", "port": "in", "map": "one"}, {"node": "Compare on identical windows", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
-    "Deflated Sharpe over the variants": {"main": [[{"node": "Compare on identical windows", "port": "in", "map": "one"}]]},
+    "Compile and run every variant": {"main": [[{"node": "Judge the results", "port": "in", "map": "one"}, {"node": "Compare on identical windows", "port": "in", "map": "one"}, {"node": "Render and grade", "port": "in", "map": "one"}]]},
+    "Judge the results": {"main": [[{"node": "Compare on identical windows", "port": "in", "map": "one"}]]},
     "Compare on identical windows": {"main": [[{"node": "Write the comparison", "port": "in", "map": "one"}, {"node": "Assemble the head-to-head page", "port": "in", "map": "one"}]]},
     "Write the comparison": {"main": [[{"node": "Assemble the head-to-head page", "port": "in", "map": "one"}]]},
     "Assemble the head-to-head page": {"main": [[{"node": "Render and grade", "port": "in", "map": "one"}]]},
