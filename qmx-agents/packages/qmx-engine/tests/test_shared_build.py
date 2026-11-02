@@ -36,7 +36,7 @@ from qmx_engine.templates.catalog import SHARED
 from qmx_engine.triggers import rows
 from qmx_engine.triggers.ticker import Scheduler
 
-type Answer = Callable[[NodeJob, JsonValue], JsonValue]
+type Answer = Callable[[NodeJob, JsonValue], Any]
 T0 = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 
 
@@ -45,18 +45,19 @@ def qmx_home(tmp: Path) -> Path:
 
 
 def run_block(
-    name: str, home: Path, inputs: JsonValue, llm: Answer | None = None
+    name: str, home: Path, inputs: Any, llm: Answer | None = None
 ) -> tuple[Outcome, list[Event]]:
     """One test run of `_shared/<name>` on `home`, with its model step answered by `llm`."""
     root = SHARED / name
     found = checked(root)
     assert not isinstance(found, list), found
     planted = {} if llm is None else {"llm": Script(llm)}
+    given = cast("JsonValue", inputs)
 
     async def go() -> Outcome:
         with Ledger.open(home) as ledger, LibraryFake.open(home) as library:
             engine = Engine(home, ledger, settings=DEFAULTS, library=library, executors=planted)
-            outcome = await engine.start(root, found[1], mode="test", inputs=inputs)
+            outcome = await engine.start(root, found[1], mode="test", inputs=given)
             await engine.settle()
             return outcome
 
@@ -204,7 +205,7 @@ def test_a_proposal_missing_its_ask_and_evidence_names_both_and_lands_nothing(
     assert artifacts(home, "proposal-card") == []
 
 
-FAILED_VERDICT = {
+FAILED_VERDICT: dict[str, Any] = {
     "item": "verdict-0f3a",
     "says": "Fail by the shipped preset. fx.eurusd fails the cost stress: expectancy -0.04R at "
     "2x costs. Behind it: 3 tries, 2 effective.",
@@ -296,7 +297,7 @@ def test_a_runs_lineage_walks_from_source_to_result(tmp_path: Path) -> None:
         [found] = library.edges(ids["result"], "consumed", reverse=True)
         record = library.get(found.from_id)
         from_source = {e.from_id for e in library.edges(ids["source"], "consumed", reverse=True)}
-    chain = record.fields["metadata"]["chain"]
+    chain = cast("list[dict[str, str]]", metadata(record)["chain"])
     assert outcome.status == "passed"
     assert from_source == {record.object_id}
     assert [(s["stage"], s["object_id"]) for s in chain] == [
@@ -370,12 +371,11 @@ def test_a_conveyor_whose_stage_lands_what_its_trigger_watches_fires_its_stage_o
 ) -> None:
     home, clock = qmx_home(tmp_path), Clock(T0)
     bundle = Bundle.read(conveyor_template(tmp_path / "template"))
-    upstream = {"object_id": "o", "seq": 0, "kind": "artifact", "output": "conveyed"}
+    upstream: dict[str, JsonValue] = {"object_id": "o", "seq": 0, "kind": "artifact"}
+    upstream |= {"output": "conveyed", "producer": "qmb"}
     with fake_service(home, clock=clock) as svc:
         item = svc.drafts.put(None, bundle, 0, caller=OPERATOR).item
-        tested = asyncio.run(
-            svc.tests.run(item, caller=OPERATOR, inputs={"event": upstream | {"producer": "qmb"}})
-        )
+        tested = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs={"event": upstream}))
         assert tested.status == "passed"
         version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)
         svc.versions.enable(version, caller=OPERATOR)

@@ -31,9 +31,7 @@ def judged(value):
 
 
 given = json.load(sys.stdin)["in"]
-found = next(
-    (j for v in (given if isinstance(given, list) else [given]) if (j := judged(v))), None
-)
+found = next((j for v in (given if isinstance(given, list) else [given]) if (j := judged(v))), None)
 if found is None:
     print(f"{FAILURE} the death-certificate block needs the judge block's verdict")
     raise SystemExit(0)
