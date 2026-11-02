@@ -7,9 +7,12 @@ counts toward the supervisor's breaker.
 Reads answer from the store. Changes are recorded in ``desired`` in arrival order, each under its
 op id; a call without one gets one minted and a call without ``issued_at`` is stamped on arrival.
 A change whose ``issued_at`` is older than the newest change applied to the same register answers
-``superseded``; ``kill`` and ``flatten`` always apply. A repeated op id answers its first answer.
-No operation places an order, and while the machine fingerprint differs from the minted one every
-change that could start trading is refused until ``confirm_same_node``.
+``superseded``; ``kill`` and ``flatten`` always apply. Any other change dated more than
+``ISSUED_AHEAD_NS`` past arrival is refused, so a caller's fast clock cannot supersede his later
+changes. A repeated op id answers its first answer, unless it carries another change, which
+answers ``op_id_reused``. No operation places an order, and while the machine fingerprint
+differs from the minted one every change that could start trading is refused until
+``confirm_same_node``.
 
 ``CHANGES`` is the one table of what each change takes, which register it orders in, whether it
 could start trading, and what it does now that no venue is set up.
@@ -17,16 +20,19 @@ could start trading, and what it does now that no venue is set up.
 
 from __future__ import annotations
 
+import bisect
+import json
+import os
+import re
 import shutil
-import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, TypeAlias, cast
 
-from qmf.core import is_refusal
-from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
+from qmf.data.journal_envelope import JournalStream
+from qmf.data.journal_reader import JournalLine, stream_folders
 
 from qmn.app.identity import Standing
 from qmn.app.store import Change, Desired, Json, Outcome, Store
@@ -35,6 +41,7 @@ from qmn.protection.ksa import LEVEL_RANK, KsaLevel
 __all__ = [
     "CHANGES",
     "GUARD_BYTES",
+    "ISSUED_AHEAD_NS",
     "READS",
     "TAIL_ROWS",
     "Answer",
@@ -47,6 +54,10 @@ Answer: TypeAlias = dict[str, Json]
 
 TAIL_ROWS: Final = 500
 """`[node] tail_rows`: the most journal rows one `journal_tail` answers."""
+ISSUED_AHEAD_NS: Final = 5_000_000_000
+"""`[node] issued_ahead_s`, starting at 5 s: how far past its arrival a change's `issued_at` may
+be. Any further ahead is a fast clock, refused as `bad_argument`; `kill` and `flatten` take any
+`issued_at`, since they always apply."""
 GUARD_BYTES: Final = 3 * 1024**3
 """`[node] journal_guard_bytes` plus its margin: 2 GB and 1 GB (NODE.md section 9)."""
 SCHEMAS: Final[dict[str, Json]] = {
@@ -59,6 +70,8 @@ VENUES: Final[tuple[tuple[str, str], ...]] = (("ctrader", "demo"), ("hyperliquid
 """Every venue this node can trade, none set up until his setup steps register it (C-11)."""
 NOT_SET_UP: Final = "Set up a venue in the trading node's setup steps first."
 STREAMS: Final = frozenset({"node", "unit"})
+_ROTATION_FILE: Final = re.compile(r"\A\d{6}\.jsonl\Z")
+"""A stream folder's rotation file, as the committed reader names it (``journal_reader``)."""
 _SCOPES: Final = ("account", "deployment_id", "instrument")
 _CHANGE_KEYS: Final = frozenset({"op_id", "issued_at"})
 
@@ -69,7 +82,8 @@ class BadArgumentError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class Context:
-    """What every operation reads: the store, who the node is now, its journal, the clock."""
+    """What every operation reads: the store, who the node is now, its journal, the clock and
+    the id source (both built in ``open_node``)."""
 
     store: Store
     here: str | None
@@ -77,6 +91,7 @@ class Context:
     data: Path
     build: str
     clock_ns: Callable[[], int]
+    new_id: Callable[[], str]
     started_ns: int
 
     def standing(self) -> Standing:
@@ -403,15 +418,24 @@ CHANGES: Final[Mapping[str, ChangeSpec]] = {
 
 
 def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) -> Answer:
-    """Take one change in arrival order and answer it; a repeated op id answers its first answer."""
+    """Take one change in arrival order and answer it.
+
+    A repeated op id carrying the same change answers its first answer; one carrying another
+    change answers ``op_id_reused``, so a kill is never answered with an earlier pause's answer.
+    """
     spec = CHANGES[name]
     try:
         _known(arguments, spec.arguments | _CHANGE_KEYS)
-        op_id = _text(arguments, "op_id", required=False) or uuid.uuid4().hex
+        op_id = _text(arguments, "op_id", required=False) or context.new_id()
         arrived = context.clock_ns()
         given = arguments.get("issued_at")
         issued = arrived if given is None else _issued_at(given)
         request = spec.parse(arguments, context.standing())
+        if request.register is not None and issued - arrived > ISSUED_AHEAD_NS:
+            raise BadArgumentError(
+                f"issued_at is {(issued - arrived) / 1e9:.3f} s ahead of this node's clock, past"
+                f" the {ISSUED_AHEAD_NS / 1e9:g} s clock skew it takes"
+            )
     except BadArgumentError as error:
         return refused("bad_argument", f"{name}: {error}")
 
@@ -447,7 +471,18 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
             answer={**answer, "op_id": op_id},
         )
 
-    return context.store.record(op_id, decide).answer
+    kept = context.store.record(op_id, decide)
+    if (kept.kind, kept.args) != (name, request.kept):
+        return {
+            **refused(
+                "op_id_reused",
+                f"{name}: op id {op_id} already carries another change ({kept.kind});"
+                " nothing was changed",
+                next_step="Send this change again under a new op id.",
+            ),
+            "op_id": op_id,
+        }
+    return kept.answer
 
 
 # --- reads ------------------------------------------------------------------------------------
@@ -556,12 +591,98 @@ def _passport(context: Context, arguments: Mapping[str, Json]) -> Answer:
     )
 
 
+class _UnreadableError(Exception):
+    """A journal file holds something the committed reader would refuse."""
+
+
+def _rotation_files(folder: Path) -> list[Path]:
+    return sorted(entry for entry in folder.iterdir() if _ROTATION_FILE.fullmatch(entry.name))
+
+
+def _committed(path: Path, *, last: bool) -> list[bytes]:
+    """The whole lines of one rotation file; only the last file may end mid-line."""
+    data = path.read_bytes()
+    end = data.rfind(b"\n") + 1
+    if end != len(data) and not last:
+        raise _UnreadableError(f"{path.name} ends mid-line but is not the last file")
+    return data[:end].splitlines()
+
+
+def _line(raw: bytes) -> JournalLine:
+    try:
+        item: object = json.loads(raw)
+    except ValueError as error:
+        raise _UnreadableError("a line is not JSON") from error
+    if isinstance(item, dict):
+        found = cast(dict[str, object], item)
+        series, t, seq, record = (found.get(key) for key in ("series", "t", "seq", "record"))
+        if (
+            isinstance(series, str)
+            and isinstance(t, int)
+            and isinstance(seq, int)
+            and isinstance(record, dict)
+        ):
+            return JournalLine(series, t, seq, cast(dict[str, object], record))
+    raise _UnreadableError("a line is not a journal record")
+
+
+def _last_seq(path: Path) -> int:
+    """The ``seq`` of a closed rotation file's last line, read back from its end."""
+    with path.open("rb") as handle:
+        size = handle.seek(0, os.SEEK_END)
+        if size == 0:
+            return -1
+        window = 4096
+        while True:
+            start = max(0, size - window)
+            handle.seek(start)
+            data = handle.read()
+            if not data.endswith(b"\n"):
+                raise _UnreadableError(f"{path.name} ends mid-line but is not the last file")
+            begin = data.rfind(b"\n", 0, len(data) - 1) + 1
+            if begin > 0 or start == 0:
+                return _line(data[begin:-1]).seq
+            window *= 4
+
+
+def _newest(files: Sequence[Path]) -> list[JournalLine]:
+    """The stream's newest ``TAIL_ROWS`` lines, reading its files newest first."""
+    found: list[JournalLine] = []
+    for index in range(len(files) - 1, -1, -1):
+        raws = _committed(files[index], last=index == len(files) - 1)
+        wanted = TAIL_ROWS - len(found)
+        found[:0] = [_line(raw) for raw in raws[max(0, len(raws) - wanted) :]]
+        if len(found) >= TAIL_ROWS:
+            break
+    return found
+
+
+def _after(files: Sequence[Path], after: int) -> list[JournalLine]:
+    """The stream's first ``TAIL_ROWS`` lines past ``after``. One writer holds a stream, so its
+    ``seq`` rises through the files: a file whose last line is at or below ``after`` is skipped
+    unread, and the first file read is searched by halves."""
+    found: list[JournalLine] = []
+    for index, path in enumerate(files):
+        last = index == len(files) - 1
+        if not last and _last_seq(path) <= after:
+            continue
+        raws = _committed(path, last=last)
+        start = bisect.bisect_right(raws, after, key=lambda raw: _line(raw).seq)
+        for raw in raws[start:]:
+            found.append(_line(raw))
+            if len(found) == TAIL_ROWS:
+                return found
+    return found
+
+
 def _journal_tail(context: Context, arguments: Mapping[str, Json]) -> Answer:
     """The node's committed journal rows after ``after_sequence``, at most ``TAIL_ROWS``.
 
-    Read with the committed reader, so a line the writer is still writing is left alone and the
-    writer's files stay byte for byte. Without ``after_sequence`` it answers the newest rows.
-    ``next_sequence`` is the ``after_sequence`` to pass for the rows that follow.
+    Only whole lines are read, so a line the writer is still writing is left alone, and no file
+    is written. Without ``after_sequence`` it answers the newest rows. The cost is bounded by the
+    rows answered, not the journal: streams are picked by folder name before any read, and each
+    stream reads only the rotation files that hold the rows it answers. ``next_sequence`` is the
+    ``after_sequence`` to pass for the rows that follow.
     """
     _known(arguments, frozenset({"after_sequence", "streams"}))
     after = arguments.get("after_sequence")
@@ -570,21 +691,15 @@ def _journal_tail(context: Context, arguments: Mapping[str, Json]) -> Answer:
     streams = arguments.get("streams", sorted(STREAMS))
     if not isinstance(streams, list) or not streams or any(item not in STREAMS for item in streams):
         raise BadArgumentError(f"streams is a list of {', '.join(sorted(STREAMS))}")
+    prefixes = tuple(f"{JournalStream(str(item)).source}." for item in streams)
     lines: list[JournalLine] = []
-    for folder in stream_folders(context.journal_root):
-        read = read_committed(folder)
-        if is_refusal(read):
-            return refused(
-                "journal_unreadable",
-                f"the node's journal could not be read ({read.category.value})",
-            )
-        lines.extend(
-            line
-            for line in read.value
-            if isinstance(line, JournalLine)
-            and line.record.get("stream") in streams
-            and (after is None or line.seq > after)
-        )
+    try:
+        for folder in stream_folders(context.journal_root):
+            if folder.name.startswith(prefixes):
+                files = _rotation_files(folder)
+                lines.extend(_newest(files) if after is None else _after(files, after))
+    except (OSError, _UnreadableError) as error:
+        return refused("journal_unreadable", f"the node's journal could not be read ({error})")
     lines.sort(key=lambda line: (line.t, line.seq))
     rows = lines[-TAIL_ROWS:] if after is None else lines[:TAIL_ROWS]
     next_sequence = max((line.seq for line in rows), default=-1 if after is None else after)

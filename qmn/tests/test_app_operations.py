@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import itertools
+import json
 import sqlite3
+import time
 from contextlib import closing
 from pathlib import Path
 
@@ -59,11 +61,11 @@ def test_an_older_pause_is_superseded_by_an_applied_resume_and_an_older_kill_app
     tmp_path: Path,
 ) -> None:
     node = node_in(tmp_path)
-    resume = {"op_id": "op-resume", "issued_at": "2026-11-02T09:30:02+00:00", "scope": "all"}
-    pause = {"op_id": "op-pause", "issued_at": "2026-11-02T09:30:01+00:00", "scope": "all"}
+    resume = {"op_id": "op-resume", "issued_at": "2026-10-26T07:30:02+00:00", "scope": "all"}
+    pause = {"op_id": "op-pause", "issued_at": "2026-10-26T07:30:01+00:00", "scope": "all"}
     kill = {
         "op_id": "op-kill",
-        "issued_at": "2026-11-02T09:30:00+00:00",
+        "issued_at": "2026-10-26T07:30:00+00:00",
         "scope": "all",
         "level": "RED",
     }
@@ -96,7 +98,7 @@ def test_a_direct_call_gets_an_op_id_and_a_repeated_op_id_answers_its_first_answ
 
     minted = node.call("pause", {"scope": {"account": "demo-1"}})
     first = node.call("pause", {"op_id": "op-1", "scope": {"account": "demo-1"}})
-    repeat = node.call("resume", {"op_id": "op-1", "scope": "all"})
+    repeat = node.call("pause", {"op_id": "op-1", "scope": {"account": "demo-1"}})
 
     op_id = minted["op_id"]
     assert isinstance(op_id, str) and len(op_id) == 32
@@ -110,6 +112,49 @@ def test_a_direct_call_gets_an_op_id_and_a_repeated_op_id_answers_its_first_answ
     assert value(node.call("status", {}))["pauses"] == ["account:demo-1"]
 
 
+def test_a_kill_under_a_pause_op_id_is_refused_as_reused_and_a_fresh_op_id_kill_applies(
+    tmp_path: Path,
+) -> None:
+    node = node_in(tmp_path)
+    node.call("pause", {"op_id": "op-1", "scope": "all"})
+
+    reused = node.call("kill", {"op_id": "op-1", "scope": "all", "level": "BLACK"})
+    other_scope = node.call("pause", {"op_id": "op-1", "scope": {"account": "demo-1"}})
+    killed = node.call("kill", {"op_id": "op-2", "scope": "all", "level": "BLACK"})
+
+    assert reused == {
+        "ok": False,
+        "code": "op_id_reused",
+        "message": "kill: op id op-1 already carries another change (pause); nothing was changed",
+        "next_step": "Send this change again under a new op id.",
+        "op_id": "op-1",
+    }
+    assert other_scope["code"] == "op_id_reused"
+    assert killed == {"ok": True, "value": {"level_in_force": "BLACK"}, "op_id": "op-2"}
+    assert value(node.call("status", {}))["kill_level"] == "BLACK"
+
+
+def test_a_change_dated_past_the_clock_skew_is_refused_and_a_kill_still_applies(
+    tmp_path: Path,
+) -> None:
+    node = open_node(tmp_path, here=MACHINE, machine="pc", clock_ns=lambda: START_NS)
+    ahead = "2026-10-26T07:33:30+00:00"
+
+    resumed = node.call("resume", {"op_id": "r", "issued_at": ahead, "scope": "all"})
+    paused = node.call("pause", {"op_id": "p", "scope": "all"})
+    killed = node.call("kill", {"op_id": "k", "issued_at": ahead, "scope": "all", "level": "RED"})
+
+    assert resumed == {
+        "ok": False,
+        "code": "bad_argument",
+        "message": "resume: issued_at is 10.000 s ahead of this node's clock, past the 5 s clock"
+        " skew it takes",
+    }
+    assert paused == {"ok": True, "value": {"state": "accepted"}, "op_id": "p"}
+    assert killed == {"ok": True, "value": {"level_in_force": "RED"}, "op_id": "k"}
+    assert value(node.call("status", {}))["pauses"] == ["all"]
+
+
 def test_every_operation_answers_bad_arguments_and_never_raises(tmp_path: Path) -> None:
     node = node_in(tmp_path)
     bad: list[object] = [
@@ -120,7 +165,9 @@ def test_every_operation_answers_bad_arguments_and_never_raises(tmp_path: Path) 
         {"scope": 5, "level": "PURPLE", "deployment": [], "account": 3, "after_sequence": "x"},
     ]
 
-    codes = {(name, str(node.call(name, given).get("code"))) for name in OPERATIONS for given in bad}
+    codes = {
+        (name, str(node.call(name, given).get("code"))) for name in OPERATIONS for given in bad
+    }
 
     assert {code for _, code in codes} == {"bad_argument"}
     assert node.call("explode", {}) == {
@@ -167,3 +214,66 @@ def test_journal_tail_mid_write_returns_whole_lines_and_leaves_the_file_as_it_wa
     assert tail["next_sequence"] == 0
     assert stream.read_bytes() == before
     assert not list(stream.parent.glob("*.torn"))
+
+
+ROWS_PER_FILE = 5_000
+
+
+def node_with_journal(data: Path, files: int) -> tuple[Node, Path]:
+    """A node whose lifecycle stream holds ``files`` rotation files of copies of its start row,
+    one writer's ``seq`` rising through them, and a line still in flight at the end."""
+    node = node_in(data)
+    (first,) = (data / "journal").glob("*node_lifecycle*/000000.jsonl")
+    line = json.loads(first.read_bytes().splitlines()[0])
+    for index in range(files):
+        lines: list[str] = []
+        for seq in range(index * ROWS_PER_FILE, (index + 1) * ROWS_PER_FILE):
+            line["seq"] = line["record"]["seq"] = seq
+            line["t"] += 1
+            lines.append(json.dumps(line, separators=(",", ":")))
+        (first.parent / f"{index:06d}.jsonl").write_bytes(("\n".join(lines) + "\n").encode())
+    newest = first.parent / f"{files - 1:06d}.jsonl"
+    with newest.open("ab") as handle:
+        handle.write(b'{"series":"journal-node/x/node_lifecycle/demo.pc","t":17')
+    return node, newest
+
+
+def seqs(answer: dict[str, Json]) -> list[Json]:
+    rows = value(answer)["rows"]
+    assert isinstance(rows, list)
+    return [row["seq"] for row in rows if isinstance(row, dict)]
+
+
+def best_seconds(node: Node, arguments: dict[str, Json]) -> float:
+    times: list[float] = []
+    for _ in range(3):
+        began = time.perf_counter()
+        node.call("journal_tail", arguments)
+        times.append(time.perf_counter() - began)
+    return min(times)
+
+
+def test_journal_tail_costs_the_same_on_a_journal_ten_times_larger(tmp_path: Path) -> None:
+    small, _ = node_with_journal(tmp_path / "small", files=2)
+    large, newest = node_with_journal(tmp_path / "large", files=20)
+    total = 20 * ROWS_PER_FILE
+    before = newest.read_bytes()
+
+    newest_rows = large.call("journal_tail", {})
+    early_rows = large.call("journal_tail", {"after_sequence": 5})
+    middle_rows = large.call("journal_tail", {"after_sequence": 3 * ROWS_PER_FILE + 17})
+    late_rows = large.call("journal_tail", {"after_sequence": total - 10})
+    timings = {
+        arguments: (best_seconds(small, dict(arguments)), best_seconds(large, dict(arguments)))
+        for arguments in [(), (("after_sequence", 5),), (("after_sequence", 9_990),)]
+    }
+
+    assert seqs(newest_rows) == list(range(total - 500, total))
+    assert value(newest_rows)["next_sequence"] == total - 1
+    assert seqs(early_rows) == list(range(6, 506))
+    assert seqs(middle_rows) == list(range(3 * ROWS_PER_FILE + 18, 3 * ROWS_PER_FILE + 518))
+    assert seqs(late_rows) == list(range(total - 9, total))
+    assert newest.read_bytes() == before
+    # A test bound, not a node setting: the read before this fix took ten times longer here.
+    for arguments, (small_s, large_s) in timings.items():
+        assert large_s < 3 * small_s + 0.1, (arguments, small_s, large_s)

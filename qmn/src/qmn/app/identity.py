@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import secrets
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,23 +23,25 @@ from typing import Final
 from qmn.app.store import IdentityRow, Json, Store
 
 __all__ = [
+    "INSTALL_ID_BYTES",
     "LINUX_MACHINE_ID",
     "TAG_LENGTH",
     "Standing",
     "establish",
     "fingerprint_of",
+    "install_id_of",
     "machine_fingerprint",
-    "mint_install_id",
 ]
 
 TAG_LENGTH: Final = 8
+INSTALL_ID_BYTES: Final = 16
 LINUX_MACHINE_ID: Final = (Path("/etc/machine-id"), Path("/var/lib/dbus/machine-id"))
 _WINDOWS_KEY: Final = r"SOFTWARE\Microsoft\Cryptography"
 
 
-def mint_install_id() -> str:
-    """128 random bits as 26 lowercase base-32 characters."""
-    return base64.b32encode(secrets.token_bytes(16)).decode("ascii").rstrip("=").lower()
+def install_id_of(random: bytes) -> str:
+    """``INSTALL_ID_BYTES`` random bytes as 26 lowercase base-32 characters."""
+    return base64.b32encode(random).decode("ascii").rstrip("=").lower()
 
 
 def fingerprint_of(machine_id: str) -> str:
@@ -99,9 +100,10 @@ class Standing:
         }
 
 
-def establish(store: Store, *, here: str | None, now_ns: int) -> Standing:
-    """Mint the identity on first start, or read the one minted; compare it with ``here``."""
+def establish(store: Store, *, install_id: str, here: str | None, now_ns: int) -> Standing:
+    """Keep ``install_id`` as the identity on first start, or read the one kept; compare it
+    with ``here``."""
     kept = store.identity()
     if kept is None:
-        kept = store.mint_identity(IdentityRow(mint_install_id(), here, now_ns))
+        kept = store.mint_identity(IdentityRow(install_id, here, now_ns))
     return Standing(kept, here)

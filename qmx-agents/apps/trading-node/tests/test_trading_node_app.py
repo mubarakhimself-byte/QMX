@@ -181,19 +181,19 @@ def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Su
     resumed, _ = ask(
         supervisor,
         "resume",
-        {"op_id": "order-resume", "issued_at": "2026-11-02T10:00:02+00:00", "scope": scope},
+        {"op_id": "order-resume", "issued_at": "2026-10-01T10:00:02+00:00", "scope": scope},
     )
     paused, _ = ask(
         supervisor,
         "pause",
-        {"op_id": "order-pause", "issued_at": "2026-11-02T10:00:01+00:00", "scope": scope},
+        {"op_id": "order-pause", "issued_at": "2026-10-01T10:00:01+00:00", "scope": scope},
     )
     killed, _ = ask(
         supervisor,
         "kill",
         {
             "op_id": "order-kill",
-            "issued_at": "2026-11-02T10:00:00+00:00",
+            "issued_at": "2026-10-01T10:00:00+00:00",
             "scope": scope,
             "level": "ORANGE",
         },

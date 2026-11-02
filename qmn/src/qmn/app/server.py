@@ -15,9 +15,9 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sys
 import time
-import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final, cast
@@ -26,7 +26,7 @@ from qmf.core import is_refusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
 from qmf.data.journal_writer import JournalWriter, WriterScope
 
-from qmn.app.identity import establish, machine_fingerprint
+from qmn.app.identity import INSTALL_ID_BYTES, establish, install_id_of, machine_fingerprint
 from qmn.app.operations import (
     CHANGES,
     READS,
@@ -81,21 +81,36 @@ class Node:
             return refused("internal", f"{name} failed inside the node ({type(error).__name__})")
 
 
+def _os_random(size: int) -> bytes:
+    """``size`` bytes of OS entropy: the node's one random source."""
+    return secrets.token_bytes(size)  # ambient-scan: allow - the node's composition root
+
+
 def open_node(
     data: Path,
     *,
     here: str | None,
     machine: str,
     clock_ns: Callable[[], int] = time.time_ns,
+    random_bytes: Callable[[int], bytes] = _os_random,
 ) -> Node:
-    """Compose the node in ``data`` (the volume's ``data/``) on the machine ``here`` names."""
+    """Compose the node in ``data`` (the volume's ``data/``) on the machine ``here`` names.
+
+    The clock and the random source are read here and nowhere below: every op id, the boot
+    epoch and the install id minted on first start come from ``random_bytes``.
+    """
     store = Store(data / "node.sqlite")
     started = clock_ns()
-    standing = establish(store, here=here, now_ns=started)
+    standing = establish(
+        store,
+        install_id=install_id_of(random_bytes(INSTALL_ID_BYTES)),
+        here=here,
+        now_ns=started,
+    )
     journal_root = data / "journal"
     scope = WriterScope(JournalStream.NODE, standing.tag, WORLD, machine, ROLE, BUILD)
     opened = JournalWriter.open(
-        journal_root, scope, clock=clock_ns, boot_epoch_id=uuid.uuid4().hex[:12]
+        journal_root, scope, clock=clock_ns, boot_epoch_id=random_bytes(6).hex()
     )
     journal: JournalWriter | None = None
     problem: str | None = None
@@ -116,6 +131,7 @@ def open_node(
         data=data,
         build=BUILD,
         clock_ns=clock_ns,
+        new_id=lambda: random_bytes(16).hex(),
         started_ns=started,
     )
     return Node(context, journal)
