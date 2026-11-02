@@ -230,15 +230,19 @@ STALE = View(
 )
 
 
-def test_a_weekend_stale_feed_sends_nothing_and_a_weekday_one_wakes_him(
+def test_a_weekend_stale_feed_sends_nothing_even_at_the_open_and_a_weekday_one_wakes_him(
     tmp_path: Path, fake: Fake
 ) -> None:
     saturday = PushSender(
         lambda: STALE, publisher_to(fake, tmp_path), forex_week, lambda: at("2026-11-07T12:00:00")
     )
     saturday.pass_once()
+    sunday_open = PushSender(
+        lambda: STALE, publisher_to(fake, tmp_path), forex_week, lambda: at("2026-11-08T22:01:00")
+    )
+    sunday_open.pass_once()
     assert fake.tried == []
-    assert (saturday.sent, saturday.failed) == (0, 0)
+    assert (saturday.sent, saturday.failed, sunday_open.sent) == (0, 0, 0)
 
     wednesday_row = {**STALE.stand_downs[0], "since_ns": at("2026-11-04T11:50:00")}
     wednesday = PushSender(

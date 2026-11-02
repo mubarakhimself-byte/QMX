@@ -50,6 +50,7 @@ from qmn.observability.liveness import LivenessHeartbeat
 __all__ = [
     "HALT_BAND_ALARM_AFTER_NS",
     "LIVENESS_INTERVAL_NS",
+    "OPEN_SETTLE_NS",
     "PUSH_PASS_S",
     "SEND_TIMEOUT_S",
     "SHORT_LIST",
@@ -78,6 +79,10 @@ minutes grace (Part C DEVOPS-CLOCKS section 7)."""
 HALT_BAND_ALARM_AFTER_NS: Final = 300_000_000_000
 """`[node] halt_band_alarm_after_s`, starting at 300 s: how long the clock stand-down holds
 before it wakes him."""
+OPEN_SETTLE_NS: Final = 120_000_000_000
+"""`[node] alarm_open_settle_s`, starting at 120 s: how long a market must have been open before
+a push that follows its calendar fires, so feeds and sessions coming back after a closure do
+not wake him."""
 PING_REFERENCE: Final = "qmx/trading-node-keys#alarms.healthchecks_ping_url"
 """Where the ping URL is kept, by name; the heartbeat never holds the URL itself."""
 LOOPBACK: Final = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -334,8 +339,9 @@ class HealthchecksSink:
 class PushSender:
     """Pushes each new occurrence on the short list once, while its calendar allows.
 
-    ``open_at(market_id, utc_ns)`` answers whether that market is open on its calendar. A push
-    that fails stays waiting and is tried again on every pass, in the order it arose."""
+    ``open_at(market_id, utc_ns)`` answers whether that market is open on its calendar; a push
+    that follows the calendar waits until a market it concerns has been open ``settle_ns``. A
+    push that fails stays waiting and is tried again on every pass, in the order it arose."""
 
     def __init__(
         self,
@@ -346,6 +352,7 @@ class PushSender:
         *,
         pass_s: float = PUSH_PASS_S,
         halt_after_ns: int = HALT_BAND_ALARM_AFTER_NS,
+        settle_ns: int = OPEN_SETTLE_NS,
     ) -> None:
         self.read = read
         self.publisher = publisher
@@ -353,6 +360,7 @@ class PushSender:
         self.clock_ns = clock_ns
         self.pass_s = pass_s
         self.halt_after_ns = halt_after_ns
+        self.settle_ns = settle_ns
         self.sent = 0
         self.failed = 0
         self.waiting: list[Raised] = []
@@ -377,8 +385,9 @@ class PushSender:
         for item in raised(self.read(), now, halt_after_ns=self.halt_after_ns):
             if item.key in self._seen:
                 continue
-            rule = SHORT_LIST[item.wake]
-            if not rule.any_hours and not any(self.open_at(m, now) for m in item.markets):
+            if not SHORT_LIST[item.wake].any_hours and not any(
+                self.open_at(m, now) and self.open_at(m, now - self.settle_ns) for m in item.markets
+            ):
                 continue
             self._seen.add(item.key)
             self.waiting.append(item)
