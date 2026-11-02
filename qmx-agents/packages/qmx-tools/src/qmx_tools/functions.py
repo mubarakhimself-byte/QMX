@@ -5,15 +5,19 @@ from __future__ import annotations
 import difflib
 import importlib.metadata
 import json
+import time
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 import qml
 from qmf.core import Instant, fingerprint, is_refusal
+from qmf.data.journal_writer import key_token
+from qmf.data.series import STATE_NAME, SeriesKey, SeriesStore
 from qml.catalogue.entry import ENTRY_SCHEMA, Computed, compute_status, corpus_problems
 from qml.catalogue.index import find as find_rows
 from qml.catalogue.index import match as match_text
@@ -35,7 +39,7 @@ from qmx_judge.landing import REPORT_SLOT, RESULT_KIND, Stored
 from qmx_judge.tries import TRY_KIND, try_item
 from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, LibraryRefused
-from qmx_library.principal import MAIN, drafts_ref
+from qmx_library.principal import MAIN, drafts_ref, state_ref
 
 from qmx_tools import journals
 from qmx_tools.gather import DUMMY, STDLIB, TEMPLATES, entry_face, gather
@@ -43,6 +47,7 @@ from qmx_tools.gather import template as template_document
 from qmx_tools.service import (
     Artifact,
     DomainContext,
+    MarketPort,
     OrderProposal,
     Page,
     ResponseFormat,
@@ -419,7 +424,7 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         return ctx.output(ctx.save(Artifact.model_validate(artifact)), "saved", response_format)
 
     def journal_query(
-        stream: Literal["unit", "market", "node", "readings"],
+        stream: Literal["unit", "market", "node"],
         window: dict[str, str | int],
         filters: dict[str, str] | None = None,
         view: Literal["rows", "trades_with_context", "digest"] = "rows",
@@ -428,12 +433,13 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         cursor: int = 0,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:
-        """Read one journal stream (unit, market, node or readings) over a required time window:
+        """Read one journal stream (unit, market or node) over a required time window:
         {"start": "2025-01-02T07:00:00Z", "end": "2025-01-02T09:00:00Z"}, UTC. Filter by any
         envelope field (unit_id, market_id, kind, world, account, machine, ...). View `rows`,
         `trades_with_context` (each signal and trade with its market's minute, spread included),
         or `digest` (counts per unit, market and day). Past the data it says where the data
-        stops; backfilled rows are left out unless include_backfilled."""
+        stops; backfilled rows are left out unless include_backfilled. Reading history is
+        read with readings_query, which keeps the study's holdout."""
         answer = journals.journal_query(
             ctx.root,
             stream=stream,
@@ -574,6 +580,8 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
         },
         "unit": unit_functions(ctx),
         "blocks": block_functions(ctx),
+        "instrument": {"instrument_get": instrument_functions(ctx)},
+        "readings": {"readings_query": readings_functions(ctx)},
     }
 
 
@@ -937,3 +945,377 @@ def block_functions(ctx: DomainContext) -> dict[str, Callable[..., dict[str, Any
         "blocks_check": blocks_check,
         "blocks_match": blocks_match,
     }
+
+
+INSTRUMENT_KIND: Final = "instrument"
+INSTRUMENT_STATUSES: Final = ("specified", "live", "suspect", "delisted")
+"""Every status an `instrument` record holds; the kind requires one, so the four list them all."""
+READINGS_SOURCE: Final = "journal-readings"
+READING_KIND: Final = "reading"
+READING_SOURCES: Final = ("node", "mis")
+
+
+def _iso_ns(ns: int) -> str:
+    seconds, rest = divmod(ns, 1_000_000_000)
+    moment = datetime.fromtimestamp(seconds, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    return f"{moment}.{rest // 1_000_000:03d}Z"
+
+
+@dataclass(frozen=True, slots=True)
+class _InForce:
+    """One instrument item's version in force: its version number, when it reached `main`,
+    and the object that holds the record."""
+
+    item: str
+    version: int
+    since: str
+    view: ObjectView
+
+
+def instrument_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
+    """The `instrument` row (Part C CONTRACTS.md section 12): one record as it stood at an
+    instant, read from his Library's `instrument` items on `main`. A record's version is how
+    many times `main` has moved for its item, as the unit checker counts it."""
+
+    def in_force(item: str, moment: int, version: int | None) -> _InForce | None:
+        store = ctx.library.store
+        moves = list(enumerate(store.history_of(OPERATOR, item, MAIN), 1))
+        if version is None:
+            moves = [(n, m) for n, m in moves if journals.parse_instant(m.at, "at") <= moment]
+        else:
+            moves = [(n, m) for n, m in moves if n == version]
+        if not moves:
+            return None
+        n, move = moves[-1]
+        return _InForce(item, n, move.at, store.get(OPERATOR, move.new_head))
+
+    def nearest(asked: Mapping[str, str]) -> list[str]:
+        store = ctx.library.store
+        fields = [
+            store.get(OPERATOR, object_id).fields
+            for status in INSTRUMENT_STATUSES
+            for object_id in store.with_field(INSTRUMENT_KIND, "status", status)
+        ]
+        if "market_id" in asked:
+            names = {str(f.get("market_id")) for f in fields}
+            wanted = asked["market_id"]
+        else:
+            names = {f"{f.get('venue')}:{f.get('symbol')}" for f in fields}
+            wanted = f"{asked['venue']}:{asked['symbol']}"
+        return difflib.get_close_matches(wanted, sorted(names), n=NEAREST_SUGGESTIONS, cutoff=0.0)
+
+    def instrument_get(
+        venue: str | None = None,
+        symbol: str | None = None,
+        market_id: str | None = None,
+        at: str | int | None = None,
+        version: int | None = None,
+    ) -> dict[str, Any]:
+        """Read one instrument record as it stood at `at` (an ISO 8601 time or epoch
+        nanoseconds, now by default), or its `version`. Name it by `venue` and `symbol`, or by
+        `market_id` when one venue holds that market. An archived record is withdrawn."""
+        if (venue is None) != (symbol is None) or (symbol is None) == (market_id is None):
+            raise ValueError("name the instrument by venue and symbol, or by market_id alone")
+        if version is not None and version < 1:
+            raise ValueError("version counts from 1, the record's first version on main")
+        try:
+            moment = time.time_ns() if at is None else journals.parse_instant(at, "at")
+        except ValueError:
+            raise ValueError(
+                f"at is an ISO 8601 time such as 2025-01-02T08:00:00Z or epoch nanoseconds; "
+                f"got {at!r}"
+            ) from None
+        asked = (
+            {"market_id": cast("str", market_id)}
+            if symbol is None
+            else {"venue": cast("str", venue), "symbol": symbol}
+        )
+        store = ctx.library.store
+        key = "symbol" if symbol is not None else "market_id"
+        items = sorted(
+            {
+                store.get(OPERATOR, object_id).item
+                for object_id in store.with_field(INSTRUMENT_KIND, key, asked[key])
+            }
+        )
+        found: list[_InForce] = []
+        starts: list[str] = []
+        for item in items:
+            state = store.head(item, state_ref(item))
+            if state is not None and state[0] == "archived":
+                continue
+            held = in_force(item, moment, version)
+            if held is None:
+                starts.extend(m.at for m in store.history_of(OPERATOR, item, MAIN)[:1])
+            elif all(held.view.fields.get(name) == value for name, value in asked.items()):
+                found.append(held)
+        if len(found) == 1:
+            held = found[0]
+            return {
+                "ok": True,
+                "record": held.view.fields,
+                "id": held.item,
+                "version": held.version,
+                "fingerprint": held.view.object_id,
+                "status": held.view.fields.get("status"),
+                "in_force_since": held.since,
+                "at": _iso_ns(moment),
+            }
+        if found:
+            return {
+                "ok": False,
+                "code": "ambiguous",
+                "message": f"{len(found)} instrument records hold {asked['market_id']}; name one "
+                "by venue and symbol",
+                "choices": [
+                    {
+                        "id": h.item,
+                        "venue": h.view.fields.get("venue"),
+                        "symbol": h.view.fields.get("symbol"),
+                    }
+                    for h in found
+                ],
+            }
+        answer: dict[str, Any] = {"ok": False, "code": "not_found", "nearest": nearest(asked)}
+        if starts:
+            answer["message"] = (
+                f"no version of it was in force at {_iso_ns(moment)}; its first version reached "
+                f"main at {min(starts)}"
+            )
+        return answer
+
+    return instrument_get
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class _Reading:
+    """One reading record as a `journal-readings` partition holds it, ordered as pages run."""
+
+    t: int
+    partition: str
+    seq: int
+    record: Mapping[str, Any] = field(compare=False)
+
+    @property
+    def body(self) -> Mapping[str, Any]:
+        return cast("Mapping[str, Any]", self.record.get("body", {}))
+
+    @property
+    def cursor(self) -> str:
+        return f"{self.t}:{self.seq}:{self.partition}"
+
+    def concise(self) -> dict[str, Any]:
+        body = dict(self.body)
+        ref = cast("Mapping[str, Any]", body.pop("reading", {}))
+        found: dict[str, Any] = {
+            "at": _iso_ns(self.t * journals.NS_PER_MS),
+            "reading": f"{ref.get('id')}@{ref.get('version')}",
+            "world": self.record.get("world"),
+            **body,
+        }
+        for name in ("computed_at", "inputs_received_at"):
+            if isinstance(found.get(name), int):
+                found[name] = _iso_ns(found[name])
+        return found
+
+    def detailed(self) -> dict[str, Any]:
+        return {"partition": self.partition, "t": self.t, "seq": self.seq, "record": self.record}
+
+
+@dataclass(frozen=True, slots=True)
+class _Ask:
+    """What a `readings_query` names, matched against each record's body."""
+
+    reading: str
+    version: str | None
+    markets: frozenset[str] | None
+    tier: str | None
+    source: str | None
+
+    def holds(self, body: Mapping[str, Any]) -> bool:
+        ref = cast("Mapping[str, Any]", body.get("reading", {}))
+        return (
+            ref.get("id") == self.reading
+            and self.version in (None, ref.get("version"))
+            and (self.markets is None or body.get("market_id") in self.markets)
+            and self.tier in (None, body.get("tier"))
+            and self.source in (None, body.get("source"))
+        )
+
+
+def _reading_folders(root: Path, subjects: frozenset[str] | None) -> list[Path]:
+    """The `journal-readings` series folders, narrowed to the subjects asked for."""
+    base = root / READINGS_SOURCE
+    if not base.is_dir():
+        return []
+    found: list[Path] = []
+    for subject in sorted(base.iterdir()):
+        kind = subject / READING_KIND
+        if (subjects is None or subject.name in subjects) and kind.is_dir():
+            found.extend(sorted(path for path in kind.iterdir() if path.is_dir()))
+    return found
+
+
+def _months(folder: Path) -> list[SeriesKey]:
+    keys: list[SeriesKey] = []
+    for month in sorted(folder.iterdir()):
+        year, _, number = month.name.partition("-")
+        if not (year.isdigit() and number.isdigit() and (month / STATE_NAME).is_file()):
+            continue
+        variant = "" if folder.name == "-" else folder.name
+        made = SeriesKey.try_create(
+            READINGS_SOURCE,
+            folder.parent.parent.name,
+            READING_KIND,
+            int(year),
+            int(number),
+            variant,
+        )
+        if not is_refusal(made):
+            keys.append(made.value)
+    return keys
+
+
+def _held_out_from(door: MarketPort, series: str) -> int | None:
+    """Where the door's holdout starts for `series`, from its own card, or None when off."""
+    card = unwrap(door.card(series))
+    boundary = card.get("seal_boundary") if isinstance(card, Mapping) else None
+    if boundary == "":
+        return None
+    if isinstance(boundary, str) and boundary.isdigit():
+        return int(boundary)
+    raise ValueError(
+        f"the market-data door names a holdout this row cannot place ({boundary!r}), so reading "
+        "history stays unread rather than risk the held-out window"
+    )
+
+
+def _cursor(cursor: str | None) -> tuple[int, str, int] | None:
+    if cursor is None:
+        return None
+    t, _, rest = cursor.partition(":")
+    seq, _, partition = rest.partition(":")
+    if not (t.isdigit() and seq.isdigit() and partition):
+        raise ValueError("cursor is a next_cursor a readings_query answer gave; pass it unchanged")
+    return int(t), partition, int(seq)
+
+
+def readings_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
+    """The `readings` row (Part C CONTRACTS.md section 12, AD-313): reading history from the
+    `journal-readings` partitions the host's records job harvests, the open month included.
+    It is the only door agents read readings through. The market-data door's holdout is his
+    choice per study (ruling 137): a month the door would seal is never read here, and a
+    window that reaches one is refused by name, as the door refuses a sealed read."""
+
+    def readings_query(
+        reading: str,
+        window: dict[str, str | int],
+        version: str | None = None,
+        markets: list[str] | None = None,
+        tier: Literal["tick", "bar", "session", "day", "calendar"] | None = None,
+        source: Literal["node", "mis"] | None = None,
+        limit: int = 200,
+        cursor: str | None = None,
+        response_format: ResponseFormat = "concise",
+    ) -> dict[str, Any]:
+        """Read what one reading said over a required time window, UTC:
+        {"start": "2025-01-06T00:00:00Z", "end": "2025-01-13T00:00:00Z"}. Narrow by its
+        `version`, `markets` (market ids), `tier` and `source`. Each row has its value or word,
+        health, computed_at and stale_after_s. Pass `next_cursor` back as `cursor` for the next
+        page; `data_ends_at` is the last recorded instant."""
+        if "start" not in window or "end" not in window:
+            raise ValueError(
+                "readings_query needs a time window: pass window = {start, end}, for example "
+                '{"start": "2025-01-06T00:00:00Z", "end": "2025-01-13T00:00:00Z"}'
+            )
+        start = journals.parse_instant(window["start"], "start")
+        end = journals.parse_instant(window["end"], "end")
+        if end <= start:
+            raise ValueError("the window's end comes after its start")
+        if limit < 1:
+            raise ValueError("limit is 1 or more")
+        door = ctx.market
+        if door is None:
+            raise ValueError(
+                "No market-data door on this host; reading history is read only where the door "
+                "can say which months a study holds out (Lib AD-28)"
+            )
+        after = _cursor(cursor)
+        ask = _Ask(reading, version, None if markets is None else frozenset(markets), tier, source)
+        root = ctx.root / journals.MARKET_FOLDER / "series"
+        sources = READING_SOURCES if source is None else (source,)
+        subjects = (
+            None
+            if markets is None
+            else frozenset(key_token(f"{s}.{m}") for s in sources for m in markets)
+        )
+        held_from: int | None = None
+        readable: list[list[SeriesKey]] = []
+        sealed: list[str] = []
+        for folder in _reading_folders(root, subjects):
+            keys = _months(folder)
+            if not keys:
+                continue
+            boundary = _held_out_from(door, keys[0].series)
+            if boundary is not None:
+                held_from = boundary if held_from is None else min(held_from, boundary)
+            opened = [key for key in keys if boundary is None or key.end_ns <= boundary]
+            sealed.extend(
+                key.text
+                for key in keys
+                if key not in opened and key.start_ns < end and start < key.end_ns
+            )
+            readable.append(opened)
+        if sealed:
+            raise ValueError(
+                f"the study's holdout seals reading history from {_iso_ns(cast('int', held_from))};"
+                f" this window reaches {', '.join(sealed)}, so it is refused, never answered "
+                "empty; ask for a window that ends before the holdout"
+            )
+        store = SeriesStore(root)
+        rows: list[_Reading] = []
+        last: int | None = None
+        unreadable: list[str] = []
+        for keys in readable:
+            for index, key in enumerate(keys):
+                if not (key.start_ns < end and start < key.end_ns) and index < len(keys) - 1:
+                    continue
+                read = store.read(key)
+                if is_refusal(read):
+                    unreadable.append(key.text)
+                    continue
+                for cells in read.value.rows:
+                    row = _Reading(
+                        int(cast("int", cells["t"])),
+                        key.text,
+                        int(cast("int", cells["seq"])),
+                        json.loads(str(cells["record"])),
+                    )
+                    if not ask.holds(row.body):
+                        continue
+                    last = row.t if last is None else max(last, row.t)
+                    inside = start <= row.t * journals.NS_PER_MS < end
+                    if inside and (after is None or (row.t, row.partition, row.seq) > after):
+                        rows.append(row)
+        rows.sort()
+        page = rows[:limit]
+        shown = [row.detailed() if response_format == "detailed" else row.concise() for row in page]
+        answer: dict[str, Any] = {
+            **ctx.output(shown, "readings", response_format),
+            "next_cursor": page[-1].cursor if len(rows) > limit else None,
+            "data_ends_at": None if last is None else _iso_ns(last * journals.NS_PER_MS),
+            "window": {"start": _iso_ns(start), "end": _iso_ns(end)},
+        }
+        if last is None:
+            answer["note"] = "no reading history matches; nothing is recorded yet"
+        elif last * journals.NS_PER_MS < end:
+            answer["note"] = (
+                f"the data stops at {answer['data_ends_at']}; nothing after it is recorded yet"
+            )
+        if held_from is not None:
+            answer["holdout_from"] = _iso_ns(held_from)
+        if unreadable:
+            answer["unreadable"] = unreadable
+        return answer
+
+    return readings_query
