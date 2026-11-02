@@ -238,7 +238,7 @@ def test_deploy_waits_until_every_file_is_staged_from_this_library(tmp_path: Pat
         key=lambda: None,
         blobs=lambda fingerprint: None if fingerprint not in held else [held[fingerprint]],
     )
-    files = [
+    files: list[JsonValue] = [
         {"path": path, "fingerprint": "sha256:" + hashlib.sha256(raw).hexdigest()}
         for path, raw in (("blocks/ema@1/block.py", block), ("weights/model.bin", weights))
     ]
