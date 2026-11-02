@@ -1,0 +1,16 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "digest",
+  "name": "Digest: one unit's day from its journal, counted by script before any model reads it",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "digest", "name": "Count the unit's day", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/digest.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Count the unit's day", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

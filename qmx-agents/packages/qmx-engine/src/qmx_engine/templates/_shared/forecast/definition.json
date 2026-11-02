@@ -1,0 +1,26 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "forecast",
+  "name": "Forecast ledger: dated calls written before a session and scored by script after it",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "scoring", "name": "Is there an outcome to score?", "type": "rule", "typeVersion": 1,
+     "position": [220, 0], "parameters": {"expr": "'outcome' in items"}},
+    {"id": "write", "name": "Write the dated calls", "type": "script", "typeVersion": 1,
+     "position": [440, 120], "effect": "none",
+     "parameters": {"script": "scripts/forecast_write.py"}},
+    {"id": "score", "name": "Score the call", "type": "script", "typeVersion": 1,
+     "position": [440, 0], "effect": "none",
+     "parameters": {"script": "scripts/forecast_score.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Is there an outcome to score?", "port": "in", "map": "one"}]]},
+    "Is there an outcome to score?": {
+      "true": [[{"node": "Score the call", "port": "in", "map": "one"}]],
+      "false": [[{"node": "Write the dated calls", "port": "in", "map": "one"}]]
+    }
+  },
+  "meta": {"block": true}
+}
