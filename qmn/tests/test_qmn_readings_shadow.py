@@ -80,7 +80,9 @@ from qmf.readings.signal_snapshot import SqsReading
 
 T = TypeVar("T")
 
-_MIS_SRC = Path(__file__).resolve().parents[2] / "packages" / "qmf-readings" / "src" / "qmf" / "readings"
+_MIS_SRC = (
+    Path(__file__).resolve().parents[2] / "packages" / "qmf-readings" / "src" / "qmf" / "readings"
+)
 
 
 def _ok(result: Result[T]) -> T:

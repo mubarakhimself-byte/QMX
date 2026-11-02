@@ -130,9 +130,7 @@ def test_fixture_switch_atomic_flip_pairs_commit_and_config(
     assert plan_a.ok
     switch_mod.apply_plan_to_fixture(plan_a, root)
     assert switch_mod.read_current_commit(root) == "aaaaaaa1"
-    record_a = switch_mod.load_deployment_record(
-        switch_mod.record_path(root, "aaaaaaa1")
-    )
+    record_a = switch_mod.load_deployment_record(switch_mod.record_path(root, "aaaaaaa1"))
     assert record_a.config_version == "cfg-a"
     assert (root / "trees" / "aaaaaaa1" / ".qmx-release").is_file()
 
@@ -146,9 +144,7 @@ def test_fixture_switch_atomic_flip_pairs_commit_and_config(
     )
     switch_mod.apply_plan_to_fixture(plan_b, root)
     assert switch_mod.read_current_commit(root) == "bbbbbbb2"
-    record_b = switch_mod.load_deployment_record(
-        switch_mod.record_path(root, "bbbbbbb2")
-    )
+    record_b = switch_mod.load_deployment_record(switch_mod.record_path(root, "bbbbbbb2"))
     assert record_b.previous_commit == "aaaaaaa1"
     assert record_b.previous_config_version == "cfg-a"
     assert (root / "trees" / "aaaaaaa1").is_dir()
@@ -202,9 +198,7 @@ def test_upgrade_policy_never_auto_reboots_or_restarts_node(
 
     apt = upgrade_mod.apt_unattended_fragment()
     nr = upgrade_mod.needrestart_fragment()
-    findings = upgrade_mod.inspect_upgrade_policy(
-        policy, fragments={"apt": apt, "needrestart": nr}
-    )
+    findings = upgrade_mod.inspect_upgrade_policy(policy, fragments={"apt": apt, "needrestart": nr})
     assert findings == ()
 
     fixture_apt = _read_fixture_text(
@@ -251,9 +245,7 @@ def test_ci_lane_contract_and_compensators(ci_lane_mod: ModuleType) -> None:
     } <= names
 
 
-def test_cli_check_mode_and_apply_refusal(
-    switch_mod: ModuleType, tmp_path: Path
-) -> None:
+def test_cli_check_mode_and_apply_refusal(switch_mod: ModuleType, tmp_path: Path) -> None:
     out = tmp_path / "plan.json"
     code = switch_mod.main(
         [
@@ -317,14 +309,13 @@ def test_deploy_surface_never_imports_composition_or_trade(
 
 
 def test_workflow_pins_ubuntu_24_04_never_latest() -> None:
-    workflow = (
-        _WORKSPACE / ".github" / "workflows" / "qmn-ubuntu-24.04.yml"
-    ).read_text(encoding="utf-8")
+    workflow = (_WORKSPACE / ".github" / "workflows" / "qmn-ubuntu-24.04.yml").read_text(
+        encoding="utf-8"
+    )
     assert "ubuntu-24.04" in workflow
     assert "runs-on: ubuntu-24.04" in workflow
     assert not any(
-        line.strip().startswith("runs-on:") and "latest" in line
-        for line in workflow.splitlines()
+        line.strip().startswith("runs-on:") and "latest" in line for line in workflow.splitlines()
     )
     assert "pythonplatform Linux" in workflow.casefold() or "--pythonplatform" in workflow
     assert "ci_lane.py" in workflow
@@ -332,9 +323,7 @@ def test_workflow_pins_ubuntu_24_04_never_latest() -> None:
     assert "node-rollback" in workflow or "rollback" in workflow
 
 
-def test_write_plan_refuses_symlink_destination(
-    switch_mod: ModuleType, tmp_path: Path
-) -> None:
+def test_write_plan_refuses_symlink_destination(switch_mod: ModuleType, tmp_path: Path) -> None:
     plan = switch_mod.build_switch_plan(
         commit="abc1234",
         config_version="cfg-1",
@@ -367,9 +356,7 @@ def test_load_deployment_record_refuses_symlink_and_oversize(
         switch_mod.load_deployment_record(big)
 
 
-def test_write_fragments_refuses_symlink(
-    upgrade_mod: ModuleType, tmp_path: Path
-) -> None:
+def test_write_fragments_refuses_symlink(upgrade_mod: ModuleType, tmp_path: Path) -> None:
     dest = tmp_path / "upgrade-policy"
     dest.mkdir()
     outside = tmp_path / "outside.conf"

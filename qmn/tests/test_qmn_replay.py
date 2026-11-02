@@ -124,9 +124,7 @@ def test_command_attempt_is_typed_policy_refusal_with_no_side_effect() -> None:
     _ok(client.open_session(account))
     _ok(client.verify_capabilities())
 
-    command = _ok(
-        Command.cancel_order(client.venue_id, account, "replay-session", 1, "order-1")
-    )
+    command = _ok(Command.cancel_order(client.venue_id, account, "replay-session", 1, "order-1"))
     submitted = client.submit(command)
     assert is_refusal(submitted)
     assert submitted.category is REPLAY_SUBMIT_REFUSAL_CATEGORY

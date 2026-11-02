@@ -94,9 +94,7 @@ def test_explicit_book_plan_persists_and_reopens_exact_ct13_row(tmp_path: Path) 
     assert checked[0].to_row() == receipt.event.to_row()
     world_store = _value(store.for_world(World.LIVE))
     assert receipt.physical_receipt.sequence is not None
-    raw_rows = _value(world_store.journal.read_stream(
-        "protection", for_world=World.LIVE
-    ))
+    raw_rows = _value(world_store.journal.read_stream("protection", for_world=World.LIVE))
     assert raw_rows[receipt.physical_receipt.sequence] == receipt.event.to_row()
     writer_after_restart = _value(
         JournalWriter.resume(journal, writer.writer, stream_name="protection")

@@ -112,9 +112,7 @@ def test_session_recovery_invariant_never_resubmits() -> None:
 def test_reconnect_refuses_secret_value() -> None:
     client = _double()
     value = _ok(SecretValue.try_create(_cred(), "plaintext-must-not-cross"))
-    refused = _refusal(
-        ReconnectGapRecovery.try_create(client=client, credential_ref=value)
-    )
+    refused = _refusal(ReconnectGapRecovery.try_create(client=client, credential_ref=value))
     assert refused.category is RefusalCategory.POLICY_REJECTION
     assert "reference" in str(refused.context["reason"])
 
@@ -175,9 +173,10 @@ def test_reconnect_gap_replay_persists_before_healthy_and_never_resubmits() -> N
     assert report.receive_frontier["last_seen_execution_id"] == "exec-2"
     assert report.receive_frontier["recorded_count"] == 2
     # Frontiers stay distinct: cursor unchanged while receive frontier advanced.
-    assert report.interpretation_cursor_observation_id != report.receive_frontier[
-        "last_observation_id"
-    ]
+    assert (
+        report.interpretation_cursor_observation_id
+        != report.receive_frontier["last_observation_id"]
+    )
     assert len(obs.emitted) == 2
     assert len(journal.appended) == 2
     assert len(report.outstanding_resolutions) == 2

@@ -272,7 +272,10 @@ def play(rig: Rig, until: int, *, start: int = LIVE_FROM) -> None:
         rig.source.play(
             [
                 *(Bar(market, bar) for _, market, bar in closed),
-                *(Quote(market, at, bar.bid.close, bar.ask.close, "both") for _, market, bar in closed),
+                *(
+                    Quote(market, at, bar.bid.close, bar.ask.close, "both")
+                    for _, market, bar in closed
+                ),
             ]
         )
         rig.runtime.tick()
@@ -330,7 +333,7 @@ def test_the_dummy_opens_and_closes_at_the_venue_with_its_stop_there(tmp_path: P
         and t.command.order_parameters.protective_stop_distance is not None
         for t in entries
     )
-    names = [cast("str", t.tags.client_order_id) for t in entries if t.tags is not None]
+    names = [t.tags.client_order_id for t in entries if t.tags is not None]
     assert all(re.fullmatch(r"qa4dqobyh-[0-9A-HJKMNP-TV-Z]{26}", name) for name in names)
     assert {t.tags.label for t in entries if t.tags is not None} == {
         "qmx:a4dqobyh:dummy-trend-pullback"
@@ -372,9 +375,9 @@ def test_deploy_answers_before_a_40_second_compile(tmp_path: Path) -> None:
 
     assert answered < 2.0
     assert value(accepted)["state"] == "accepted"
-    assert [(d["state"], d["detail"]) for d in cast("list[dict[str, Json]]", compiling["value"])] == [
-        ("compiling", "compiling after the answer")
-    ]
+    assert [
+        (d["state"], d["detail"]) for d in cast("list[dict[str, Json]]", compiling["value"])
+    ] == [("compiling", "compiling after the answer")]
     assert shown["headline"] == "Ready"
     assert killed == {"ok": True, "value": {"level_in_force": "YELLOW"}, "op_id": "op-kill"}
 
@@ -409,7 +412,11 @@ def test_a_missing_or_changed_staged_file_refuses_deploy_by_name_and_32_mb_deplo
     assert len(weights) == 33_554_432
     assert answered < 2.0
     lock = json.loads((node.data / "deployments" / "dep-heavy" / "lock.json").read_text("utf-8"))
-    assert {"fingerprint": fingerprint(weights), "kind": "weights", "path": "weights/model.bin"} in lock
+    assert {
+        "fingerprint": fingerprint(weights),
+        "kind": "weights",
+        "path": "weights/model.bin",
+    } in lock
     assert [d["deployment_id"] for d in cast("list[dict[str, Json]]", listed(node))] == [
         "dep-heavy"
     ]

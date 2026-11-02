@@ -925,9 +925,7 @@ def _exercise_configured_decision_root(
     tmp_path: Path,
     *,
     direction: Direction = Direction.LONG,
-    after_root_ready: Callable[
-        [HostedDecisionRoot, object, JournalStore, dict[str, object]], None
-    ]
+    after_root_ready: Callable[[HostedDecisionRoot, object, JournalStore, dict[str, object]], None]
     | None = None,
 ) -> None:
     evidence = EvidenceStore(tmp_path / "evidence")
@@ -1545,20 +1543,21 @@ def _exercise_configured_decision_root(
         )
     )
     assert bound_refusal.context["field"] == "tighten_bound"
-    assert _ok(
-        JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
-    ) == before_denied_projections
+    assert (
+        _ok(JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE))
+        == before_denied_projections
+    )
     assert ordinal_store.high_water == before_denied_ordinal
     assert ledger.records == before_denied_ledger
     assert _ok(client.observations()) == before_denied_venue
     refused_tighten = _refusal(
         dispatch_hosted_intents(
-                admitted,
-                (tighten_intent,),
-                path=replace(
-                    exit_path,
-                    decision_at=_instant(_NS + 4),
-                    native_exit_authority=replace(
+            admitted,
+            (tighten_intent,),
+            path=replace(
+                exit_path,
+                decision_at=_instant(_NS + 4),
+                native_exit_authority=replace(
                     authority,
                     evidence_store=None,
                     spot_events_by_position_ref=None,
@@ -1567,12 +1566,14 @@ def _exercise_configured_decision_root(
         )
     )
     assert refused_tighten.context["field"] == "protection_evidence"
-    assert _ok(
-        JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE)
-    ) == before_denied_decisions
-    assert _ok(
-        JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE)
-    ) == before_denied_projections
+    assert (
+        _ok(JournalReader(world.journal).read_checked("hosted-decisions", for_world=World.LIVE))
+        == before_denied_decisions
+    )
+    assert (
+        _ok(JournalReader(world.journal).read_checked("native-projections", for_world=World.LIVE))
+        == before_denied_projections
+    )
     assert ordinal_store.high_water == before_denied_ordinal
     assert ledger.records == before_denied_ledger
     assert _ok(client.observations()) == before_denied_venue

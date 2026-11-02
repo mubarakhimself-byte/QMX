@@ -323,9 +323,7 @@ def test_live_drift_entries_only_stand_down_cleared_by_resume() -> None:
     assert resp.alarm_class == DRIFT_ALARM_CLASS
     assert resp.world_ignored is True
 
-    blocked = _refusal(
-        clear_operator_review(response=resp, clearance="restart", fresh_review=True)
-    )
+    blocked = _refusal(clear_operator_review(response=resp, clearance="restart", fresh_review=True))
     assert blocked.category is RefusalCategory.POLICY_REJECTION
 
     cleared = _ok(

@@ -59,8 +59,8 @@ def node_rows(node: Rig, kind: str) -> list[dict[str, object]]:
     return [cast("dict[str, object]", row["body"]) for row in found if row["kind"] == kind]
 
 
-def trading(tmp_path: Path, **options: bool) -> Rig:
-    node = rig(tmp_path, **options)
+def trading(tmp_path: Path, *, holds_stops: bool = True) -> Rig:
+    node = rig(tmp_path, holds_stops=holds_stops)
     deploy(node, deployment(node.data))
     assert settle(node) == "trading"
     return node
@@ -217,7 +217,11 @@ def _compiled() -> object:
         descriptor_pb2.FieldDescriptorProto.TYPE_BYTES,
     )
     shapes: Mapping[str, tuple[tuple[str, int, int], ...]] = {
-        "ProtoMessage": (("payloadType", 1, uint32), ("payload", 2, raw), ("clientMsgId", 3, string)),
+        "ProtoMessage": (
+            ("payloadType", 1, uint32),
+            ("payload", 2, raw),
+            ("clientMsgId", 3, string),
+        ),
         "ProtoOANewOrderReq": (
             ("ctidTraderAccountId", 2, int64),
             ("symbolId", 3, int64),

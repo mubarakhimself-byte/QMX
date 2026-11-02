@@ -321,8 +321,7 @@ def test_only_host_persists_composition_lineage() -> None:
                     continue
                 module = node.module
                 if any(
-                    module == banned or module.startswith(f"{banned}.")
-                    for banned in banned_modules
+                    module == banned or module.startswith(f"{banned}.") for banned in banned_modules
                 ):
                     violations.append(f"{path.relative_to(_QMN_SRC)}: imports {module}")
     assert violations == [], f"child/door lineage persist surface leak: {violations}"

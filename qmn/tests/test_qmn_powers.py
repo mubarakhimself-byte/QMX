@@ -90,10 +90,14 @@ def test_transport_identity_and_closed_sets() -> None:
     assert identity["socket_owner"] == POWERS_SOCKET_OWNER == "qmx:qmxops"
     assert identity["socket_mode"] == POWERS_SOCKET_MODE == 0o660
     assert identity["service_account"] == SERVICE_ACCOUNT_NAME == "qmx"
-    assert set(cast(Iterable[str], identity["principal_set"])) == PRINCIPAL_SET == {
-        OPERATOR_PRINCIPAL,
-        OPS_PRINCIPAL,
-    }
+    assert (
+        set(cast(Iterable[str], identity["principal_set"]))
+        == PRINCIPAL_SET
+        == {
+            OPERATOR_PRINCIPAL,
+            OPS_PRINCIPAL,
+        }
+    )
     assert "agent" not in PRINCIPAL_SET
     assert identity["agent_never_a_principal"] is True
     assert set(cast(Iterable[str], identity["ops_allowed_powers"])) == OPS_ALLOWED_POWERS
@@ -345,9 +349,7 @@ def test_resolve_peer_principal_mapping() -> None:
     assert op.principal == OPERATOR_PRINCIPAL
     ops = _ok(resolve_peer_principal(peer=_peer(_OPS_UID), principals=principals))
     assert ops.principal == OPS_PRINCIPAL
-    assert is_refusal(
-        resolve_peer_principal(peer=_peer(_STRANGER_UID), principals=principals)
-    )
+    assert is_refusal(resolve_peer_principal(peer=_peer(_STRANGER_UID), principals=principals))
 
 
 def test_unit_principals_preflight_refuses_operator_uid() -> None:

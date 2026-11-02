@@ -242,4 +242,3 @@ def test_selection_still_credential_free_for_conformance() -> None:
 def test_live_credentialed_session_verification_separately_tagged() -> None:
     """Credentialed CT-18 session check — not this story's gate (SC-13; AR-87)."""
     pytest.skip("Spotware sandbox token not a Story 24.2 prerequisite")
-

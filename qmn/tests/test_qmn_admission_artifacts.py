@@ -177,9 +177,7 @@ def test_sqs_reader_refuses_changed_inner_identity_and_missing_source_refs(tmp_p
 
 def test_sqs_reader_refuses_correctly_fingerprinted_demo_key_row(tmp_path: Path) -> None:
     store, live_baseline, refs, calendar = _fixture(tmp_path / "evidence")
-    demo_key = _ok(
-        sqs_baseline_key(live_baseline.key.venue, "demo", live_baseline.key.instrument)
-    )
+    demo_key = _ok(sqs_baseline_key(live_baseline.key.venue, "demo", live_baseline.key.instrument))
     demo_baseline = replace(live_baseline, key=demo_key)
     artifact_identity = demo_baseline.fp1_identity()
     artifact_fp = _ok(fingerprint(artifact_identity))

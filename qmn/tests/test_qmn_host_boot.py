@@ -86,11 +86,15 @@ def _streams() -> tuple[tuple[str, str], ...]:
 
 def test_surface_markers_and_ordered_ceremony() -> None:
     assert BOOT_CEREMONY_SURFACE == COMPOSITION_ROOT_SURFACE == "qmn.host"
-    assert ceremony_steps() == BOOT_CEREMONY_STEPS == (
-        "preflight",
-        "compose",
-        "fingerprint",
-        "seal",
+    assert (
+        ceremony_steps()
+        == BOOT_CEREMONY_STEPS
+        == (
+            "preflight",
+            "compose",
+            "fingerprint",
+            "seal",
+        )
     )
     assert BOOT_STAGES[0] == "doors_bound"
     assert BOOT_STAGES[-1] == "seal"
@@ -401,8 +405,7 @@ def test_no_cli_and_only_host_owns_boot_ceremony() -> None:
                     continue
                 module = node.module
                 if any(
-                    module == banned or module.startswith(f"{banned}.")
-                    for banned in banned_modules
+                    module == banned or module.startswith(f"{banned}.") for banned in banned_modules
                 ):
                     violations.append(f"{path.relative_to(_QMN_SRC)}: imports {module}")
     assert violations == [], f"child/door boot ceremony surface leak: {violations}"

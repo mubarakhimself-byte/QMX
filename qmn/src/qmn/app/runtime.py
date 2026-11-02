@@ -399,7 +399,6 @@ class ConformanceAccount:
     _quotes: dict[str, tuple[Decimal, Decimal]] = field(
         default_factory=dict[str, tuple[Decimal, Decimal]]
     )
-    _booked: Decimal = Decimal(0)
 
     @classmethod
     def open(
@@ -443,9 +442,7 @@ class ConformanceAccount:
         self._quotes[event.market_id] = (bar.bid.close, bar.ask.close)
 
     def _close(self, position: str, closed: VenueClose) -> None:
-        held = self._positions.pop(position)
-        move = closed.price - held.entry if held.side is Side.LONG else held.entry - closed.price
-        self._booked += move * held.quantity
+        del self._positions[position]
         self._closed[position] = closed
 
     def send(self, ticket: Ticket, /) -> Result[Sent]:
@@ -493,7 +490,9 @@ class ConformanceAccount:
         return self._closed.get(position)
 
     def equity(self) -> Decimal:
-        return self.starting_equity + self._booked
+        """The account's balance as the venue states it. The conformance venue keeps its
+        starting balance; it models fills and stops, not money."""
+        return self.starting_equity
 
     def positions(self) -> dict[str, tuple[str, str, Decimal, Decimal | None]]:
         """Every open position: market, side, quantity and the stop the venue holds."""

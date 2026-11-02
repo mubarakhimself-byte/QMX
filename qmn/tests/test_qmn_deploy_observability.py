@@ -73,7 +73,7 @@ def test_loopback_binds_and_host_network(stack_mod: ModuleType) -> None:
     compose = (_OBS / "compose.yml").read_text(encoding="utf-8")
     assert "network_mode: host" in compose
     assert "127.0.0.1:9090" in compose
-    assert "127.0.0.1:3000" in compose or 'GF_SERVER_HTTP_ADDR: 127.0.0.1' in compose
+    assert "127.0.0.1:3000" in compose or "GF_SERVER_HTTP_ADDR: 127.0.0.1" in compose
     assert "0.0.0.0:" not in compose
     loki = (_OBS / "loki" / "loki.yml").read_text(encoding="utf-8")
     assert "http_listen_address: 127.0.0.1" in loki

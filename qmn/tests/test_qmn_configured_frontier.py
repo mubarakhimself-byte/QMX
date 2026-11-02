@@ -42,9 +42,7 @@ def test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root(
         assert first.dispatch.commands
         assert not second_transcript.dispatch.commands
         assert first.snapshot_fingerprint != second_transcript.snapshot_fingerprint
-        events = JournalReader(journal).read_checked(
-            "hosted-decisions", for_world=World.LIVE
-        )
+        events = JournalReader(journal).read_checked("hosted-decisions", for_world=World.LIVE)
         recorded_frontiers = JournalReader(journal).read_checked(
             "frontier-observations", for_world=World.LIVE
         )
@@ -56,7 +54,8 @@ def test_two_accumulated_qmb_frontiers_call_persisted_hosted_book_ksa_root(
         assert is_ok(committed_frontiers)
         assert len(recorded_frontiers.value) == 2
         cursor_commits = [
-            event for event in committed_frontiers.value
+            event
+            for event in committed_frontiers.value
             if event.payload.get("kind") == "interpretation-cursor-commit"
         ]
         assert len(cursor_commits) == 2

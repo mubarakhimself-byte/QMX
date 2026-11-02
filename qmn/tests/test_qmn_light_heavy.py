@@ -169,9 +169,7 @@ def test_light_claim_without_baseline_is_refused() -> None:
 
 
 def test_light_claim_without_benchmark_proof_is_refused() -> None:
-    refused = evaluate_workload_claim(
-        _claim(bounds=_bounds(), baseline=True, proven=False)
-    )
+    refused = evaluate_workload_claim(_claim(bounds=_bounds(), baseline=True, proven=False))
     assert is_refusal(refused)
     assert "unmet" in refused.context
     unmet_raw = refused.context["unmet"]
@@ -181,16 +179,12 @@ def test_light_claim_without_benchmark_proof_is_refused() -> None:
 
 
 def test_proven_light_claim_is_admitted() -> None:
-    assignment = _ok(
-        evaluate_workload_claim(_claim(bounds=_bounds(), baseline=True, proven=True))
-    )
+    assignment = _ok(evaluate_workload_claim(_claim(bounds=_bounds(), baseline=True, proven=True)))
     assert assignment.effective_class is CompositionClass.LIGHT
 
 
 def test_self_approved_class_is_refused() -> None:
-    refused = evaluate_workload_claim(
-        _claim(self_approved=CompositionClass.LIGHT)
-    )
+    refused = evaluate_workload_claim(_claim(self_approved=CompositionClass.LIGHT))
     assert is_refusal(refused)
     assert refused.context["field"] == "self_approved_class"
 
@@ -285,9 +279,7 @@ def test_heavy_synchronous_placement_is_unsupported() -> None:
     refused = guard_synchronous_placement(heavy)
     assert is_refusal(refused)
     assert refused.category is RefusalCategory.UNSUPPORTED_CAPABILITY
-    light = _ok(
-        evaluate_workload_claim(_claim(bounds=_bounds(), baseline=True, proven=True))
-    )
+    light = _ok(evaluate_workload_claim(_claim(bounds=_bounds(), baseline=True, proven=True)))
     assert is_ok(guard_synchronous_placement(light))
 
 

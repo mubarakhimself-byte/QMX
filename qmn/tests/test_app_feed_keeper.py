@@ -8,7 +8,17 @@ from pathlib import Path
 from qmf.core import TypedRefusal
 from qmf.data.journal_envelope import JournalStream, JournalWorld
 from qmf.data.journal_writer import JournalWriter, WriterScope
-from test_app_runtime import LIVE_FROM, deploy, deployment, month, play, rig, settle, value
+from test_app_runtime import (
+    LIVE_FROM,
+    deploy,
+    deployment,
+    month,
+    play,
+    rig,
+    settle,
+    unit_rows,
+    value,
+)
 
 from qmn.app.feed_keeper import (
     Bar,
@@ -103,17 +113,16 @@ def test_no_entry_is_placed_while_the_session_is_connected_but_not_ready(tmp_pat
     node.source.drop()
     play(node, LIVE_FROM + 2 * 86_400_000_000_000)
     blocked = list(node.account.received)
-    guards = [
-        row
-        for row in value(node.node.call("journal_tail", {"streams": ["unit"]}))["rows"]
-        if isinstance(row, dict) and row["kind"] == "guard"
-    ]
+    guards = unit_rows(node, "guard")
 
     assert blocked == []
     assert node.feed.state is SessionState.CONNECTED
     assert len(guards) == 10
-    assert {row["body"]["reason"] for row in guards if isinstance(row["body"], dict)} == {
-        "health_stop"
+    assert {(row["reason"], row["detail"]) for row in guards} == {
+        (
+            "health_stop",
+            "venue not ready: connected, capabilities not re-verified (unavailable dependency)",
+        )
     }
     assert value(node.node.call("status", {}))["venues"] == [
         {
@@ -129,7 +138,9 @@ def test_no_entry_is_placed_while_the_session_is_connected_but_not_ready(tmp_pat
 
 
 def test_the_recorded_bars_are_what_a_restarted_node_warms_up_from(tmp_path: Path) -> None:
-    scope = WriterScope(JournalStream.MARKET, "ctrader.demo", JournalWorld.DEMO, "pc", "node", "0.1.0")
+    scope = WriterScope(
+        JournalStream.MARKET, "ctrader.demo", JournalWorld.DEMO, "pc", "node", "0.1.0"
+    )
     now = [T0]
     writer = JournalWriter.open(tmp_path, scope, clock=lambda: now[0], boot_epoch_id="b1")
     assert not isinstance(writer, TypedRefusal), writer

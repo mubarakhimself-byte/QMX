@@ -102,9 +102,7 @@ def _filled_layers(
         "backup_retention_period": _entry(retention_ns, evidence=_fp("retention")),
         "restore_verification_cadence": _entry(verify_ns, evidence=_fp("verify-cadence")),
         "backup_object_storage_provider": _entry(provider, evidence=_fp("provider")),
-        "backup_payload_key_custody": _entry(
-            PAYLOAD_KEY_CUSTODY_RULE, evidence=_fp("custody")
-        ),
+        "backup_payload_key_custody": _entry(PAYLOAD_KEY_CUSTODY_RULE, evidence=_fp("custody")),
     }
 
 
@@ -214,9 +212,7 @@ def test_rpo_is_derived_from_nightly_schedule_not_declared() -> None:
     assert refused.context["failure_id"] == "data.backup.rpo_not_derived"
 
     layers = _filled_layers()
-    layers["backup_recovery_point_objective"] = _entry(
-        12 * _NS_HOUR, evidence=_fp("wrong-rpo")
-    )
+    layers["backup_recovery_point_objective"] = _entry(12 * _NS_HOUR, evidence=_fp("wrong-rpo"))
     mismatch = _refusal(compile_backup_config(_node_config(layers)))
     assert mismatch.context["failure_id"] == "data.backup.rpo_not_derived"
 
@@ -300,9 +296,7 @@ def test_custody_rule_is_workstation_escrowed_not_vps() -> None:
     assert refused.context["failure_id"] == "data.backup.custody"
     vps = refuse_vps_minted_payload_key(minted_on="vps")
     assert vps.context["failure_id"] == "data.backup.vps_minted_key"
-    shared = refuse_venue_shared_custody(
-        holder=CONNECTION_MANAGER, slot="venue-refresh-token"
-    )
+    shared = refuse_venue_shared_custody(holder=CONNECTION_MANAGER, slot="venue-refresh-token")
     assert shared.context["failure_id"] == "data.backup.venue_shared_custody"
     ceremony = refuse_payload_key_ceremony(request="generate")
     assert ceremony.context["failure_id"] == "data.backup.ceremony_tonight"
@@ -438,14 +432,10 @@ def test_backup_copy_purge_checks_retention_verification_two_copy_and_journals()
     explicit = refuse_provider_default_retention(provider="backblaze-b2")
     assert explicit.context["failure_id"] == "data.backup.provider_default_retention"
 
-    early = _refusal(
-        evaluate_backup_copy_purge(_candidate(now_ns=_RPO_NS), journal=journal)
-    )
+    early = _refusal(evaluate_backup_copy_purge(_candidate(now_ns=_RPO_NS), journal=journal))
     assert early.context["failure_id"] == "data.backup.retention_window"
 
-    unverified = _refusal(
-        evaluate_backup_copy_purge(_candidate(verified=False), journal=journal)
-    )
+    unverified = _refusal(evaluate_backup_copy_purge(_candidate(verified=False), journal=journal))
     assert unverified.context["failure_id"] == "data.backup.unverified_purge"
 
     two_copy = _refusal(

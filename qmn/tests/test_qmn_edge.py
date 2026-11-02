@@ -176,9 +176,7 @@ def _path() -> OrderPath:
             ordinal_store=_ok(
                 CommandOrdinalStore.try_create(_venue(), _account(), RecordingSink())
             ),
-            binder=_ok(
-                CommandIdentityBinder.try_create(RecordingSink(), injective_total=False)
-            ),
+            binder=_ok(CommandIdentityBinder.try_create(RecordingSink(), injective_total=False)),
             pacer=_ok(
                 ConnectionCommandPacer.try_create(
                     local_queue_bound=_duration(5_000_000_000),
@@ -217,9 +215,7 @@ def _params(*, with_stop: bool = True) -> OrderParameters:
     if with_stop:
         kwargs["protective_stop_distance"] = _delta()
     return _ok(
-        OrderParameters.try_create(
-            OrderType.MARKET, TimeInForce.GOOD_TILL_CANCEL, _qty(), **kwargs
-        )
+        OrderParameters.try_create(OrderType.MARKET, TimeInForce.GOOD_TILL_CANCEL, _qty(), **kwargs)
     )
 
 
@@ -229,12 +225,8 @@ def _params(*, with_stop: bool = True) -> OrderParameters:
 def test_equal_duplicate_fill_is_idempotently_ignored() -> None:
     store = AccountFillStore()
     content = {"price": 1.1, "qty": 100, "side": "buy"}
-    first = _ok(
-        store.ingest(account_id="acct-1", venue_native_id="deal-9", content=content)
-    )
-    second = _ok(
-        store.ingest(account_id="acct-1", venue_native_id="deal-9", content=dict(content))
-    )
+    first = _ok(store.ingest(account_id="acct-1", venue_native_id="deal-9", content=content))
+    second = _ok(store.ingest(account_id="acct-1", venue_native_id="deal-9", content=dict(content)))
     assert first.disposition is FillIngestDisposition.ACCEPTED
     assert first.virtual_ledger_effect is True
     assert second.disposition is FillIngestDisposition.IDEMPOTENT_IGNORE

@@ -137,9 +137,7 @@ def _ordinal_store(
     *,
     prior: int = 0,
 ) -> CommandOrdinalStore:
-    record_sink: RecordingSink | FailingSink = (
-        sink if sink is not None else RecordingSink()
-    )
+    record_sink: RecordingSink | FailingSink = sink if sink is not None else RecordingSink()
     store = _ok(CommandOrdinalStore.try_create(_venue(), _account(), record_sink))
     _ok(store.recover(prior))
     return store
@@ -239,9 +237,7 @@ def test_ordinal_reuse_blocks_submission() -> None:
 def test_place_order_without_protective_stop_refused_before_submission() -> None:
     venue = _venue()
     account = _account(venue)
-    bare = _ok(
-        Command.place_order(venue, account, _SESSION, 1, _params(with_stop=False))
-    )
+    bare = _ok(Command.place_order(venue, account, _SESSION, 1, _params(with_stop=False)))
     refusal = _refusal(
         require_venue_resident_protective_stop(
             bare,
@@ -289,9 +285,7 @@ def test_protective_reserve_unavailable_to_entry_and_priority() -> None:
 
     # Fill general capacity with a protective command.
     _ok(pacer.enqueue(protect))
-    admitted = _ok(
-        pacer.admit(protect, enqueued_at=_mono(1_000), now=_mono(2_000))
-    )
+    admitted = _ok(pacer.admit(protect, enqueued_at=_mono(1_000), now=_mono(2_000)))
     assert admitted.admission_class is AdmissionClass.PROTECTIVE
 
     # Pending protective blocks entry.
@@ -304,9 +298,7 @@ def test_protective_reserve_unavailable_to_entry_and_priority() -> None:
     # Drain the pending protective into reserve; entry still cannot use reserve.
     reserved = _ok(pacer.admit(protect, enqueued_at=_mono(5_000), now=_mono(6_000)))
     assert reserved.used_protective_reserve is True
-    refused_reserve = _refusal(
-        pacer.admit(entry, enqueued_at=_mono(7_000), now=_mono(8_000))
-    )
+    refused_reserve = _refusal(pacer.admit(entry, enqueued_at=_mono(7_000), now=_mono(8_000)))
     assert refused_reserve.context["field"] == "protective_reserve_capacity"
 
 
@@ -316,9 +308,7 @@ def test_local_queue_bound_is_door_refusal_not_unknown() -> None:
     account = _account(venue)
     cmd = _ok(Command.cancel_order(venue, account, _SESSION, 1, "ord-1"))
     _ok(pacer.enqueue(cmd))
-    refusal = _refusal(
-        pacer.admit(cmd, enqueued_at=_mono(0), now=_mono(50_000_000))
-    )
+    refusal = _refusal(pacer.admit(cmd, enqueued_at=_mono(0), now=_mono(50_000_000)))
     assert refusal.category is RefusalCategory.POLICY_REJECTION
     assert refusal.context["field"] == "local_queue_bound"
     assert refusal.context["door"] == PACER_DOOR

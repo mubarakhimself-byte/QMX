@@ -293,9 +293,7 @@ def _live_account() -> Account:
 
 
 def _cancel(account: Account) -> Command:
-    return _ok(
-        Command.cancel_order(_venue(), account, "session-shakedown", 1, "ord-1")
-    )
+    return _ok(Command.cancel_order(_venue(), account, "session-shakedown", 1, "ord-1"))
 
 
 def _shakedown_plan(**overrides: object) -> ShakedownPlan:
@@ -374,9 +372,7 @@ def test_dangling_seat_is_referential_integrity_refusal() -> None:
     )
     refused = _refusal(admit_runtime_risk_population(graph))
     assert refused.category is RefusalCategory.UNAVAILABLE_DEPENDENCY
-    assert refused.context["failure_id"] == (
-        "compose.risk_population.referential_integrity"
-    )
+    assert refused.context["failure_id"] == ("compose.risk_population.referential_integrity")
 
 
 def test_incomplete_rank_table_refuses_total_unique_rank() -> None:
@@ -491,9 +487,7 @@ def test_two_paper_targets_for_one_binding_refuse() -> None:
         ),
     )
     refused = _refusal(admit_runtime_risk_population(graph))
-    assert refused.context["failure_id"] == (
-        "compose.risk_population.one_active_paper_target"
-    )
+    assert refused.context["failure_id"] == ("compose.risk_population.one_active_paper_target")
 
 
 def test_compose_refuses_population_mismatch_before_seal() -> None:
@@ -583,17 +577,13 @@ def test_demo_shakedown_exercises_required_machinery_without_live_binding() -> N
 
 
 def test_live_binding_shakedown_is_policy_rejection() -> None:
-    refused = _refusal(
-        run_demo_shakedown(_shakedown_plan(shakedown_role=AccountRole.LIVE))
-    )
+    refused = _refusal(run_demo_shakedown(_shakedown_plan(shakedown_role=AccountRole.LIVE)))
     assert refused.category is RefusalCategory.POLICY_REJECTION
     assert refused.context["field"] == "shakedown_role"
 
 
 def test_shakedown_evidence_is_not_performance_proof() -> None:
-    refused = _refusal(
-        run_demo_shakedown(_shakedown_plan(treat_as_performance_proof=True))
-    )
+    refused = _refusal(run_demo_shakedown(_shakedown_plan(treat_as_performance_proof=True)))
     assert refused.category is RefusalCategory.POLICY_REJECTION
     evidence = _ok(run_demo_shakedown(_shakedown_plan()))
     page = _ok(
@@ -612,17 +602,13 @@ def test_shakedown_refuses_invented_soak_or_ksa_numbers() -> None:
     assert soak.context["field"] == "invented-value"
     ksa = _refusal(run_demo_shakedown(_shakedown_plan(ksa_numeric_value=50)))
     assert ksa.context["field"] == "invented-value"
-    minutes = _refusal(
-        run_demo_shakedown(_shakedown_plan(invented_window_minutes=15))
-    )
+    minutes = _refusal(run_demo_shakedown(_shakedown_plan(invented_window_minutes=15)))
     assert minutes.context["field"] == "window_bounds"
     assert is_refusal(refuse_invented_soak_or_ksa_number())
 
 
 def test_demo_sqs_baseline_cannot_claim_live_conditioning() -> None:
-    refused = _refusal(
-        run_demo_shakedown(_shakedown_plan(claim_sqs_live_conditioned=True))
-    )
+    refused = _refusal(run_demo_shakedown(_shakedown_plan(claim_sqs_live_conditioned=True)))
     assert refused.category is RefusalCategory.POLICY_REJECTION
     live_env = _refusal(run_demo_shakedown(_shakedown_plan(sqs_environment="live")))
     assert live_env.category is RefusalCategory.POLICY_REJECTION
@@ -630,9 +616,7 @@ def test_demo_sqs_baseline_cannot_claim_live_conditioning() -> None:
 
 def test_command_path_dry_run_refuses_live_account() -> None:
     refused = _refusal(
-        run_demo_shakedown(
-            _shakedown_plan(dry_run_command=_cancel(_live_account()))
-        )
+        run_demo_shakedown(_shakedown_plan(dry_run_command=_cancel(_live_account())))
     )
     assert refused.context["field"] == "dry_run_command"
 

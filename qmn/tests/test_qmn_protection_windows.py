@@ -81,9 +81,7 @@ def _bounds(start: int, end: int) -> WindowBounds:
 def _exposure(
     instrument: Instrument, *currencies: str, record_id: str = "exp-1"
 ) -> CurrencyExposureRecord:
-    return _ok(
-        CurrencyExposureRecord.try_create(instrument, currencies, _instant(500), record_id)
-    )
+    return _ok(CurrencyExposureRecord.try_create(instrument, currencies, _instant(500), record_id))
 
 
 def _scope(currencies: tuple[str, ...] = ("USD",)):
@@ -167,9 +165,10 @@ def test_protection_surface_still_named() -> None:
 def test_both_dead_zone_kinds_exist_and_differ() -> None:
     kinds = dead_zone_kinds()
     assert kinds == (DeadZoneKind.DAILY_DEAD_ZONE, DeadZoneKind.SESSION_HANDOVER_BUFFER)
-    assert frozenset(
-        {WindowKind.DAILY_DEAD_ZONE, WindowKind.SESSION_HANDOVER_BUFFER}
-    ) == DEAD_ZONE_KINDS
+    assert (
+        frozenset({WindowKind.DAILY_DEAD_ZONE, WindowKind.SESSION_HANDOVER_BUFFER})
+        == DEAD_ZONE_KINDS
+    )
     daily = _dead_zone(kind=WindowKind.DAILY_DEAD_ZONE)
     handover = _dead_zone(kind=WindowKind.SESSION_HANDOVER_BUFFER, anchor=AnchorSide.PRE_CLOSE)
     assert daily.window_kind is not handover.window_kind
@@ -197,9 +196,10 @@ def test_resolved_settings_refuse_invented_minutes() -> None:
         news_calendar_max_staleness=_duration(1),
     )
     assert is_refusal(invented)
-    assert "invented" in str(invented.context["reason"]).lower() or "bare" in str(
-        invented.context["reason"]
-    ).lower()
+    assert (
+        "invented" in str(invented.context["reason"]).lower()
+        or "bare" in str(invented.context["reason"]).lower()
+    )
 
     invented_minutes = refuse_invented_window_minutes(15)
     assert is_refusal(invented_minutes)
