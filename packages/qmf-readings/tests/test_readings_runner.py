@@ -43,7 +43,7 @@ from qmf.readings import (
     configure_mis_producer,
     sqs_baseline_key,
 )
-from qmf.readings.record import ReadingRecord, ReadingSource, Tier, TimeBase
+from qmf.readings.record import Health, ReadingRecord, ReadingRef, ReadingSource, Tier, TimeBase
 from qmf.readings.runner import Quote, ReadingBinding, ReadingRunner, Readings, outputs_of
 
 T = TypeVar("T")
@@ -434,3 +434,52 @@ def test_a_runner_refuses_a_writer_for_another_stream_or_subject(tmp_path: Path)
     assert is_refusal(refused)
     assert refused.context["expected"] == "node.fx.EURUSD"
     _ok(wrong_subject.close())
+
+
+def test_a_record_with_every_optional_field_set_writes_all_eighteen_fields() -> None:
+    record = ReadingRecord(
+        reading=ReadingRef("order_flow_pressure", "v1", _print("order-flow-block")),
+        source=ReadingSource.MIS,
+        machine="this-pc",
+        market_id=_MARKET,
+        instrument="EURUSD",
+        tier=Tier.TICK,
+        time_base=TimeBase.CLOCK,
+        health=Health.DEGRADED,
+        data_level=3,
+        fallback_step=1,
+        inputs_received_at=10,
+        computed_at=11,
+        stale_after_s=2,
+        value=_ratio(-3, 4),
+        percentile=_ratio(9, 10),
+        word="selling",
+        estimate="broker-side",
+        corrects="node@this-pc/41",
+    )
+
+    assert set(record.body()) == _SECTION_7
+    assert record.body() == {
+        "reading": {
+            "id": "order_flow_pressure",
+            "version": "v1",
+            "fingerprint": _print("order-flow-block").value,
+        },
+        "source": "mis",
+        "machine": "this-pc",
+        "market_id": "fx.EURUSD",
+        "instrument": "EURUSD",
+        "tier": "tick",
+        "time_base": "clock",
+        "health": "degraded",
+        "data_level": 3,
+        "fallback_step": 1,
+        "inputs_received_at": 10,
+        "computed_at": 11,
+        "stale_after_s": 2,
+        "value": {"num": -3, "den": 4, "unit_kind": "dimensionless-ratio"},
+        "percentile": {"num": 9, "den": 10, "unit_kind": "dimensionless-ratio"},
+        "word": "selling",
+        "estimate": "broker-side",
+        "corrects": "node@this-pc/41",
+    }
