@@ -574,8 +574,24 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     units = _observed_list(context, "runtime.units")
     states = [str(cast(dict[str, Json], unit).get("state")) for unit in units]
     trading = states.count("trading")
-    if standing.mismatch or journal_problem is not None:
+    faulted = [
+        cast(dict[str, Json], held)
+        for held in _observed_list(context, "runtime.stand_downs")
+        if cast(dict[str, Json], held).get("stand_down") == "repeated_fault"
+    ]
+    reasons.extend(
+        f"{held['word']}: {held['cause']}. It waits for your resume." for held in faulted
+    )
+    healing = context.store.observed("runtime.healing")
+    if isinstance(healing, dict):
+        reasons.append(
+            f"Healing after {healing.get('why')}: restart {healing.get('restart')} in the last"
+            " 10 minutes."
+        )
+    if standing.mismatch or journal_problem is not None or faulted:
         word = "Stopped by a health check"
+    elif isinstance(healing, dict):
+        word = "Healing"
     elif level is not KsaLevel.GREEN or target.paused.get("all"):
         word = "Paused"
     elif trading:
@@ -624,7 +640,9 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
             "kill_effects": context.store.observed("runtime.kill"),
             "alarms": context.store.observed("runtime.alarms"),
             "pauses": target.pauses(),
-            "safe_to_restart": {"ok": True, "reasons": []},
+            "safe_to_restart": context.store.observed("runtime.safe_to_restart")
+            or {"ok": True, "reasons": []},
+            "heals": _observed_list(context, "runtime.heals"),
             "contracts": SCHEMAS,
             "build": context.build,
             "disk": {"free_bytes": free, "guard_bytes": GUARD_BYTES},
