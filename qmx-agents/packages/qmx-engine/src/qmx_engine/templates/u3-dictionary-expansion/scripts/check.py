@@ -2,8 +2,8 @@
 
 Its inputs are the match step's answer and the agent's `entries` (each `{for, entry, code}`) and
 `already_held`. Each draft is checked by QML's own checker, `compute_status`, with its code, and
-against the whole catalogue by `corpus_problems`, so a name another entry holds is refused. The
-status is the script's; an agent never types one. A draft that passes lands as one `entry-draft`
+against the whole catalogue and the drafts that passed before it in this run by `corpus_problems`,
+so a name another entry or an earlier draft holds is refused. The status is the script's; an agent never types one. A draft that passes lands as one `entry-draft`
 artifact on the run's own ref with its computed status and fingerprint: a governed draft, never
 published here. A draft that fails lands nothing and is listed under `refused` with every
 problem. A sentence the agent says an entry already holds is listed under `already_held`; its
@@ -40,13 +40,17 @@ written = next((r for r in rows if "entries" in r), {"entries": [], "already_hel
 others = [entry for entry, _ in entries()]
 bodies = Path(os.environ["QMX_WORK"]) / "library"
 bodies.mkdir(parents=True, exist_ok=True)
-drafts, refused, writes = [], [], []
+drafts, refused, writes, passed = [], [], [], []
 for index, draft in enumerate(written["entries"]):
     entry, code = draft["entry"], draft.get("code")
     source = None if code is None else code.encode("utf-8")
     computed = compute_status(entry, source)
     pin = f"{entry.get('entry_id')}@{entry.get('version')}"
-    clashes = [p for p in corpus_problems([*others, entry]) if p.where.startswith(f"{pin}@")]
+    clashes = [
+        p
+        for p in corpus_problems([*others, *passed, entry])
+        if p.where == pin or p.where.startswith(f"{pin}/")
+    ]
     problems = [p.as_json() for p in (*computed.problems, *clashes)]
     if computed.status is None or problems:
         refused.append({"for": draft["for"], "pin": pin, "problems": problems})
@@ -70,6 +74,7 @@ for index, draft in enumerate(written["entries"]):
         }
     )
     drafts.append(found)
+    passed.append(entry)
 print(
     json.dumps(
         {

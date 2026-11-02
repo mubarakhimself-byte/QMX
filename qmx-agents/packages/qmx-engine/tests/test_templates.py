@@ -1050,6 +1050,48 @@ def test_dictionary_expansion_files_an_append_request_per_unmatched_sentence(hom
     assert [w["refused"] for w in out["library_written"]] == [None]
 
 
+def expand_with(home: Path, *entries: dict[str, Any]) -> Any:
+    """Run the dictionary expansion with the agent's drafts replaced by these entries, each with
+    the shipped fixture draft's code."""
+    fixture = json.loads(recorded(U3, "drafts.json"))["entries"][0]
+    drafts = [{"for": fixture["for"], "entry": e, "code": fixture["code"]} for e in entries]
+    planted = json.dumps({"entries": drafts, "already_held": []})
+    port = answers(planted={"You draft dictionary entries": planted})
+    with fake_service(home, harness=port) as svc:
+        item = svc.drafts.put(U3.name, Bundle.read(U3), 0, caller=OPERATOR).item
+        inputs = find("expand-the-dictionary-from-a-source").test_inputs
+        report = asyncio.run(svc.tests.run(item, caller=OPERATOR, inputs=inputs))
+    assert report.status == "passed", report.reason
+    return finished_output(home, report, "check")
+
+
+def test_a_draft_that_takes_another_entrys_name_is_refused(home: Path) -> None:
+    entry = json.loads(recorded(U3, "drafts.json"))["entries"][0]["entry"]
+    out = expand_with(home, {**entry, "aliases": ["ema"]})
+
+    assert out["drafts"] == []
+    assert [(r["pin"], [p["message"] for p in r["problems"]]) for r in out["refused"]] == [
+        ("smoothed-close-fixture@1", ["'ema' already names ema"])
+    ]
+    assert out.get("library_written", []) == []
+
+
+def test_a_draft_that_takes_an_earlier_drafts_name_in_the_same_run_is_refused(
+    home: Path,
+) -> None:
+    entry = json.loads(recorded(U3, "drafts.json"))["entries"][0]["entry"]
+    out = expand_with(home, entry, {**entry, "entry_id": "smoothed-close-copy"})
+
+    assert [d["pin"] for d in out["drafts"]] == ["smoothed-close-fixture@1"]
+    assert [(r["pin"], [p["message"] for p in r["problems"]]) for r in out["refused"]] == [
+        (
+            "smoothed-close-copy@1",
+            ["'smoothed close fixture' already names smoothed-close-fixture"],
+        )
+    ]
+    assert [w["refused"] for w in out["library_written"]] == [None]
+
+
 def test_the_librarian_reports_with_receipts_and_lands_only_its_report(home: Path) -> None:
     with fake_service(home, harness=answers()) as svc:
         item = svc.drafts.put(U4.name, Bundle.read(U4), 0, caller=OPERATOR).item
