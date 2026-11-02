@@ -22,7 +22,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from fastapi import APIRouter, Request
 from pydantic import JsonValue
@@ -34,8 +34,10 @@ from qmx_engine.service.context import OPERATOR
 from qmx_engine.service.forward import PASS_HEADER, ForwardRefused, verify_host_pass
 from starlette.responses import FileResponse, JSONResponse, Response
 
-from qmx_host.market_data import MarketDoor
 from qmx_host.node_link import ROUTE_PATH, SCHEMA, NodeLink
+
+if TYPE_CHECKING:
+    from qmx_host.market_data import MarketDoor
 
 HOST_ROUTE: Final = ("POST", ROUTE_PATH)
 """The one host-pass route this module serves, admitted by the door beside the other four."""
