@@ -122,7 +122,7 @@ class Ports:
 @dataclass(frozen=True, slots=True)
 class Setup:
     """One step of the setup. A `waiting` step's card does not end the run; `after` names the
-    waiting steps this one needs done first."""
+    steps this one needs done first, and while one of them waits this one waits too."""
 
     step: Step
     waiting: bool = False
