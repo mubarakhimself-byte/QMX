@@ -40,6 +40,10 @@
           "min_holdout_days": {"type": "integer", "minimum": 1, "default": 60, "description": "the shortest holdout the study accepts, in days"}
         }
       },
+      "ranges": {
+        "type": "object",
+        "description": "the unit's numbers a walk-forward picks from in each fold, each a list of values or {min, max, step}; left out, no walk-forward runs and the verdict's walk-forward step waits"
+      },
       "fixture": {
         "enum": ["pass", "fail"],
         "description": "test runs only: replay a recorded QMB run instead of asking QMB"
@@ -60,6 +64,9 @@
     {"id": "replay", "name": "Recorded runs?", "type": "rule", "typeVersion": 1, "position": [1760, 0], "parameters": {"expr": "items.recorded is not None"}, "effect": "none"},
     {"id": "recorded", "name": "Replay the recorded runs", "type": "script", "typeVersion": 1, "position": [1980, 120], "parameters": {"script": "scripts/recorded.py", "fixture_ref": "fixtures/qmb.json"}, "effect": "none"},
     {"id": "ask", "name": "The ask QMB runs", "type": "script", "typeVersion": 1, "position": [1980, 0], "parameters": {"script": "scripts/ask.py"}, "effect": "none"},
+    {"id": "folds", "name": "Walk-forward asked?", "type": "rule", "typeVersion": 1, "position": [1980, -240], "parameters": {"expr": "items.walk_forward is not None"}, "effect": "none"},
+    {"id": "ask_walk_forward", "name": "The walk-forward QMB runs", "type": "script", "typeVersion": 1, "position": [2200, -240], "parameters": {"script": "scripts/ask_walk_forward.py"}, "effect": "none"},
+    {"id": "walk_forward", "name": "Walk-forward on QMB", "type": "app_op", "typeVersion": 1, "position": [2420, -240], "parameters": {"app": "qmb", "job": "jobs/walk_forward.py", "inputs": {}}},
     {"id": "backtest", "name": "Backtest on QMB", "type": "app_op", "typeVersion": 1, "position": [2200, 0], "parameters": {"app": "qmb", "job": "jobs/backtest.py", "inputs": {}}},
     {"id": "robustness", "name": "Robustness runs on QMB", "type": "app_op", "typeVersion": 1, "position": [2200, -120], "parameters": {"app": "qmb", "job": "jobs/robustness.py", "inputs": {}}},
     {"id": "referee", "name": "Ask the referee", "type": "agent", "typeVersion": 1, "toolsets": ["backtest"], "position": [2420, 0], "role": "judge", "retry": {"max_tries": 2}, "parameters": {"brief_ref": "prompts/referee.md", "output_schema_ref": "schemas/referee.json", "tools": []}, "effect": "none"},
@@ -85,7 +92,10 @@
     "Check the unit": {"main": [[{"node": "Ready to test?", "port": "in", "map": "one"}]]},
     "Ready to test?": {"main": [[{"node": "Unit ready?", "port": "in", "map": "one"}, {"node": "What follows the verdict", "port": "in", "map": "one"}, {"node": "Assemble the scorecard", "port": "in", "map": "one"}]]},
     "Unit ready?": {"true": [[{"node": "Recorded runs?", "port": "in", "map": "one"}]]},
-    "Recorded runs?": {"true": [[{"node": "Replay the recorded runs", "port": "in", "map": "one"}]], "false": [[{"node": "The ask QMB runs", "port": "in", "map": "one"}]]},
+    "Recorded runs?": {"true": [[{"node": "Replay the recorded runs", "port": "in", "map": "one"}]], "false": [[{"node": "The ask QMB runs", "port": "in", "map": "one"}, {"node": "Walk-forward asked?", "port": "in", "map": "one"}]]},
+    "Walk-forward asked?": {"true": [[{"node": "The walk-forward QMB runs", "port": "in", "map": "one"}]]},
+    "The walk-forward QMB runs": {"main": [[{"node": "Walk-forward on QMB", "port": "in", "map": "one"}]]},
+    "Walk-forward on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
     "The ask QMB runs": {"main": [[{"node": "Backtest on QMB", "port": "in", "map": "one"}, {"node": "Robustness runs on QMB", "port": "in", "map": "one"}]]},
     "Backtest on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},
     "Robustness runs on QMB": {"main": [[{"node": "Ask the referee", "port": "in", "map": "one"}]]},

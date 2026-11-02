@@ -30,6 +30,7 @@ def entries():
                 found.append((json.loads(face.read_text("utf-8")), code.read_bytes()))
     return found
 
+
 source = json.load(sys.stdin)["in"]["source"]
 report = match(source["text"], [row(entry, None) for entry, _ in entries()]).as_json()
 cited = {k: source[k] for k in ("title", "url", "date") if source.get(k)}

@@ -1,6 +1,6 @@
 """A test run's stand-in for the two QMB runs: what QMB answered on a recorded run, read from
-`fixtures/qmb.json` under the fixture's name. Only a run whose inputs name a `fixture` comes here; any
-other run asks QMB itself. Zero tokens.
+`fixtures/qmb.json` under the fixture's name. Only a run whose inputs name a `fixture` comes
+here; any other run asks QMB itself. Zero tokens.
 """
 
 import json

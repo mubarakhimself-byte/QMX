@@ -32,6 +32,7 @@ def entries():
                 found.append((json.loads(face.read_text("utf-8")), code.read_bytes()))
     return found
 
+
 given = json.load(sys.stdin)["in"]
 rows = [v for v in (given if isinstance(given, list) else [given]) if isinstance(v, dict)]
 matched = next(r for r in rows if "append_requests" in r)

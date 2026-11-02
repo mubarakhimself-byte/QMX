@@ -63,7 +63,7 @@ JUDGED = (
     "d4-variant-comparison",
 )
 """The templates that call the `judge` block as their child in place of a copied gate script. `b`
-asks the core's referee, `backtest_judge_run`, instead, because no workflow reads a family's tries."""
+asks the core's referee, `backtest_judge_run`, because no workflow reads a family's tries."""
 
 NO_RENDER = frozenset(
     {
@@ -891,7 +891,9 @@ def scorecard(
     report, delivered = try_template(home, B, {**IDEA, "fixture": fixture}, port)
     with Reader.open(home) as reader:
         ran = [
-            str(e.data["node_id"]) for e in reader.events(report.run_id) if e.kind == "node_finished"
+            str(e.data["node_id"])
+            for e in reader.events(report.run_id)
+            if e.kind == "node_finished"
         ]
     return report, delivered, ran
 
@@ -938,7 +940,7 @@ def test_b_turns_a_passing_verdict_into_a_paper_proposal_and_no_certificate(home
         ],
         "verdict": "verdict-fixture-pass",
         "tries": {"raw": 2, "effective": 2},
-        "why": "Holds. fx.eurusd and metal.xauusd pass every step. Behind it: 2 tries, 2 effective.",
+        "why": json.loads(recorded(B, "referee-pass.json"))["verdict"]["says"],
         "cost": {"qmb_runs": 2},
         "made_by": card["proposal"]["made_by"],
     }
@@ -1063,3 +1065,44 @@ def test_the_librarian_reports_with_receipts_and_lands_only_its_report(home: Pat
     ]
     assert out["scanned"]["qml"] > 0
     assert [(w["op"], w["refused"]) for w in out["library_written"]] == [("put_artifact", None)]
+
+
+def test_b_asks_qmb_for_a_walk_forward_only_when_the_run_names_ranges() -> None:
+    sealed = {
+        "memo_key": "k",
+        "spec": {
+            "study": {"folds": 3},
+            "windows": {
+                "in_sample": {"start": "2020-01-01", "end": "2023-01-01"},
+                "folds": [{"start": "2023-01-01", "end": "2024-01-02"}],
+                "holdout": {"start": "2024-01-02", "end": "2025-01-01"},
+            },
+        },
+    }
+    built: dict[str, Any] = {"item": "u", "object_id": "unit-pin", "unit": {}}
+    report = {"verdict": "pass", "rounds": 0, "stopped": "passed", "problem_set": "p", "why": ""}
+    ranges = {"ema_period": ["50", "100"]}
+
+    def ready(inputs: dict[str, Any]) -> Any:
+        given: list[Any] = [inputs, sealed, built, {"outputs": {"report": {"main": report}}}]
+        ran = subprocess.run(
+            [sys.executable, "-I", str(B / "scripts" / "ready.py")],
+            input=json.dumps({"in": given}),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
+        )
+        return json.loads(ran.stdout)
+
+    asked = ready({"idea": "i", "window": {}, "ranges": ranges})
+    plain = ready({"idea": "i", "window": {}})
+
+    assert asked["walk_forward"] == {
+        "unit": "unit-pin",
+        "window": {"start": "2020-01-01", "end": "2024-01-02"},
+        "split": {"folds": 3},
+        "ranges": {"ema_period": ["50", "100"]},
+    }
+    assert plain["walk_forward"] is None
+    assert (asked["ok"], asked["window"]) == (True, {"start": "2020-01-01", "end": "2023-01-01"})

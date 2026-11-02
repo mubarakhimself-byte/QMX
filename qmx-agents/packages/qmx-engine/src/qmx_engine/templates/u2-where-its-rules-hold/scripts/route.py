@@ -16,7 +16,9 @@ base = {"unit": given["unit"], "window": given["window"]}
 sessions = given.get("sessions") or []
 whatif = None
 if sessions:
-    scenarios = [{"name": "session_hours", "params": {"from": s["from"], "to": s["to"]}} for s in sessions]
+    scenarios = [
+        {"name": "session_hours", "params": {"from": s["from"], "to": s["to"]}} for s in sessions
+    ]
     whatif = base | {"scenarios": scenarios}
 print(
     json.dumps(

@@ -1,7 +1,7 @@
 """The librarian's scan of the dictionary QML holds and the content wave committed beside it
 (`qml/catalogue-seed/wave-1/`, which lands in the Library at each start): repeated code, clashing
-names and gaps, each with its receipts. Zero tokens, and it changes nothing: it lands one `librarian-report` artifact
-on the run's own ref and moves, edits or publishes no entry.
+names and gaps, each with its receipts. Zero tokens, and it changes nothing: it lands one
+`librarian-report` artifact on the run's own ref and moves, edits or publishes no entry.
 
 - `repeated_code`: entries whose `block.py` bytes have one fingerprint under two or more pins.
   Each cluster is one proposal, a single block in place of the copies.
@@ -12,8 +12,8 @@ on the run's own ref and moves, edits or publishes no entry.
 
 Every finding names its pins and fingerprints, which `blocks_get` and `blocks_check` show again.
 A script never opens the Library, so an entry only the Library holds (the port's drafts, his own
-components) is not scanned here; see the README. A seed entry carries no code, so it is checked by
-its face alone.
+components) is not scanned here; see the README. A seed entry carries no code, so it is checked
+by its face alone.
 """
 
 import json
@@ -62,9 +62,13 @@ for pin, entry, code in held:
         by_code[block_fingerprint(code).value].append(pin)
     computed = compute_status(entry, code, golden(entry))
     if computed.status is None:
-        gaps.append({"pin": pin, "status": None, "problems": [p.as_json() for p in computed.problems]})
+        gaps.append(
+            {"pin": pin, "status": None, "problems": [p.as_json() for p in computed.problems]}
+        )
     elif computed.missing:
-        gaps.append({"pin": pin, "status": computed.status.value, "missing": list(computed.missing)})
+        gaps.append(
+            {"pin": pin, "status": computed.status.value, "missing": list(computed.missing)}
+        )
 repeated = [
     {"fingerprint": fp, "pins": pins, "proposal": f"one block in place of {', '.join(pins)}"}
     for fp, pins in sorted(by_code.items())
