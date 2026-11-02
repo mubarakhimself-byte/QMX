@@ -584,10 +584,7 @@ def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     )
     healing = context.store.observed("runtime.healing")
     if isinstance(healing, dict):
-        reasons.append(
-            f"Healing after {healing.get('why')}: restart {healing.get('restart')} in the last"
-            " 10 minutes."
-        )
+        reasons.append(f"Healing after {healing.get('why')}: restart {healing.get('restart')}.")
     if standing.mismatch or journal_problem is not None or faulted:
         word = "Stopped by a health check"
     elif isinstance(healing, dict):

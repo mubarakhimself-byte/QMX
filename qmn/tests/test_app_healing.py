@@ -20,7 +20,7 @@ from qmf.data.store.refusals import storage_failure
 from qmf.venue.commands import CommandKind
 from qmn.app import stand_down
 from qmn.app.feed_keeper import Bar, Quote
-from qmn.app.healing import RUNTIME_STUCK_EXIT_CODE
+from qmn.app.healing import RUNTIME_STUCK_EXIT_CODE, Backoff
 from test_app_runtime import (
     DAY,
     LIVE_FROM,
@@ -378,3 +378,12 @@ def test_safe_to_restart_reads_false_while_an_order_is_in_flight(tmp_path: Path)
     assert resolved == {"ok": True, "reasons": []}
     node.runtime.stop()
 
+
+def test_the_back_off_doubles_to_its_cap_and_starts_again_after_a_healthy_run() -> None:
+    backoff = Backoff()
+    waits = [backoff.next(n * SECOND) for n in range(8)]
+    after_ten_quiet_minutes = backoff.next(7 * SECOND + 600 * SECOND)
+    then = backoff.next(8 * SECOND + 600 * SECOND)
+
+    assert waits == [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 60.0, 60.0]
+    assert (after_ten_quiet_minutes, then) == (1.0, 2.0)
