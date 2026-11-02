@@ -2,10 +2,10 @@
 
 `GET /api/maintenance` lists the host's jobs (sync to my storage, the monthly upkeep of each
 storage, the monthly restore drill, bringing records in and, on This PC, bringing node records
-home) and the shipped workflows whose
-definition is marked `meta.kind = "maintenance"`, each with its own off switch: a backup job's is
-one `[backup]` key, the records job's is `[records] on`, and a workflow's are its triggers'
-enable and disable routes. Turning one off stops it and nothing else.
+home) and the shipped workflows whose definition is marked `meta.kind = "maintenance"`, each
+with its own off switch: a backup job's is one `[backup]` key, the records jobs' is `[records]
+on`, and a workflow's are its triggers' enable and disable routes. Turning one off stops it and
+nothing else.
 
 Each host job ends by landing a Library `artifact` whose `fields.type` is `maintenance-result`
 (`landed`), written as the operator's, whom the host acts for. A workflow of his follows it with
