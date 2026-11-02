@@ -27,11 +27,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Final
 
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.dukascopy import DEFAULT_PRICE_SCALE, PERSONAL_USE_LICENSE, decode_bi5_ticks
-from qmf.data.importers.quality import OpenAt, QualityReport, check_month
+from qmf.data.importers.quality import OpenAt, QualityReport, check_month, partition_stamps
 from qmf.data.importers.stamps import SourceClock
 from qmf.data.series import INCOMING_NAME, TICKS_KIND, CommitReceipt, SeriesKey, SeriesStore
 from qmf.data.store.engines import SeriesFile, StoreEngineError
@@ -204,7 +204,7 @@ def import_raw_month(
         None
         if open_at is None
         else check_month(
-            _stamps_of(written.path),
+            partition_stamps(written.path),
             start_ms=key.start_ns // NS_PER_MS,
             end_ms=key.end_ns // NS_PER_MS,
             open_at=open_at,
@@ -217,15 +217,6 @@ def import_raw_month(
     if is_refusal(receipt):
         return receipt
     return Ok(RawTicksImport(key=key, receipt=receipt.value, hours=len(files), checked=checked))
-
-
-def _stamps_of(path: Path) -> Iterator[int]:
-    """A written partition's stamps in file order, a batch at a time."""
-    import pyarrow.parquet as pq  # noqa: PLC0415  # pyright: ignore[reportMissingTypeStubs]
-
-    reader: Any = pq.ParquetFile(path)
-    for batch in reader.iter_batches(columns=["t"]):
-        yield from cast("list[int]", batch.column(0).to_pylist())
 
 
 def import_raw_month_in_process(

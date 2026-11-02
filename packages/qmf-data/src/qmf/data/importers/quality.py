@@ -13,19 +13,32 @@ own gap rule cannot see, because only the calendar knows when the market was ope
 The calendar is a function of UTC epoch milliseconds, so the check reads any calendar source:
 the shipped ``qmx.calendar/1`` files in the engine, or a fixture in a test.
 
-Stdlib only.
+Stdlib only, and pyarrow to read a written partition's stamps back.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Final
+from pathlib import Path
+from typing import Any, Final, Protocol, cast
 
 from qmf.data.importers.stamps import iso_ms
 
-__all__ = ["GAP_MINUTES", "Gap", "Jump", "OpenAt", "QualityReport", "check_month", "hour_ms"]
+__all__ = [
+    "GAP_MINUTES",
+    "Calendar",
+    "Gap",
+    "Jump",
+    "OpenAt",
+    "QualityReport",
+    "check_month",
+    "confirmed_hours",
+    "hour_ms",
+    "open_at_of",
+    "partition_stamps",
+]
 
 GAP_MINUTES: Final[int] = 5
 """The data-quality step's ``gap_minutes`` starting default: a run of missing open minutes
@@ -160,3 +173,34 @@ def check_month(
         confirmed=tuple(hour for hour in empty if hour in agreed),
         jumps=tuple(jumps),
     )
+
+
+class Calendar(Protocol):
+    """Any market calendar that says whether it is open at an instant."""
+
+    def open_at(self, instant: datetime, /) -> bool: ...
+
+
+def open_at_of(calendar: Calendar) -> OpenAt:
+    """A calendar's open time as the check reads it, a UTC epoch millisecond at a time."""
+    return lambda at_ms: calendar.open_at(datetime.fromtimestamp(at_ms // 1000, tz=UTC))
+
+
+def confirmed_hours(named: Iterable[object]) -> tuple[int, ...] | str:
+    """The hours a source definition names as confirmed empty, or why one names no hour."""
+    hours: list[int] = []
+    for text in named:
+        hour = hour_ms(str(text))
+        if hour is None:
+            return f"{text!r} names no hour as YYYY-MM-DDTHH"
+        hours.append(hour)
+    return tuple(hours)
+
+
+def partition_stamps(path: Path) -> Iterator[int]:
+    """A written partition's stamps in file order, a batch at a time."""
+    import pyarrow.parquet as pq  # noqa: PLC0415  # pyright: ignore[reportMissingTypeStubs]
+
+    reader: Any = pq.ParquetFile(path)
+    for batch in reader.iter_batches(columns=["t"]):
+        yield from cast("list[int]", batch.column(0).to_pylist())

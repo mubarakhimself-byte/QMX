@@ -1,0 +1,17 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "data-quality",
+  "name": "Data quality: one month counted against its market's calendar, decided by script",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "check", "name": "Check the month", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none",
+     "parameters": {"script": "scripts/data_quality.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Check the month", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

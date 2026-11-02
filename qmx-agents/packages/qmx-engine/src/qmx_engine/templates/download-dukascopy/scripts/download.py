@@ -17,6 +17,13 @@ after its retries stops the month from landing. A refused hour is never read as 
 no ticks.
 
 The volume on every row is Dukascopy's own liquidity. The card says so.
+
+Before the month lands, its stamps are checked (a bi5 tick is milliseconds from its UTC hour,
+so the source clock is UTC in milliseconds) and, when the source definition names its market's
+`calendar`, the month is counted against that calendar's open time. An hour wholly inside open
+time with no tick is a fetch failure until a retry and a second source agree, so the month
+lands held open, unfrozen, until the source definition lists that hour in `confirmed_empty`
+(LD-01). The card states the clock, the seams and the calendar.
 """
 
 import http.client
@@ -36,11 +43,14 @@ from qmf.data.dukascopy import (
     DukascopyHourKey,
     decode_bi5_ticks,
 )
+from qmf.data.importers.quality import check_month, confirmed_hours, open_at_of
+from qmf.data.importers.stamps import ClockLedger, StampCheck, card_facts
 from qmf.data.series import SeriesKey
 from qmf.data.store.engines.typed import TICK_COLUMNS, TypedWriter
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_library.cards import Partition, SeriesCard, card_fields
 
+from qmx_engine.triggers.preflight import shipped_calendars
 from qmx_engine.workers.zones import home_of
 
 FAILURE = "[QMX_FAILURE]"
@@ -229,6 +239,13 @@ symbol = str(source.get("symbol") or "").strip().upper()
 if symbol == "":
     fail("the source definition names no symbol")
 year, month = month_of(str(source.get("month") or ""))
+calendar_ref = str(source.get("calendar") or "").strip() or None
+calendar = shipped_calendars().get(calendar_ref) if calendar_ref else None
+if calendar_ref and calendar is None:
+    fail(f"no shipped calendar is named {calendar_ref!r}")
+confirmed = confirmed_hours(source.get("confirmed_empty") or [])
+if isinstance(confirmed, str):
+    fail(f"confirmed_empty: {confirmed}")
 shared = Path(os.environ["QMX_WORK_SHARED"])
 home = home_of(shared)
 settings_file = home / "settings.toml"
@@ -295,17 +312,36 @@ try:
     if not rows:
         print(json.dumps({"status": "empty", "key": key.value.text}))
         raise SystemExit(0)
+    ledger = ClockLedger(root)
+    unit, _ = ledger.before(key.value.series, year, month)
+    stamps = StampCheck(after=unit)
+    checked_rows = stamps.file(key.value.text, rows)
+    if is_refusal(checked_rows):
+        fail(f"the stamps did not check: {checked_rows.context}")
+    report = (
+        None
+        if calendar is None
+        else check_month(
+            (row[0] for row in rows),
+            start_ms=start_ns // 1_000_000,
+            end_ms=key.value.end_ns // 1_000_000,
+            open_at=open_at_of(calendar),
+            confirmed=confirmed,
+        )
+    )
     staging = root / "staging"
     staged = staging / "dukascopy" / symbol / "ticks" / "-" / f"{year:04d}-{month:02d}.parquet"
     staged.parent.mkdir(parents=True, exist_ok=True)
     short = free_disk(staged.parent, float(data.get("disk_floor_gb") or DEFAULT_FLOOR_GB))
     if short:
         fail(f"the partition keeps the disk below its floor: {short}")
-    written = TypedWriter(staged, key.value.text, TICK_COLUMNS).add(rows).finish()
-    landed = door.commit([staged], staging=staging, born_on=placement)
+    written = TypedWriter(staged, key.value.text, TICK_COLUMNS).add(checked_rows.value).finish()
+    hold = None if report is None else report.hold
+    landed = door.commit([staged], staging=staging, born_on=placement, hold=hold)
     if is_refusal(landed):
         fail(f"the door refused the commit: {landed.context}")
     receipt = landed.value[0]
+    ledger.record(key.value.series, year, month, stamps)
     partitions = (
         Partition(
             year=year,
@@ -331,12 +367,14 @@ try:
             ),
             "price_scale": PRICE_SCALE,
             "hours_refused": 0,
+            "checked": None if report is None else report.as_json(),
         },
     )
     cards = Path(os.environ.get("QMX_WORK") or ".") / "library" / "cards"
     card_path = cards / f"{card.series.replace('/', '_')}.json"
     card_path.parent.mkdir(parents=True, exist_ok=True)
-    card_path.write_text(json.dumps(card_fields(card, partitions), indent=2), encoding="utf-8")
+    fields = {**card_fields(card, partitions), **card_facts(stamps, calendar_ref)}
+    card_path.write_text(json.dumps(fields, indent=2), encoding="utf-8")
     print(
         json.dumps(
             {
@@ -344,6 +382,9 @@ try:
                 "key": key.value.text,
                 "rows": receipt.rows,
                 "frozen": receipt.frozen,
+                "held_open": hold,
+                **card_facts(stamps, calendar_ref),
+                "checked": None if report is None else report.as_json(),
                 "fingerprint": receipt.fingerprint,
                 "hours": len(keys),
                 "staged_bytes": written.bytes,

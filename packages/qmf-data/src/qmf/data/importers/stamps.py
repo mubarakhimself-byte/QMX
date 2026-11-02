@@ -36,6 +36,7 @@ __all__ = [
     "SourceClock",
     "StampCheck",
     "StampUnit",
+    "card_facts",
     "iso_ms",
     "unit_of",
 ]
@@ -255,3 +256,14 @@ class ClockLedger:
         staged = self._path(series).with_suffix(".tmp")
         staged.write_text(json.dumps(months, sort_keys=True), encoding="utf-8")
         staged.replace(self._path(series))
+
+
+def card_facts(check: StampCheck, calendar: str | None = None) -> dict[str, object]:
+    """The ``dataset`` card's version 2 facts an import knows: its clock, seams and calendar."""
+    facts: dict[str, object] = {
+        "source_clock": check.clock.as_json(),
+        "seams": [seam.as_json() for seam in check.seams],
+    }
+    if calendar:
+        facts["calendar"] = {"ref": calendar}
+    return facts
