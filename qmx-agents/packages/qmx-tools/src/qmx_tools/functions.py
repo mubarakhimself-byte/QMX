@@ -1080,8 +1080,8 @@ def instrument_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
             return {
                 "ok": False,
                 "code": "ambiguous",
-                "message": f"{len(found)} instrument records hold {asked['market_id']}; name one "
-                "by venue and symbol",
+                "message": f"{len(found)} instrument records hold {':'.join(asked.values())}; "
+                "name one by venue and symbol, or archive the one withdrawn",
                 "choices": [
                     {
                         "id": h.item,

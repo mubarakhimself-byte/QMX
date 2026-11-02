@@ -310,7 +310,12 @@ def test_instrument_get_names_the_choices_and_the_nearest_records(context: Domai
     landed(context, instrument("pepperstone", "XAUUSD", "gold", **{"class": "metal"}), at)
     get = domain_functions(context)["instrument"]["instrument_get"]
 
-    assert get(market_id="gold")["choices"] == [
+    gold = get(market_id="gold")
+
+    assert gold["message"] == (
+        "2 instrument records hold gold; name one by venue and symbol, or archive the one withdrawn"
+    )
+    assert gold["choices"] == [
         {
             "id": "instrument:icmarkets-ctrader:XAUUSD",
             "venue": "icmarkets-ctrader",
