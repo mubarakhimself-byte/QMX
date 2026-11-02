@@ -3,11 +3,11 @@ survivor touches nothing. Its output is the survivor's `holdout` score with the 
 `monte_carlo` band it must land in, plus the `judge` block's request: the study `spec`, the
 `study` id, the survivor's landed `results` and the `tries` of the family, dead children included.
 
-Until QMB's sealed-holdout door exists this template stays a draft (`needs: qmb-door`) and this
+Until a workflow can read the sealed holdout this template stays a draft (`needs: real-library`) and this
 script refuses to guess.
 """
 
 import sys
 
-sys.stderr.write("waits for QMB's sealed-holdout door for agents (needs: qmb-door)")
+sys.stderr.write("waits for a workflow read of the family's sealed holdout (needs: real-library)")
 raise SystemExit(1)

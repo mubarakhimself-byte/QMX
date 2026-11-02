@@ -61,6 +61,9 @@ def card(file: CardFile, *ids: str) -> tuple[Card, ...]:
 
 NODE: Final[tuple[Need, ...]] = ("trading-node",)
 QMB: Final[tuple[Need, ...]] = ("qmb-door",)
+LIBRARY: Final[tuple[Need, ...]] = ("real-library",)
+"""The template reads Library rows a workflow cannot read yet: a family's tries, its reports or
+its sealed holdout (a script reads four verbs, `nodes/script.py` `READS`)."""
 SANDBOX: Final[tuple[Need, ...]] = ("sandbox",)
 """A placed attempt runs under the sandbox tool server (AD-25, H8); the template is a draft until
 that placement exists, which is what `meta.needs` records."""
@@ -278,7 +281,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Get a first backtest result from an idea",
         card("17", "L1"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="l1-idea-to-first-result",
     ),
     Template(
@@ -286,7 +289,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Overnight Lab loop",
         card("17", "L4"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="l4-overnight-lab-loop",
         triggers=(Cron("0 23 * * *", "Europe/London"),),
     ),
@@ -303,7 +306,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Iterate against QMB with overfit guards",
         card("17", "D3"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="d3-iterate-against-qmb",
     ),
     Template(
@@ -311,7 +314,7 @@ CATALOG: Final[tuple[Template, ...]] = (
         "Variant generation and comparison",
         card("17", "D4"),
         "TP4",
-        QMB,
+        LIBRARY,
         folder="d4-variant-comparison",
     ),
     Template(

@@ -5,11 +5,11 @@ a full report is refused.
 
 Its output is `parent` (id, spec, `spec_hash`, `validated` score), `report` (its sections),
 `holdout` (numbers the diagnoser must not see), `family` (`trials`, `spec_hashes`) and
-`headroom`. Until QMB's doors for agents exist this template stays a draft (`needs: qmb-door`) and
+`headroom`. Until a workflow can read those Library rows this template stays a draft (`needs: real-library`) and
 this script refuses to guess.
 """
 
 import sys
 
-sys.stderr.write("waits for QMB's report and family ledger doors for agents (needs: qmb-door)")
+sys.stderr.write("waits for a workflow read of the parent's reports and its family's tries (needs: real-library)")
 raise SystemExit(1)

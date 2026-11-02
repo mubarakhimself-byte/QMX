@@ -4,11 +4,11 @@ each reading's `reading`, `trades` (time and session of each), `sharpe`, `daily_
 `expectancy_r`, `costs_on_expectancy_r`, the stated `session`, the `lookahead_lint` result with any
 offending line, and `refused` with QMB's reason. A QMB refusal is a result, not a failure.
 
-Until QMB's doors for agents exist this template stays a draft (`needs: qmb-door`) and this script
+Until the facts step's Library read exists this template stays a draft (`needs: real-library`) and this script
 refuses to guess.
 """
 
 import sys
 
-sys.stderr.write("waits for QMB's spec compile and backtest doors for agents (needs: qmb-door)")
+sys.stderr.write("waits for a workflow read of its readings, read with the Toolbox facts (needs: real-library)")
 raise SystemExit(1)

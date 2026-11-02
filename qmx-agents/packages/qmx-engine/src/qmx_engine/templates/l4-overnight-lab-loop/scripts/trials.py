@@ -5,13 +5,11 @@ from Settings. Its output is `trials`: each candidate's `spec_hash`, `in_sample`
 scores, `monte_carlo` band, `passed` and `failed` gates, `daily_sharpe`, or `error`. A QMB failure
 on one candidate drops it and still counts it as a trial.
 
-Until QMB's doors for agents exist this template stays a draft (`needs: qmb-door`) and this script
+Until a workflow can read the family's tries this template stays a draft (`needs: real-library`) and this script
 refuses to guess.
 """
 
 import sys
 
-sys.stderr.write(
-    "waits for QMB's compile, backtest and validation doors for agents (needs: qmb-door)"
-)
+sys.stderr.write("waits for a workflow read of the family's tries its judge child counts (needs: real-library)")
 raise SystemExit(1)

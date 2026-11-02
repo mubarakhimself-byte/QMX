@@ -1,6 +1,6 @@
 # Overnight Lab loop
 
-Waits for QMB's doors for agents: family ledger, compile, backtest, validation and sealed holdout (`needs: qmb-door`).
+Waits for a workflow read of the Library: the family's tries and its sealed holdout (`needs: real-library`). QMB's own door is there now.
 
 Built from card L4 (overnight Lab loop, Build Alpha style) in `research/methodology/17-templates-dev-pm-lab.md`. While he sleeps it generates candidates inside a search space, backtests and validates them, detects a plateau, changes the space by one fixed move, and restarts. Every trial is recorded and every dead end kept. The model proposes; scripts decide, behind gates the loop cannot loosen.
 

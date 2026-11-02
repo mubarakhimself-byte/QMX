@@ -5,11 +5,11 @@ costs), fanned out. Its output is `results`: each child's `spec_hash`, `in_sampl
 scores, `daily_sharpe`, `failed` gates, or `could_not_build` and `error` carried through. A failed
 build or run counts as a dead child.
 
-Until QMB's doors for agents exist this template stays a draft (`needs: qmb-door`) and this script
+Until a workflow can read the family's tries this template stays a draft (`needs: real-library`) and this script
 refuses to guess.
 """
 
 import sys
 
-sys.stderr.write("waits for QMB's compile, walk-forward and robustness doors (needs: qmb-door)")
+sys.stderr.write("waits for a workflow read of the family's tries its judge child counts (needs: real-library)")
 raise SystemExit(1)
