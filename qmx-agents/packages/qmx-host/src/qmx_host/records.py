@@ -35,7 +35,7 @@ import asyncio
 import json
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -47,7 +47,14 @@ from qmf.core import TypedRefusal, canonical_bytes, fingerprint, fingerprint_byt
 from qmf.data.journal_reader import CommittedLine, JournalLine, read_committed
 from qmf.data.series import JOURNAL_SOURCE_PREFIX, TICKS_KIND, SeriesKey
 from qmf.data.store.engines.typed import FLOAT_COLUMNS, TypedWriter
-from qmx_judge.paper import PAPER_RUN_KIND, PaperLane, PaperRule, PaperTrade, paper_run
+from qmx_judge.paper import (
+    PAPER_RUN_KIND,
+    PaperLane,
+    PaperRule,
+    PaperTrade,
+    ended_run,
+    paper_run,
+)
 from qmx_library.port import Draft, JsonObject, LibraryRefused
 from qmx_library.principal import MAIN, Principal
 
@@ -598,11 +605,43 @@ def _at_ns(text: object) -> int | None:
     return int(moment.timestamp()) * 1_000_000_000
 
 
+def _fold_moves(lines: Sequence[JournalLine], starts: dict[str, dict[str, object]]) -> None:
+    """Fold the `lifecycle` moves in ``lines`` into each market's lane entry: its latest move
+    (``to``, ``moved_at``) and, kept apart, its latest move into paper (``paper_at``), the lane's
+    start."""
+    for line in lines:
+        record = line.record
+        if record.get("kind") != "lifecycle":
+            continue
+        body = cast("Mapping[str, object]", record.get("body", {}))
+        unit, market, to = body.get("unit_id"), body.get("market_id"), str(body.get("to"))
+        moved = _at_ns(body.get("at"))
+        if not isinstance(unit, str) or not isinstance(market, str) or moved is None:
+            continue
+        entry = starts.setdefault(f"{unit}|{market}", {})
+        if to == "paper" and moved >= cast("int", entry.get("paper_at", moved)):
+            entry["paper_at"] = moved
+        if moved >= cast("int", entry.get("moved_at", moved)):
+            entry["to"], entry["moved_at"] = to, moved
+
+
+def _lane_state(entry: Mapping[str, object]) -> tuple[str, int | None, int | None]:
+    """A market's paper lane as its moves left it: status, start and end in epoch ns. The start
+    is unknown while no move into paper was seen."""
+    paper_at = entry.get("paper_at")
+    started = paper_at if isinstance(paper_at, int) else None
+    to = entry.get("to")
+    if to is None or to == "paper":
+        return "running", started, None
+    return ("ended" if to == "live" else "stopped"), started, cast("int", entry["moved_at"])
+
+
 class Projection:
     """The records job's Library writes: `trade` items and the paper lanes' `paper-run` items.
 
-    ``folder`` holds each lane's start, read from the `lifecycle` moves into paper, so a lane
-    keeps its start once that stream has been filed.
+    ``folder`` holds each market's lane entry, read from its `lifecycle` moves, and the accounts
+    and nodes its paper runs were scored on. A lane keeps its start once that stream has been
+    filed, and a later move out of paper ends its runs even when their trades are not re-read.
     """
 
     def __init__(
@@ -620,19 +659,7 @@ class Projection:
         """Project the round trips and score the paper lanes in ``lines``; the counts of `trade`
         and `paper-run` versions that landed."""
         starts = self._read_lanes()
-        for line in lines:
-            record = line.record
-            if record.get("kind") != "lifecycle":
-                continue
-            body = cast("Mapping[str, object]", record.get("body", {}))
-            unit, market = body.get("unit_id"), body.get("market_id")
-            moved = _at_ns(body.get("at"))
-            if not isinstance(unit, str) or not isinstance(market, str) or moved is None:
-                continue
-            key = f"{unit}|{market}"
-            last = starts.get(key)
-            if last is None or moved >= int(cast("int", last["moved_at"])):
-                starts[key] = {"to": str(body.get("to")), "moved_at": moved}
+        _fold_moves(lines, starts)
         self._write_lanes(starts)
         trades = 0
         lanes: dict[tuple[str, str, str, str], list[Mapping[str, object]]] = {}
@@ -650,6 +677,8 @@ class Projection:
         papers = sum(
             self._paper(lane, rows, starts, series[lane], now) for lane, rows in lanes.items()
         )
+        papers += sum(self._end(key, entry, lanes.keys()) for key, entry in sorted(starts.items()))
+        self._write_lanes(starts)
         return trades, papers
 
     def _project(self, record: Mapping[str, object]) -> bool:
@@ -663,7 +692,7 @@ class Projection:
         self,
         lane: tuple[str, str, str, str],
         rows: Sequence[Mapping[str, object]],
-        starts: Mapping[str, Mapping[str, object]],
+        starts: dict[str, dict[str, object]],
         series: set[str],
         now: datetime,
     ) -> int:
@@ -676,15 +705,11 @@ class Projection:
                 trades.append(PaperTrade(closed, _decimal(body.get("r"))))
         if not trades:
             return 0
-        move = starts.get(f"{unit}|{market}")
-        status, started, ended = "running", None, None
-        if move is not None:
-            moved = int(cast("int", move["moved_at"]))
-            if move["to"] == "paper":
-                started = moved
-            else:
-                status = "ended" if move["to"] == "live" else "stopped"
-                ended = moved
+        entry = starts.setdefault(f"{unit}|{market}", {})
+        scored = cast("list[list[str]]", entry.setdefault("lanes", []))
+        if [account, node] not in scored:
+            scored.append([account, node])
+        status, started, ended = _lane_state(entry)
         if started is None:
             opened = [
                 cast("int", cast("Mapping[str, object]", r.get("body", {})).get("opened_at", 0))
@@ -700,16 +725,51 @@ class Projection:
             journal=sorted(series),
             rule=self._rule(),
         )
-        head = self._store.head(item, MAIN)
-        if head is not None and self._store.get(OPERATOR, head[0]).fields == fields:
+        found = self._store.head(item, MAIN)
+        head = None if found is None else found[0]
+        if head is not None and self._store.get(OPERATOR, head).fields == fields:
             return 0
         title = f"Paper run of {unit} on {market}"
-        return 1 if self._put(PAPER_RUN_KIND, item, cast("JsonObject", fields), title) else 0
+        landed = self._put(PAPER_RUN_KIND, item, cast("JsonObject", fields), title, head=head)
+        return 1 if landed else 0
 
-    def _put(self, kind: str, item: str, fields: JsonObject, title: str) -> bool:
+    def _end(
+        self,
+        key: str,
+        entry: Mapping[str, object],
+        scored: Iterable[tuple[str, str, str, str]],
+    ) -> int:
+        """End the runs a move out of paper closed whose trades this round did not re-read. A run
+        already ended lands nothing again."""
+        status, started, ended = _lane_state(entry)
+        if started is None or ended is None:
+            return 0
+        unit, _, market = key.partition("|")
+        rescored = set(scored)
+        landed = 0
+        for account, node in cast("list[list[str]]", entry.get("lanes", [])):
+            if (unit, market, account, node) in rescored:
+                continue
+            item = PaperLane(unit, market, account, node, started).item
+            found = self._store.head(item, MAIN)
+            if found is None:
+                continue
+            last = self._store.get(OPERATOR, found[0]).fields
+            fields = ended_run(last, status=status, ended_at_ns=ended)
+            if fields == last:
+                continue
+            title = f"Paper run of {unit} on {market}"
+            if self._put(PAPER_RUN_KIND, item, cast("JsonObject", fields), title, head=found[0]):
+                landed += 1
+        return landed
+
+    def _put(
+        self, kind: str, item: str, fields: JsonObject, title: str, *, head: str | None = None
+    ) -> bool:
+        """Land a version of ``item`` over ``head``, the main head it was read at."""
         draft = Draft(kind, item, title=title, summary=title, fields=fields)
         try:
-            self._store.put(OPERATOR, draft, on=MAIN, expected_head=None)
+            self._store.put(OPERATOR, draft, on=MAIN, expected_head=head)
         except LibraryRefused as refused:
             print(f"records: the {kind} {item} did not land: {refused}", file=sys.stderr)
             return False

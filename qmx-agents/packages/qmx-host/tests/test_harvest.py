@@ -79,6 +79,30 @@ class Volume:
         )
         assert not is_refusal(self.unit.append("signal", body, facts))
 
+    def trade(self, trade_id: str, opened: datetime, closed: datetime, **extra: str) -> None:
+        self.clock.at(closed)
+        body = {
+            "closing_deal_id": f"{trade_id}.close",
+            "trade_id": trade_id,
+            "side": "long",
+            "opened_at": int(opened.timestamp()) * 1_000_000_000,
+            "closed_at": self.clock.ns,
+            "entry_price": "1.08000",
+            "exit_price": "1.08300",
+            "quantity": "0.10",
+            **extra,
+        }
+        facts = RowFacts(
+            ts_recv=self.clock.ns,
+            clock_ok=True,
+            unit_id="dummy",
+            unit_version="v1",
+            market_id="fx.eurusd",
+            venue="conformance",
+            account="demo-1",
+        )
+        assert not is_refusal(self.unit.append("trade", body, facts))
+
     def add_bars(self, count: int) -> None:
         for _ in range(count):
             t = ms(OPEN_MONTH) + self.bars * 60_000
@@ -229,33 +253,9 @@ def test_a_round_leaves_every_stream_file_byte_for_byte_with_a_line_in_flight(
 def test_a_reprojected_trade_lands_nothing_new_and_one_without_initial_risk_says_so(
     volume: Volume, tmp_path: Path
 ) -> None:
-    volume.clock.at(OPEN_MONTH + timedelta(hours=9))
-    trades = (
-        ("t1", {"r": "1.5", "money": "53.30"}),
-        ("t2", {"money": "-12.00"}),
-    )
-    for trade_id, extra in trades:
-        body = {
-            "closing_deal_id": f"{trade_id}.close",
-            "trade_id": trade_id,
-            "side": "long",
-            "opened_at": int(OPEN_MONTH.timestamp()) * 1_000_000_000,
-            "closed_at": volume.clock.ns,
-            "entry_price": "1.08000",
-            "exit_price": "1.08300",
-            "quantity": "0.10",
-            **extra,
-        }
-        facts = RowFacts(
-            ts_recv=volume.clock.ns,
-            clock_ok=True,
-            unit_id="dummy",
-            unit_version="v1",
-            market_id="fx.eurusd",
-            venue="conformance",
-            account="demo-1",
-        )
-        assert not is_refusal(volume.unit.append("trade", body, facts))
+    closed = OPEN_MONTH + timedelta(hours=9)
+    volume.trade("t1", OPEN_MONTH, closed, r="1.5", money="53.30")
+    volume.trade("t2", OPEN_MONTH, closed, money="-12.00")
     with Store.open(tmp_path / "library", redactor=redact) as store:
         job = Records(
             harvester(volume.home),
@@ -286,3 +286,65 @@ def test_a_reprojected_trade_lands_nothing_new_and_one_without_initial_risk_says
         "1.5",
     )
     assert (paper.fields["sequential_score"], paper.fields["fresh_enough"]) == ("1.140625", False)
+
+
+def iso(moment: datetime) -> str:
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def test_a_lane_that_leaves_paper_ends_its_one_run_from_the_move_into_paper(
+    volume: Volume, tmp_path: Path
+) -> None:
+    host = writer(volume.home / "journals", JournalStream.UNIT, "dummy", volume.clock)
+
+    def move(at: datetime, was: str, to: str) -> None:
+        volume.clock.at(at)
+        body = {
+            "schema": "qmx.lifecycle/1",
+            "event_id": f"move-{to}",
+            "unit_id": "dummy",
+            "version_ref": "v1",
+            "compiled_fingerprint": "fp1-dummy",
+            "market_id": "fx.eurusd",
+            "from": was,
+            "to": to,
+            "by": {"kind": "his_click", "principal": "operator"},
+            "reason": "his click",
+            "at": at.isoformat(),
+        }
+        facts = RowFacts(
+            ts_recv=volume.clock.ns, clock_ok=True, unit_id="dummy", market_id="fx.eurusd"
+        )
+        assert not is_refusal(host.append("lifecycle", body, facts))
+
+    into_paper, to_live = OPEN_MONTH + timedelta(hours=2), OPEN_MONTH + timedelta(hours=5)
+    volume.trade("before", OPEN_MONTH, OPEN_MONTH + timedelta(hours=1), r="-0.5")
+    move(into_paper, "tested", "paper")
+    volume.trade("p1", into_paper, OPEN_MONTH + timedelta(hours=3), r="1.5")
+    volume.trade("p2", into_paper, OPEN_MONTH + timedelta(hours=4), r="1.0")
+    try:
+        with Store.open(tmp_path / "library", redactor=redact) as store:
+            now = [NOW]
+            job = Records(
+                harvester(volume.home),
+                Cadence,
+                clock=lambda: now[0],
+                projection=Projection(store, volume.home / "records"),
+                store=store,
+            )
+            running = job.round()
+            move(to_live, "paper", "live")
+            now[0] = NOW + timedelta(seconds=60)
+            ended = job.round()
+            views = [store.get(OPERATOR, object_id) for _item, object_id in store.heads_on(MAIN)]
+    finally:
+        host.close()
+
+    runs = [view.fields for view in views if view.kind == "paper-run"]
+    assert (running.paper_runs, ended.paper_runs, len(runs)) == (1, 1, 1)
+    assert (runs[0]["status"], runs[0]["started_at"], runs[0]["ended_at"]) == (
+        "ended",
+        iso(into_paper),
+        iso(to_live),
+    )
+    assert (runs[0]["trades"], runs[0]["record_r"]) == (2, "2.5")

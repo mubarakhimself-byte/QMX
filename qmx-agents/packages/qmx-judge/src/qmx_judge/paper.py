@@ -35,6 +35,7 @@ __all__ = [
     "PaperRule",
     "PaperScore",
     "PaperTrade",
+    "ended_run",
     "paper_run",
     "score",
     "sequential_score",
@@ -185,6 +186,11 @@ def score(
 
 def _iso(ns: int) -> str:
     return datetime.fromtimestamp(ns // 1_000_000_000, tz=UTC).isoformat().replace("+00:00", "Z")
+
+
+def ended_run(fields: Mapping[str, object], *, status: str, ended_at_ns: int) -> dict[str, object]:
+    """A lane's last `paper-run` fields once it left paper, its score as last landed."""
+    return {**fields, "status": status, "ended_at": _iso(ended_at_ns)}
 
 
 def paper_run(
