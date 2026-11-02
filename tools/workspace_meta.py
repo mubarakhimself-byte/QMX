@@ -97,9 +97,11 @@ EXPECTED_APPLICATION_PEERS: dict[str, frozenset[str]] = {
 
 # Third-party runtime deps for application members (workspace qmf-* dropped).
 # qmn Story 27.1 adds cryptography for the two-layer VPS secret-store AEAD.
+# qmb B7 adds tzdata so its locked app environment resolves the venue's IANA zone
+# on Windows, which ships no system zone database.
 EXPECTED_APPLICATION_THIRD_PARTY: dict[str, frozenset[str]] = {
     "qml": frozenset(),
-    "qmb": frozenset({"click", "optuna"}),
+    "qmb": frozenset({"click", "optuna", "tzdata"}),
     "qmn": frozenset({"cryptography", "prometheus-client"}),
 }
 
