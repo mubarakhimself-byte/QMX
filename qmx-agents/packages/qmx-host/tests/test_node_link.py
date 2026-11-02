@@ -190,3 +190,35 @@ def test_a_change_waits_while_its_node_is_down_and_applies_once(control: Control
     applied = cast(Any, link.outbox.get("op-1"))
     assert (applied.state, applied.answer) == ("applied", {"verb": "apps.ask"})
     assert link.outbox.waiting("ldn-1") == []
+
+
+class RecordingSupervisor:
+    """The local supervisor of a node host whose trading node is homed here."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def call(
+        self, app: str, operation: str, arguments: Document, *, pin: Document | None
+    ) -> Document:
+        self.calls.append((app, operation))
+        return {"result": {"paused": True}}
+
+
+def test_a_change_on_a_node_homed_here_answers_only_to_the_operator(tmp_path: Path) -> None:
+    supervisor = RecordingSupervisor()
+    link = NodeLink(
+        tmp_path, here="ldn-1", apps=cast(Any, supervisor), settings=dict, key=lambda: None
+    )
+    for principal, op_id in (("agent:x", "L1"), ("run:r1", "L2")):
+        with pytest.raises(AppError, match=f"only to the operator, not {principal}") as refused:
+            link.change("trading-node", "pause", {}, principal=principal, op_id=op_id)
+        assert refused.value.code == "refused_principal"
+        assert link.outbox.get(op_id) is None
+
+    assert supervisor.calls == []
+    assert link.outbox.places() == []
+    first = link.change("trading-node", "pause", {}, principal="operator", op_id="L3")
+    again = link.change("trading-node", "pause", {}, principal="operator", op_id="L3")
+    assert (first.state, first.answer, again.state) == ("applied", {"paused": True}, "applied")
+    assert supervisor.calls == [("trading-node", "pause")]
