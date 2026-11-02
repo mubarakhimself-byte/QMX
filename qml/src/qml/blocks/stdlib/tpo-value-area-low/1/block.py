@@ -11,6 +11,7 @@ goes to the row nearer the point of control, then to the higher row) until it ho
 ``value_area_share`` percent of the blocks. A session whose range spans more than ``max_rows``
 rows is missing.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 

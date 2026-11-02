@@ -102,7 +102,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:0453986f3e2b6192ad45dd4b9ae01e791a024fb942d8b69a901957f8614d4e9d",
+  "fingerprint": "fp1:sha256:f5f975792d3bdf291eee49f34eaf3124892204bf8d689b94909738b8a75634aa",
   "golden": {
     "reference": "Aspen's initial balance and range extension rebuilt per bar, in qml/tests/golden/beyond-fx/reference_run.py",
     "cases": "qml/tests/golden/beyond-fx/profile.json"

@@ -8,6 +8,7 @@ its close in nanoseconds UTC; a bar without one is missing. ``interval`` is in s
 divides the day: 28800 for an eight-hour venue, 3600 for Hyperliquid's hourly funding. A venue
 that moves its funding times is not modelled.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
@@ -19,41 +20,6 @@ from qml.blocks.api import Side, quantise
 _DAY_NS = 86_400 * 10**9
 _HOUR_NS = 3_600 * 10**9
 _SEARCH_DAYS = 8
-
-
-def _days(year: int, month: int, day: int) -> int:
-    """Days from 1970-01-01 to a civil date (H. Hinnant's days_from_civil)."""
-    year -= month <= 2
-    era = (year if year >= 0 else year - 399) // 400
-    yoe = year - era * 400
-    doy = (153 * (month + (-3 if month > 2 else 9)) + 2) // 5 + day - 1
-    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
-    return era * 146_097 + doe - 719_468
-
-
-def _year(days: int) -> int:
-    """The civil year of a day count (H. Hinnant's civil_from_days)."""
-    z = days + 719_468
-    era = (z if z >= 0 else z - 146_096) // 146_097
-    doe = z - era * 146_097
-    yoe = (doe - doe // 1_460 + doe // 36_524 - doe // 146_096) // 365
-    doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
-    month = (5 * doy + 2) // 153
-    return yoe + era * 400 + (month >= 10)
-
-
-def _weekday(days: int) -> int:
-    """0 for Monday to 6 for Sunday; 1970-01-01 was a Thursday."""
-    return (days + 3) % 7
-
-
-def _sunday(year: int, month: int, nth: int) -> int:
-    """The nth Sunday of a month, or the last one when ``nth`` is 0."""
-    if nth == 0:
-        first_next = _days(year + (month == 12), month % 12 + 1, 1)
-        return first_next - 1 - (_weekday(first_next - 1) + 1) % 7
-    first = _days(year, month, 1)
-    return first + (6 - _weekday(first)) % 7 + 7 * (nth - 1)
 
 
 def _on(day: int, events: tuple[tuple[int, int], ...]) -> list[int]:

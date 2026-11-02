@@ -114,7 +114,7 @@
     "rule": "max_rows",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:d67f723054045d38d52e96b3b65758d747fa537e8149f0a5cb4c4dbf2173a585",
+  "fingerprint": "fp1:sha256:05f44cf0aa6e3dabb2cd8739f751fb6bec814ca2a8842ca12829912d8171e35f",
   "golden": {
     "reference": "TradingView's TPO value-area algorithm with CQG's point-of-control tie, rebuilt from the session's bars at every bar, in qml/tests/golden/beyond-fx/reference_run.py",
     "cases": "qml/tests/golden/beyond-fx/profile.json"

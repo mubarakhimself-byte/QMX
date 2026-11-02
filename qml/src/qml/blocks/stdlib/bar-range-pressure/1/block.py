@@ -3,6 +3,7 @@
 Distribution Line. A bar whose high equals its low reads 0, as TA-Lib's AD counts it. It needs
 only the bar's prices, so it reads on every bar a unit is given.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 

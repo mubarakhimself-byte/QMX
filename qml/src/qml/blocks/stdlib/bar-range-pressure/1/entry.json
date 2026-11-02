@@ -67,7 +67,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:7d1ba79fff1fb0b2c5e3d456d1f0f2b561b45cc60637a6e5b913f3f6b1b463ff",
+  "fingerprint": "fp1:sha256:c0bcba93a11183a9bf38b9f84813800ceb3df290e5ba217fcef71014b39e0a34",
   "golden": {
     "reference": "TA-Lib 0.7.1 AD over a volume of 1, first difference, in qml/tests/golden/beyond-fx/reference_run.py",
     "cases": "qml/tests/golden/beyond-fx/profile.json"

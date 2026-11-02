@@ -8,6 +8,7 @@ its close in nanoseconds UTC; a bar without one is missing. ``auction`` 1 keeps 
 auction, 2 the 15:00 auction and 0 both. Auctions run on London weekdays; UK bank holidays are
 not modelled.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 

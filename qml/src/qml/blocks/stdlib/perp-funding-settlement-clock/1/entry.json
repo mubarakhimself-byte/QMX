@@ -78,7 +78,7 @@
     "rule": "constant",
     "observations": null
   },
-  "fingerprint": "fp1:sha256:1a1f02d3c3ddb864a04d235d83b19a4a7c5fe0b5caba222abac9a5ddff21277d",
+  "fingerprint": "fp1:sha256:0e0170c1cf83199f7e58112bca4eae72ff027832dcb34d12646c930b20fe3e7f",
   "golden": {
     "reference": "local event times from zoneinfo (the IANA tz database), in qml/tests/golden/beyond-fx/reference_run.py",
     "cases": "qml/tests/golden/beyond-fx/clocks.json"

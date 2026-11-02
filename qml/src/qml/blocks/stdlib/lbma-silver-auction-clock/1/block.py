@@ -7,6 +7,7 @@ event, positive after it, so a window of N minutes either side is an absolute va
 its close in nanoseconds UTC; a bar without one is missing. Auctions run on London weekdays; UK
 bank holidays are not modelled.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 

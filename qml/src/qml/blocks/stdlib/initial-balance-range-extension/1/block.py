@@ -7,6 +7,7 @@ lasts a day. Each bar's ``time`` is its close in nanoseconds UTC; a bar without 
 The value is missing until the initial balance is complete, which is at the first bar that
 closes at or after its end, and for the whole session when no bar closed inside it.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 

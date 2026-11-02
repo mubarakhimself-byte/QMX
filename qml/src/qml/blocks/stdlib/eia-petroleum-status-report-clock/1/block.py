@@ -7,6 +7,7 @@ event, positive after it, so a window of N minutes either side is an absolute va
 its close in nanoseconds UTC; a bar without one is missing. The weeks EIA moves the release for
 a holiday are not modelled, so in those weeks the value measures from the standard Wednesday.
 """
+# pyright: reportUnknownVariableType=false, reportUnknownArgumentType=false, reportUnknownMemberType=false
 
 from __future__ import annotations
 
