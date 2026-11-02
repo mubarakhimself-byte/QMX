@@ -9,7 +9,8 @@ session's close) and its `confidence` (the chance it holds, above 0 and at most 
 Each call lands as one `forecast` artifact on the run's own ref, stamped `written_at` the run's own
 clock and `written_by` the author, with only the `forecast` kind's fields: anything else the author
 wrote, a score or an outcome of its own included, is dropped. A call whose horizon is not after its
-writing is refused, with every problem named. The block's score step scores it later.
+writing is refused, with every problem named. The block's score step scores it later, and checks
+the call again with this file's `problems_of`.
 """
 
 import json
@@ -59,52 +60,60 @@ def problems_of(place, forecast, written_at):
         found.append(f"forecast {place}: state is not text")
     horizon = instant(forecast.get("horizon"))
     if horizon is None or horizon <= written_at:
-        found.append(f"forecast {place}: horizon {forecast.get('horizon')!r} is not after now")
+        found.append(
+            f"forecast {place}: horizon {forecast.get('horizon')!r} is not after its writing"
+        )
     confidence = number(forecast.get("confidence"))
     if confidence is None or not Decimal(0) < confidence <= Decimal(1):
         found.append(f"forecast {place}: confidence is not text above 0 and at most 1")
     return found
 
 
-given = json.load(sys.stdin).get("in")
-rows = [v for v in (given if isinstance(given, list) else [given]) if isinstance(v, dict)]
-asked = next((r for r in rows if isinstance(r.get("forecasts"), list)), None)
-if asked is None or not isinstance(asked.get("author"), str) or not asked["author"]:
-    print(f"{FAILURE} the forecast block needs forecasts and the author who made them")
-    raise SystemExit(0)
-now = os.environ.get("QMX_NOW") or datetime.now(UTC).isoformat()
-written_at = instant(now)
-problems = [p for i, f in enumerate(asked["forecasts"], 1) for p in problems_of(i, f, written_at)]
-if not asked["forecasts"]:
-    problems.append("there are no forecasts to write")
-if problems:
-    print(f"{FAILURE} {'; '.join(problems)}")
-    raise SystemExit(0)
+def main():
+    given = json.load(sys.stdin).get("in")
+    rows = [v for v in (given if isinstance(given, list) else [given]) if isinstance(v, dict)]
+    asked = next((r for r in rows if isinstance(r.get("forecasts"), list)), None)
+    if asked is None or not isinstance(asked.get("author"), str) or not asked["author"]:
+        print(f"{FAILURE} the forecast block needs forecasts and the author who made them")
+        return
+    written_at = instant(os.environ.get("QMX_NOW") or datetime.now(UTC).isoformat())
+    forecasts = asked["forecasts"]
+    problems = [p for i, f in enumerate(forecasts, 1) for p in problems_of(i, f, written_at)]
+    if not forecasts:
+        problems.append("there are no forecasts to write")
+    if problems:
+        print(f"{FAILURE} {'; '.join(problems)}")
+        return
 
-stamp = written_at.isoformat().replace("+00:00", "Z")
-bodies = Path(os.environ["QMX_WORK"]) / "library"
-bodies.mkdir(parents=True, exist_ok=True)
-landed, writes = [], []
-for place, given_forecast in enumerate(asked["forecasts"], 1):
-    forecast = {
-        "market": given_forecast["market"],
-        "call": {k: v for k, v in given_forecast["call"].items() if k in CALLS},
-        "horizon": given_forecast["horizon"],
-        "confidence": given_forecast["confidence"],
-        "written_at": stamp,
-        "written_by": asked["author"],
-    }
-    (bodies / f"forecast-{place}.json").write_text(json.dumps(forecast, sort_keys=True), "utf-8")
-    call = json.dumps(forecast["call"], sort_keys=True)
-    writes.append(
-        {
-            "op": "put_artifact",
-            "type": "forecast",
-            "body": f"library/forecast-{place}.json",
-            "metadata": forecast,
-            "intent_key": f"forecast|{forecast['market']}|{forecast['horizon']}|"
-            f"{asked['author']}|{call}",
+    stamp = written_at.isoformat().replace("+00:00", "Z")
+    bodies = Path(os.environ["QMX_WORK"]) / "library"
+    bodies.mkdir(parents=True, exist_ok=True)
+    landed, writes = [], []
+    for place, given_forecast in enumerate(forecasts, 1):
+        forecast = {
+            "market": given_forecast["market"],
+            "call": {k: v for k, v in given_forecast["call"].items() if k in CALLS},
+            "horizon": given_forecast["horizon"],
+            "confidence": given_forecast["confidence"],
+            "written_at": stamp,
+            "written_by": asked["author"],
         }
-    )
-    landed.append(forecast)
-print(json.dumps({"forecasts": landed, "library": writes}))
+        body = json.dumps(forecast, sort_keys=True)
+        (bodies / f"forecast-{place}.json").write_text(body, "utf-8")
+        call = json.dumps(forecast["call"], sort_keys=True)
+        writes.append(
+            {
+                "op": "put_artifact",
+                "type": "forecast",
+                "body": f"library/forecast-{place}.json",
+                "metadata": forecast,
+                "intent_key": f"forecast|{forecast['market']}|{forecast['horizon']}|"
+                f"{asked['author']}|{call}",
+            }
+        )
+        landed.append(forecast)
+    print(json.dumps({"forecasts": landed, "library": writes}))
+
+
+if __name__ == "__main__":
+    main()
