@@ -156,16 +156,17 @@ def _matches(record: Mapping[str, Any], filters: Mapping[str, str]) -> bool:
     return all(str(record.get(name)) == value for name, value in filters.items())
 
 
-def _rows(store: SeriesStore, key: SeriesKey) -> list[JournalRow]:
+def _rows(store: SeriesStore, key: SeriesKey) -> list[JournalRow] | None:
+    """One partition's rows, or None when the store cannot read it."""
     read = store.read(key)
     if is_refusal(read):
-        return []
+        return None
     rows: list[JournalRow] = []
     for row in read.value.rows:
         try:
             record = json.loads(str(row["record"]))
         except ValueError:
-            continue
+            return None
         rows.append(
             JournalRow(key, int(cast("int", row["t"])), int(cast("int", row["seq"])), record)
         )
@@ -177,6 +178,7 @@ class _Found:
     rows: list[JournalRow]
     last_t: int | None
     backfilled: int
+    unreadable: list[str]
 
 
 def _read(
@@ -191,6 +193,7 @@ def _read(
     rows: list[JournalRow] = []
     last: int | None = None
     left_out = 0
+    unreadable: list[str] = []
     for folder in _series_folders(root, stream, filters):
         months = [
             (key, month)
@@ -202,7 +205,11 @@ def _read(
             newest = index == len(months) - 1
             if not (overlaps or newest):
                 continue
-            for row in _rows(store, key):
+            found = _rows(store, key)
+            if found is None:
+                unreadable.append(key.text)
+                continue
+            for row in found:
                 if not _matches(row.record, filters):
                     continue
                 last = row.t if last is None else max(last, row.t)
@@ -213,7 +220,7 @@ def _read(
                     continue
                 rows.append(row)
     rows.sort(key=lambda row: (row.t, row.key.text, row.seq))
-    return _Found(rows, last, left_out)
+    return _Found(rows, last, left_out, unreadable)
 
 
 def _decimal(value: object) -> Decimal:
@@ -319,6 +326,8 @@ def journal_query(
         "view": view,
         "backfilled_left_out": found.backfilled,
     }
+    if found.unreadable:
+        answer["unreadable"] = found.unreadable
     if found.last_t is None:
         answer["data_stops_at"] = None
         answer["note"] = "this journal holds no rows that match; nothing is recorded yet"

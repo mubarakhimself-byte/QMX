@@ -14,7 +14,8 @@ commits partitions through this machine's market-data door with `born_on = node`
 | the open month of ticks | every `[records] tick_harvest_s` (3,600) |
 
 A month is closed at its end, plus `[journals] settle_days` (1) for a journal stream. A stream
-whose committed bytes have the fingerprint of the last round is skipped whole, because the store
+whose own fingerprint (its files and their sizes) is the last round's is skipped whole, and a
+month whose rows have the fingerprint of its last commit is not committed again, because the store
 counts the same rows committed again as a second fetch (`idempotent = False`), which would freeze
 a bar month that is still open. The open month is one `open.parquet` the store replaces on each
 commit (`qmf/data/series.py`), so a growing month never leaves a file per round.
@@ -280,13 +281,15 @@ def _reason(refusal: TypedRefusal) -> str:
     return f"{refusal.category.value}: {context.get('reason') or context}"
 
 
-def _stream_bytes(folder: Path) -> bytes:
-    """The committed bytes of one stream: every rotation file up to its last LF."""
-    chunks: list[bytes] = []
-    for path in sorted(folder.glob("[0-9][0-9][0-9][0-9][0-9][0-9].jsonl")):
-        data = path.read_bytes()
-        chunks.append(data[: data.rfind(b"\n") + 1])
-    return b"".join(chunks)
+def _stream_print(folder: Path) -> str:
+    """One stream's own fingerprint: its rotation files and their sizes. A stream only grows at
+    its end, so the same sizes are the same rows, and an unchanged stream is never read."""
+    sizes = {
+        path.name: path.stat().st_size
+        for path in sorted(folder.glob("[0-9][0-9][0-9][0-9][0-9][0-9].jsonl"))
+    }
+    printed = fingerprint(sizes)
+    return "" if is_refusal(printed) else printed.value.value
 
 
 class Harvester:
@@ -328,7 +331,7 @@ class Harvester:
             for folder in sorted(entry for entry in root.iterdir() if entry.is_dir()):
                 name = f"{root.as_posix()}|{folder.name}"
                 try:
-                    printed = fingerprint_bytes(_stream_bytes(folder)).value
+                    printed = _stream_print(folder)
                 except OSError as error:
                     refusals.append({"stream": folder.name, "reason": str(error)})
                     continue
