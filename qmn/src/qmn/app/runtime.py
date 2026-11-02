@@ -981,6 +981,8 @@ class NodeUnit:
         self.warming = True
         self.venue_ids: dict[str, str] = {}
         self.names: dict[str, str] = {}
+        self.placed: dict[str, tuple[str, Side, Decimal]] = {}
+        """Each entry the venue filled, by client order id: market, side and fill price."""
         self._orders: dict[str, Placed | Blocked] = {}
         self._done: set[str] = set()
         self._execution = _Execution(self)
@@ -1096,14 +1098,18 @@ class NodeUnit:
             if is_refusal(sized):
                 return Blocked(str(sized.context.get("reason")))
             row = str(wire["decision_row_id"])
-            return self.orders.entry(
-                client_order_id=self.client_order_id(row, at),
+            named = self.client_order_id(row, at)
+            placed = self.orders.entry(
+                client_order_id=named,
                 label=self.label,
                 wire=wire,
                 record=record,
                 quantity=sized.value,
                 blocked_by=self.guard(market),
             )
+            if isinstance(placed, Placed):
+                self.placed[named] = (market, Side(str(wire["direction"])), placed.price)
+            return placed
         return self._exit(intent.stream_id, wire)
 
     def _exit(self, market: str, wire: Mapping[str, object]) -> Placed | Blocked:
@@ -1159,6 +1165,12 @@ class NodeUnit:
             return None
         done = self.orders.close(position, market, held.position.side, target, "target")
         return Reached(FillKind.TARGET, done.price) if isinstance(done, Placed) else None
+
+    def venue_open(self) -> dict[str, tuple[str, Side, Decimal]]:
+        """This unit's positions still open at the venue, by client order id, whether or not
+        the handler has booked their fill yet."""
+        client = self.orders.venue.client
+        return {name: held for name, held in self.placed.items() if client.closed(name) is None}
 
     # --- what he sees ---
 
@@ -1424,9 +1436,9 @@ class Runtime:
         closed = 0
         for hosted in self.hosted.values():
             unit = hosted.unit
-            if unit is None or unit.handler is None:
+            if unit is None:
                 continue
-            for market, position in unit.handler.open_positions.items():
+            for position, (market, side, price) in unit.venue_open().items():
                 symbol = f"instrument:{unit.records[market].symbol}"
                 covers = (
                     effect.close_all_and_pause
@@ -1441,11 +1453,7 @@ class Runtime:
                 if not covers:
                     continue
                 done = unit.orders.close(
-                    unit.venue_name(position.position_id),
-                    market,
-                    position.side,
-                    position.entry_price,
-                    f"kill-{effect.level.value.lower()}",
+                    position, market, side, price, f"kill-{effect.level.value.lower()}"
                 )
                 closed += isinstance(done, Placed)
         return closed

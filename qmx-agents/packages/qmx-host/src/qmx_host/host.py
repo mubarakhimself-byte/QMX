@@ -39,7 +39,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -1547,6 +1547,14 @@ def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
         found = section(control, "engine").get("node_link")
         return cast("Mapping[str, object]", found) if isinstance(found, dict) else {}
 
+    def blobs(fingerprint: str) -> Iterable[bytes] | None:
+        store = control.library.store
+        try:
+            store.blob_size(fingerprint)
+        except LibraryRefused:
+            return None
+        return store.blob_stream(fingerprint)
+
     return NodeLink(
         home,
         here=name,
@@ -1554,6 +1562,7 @@ def node_link(home: Path, control: ControlService, name: str) -> NodeLink:
         settings=ControlSettings(control).values,
         key=pairing_key(home),
         tuning=tuning,
+        blobs=blobs,
     )
 
 

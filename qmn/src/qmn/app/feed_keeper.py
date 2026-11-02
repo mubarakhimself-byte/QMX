@@ -48,6 +48,7 @@ __all__ = [
     "FeedEvent",
     "FeedKeeper",
     "FeedSource",
+    "Heartbeat",
     "Level",
     "Quote",
     "RecordedSource",
@@ -118,7 +119,12 @@ class Dropped:
     reason: str
 
 
-FeedEvent = Quote | Book | Bar | Dropped
+@dataclass(frozen=True, slots=True)
+class Heartbeat:
+    """The venue's keep-alive: the session is alive though nothing traded."""
+
+
+FeedEvent = Quote | Book | Bar | Dropped | Heartbeat
 
 
 class FeedSource(Protocol):
@@ -268,13 +274,13 @@ class FeedKeeper:
         return self._quotes.get(market)
 
     def pump(self) -> tuple[Bar, ...]:
-        """One turn: reopen a session that is down or silent, then take what arrived.
+        """One turn: reopen a session that is down, re-verify one that is only connected, then
+        take what arrived. A read that brings nothing past ``silent_after_ns`` since the last
+        word drops the session, and the next turn opens it again.
 
         Answers the closed bars this turn brought, after every listener saw each of them.
         """
         now = self.clock_ns()
-        if self.state is not SessionState.DOWN and now - self.last_heard_ns > self.silent_after_ns:
-            self._drop(f"silent for more than {self.silent_after_ns / 1e9:g} s")
         if self.state is SessionState.DOWN and not self._open(now):
             return ()
         if self.state is SessionState.CONNECTED:
@@ -282,9 +288,14 @@ class FeedKeeper:
         events = self.source.read()
         if events:
             self.last_heard_ns = now
+        elif now - self.last_heard_ns > self.silent_after_ns:
+            self._drop(f"silent for more than {self.silent_after_ns / 1e9:g} s")
+            return ()
         bars: list[Bar] = []
         for event in events:
             match event:
+                case Heartbeat():
+                    pass
                 case Dropped(reason=reason):
                     self._drop(f"the venue closed the session: {reason}")
                     break
@@ -375,9 +386,10 @@ def _merge(last: Quote | None, event: Quote) -> Quote:
 class RecordedSource:
     """The conformance venue's market data: a recorded day played back, one step per read.
 
-    Each step is the events one read answers. :meth:`drop` makes the next read answer
-    :class:`Dropped`, and :meth:`silence` makes the next reads answer nothing, as a dead
-    socket does. No network and no credentials.
+    Each step is the events one read answers, and a read with no step left answers the venue's
+    :class:`Heartbeat`. :meth:`drop` makes the next read answer :class:`Dropped`, and
+    :meth:`silence` makes the next reads answer nothing, as a dead socket does. No network and
+    no credentials.
     """
 
     steps: list[tuple[FeedEvent, ...]]
@@ -413,7 +425,7 @@ class RecordedSource:
         if self._silent > 0:
             self._silent -= 1
             return ()
-        return self.steps.pop(0) if self.steps else ()
+        return self.steps.pop(0) if self.steps else (Heartbeat(),)
 
     def close(self) -> None:
         self._open = False
