@@ -953,6 +953,21 @@ INSTRUMENT_STATUSES: Final = ("specified", "live", "suspect", "delisted")
 READINGS_SOURCE: Final = "journal-readings"
 READING_KIND: Final = "reading"
 READING_SOURCES: Final = ("node", "mis")
+CONCISE_READING: Final = (
+    "market_id",
+    "tier",
+    "source",
+    "word",
+    "value",
+    "percentile",
+    "health",
+    "computed_at",
+    "stale_after_s",
+    "fallback_step",
+    "estimate",
+    "corrects",
+)
+"""The section 7 fields a concise row keeps."""
 
 
 def _iso_ns(ns: int) -> str:
@@ -1105,17 +1120,16 @@ class _Reading:
         return f"{self.t}:{self.seq}:{self.partition}"
 
     def concise(self) -> dict[str, Any]:
-        body = dict(self.body)
-        ref = cast("Mapping[str, Any]", body.pop("reading", {}))
+        """What the reading said and how fresh it was; `detailed` carries the whole record."""
+        body = self.body
+        ref = cast("Mapping[str, Any]", body.get("reading", {}))
         found: dict[str, Any] = {
             "at": _iso_ns(self.t * journals.NS_PER_MS),
             "reading": f"{ref.get('id')}@{ref.get('version')}",
-            "world": self.record.get("world"),
-            **body,
         }
-        for name in ("computed_at", "inputs_received_at"):
-            if isinstance(found.get(name), int):
-                found[name] = _iso_ns(found[name])
+        found.update({name: body[name] for name in CONCISE_READING if name in body})
+        if isinstance(found.get("computed_at"), int):
+            found["computed_at"] = _iso_ns(found["computed_at"])
         return found
 
     def detailed(self) -> dict[str, Any]:
@@ -1218,7 +1232,7 @@ def readings_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
         markets: list[str] | None = None,
         tier: Literal["tick", "bar", "session", "day", "calendar"] | None = None,
         source: Literal["node", "mis"] | None = None,
-        limit: int = 200,
+        limit: int = 50,
         cursor: str | None = None,
         response_format: ResponseFormat = "concise",
     ) -> dict[str, Any]:

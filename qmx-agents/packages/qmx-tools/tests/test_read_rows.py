@@ -151,20 +151,16 @@ def test_a_week_of_readings_pages_by_cursor_into_exactly_its_rows(week: DomainCo
         "at": "2024-12-30T12:00:00.000Z",
         "word": "elevated",
         "reading": "volatility-state@1",
-        "world": "live",
         "source": "mis",
-        "machine": "this-pc",
         "market_id": "eurusd",
-        "instrument": "EURUSD",
         "tier": "bar",
-        "time_base": "clock",
         "health": "fresh",
-        "data_level": 1,
         "fallback_step": 0,
-        "inputs_received_at": "2024-12-30T12:00:00.000Z",
         "computed_at": "2024-12-30T12:00:00.000Z",
         "stale_after_s": 7_200,
     }
+    detailed = query(week, reading="volatility-state", window=WEEK, response_format="detailed")
+    assert detailed["result"][0]["record"]["body"]["instrument"] == "EURUSD"
 
 
 def test_a_window_past_the_data_answers_where_the_data_ends(week: DomainContext) -> None:
