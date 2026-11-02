@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -71,6 +72,7 @@ VERSION: Final = "1.0.0"
 APP_FOLDER: Final = Path(__file__).resolve().parent
 PACKS: Final = APP_FOLDER / "packs.json"
 STDLIB: Final[Traversable] = files("qml.blocks") / "stdlib"
+ENTRY_ID: Final = re.compile(r"[a-z0-9][a-z0-9-]*")
 HOST_FACTS: Final = "road/host/facts.json"
 """Where the host writes its facts in this volume (AD-307); the app cannot write under `road/`."""
 NS: Final = 1_000_000_000
@@ -284,7 +286,9 @@ def _decimal(value: object, where: str) -> Decimal:
 
 
 def _block_reading(pin: str) -> BlockReading:
-    entry_id, version = pin.split("@")
+    entry_id, _, version = pin.partition("@")
+    if not (ENTRY_ID.fullmatch(entry_id) and version.isdigit()):
+        raise Refused(f"no reading {pin}")
     folder = STDLIB / entry_id / version
     face_file, source_file = folder / "entry.json", folder / "block.py"
     if not (face_file.is_file() and source_file.is_file()):
