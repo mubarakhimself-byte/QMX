@@ -77,7 +77,7 @@ def only_qmb(app_id: str, version: str) -> Collection[str]:
 
 def test_open_and_close_land_valid_records_with_three_edges(store: Store, tmp_path: Path) -> None:
     unit, study, card = note(store, "unit"), note(store, "study"), note(store, "card")
-    lander = Lander(StoreLanding(store), "operator", "pc", only_qmb, Clock())
+    lander = Lander(StoreLanding(store), "operator", "pc", only_qmb, Clock(), family_of=str)
     ticket = lander.open(
         "qmb", "0.2.0", "backtest", {"unit": unit, "study": study, "seed": 7}, "operator"
     )

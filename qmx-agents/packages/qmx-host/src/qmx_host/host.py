@@ -1624,6 +1624,23 @@ class LanderLibrary:
     def holds(self, object_id: str) -> bool:
         return self.store.catalog.row(object_id) is not None
 
+    def family_of(self, unit: str) -> str:
+        """The root item of `unit`'s `variant-of` lineage (judge.md §2). Versions of an item
+        share it, and an edge from any version of a variant leads to its parent's item. A pin
+        the Library does not hold is its own root."""
+        if not self.holds(unit):
+            return unit
+        found = self.store.get(OPERATOR_READ, unit)
+        item, kind, seen = found.item, found.kind, {found.item}
+        while True:
+            placed = [object_id for object_id, _ in self.store.placed(item, kind, None)]
+            up = self.store.walk(OPERATOR_READ, placed, (LINEAGE,), "out", depth=1)
+            parent = None if not up else self.store.get(OPERATOR_READ, up[0].object_id)
+            if parent is None or parent.item in seen:
+                return item
+            item, kind = parent.item, parent.kind
+            seen.add(item)
+
     def unit(self, pin: str) -> RunUnit | str | None:
         """The unit document `pin` names, compiled with the blocks and records `gather` finds;
         why it does not compile; or None when the pin names an object of another kind. An object
@@ -1660,6 +1677,7 @@ class LanderLibrary:
 
 
 OPERATOR_READ: Final = Principal.parse("operator")
+LINEAGE: Final = "variant-of"
 BAR_SIDES: Final = ("bid", "ask")
 BARS_TEMPLATE: Final = "download-dukascopy"
 
@@ -1856,6 +1874,7 @@ def landers(
         provides_of=provides_of,
         clock=lambda: datetime.now(UTC),
         check_first=CheckFirst(run_job, library),
+        family_of=library.family_of,
     )
     return {QMB_RUN: QmbRun(lander, library, folder_of, settings, runtime.home / MARKET_STORE)}
 

@@ -1,8 +1,11 @@
 """This PC's lifecycle writer: the judge's move lands once, an illegal move never, and a spec
-edit after a result is a counted try."""
+edit after a result is a counted try. Every run of a unit's lineage is one family, so the best
+of many versions judged alone still counts them all."""
 
 from __future__ import annotations
 
+import json
+import random
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -10,13 +13,18 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-from qmf.core import is_refusal
+from qmf.core import fingerprint_bytes, is_refusal
 from qmf.data.journal_reader import JournalLine, read_committed, stream_folders
 from qml.lifecycle import Actor, ActorKind, Event, MarketKey, Refusal, State
 from qmx_judge.judge import JudgedResult, Trade, Verdict, judge, land_judgement, parse_spec
+from qmx_judge.landing import Lander
+from qmx_judge.runs import Landing, parse_bundle
 from qmx_library.kinds import KindRefused
 from qmx_library.port import Draft, JsonObject
 from qmx_library.principal import MAIN, Principal
+from qmx_library.store import Store
+from qmx_tools import DomainContext
+from qmx_tools.functions import domain_functions
 
 from qmx_host.first_start import land_dummy
 from qmx_host.host import (
@@ -34,14 +42,13 @@ DAY = 86_400 * 10**9
 START = 1_735_689_600 * 10**9
 NOW = 1_762_041_600 * 10**9
 """2025-11-02 00:00 UTC, the writer's fixed clock."""
-SPEC = parse_spec(
-    {
-        "origin": "written",
-        "claim": {"edge": "buys pullbacks in an uptrend"},
-        "markets": "admitted",
-        "preset": "shipped",
-    }
-)
+SPEC_FIELDS: JsonObject = {
+    "origin": "written",
+    "claim": {"edge": "buys pullbacks in an uptrend"},
+    "markets": "admitted",
+    "preset": "shipped",
+}
+SPEC = parse_spec(SPEC_FIELDS)
 EVIDENCE = {
     "random_entries": {"edge_ratio": "1.4", "p": "0.01"},
     "cost_stress": {"multiplier": "1.5", "expectancy_r": "0.2"},
@@ -224,3 +231,76 @@ def test_a_study_spec_with_an_unknown_preset_is_refused(store: HostStore) -> Non
     assert str(refused.value) == (
         "check_failed: study-spec: preset is one of old-qmx, shipped, not 'lenient'"
     )
+
+
+def version(store: Store, item: str, n: int) -> str:
+    head = store.head(item, MAIN)
+    draft = Draft("note", item, f"{item} v{n}", fields={"text": f"version {n}"})
+    return store.put(
+        OPERATOR, draft, on=MAIN, expected_head=None if head is None else head[0]
+    ).object_id
+
+
+def qmb_only(app_id: str, version: str) -> set[str]:
+    return {"backtest-result"}
+
+
+def clock() -> datetime:
+    return datetime(2026, 11, 2, tzinfo=UTC)
+
+
+def backtest(lander: Lander, unit: str, study: str, rs: list[Decimal], out: Path) -> str:
+    """One run of `unit` through the real lander: its opened try, its result, its landed try."""
+    ticket = lander.open("qmb", "0.1.0", "jobs/backtest.py", {"unit": unit, "study": study}, "x")
+    assert ticket is not None
+    trades = [
+        {"trade_id": f"t{day}", "market_id": "fx.eurusd", "closed_at": START + day * DAY}
+        | {"r": str(r)}
+        for day, r in enumerate(rs)
+    ]
+    report = json.dumps({"trades": trades}).encode()
+    folder = out / ticket.run_id
+    folder.mkdir(parents=True)
+    (folder / "report.json").write_bytes(report)
+    bundle = parse_bundle(
+        {
+            "run_id": ticket.run_id,
+            "status": "finished",
+            "tester": {"app": "qmb", "version": "0.1.0"},
+            "measures": {"trades": len(rs), **EVIDENCE},
+            "labels": {"zero_trades": False, "fidelity": "bars"},
+            "files": [
+                {"slot": "report", "path": "report.json", "fp": fingerprint_bytes(report).value}
+            ],
+            "consumed": [],
+        }
+    )
+    return lander.close(Landing(ticket, bundle, folder))
+
+
+def test_the_best_of_30_versions_judged_alone_counts_30_tries(tmp_path: Path) -> None:
+    """A weak +0.06R unit saved 20 times and varied into 10 more versions, each run once: the
+    luckiest run judged through the judge door still answers for the whole lineage."""
+    context = DomainContext(root=tmp_path / "home")
+    store = context.library.store
+    register_checkers(store)
+    library = LanderLibrary(store)
+    lander = Lander(library, "operator", "pc", qmb_only, clock, family_of=library.family_of)
+    study = store.put(
+        OPERATOR, Draft("study-spec", "study", "s", fields=SPEC_FIELDS), on=MAIN, expected_head=None
+    ).object_id
+    versions = [version(store, "unit", n) for n in range(20)]
+    varied = [version(store, "unit-varied", n) for n in range(10)]
+    store.relate(OPERATOR, varied[0], "variant-of", versions[3])
+    draw = random.Random(0)  # noqa: S311 - a seeded fixture, not a secret
+    runs: list[tuple[Decimal, str]] = []
+    for unit in [*versions, *varied]:
+        rs = [Decimal(f"{draw.gauss(0.06, 1):.4f}") for _ in range(150)]
+        runs.append((sum(rs, Decimal(0)), backtest(lander, unit, study, rs, tmp_path / "runs")))
+    best = max(runs)[1]
+
+    judged = domain_functions(context)["backtest"]["backtest_judge_run"](results=[best])["result"]
+
+    assert (judged["overall"], judged["raw_tries"], judged["effective_tries"]) == ("fail", 30, 30)
+    tries = store.with_field("try", "kind", "run")
+    assert {str(store.get(OPERATOR, found).fields["family"]) for found in tries} == {"unit"}

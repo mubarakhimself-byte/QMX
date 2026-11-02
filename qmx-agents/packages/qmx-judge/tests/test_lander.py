@@ -61,7 +61,13 @@ def provides(app_id: str, version: str) -> Collection[str]:
 
 def lander(library: FakeLibrary) -> Lander:
     return Lander(
-        library, "operator", "pc", provides, lambda: AT, mint=lambda: "01JZ0000000000000000000000"
+        library,
+        "operator",
+        "pc",
+        provides,
+        lambda: AT,
+        mint=lambda: "01JZ0000000000000000000000",
+        family_of=lambda unit: unit.partition("@")[0],
     )
 
 
@@ -113,7 +119,7 @@ def test_open_lands_one_opened_try_under_the_minted_run_id() -> None:
                 "kind": "run",
                 "state": "opened",
                 "run_id": RUN,
-                "family": "unit-dummy@1",
+                "family": "unit-dummy",
                 "unit": "unit-dummy@1",
                 "principal": "agent:chat-1",
                 "at": "2026-11-01T09:30:00+00:00",
@@ -249,6 +255,16 @@ def test_a_request_that_names_its_own_run_id_is_refused_and_lands_nothing() -> N
         lander(library).open("qmb", "0.2.0", "backtest", {**INPUTS, "run_id": "unit"}, "agent:1")
 
     assert refused.value.problems == ("run_id is minted by the lander, never by the request",)
+    assert library.state() == ({}, set())
+
+
+def test_a_request_that_names_its_own_family_is_refused_and_lands_nothing() -> None:
+    library = FakeLibrary()
+
+    with pytest.raises(BundleRefused) as refused:
+        lander(library).open("qmb", "0.2.0", "backtest", {**INPUTS, "family": "fresh"}, "agent:1")
+
+    assert refused.value.problems == ("family is the unit's lineage root, found by the lander",)
     assert library.state() == ({}, set())
 
 
