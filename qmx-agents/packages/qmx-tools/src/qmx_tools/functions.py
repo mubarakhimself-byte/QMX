@@ -64,7 +64,7 @@ COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "
 
 def _by_opening(trades: list[dict[str, Any]]) -> dict[tuple[str, int, str], dict[str, Any]]:
     """A result's trades by market and opening instant, since a unit holds one position per
-    market; a row from before trades named their opening pairs by its trade id."""
+    market. A row with no opening instant, landed before B6, pairs by its trade id."""
     return {
         (
             str(t.get("market_id")),

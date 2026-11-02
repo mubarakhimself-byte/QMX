@@ -31,10 +31,13 @@ __all__ = [
     "CHECK",
     "JOB",
     "LISTS",
+    "OUTPUT",
     "PACK",
+    "PACK_SCHEMA",
     "Case",
     "CaseVerdict",
     "ConformanceLibrary",
+    "ConformanceRun",
     "Diff",
     "Pack",
     "Verdict",
@@ -378,6 +381,8 @@ class ConformanceLibrary(LandingPort, Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ConformanceRun:
+    """One run of the pack: the core's run id, the result it landed and the verdict's report."""
+
     run_id: str
     result_id: str
     report_id: str
@@ -428,7 +433,6 @@ def run_conformance(
     fields, report = library.read(result_id)
     if fields.get("status") != "finished" or report is None:
         why = fields.get("reason", "it left no report")
-        output: object = {"schema_version": OUTPUT, "cases": {}, "reason": why}
         verdict = Verdict(
             tuple(
                 CaseVerdict(case.case, False, {}, reason=f"the run {fields.get('status')}: {why}")
@@ -436,8 +440,7 @@ def run_conformance(
             )
         )
     else:
-        output = json.loads(report)
-        verdict = judge_output(pack, output)
+        verdict = judge_output(pack, json.loads(report))
     tester = {"app": app_id, "version": version}
     body: dict[str, object] = {
         "check": CHECK,
