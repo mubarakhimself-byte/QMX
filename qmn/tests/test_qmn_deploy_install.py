@@ -305,7 +305,9 @@ def test_root_justfile_imports_node_recipes() -> None:
     assert "trading" in node_just.lower() or "DevOps" in node_just
 
 
-def test_write_plan_refuses_symlink_destination(install_mod: ModuleType, tmp_path: Path) -> None:
+def test_write_plan_refuses_symlink_destination(
+    install_mod: ModuleType, tmp_path: Path
+) -> None:
     plan = install_mod.build_install_plan(
         mode="check",
         render_values={"drain_window": "30s", "watchdog_interval": "15s"},
@@ -350,12 +352,20 @@ def test_safe_io_read_and_write_use_o_nofollow(tmp_path: Path) -> None:
     assert "path.stat()" not in source
 
     target = tmp_path / "plan.json"
-    safe_io.write_text_exclusive_no_follow(target, '{"ok":true}\n', contain_within=tmp_path)
+    safe_io.write_text_exclusive_no_follow(
+        target, '{"ok":true}\n', contain_within=tmp_path
+    )
     assert target.is_file() and not target.is_symlink()
-    assert safe_io.read_text_contained(target, contain_within=tmp_path) == '{"ok":true}\n'
+    assert (
+        safe_io.read_text_contained(target, contain_within=tmp_path) == '{"ok":true}\n'
+    )
 
-    safe_io.write_text_exclusive_no_follow(target, '{"ok":false}\n', contain_within=tmp_path)
-    assert safe_io.read_text_contained(target, contain_within=tmp_path) == '{"ok":false}\n'
+    safe_io.write_text_exclusive_no_follow(
+        target, '{"ok":false}\n', contain_within=tmp_path
+    )
+    assert (
+        safe_io.read_text_contained(target, contain_within=tmp_path) == '{"ok":false}\n'
+    )
 
     big = tmp_path / "big.txt"
     big.write_text("x" * (_MAX_READ_BYTES + 1), encoding="utf-8")
@@ -372,5 +382,7 @@ def test_safe_io_refuses_symlink_leaf(tmp_path: Path) -> None:
     with pytest.raises(OSError, match="symlink"):
         safe_io.read_text_contained(link, contain_within=tmp_path)
     with pytest.raises(OSError, match="symlink"):
-        safe_io.write_text_exclusive_no_follow(link, "nope\n", contain_within=tmp_path)
+        safe_io.write_text_exclusive_no_follow(
+            link, "nope\n", contain_within=tmp_path
+        )
     assert outside.read_text(encoding="utf-8") == "keep\n"

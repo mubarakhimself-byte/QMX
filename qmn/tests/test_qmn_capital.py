@@ -333,14 +333,7 @@ def test_loss_floor_drift_from_kill_line_refuses() -> None:
 
 
 def test_v1_dynamic_protection_grammar_is_ratchet_only() -> None:
-    assert (
-        _ok(
-            refuse_non_breakeven_dynamic_grammar(
-                DynamicProtectionGrammar.SINGLE_SIDED_BREAKEVEN_RATCHET
-            )
-        )
-        is None
-    )
+    assert _ok(refuse_non_breakeven_dynamic_grammar(DynamicProtectionGrammar.SINGLE_SIDED_BREAKEVEN_RATCHET)) is None
     refused = _refusal(refuse_non_breakeven_dynamic_grammar("trailing-stop"))
     assert refused.category is RefusalCategory.UNSUPPORTED_CAPABILITY
 
@@ -517,13 +510,10 @@ def test_stale_exit_persistence_refuses_next_intent() -> None:
         )
     )
     assert refused.category is RefusalCategory.STALE_EVIDENCE
-    assert (
-        _ok(
-            refuse_stale_exit_before_intent(
-                closing_exit_record=closing,
-                persisted=True,
-                journaled=True,
-            )
+    assert _ok(
+        refuse_stale_exit_before_intent(
+            closing_exit_record=closing,
+            persisted=True,
+            journaled=True,
         )
-        is None
-    )
+    ) is None

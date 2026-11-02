@@ -46,7 +46,8 @@ def _ok(result: Result[T]) -> T:
 
 def _clock() -> DataDrivenClock:
     walls = tuple(
-        _ok(Instant.try_create(1_724_000_000_000_000_000 + i * 1_000_000)) for i in range(8)
+        _ok(Instant.try_create(1_724_000_000_000_000_000 + i * 1_000_000))
+        for i in range(8)
     )
     return DataDrivenClock(
         boot_epoch_id="protection-fixture-boot",
@@ -280,7 +281,6 @@ def test_live_client_intake_receipt_reopens_raw_ct10_and_ct13_links(tmp_path: Pa
         "mutate-input",
         "shifted-time",
     ):
-
         def corrupt_record(
             event_type: object,
             payload: Mapping[str, object] | None = None,
@@ -297,7 +297,9 @@ def test_live_client_intake_receipt_reopens_raw_ct10_and_ct13_links(tmp_path: Pa
                 cast(dict[str, object], payload)["foreign_body"] = "mutated-before-append"
             if _mutation == "shifted-time":
                 requested_instant = cast(Instant, actual_kwargs["instant"])
-                actual_kwargs["instant"] = _ok(Instant.try_create(requested_instant.value_ns + 1))
+                actual_kwargs["instant"] = _ok(
+                    Instant.try_create(requested_instant.value_ns + 1)
+                )
             appended = actual_record(event_type, actual_payload, **actual_kwargs)
             assert is_ok(appended), appended
             record = appended.value

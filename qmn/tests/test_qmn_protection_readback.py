@@ -111,8 +111,14 @@ def test_position_stop_loss_revalidates_nominal_instrument_and_nested_venue() ->
         _unchecked_instrument(_unchecked_instrument(None, None), "EURUSD"),
         _unchecked_instrument(_unchecked_venue(None), "EURUSD"),
     ):
-        assert is_refusal(decode_native_protection_readback(base, **kwargs, instrument=instrument))
+        assert is_refusal(
+            decode_native_protection_readback(base, **kwargs, instrument=instrument)
+        )
     # Revalidation preserves canonical official identities and execution scaling.
-    valid = _ok(decode_native_protection_readback(base, **kwargs, instrument=_instrument()))
+    valid = _ok(
+        decode_native_protection_readback(
+            base, **kwargs, instrument=_instrument()
+        )
+    )
     assert valid.instrument == _instrument()
     assert valid.stop_loss.value == 108_523

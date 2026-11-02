@@ -150,7 +150,11 @@ def _manager(
     writer = _ok(venue_writer_id(_MACHINE, _ADAPTER, venue, account, _BOOT))
     jnl = journal if journal is not None else _JournalSink()
     observations = obs if obs is not None else _ObsSink()
-    cm = _ok(ConnectionManager.try_create(writer, _SecretStore(), observations, jnl, _RecordSink()))
+    cm = _ok(
+        ConnectionManager.try_create(
+            writer, _SecretStore(), observations, jnl, _RecordSink()
+        )
+    )
     return cm, jnl, observations
 
 
@@ -430,7 +434,9 @@ def test_journal_failure_uses_reserved_extent_or_undeliverable() -> None:
 
 
 def test_resolve_path_auto_only_on_unambiguous_reconciled_inside_lookback() -> None:
-    reconciled = Reconciliation(verdict=ReconciliationVerdict.RECONCILED, detail="agree")
+    reconciled = Reconciliation(
+        verdict=ReconciliationVerdict.RECONCILED, detail="agree"
+    )
     auto = _ok(
         decide_resolve_path(
             reconciled,
@@ -495,13 +501,17 @@ def test_auto_and_operator_resolve_enforce_two_path_precedence() -> None:
 
     hold_decision = _ok(
         decide_resolve_path(
-            Reconciliation(verdict=ReconciliationVerdict.DRIFT, detail="disagree"),
+            Reconciliation(
+                verdict=ReconciliationVerdict.DRIFT, detail="disagree"
+            ),
             clarity=ReadbackClarity.OBSERVED_ACCEPTED,
             covers_lookback=True,
         )
     )
     refused_auto = _refusal(
-        boundary.resolve_auto(block.command_fp1, hold_decision, receive_instant=_instant())
+        boundary.resolve_auto(
+            block.command_fp1, hold_decision, receive_instant=_instant()
+        )
     )
     assert refused_auto.category is RefusalCategory.POLICY_REJECTION
     assert boundary.stream_open is False
@@ -519,7 +529,9 @@ def test_auto_and_operator_resolve_enforce_two_path_precedence() -> None:
 
     auto_decision = _ok(
         decide_resolve_path(
-            Reconciliation(verdict=ReconciliationVerdict.RECONCILED, detail="agree"),
+            Reconciliation(
+                verdict=ReconciliationVerdict.RECONCILED, detail="agree"
+            ),
             clarity=ReadbackClarity.OBSERVED_ABSENT,
             covers_lookback=True,
         )

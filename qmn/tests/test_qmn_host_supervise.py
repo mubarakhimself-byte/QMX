@@ -83,13 +83,9 @@ def test_process_model_constants_and_surface() -> None:
     model = supervision_process_model()
     assert SUPERVISION_SURFACE == "qmn.host"
     assert model["event_loop_count"] == EVENT_LOOP_COUNT == 1
-    assert (
-        model["async_allowed_surfaces"]
-        == ASYNC_ALLOWED_SURFACES
-        == (
-            "venue_edge",
-            "doors",
-        )
+    assert model["async_allowed_surfaces"] == ASYNC_ALLOWED_SURFACES == (
+        "venue_edge",
+        "doors",
     )
     assert model["domain_background_threads_allowed"] is DOMAIN_BACKGROUND_THREADS_ALLOWED
     assert DOMAIN_BACKGROUND_THREADS_ALLOWED is False
@@ -185,52 +181,37 @@ def test_safe_point_requires_settled_commands_never_positions() -> None:
 
 
 def test_stand_down_refuses_entries_passes_risk_non_increasing() -> None:
-    assert (
-        _ok(
-            admit_under_lifecycle(
-                state=LifecycleState.STAND_DOWN_ALIVE,
-                kind="place_order",
-                risk_increasing=True,
-            )
+    assert _ok(
+        admit_under_lifecycle(
+            state=LifecycleState.STAND_DOWN_ALIVE,
+            kind="place_order",
+            risk_increasing=True,
         )
-        == "refuse-entry"
-    )
-    assert (
-        _ok(
-            admit_under_lifecycle(
-                state=LifecycleState.STAND_DOWN_ALIVE,
-                kind="risk_increasing_amend_protection",
-            )
+    ) == "refuse-entry"
+    assert _ok(
+        admit_under_lifecycle(
+            state=LifecycleState.STAND_DOWN_ALIVE,
+            kind="risk_increasing_amend_protection",
         )
-        == "refuse-entry"
-    )
-    assert (
-        _ok(
-            admit_under_lifecycle(
-                state=LifecycleState.STAND_DOWN_ALIVE,
-                kind="close_position",
-            )
+    ) == "refuse-entry"
+    assert _ok(
+        admit_under_lifecycle(
+            state=LifecycleState.STAND_DOWN_ALIVE,
+            kind="close_position",
         )
-        == "admit"
-    )
-    assert (
-        _ok(
-            admit_under_lifecycle(
-                state=LifecycleState.STAND_DOWN_ALIVE,
-                kind="flatten",
-            )
+    ) == "admit"
+    assert _ok(
+        admit_under_lifecycle(
+            state=LifecycleState.STAND_DOWN_ALIVE,
+            kind="flatten",
         )
-        == "admit"
-    )
-    assert (
-        _ok(
-            admit_under_lifecycle(
-                state=LifecycleState.STAND_DOWN_ALIVE,
-                kind="risk_non_increasing_amend_protection",
-            )
+    ) == "admit"
+    assert _ok(
+        admit_under_lifecycle(
+            state=LifecycleState.STAND_DOWN_ALIVE,
+            kind="risk_non_increasing_amend_protection",
         )
-        == "admit"
-    )
+    ) == "admit"
 
 
 def test_only_operator_resurrect_clears_stand_down_restart_does_not() -> None:
@@ -262,7 +243,9 @@ def test_only_operator_resurrect_clears_stand_down_restart_does_not() -> None:
     assert supervisor.state is LifecycleState.RUNNING
     assert supervisor.boot_epoch_id == "boot-2"
     assert supervisor.stand_down_trigger is None
-    assert any(event.get("kind") == NODE_RESURRECT_SUBTYPE for event in supervisor.journal_events)
+    assert any(
+        event.get("kind") == NODE_RESURRECT_SUBTYPE for event in supervisor.journal_events
+    )
 
 
 def test_crash_loop_counts_unrequested_exits_not_requested_restart() -> None:
@@ -347,10 +330,9 @@ def test_requested_restart_exits_75_without_advancing_crash_loop() -> None:
     _ok(supervisor.set_command_fate("cmd-b", CommandFate.UNRESOLVED))
     _ok(supervisor.begin_drain(kind=ShutdownKind.REQUESTED_RESTART, now_mono_ns=0))
     assert supervisor.suspend_new_enforced is True
-    assert (
-        _ok(admit_under_lifecycle(state=LifecycleState.DRAINING, kind="place_order"))
-        == "refuse-entry"
-    )
+    assert _ok(
+        admit_under_lifecycle(state=LifecycleState.DRAINING, kind="place_order")
+    ) == "refuse-entry"
 
     outcome = _ok(
         supervisor.complete_drain(
@@ -411,7 +393,9 @@ def test_drain_window_breach_exits_neither_0_nor_75() -> None:
     supervisor = _supervisor()
     _ok(supervisor.begin_drain(kind=ShutdownKind.SIGTERM, now_mono_ns=0))
     # drain_window default 30s; breach at 30s+1ns.
-    outcome = _ok(supervisor.complete_drain(now_mono_ns=30_000_000_001, flush_ok=True))
+    outcome = _ok(
+        supervisor.complete_drain(now_mono_ns=30_000_000_001, flush_ok=True)
+    )
     assert outcome.reached_safe_point is False
     assert outcome.exit_code == DRAIN_WINDOW_BREACH_EXIT_CODE
     assert outcome.exit_code not in {CLEAN_STOP_EXIT_CODE, REQUESTED_RESTART_EXIT_CODE}

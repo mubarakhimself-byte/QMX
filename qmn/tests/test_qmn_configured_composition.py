@@ -167,7 +167,9 @@ def _offline_profile(assessment: ConfiguredRuntimeAssessment, root: Path) -> dic
     bot = assessment.bot_definition
     callback = _ok(registered_callback_fp1())
     logic_fp = _ok(bot.logic_reference.fingerprint_content())
-    producers: list[dict[str, object]] = [{"producer_id": "sqs", "version": "v1", "parameters": {}}]
+    producers: list[dict[str, object]] = [
+        {"producer_id": "sqs", "version": "v1", "parameters": {}}
+    ]
     mis_identity: dict[str, object] = {
         "class": "qmn-profile-mis-catalog-v1",
         "catalog_id": "fixture-mis-catalog",
@@ -229,7 +231,9 @@ def valid_deployment(root: Path) -> Path:
     return _valid_deployment(root)
 
 
-def offline_profile(assessment: ConfiguredRuntimeAssessment, root: Path) -> dict[str, object]:
+def offline_profile(
+    assessment: ConfiguredRuntimeAssessment, root: Path
+) -> dict[str, object]:
     """Public shared fixture builder for the registered replay-only profile."""
     return _offline_profile(assessment, root)
 
@@ -290,7 +294,11 @@ def test_resolved_profile_freezes_nested_mis_parameters(tmp_path: Path) -> None:
 def test_v2_refuses_descriptor_mutation_and_unregistered_callback_before_selection(
     tmp_path: Path,
 ) -> None:
-    assessment = _ok(assess_configured_runtime(_valid_deployment(tmp_path), qmx_root=tmp_path))
+    assessment = _ok(
+        assess_configured_runtime(
+            _valid_deployment(tmp_path), qmx_root=tmp_path
+        )
+    )
     profile = _offline_profile(assessment, tmp_path)
     path = _write_v2_deployment(tmp_path, profile)
     payload = json.loads(path.read_text(encoding="utf-8"))

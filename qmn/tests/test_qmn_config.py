@@ -324,7 +324,9 @@ def test_secret_values_refused_and_refs_not_fingerprinted_as_secrets() -> None:
     assert "super-secret-token" not in str(payload)
     explain_rows_payload = cast("Sequence[Mapping[str, object]]", payload["rows"])
     token_explain = next(
-        row for row in explain_rows_payload if row["name"] == "liveness_heartbeat_token_reference"
+        row
+        for row in explain_rows_payload
+        if row["name"] == "liveness_heartbeat_token_reference"
     )
     assert token_explain["value"] == ref.value.value
     assert token_explain.get("secret_ref") is True

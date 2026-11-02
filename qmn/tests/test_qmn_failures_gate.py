@@ -52,11 +52,15 @@ def test_failures_completeness_gate_passes_on_the_register() -> None:
         assert failure_id in DESIGNED_TYPED_FAILURE_IDS
     for failure_id in emitted:
         assert failure_id in report.registered_ids or any(
-            failure_id.startswith(f"{parent}.") for parent in report.registered_ids if "." in parent
+            failure_id.startswith(f"{parent}.")
+            for parent in report.registered_ids
+            if "." in parent
         )
     for failure_id in DESIGNED_TYPED_FAILURE_IDS:
         assert failure_id in report.registered_ids or any(
-            failure_id.startswith(f"{parent}.") for parent in report.registered_ids if "." in parent
+            failure_id.startswith(f"{parent}.")
+            for parent in report.registered_ids
+            if "." in parent
         )
     for fr_id, resolved in report.affordances.items():
         assert resolved, fr_id
@@ -178,7 +182,8 @@ def test_affordance_resolves_to_existing_door_or_recipe() -> None:
     assert "node-config-validate" in recipes
     assert "node-notify-test" in recipes
     resolved = resolve_operator_affordance(
-        "Retry from the desktop UI over the powers channel; resurrect via the operations toolkit.",
+        "Retry from the desktop UI over the powers channel; resurrect via the "
+        "operations toolkit.",
         recipes=recipes,
     )
     assert "enact_power" in resolved

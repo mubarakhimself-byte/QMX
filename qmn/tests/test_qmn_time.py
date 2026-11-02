@@ -115,14 +115,10 @@ class _FakeDayBoundary:
 
 def test_surface_and_three_calendar_kinds() -> None:
     assert TIME_SURFACE == VPS_CLOCK_SURFACE == "qmn.time"
-    assert (
-        calendar_identities()
-        == CALENDAR_IDENTITIES
-        == (
-            "market_hours_calendar",
-            "day_boundary_calendar",
-            "news_calendar",
-        )
+    assert calendar_identities() == CALENDAR_IDENTITIES == (
+        "market_hours_calendar",
+        "day_boundary_calendar",
+        "news_calendar",
     )
     assert "news_calendar_timer" in CALENDAR_TIMER_KINDS
     assert "market-hours calendar" in named_time_rules()
@@ -345,7 +341,9 @@ def test_wall_monotonic_divergence_marks_suspect_window() -> None:
 
 
 def test_activation_uses_account_day_boundary_calendar() -> None:
-    identity = _ok(CalendarIdentity.try_create("account-day-boundary", "v1", "2026a"))
+    identity = _ok(
+        CalendarIdentity.try_create("account-day-boundary", "v1", "2026a")
+    )
     port = _FakeDayBoundary(identity=identity, next_ns=2_000)
     schedule = _ok(
         activation_effective_trading_date(

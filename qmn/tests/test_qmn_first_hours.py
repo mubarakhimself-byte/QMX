@@ -326,7 +326,9 @@ def test_refuses_procure_vps_and_watched_gate_and_invented_budget() -> None:
 
 def test_refuses_slice_driving_lifecycle() -> None:
     refused = _refusal(
-        record_first_hours_baselines(_inputs(lifecycle=BenchLifecycle.RUNNING_SLICE_DRIVING))
+        record_first_hours_baselines(
+            _inputs(lifecycle=BenchLifecycle.RUNNING_SLICE_DRIVING)
+        )
     )
     assert refused.context["failure_id"] == "first_hours.contaminated_lifecycle"
 

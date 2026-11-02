@@ -42,7 +42,9 @@ _SRC = _QMN_ROOT / "src" / "qmn"
 _NS_HOUR = 3_600 * 1_000_000_000
 _RPO_NS = 24 * _NS_HOUR
 _BANNED_INFRA = frozenset({"boto3", "b2sdk", "keyring"})
-_BANNED_TRADE = frozenset({"qmn.order", "qmn.venue", "qmn.host", "qmn.doors", "qmn.seats"})
+_BANNED_TRADE = frozenset(
+    {"qmn.order", "qmn.venue", "qmn.host", "qmn.doors", "qmn.seats"}
+)
 _TRADE_TOKENS = (
     "place_order",
     "cancel_order",
@@ -295,7 +297,9 @@ def test_push_is_idempotent_on_retry(tmp_path: Path) -> None:
 
 def test_rclone_failure_is_storage_failure_not_completion(tmp_path: Path) -> None:
     prefix = _ok(_prefix())
-    result, _cipher, _key, _staging, _remote, _runner = _push(tmp_path, (prefix,), fail=True)
+    result, _cipher, _key, _staging, _remote, _runner = _push(
+        tmp_path, (prefix,), fail=True
+    )
     refused = _refusal(result)
     assert refused.category is RefusalCategory.STORAGE_FAILURE
     assert refused.context["failure_id"] == "data.backup.rclone_transfer"
@@ -350,13 +354,17 @@ def test_live_b2_is_soak_local_and_missing_accounts_do_not_block_local(
     assert live.context["failure_id"] == "data.backup.backblaze_tonight"
     assert live.context["live_bucket_tonight"] is False
     soak = _refusal(
-        refuse_live_b2_without_soak(backend="backblaze-b2", soak_local=True, has_account=False)
+        refuse_live_b2_without_soak(
+            backend="backblaze-b2", soak_local=True, has_account=False
+        )
     )
     assert soak.context["failure_id"] == "data.backup.missing_bucket_account"
     ceremony = _refusal(generate_test_payload_key(backend="backblaze-b2"))
     assert ceremony.context["failure_id"] == "data.backup.ceremony_tonight"
     prefix = _ok(_prefix())
-    blocked = _refusal(_push(tmp_path, (prefix,), backend="backblaze-b2")[0])
+    blocked = _refusal(
+        _push(tmp_path, (prefix,), backend="backblaze-b2")[0]
+    )
     assert blocked.context["failure_id"] == "data.backup.backblaze_tonight"
     local = _ok(_push(tmp_path / "local", (prefix,))[0])
     assert local.backend == LOCAL_TEST_BACKEND
@@ -365,9 +373,9 @@ def test_live_b2_is_soak_local_and_missing_accounts_do_not_block_local(
 
 
 def test_systemd_unit_invokes_backup_run_without_trading_power() -> None:
-    unit = (_QMN_ROOT / "deploy" / "systemd" / "templates" / "qmn-backup.service.in").read_text(
-        encoding="utf-8"
-    )
+    unit = (
+        _QMN_ROOT / "deploy" / "systemd" / "templates" / "qmn-backup.service.in"
+    ).read_text(encoding="utf-8")
     assert "python -m qmn.data.backup_run" in unit
     assert "LoadCredentialEncrypted=backup-payload-key" in unit
     assert "LoadCredentialEncrypted=object-storage" in unit

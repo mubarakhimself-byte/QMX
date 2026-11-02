@@ -343,7 +343,11 @@ def test_amend_min_improvement_never_suppresses_originated_amend() -> None:
         amendment=_stop_amendment(new_value=1, original_value=100, venue=venue),
         venue=venue,
     )
-    admitted = _ok(admit_risk_non_increasing_amend_protection(cmd, amend_min_improvement=0.5))
+    admitted = _ok(
+        admit_risk_non_increasing_amend_protection(
+            cmd, amend_min_improvement=0.5
+        )
+    )
     assert admitted is cmd
 
     path = _path(atomicity=AmendAtomicity.NON_ATOMIC)
@@ -476,7 +480,9 @@ def test_unknown_holds_amend_protection_as_standing_intent() -> None:
             del ref
             return unpersistable("unused")
 
-        def atomic_replace(self, ref: SecretRef, new_value: SecretValue, /) -> Result[SecretRef]:
+        def atomic_replace(
+            self, ref: SecretRef, new_value: SecretValue, /
+        ) -> Result[SecretRef]:
             del new_value
             return Ok(ref)
 
@@ -486,8 +492,14 @@ def test_unknown_holds_amend_protection_as_standing_intent() -> None:
             return Ok(SinkAck())
 
     journal = RecordingJournal()
-    writer = _ok(venue_writer_id("vps-fra-01", "ctrader-adapter", venue, account, _BOOT))
-    cm = _ok(ConnectionManager.try_create(writer, _Secrets(), _Obs(), journal, RecordingSink()))
+    writer = _ok(
+        venue_writer_id("vps-fra-01", "ctrader-adapter", venue, account, _BOOT)
+    )
+    cm = _ok(
+        ConnectionManager.try_create(
+            writer, _Secrets(), _Obs(), journal, RecordingSink()
+        )
+    )
     boundary = _ok(
         CommandStreamUnknownBoundary.try_create(
             venue_id=venue,
@@ -513,7 +525,9 @@ def test_unknown_holds_amend_protection_as_standing_intent() -> None:
         kind=place.kind,
         outcome=SubmissionOutcome.UNKNOWN,
         observation=obs,
-        journal_event=JournalEvent.for_outcome(fp, place.kind, SubmissionOutcome.UNKNOWN),
+        journal_event=JournalEvent.for_outcome(
+            fp, place.kind, SubmissionOutcome.UNKNOWN
+        ),
     )
     _ok(boundary.record_unknown(unknown))
     held = _ok(

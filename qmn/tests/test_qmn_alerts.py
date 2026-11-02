@@ -240,7 +240,9 @@ def test_typed_failure_ids_have_register_entries() -> None:
     allow_list = report.allow_list
     registered = allow_list.registered_ids()
     missing = [
-        failure_id for failure_id in CLOCK_BAND_FAILURE_IDS.values() if failure_id not in registered
+        failure_id
+        for failure_id in CLOCK_BAND_FAILURE_IDS.values()
+        if failure_id not in registered
     ]
     assert missing == [], f"typed failure ids missing from FAILURES.md: {missing}"
     for entry in allow_list.entries:
