@@ -177,38 +177,22 @@ class Store:
 
     # --- desired -------------------------------------------------------------------------
 
-    def change(self, op_id: str) -> Change | None:
+    def accepted(self) -> list[Change]:
+        """Every applied change, in arrival order."""
         with closing(self._connect()) as db:
-            return _change_by_op(db, op_id)
+            return Desired(db).accepted()
 
-    def changes(self, *, outcome: Outcome | None = None) -> list[Change]:
-        """Every change in arrival order, or only those with ``outcome``."""
-        with closing(self._connect()) as db:
-            if outcome is None:
-                rows = db.execute(
-                    "SELECT seq, op_id, kind, register, args, stamped, issued_at_ns, arrived_at_ns,"
-                    " outcome, answer FROM desired ORDER BY seq"
-                )
-            else:
-                rows = db.execute(
-                    "SELECT seq, op_id, kind, register, args, stamped, issued_at_ns, arrived_at_ns,"
-                    " outcome, answer FROM desired WHERE outcome = ? ORDER BY seq",
-                    (outcome.value,),
-                )
-            return [_change(row) for row in rows.fetchall()]
-
-    def record(self, op_id: str, decide: Callable[[Desired], Change]) -> tuple[Change, bool]:
+    def record(self, op_id: str, decide: Callable[[Desired], Change]) -> Change:
         """Decide and keep one change under the write lock, in arrival order.
 
         A repeated op id keeps nothing and answers the earlier row. Otherwise ``decide`` reads
         ``desired`` (and may rebind the identity) through the transaction's :class:`Desired` and
-        returns the row to keep; ``seq`` is assigned here. Answers the kept row and whether it
-        is new.
+        returns the row to keep; ``seq`` is assigned here.
         """
         with self._write() as db:
             earlier = _change_by_op(db, op_id)
             if earlier is not None:
-                return earlier, False
+                return earlier
             decided = decide(Desired(db))
             cursor = db.execute(
                 "INSERT INTO desired (op_id, kind, register, args, stamped, issued_at_ns,"
@@ -226,7 +210,7 @@ class Store:
                 ),
             )
             seq = cast(int, cursor.lastrowid)
-        return replace(decided, seq=seq), True
+        return replace(decided, seq=seq)
 
     # --- observed ------------------------------------------------------------------------
 

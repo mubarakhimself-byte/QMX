@@ -190,6 +190,7 @@ class Target:
                     paused[scope] = change.kind == "pause"
             elif change.kind == "deploy":
                 deployments[str(change.args["deployment_id"])] = change
+                withdrawn.discard(str(change.args["deployment_id"]))
             elif change.kind == "withdraw":
                 withdrawn.add(str(change.args["deployment_id"]))
         return cls(kills, paused, deployments, frozenset(withdrawn))
@@ -214,13 +215,24 @@ class Request:
 
 
 @dataclass(frozen=True, slots=True)
+class Applying:
+    """A change in order and allowed, about to be answered inside its transaction."""
+
+    context: Context
+    desired: Desired
+    request: Request
+    op_id: str
+    now_ns: int
+
+
+@dataclass(frozen=True, slots=True)
 class ChangeSpec:
     """One change: its arguments, its register (``None`` always applies), whether it could start
     trading, and what it answers once it is in order."""
 
     arguments: frozenset[str]
     parse: Callable[[Mapping[str, Json], Standing], Request]
-    apply: Callable[[Context, Desired, Request, str, int], Answer]
+    apply: Callable[[Applying], Answer]
     trades: bool = False
 
 
@@ -239,8 +251,8 @@ def _deploy(arguments: Mapping[str, Json], standing: Standing) -> Request:
     )
 
 
-def _accepted_deploy(_: Context, __: Desired, request: Request, ___: str, ____: int) -> Answer:
-    return ok({"deployment_id": request.kept["deployment_id"], "state": "accepted"})
+def _accepted_deploy(step: Applying) -> Answer:
+    return ok({"deployment_id": step.request.kept["deployment_id"], "state": "accepted"})
 
 
 def _withdraw(arguments: Mapping[str, Json], _: Standing) -> Request:
@@ -251,9 +263,9 @@ def _withdraw(arguments: Mapping[str, Json], _: Standing) -> Request:
     return Request(f"deployment:{deployment_id}", {"deployment_id": deployment_id, "when": when})
 
 
-def _apply_withdraw(_: Context, desired: Desired, request: Request, __: str, ___: int) -> Answer:
-    deployment_id = str(request.kept["deployment_id"])
-    if deployment_id not in Target.fold(desired.accepted()).deployments:
+def _apply_withdraw(step: Applying) -> Answer:
+    deployment_id = str(step.request.kept["deployment_id"])
+    if deployment_id not in Target.fold(step.desired.accepted()).deployments:
         return refused("unknown_deployment", f"no deployment {deployment_id} is on this node")
     return ok({"state": "accepted"})
 
@@ -266,13 +278,13 @@ def _scoped(register: str) -> Callable[[Mapping[str, Json], Standing], Request]:
     return parse
 
 
-def _accepted(_: Context, __: Desired, ___: Request, ____: str, _____: int) -> Answer:
+def _accepted(step: Applying) -> Answer:
     return ok({"state": "accepted"})
 
 
-def _apply_resume(_: Context, desired: Desired, request: Request, __: str, ___: int) -> Answer:
-    scope = str(request.kept["scope"])
-    level = Target.fold(desired.accepted()).level_at(scope)
+def _apply_resume(step: Applying) -> Answer:
+    scope = str(step.request.kept["scope"])
+    level = Target.fold(step.desired.accepted()).level_at(scope)
     causes: list[Json] = [] if level is KsaLevel.GREEN else [f"kill switch at {level.value}"]
     return ok({"state": "accepted", "open_causes": causes})
 
@@ -285,10 +297,9 @@ def _kill(arguments: Mapping[str, Json], _: Standing) -> Request:
     return Request(None, {"level": level.upper(), "scope": _scope(arguments)})
 
 
-def _apply_kill(_: Context, desired: Desired, request: Request, __: str, ___: int) -> Answer:
-    asked = KsaLevel(str(request.kept["level"]))
-    target = Target.fold(desired.accepted())
-    held = target.level_at(str(request.kept["scope"]))
+def _apply_kill(step: Applying) -> Answer:
+    asked = KsaLevel(str(step.request.kept["level"]))
+    held = Target.fold(step.desired.accepted()).level_at(str(step.request.kept["scope"]))
     in_force = asked if LEVEL_RANK[asked] > LEVEL_RANK[held] else held
     return ok({"level_in_force": in_force.value})
 
@@ -297,7 +308,7 @@ def _flatten(arguments: Mapping[str, Json], _: Standing) -> Request:
     return Request(None, {"scope": _scope(arguments)})
 
 
-def _apply_flatten(_: Context, __: Desired, ___: Request, ____: str, _____: int) -> Answer:
+def _apply_flatten(step: Applying) -> Answer:
     return ok({"state": "accepted", "positions": 0})
 
 
@@ -310,7 +321,7 @@ def _bind(arguments: Mapping[str, Json], _: Standing) -> Request:
     return Request(f"binding:{account_id}", {"account": account_id, "action": action})
 
 
-def _not_set_up(_: Context, __: Desired, ___: Request, ____: str, _____: int) -> Answer:
+def _not_set_up(step: Applying) -> Answer:
     return refused("not_set_up", "no venue is set up on this node yet", next_step=NOT_SET_UP)
 
 
@@ -321,9 +332,8 @@ def _bare(register: str) -> Callable[[Mapping[str, Json], Standing], Request]:
     return parse
 
 
-def _apply_confirm(
-    context: Context, desired: Desired, _: Request, op_id: str, now_ns: int
-) -> Answer:
+def _apply_confirm(step: Applying) -> Answer:
+    context = step.context
     standing = context.standing()
     if context.here is None:
         return refused(
@@ -331,8 +341,8 @@ def _apply_confirm(
             "this machine's id cannot be read, so the node cannot be bound to it",
         )
     if standing.mismatch:
-        row = desired.rebind_identity(
-            op_id=op_id, kind="confirm_same_node", fingerprint=context.here, at_ns=now_ns
+        row = step.desired.rebind_identity(
+            op_id=step.op_id, kind="confirm_same_node", fingerprint=context.here, at_ns=step.now_ns
         )
         standing = Standing(row, context.here)
     return ok({"identity": standing.document()})
@@ -345,7 +355,7 @@ def _take_over(arguments: Mapping[str, Json], _: Standing) -> Request:
     return Request("identity", {"old_tag": old_tag, "confirmed_gone": True})
 
 
-def _not_yet_take_over(_: Context, __: Desired, ___: Request, ____: str, _____: int) -> Answer:
+def _not_yet_take_over(step: Applying) -> Answer:
     return refused(
         "not_available",
         "taking over a dead node needs the reconciler's attribution, which this node has not yet",
@@ -422,7 +432,7 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
                 next_step="Confirm on the node's card that it is the same node, moved.",
             )
         else:
-            answer = spec.apply(context, desired, request, op_id, arrived)
+            answer = spec.apply(Applying(context, desired, request, op_id, arrived))
             outcome = Outcome.ACCEPTED if answer["ok"] is True else Outcome.REFUSED
         return Change(
             seq=0,
@@ -437,8 +447,7 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
             answer={**answer, "op_id": op_id},
         )
 
-    kept, _ = context.store.record(op_id, decide)
-    return kept.answer
+    return context.store.record(op_id, decide).answer
 
 
 # --- reads ------------------------------------------------------------------------------------
@@ -447,7 +456,7 @@ def answer_change(context: Context, name: str, arguments: Mapping[str, Json]) ->
 def _status(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset())
     standing = context.standing()
-    target = Target.fold(context.store.changes(outcome=Outcome.ACCEPTED))
+    target = Target.fold(context.store.accepted())
     level = target.level_at("all")
     journal_problem = context.store.observed("journal_problem")
     last_write = context.store.observed("journal_write")
@@ -518,7 +527,7 @@ def _positions(_: Context, arguments: Mapping[str, Json]) -> Answer:
 
 def _deployments(context: Context, arguments: Mapping[str, Json]) -> Answer:
     _known(arguments, frozenset())
-    target = Target.fold(context.store.changes(outcome=Outcome.ACCEPTED))
+    target = Target.fold(context.store.accepted())
     return ok(
         [
             {
