@@ -1,0 +1,81 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "perp-funding-rate",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "funding rate",
+    "perp funding"
+  ],
+  "same_word_as": [
+    "rollover-swap-cost@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The rate a perpetual's longs pay its shorts (or shorts pay longs when negative) at each funding settlement, set from the perp's premium to its index.",
+  "boundaries": "A carry the venue charges peer to peer, not a broker's swap: the daily FX swap is rollover-swap-cost@1. The instrument record's funding_interval and funding_source name the venue's clock; perp-funding-settlement-clock@1 measures the time to the next one.",
+  "recognition": "Strongly positive funding reads as crowded longs.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "sizing_modifier",
+    "exit"
+  ],
+  "class_meanings": {
+    "fx": "No funding: the daily swap is a broker-quoted rate differential, rollover-swap-cost@1.",
+    "metal": "No funding: a CFD's overnight swap, rollover-swap-cost@1.",
+    "index_cfd": "No funding: a CFD's overnight financing and dividend adjustment.",
+    "commodity_cfd": "No funding: a CFD's overnight swap.",
+    "stock_cfd": "No funding: a CFD's overnight financing.",
+    "future": "No funding: the carry sits in the basis and falls to zero at expiry.",
+    "perp": "Paid peer to peer at each settlement, every 8 hours or every hour by venue.",
+    "spot_crypto": "No funding on spot.",
+    "stock": "No funding."
+  },
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/funding (read 2026-11-02)",
+      "quote": "Funding on Hyperliquid is capped at 4%/hour",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 4",
+      "quote": "Perp funding: peer to peer, every 8 h or 1 h, from the perp-index premium",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "funding",
+      "stream_kind": "series",
+      "measure": "percent",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "provider_limited"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

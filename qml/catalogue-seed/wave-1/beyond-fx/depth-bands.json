@@ -1,0 +1,88 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "depth-bands",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "book depth bands",
+    "depth within one percent"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Total resting size within bands of percent distance from the price, bid side against ask side.",
+  "boundaries": "Binance archives the bands at 1% to 5%. cTrader's depth is the broker's own, so there it is a broker-side estimate.",
+  "recognition": "Ask depth thinning inside 1% reads as an easy path up.",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.2",
+      "quote": "Depth bands (book size within ±1% to ±5%)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "book",
+      "stream_kind": "book",
+      "measure": "price",
+      "data_level": 3,
+      "splits": {
+        "depth": "by_price"
+      },
+      "fallback": [
+        {
+          "data_level": 2,
+          "expected_loss": "a broker-side estimate from the best bid and ask alone: the size away from the touch is unseen, so walls and pulled orders deeper in the book are missed"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "band": {
+      "measure": "percent",
+      "default": "1",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "5",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "native",
+    "spot_crypto": "native",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "the-open",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "opening price by class"
+  ],
+  "same_word_as": [
+    "daily-open@1",
+    "session-open-price@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "The price and moment a market's day opens, which differs by class.",
+  "boundaries": "Name the clock: an auction, a session open after a break, a day turn, or a UTC bar. For a gold CFD traders use the London auction, the New York open or the broker's day turn; the unit picks one.",
+  "recognition": "Price against the open is the day's first reference.",
+  "eligible_roles": [
+    "location",
+    "context"
+  ],
+  "class_meanings": {
+    "fx": "17:00 New York day turn, or whatever the broker's server uses.",
+    "metal": "The New York day turn at 18:00, the London 10:30 auction, or the broker's turn.",
+    "index_cfd": "The cash index's opening auction in its own clock.",
+    "commodity_cfd": "The underlying future's session open after its daily break.",
+    "stock_cfd": "The listing exchange's opening auction.",
+    "future": "The session open after the daily break.",
+    "perp": "00:00 UTC by convention.",
+    "spot_crypto": "00:00 UTC by convention.",
+    "stock": "The opening auction price."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 4",
+      "quote": "Crypto: 00:00 UTC by convention.",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "flag"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

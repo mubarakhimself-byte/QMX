@@ -1,0 +1,89 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "basis",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "premium index",
+    "futures basis"
+  ],
+  "same_word_as": [
+    "fair-value-premium@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "A contract's price less its reference: future less cash index, falling to zero at expiry; perpetual less index, held near zero by funding.",
+  "boundaries": "Annualise it to compare contracts with different expiries. A perp's basis never expires.",
+  "recognition": "A wide positive basis on an index future reads as rich carry.",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "class_meanings": {
+    "fx": "Forward points against spot, a rate differential (not assessed further).",
+    "metal": "none for spot CFDs",
+    "index_cfd": "Only through the future the CFD prices from; a proxy.",
+    "commodity_cfd": "Storage and supply between the CFD's future and spot (not assessed).",
+    "stock_cfd": "none",
+    "future": "Future less cash, from rates less dividends, falling to zero at expiry.",
+    "perp": "Perp less index, held near zero by funding, never expiring.",
+    "spot_crypto": "none",
+    "stock": "none"
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-equity-index-products/what-is-equity-index-basis (read 2026-11-02)",
+      "quote": "may be positive or negative, depending on dividend income and financing cost rates",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 4",
+      "quote": "Perps: perp minus index, held near zero by funding, never expires.",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "contract",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "provider_limited"
+      }
+    },
+    {
+      "port": "index",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "provider_limited"
+      }
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

@@ -1,0 +1,75 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "volume-kind",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "volume by class",
+    "what volume counts"
+  ],
+  "same_word_as": [
+    "exchange-volume@1",
+    "spot-fx-tick-volume@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "What a bar's volume counts, which differs by class: traded contracts or shares, traded coins with a taker split, or a count of price changes.",
+  "boundaries": "The volume split of the data level (exchange, taker_split, tick_count, venue) records it on the instrument record; a block built on tick counts is a proxy and its entry says so. exchange-volume@1 and spot-fx-tick-volume@1 are the two meanings as entries.",
+  "recognition": "Volume on a cTrader index CFD is a tick count, not the future's contracts.",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "class_meanings": {
+    "fx": "A tick count: the number of price changes, a proxy for activity.",
+    "metal": "A tick count on spot CFDs.",
+    "index_cfd": "A tick count on the CFD, not the index future's contracts.",
+    "commodity_cfd": "A tick count on the CFD.",
+    "stock_cfd": "A tick count, or the broker's own flow.",
+    "future": "Contracts traded on the exchange.",
+    "perp": "Contracts or coins traded on that venue, with a taker split on Binance bars.",
+    "spot_crypto": "Coins traded on that venue, with a taker split on Binance bars.",
+    "stock": "Shares traded, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-futures/what-is-volume (read 2026-11-02)",
+      "quote": "calculated by counting the number of contracts that have been bought and sold",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://ctrader.com/products/4684",
+      "quote": "It does not provide verified executed trade volume",
+      "dated": "2026-08-01"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

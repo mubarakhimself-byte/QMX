@@ -1,0 +1,56 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "venue-fragmentation",
+  "version": 1,
+  "family": "crypto",
+  "aliases": [
+    "cross-venue spread"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The same coin trading on several venues at different prices and depths, against a chosen reference venue.",
+  "boundaries": "Each venue is its own market; a perp's index is a weighted median of several.",
+  "recognition": "One venue far from the rest reads as a local dislocation.",
+  "eligible_roles": [
+    "context",
+    "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/robust-price-indices (read 2026-11-02)",
+      "quote": "This weighted median of CEX prices is robust",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "venues",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

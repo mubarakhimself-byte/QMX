@@ -1,0 +1,75 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bar-range-pressure",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "close location value",
+    "CLV",
+    "bar close pressure"
+  ],
+  "same_word_as": [
+    "accumulation-distribution@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Where a bar closed inside its range, from -1 at the low to 1 at the high: ((close - low) - (high - close)) / (high - low), the money flow multiplier of the Accumulation Distribution Line.",
+  "boundaries": "An estimate of who pressed, read from the bar alone: it is the last step of every order-flow entry's fallback chain, never traded buying or selling. A bar whose high equals its low reads 0, as TA-Lib's AD counts it. It needs only the bar's prices, so it reads on every bar a unit is given.",
+  "recognition": "Closes near the high bar after bar read as buyers pressing.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "confirmation"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/accumulation-distribution-line (read 2026-11-02)",
+      "quote": "Money Flow Multiplier = [(Close - Low) - (High - Close)] /(High - Low)",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://ctrader.com/products/4684",
+      "quote": "classified broker Bid/Ask quote updates to estimate Up/Down Tick pressure",
+      "dated": "2026-08-01"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:7d1ba79fff1fb0b2c5e3d456d1f0f2b561b45cc60637a6e5b913f3f6b1b463ff",
+  "golden": {
+    "reference": "TA-Lib 0.7.1 AD over a volume of 1, first difference, in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/profile.json"
+  }
+}

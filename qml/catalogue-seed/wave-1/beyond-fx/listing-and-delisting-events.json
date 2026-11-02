@@ -1,0 +1,57 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "listing-and-delisting-events",
+  "version": 1,
+  "family": "crypto",
+  "aliases": [
+    "token unlock",
+    "delisting"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "A venue's announced listings, delistings and token unlocks, as dated events.",
+  "boundaries": "Outside data from venue announcements.",
+  "recognition": "A delisting announcement reads as forced selling ahead.",
+  "eligible_roles": [
+    "veto",
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Listing, delisting, token unlock events",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "events",
+      "stream_kind": "series",
+      "measure": null,
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "flag"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

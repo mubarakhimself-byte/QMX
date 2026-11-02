@@ -1,0 +1,71 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "earnings-release-window",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "earnings date",
+    "earnings blackout"
+  ],
+  "same_word_as": [
+    "news-event-window@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "The window around a company's earnings release, before the open or after the close, and its weight in an index.",
+  "boundaries": "Outside data; the window length is the binding's.",
+  "recognition": "Index units stand aside around a mega-cap's earnings.",
+  "eligible_roles": [
+    "veto",
+    "filter",
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Earnings date and time (before open, after close)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "events",
+      "stream_kind": "series",
+      "measure": null,
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "flag"
+  },
+  "parameters": {
+    "window": {
+      "measure": "seconds",
+      "default": "3600",
+      "origin": "inferred",
+      "range": {
+        "min": "60",
+        "max": "604800",
+        "step": "60"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "direct",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "native"
+  },
+  "mirroring": "not_applicable"
+}

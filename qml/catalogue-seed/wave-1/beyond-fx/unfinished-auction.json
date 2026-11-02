@@ -1,0 +1,85 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "unfinished-auction",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "finished auction",
+    "unfinished business"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "structure",
+  "definition": "A bar edge where both the bid and the ask traded size at the extreme price: the auction there is not finished, against a finished auction where one side shows zero.",
+  "boundaries": "Needs the tape split by side at each price; on cTrader it is a broker-side estimate and the zero test is unreliable.",
+  "recognition": "Price tends to return to an unfinished auction to test it.",
+  "eligible_roles": [
+    "location",
+    "context"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "https://learn.atas.net/volume-basics/volume-analysis/footprint-patterns (read 2026-11-02)",
+      "quote": "A zero at the edge means a finished auction",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "tape",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 4,
+      "fallback": [
+        {
+          "data_level": 3,
+          "splits": {
+            "depth": "by_price"
+          },
+          "expected_loss": "an estimate from resting size: the bid against the ask size near the price stands in for executed aggression, and on cTrader the book is the broker's own, so it is a broker-side estimate"
+        },
+        {
+          "data_level": 2,
+          "expected_loss": "a broker-side estimate by the tick rule: a quote that moves up counts as buying and one that moves down as selling, with no traded size behind either"
+        },
+        {
+          "data_level": 1,
+          "expected_loss": "an estimate from the bar alone: where the close sits in the range (bar-range-pressure@1) stands in for who pressed, with no size at all"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

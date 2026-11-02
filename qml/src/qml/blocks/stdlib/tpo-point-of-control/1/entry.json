@@ -1,0 +1,127 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "tpo-point-of-control",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "TPO point of control",
+    "time-price point of control",
+    "TPO POC"
+  ],
+  "same_word_as": [
+    "point-of-control@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The price row where the session spent the most time blocks so far, from a time-price opportunity profile built from the session's bars. Each bar is one time block and marks every row its range traversed; a row is the price rounded to a multiple of row_size.",
+  "boundaries": "A tie between rows goes to the row nearest the middle of the session's range, then to the higher row. It counts time, not traded size, so it needs no volume; the volume point of control is point-of-control@1. The bar length is the block length, so bind it to 30-minute bars for the common profile. A session spanning more than max_rows rows is missing: max_rows bounds the block's state, so bind row_size to the instrument's tick size times the ticks per row. Bars without a time are missing. QML's unit runtime does not yet pass a bars input its time, so inside a unit this value stays missing until it does.",
+  "recognition": "Price returning to the session's point of control reads as a return to value.",
+  "eligible_roles": [
+    "context",
+    "location",
+    "filter",
+    "exit"
+  ],
+  "class_meanings": {
+    "fx": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "perp": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact.",
+    "spot_crypto": "No exchange session: the profile's day is the UTC slot session_start names, a choice, not a market fact."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "The POC is the first row added to the VA",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://help.cqg.com/cqgic/26/Documents/marketprofilevalueareasmpva.htm (read 2026-11-02)",
+      "quote": "the price that is closest to the middle price range is the POC price",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://ftmo.oanda.com/blog/market-profile-how-to-read-market-context-and-uncover-fair-value-zones/ (read 2026-11-02)",
+      "quote": "30 minutes is the most common and widely used setting",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "row_size": {
+      "measure": "price_distance",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0.00001",
+        "max": "100000",
+        "step": "0.00001"
+      }
+    },
+    "value_area_share": {
+      "measure": "percent",
+      "default": "70",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    },
+    "max_rows": {
+      "measure": "count",
+      "default": "2000",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "100000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "native",
+    "perp": "adapted",
+    "spot_crypto": "adapted",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "max_rows",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:770857ead37f18ed3a345ffbd142b1408993e2a0947b5e13925b77c02cb7b17e",
+  "golden": {
+    "reference": "TradingView's TPO value-area algorithm with CQG's point-of-control tie, rebuilt from the session's bars at every bar, in qml/tests/golden/beyond-fx/reference_run.py",
+    "cases": "qml/tests/golden/beyond-fx/profile.json"
+  }
+}

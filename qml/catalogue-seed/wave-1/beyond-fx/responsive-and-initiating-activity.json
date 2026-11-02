@@ -1,0 +1,70 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "responsive-and-initiating-activity",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "responsive buying",
+    "initiating selling"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Whether today's range extensions and extremes sit inside or beyond yesterday's value area: buying below yesterday's value is responsive, buying above or within it is initiating, and selling the mirror.",
+  "boundaries": "Needs yesterday's value area (tpo-value-area-high@1 and tpo-value-area-low@1 on the day before) and today's range extension (initial-balance-range-extension@1); no block joins them yet. Read on a market with a main session; on a 24-hour market the day is the slot the unit binds.",
+  "recognition": "Initiating selling below yesterday's value reads as conviction to continue lower.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "http://www.aspenres.com/Documents/AspenGraphics4.0/Using_Market_profile.htm (read 2026-11-02)",
+      "quote": "Initiating activity is a stronger form of behavior",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

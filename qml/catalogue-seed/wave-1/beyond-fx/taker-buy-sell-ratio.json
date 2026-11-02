@@ -1,0 +1,84 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "taker-buy-sell-ratio",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "taker ratio",
+    "taker buy share"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The share of a bar's volume where the buyer took the offer, against the seller hitting the bid.",
+  "boundaries": "Binance bars carry taker buy volume as a column, so on those bars it is level 1 with the taker split; elsewhere it needs the tape, and on cTrader it is a broker-side estimate.",
+  "recognition": "Taker buying above half on a breakout reads as aggressive participation.",
+  "eligible_roles": [
+    "context",
+    "trigger",
+    "confirmation",
+    "filter",
+    "location"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "https://github.com/binance/binance-public-data (read 2026-11-02)",
+      "quote": "Taker buy base asset volume",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "taker_split"
+      },
+      "fallback": [
+        {
+          "data_level": 2,
+          "expected_loss": "a broker-side estimate by the tick rule: a quote that moves up counts as buying and one that moves down as selling, with no traded size behind either"
+        },
+        {
+          "data_level": 1,
+          "expected_loss": "an estimate from the bar alone: where the close sits in the range (bar-range-pressure@1) stands in for who pressed, with no size at all"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "adapted",
+    "perp": "native",
+    "spot_crypto": "native",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

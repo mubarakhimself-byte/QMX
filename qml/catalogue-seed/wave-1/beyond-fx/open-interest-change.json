@@ -1,0 +1,71 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "open-interest-change",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "OI change",
+    "delta open interest"
+  ],
+  "same_word_as": [
+    "open-interest@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The change in open interest over a window, read with price: rising with the trend confirms it, falling warns it is tiring.",
+  "boundaries": "On CME futures the window is in days; on perps it can be bars of 5 minutes and up.",
+  "recognition": "Price up with open interest falling reads as short covering.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "confirmation"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-futures/open-interest (read 2026-11-02)",
+      "quote": "Increasing open interest is typically a confirmation of the trend",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "open_interest",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 5
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "not_transferable",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

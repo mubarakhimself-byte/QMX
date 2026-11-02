@@ -1,0 +1,61 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "volatility-index-level",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "VIX level",
+    "fear gauge"
+  ],
+  "same_word_as": [
+    "implied-volatility@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The level and one-day change of a published implied-volatility index such as the VIX, and its term structure.",
+  "boundaries": "Outside data; implied-volatility@1 is the general concept.",
+  "recognition": "A VIX spike reads as fear.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Volatility index level and term (VIX and similar)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "index",
+      "stream_kind": "series",
+      "measure": "percent",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

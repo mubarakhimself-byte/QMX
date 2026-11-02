@@ -1,0 +1,66 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "margin-mode",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "isolated margin",
+    "cross margin"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Whether a position's margin is isolated to it or shared across the account (cross), and its leverage.",
+  "boundaries": "A fact of the account and the instrument record (leverage, margin), not market data. Under isolated margin a liquidation leaves the rest of the account untouched.",
+  "recognition": "Cross margin ties every open position's survival together.",
+  "eligible_roles": [
+    "context",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations (read 2026-11-02)",
+      "quote": "The user's cross margin and positions are untouched",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "Leverage and margin mode (isolated, cross)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    },
+    {
+      "port": "account",
+      "stream_kind": "account",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "direct",
+    "perp": "native",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

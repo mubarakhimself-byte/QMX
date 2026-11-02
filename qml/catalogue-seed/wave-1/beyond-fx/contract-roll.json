@@ -1,0 +1,95 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "contract-roll",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "futures roll",
+    "front month switch",
+    "roll date"
+  ],
+  "same_word_as": [
+    "rollover-swap-cost@1"
+  ],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Moving a futures position or a continuous series from the expiring contract to the next, when the next contract's volume (or open interest) passes the expiring one's, or on a set date.",
+  "boundaries": "Never the carry charge: the FX and CFD daily swap is rollover-swap-cost@1. The roll rule is 0 for calendar, 1 for volume and 2 for open_interest, QML's roll-rule words; the instrument record's root, expiry and rolls_to name the contracts, and the unit names its root and its rule. Some index CFDs are dated and expire instead of rolling.",
+  "recognition": "Volume moving to September in the June contract's last week reads as the roll.",
+  "eligible_roles": [
+    "context",
+    "exit"
+  ],
+  "class_meanings": {
+    "fx": "none: 'rollover' on FX is the daily swap charge, rollover-swap-cost@1.",
+    "metal": "none for spot CFDs; the swap is rollover-swap-cost@1.",
+    "index_cfd": "Cash CFDs never roll; dated CFDs expire and are never rolled by the broker.",
+    "commodity_cfd": "The broker rolls the underlying future and adjusts the CFD.",
+    "stock_cfd": "none",
+    "future": "From the expiring to the next contract, by volume, open interest or date.",
+    "perp": "none: a perpetual never expires.",
+    "spot_crypto": "none",
+    "stock": "none"
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-futures/what-is-volume (read 2026-11-02)",
+      "quote": "When the September contract has more volume than the June contract",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 4",
+      "quote": "Futures: moving from the expiring to the next contract.",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    },
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      }
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {
+    "rule": {
+      "measure": "category",
+      "default": "1",
+      "origin": "source_stated",
+      "range": {
+        "min": "0",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_assessed",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_transferable",
+    "spot_crypto": "not_transferable",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

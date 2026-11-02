@@ -1,0 +1,64 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "gold-silver-ratio",
+  "version": 1,
+  "family": "metals-and-energy",
+  "aliases": [
+    "gold to silver ratio"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The gold price divided by the silver price.",
+  "boundaries": "Needs two instruments on one clock; no block joins two markets yet.",
+  "recognition": "A high gold/silver ratio reads as silver cheap against gold.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Real yields, gold/silver ratio",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "gold",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "silver",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "native",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

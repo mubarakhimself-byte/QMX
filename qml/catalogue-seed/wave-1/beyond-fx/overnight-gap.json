@@ -1,0 +1,76 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "overnight-gap",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "gap fill",
+    "opening gap"
+  ],
+  "same_word_as": [
+    "price-gap@1"
+  ],
+  "origin": "qml",
+  "component_type": "structure",
+  "definition": "The jump between a session's close and the next session's open, and whether price has come back to fill it.",
+  "boundaries": "When a gap can happen depends on the class. The gap size in ATR is a starting default for 'large'.",
+  "recognition": "A gap that fills in the first hour reads as a failed move.",
+  "eligible_roles": [
+    "location",
+    "context",
+    "exit"
+  ],
+  "class_meanings": {
+    "fx": "The weekend gap only.",
+    "metal": "The weekend gap and the daily break.",
+    "index_cfd": "The overnight gap at the cash open.",
+    "commodity_cfd": "Around the daily break and the weekend.",
+    "stock_cfd": "The overnight gap at the open.",
+    "future": "Only around the daily break and the weekend.",
+    "perp": "No gaps on a 24/7 venue except outages.",
+    "spot_crypto": "No gaps on a 24/7 venue except outages.",
+    "stock": "The overnight gap at the open, from the auction."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Gap fill (overnight gap to prior close)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "adapted",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

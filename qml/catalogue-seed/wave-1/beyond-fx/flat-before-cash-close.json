@@ -1,0 +1,38 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "flat-before-cash-close",
+  "version": 1,
+  "family": "beyond-fx-exits",
+  "aliases": [
+    "flat into the close"
+  ],
+  "same_word_as": [
+    "session-exit@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Be flat before the cash close or before the closing auction.",
+  "boundaries": "Vocabulary only: the exit's maths belongs to the risk session, and the unit's binding assigns the job.",
+  "recognition": "Named in research 45 as a practice outside FX.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.6",
+      "quote": "Flat before the cash close or before the closing auction",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "native"
+  }
+}

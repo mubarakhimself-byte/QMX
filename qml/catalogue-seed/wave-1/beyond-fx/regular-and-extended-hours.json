@@ -1,0 +1,65 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "regular-and-extended-hours",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "RTH",
+    "ETH",
+    "overnight high",
+    "overnight low"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "Whether a bar is in the regular trading hours (the cash session) or the extended hours around it, and the overnight high and low made outside the regular hours.",
+  "boundaries": "The regular hours are the cash market's (nyse@1 for US index futures); the record's calendar_ref names them. The overnight range is a level set before the cash open.",
+  "recognition": "A cash open above the overnight high reads as strength.",
+  "eligible_roles": [
+    "context",
+    "location",
+    "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Regular vs extended trading hours (RTH, ETH), overnight high and low",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 0
+    },
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

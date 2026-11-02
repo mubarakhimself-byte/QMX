@@ -1,0 +1,37 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "auction-order-entry",
+  "version": 1,
+  "family": "beyond-fx-exits",
+  "aliases": [
+    "market on close",
+    "MOC entry"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "entry_order",
+  "definition": "Enter with an order that fills in the opening or closing auction.",
+  "boundaries": "Vocabulary only: the exit's maths belongs to the risk session, and the unit's binding assigns the job.",
+  "recognition": "Named in research 45 as a practice outside FX.",
+  "eligible_roles": [
+    "entry_order"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.6",
+      "quote": "Entry on the closing or opening auction (market-on-close order)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "native"
+  }
+}

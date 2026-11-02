@@ -1,0 +1,86 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "tape-speed",
+  "version": 1,
+  "family": "order-flow",
+  "aliases": [
+    "trade rate",
+    "tape pace"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Trades per second against the usual rate at this time of day.",
+  "boundaries": "Needs the tape. Quote updates per second stand in on cTrader, a broker-side estimate.",
+  "recognition": "Tape speed well above usual at a level reads as a fight there.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.2",
+      "quote": "Tape speed (trades per second against the usual rate)",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "tape",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 4,
+      "fallback": [
+        {
+          "data_level": 2,
+          "expected_loss": "a broker-side estimate: quote updates per second stand in for trades per second"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

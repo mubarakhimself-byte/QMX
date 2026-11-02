@@ -1,0 +1,79 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "calendar-spread",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "term structure",
+    "contango",
+    "backwardation"
+  ],
+  "same_word_as": [
+    "bid-ask-spread@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The price of one contract month less another's; its sign across months is the term structure, contango when later months are dearer and backwardation when cheaper.",
+  "boundaries": "'Spread' means three things: this, the bid-ask spread (bid-ask-spread@1) and the price gap of two instruments in pairs trading (cointegration-of-two-instruments@1). Needs two contracts on one clock.",
+  "recognition": "Backwardation in crude reads as tight supply now.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "class_meanings": {
+    "fx": "The bid-ask spread is meant; a calendar spread exists only in FX forwards.",
+    "metal": "The bid-ask spread is meant for spot CFDs.",
+    "index_cfd": "The bid-ask spread is meant.",
+    "commodity_cfd": "The broker's bid-ask spread; term structure only through the future.",
+    "stock_cfd": "The bid-ask spread is meant.",
+    "future": "Front month less next month, the term structure.",
+    "perp": "Perp against a dated future of the same coin, where the venue lists one.",
+    "spot_crypto": "The bid-ask spread is meant.",
+    "stock": "The bid-ask spread is meant."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.3",
+      "quote": "Term structure (contango, backwardation), calendar spread",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "front",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "next",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "adapted",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

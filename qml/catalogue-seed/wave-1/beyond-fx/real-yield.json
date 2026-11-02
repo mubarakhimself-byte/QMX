@@ -1,0 +1,61 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "real-yield",
+  "version": 1,
+  "family": "metals-and-energy",
+  "aliases": [
+    "real yields",
+    "TIPS yield"
+  ],
+  "same_word_as": [
+    "intermarket-risk-regime@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The inflation-adjusted bond yield, read as gold's opportunity cost.",
+  "boundaries": "Outside data, daily.",
+  "recognition": "Falling real yields read as support for gold.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Real yields, gold/silver ratio",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "yield",
+      "stream_kind": "series",
+      "measure": "percent",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

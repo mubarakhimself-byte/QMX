@@ -1,0 +1,113 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "developing-volume-value-area",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "developing value area",
+    "developing POC"
+  ],
+  "same_word_as": [
+    "value-area@1",
+    "point-of-control@1"
+  ],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The volume value area and point of control as they stand at each bar of the session, built from volume at price rather than time blocks.",
+  "boundaries": "Needs exchange volume at price, which a bar does not carry; the time-based equivalents are tpo-value-area-high@1, tpo-value-area-low@1 and tpo-point-of-control@1, which already develop bar by bar.",
+  "recognition": "A developing value area migrating up during the session reads as buyers accepting higher prices.",
+  "eligible_roles": [
+    "context",
+    "location"
+  ],
+  "class_meanings": {
+    "fx": "No central tape or book exists; any reading is a broker-side estimate from one broker's quotes and depth.",
+    "metal": "Spot metal CFDs carry broker quotes only, so the reading is a broker-side estimate.",
+    "index_cfd": "The CFD carries broker quotes, not the index future's tape, so the reading is a broker-side estimate.",
+    "commodity_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "stock_cfd": "Broker quotes only, so the reading is a broker-side estimate.",
+    "future": "The exchange's own tape and book: the reading as its source means it.",
+    "perp": "The venue's own tape and book, one venue among several.",
+    "spot_crypto": "The venue's own tape and book, one venue among several.",
+    "stock": "The exchange's tape, split across venues."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.1",
+      "quote": "Developing value area and POC (live during the session)",
+      "dated": "2026-10-30"
+    },
+    {
+      "source_ref": "https://help.cqg.com/cqgic/26/Documents/marketprofilevalueareasmpva.htm (read 2026-11-02)",
+      "quote": "dynamic mode shows how MPVA values are changing within the day or session",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "tape",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 4,
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "exchange"
+          },
+          "expected_loss": "bar volume spread over the bar's range is an estimate of volume at price"
+        },
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "a broker-side estimate: tick counts spread over the range, no traded size"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "value_area_share": {
+      "measure": "percent",
+      "default": "70",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "native",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable"
+}

@@ -1,0 +1,72 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "liquidation",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "forced liquidation",
+    "stop-out"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "A position closed by force because its margin ran out.",
+  "boundaries": "On perps it is the venue closing at the mark price, visible as public flow; on FX and CFDs it is the broker's stop-out on one account, private; on futures a margin call, private.",
+  "recognition": "A cascade of perp liquidations reads as forced flow, not opinion.",
+  "eligible_roles": [
+    "context",
+    "veto"
+  ],
+  "class_meanings": {
+    "fx": "The broker's stop-out of one account: private, never market data.",
+    "metal": "The broker's stop-out of one account: private.",
+    "index_cfd": "The broker's stop-out of one account: private.",
+    "commodity_cfd": "The broker's stop-out of one account: private.",
+    "stock_cfd": "The broker's stop-out of one account: private.",
+    "future": "A margin call between a trader and the clearing firm: private.",
+    "perp": "The venue closes the position at the mark price; the order is public flow.",
+    "spot_crypto": "none on spot without margin",
+    "stock": "A margin call: private."
+  },
+  "sources": [
+    {
+      "source_ref": "https://hyperliquid.gitbook.io/hyperliquid-docs/trading/liquidations (read 2026-11-02)",
+      "quote": "A liquidation event occurs when a trader's positions move against them",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "liquidations",
+      "stream_kind": "prints",
+      "measure": "price",
+      "data_level": 5,
+      "splits": {
+        "derivatives_clock": "live",
+        "history": "sampled"
+      }
+    }
+  ],
+  "output": {
+    "type": "event",
+    "measure": "count"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_transferable",
+    "commodity_cfd": "not_transferable",
+    "stock_cfd": "not_transferable",
+    "future": "not_transferable",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}

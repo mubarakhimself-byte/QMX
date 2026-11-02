@@ -1,0 +1,59 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "arms-index-trin",
+  "version": 1,
+  "family": "index-internals",
+  "aliases": [
+    "TRIN",
+    "Arms index"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "Advancing over declining issues divided by advancing over declining volume.",
+  "boundaries": "Outside data from a breadth feed. Below 1 reads as volume in advancers.",
+  "recognition": "A TRIN well above 1 on a down day reads as heavy selling volume.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "veto",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.interactivebrokers.com/campus/glossary-terms/tick-trin-market-indicator/ (read 2026-11-02)",
+      "quote": "calculated by dividing the advances-to-declines spread by the volume of advances",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "breadth",
+      "stream_kind": "series",
+      "measure": "ratio",
+      "data_level": 6
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "native"
+  },
+  "mirroring": "not_applicable"
+}

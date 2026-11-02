@@ -1,0 +1,83 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "anchored-vwap",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "AVWAP",
+    "VWAP deviation bands"
+  ],
+  "same_word_as": [
+    "vwap-session-anchored@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The volume-weighted average price from a chosen anchor bar or event, with bands a chosen number of volume-weighted standard deviations above and below.",
+  "boundaries": "The anchor is the binding's choice (a swing, a session open, a news bar); vwap-session-anchored@1 is the session-anchored case. On tick-count bars it is a quote-weighted proxy. QML's unit runtime does not yet pass a bars input its volume.",
+  "recognition": "Price holding above the VWAP anchored at a swing low reads as that move intact.",
+  "eligible_roles": [
+    "location",
+    "context",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.1",
+      "quote": "Anchored VWAP (from a chosen bar or event) and VWAP deviation bands",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "weights by quote activity, an estimate of traded size"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "deviations": {
+      "measure": "ratio",
+      "default": "0",
+      "origin": "inferred",
+      "range": {
+        "min": "-3",
+        "max": "3",
+        "step": "0.5"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "adapted",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

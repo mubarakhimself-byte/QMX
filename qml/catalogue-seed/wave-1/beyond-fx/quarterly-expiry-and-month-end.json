@@ -1,0 +1,63 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "quarterly-expiry-and-month-end",
+  "version": 1,
+  "family": "futures-calendar",
+  "aliases": [
+    "quad witching",
+    "expiry Friday",
+    "index rebalance"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "calendar",
+  "definition": "The dated events that move index markets: quarterly contract expiry (the third Friday), index rebalances and month end.",
+  "boundaries": "Calendar data per exchange; the instrument record's expiry and last_trade hold a contract's own dates.",
+  "recognition": "Index units widen stops or stand aside on expiry Friday.",
+  "eligible_roles": [
+    "context",
+    "veto",
+    "filter"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/notices/clearing/2019/10/Chadv19-357.pdf",
+      "quote": "on the third Friday of the contract month",
+      "dated": "2019-10-30"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/45-dictionary-beyond-fx.md, branch plan/unit-system, section 3.4",
+      "quote": "Index rebalance, quarterly expiry",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "record",
+      "stream_kind": "record",
+      "measure": null
+    }
+  ],
+  "output": {
+    "type": "calendar_state",
+    "measure": "flag"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "direct",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "native",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

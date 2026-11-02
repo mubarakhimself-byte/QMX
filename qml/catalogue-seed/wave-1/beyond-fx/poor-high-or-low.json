@@ -1,0 +1,79 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "poor-high-or-low",
+  "version": 1,
+  "family": "market-profile",
+  "aliases": [
+    "poor high",
+    "poor low",
+    "unfinished high"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "structure",
+  "definition": "A session high or low row that holds more than one time block: the auction stopped there without the quick rejection of a tail.",
+  "boundaries": "Built on the same profile as tpo-point-of-control@1; no block computes it yet. The last time block's extreme cannot be tested inside the session.",
+  "recognition": "A poor high is expected to be revisited.",
+  "eligible_roles": [
+    "location",
+    "context"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/support/solutions/43000713306-time-price-opportunity-tpo-indicator/ (read 2026-11-02)",
+      "quote": "Poor highs and lows are extreme levels with more than one TPO block",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    },
+    "row_size": {
+      "measure": "price_distance",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0.00001",
+        "max": "100000",
+        "step": "0.00001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "not_assessed",
+    "future": "direct",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

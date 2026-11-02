@@ -1,0 +1,73 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "open-interest",
+  "version": 1,
+  "family": "derivatives",
+  "aliases": [
+    "OI"
+  ],
+  "same_word_as": [],
+  "origin": "qml",
+  "component_type": "context",
+  "definition": "The number of contracts open: each new position adds, each closing trade subtracts.",
+  "boundaries": "Its clock differs by venue: CME publishes it at the end of each day, final the next morning; Binance gives it live and keeps one month through its API (its archive goes back further). A reading must say which.",
+  "recognition": "Rising open interest with price confirms a trend; falling warns it tires.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "confirmation"
+  ],
+  "class_meanings": {
+    "fx": "none: spot FX has no contracts open; currency futures carry it.",
+    "metal": "none for spot CFDs; the COMEX future carries it.",
+    "index_cfd": "none: the CFD has no exchange contracts; the index future carries it.",
+    "commodity_cfd": "none: the underlying future carries it.",
+    "stock_cfd": "none",
+    "future": "End-of-day total, published that evening and final the next morning.",
+    "perp": "Live, with history in steps of 5 minutes and up.",
+    "spot_crypto": "none",
+    "stock": "none"
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.cmegroup.com/education/courses/introduction-to-futures/open-interest (read 2026-11-02)",
+      "quote": "contracts held by market participants at the end of the trading day",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics (read 2026-11-02)",
+      "quote": "Only the data of the latest 1 month is available.",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "open_interest",
+      "stream_kind": "series",
+      "measure": "count",
+      "data_level": 5
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "count"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "not_transferable",
+    "metal": "not_transferable",
+    "index_cfd": "not_transferable",
+    "commodity_cfd": "not_transferable",
+    "stock_cfd": "not_transferable",
+    "future": "native",
+    "perp": "native",
+    "spot_crypto": "not_transferable",
+    "stock": "not_transferable"
+  },
+  "mirroring": "not_applicable"
+}
