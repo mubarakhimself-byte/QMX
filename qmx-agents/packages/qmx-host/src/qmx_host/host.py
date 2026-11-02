@@ -113,7 +113,6 @@ from qmx_home.rclone import Rclone
 from qmx_home.versions import StoreRefused, upgrade_moment_ended
 from qmx_hub.server import Hub, in_process
 from qmx_judge.judge import STUDY_KIND, VERDICT_KIND, spec_edit, spec_problems
-from qmx_judge.paper import PaperRule
 from qmx_judge.landing import (
     G_CHECK,
     RESULT_KIND,
@@ -124,6 +123,7 @@ from qmx_judge.landing import (
     run_kind,
 )
 from qmx_judge.landing import Lander as RunLander
+from qmx_judge.paper import PaperRule
 from qmx_judge.runs import BundleRefused, Landing, Ticket, parse_bundle
 from qmx_judge.tries import TRY_KIND, spec_edit_item, try_item
 from qmx_library.adapter import EngineLibraryAdapter
@@ -188,10 +188,10 @@ from qmx_host.keys import keys_router
 from qmx_host.lifecycle import LifecycleWriter, MoveRefused, judge_moves
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
-from qmx_host.records import Cadence, Harvester, Projection, Records, append_roots
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.publish_collection import publish_collection_router
+from qmx_host.records import Cadence, Harvester, Projection, Records, append_roots
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 
@@ -1164,9 +1164,7 @@ async def serve(
                         )
                         answering.append(templates_router(engine))
                         answering.append(backups_router(backups))
-                        answering.append(
-                            maintenance_router(backups, triggers_of(control), records)
-                        )
+                        answering.append(maintenance_router(backups, triggers_of(control), records))
                         answering.append(publish_collection_router(control))
                         answering.extend(dialog_routers(connect, control))
                         answering.append(

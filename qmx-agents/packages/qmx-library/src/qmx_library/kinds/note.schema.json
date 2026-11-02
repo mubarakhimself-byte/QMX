@@ -1,12 +1,74 @@
 {
   "kind": "note",
-  "schema_version": 1,
+  "schema_version": 2,
   "class": "record",
   "retired": false,
   "identity": "manifest",
   "fields": {
     "type": "object",
-    "properties": {}
+    "properties": {
+      "about": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": [
+            "rel",
+            "ref"
+          ],
+          "properties": {
+            "rel": {
+              "type": "string"
+            },
+            "ref": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "note_kind": {
+        "type": "string",
+        "enum": [
+          "analysis",
+          "proposal",
+          "lesson",
+          "forecast_ref",
+          "disagreement"
+        ]
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "window": {
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "properties": {
+          "start": {
+            "type": "string"
+          },
+          "end": {
+            "type": "string"
+          }
+        }
+      },
+      "sources_marked": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "expires": {
+        "type": "string"
+      },
+      "author": {
+        "type": "string"
+      }
+    }
   },
   "blobs": {
     "body.md": {

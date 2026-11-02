@@ -42,7 +42,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
-from qmf.core import canonical_bytes, fingerprint, fingerprint_bytes, is_refusal
+from qmf.core import TypedRefusal, canonical_bytes, fingerprint, fingerprint_bytes, is_refusal
 from qmf.data.journal_reader import CommittedLine, JournalLine, read_committed
 from qmf.data.series import JOURNAL_SOURCE_PREFIX, TICKS_KIND, SeriesKey
 from qmf.data.store.engines.typed import FLOAT_COLUMNS, TypedWriter
@@ -275,6 +275,11 @@ def _content(lines: Sequence[CommittedLine]) -> str | None:
     return fingerprint_bytes("\n".join(texts).encode("utf-8")).value
 
 
+def _reason(refusal: TypedRefusal) -> str:
+    context = dict(refusal.context)
+    return f"{refusal.category.value}: {context.get('reason') or context}"
+
+
 def _stream_bytes(folder: Path) -> bytes:
     """The committed bytes of one stream: every rotation file up to its last LF."""
     chunks: list[bytes] = []
@@ -328,12 +333,16 @@ class Harvester:
                     refusals.append({"stream": folder.name, "reason": str(error)})
                     continue
                 known = state.get(name)
-                if known is not None and known.fingerprint == printed and known.settled(at, cadence):
+                if (
+                    known is not None
+                    and known.fingerprint == printed
+                    and known.settled(at, cadence)
+                ):
                     skipped += 1
                     continue
                 read = read_committed(folder)
                 if is_refusal(read):
-                    refusals.append({"stream": folder.name, "reason": read.message})
+                    refusals.append({"stream": folder.name, "reason": _reason(read)})
                     continue
                 streams += 1
                 stream = known or _Stream()
@@ -344,7 +353,9 @@ class Harvester:
                 state[name] = stream
                 read_again.extend(line for line in read.value if isinstance(line, JournalLine))
         self._write_state(state)
-        counts = HarvestRound(streams, partitions, skipped, waiting, tuple(refusals), tuple(committed))
+        counts = HarvestRound(
+            streams, partitions, skipped, waiting, tuple(refusals), tuple(committed)
+        )
         return counts, tuple(read_again)
 
     def _stream(
@@ -421,7 +432,7 @@ class Harvester:
         finally:
             target.unlink(missing_ok=True)
         if is_refusal(receipts):
-            refusals.append({"key": key.text, "reason": receipts.message})
+            refusals.append({"key": key.text, "reason": _reason(receipts)})
             return None
         return receipts.value[0].frozen
 
@@ -485,6 +496,15 @@ def _decimal(value: object) -> Decimal | None:
     return found if found.is_finite() else None
 
 
+def _text(value: object) -> str | None:
+    """An exact number or a word as the kind keeps it: decimal text, never a binary float."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    return None
+
+
 def _digits(*values: Decimal | None) -> int:
     exponents = [-cast("int", v.as_tuple().exponent) for v in values if v is not None]
     return max([0, *exponents])
@@ -533,13 +553,15 @@ def trade_fields(record: Mapping[str, object]) -> JsonObject | None:
         "exit_price": _scaled(exit_price, price_digits),
         "net_result": _scaled(money, money_digits),
         "r": None if r is None else float(r),
-        "mae_r": body.get("mae_r"),
-        "mfe_r": body.get("mfe_r"),
-        "costs": body.get("costs"),
-        "equity_before": body.get("equity_before"),
-        "session": body.get("session"),
-        "streak": body.get("streak"),
-        "placeholders": body.get("placeholders"),
+        "mae_r": _text(body.get("mae_r")),
+        "mfe_r": _text(body.get("mfe_r")),
+        "costs": body.get("costs") if isinstance(body.get("costs"), dict) else None,
+        "equity_before": _text(body.get("equity_before")),
+        "session": _text(body.get("session")),
+        "streak": body.get("streak") if isinstance(body.get("streak"), int) else None,
+        "placeholders": body.get("placeholders")
+        if isinstance(body.get("placeholders"), list)
+        else None,
     }
     unit, version = record.get("unit_id"), record.get("unit_version")
     if isinstance(unit, str):

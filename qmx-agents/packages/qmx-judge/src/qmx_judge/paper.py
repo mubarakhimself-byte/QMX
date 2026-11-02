@@ -24,8 +24,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
-from typing import Final
+from decimal import Decimal, InvalidOperation
+from typing import Final, cast
 
 from qmf.core import fingerprint, is_refusal
 
@@ -64,25 +64,37 @@ class PaperRule:
 
         def whole(name: str, default: int) -> int:
             value = judge.get(name, default)
-            return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+            return (
+                value
+                if isinstance(value, int) and not isinstance(value, bool) and value > 0
+                else default
+            )
 
-        passing = judge.get("sequential_pass")
         bets = judge.get("sequential_bets")
-        parsed_bets = (
-            tuple(Decimal(str(item)) for item in bets if isinstance(item, str | int))
-            if isinstance(bets, list)
-            else base.bets
-        )
+        listed = cast("list[object]", bets) if isinstance(bets, list) else []
+        parsed = tuple(found for item in listed if (found := _exact(item)) is not None)
         return cls(
             fresh_trades=whole("fresh_trades", base.fresh_trades),
             fresh_days=whole("fresh_days", base.fresh_days),
             card_trades=whole("paper_card_trades", base.card_trades),
             card_days=whole("paper_card_days", base.card_days),
-            sequential_pass=(
-                Decimal(str(passing)) if isinstance(passing, str | int) else base.sequential_pass
-            ),
-            bets=parsed_bets or base.bets,
+            sequential_pass=_exact(judge.get("sequential_pass")) or base.sequential_pass,
+            bets=parsed or base.bets,
         )
+
+
+def _exact(value: object) -> Decimal | None:
+    """A setting's number as an exact decimal: decimal text or a whole number, never a float."""
+    if isinstance(value, bool) or not isinstance(value, str | int):
+        return None
+    try:
+        found = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    return found if found.is_finite() and found > 0 else None
+
+
+DEFAULT_RULE: Final = PaperRule()
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +160,7 @@ class PaperScore:
 
 
 def score(
-    lane: PaperLane, trades: Sequence[PaperTrade], *, now_ns: int, rule: PaperRule = PaperRule()
+    lane: PaperLane, trades: Sequence[PaperTrade], *, now_ns: int, rule: PaperRule = DEFAULT_RULE
 ) -> PaperScore:
     """Score a lane's trades closed after it began, in the order they closed."""
     fresh = sorted(
@@ -183,7 +195,7 @@ def paper_run(
     status: str = "running",
     ended_at_ns: int | None = None,
     journal: Sequence[str] = (),
-    rule: PaperRule = PaperRule(),
+    rule: PaperRule = DEFAULT_RULE,
 ) -> tuple[str, dict[str, object]]:
     """The lane's `paper-run` item and its version 2 fields."""
     scored = score(lane, trades, now_ns=now_ns, rule=rule)

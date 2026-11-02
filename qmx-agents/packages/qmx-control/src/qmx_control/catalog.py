@@ -335,6 +335,28 @@ DOMAIN_ROWS: Final = (
     ),
     _row("research", "qml_run", "domain_fn", "qml_run", "read"),
     _row(
+        "research",
+        "journal_query",
+        "domain_fn",
+        "journal_query",
+        "read",
+        "Read a journal (unit, market, node or readings) over a required time window, filtered by"
+        " envelope fields such as unit_id, market_id, kind or world. The `trades_with_context`"
+        " view puts each decision and trade beside its market's minute, spread included, which"
+        " answers why a unit did or did not trade; `digest` counts per unit, market and day. Past"
+        " the data it says where the data stops. Reads only.",
+    ),
+    _row(
+        "research",
+        "notes_write",
+        "domain_fn",
+        "notes_write",
+        "domain_write",
+        "Write an analysis as a Library note, with a receipt for every number and the journal"
+        " rows or items it is about. The only thing an agent writes from journals: never a trade,"
+        " a journal row, a unit move or an order.",
+    ),
+    _row(
         "node",
         "state",
         "domain_fn",
