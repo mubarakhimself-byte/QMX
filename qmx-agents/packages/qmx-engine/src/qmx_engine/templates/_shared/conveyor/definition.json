@@ -1,0 +1,16 @@
+{
+  "schema": "qmx.workflow/1",
+  "id": "conveyor",
+  "name": "Conveyor: a landing starts the next stage, never one this conveyor landed itself",
+  "settings": {"on_error": "park", "caller_policy": "workflows_only"},
+  "nodes": [
+    {"id": "start", "name": "Start", "type": "trigger", "typeVersion": 1, "position": [0, 0],
+     "parameters": {"kinds": ["manual"]}},
+    {"id": "guard", "name": "Guard the loop", "type": "script", "typeVersion": 1,
+     "position": [220, 0], "effect": "none", "parameters": {"script": "scripts/guard.py"}}
+  ],
+  "connections": {
+    "Start": {"main": [[{"node": "Guard the loop", "port": "in", "map": "one"}]]}
+  },
+  "meta": {"block": true}
+}

@@ -10,25 +10,34 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import shutil
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from flows import Script
+from fake_library import fake_service
+from flows import Script, edge, events_of, folder, node
 from pydantic import JsonValue
 from qmx_home import resolve
 from qmx_tools.gather import template
+from scheduled import Clock, fires_of
 
 from qmx_engine.definition.validate import checked
 from qmx_engine.ledger.events import Event
 from qmx_engine.ledger.store import Ledger, Reader
 from qmx_engine.nodes.base import NodeJob
+from qmx_engine.ports.library import Bundle, Stored
 from qmx_engine.ports.library_fake import LibraryFake
 from qmx_engine.runner import Engine, Outcome
+from qmx_engine.service.context import OPERATOR
 from qmx_engine.settings import DEFAULTS
 from qmx_engine.templates.catalog import SHARED
+from qmx_engine.triggers import rows
+from qmx_engine.triggers.ticker import Scheduler
 
 type Answer = Callable[[NodeJob, JsonValue], JsonValue]
+T0 = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 
 
 def qmx_home(tmp: Path) -> Path:
@@ -136,3 +145,275 @@ def test_a_unit_that_passes_at_once_is_never_sent_to_the_fix_step(tmp_path: Path
 
     report = output(events, "report")
     assert (finished(events, "fix"), report["verdict"], report["rounds"]) == (0, "pass", 0)
+
+
+def metadata(stored: Stored) -> dict[str, Any]:
+    """An artifact's metadata without the `write_key` the runner stamps on every script write."""
+    found = cast("dict[str, Any]", stored.fields["metadata"])
+    return {key: value for key, value in found.items() if key != "write_key"}
+
+
+def landed(home: Path) -> list[Stored]:
+    with LibraryFake.open(home) as library:
+        return [library.get(e.object_id) for e in library.events()]
+
+
+def artifacts(home: Path, type_: str) -> list[Stored]:
+    return [s for s in landed(home) if s.kind == "artifact" and s.fields["type"] == type_]
+
+
+def body(home: Path, stored: Stored) -> str:
+    assert stored.blob is not None
+    with LibraryFake.open(home) as library:
+        return library.get_artifact(stored.blob).decode("utf-8")
+
+
+def test_a_proposal_lands_as_one_card_on_the_runs_own_ref_and_moves_nothing(
+    tmp_path: Path,
+) -> None:
+    home = qmx_home(tmp_path)
+    proposal = {
+        "subject": "unit-gold-pullback",
+        "ask": "paper",
+        "evidence": ["verdict-1", "result-1"],
+        "why": "passes on 140 trades at +0.21R shrunk",
+        "cost": {"backtests": 3, "tokens": 0},
+    }
+
+    outcome, _ = run_block("proposal-card", home, {"proposal": proposal})
+
+    everything = landed(home)
+    [card] = artifacts(home, "proposal-card")
+    assert outcome.status == "passed"
+    assert metadata(card) == {**proposal, "made_by": f"run:{outcome.run_id}"}
+    assert {s.ref for s in everything} == {f"refs/runs/{outcome.run_id}"}
+    assert [s.kind for s in everything if s.kind == "artifact"] == ["artifact"]
+
+
+def test_a_proposal_missing_its_ask_and_evidence_names_both_and_lands_nothing(
+    tmp_path: Path,
+) -> None:
+    home = qmx_home(tmp_path)
+
+    outcome, _ = run_block("proposal-card", home, {"proposal": {"subject": "u", "ask": "promote"}})
+
+    assert outcome.status == "failed"
+    assert outcome.reason is not None
+    assert "ask 'promote' is not one of paper, live" in outcome.reason
+    assert "evidence lists no Library object id" in outcome.reason
+    assert artifacts(home, "proposal-card") == []
+
+
+FAILED_VERDICT = {
+    "item": "verdict-0f3a",
+    "says": "Fail by the shipped preset. fx.eurusd fails the cost stress: expectancy -0.04R at "
+    "2x costs. Behind it: 3 tries, 2 effective.",
+    "verdict": {
+        "unit": "unit-gold-pullback",
+        "overall": "fail",
+        "per_market": [
+            {
+                "market": "fx.eurusd",
+                "outcome": "fail",
+                "steps": [
+                    {"name": "claim", "outcome": "passed"},
+                    {"name": "random_entries", "outcome": "passed"},
+                    {"name": "cost_stress", "outcome": "failed"},
+                    {"name": "walk_forward", "outcome": "failed"},
+                ],
+            }
+        ],
+    },
+}
+
+
+def test_a_failed_unit_lands_one_death_certificate_carrying_its_dead_end_row(
+    tmp_path: Path,
+) -> None:
+    home = qmx_home(tmp_path)
+    judged = {"run_id": "judge-run", "outputs": {"judge": {"main": FAILED_VERDICT}}}
+
+    outcome, events = run_block(
+        "death-certificate",
+        home,
+        judged,
+        llm=lambda _job, _value: {"explanation": "Costs ate the edge at twice the spread."},
+    )
+
+    [certificate] = artifacts(home, "death-certificate")
+    dead_end = {
+        "tag": "dead_end",
+        "intent_key": "unit-gold-pullback",
+        "when_to_use": "before building unit-gold-pullback again or a unit with the same rules",
+        "content": f"unit-gold-pullback died of costs. {FAILED_VERDICT['says']}",
+        "refs": ["unit-gold-pullback", "verdict-0f3a"],
+    }
+    assert outcome.status == "passed"
+    assert metadata(certificate) == {
+        "unit": "unit-gold-pullback",
+        "verdict": "verdict-0f3a",
+        "cause": "costs",
+        "classifier_version": "1",
+        "dead_end": dead_end,
+    }
+    assert body(home, certificate) == "Costs ate the edge at twice the spread."
+    assert output(events, "land")["dead_end"] == dead_end
+
+
+def test_a_passing_verdict_gets_no_death_certificate(tmp_path: Path) -> None:
+    home = qmx_home(tmp_path)
+    passed = {**FAILED_VERDICT, "verdict": {**FAILED_VERDICT["verdict"], "overall": "pass"}}
+
+    outcome, _ = run_block("death-certificate", home, passed, llm=lambda _j, _v: {})
+
+    assert (outcome.status, outcome.reason) == (
+        "failed",
+        "node classify failed: qmx_failure: verdict-0f3a is pass; only a failed unit gets a "
+        "death certificate",
+    )
+    assert artifacts(home, "death-certificate") == []
+
+
+def seeded(home: Path, names: tuple[str, ...]) -> dict[str, str]:
+    """One Library object per stage, landed before the run that records the lineage."""
+    with LibraryFake.open(home) as library:
+        return {
+            name: library.put_artifact(
+                name.encode(), name, {}, run_id="seed", principal="run:seed"
+            ).object_id
+            for name in names
+        }
+
+
+def test_a_runs_lineage_walks_from_source_to_result(tmp_path: Path) -> None:
+    home = qmx_home(tmp_path)
+    ids = seeded(home, ("source", "idea", "unit", "version", "result"))
+
+    outcome, events = run_block("lineage", home, {"lineage": ids})
+
+    written = output(events, "lineage")["library_written"]
+    with LibraryFake.open(home) as library:
+        [found] = library.edges(ids["result"], "consumed", reverse=True)
+        record = library.get(found.from_id)
+        from_source = {e.from_id for e in library.edges(ids["source"], "consumed", reverse=True)}
+    chain = record.fields["metadata"]["chain"]
+    assert outcome.status == "passed"
+    assert from_source == {record.object_id}
+    assert [(s["stage"], s["object_id"]) for s in chain] == [
+        ("source", ids["source"]),
+        ("idea", ids["idea"]),
+        ("unit", ids["unit"]),
+        ("version", ids["version"]),
+        ("result", ids["result"]),
+    ]
+    assert [w["refused"] for w in written] == [None] * 6
+
+
+def test_a_lineage_leaves_out_a_stage_it_was_not_given(tmp_path: Path) -> None:
+    home = qmx_home(tmp_path)
+    ids = seeded(home, ("idea", "result"))
+
+    _, events = run_block("lineage", home, {"lineage": ids})
+
+    assert output(events, "lineage")["chain"] == [
+        {"stage": "idea", "object_id": ids["idea"]},
+        {"stage": "result", "object_id": ids["result"]},
+    ]
+
+
+STAGE = """\
+import json, os, sys
+from pathlib import Path
+
+guard = json.load(sys.stdin)["in"]["outputs"]["guard"]["main"]
+bodies = Path(os.environ["QMX_WORK"]) / "library"
+bodies.mkdir(parents=True, exist_ok=True)
+(bodies / "conveyed.json").write_text(json.dumps(guard["event"]), encoding="utf-8")
+write = {"op": "put_artifact", "type": "conveyed", "body": "library/conveyed.json",
+         "metadata": {"from": guard["event"]["object_id"]}, "intent_key": guard["intent_key"]}
+print(json.dumps({"conveyed": guard["event"]["object_id"], "library": [write]}))
+"""
+STAND_DOWN = """\
+import json, sys
+
+guard = json.load(sys.stdin)["in"]["outputs"]["guard"]["main"]
+print(json.dumps({"stood_down": guard["why"]}))
+"""
+
+
+def conveyor_template(root: Path) -> Path:
+    """A template that conveys every landed `conveyed` artifact into a new `conveyed` artifact:
+    its stage lands exactly what its own trigger watches."""
+    folder(
+        root,
+        [
+            node("start", "trigger", kinds=["manual"]),
+            node("conveyor", "subworkflow", workflow="conveyor"),
+            node("go", "rule", expr="items.outputs.guard.main.go"),
+            node("stage", "script", script="scripts/stage.py"),
+            node("standdown", "script", script="scripts/stand_down.py"),
+        ],
+        {
+            "start": {"main": [edge("conveyor")]},
+            "conveyor": {"main": [edge("go")]},
+            "go": {"true": [edge("stage")], "false": [edge("standdown")]},
+        },
+        {"stage": STAGE, "stand_down": STAND_DOWN},
+        on_error="park",
+    )
+    shutil.copytree(SHARED / "conveyor", root / "conveyor")
+    return root
+
+
+def test_a_conveyor_whose_stage_lands_what_its_trigger_watches_fires_its_stage_once(
+    tmp_path: Path,
+) -> None:
+    home, clock = qmx_home(tmp_path), Clock(T0)
+    bundle = Bundle.read(conveyor_template(tmp_path / "template"))
+    upstream = {"object_id": "o", "seq": 0, "kind": "artifact", "output": "conveyed"}
+    with fake_service(home, clock=clock) as svc:
+        item = svc.drafts.put(None, bundle, 0, caller=OPERATOR).item
+        tested = asyncio.run(
+            svc.tests.run(item, caller=OPERATOR, inputs={"event": upstream | {"producer": "qmb"}})
+        )
+        assert tested.status == "passed"
+        version = svc.versions.publish(item, "1.0.0", caller=OPERATOR)
+        svc.versions.enable(version, caller=OPERATOR)
+        trigger = rows.create(
+            svc.ctx.engine.ledger,
+            workflow_item=item,
+            pinned_object=version,
+            spec=rows.Event({"kind": "artifact", "output": "conveyed"}),
+            caller=OPERATOR,
+            now=clock.now(),
+        )
+        ticker = Scheduler(svc.ctx, credentials=set(), skills=set())
+        seed: list[str] = []
+
+        async def drive() -> None:
+            await ticker.tick()
+            seed.append(
+                svc.ctx.library.put_artifact(
+                    b"{}", "conveyed", {"producer_app": "qmb"}, run_id="r", principal="run:r"
+                ).object_id
+            )
+            for _ in range(4):
+                clock.move(seconds=60)
+                await ticker.tick()
+                await ticker.settle()
+
+        asyncio.run(drive())
+
+    fires = fires_of(home, trigger.id)
+    runs = [fire.run_id for fire in fires]
+    stage_landings = [
+        s for s in artifacts(home, "conveyed") if s.principal in {f"run:{r}" for r in runs}
+    ]
+    assert tested.status == "passed"
+    assert [fire.status for fire in fires] == ["ok", "ok"]
+    assert [metadata(s) for s in stage_landings] == [{"from": seed[0]}]
+    assert fires[1].delivery_id == f"event:{stage_landings[0].object_id}"
+    assert output(events_of(home, str(runs[1])), "standdown") == {
+        "stood_down": f"{stage_landings[0].object_id} was landed by run:{runs[0]}, a run of "
+        "this conveyor; a conveyor never starts on its own landing"
+    }
