@@ -215,7 +215,7 @@ try:
     checked = stamps.file(f"{exchange_name}-{symbol}-{timeframe}", rows)
     if is_refusal(checked):
         fail(f"the stamps did not check: {checked.context}")
-    rows = checked.value
+    rows = list(checked.value)
     report = (
         None
         if calendar is None

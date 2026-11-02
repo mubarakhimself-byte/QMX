@@ -140,7 +140,9 @@ class StampCheck:
 
     ``zone`` is the source's clock as its documentation states it. An epoch count is UTC by
     definition, so the zone is recorded for the card and moves nothing. ``cadenced`` asks for
-    cadence seams, which only a kind sampled on a cadence has.
+    cadence seams, which only a kind sampled on a cadence has. ``after`` and
+    ``after_cadence_ms`` are what the series' previous month ended in, so a change at the month
+    boundary is a seam too.
     """
 
     def __init__(
@@ -173,10 +175,13 @@ class StampCheck:
 
     def file(
         self, name: str, rows: Sequence[tuple[object, ...]]
-    ) -> Result[list[tuple[object, ...]]]:
-        """One file's rows with their first cell, the stamp, in UTC epoch milliseconds."""
+    ) -> Result[Sequence[tuple[object, ...]]]:
+        """One file's rows with their first cell, the stamp, in UTC epoch milliseconds.
+
+        Rows already in milliseconds come back as given, so a month of ticks is never copied.
+        """
         if not rows:
-            return Ok([])
+            return Ok(rows)
         first, last = rows[0][0], rows[-1][0]
         if not isinstance(first, int) or not isinstance(last, int):
             return invalid_input("t", "a file's stamps are epoch counts", file=name)
@@ -193,21 +198,20 @@ class StampCheck:
                 first=unit.value,
                 last=closing.value,
             )
-        converted: list[tuple[object, ...]] = []
-        stamps: list[int] = []
-        for row in rows:
-            stamp = row[0]
-            if not isinstance(stamp, int):
-                return invalid_input("t", "a file's stamps are epoch counts", file=name)
-            stamps.append(_to_ms(stamp, unit))
-            converted.append((stamps[-1], *row[1:]))
-        start = stamps[0]
+        if any(not isinstance(row[0], int) for row in rows):
+            return invalid_input("t", "a file's stamps are epoch counts", file=name)
+        converted = (
+            rows
+            if unit is STORE_UNIT
+            else [(_to_ms(cast("int", row[0]), unit), *row[1:]) for row in rows]
+        )
+        start = _to_ms(first, unit)
         self._first = self._first or unit
         if self._unit is not None and unit is not self._unit:
             self._seams.append(Seam(SeamKind.STAMP_UNIT, start, self._unit.value, unit.value))
         self._unit = unit
         if self._cadenced:
-            spacing = _cadence(stamps)
+            spacing = _cadence([cast("int", row[0]) for row in converted])
             if spacing is not None:
                 if self._spacing is not None and spacing != self._spacing:
                     self._seams.append(
