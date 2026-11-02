@@ -39,10 +39,10 @@ GOOD: dict[str, Document] = {
     "passport": {},
     "deployments": {},
     "withdraw": {"deployment_id": "dep-none"},
-    "pause": {"scope": {"instrument": "XAUUSD"}},
-    "resume": {"scope": {"instrument": "XAUUSD"}},
-    "kill": {"level": "YELLOW", "scope": {"instrument": "XAUUSD"}},
-    "flatten": {"scope": {"instrument": "XAUUSD"}},
+    "pause": {"scope": {"account": "demo-1"}},
+    "resume": {"scope": {"account": "demo-1"}},
+    "kill": {"level": "YELLOW", "scope": {"account": "demo-1"}},
+    "flatten": {"scope": {"account": "demo-1"}},
     "bind": {"account": {"id": "demo-1"}, "action": "add"},
     "confirm_same_node": {},
     "take_over": {"old_tag": "abcdefgh", "confirmed_gone": True},
@@ -213,7 +213,7 @@ def test_the_node_reads_ready_with_no_units_and_declares_every_operation_and_no_
 
 
 def test_an_older_pause_is_superseded_while_an_older_kill_applies(supervisor: Supervisor) -> None:
-    scope: Document = {"instrument": "EURUSD"}
+    scope: Document = {"account": "demo-order"}
     resumed, _ = ask(
         supervisor,
         "resume",

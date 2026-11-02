@@ -119,6 +119,7 @@ from qmn.venue import (
 )
 
 __all__ = [
+    "CLOSE_REFUSALS_ALARM",
     "PROTECT_CONFIRM_NS",
     "PROTECT_RETRY_MAX",
     "RECONCILE_TICK_S",
@@ -129,6 +130,7 @@ __all__ = [
     "Runtime",
     "Sent",
     "Ticket",
+    "Unprotected",
     "Venue",
     "VenueAccount",
     "deploy_preflight",
@@ -142,6 +144,10 @@ PROTECT_CONFIRM_NS: Final = 2_000_000_000
 the stop. A labelled placeholder for the risk session."""
 PROTECT_RETRY_MAX: Final = 3
 """`[node] protect_retry_max`, starting at 3 tries. A labelled placeholder for the risk session."""
+CLOSE_REFUSALS_ALARM: Final = 3
+"""`[node] close_refusals_alarm`, starting at 3: refused closes of one position before the node
+raises the protection alarm. It keeps closing after the alarm. A labelled placeholder for the
+risk session."""
 PROTECT_POLL_S: Final = 0.05
 MAX_SLICE_LATENCY_NS: Final = 500_000_000
 """`[node] max_slice_latency`, starting at 500 ms (research 31 section 3.3)."""
@@ -208,7 +214,7 @@ def _staged(item: object) -> StagedFile:
         raise ValueError("each of deployment.files is an object")
     entry = cast("Mapping[str, object]", item)
     path = _str(entry, "path")
-    if Path(path).is_absolute() or ".." in Path(path).parts or "\\" in path:
+    if "\\" in path:
         raise ValueError(f"deployment.files path {path} is a relative path inside the folder")
     version = entry.get("version")
     if type(version) is not int:
@@ -258,23 +264,23 @@ def staging_folder(data: Path, deployment_id: str) -> Path:
     return data / "deployments" / deployment_id / "in"
 
 
-def file_fingerprint(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        while chunk := handle.read(1 << 20):
-            digest.update(chunk)
-    return f"sha256:{digest.hexdigest()}"
+def staged_path(folder: Path, path: str) -> Path | None:
+    """``path`` inside the staging folder, or None when it resolves outside it: an absolute
+    path, ``..``, a link out, or on Windows a rooted ``/x`` or a drive-relative ``C:x``."""
+    target = (folder / path).resolve()
+    return target if target.is_relative_to(folder.resolve()) else None
 
 
 def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | None:
     """``deploy``'s refusals before it is kept, each naming what is wrong; None when it may go.
 
-    A file missing from the staging folder answers ``files_missing``, which the node link's
-    outbox keeps waiting on; a file of another size than the document states answers
-    ``file_mismatch``. Only stats are read here, so the answer stays inside the 2 s budget
-    whatever the files weigh: there is no size limit. Each file's fingerprint was verified by
-    the node link as it staged it, and the runtime verifies it again before it compiles
-    (:func:`staged_problem`). A kept deployment's ``lock.json`` lists every staged file.
+    A path outside the staging folder answers ``bad_argument``. A file missing from the
+    staging folder answers ``files_missing``, which the node link's outbox keeps waiting on;
+    a file of another size than the document states answers ``file_mismatch``. Only stats are
+    read here, so the answer stays inside the 2 s budget whatever the files weigh: there is no
+    size limit. Each file's fingerprint was verified by the node link as it staged it, and the
+    runtime verifies it again as it reads the file to compile (:func:`compile_staged`). A kept
+    deployment's ``lock.json`` lists every staged file.
     """
     try:
         deployment = parse_deployment(document)
@@ -295,6 +301,12 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
             },
         )
     folder = staging_folder(data, deployment.deployment_id)
+    for item in deployment.files:
+        if staged_path(folder, item.path) is None:
+            return refused(
+                "bad_argument",
+                f"deploy: deployment.files path {item.path} is a relative path inside the folder",
+            )
     missing = [item.path for item in deployment.files if not (folder / item.path).is_file()]
     if missing:
         return refused(
@@ -531,6 +543,14 @@ class Blocked:
     reason: str
 
 
+@dataclass(frozen=True, slots=True)
+class Unprotected(Blocked):
+    """The venue filled the entry and does not hold its stop: blocked for the unit, open at
+    the venue, and closed by the node until the venue shows it closed."""
+
+    price: Decimal
+
+
 def ulid(at_ms: int, seed: str) -> str:
     """A 26-character ULID: ``at_ms`` then 80 bits of SHA-256 of ``seed``, so the same order
     on a re-run gets the same id."""
@@ -595,10 +615,15 @@ class OrderPath:
     session_epoch: str = "node-session-1"
     confirm_ns: int = PROTECT_CONFIRM_NS
     retry_max: int = PROTECT_RETRY_MAX
+    close_refusals_alarm: int = CLOSE_REFUSALS_ALARM
     unknown: bool = False
     """An earlier order's outcome is unknown: no entry until it resolves (TN-01, C-12b)."""
+    unprotected: set[str] = field(default_factory=set[str])
+    """Positions the venue filled without holding their stop, which the node closes on every
+    tick until the venue shows them closed."""
     _ordinal: int = 0
     _sent: dict[str, Placed | Blocked] = field(default_factory=dict[str, Placed | Blocked])
+    _refusals: dict[str, int] = field(default_factory=dict[str, int])
 
     def _next(self) -> int:
         self._ordinal += 1
@@ -748,7 +773,9 @@ class OrderPath:
                 self._note(client_order_id, "filled", {"step": "filled", "price": str(sent.price)})
                 if self._protected(client_order_id, ticket, distance):
                     return Placed(sent.price)
-                return Blocked("the venue cannot hold this order's stop, so the node closed it")
+                return Unprotected(
+                    "the venue cannot hold this order's stop, so the node closes it", sent.price
+                )
             case SubmissionOutcome.UNKNOWN:
                 self.unknown = True
                 self._note(client_order_id, "unknown", {"step": "unknown"})
@@ -772,18 +799,23 @@ class OrderPath:
                 if self.clock_ns() >= deadline:
                     break
                 self.sleep(PROTECT_POLL_S)
-        self.close(position, ticket.market_id, ticket.side, ticket.reference, "protection")
-        alarm: dict[str, object] = {
-            "alarm": "protection_escalation",
-            "position": position,
-            "market_id": ticket.market_id,
-            "tries": self.retry_max,
-            "action": "closed_reduce_only",
-            "origin": "placeholder",
-        }
+        self.unprotected.add(position)
+        done = self.close(position, ticket.market_id, ticket.side, ticket.reference, "protection")
+        self._alarm(
+            {
+                "alarm": "protection_escalation",
+                "position": position,
+                "market_id": ticket.market_id,
+                "tries": self.retry_max,
+                "action": "closed_reduce_only" if isinstance(done, Placed) else "close_refused",
+                "origin": "placeholder",
+            }
+        )
+        return False
+
+    def _alarm(self, alarm: Mapping[str, object]) -> None:
         self.journal.append("protection", alarm, RowFacts(ts_recv=self.clock_ns(), clock_ok=False))
         self.on_alarm(alarm)
-        return False
 
     def _amend(self, position: str, ticket: Ticket, distance: Decimal, attempt: int) -> None:
         params = ticket.command.order_parameters
@@ -820,7 +852,32 @@ class OrderPath:
         self, position: str, market: str, side: Side, reference: Decimal, why: str
     ) -> Placed | Blocked:
         """Close one position reduce-only. A close is never blocked by a guard, and a journal
-        that cannot be written does not stop it."""
+        that cannot be written does not stop it. Asking again for the same position and reason
+        repeats its journal row and sends the close again; the ``close_refusals_alarm``-th
+        refusal of one position raises the protection alarm."""
+        done = self._close(position, market, side, reference, why)
+        if isinstance(done, Placed):
+            self._refusals.pop(position, None)
+            self.unprotected.discard(position)
+            return done
+        refusals = self._refusals.get(position, 0) + 1
+        self._refusals[position] = refusals
+        if refusals == self.close_refusals_alarm:
+            self._alarm(
+                {
+                    "alarm": "close_refused",
+                    "position": position,
+                    "market_id": market,
+                    "why": why,
+                    "refusals": refusals,
+                    "origin": "placeholder",
+                }
+            )
+        return done
+
+    def _close(
+        self, position: str, market: str, side: Side, reference: Decimal, why: str
+    ) -> Placed | Blocked:
         command = Command.close_position(
             self.venue.client.account.venue,
             self.venue.client.account,
@@ -991,7 +1048,8 @@ class NodeUnit:
         self.venue_ids: dict[str, str] = {}
         self.names: dict[str, str] = {}
         self.placed: dict[str, tuple[str, Side, Decimal]] = {}
-        """Each entry the venue filled, by client order id: market, side and fill price."""
+        """Each entry the venue filled, by client order id: market, side and fill price, its
+        stop held or not."""
         self._orders: dict[str, Placed | Blocked] = {}
         self._done: set[str] = set()
         self._execution = _Execution(self)
@@ -1041,6 +1099,11 @@ class NodeUnit:
     @property
     def label(self) -> str:
         return f"qmx:{self.orders.tag}:{self.deployment.unit_id}"
+
+    def instrument_scopes(self, market: str) -> tuple[str, str]:
+        """Both scope keys that name ``market``: its market id, as the node shows it, and its
+        record's symbol."""
+        return f"instrument:{market}", f"instrument:{self.records[market].symbol}"
 
     @property
     def handled(self) -> UnitSliceHandler:
@@ -1118,7 +1181,7 @@ class NodeUnit:
                 quantity=sized.value,
                 blocked_by=self.guard(market),
             )
-            if isinstance(placed, Placed):
+            if isinstance(placed, Placed | Unprotected):
                 self.placed[named] = (market, Side(str(wire["direction"])), placed.price)
             return placed
         return self._exit(intent.stream_id, wire)
@@ -1264,27 +1327,21 @@ class _LoopClock:
 Compile = Callable[[Deployment, Path], "CompiledUnit | str"]
 
 
-def staged_problem(deployment: Deployment, folder: Path) -> str | None:
-    """The first staged file whose bytes have another fingerprint than the document names."""
-    for item in deployment.files:
-        found = file_fingerprint(folder / item.path)
-        if found != item.fingerprint:
-            return f"staged file {item.path} has fingerprint {found}, not {item.fingerprint}"
-    return None
-
-
 def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
-    """Verify every staged file, then compile the deployment's unit from its staged blocks
-    through QML's one compiler, which checks every pin's fingerprint; answers the compiled
-    unit or why it does not trade."""
-    problem = staged_problem(deployment, folder)
-    if problem is not None:
-        return problem
+    """Read each staged file once and verify those bytes' fingerprint, then compile the
+    deployment's unit from them through QML's one compiler, which checks every pin's
+    fingerprint; answers the compiled unit or why it does not trade."""
     sources: dict[str, bytes] = {}
     entries: dict[str, bytes] = {}
     for item in deployment.files:
+        path = staged_path(folder, item.path)
+        if path is None:
+            return f"staged file {item.path} is outside {folder.name}/"
+        data = path.read_bytes()
+        found = f"sha256:{hashlib.sha256(data).hexdigest()}"
+        if found != item.fingerprint:
+            return f"staged file {item.path} has fingerprint {found}, not {item.fingerprint}"
         pin = f"{item.entry_id}@{item.version}"
-        data = (folder / item.path).read_bytes()
         if item.kind == "block":
             sources[pin] = data
         elif item.kind == "entry":
@@ -1400,7 +1457,7 @@ class Runtime:
                 hosted.phase, hosted.detail = Phase.WAITING, "the node's identity is unconfirmed"
             self._observe()
             return
-        self._kill(target)
+        self._protect(self._kill(target))
         self._deployments(target)
         for venue in self.venues.values():
             bars = venue.feed.pump()
@@ -1434,21 +1491,32 @@ class Runtime:
             f"account:{deployment.account_id}",
         ]
         if market is not None and hosted.unit is not None:
-            scopes.append(f"instrument:{hosted.unit.records[market].symbol}")
+            scopes.extend(hosted.unit.instrument_scopes(market))
         held = [(self._target.kills.get(scope, KsaLevel.GREEN), scope) for scope in scopes]
         return max(held, key=lambda pair: LEVEL_RANK[pair[0]])
 
-    def _kill(self, target: Target) -> None:
+    def _kill(self, target: Target) -> set[str]:
+        """Apply every kill level in force; answers the positions a close was sent for.
+
+        A level that rises is journalled once. While a scope holds a level that closes
+        positions, its closes are sent again on every tick for each covered position still
+        open at the venue, so one refused close is never the last."""
         for scope in list(self.applied):
             if target.kills.get(scope, KsaLevel.GREEN) is KsaLevel.GREEN:
                 del self.applied[scope]
         self.paused_by_black = any(level is KsaLevel.BLACK for level in target.kills.values())
+        tried: set[str] = set()
         for scope, level in target.kills.items():
-            if LEVEL_RANK[level] <= LEVEL_RANK[self.applied.get(scope, KsaLevel.GREEN)]:
+            rises = LEVEL_RANK[level] > LEVEL_RANK[self.applied.get(scope, KsaLevel.GREEN)]
+            if rises:
+                self.applied[scope] = level
+            held = self.applied.get(scope)
+            if held is None:
                 continue
-            self.applied[scope] = level
-            effect = PLACEHOLDER_KILL_EFFECTS[level]
-            closed = self._enact(scope, effect)
+            effect = PLACEHOLDER_KILL_EFFECTS[held]
+            closed = self._enact(scope, effect, tried)
+            if not rises:
+                continue
             body: dict[str, object] = {
                 "scope": scope,
                 **effect.document(),
@@ -1459,8 +1527,9 @@ class Runtime:
             self.journal.append(
                 "kill_level", body, RowFacts(ts_recv=self.clock_ns(), clock_ok=False)
             )
+        return tried
 
-    def _enact(self, scope: str, effect: KillEffect) -> int:
+    def _enact(self, scope: str, effect: KillEffect, tried: set[str]) -> int:
         if not (effect.close_positions or effect.close_all_and_pause):
             return 0
         closed = 0
@@ -1469,7 +1538,6 @@ class Runtime:
             if unit is None:
                 continue
             for position, (market, side, price) in unit.venue_open().items():
-                symbol = f"instrument:{unit.records[market].symbol}"
                 covers = (
                     effect.close_all_and_pause
                     or scope == "all"
@@ -1477,16 +1545,28 @@ class Runtime:
                     in (
                         f"deployment_id:{hosted.deployment.deployment_id}",
                         f"account:{hosted.deployment.account_id}",
-                        symbol,
+                        *unit.instrument_scopes(market),
                     )
                 )
-                if not covers:
+                if not covers or position in tried:
                     continue
+                tried.add(position)
                 done = unit.orders.close(
                     position, market, side, price, f"kill-{effect.level.value.lower()}"
                 )
                 closed += isinstance(done, Placed)
         return closed
+
+    def _protect(self, tried: set[str]) -> None:
+        """Close again each position the venue filled without holding its stop, until the
+        venue shows it closed; a position a kill close was sent for this tick waits."""
+        for hosted in self.hosted.values():
+            unit = hosted.unit
+            if unit is None:
+                continue
+            for position, (market, side, price) in unit.venue_open().items():
+                if position in unit.orders.unprotected and position not in tried:
+                    unit.orders.close(position, market, side, price, "protection")
 
     def guard(self, hosted: _Hosted) -> Callable[[str], str | None]:
         """Why an entry on ``market`` may not go now, or None (Level 0 AD-39 step 2)."""
@@ -1497,12 +1577,11 @@ class Runtime:
                 return f"the kill switch is at {level.value} for {scope}"
             if self.paused_by_black:
                 return "the kill switch is at BLACK, so the node is paused"
-            symbol = f"instrument:{hosted.unit.records[market].symbol}" if hosted.unit else ""
             for scope_key in (
                 "all",
                 f"deployment_id:{hosted.deployment.deployment_id}",
                 f"account:{hosted.deployment.account_id}",
-                symbol,
+                *(hosted.unit.instrument_scopes(market) if hosted.unit else ()),
             ):
                 if self._target.paused.get(scope_key):
                     return f"paused at {scope_key}"
