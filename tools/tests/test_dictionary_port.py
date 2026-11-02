@@ -168,7 +168,8 @@ def _crlf_copy(tmp_path: Path) -> Path:
     for name in [SCRIPT.README, *SCRIPT.FAMILIES]:
         target = tmp_path / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes((SCRIPT.SEED / name).read_bytes().replace(b"\n", b"\r\n"))
+        lf = (SCRIPT.SEED / name).read_bytes().replace(b"\r\n", b"\n")
+        target.write_bytes(lf.replace(b"\n", b"\r\n"))
     return tmp_path
 
 
