@@ -1,6 +1,6 @@
 {
   "kind": "dataset",
-  "schema_version": 1,
+  "schema_version": 2,
   "class": "record",
   "retired": false,
   "identity": "manifest",
@@ -66,6 +66,121 @@
       },
       "partition_digests": {
         "type": "array"
+      },
+      "source_clock": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "zone",
+          "unit"
+        ],
+        "properties": {
+          "zone": {
+            "type": "string",
+            "minLength": 1
+          },
+          "unit": {
+            "enum": [
+              "s",
+              "ms",
+              "us",
+              "ns",
+              "wall"
+            ]
+          }
+        }
+      },
+      "seams": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "at",
+            "at_ms",
+            "before",
+            "after"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "stamp_unit",
+                "cadence"
+              ]
+            },
+            "at": {
+              "type": "string"
+            },
+            "at_ms": {
+              "type": "integer"
+            },
+            "before": {
+              "type": "string"
+            },
+            "after": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "stitching": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "adjusted"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "adjusted": {
+            "type": "boolean"
+          }
+        }
+      },
+      "rolls": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "at",
+            "from",
+            "to"
+          ],
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "from": {
+              "type": "string",
+              "minLength": 1
+            },
+            "to": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "calendar": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ref"
+        ],
+        "properties": {
+          "ref": {
+            "type": "string",
+            "minLength": 1
+          },
+          "record": {
+            "type": "string"
+          }
+        }
       }
     }
   },
@@ -75,6 +190,8 @@
       "source",
       "subject",
       "kind",
+      "source_clock",
+      "seams",
       "coverage",
       "quality"
     ],
@@ -97,6 +214,16 @@
         "tab": "Quality",
         "renderer": "json",
         "source": "fields.quality"
+      },
+      {
+        "tab": "Seams",
+        "renderer": "table",
+        "source": "fields.seams"
+      },
+      {
+        "tab": "Rolls",
+        "renderer": "table",
+        "source": "fields.rolls"
       },
       {
         "tab": "Sample",

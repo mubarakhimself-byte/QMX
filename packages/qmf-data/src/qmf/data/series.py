@@ -435,12 +435,16 @@ class SeriesStore:
         *,
         correction: str | None = None,
         provider_checksum: str | None = None,
+        hold: str | None = None,
     ) -> Result[CommitReceipt]:
         """Write one fetch of a month; return the receipt, or the refusal.
 
         A frozen month takes a different file only when ``correction`` names why, and then
         the new fingerprint and the range it covers are recorded. The same rows again are
-        an idempotent write and leave one file, whether the month is open or frozen.
+        an idempotent write and leave one file, whether the month is open or frozen. A
+        ``hold`` keeps an open month open whatever its kind's rule says: the importer's data
+        check found something only a later fetch can settle, such as an empty hour in open
+        time that a retry and a second source have not yet agreed on (LD-01).
         """
         rule = key.rule
         folder = self.folder(key)
@@ -461,7 +465,7 @@ class SeriesStore:
                 "could not write the partition", context={"key": key.text, "error": str(exc)}
             )
         return self.commit_file(
-            key, written, correction=correction, provider_checksum=provider_checksum
+            key, written, correction=correction, provider_checksum=provider_checksum, hold=hold
         )
 
     def commit_file(
@@ -471,6 +475,7 @@ class SeriesStore:
         *,
         correction: str | None = None,
         provider_checksum: str | None = None,
+        hold: str | None = None,
     ) -> Result[CommitReceipt]:
         """Finish a file another process wrote — the importer's child writer — as a commit.
 
@@ -486,7 +491,7 @@ class SeriesStore:
             if previous is not None and previous.frozen:
                 return self._commit_frozen(key, folder, previous, written, correction)
             return self._commit_open(
-                key, folder, key.rule, previous, written, gaps, provider_checksum
+                key, folder, key.rule, previous, written, gaps, provider_checksum, hold
             )
         except OSError as exc:
             # A rename or a state write that the disk refused is a storage failure, never a
@@ -566,6 +571,7 @@ class SeriesStore:
         written: SeriesFile,
         gaps: tuple[str, ...],
         provider_checksum: str | None,
+        hold: str | None = None,
     ) -> Result[CommitReceipt]:
         same_as_last = (
             previous is not None
@@ -573,7 +579,7 @@ class SeriesStore:
             and previous.gaps == gaps
         )
         attempts = previous.attempts + 1 if same_as_last and previous is not None else 1
-        if not self._should_freeze(key, rule, gaps, attempts, provider_checksum):
+        if hold or not self._should_freeze(key, rule, gaps, attempts, provider_checksum):
             open_path = folder / OPEN_NAME
             _replace(written.path, open_path)
             state = SeriesState(
