@@ -4,6 +4,14 @@ Every ``place_order`` carries a venue-resident protective stop at placement in
 the form CT-18 declares for that order type. Where capability verification
 cannot prove the required form, the entry is refused before submission — no
 unprotected entry reaches the broker (DEC-0191, DEC-0196).
+
+Each venue protects in its own way (Part C AD-308). cTrader holds the stop on the
+order itself as a distance (``entry-relative``). Hyperliquid has no stop on an
+entry that survives a partial fill, so its client places the stop right after the
+fill as a reduce-only trigger over the whole position
+(``position-trigger-after-fill``). Both forms are computed from the same
+``protective_stop_distance`` on the entry, so the gate refuses an entry without it
+in either form.
 """
 
 from __future__ import annotations
@@ -17,12 +25,14 @@ from qmn.venue import Command, CommandKind, OrderType
 
 __all__ = [
     "ENTRY_RELATIVE_FORM",
+    "POSITION_TRIGGER_AFTER_FILL_FORM",
     "require_venue_resident_protective_stop",
     "resolved_protective_stop_form",
 ]
 
 
 ENTRY_RELATIVE_FORM: Final[str] = "entry-relative"
+POSITION_TRIGGER_AFTER_FILL_FORM: Final[str] = "position-trigger-after-fill"
 
 
 def _unsupported(field: str, reason: str, **extra: object) -> TypedRefusal:
@@ -139,6 +149,17 @@ def require_venue_resident_protective_stop(
                 "protective_stop_distance",
                 "place_order requires a venue-resident entry-relative protective "
                 "stop at placement; unprotected entry is refused before submission",
+                order_type=params.order_type.value,
+                required_form=required,
+            )
+        return Ok(required)
+    if required == POSITION_TRIGGER_AFTER_FILL_FORM:
+        if params.protective_stop_distance is None:
+            return _unsupported(
+                "protective_stop_distance",
+                "place_order requires the stop distance the venue client places as a "
+                "whole-position trigger right after the fill; unprotected entry is "
+                "refused before submission",
                 order_type=params.order_type.value,
                 required_form=required,
             )

@@ -2,10 +2,12 @@
 
 ``qmf-venue`` exposes no injectable port seam at the inventory baseline, so the
 node mints this Protocol over the CT-19 command and CT-20 event/reconciliation
-shapes. V1 implementations are selected by ``(world, VenueId)`` plus an explicit
+shapes. Implementations are selected by ``(world, VenueId)`` plus an explicit
 roster ``VenueClientKind`` on a live binding — never by ``VenueId`` spelling,
 except the credential-free ``conformance:`` prefix convention. A replay
 composition refuses any venue-connecting implementation (DEC-0196, DEC-0228).
+The kind list opens to ``ccxt`` for the venues the node reaches through the pinned
+CCXT class (Level 0 AD-41).
 """
 
 from __future__ import annotations
@@ -37,11 +39,16 @@ __all__ = [
 
 
 class VenueClientKind(StrEnum):
-    """The three V1 :class:`VenueClientPort` implementations (DEC-0196, DEC-0228)."""
+    """The venue client implementations (DEC-0196, DEC-0228, Level 0 AD-41).
+
+    ``ccxt`` is the node's client for Hyperliquid, Binance and Bybit through the pinned CCXT
+    class (:mod:`qmn.venue.ccxt_client`).
+    """
 
     CTRADER = "ctrader"
     REPLAY = "replay"
     CONFORMANCE = "conformance"
+    CCXT = "ccxt"
 
 
 @runtime_checkable
@@ -114,9 +121,9 @@ def select_venue_client(
     """Select a :class:`VenueClientPort` implementation fail-closed.
 
     ``world = replay`` selects replay for every ``VenueId``; a roster
-    ``ctrader`` / ``conformance`` kind cannot bind in replay. ``world =
+    ``ctrader`` / ``ccxt`` / ``conformance`` kind cannot bind in replay. ``world =
     simulated`` is reserved-unusable and constructs no client. Live selection
-    requires an explicit roster ``VenueClientKind`` of ``ctrader`` or
+    requires an explicit roster ``VenueClientKind`` of ``ctrader``, ``ccxt`` or
     ``conformance``; the only spelling inference is the credential-free
     ``conformance:`` VenueId prefix. Unknown worlds or a malformed venue are
     typed refusals (DEC-0196, DEC-0228).
@@ -145,14 +152,14 @@ def select_venue_client(
         )
     kind_token = _roster_kind_token(venue_client_kind)
     if resolved_world is World.REPLAY:
-        if kind_token in {VenueClientKind.CTRADER.value, VenueClientKind.CONFORMANCE.value}:
+        if kind_token in _CONNECTING_KINDS:
             return TypedRefusal(
                 category=RefusalCategory.UNSUPPORTED_CAPABILITY,
                 retryability=Retryability.NO,
                 context={
                     "field": "venue_client_kind",
                     "reason": "world=replay binds the replay VenueClientPort; "
-                    "ctrader and conformance kinds cannot bind in replay",
+                    "ctrader, ccxt and conformance kinds cannot bind in replay",
                     "given": _roster_kind_given(venue_client_kind),
                     "world": resolved_world.value,
                 },
@@ -170,6 +177,8 @@ def select_venue_client(
         )
     elif kind_token == VenueClientKind.CTRADER.value:
         kind = VenueClientKind.CTRADER
+    elif kind_token == VenueClientKind.CCXT.value:
+        kind = VenueClientKind.CCXT
     elif kind_token == VenueClientKind.CONFORMANCE.value or venue_id.value.startswith(
         "conformance:"
     ):
@@ -181,7 +190,7 @@ def select_venue_client(
             context={
                 "field": "venue_client_kind",
                 "reason": "live VenueClientPort selection requires roster "
-                "VenueClientKind ctrader | conformance; kind is never inferred "
+                "VenueClientKind ctrader | ccxt | conformance; kind is never inferred "
                 "from VenueId spelling",
                 "given": _roster_kind_given(venue_client_kind),
                 "world": resolved_world.value,
@@ -189,6 +198,11 @@ def select_venue_client(
             },
         )
     return Ok(VenueClientSelection(world=resolved_world, venue_id=venue_id, kind=kind))
+
+
+_CONNECTING_KINDS: frozenset[str] = frozenset(
+    {VenueClientKind.CTRADER.value, VenueClientKind.CCXT.value, VenueClientKind.CONFORMANCE.value}
+)
 
 
 def _roster_kind_token(value: object) -> str | None:
