@@ -598,10 +598,11 @@ def make_new(folder: Path, places: Places) -> Layout:
 
 
 FIRST_APPS: Final[Mapping[str, Path]] = {
-    "qmb": Path(__file__).resolve().parents[4] / "apps" / "qmb"
+    app: Path(__file__).resolve().parents[4] / "apps" / app for app in ("qmb", "mis")
 }
 """The first-party apps a new folder starts with, as this program ships them: QMB first (Part B
-AD-201). The node and the MIS join this table when their apps land."""
+AD-201), then the MIS, which reads this machine's market store and publishes readings (Part C
+AD-313). The node joins this table when its app lands."""
 FIRST_PARTY: Final = "first-party.json"
 """The card's choice, in a new folder's `data/`: the first-party apps enabled in this folder,
 which the host starts at every start."""

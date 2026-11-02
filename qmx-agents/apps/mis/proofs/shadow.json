@@ -1,0 +1,23 @@
+{
+  "source": "live",
+  "cases": [
+    {
+      "tool": "status",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "status: unknown argument surprise"
+      }
+    },
+    {
+      "tool": "board",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "board: unknown argument surprise"
+      }
+    }
+  ]
+}
