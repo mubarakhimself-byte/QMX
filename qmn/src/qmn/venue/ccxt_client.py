@@ -104,7 +104,7 @@ _T = TypeVar("_T")
 
 
 class AgentKey:
-    """An agent wallet's signing key. It never prints: only :meth:`reveal` gives it, once, to the
+    """An agent wallet's signing key. It never prints. Only :meth:`reveal` gives it out, for the
     exchange the composition root makes."""
 
     __slots__ = ("_value",)
