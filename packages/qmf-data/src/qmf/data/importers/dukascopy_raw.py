@@ -12,20 +12,27 @@ importable without holding it.
 
 The source is read only. Bids and asks stay as the provider's scaled integers; both sides of one
 tick are one row, so ticks are one series.
+
+A bi5 file states each tick as milliseconds from its UTC hour, so the source clock is UTC in
+milliseconds by the format itself. Given ``open_at``, the written month is checked against its
+market's open time before the commit, reading the time column back in batches, and an empty
+open hour keeps the month open (LD-01).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
-from typing import Final
+from typing import Any, Final, cast
 
 from qmf.core import Ok, Result, is_refusal
 from qmf.data.dukascopy import DEFAULT_PRICE_SCALE, PERSONAL_USE_LICENSE, decode_bi5_ticks
+from qmf.data.importers.quality import OpenAt, QualityReport, check_month
+from qmf.data.importers.stamps import SourceClock
 from qmf.data.series import INCOMING_NAME, TICKS_KIND, CommitReceipt, SeriesKey, SeriesStore
 from qmf.data.store.engines import SeriesFile, StoreEngineError
 from qmf.data.store.engines.typed import TypedWriter, write_in_child
@@ -103,16 +110,25 @@ class RawTicksImport:
     hours: int
     licence: str = PERSONAL_USE_LICENSE
     redownloadable: bool = True
+    checked: QualityReport | None = None
+    """The data-quality check's report, when the import was given its market's open time."""
+
+    @property
+    def clock(self) -> SourceClock:
+        return SourceClock("UTC", "ms")
 
     @property
     def quality(self) -> dict[str, object]:
         """The note a ``dataset`` card carries for this month."""
-        return {
+        note: dict[str, object] = {
             "hours": self.hours,
             "rows": self.receipt.rows,
             "gaps": list(self.receipt.gaps),
             "frozen": self.receipt.frozen,
         }
+        if self.checked is not None:
+            note["checked"] = self.checked.as_json()
+        return note
 
 
 def raw_tick_rows(
@@ -146,8 +162,13 @@ def import_raw_month(
     *,
     correction: str | None = None,
     writer: Callable[..., SeriesFile] | None = None,
+    open_at: OpenAt | None = None,
+    confirmed: Iterable[int] = (),
 ) -> Result[RawTicksImport]:
-    """Import one month of raw ticks through the store's commit, in a child by default."""
+    """Import one month of raw ticks through the store's commit, in a child by default.
+
+    Given ``open_at``, an empty open hour not in ``confirmed`` keeps the month open.
+    """
     built = SeriesKey.try_create(DUKASCOPY_SOURCE, raw.subject, TICKS_KIND, raw.year, raw.month)
     if is_refusal(built):
         return built
@@ -179,17 +200,51 @@ def import_raw_month(
     except StoreEngineError as exc:
         temp.unlink(missing_ok=True)
         return translate_engine_failure(exc)
-    receipt = store.commit_file(key, written, correction=correction)
+    checked = (
+        None
+        if open_at is None
+        else check_month(
+            _stamps_of(written.path),
+            start_ms=key.start_ns // NS_PER_MS,
+            end_ms=key.end_ns // NS_PER_MS,
+            open_at=open_at,
+            confirmed=confirmed,
+        )
+    )
+    receipt = store.commit_file(
+        key, written, correction=correction, hold=None if checked is None else checked.hold
+    )
     if is_refusal(receipt):
         return receipt
-    return Ok(RawTicksImport(key=key, receipt=receipt.value, hours=len(files)))
+    return Ok(RawTicksImport(key=key, receipt=receipt.value, hours=len(files), checked=checked))
+
+
+def _stamps_of(path: Path) -> Iterator[int]:
+    """A written partition's stamps in file order, a batch at a time."""
+    import pyarrow.parquet as pq  # noqa: PLC0415  # pyright: ignore[reportMissingTypeStubs]
+
+    reader: Any = pq.ParquetFile(path)
+    for batch in reader.iter_batches(columns=["t"]):
+        yield from cast("list[int]", batch.column(0).to_pylist())
 
 
 def import_raw_month_in_process(
-    store: SeriesStore, raw: RawTicks, *, correction: str | None = None
+    store: SeriesStore,
+    raw: RawTicks,
+    *,
+    correction: str | None = None,
+    open_at: OpenAt | None = None,
+    confirmed: Iterable[int] = (),
 ) -> Result[RawTicksImport]:
     """The same import without a child process: the tests and a handful of hours use this."""
-    return import_raw_month(store, raw, correction=correction, writer=_writer_in_process)
+    return import_raw_month(
+        store,
+        raw,
+        correction=correction,
+        writer=_writer_in_process,
+        open_at=open_at,
+        confirmed=confirmed,
+    )
 
 
 def _writer_in_process(

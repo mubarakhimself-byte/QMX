@@ -14,19 +14,23 @@ Stdlib + qmf-core.
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from itertools import pairwise
-from typing import Final
+from pathlib import Path
+from typing import Final, cast
 
 from qmf.core import Ok, Result
 from qmf.data.store.refusals import invalid_input
 
 __all__ = [
     "STORE_UNIT",
+    "WALL",
+    "ClockLedger",
     "Seam",
     "SeamKind",
     "SourceClock",
@@ -138,12 +142,19 @@ class StampCheck:
     cadence seams, which only a kind sampled on a cadence has.
     """
 
-    def __init__(self, *, zone: str = "UTC", cadenced: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        zone: str = "UTC",
+        cadenced: bool = False,
+        after: StampUnit | None = None,
+        after_cadence_ms: int | None = None,
+    ) -> None:
         self._zone = zone
         self._cadenced = cadenced
         self._first: StampUnit | None = None
-        self._unit: StampUnit | None = None
-        self._spacing: int | None = None
+        self._unit: StampUnit | None = after
+        self._spacing: int | None = after_cadence_ms
         self._seams: list[Seam] = []
 
     @property
@@ -153,6 +164,11 @@ class StampCheck:
     @property
     def seams(self) -> tuple[Seam, ...]:
         return tuple(self._seams)
+
+    @property
+    def last(self) -> tuple[StampUnit | None, int | None]:
+        """The unit and the cadence of the last file read, which the next import starts from."""
+        return self._unit, self._spacing
 
     def file(
         self, name: str, rows: Sequence[tuple[object, ...]]
@@ -185,9 +201,8 @@ class StampCheck:
             stamps.append(_to_ms(stamp, unit))
             converted.append((stamps[-1], *row[1:]))
         start = stamps[0]
-        if self._first is None:
-            self._first = unit
-        elif unit is not self._unit and self._unit is not None:
+        self._first = self._first or unit
+        if self._unit is not None and unit is not self._unit:
             self._seams.append(Seam(SeamKind.STAMP_UNIT, start, self._unit.value, unit.value))
         self._unit = unit
         if self._cadenced:
@@ -199,3 +214,44 @@ class StampCheck:
                     )
                 self._spacing = spacing
         return Ok(converted)
+
+
+class ClockLedger:
+    """The unit and cadence each landed month of a series ended in, beside a store's claims.
+
+    A month is one download run, so a seam at a month boundary (Binance's spot files moved to
+    microseconds on 1 January 2025) is only seen against the month before. The ledger is one
+    small file per series under ``<root>/.clocks``; a month landed again replaces its entry.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self._folder = root / ".clocks"
+
+    def _path(self, series: str) -> Path:
+        return self._folder / f"{series.replace('/', '_')}.json"
+
+    def _months(self, series: str) -> dict[str, dict[str, object]]:
+        path = self._path(series)
+        if not path.is_file():
+            return {}
+        return cast("dict[str, dict[str, object]]", json.loads(path.read_text("utf-8")))
+
+    def before(self, series: str, year: int, month: int) -> tuple[StampUnit | None, int | None]:
+        """What the latest month before ``year``-``month`` ended in, or nothing when none."""
+        earlier = sorted(m for m in self._months(series) if m < f"{year:04d}-{month:02d}")
+        if not earlier:
+            return None, None
+        found = self._months(series)[earlier[-1]]
+        cadence = found.get("cadence_ms")
+        return StampUnit(str(found["unit"])), cadence if isinstance(cadence, int) else None
+
+    def record(self, series: str, year: int, month: int, check: StampCheck) -> None:
+        unit, cadence = check.last
+        if unit is None:
+            return
+        months = self._months(series)
+        months[f"{year:04d}-{month:02d}"] = {"unit": unit.value, "cadence_ms": cadence}
+        self._folder.mkdir(parents=True, exist_ok=True)
+        staged = self._path(series).with_suffix(".tmp")
+        staged.write_text(json.dumps(months, sort_keys=True), encoding="utf-8")
+        staged.replace(self._path(series))
