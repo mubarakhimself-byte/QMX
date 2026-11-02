@@ -10,6 +10,7 @@ from typing import TypeVar
 
 import tomllib
 from qmf.core.refusal import Result, is_ok, is_refusal
+from qmn.app.healing import REQUESTED_RESTART_REASON, BootAttemptStamp, CrashLoopFold
 from qmn.config import (
     COMPILE_LAYERS,
     HAS_INVOCATION_OVERRIDE_LAYER,
@@ -23,14 +24,11 @@ from qmn.host import (
     EVENT_LOOP_COUNT,
     NODE_RESURRECT_SUBTYPE,
     OPERATOR_PRINCIPAL,
-    REQUESTED_RESTART_REASON,
-    CrashLoopFold,
     LifecycleState,
     LifecycleSupervisor,
     StandDownTrigger,
 )
 from qmn.host.supervise import (
-    BootAttemptStamp,
     RecordingNotifyTransport,
     SupervisionConfig,
 )

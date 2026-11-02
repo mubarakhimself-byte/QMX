@@ -34,6 +34,7 @@ from qmf.risk.control_action import (
 )
 from qmf.risk.control_rank import ControlActionKind
 
+from qmn.app.healing import CrashLoopFold
 from qmn.data import (
     CLEAN_HOST_REHEARSAL_TONIGHT,
     FULL_DRILL,
@@ -47,7 +48,6 @@ from qmn.data import (
 from qmn.host._refuse import invalid, policy
 from qmn.host._supervision import (
     CommandFate,
-    CrashLoopFold,
     LifecycleState,
     LifecycleSupervisor,
     RecordingNotifyTransport,
