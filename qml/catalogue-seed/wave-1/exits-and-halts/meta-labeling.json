@@ -1,0 +1,67 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "meta-labeling",
+  "version": 1,
+  "family": "probability-exit",
+  "aliases": [
+    "meta-label",
+    "secondary model filter"
+  ],
+  "origin": "qml",
+  "component_type": "model",
+  "definition": "A second model, trained on the triple-barrier outcomes of a first rule's signals, gives the chance that a signal is worth taking, which can veto it or scale its size.",
+  "boundaries": "A learned block for the Lab: it needs labelled history and a fit, so it has no code here. It decides take or skip and size, so its use in a unit is the risk session's. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "A model checks each signal and passes only the ones it trusts.",
+  "eligible_roles": [
+    "veto",
+    "sizing_modifier",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://mlfinpy.readthedocs.io/en/latest/_modules/mlfinpy/labeling/labeling.html (read 2026-11-02)",
+      "quote": "This module combine Meta Labeling with Triple Barrier Labeling Method",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "probability",
+    "measure": "probability"
+  },
+  "parameters": {
+    "take_above": {
+      "measure": "ratio",
+      "default": "0.5",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "1",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "the model's training window",
+    "bars": null
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported"
+}

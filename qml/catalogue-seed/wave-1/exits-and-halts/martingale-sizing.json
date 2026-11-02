@@ -1,0 +1,42 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "martingale-sizing",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "martingale",
+    "double after a loss"
+  ],
+  "origin": "qml",
+  "component_type": "sizer",
+  "definition": "After a losing trade, multiply the next trade's size; after a winner, go back to the starting size.",
+  "boundaries": "Known failure: a long enough losing run needs a size the account cannot carry, and the whole deposit is lost at once; until then the equity curve looks smooth. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "Each loss is followed by a bigger trade meant to win it all back.",
+  "eligible_roles": [
+    "sizer",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/8390",
+      "quote": "As soon as we get a loss, we increase the lot",
+      "dated": "2020-12-17"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/5269",
+      "quote": "The most important of them is the high probability of losing the entire deposit.",
+      "dated": "2019-02-25"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

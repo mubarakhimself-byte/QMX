@@ -1,0 +1,72 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "losing-days-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "max consecutive loss days",
+    "losing day streak halt"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Flatten the unit and stop it once its own journal counts days or more losing days in a row.",
+  "boundaries": "TradingView stops the whole strategy for good; this halt holds while the streak stands, and a streak can only end with a winning day the unit is not trading, so in practice it holds until he releases it. The count is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "recognition": "After several losing days in a row the unit stops trading.",
+  "eligible_roles": [
+    "halt"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/pine-script-docs/v5/concepts/strategies/ (read 2026-11-02)",
+      "quote": "a defined number of trading days with consecutive losses",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "losing_day_streak",
+      "stream_kind": "trades",
+      "measure": "count",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "days": {
+      "measure": "count",
+      "default": "3",
+      "origin": "placeholder",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:1a3deb0581e343c6c56c393601d87aef4905ef7447ea38ea572227d957c74772",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

@@ -1,0 +1,86 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "low-profit-lock-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "LowProfitPairs",
+    "low profit lock"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Stop new entries on a market for stop_duration_bars when its trades in the last lookback_bars bars made less than required_profit as a ratio.",
+  "boundaries": "It needs the unit's closed trades on that market with their profit ratios and bars, which no host passes a block yet, so it has no code. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "A market that has stopped paying is set aside for a while.",
+  "eligible_roles": [
+    "halt",
+    "cooldown"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.freqtrade.io/en/stable/plugins/ (read 2026-11-02)",
+      "quote": "If that ratio is below required_profit , that pair will be locked",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "closed_trades",
+      "stream_kind": "trades",
+      "measure": null,
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "lookback_bars": {
+      "measure": "bars",
+      "default": "1440",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    },
+    "required_profit": {
+      "measure": "ratio",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "-1",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "stop_duration_bars": {
+      "measure": "bars",
+      "default": "60",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

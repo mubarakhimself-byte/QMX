@@ -1,0 +1,95 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "offset-gated-trailing-stop",
+  "version": 1,
+  "family": "trailing-stop",
+  "aliases": [
+    "trailing stop positive offset",
+    "profit-gated trail"
+  ],
+  "same_word_as": [
+    "trailing-protective-threshold@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Once the best rate since entry is at least entry times (1 + offset), a stop distance below that best rate (above it for a short), moved only in the trade's favour.",
+  "boundaries": "This is freqtrade's trailing_only_offset_is_reached = True form; before the offset the level is missing and the unit's own initial stop holds. The best rate is the bar's high for a long and its low for a short. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "recognition": "The stop starts trailing only once the trade is a set amount in profit.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "class_meanings": {
+    "perp": "freqtrade scales a futures trade's profit ratio by its leverage; this ratio is the price's, before leverage.",
+    "index_cfd": "a gap across the close moves past the level between two bars; the exit reads the next bar."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.freqtrade.io/en/stable/stoploss/ (read 2026-11-02)",
+      "quote": "the trailing stoploss is only activated once the offset is reached",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "offset": {
+      "measure": "ratio",
+      "default": "0.03",
+      "origin": "source_stated",
+      "range": {
+        "min": "0",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "distance": {
+      "measure": "ratio",
+      "default": "0.02",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "0.9999",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 1
+  },
+  "fingerprint": "fp1:sha256:36379c437a339c6607119768038eec85e7474c7dbd78e81c46cf0b7e336d85f7",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

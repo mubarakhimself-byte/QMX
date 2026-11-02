@@ -1,0 +1,46 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "averaging-down",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "average down",
+    "adding to a loser",
+    "DCA into a loser"
+  ],
+  "same_word_as": [
+    "scale-in@1"
+  ],
+  "origin": "qml",
+  "component_type": "entry_order",
+  "definition": "Add to an open position after the price has moved against it, so its average entry price improves and a smaller move back reaches break-even.",
+  "boundaries": "Known failure: a falling price may be a warning, not a bargain, and each add makes the same wrong idea bigger. It differs from scale-in, which adds to a winner. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "The trader buys more as the price keeps falling below the first entry.",
+  "eligible_roles": [
+    "entry_order",
+    "re_entry"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.investopedia.com/terms/a/averagedown.asp",
+      "quote": "adding to an existing position when its price drops",
+      "dated": "2026-04-23"
+    },
+    {
+      "source_ref": "https://www.investopedia.com/terms/a/averagedown.asp",
+      "quote": "a warning signal that prices are about to go much lower",
+      "dated": "2026-04-23"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

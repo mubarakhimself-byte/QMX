@@ -1,0 +1,72 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "session-loss-limit-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "max intraday loss",
+    "session loss limit"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Flatten the unit and stop it for the session once its session result from its own journal, session_loss_r, is at or below -limit R.",
+  "boundaries": "TradingView counts the loss in money or in percent of equity; this counts R, the unit journal's measure, and reads the unit alone. The host resets the session result at each session start, which releases the halt. The limit is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "recognition": "After a bad session the unit is closed out and sits out the rest of it.",
+  "eligible_roles": [
+    "halt"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/pine-script-docs/v5/concepts/strategies/ (read 2026-11-02)",
+      "quote": "stops all trading activity until the end of the current session",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "session_loss_r",
+      "stream_kind": "trades",
+      "measure": "r",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "limit": {
+      "measure": "r",
+      "default": "3",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.1",
+        "max": "100",
+        "step": "0.1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:1fcbfd0c324f4c4be96d545ee25d7c388a1adf5b8f2fce7ef35794bdd021c2a5",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

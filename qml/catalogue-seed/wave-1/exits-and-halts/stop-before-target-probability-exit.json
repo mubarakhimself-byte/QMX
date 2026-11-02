@@ -1,0 +1,83 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "stop-before-target-probability-exit",
+  "version": 1,
+  "family": "probability-exit",
+  "aliases": [
+    "stop-first probability exit",
+    "P(stop first) exit"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close once the estimated chance that the price reaches the stop before the target is above the chance it reaches the target first.",
+  "boundaries": "No retail platform ships it; its calibration, lag and behaviour on bar data are open (research 35, open question 4). Specified, not coded. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "The trade closes when the stop has become more likely than the target.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/operator/transcript-2026-10-20-to-28.md:218, branch plan/unit-system",
+      "quote": "the chance of hitting the stop overtakes the chance of hitting the target",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "stop_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    },
+    {
+      "port": "target_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "exit_action",
+    "measure": "probability"
+  },
+  "parameters": {
+    "margin": {
+      "measure": "ratio",
+      "default": "0",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "1",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "the estimator's window",
+    "bars": null
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported"
+}

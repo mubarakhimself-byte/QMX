@@ -1,0 +1,136 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "stepped-profit-stop",
+  "version": 1,
+  "family": "trailing-stop",
+  "aliases": [
+    "stepped stoploss",
+    "profit-lock steps"
+  ],
+  "same_word_as": [
+    "break-even-adjustment@1",
+    "trailing-protective-threshold@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Move the stop to a fixed level beyond entry as the profit passes each step: above trigger_1 the stop locks lock_1 of the entry price in profit, above trigger_2 lock_2, above trigger_3 lock_3; the highest step passed wins and the stop never moves back.",
+  "boundaries": "Before the first step the level is missing and the unit's own initial stop holds. The profit is read at the bar's high for a long and its low for a short, as freqtrade's backtest reads it. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "recognition": "Each time the trade reaches a profit step the stop jumps up to lock more in.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "class_meanings": {
+    "perp": "freqtrade scales a futures trade's profit ratio by its leverage; this ratio is the price's, before leverage.",
+    "index_cfd": "a gap across the close moves past the level between two bars; the exit reads the next bar."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.freqtrade.io/en/stable/strategy-callbacks/ (read 2026-11-02)",
+      "quote": "Once profit is > 20% - set stoploss to 7% above open price.",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "level",
+    "measure": "price"
+  },
+  "parameters": {
+    "trigger_1": {
+      "measure": "ratio",
+      "default": "0.20",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "lock_1": {
+      "measure": "ratio",
+      "default": "0.07",
+      "origin": "source_stated",
+      "range": {
+        "min": "-0.9999",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "trigger_2": {
+      "measure": "ratio",
+      "default": "0.25",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "lock_2": {
+      "measure": "ratio",
+      "default": "0.15",
+      "origin": "source_stated",
+      "range": {
+        "min": "-0.9999",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "trigger_3": {
+      "measure": "ratio",
+      "default": "0.40",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "10",
+        "step": "0.0001"
+      }
+    },
+    "lock_3": {
+      "measure": "ratio",
+      "default": "0.25",
+      "origin": "source_stated",
+      "range": {
+        "min": "-0.9999",
+        "max": "10",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 1
+  },
+  "fingerprint": "fp1:sha256:d353fdc0d6f611ea8fd4d5f4d824925466b303654f78a7cbf10bffb5a0ac939b",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

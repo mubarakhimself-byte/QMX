@@ -1,0 +1,65 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "max-position-size-limit",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "max position size",
+    "position size ceiling"
+  ],
+  "origin": "qml",
+  "component_type": "sizer",
+  "definition": "Cut an entry's quantity so the position it makes is no larger than max_lots.",
+  "boundaries": "TradingView reduces the order rather than refusing it. In QMX a size is the sizer's and the cross-unit hook's, so this is a sizing modifier, written down here because TradingView lists it with its halts; the ceiling is his. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "No trade is ever bigger than a set size.",
+  "eligible_roles": [
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.tradingview.com/pine-script-docs/v5/concepts/strategies/ (read 2026-11-02)",
+      "quote": "specifies the maximum possible position size when using strategy.entry() commands",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "position_lots",
+      "stream_kind": "position",
+      "measure": "lots",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "quantity",
+    "measure": "lots"
+  },
+  "parameters": {
+    "max_lots": {
+      "measure": "lots",
+      "default": "1",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.01",
+        "max": "1000",
+        "step": "0.01"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable"
+}

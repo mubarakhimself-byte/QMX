@@ -1,0 +1,91 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "peak-holdings-giveback-exit",
+  "version": 1,
+  "family": "giveback",
+  "aliases": [
+    "giveback exit",
+    "peak-to-trough profit exit",
+    "LEAN trailing stop model"
+  ],
+  "same_word_as": [
+    "trailing-protective-threshold@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close once the position has given back more than giveback of its best value since entry: the best close starts at the entry price, and the exit holds while |best - close| / best is above giveback.",
+  "boundaries": "With one position of fixed size LEAN's drawdown of absolute holdings value is this drawdown of price. A bar that sets a new best never closes, as in LEAN. It reads closes, not highs, so it gives back from the best close. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "recognition": "The trade is closed when it falls back a set share from the best it reached.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "class_meanings": {
+    "perp": "freqtrade scales a futures trade's profit ratio by its leverage; this ratio is the price's, before leverage.",
+    "index_cfd": "a gap across the close moves past the level between two bars; the exit reads the next bar."
+  },
+  "sources": [
+    {
+      "source_ref": "https://github.com/QuantConnect/Lean/blob/master/Algorithm.Framework/Risk/TrailingStopRiskManagementModel.cs (read 2026-11-02)",
+      "quote": "compared with the highest unrealized profit, defaults to 5% drawdown per security",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/research/35-trading-lens-strategy-anatomy.md, branch plan/unit-system, section 5.1",
+      "quote": "close when open profit falls X % from its peak",
+      "dated": "2026-10-30"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "exit_action",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "giveback": {
+      "measure": "ratio",
+      "default": "0.05",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.0001",
+        "max": "0.9999",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 1
+  },
+  "fingerprint": "fp1:sha256:e652f8700a58c5f97311e225c9a46d2cbb667cfc6c8281750125e6b4b7f3eb17",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

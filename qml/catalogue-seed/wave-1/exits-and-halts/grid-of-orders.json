@@ -1,0 +1,41 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "grid-of-orders",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "grid trading",
+    "order grid"
+  ],
+  "origin": "qml",
+  "component_type": "entry_order",
+  "definition": "Place orders at fixed steps above and below a price so that, together, the positions they open reach a combined profit and close as one.",
+  "boundaries": "Known failure: a trend that does not come back leaves every order open against it; the run of finished cycles ends with one the deposit cannot carry. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "Orders sit at regular steps and are closed together in profit.",
+  "eligible_roles": [
+    "entry_order"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/8390",
+      "quote": "these orders gain enough profit at some point to close them all at once",
+      "dated": "2020-12-17"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/8390",
+      "quote": "this inevitably ends with a cycle when the deposit is insufficient",
+      "dated": "2020-12-17"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}

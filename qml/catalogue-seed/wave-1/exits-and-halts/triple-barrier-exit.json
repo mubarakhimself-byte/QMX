@@ -1,0 +1,102 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "triple-barrier-exit",
+  "version": 1,
+  "family": "probability-exit",
+  "aliases": [
+    "triple barrier",
+    "vertical barrier exit"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close at whichever of three barriers the price touches first: a profit barrier upper_width volatilities above entry, a loss barrier lower_width volatilities below, or a time barrier max_bars after entry.",
+  "boundaries": "Written in Advances in Financial Machine Learning as a labelling method for training; as an exit it is a volatility-scaled bracket with a time stop. The volatility is a rolling estimate of returns. Specified, not coded, as the probability family is kept for the risk session. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "The trade ends at its target, its stop, or its time limit, whichever comes first.",
+  "eligible_roles": [
+    "exit",
+    "timeout"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://mlfinpy.readthedocs.io/en/latest/_modules/mlfinpy/labeling/labeling.html (read 2026-11-02)",
+      "quote": "Timestamps of when first barrier was touched",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "exit_action",
+    "measure": null
+  },
+  "parameters": {
+    "upper_width": {
+      "measure": "atr_multiple",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    },
+    "lower_width": {
+      "measure": "atr_multiple",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    },
+    "max_bars": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "10000",
+        "step": "1"
+      }
+    },
+    "volatility_span": {
+      "measure": "bars",
+      "default": "100",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "2",
+        "max": "10000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "volatility_span bars",
+    "bars": 100
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported"
+}

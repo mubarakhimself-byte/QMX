@@ -1,0 +1,81 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "model-confidence-exit",
+  "version": 1,
+  "family": "probability-exit",
+  "aliases": [
+    "confidence exit",
+    "model sentiment exit"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "Close a long when a model's confidence that price rises falls below long_below, and a short when it rises above short_above.",
+  "boundaries": "It reads a model's output, which a learned block in the Lab gives; the 40 and 60 thresholds are the article's. Specified, not coded. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it.",
+  "recognition": "The trade closes when the model stops believing in it.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/19047",
+      "quote": "Long positions are closed if confidence falls below 40%",
+      "dated": "2026-07-01"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "confidence",
+      "stream_kind": "series",
+      "measure": "probability",
+      "data_level": 1
+    },
+    {
+      "port": "entry_price",
+      "stream_kind": "position",
+      "measure": "price",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "exit_action",
+    "measure": "probability"
+  },
+  "parameters": {
+    "long_below": {
+      "measure": "ratio",
+      "default": "0.4",
+      "origin": "source_stated",
+      "range": {
+        "min": "0",
+        "max": "1",
+        "step": "0.0001"
+      }
+    },
+    "short_above": {
+      "measure": "ratio",
+      "default": "0.6",
+      "origin": "source_stated",
+      "range": {
+        "min": "0",
+        "max": "1",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "adapted",
+    "spot_crypto": "direct",
+    "stock": "not_assessed"
+  },
+  "mirroring": "supported"
+}

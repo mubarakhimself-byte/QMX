@@ -1,0 +1,78 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "account-daily-loss-halt",
+  "version": 1,
+  "family": "account-halt",
+  "aliases": [
+    "daily loss limit",
+    "daily loss circuit breaker"
+  ],
+  "origin": "qml",
+  "component_type": "halt",
+  "definition": "Flatten the account for the day once equity is at or below (1 - limit) times the equity at the day's start.",
+  "boundaries": "The day boundary is the host's (the article uses the broker's server midnight) and it passes day_start_equity; a new day releases the halt. Equity includes floating results, as the article's combined daily result does. The limit is his to set: its default is the risk session's placeholder. No host runs halts yet, so this halt acts only where a host passes it these statistics.",
+  "recognition": "After a set loss in one day the account is closed out until tomorrow.",
+  "eligible_roles": [
+    "halt"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/23732",
+      "quote": "if the limit is breached, immediately closes all open positions, cancels all pending orders",
+      "dated": "2026-08-28"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "equity",
+      "stream_kind": "account",
+      "measure": "money",
+      "data_level": null
+    },
+    {
+      "port": "day_start_equity",
+      "stream_kind": "account",
+      "measure": "money",
+      "data_level": null
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": null
+  },
+  "parameters": {
+    "limit": {
+      "measure": "ratio",
+      "default": "0.05",
+      "origin": "placeholder",
+      "range": {
+        "min": "0.0001",
+        "max": "0.9999",
+        "step": "0.0001"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "none",
+    "bars": 0
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "direct",
+    "commodity_cfd": "direct",
+    "stock_cfd": "direct",
+    "future": "direct",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "direct"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": 0
+  },
+  "fingerprint": "fp1:sha256:3939758138d75dbf088c585a2423f9617ca14be894648ca2752af6ea5fe5cb53",
+  "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
+}

@@ -1,0 +1,39 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "close-by-opposite-position",
+  "version": 1,
+  "family": "grid-and-recovery",
+  "aliases": [
+    "close by",
+    "close by opposite"
+  ],
+  "same_word_as": [
+    "exit-order@1"
+  ],
+  "origin": "qml",
+  "component_type": "exit",
+  "definition": "On a hedging account, close a position against an opposite position of the same market, in one operation, instead of with a market order.",
+  "boundaries": "It needs a hedging account; a netting account has no opposite position to close by. It saves one spread on the pair; it is an exit form, not a rule for when to exit. Named so a unit, a source or he can point at it; its maths is the risk session's.",
+  "recognition": "Two opposite trades cancel each other out.",
+  "eligible_roles": [
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.mql5.com/en/articles/3620",
+      "quote": "closing the main trade by the volume of the triggered pending order",
+      "dated": "2017-09-08"
+    }
+  ],
+  "transfer": {
+    "fx": "not_assessed",
+    "metal": "not_assessed",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  }
+}
