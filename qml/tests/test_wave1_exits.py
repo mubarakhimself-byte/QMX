@@ -196,6 +196,34 @@ def test_an_exit_answers_only_for_a_position_it_is_given_and_forgets_it_after(
     assert (long.retained(), short.retained()) == (0, 0)
 
 
+_POSITION_HELD = ("profit-fraction-trailing-stop", "offset-gated-trailing-stop")
+_POSITION_HELD += ("stepped-profit-stop", "peak-holdings-giveback-exit", "roi-table-exit")
+
+
+@pytest.mark.parametrize("entry_id", _POSITION_HELD)
+def test_a_new_entry_price_starts_a_new_position_with_no_flat_bar_between(entry_id: str) -> None:
+    def walk(entry: str, prices: tuple[str, ...], long: bool) -> list[dict[str, object]]:
+        def at(p: str) -> Decimal:
+            return Decimal(p) if long else 200 - Decimal(p)
+
+        bars = [dict.fromkeys(("open", "high", "low", "close"), at(p)) for p in prices]
+        return [{"series": b, "entry_price": at(entry)} for b in bars]
+
+    for side in (Side.LONG, Side.SHORT):
+        long = side is Side.LONG
+        first = walk("100", ("110", "130", "150", *["148"] * 20), long)
+        second = walk("100.5", ("101", "104", "110", "125", "122"), long)
+        carried, fresh = _make(f"{entry_id}@1", side), _make(f"{entry_id}@1", side)
+        for evidence in first:
+            carried.update(evidence)
+
+        answers = [carried.update(e) for e in second]
+        expected = [fresh.update(e) for e in second]
+
+        assert answers == expected, side
+        assert any(a is not None for a in expected), side
+
+
 def test_the_published_worked_examples_hold() -> None:
     def bar(high: str, low: str, close: str) -> dict[str, object]:
         return {
