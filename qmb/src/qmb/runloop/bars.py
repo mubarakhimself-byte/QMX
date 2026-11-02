@@ -12,12 +12,10 @@ mappings and never redefines the type.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, time, timedelta
 from types import MappingProxyType
 from typing import Final, cast
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from qmf.core.chrono import Instant, Interval
 from qmf.core.fingerprint import Fingerprint, fingerprint
@@ -35,6 +33,7 @@ __all__ = [
     "FORMING_BAR_VISIBLE",
     "LOOKAHEAD_PREVENTION_INDEPENDENT_OF_GAP_0048",
     "BarBuilder",
+    "DaySpan",
     "DeclaredBarSpec",
     "DerivedBar",
     "FormingBarState",
@@ -44,7 +43,6 @@ __all__ = [
     "SeriesSample",
     "StreamBarPlan",
     "UnderlyingSeries",
-    "VenueDay",
     "act_on_bar",
     "consume_same_slice",
     "consume_stream_plans",
@@ -1320,51 +1318,9 @@ def _ohlc_bar(
 # --- bars of both sides in the venue's own day (QB-21) ---------------------------------------
 
 _DAY_SECONDS: Final[int] = 86_400
-_EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
-_NS_PER_US: Final[int] = 1_000
 
-
-def _ns_of(moment: datetime) -> int:
-    return (moment - _EPOCH) // timedelta(microseconds=1) * _NS_PER_US
-
-
-@dataclass(frozen=True, slots=True)
-class VenueDay:
-    """The venue's trading day: each one starts at ``boundary`` wall time in ``zone``.
-
-    It comes from the instrument record's ``zone`` and ``day_boundary`` (17:00 New York at most
-    FX CFD brokers), so a daily bar closes where the venue's day does and moves with its
-    daylight saving, never at UTC midnight.
-    """
-
-    zone: ZoneInfo
-    boundary: time
-
-    @classmethod
-    def try_create(cls, zone: object, boundary: object) -> Result[VenueDay]:
-        if not isinstance(boundary, str):
-            return invalid("day_boundary", "a day boundary is wall time HH:MM", given=boundary)
-        try:
-            wall = time.fromisoformat(boundary)
-        except ValueError:
-            return invalid("day_boundary", "a day boundary is wall time HH:MM", given=boundary)
-        if not isinstance(zone, str):
-            return invalid("zone", "a venue zone is an IANA zone name", given=zone)
-        try:
-            return Ok(cls(ZoneInfo(zone), wall))
-        except (ZoneInfoNotFoundError, ValueError):
-            return invalid(
-                "zone", "the venue zone is not in this machine's time zone data", zone=zone
-            )
-
-    def span(self, ns: int) -> tuple[int, int]:
-        """The start and the end, in UTC ns, of the venue day that holds ``ns``."""
-        date = (_EPOCH + timedelta(microseconds=ns // _NS_PER_US)).astimezone(self.zone).date()
-        start = datetime.combine(date, self.boundary, self.zone)
-        if _ns_of(start) > ns:
-            start = datetime.combine(date - timedelta(days=1), self.boundary, self.zone)
-        end = datetime.combine(start.date() + timedelta(days=1), self.boundary, self.zone)
-        return _ns_of(start), _ns_of(end)
+DaySpan = Callable[[int], tuple[int, int]]
+"""The start and the end, in UTC ns, of the venue day that holds an instant (QB-21)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1394,7 +1350,7 @@ class BarBuilder:
     no piece makes no bar: a hole stays a hole.
     """
 
-    def __init__(self, day: VenueDay, seconds: int) -> None:
+    def __init__(self, day: DaySpan, seconds: int) -> None:
         self._day = day
         self._period_ns = seconds * _NS_PER_SEC
         self._whole_day = seconds == _DAY_SECONDS
@@ -1405,7 +1361,7 @@ class BarBuilder:
         self._ask: OHLC | None = None
 
     @classmethod
-    def try_create(cls, day: VenueDay, seconds: object) -> Result[BarBuilder]:
+    def try_create(cls, day: DaySpan, seconds: object) -> Result[BarBuilder]:
         if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds <= 0:
             return invalid("seconds", "a bar lasts a positive whole number of seconds")
         if seconds > _DAY_SECONDS:
@@ -1419,7 +1375,7 @@ class BarBuilder:
     def _bucket_end(self, ns: int) -> int:
         start, end = self._day_span
         if not start <= ns < end:
-            start, end = self._day.span(ns)
+            start, end = self._day(ns)
             self._day_span = (start, end)
         if self._whole_day:
             return end

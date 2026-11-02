@@ -18,11 +18,12 @@ from qmb.host.replay import (
     BarWindow,
     DataCard,
     Tick,
+    VenueDay,
     replay_feed,
     window_size,
 )
 from qmb.host.unit_runner import load_unit_folder
-from qmb.runloop.bars import BarBuilder, VenueDay
+from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
 from qml.protocol.unit import OHLC, QuoteBar
 from test_unit_runner import make_run_folder
@@ -43,7 +44,7 @@ def _read(steps: int, window: MutableMapping[int, QuoteBar] | BarWindow) -> tupl
     """Steps read and the peak bytes traced while reading them into ``window``."""
     day = VenueDay.try_create("America/New_York", "17:00")
     assert not isinstance(day, TypedRefusal), day
-    builder = BarBuilder.try_create(day.value, 60)
+    builder = BarBuilder.try_create(day.value.span, 60)
     assert not isinstance(builder, TypedRefusal), builder
     card = DataCard.try_create("bars", Decimal("0.00002"))
     assert not isinstance(card, TypedRefusal), card
@@ -94,7 +95,7 @@ def test_the_probe_sees_a_reader_that_keeps_every_bar_grow_past_the_tolerance() 
 def test_a_card_refuses_a_row_of_another_kind_and_the_feed_stops_there() -> None:
     day = VenueDay.try_create("America/New_York", "17:00")
     assert not isinstance(day, TypedRefusal), day
-    builder = BarBuilder.try_create(day.value, 60)
+    builder = BarBuilder.try_create(day.value.span, 60)
     assert not isinstance(builder, TypedRefusal), builder
     card = DataCard.try_create("bars", Decimal("0.00002"))
     assert not isinstance(card, TypedRefusal), card

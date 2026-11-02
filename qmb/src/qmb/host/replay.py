@@ -25,12 +25,14 @@ import tempfile
 from collections import OrderedDict
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from itertools import groupby
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from qmf.core.chrono import Instant
 from qmf.core.exact import Price
@@ -75,6 +77,7 @@ __all__ = [
     "RecordedReplaySource",
     "Tick",
     "TypedPartitionRef",
+    "VenueDay",
     "read_bar_csv",
     "read_bar_pair_csv",
     "read_recorded_replay_source",
@@ -951,6 +954,53 @@ def _typed_frontiers(
 WINDOW_MEMORY_TOLERANCE: Final[Decimal] = Decimal("0.10")
 """``[qmb] window_memory_tolerance``'s starting default: a run's peak memory at 200,000 steps
 stays within 10% of its peak at 10,000 steps."""
+
+
+_EPOCH: Final[datetime] = datetime(1970, 1, 1, tzinfo=UTC)
+_NS_PER_US: Final[int] = 1_000
+
+
+def _ns_of(moment: datetime) -> int:
+    return (moment - _EPOCH) // timedelta(microseconds=1) * _NS_PER_US
+
+
+@dataclass(frozen=True, slots=True)
+class VenueDay:
+    """The venue's trading day: each one starts at ``boundary`` wall time in ``zone``.
+
+    It comes from the instrument record's ``zone`` and ``day_boundary`` (17:00 New York at most
+    FX CFD brokers), so a daily bar closes where the venue's day does and moves with its
+    daylight saving, never at UTC midnight.
+    """
+
+    zone: ZoneInfo
+    boundary: time
+
+    @classmethod
+    def try_create(cls, zone: object, boundary: object) -> Result[VenueDay]:
+        if not isinstance(boundary, str):
+            return invalid("day_boundary", "a day boundary is wall time HH:MM", given=boundary)
+        try:
+            wall = time.fromisoformat(boundary)
+        except ValueError:
+            return invalid("day_boundary", "a day boundary is wall time HH:MM", given=boundary)
+        if not isinstance(zone, str):
+            return invalid("zone", "a venue zone is an IANA zone name", given=zone)
+        try:
+            return Ok(cls(ZoneInfo(zone), wall))
+        except (ZoneInfoNotFoundError, ValueError):
+            return invalid(
+                "zone", "the venue zone is not in this machine's time zone data", zone=zone
+            )
+
+    def span(self, ns: int) -> tuple[int, int]:
+        """The start and the end, in UTC ns, of the venue day that holds ``ns``."""
+        date = (_EPOCH + timedelta(microseconds=ns // _NS_PER_US)).astimezone(self.zone).date()
+        start = datetime.combine(date, self.boundary, self.zone)
+        if _ns_of(start) > ns:
+            start = datetime.combine(date - timedelta(days=1), self.boundary, self.zone)
+        end = datetime.combine(start.date() + timedelta(days=1), self.boundary, self.zone)
+        return _ns_of(start), _ns_of(end)
 
 
 class Fidelity(StrEnum):

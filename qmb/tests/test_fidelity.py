@@ -22,6 +22,7 @@ from qmb.host.replay import (
     Print,
     Row,
     Tick,
+    VenueDay,
     read_bar_csv,
     read_bar_pair_csv,
     replay_feed,
@@ -30,7 +31,7 @@ from qmb.host.replay import (
 )
 from qmb.host.unit_handler import ListJournal, NextOpenExecution, UnitSliceHandler
 from qmb.host.unit_runner import load_unit_folder
-from qmb.runloop.bars import BarBuilder, VenueDay
+from qmb.runloop.bars import BarBuilder
 from qmf.core.refusal import TypedRefusal
 from qml.protocol.unit import QuoteBar, construct_unit
 from test_unit_runner import make_run_folder, request
@@ -85,7 +86,7 @@ def _trade_list(tmp_path: Path, fidelity: Fidelity) -> list[tuple[object, ...]]:
     for market, record in loaded.value.records.items():
         day = VenueDay.try_create(record.zone, record.day_boundary)
         assert not isinstance(day, TypedRefusal), day
-        builder = BarBuilder.try_create(day.value, 900)
+        builder = BarBuilder.try_create(day.value.span, 900)
         assert not isinstance(builder, TypedRefusal), builder
         files = folder / "bars" / market
         spread = None if fidelity is Fidelity.QUOTES else _SPREADS[market]
@@ -146,7 +147,7 @@ def test_bars_replay_one_side_with_the_declared_spread_into_the_golden_trades(
 def _daily_closes(zone: str, boundary: str, ticks: Iterable[Tick]) -> list[int]:
     day = VenueDay.try_create(zone, boundary)
     assert not isinstance(day, TypedRefusal), day
-    builder = BarBuilder.try_create(day.value, 86_400)
+    builder = BarBuilder.try_create(day.value.span, 86_400)
     assert not isinstance(builder, TypedRefusal), builder
     card = DataCard.try_create("quotes")
     assert not isinstance(card, TypedRefusal), card
