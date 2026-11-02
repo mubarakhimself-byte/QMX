@@ -384,7 +384,8 @@ def same_folder(one: Path, other: Path) -> bool:
 # The kinds build on the types above.
 from qmx_host.connect_compute import COMPUTE  # noqa: E402
 from qmx_host.connect_logs import DEEP_LOGS  # noqa: E402
+from qmx_host.connect_node import TRADING_NODE  # noqa: E402
 from qmx_host.connect_storage import STORAGE  # noqa: E402
 
-KINDS: Final[Mapping[str, Kind]] = kinds_of(STORAGE, COMPUTE, DEEP_LOGS)
+KINDS: Final[Mapping[str, Kind]] = kinds_of(STORAGE, COMPUTE, DEEP_LOGS, TRADING_NODE)
 """Every kind the dialog connects, by id."""

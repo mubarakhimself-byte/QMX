@@ -137,6 +137,7 @@ def test_the_kinds_name_what_each_can_do_and_every_route_needs_the_bearer(tmp_pa
         ("e2b", ["run"], False),
         ("deep-logs-pc", [], False),
         ("deep-logs-server", [], False),
+        ("trading-node-pc", [], False),
     ]
     assert bare == [401] * 4
 
