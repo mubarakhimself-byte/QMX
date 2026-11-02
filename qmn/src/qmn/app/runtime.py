@@ -27,6 +27,10 @@ QMB's ``run_slice``. :class:`NodeUnit` wraps the handler for the node:
   world, never ``replay``;
 - a stop amendment that would widen the stop is refused before it reaches the venue.
 
+A paper deployment takes the same order path and ends at its paper account beside the binding,
+which sends nothing to the venue (``paper_lane.py``). Every entry also passes the stand-down
+table (``stand_down.py``); exits, broker stops and the kill switch never do.
+
 Protection follows the venue's rule: on cTrader the stop rides on the entry order as a distance.
 If the venue does not hold it after ``PROTECT_RETRY_MAX`` tries of ``PROTECT_CONFIRM_NS`` each,
 the node closes that position reduce-only and raises the protection alarm, a labelled placeholder
@@ -1801,9 +1805,7 @@ class Runtime:
         live = deployment.lane == "live"
         if live and venue.client.account.role is not AccountRole.DEMO:
             hosted.phase = Phase.REFUSED
-            hosted.detail = (
-                "a live lane needs a live account binding, which this node does not hold"
-            )
+            hosted.detail = "a live lane trades only on a demo binding until a live one is bound"
             return
         path = self._path(deployment.account_id) if live else self._paper_path(hosted, venue)
         if path is None:

@@ -244,6 +244,11 @@ def _iso(at_ns: int) -> str:
     return datetime.fromtimestamp(at_ns / 1e9, UTC).isoformat()
 
 
+def _reading(cause: bool, healthy: bool) -> bool | None:
+    """True past a row's entry band, False inside its healthy band, None between the two."""
+    return True if cause else (False if healthy else None)
+
+
 def _event_id(*parts: str) -> str:
     digest = hashlib.sha256("/".join(parts).encode("utf-8")).hexdigest()
     return f"lifecycle-{digest[:24]}"
@@ -296,18 +301,10 @@ class StandDowns:
         now = self.clock_ns()
         offset = self.clock_offset_ns()
         if offset is not None:
-            band = (
-                True
-                if abs(offset) > CLOCK_NO_NEW_ENTRIES_NS
-                else (False if abs(offset) <= CLOCK_WARN_NS else None)
-            )
+            band = _reading(abs(offset) > CLOCK_NO_NEW_ENTRIES_NS, abs(offset) <= CLOCK_WARN_NS)
             self._observe(Kind.CLOCK_BAND, "all", band, now, f"clock offset {offset} ns")
         free = self.free_bytes()
-        low = (
-            True
-            if free < DISK_GUARD_BYTES
-            else (False if free > DISK_GUARD_BYTES + DISK_MARGIN_BYTES else None)
-        )
+        low = _reading(free < DISK_GUARD_BYTES, free > DISK_GUARD_BYTES + DISK_MARGIN_BYTES)
         self._observe(Kind.DISK, "all", low, now, f"{free} bytes free")
 
     def watch_feed(self, account_id: str, feed: FeedKeeper) -> None:
