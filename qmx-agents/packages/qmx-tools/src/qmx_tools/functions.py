@@ -1054,14 +1054,16 @@ def instrument_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
             }
         )
         found: list[_InForce] = []
-        starts: list[str] = []
+        missed: list[list[str]] = []
         for item in items:
             state = store.head(item, state_ref(item))
             if state is not None and state[0] == "archived":
                 continue
             held = in_force(item, moment, version)
             if held is None:
-                starts.extend(m.at for m in store.history_of(OPERATOR, item, MAIN)[:1])
+                moves = [m.at for m in store.history_of(OPERATOR, item, MAIN)]
+                if moves:
+                    missed.append(moves)
             elif all(held.view.fields.get(name) == value for name, value in asked.items()):
                 found.append(held)
         if len(found) == 1:
@@ -1092,10 +1094,15 @@ def instrument_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
                 ],
             }
         answer: dict[str, Any] = {"ok": False, "code": "not_found", "nearest": nearest(asked)}
-        if starts:
+        if missed and version is not None:
+            answer["message"] = (
+                f"no version {version} of it is on main; its newest version there is "
+                f"{max(len(moves) for moves in missed)}"
+            )
+        elif missed:
             answer["message"] = (
                 f"no version of it was in force at {_iso_ns(moment)}; its first version reached "
-                f"main at {min(starts)}"
+                f"main at {min(moves[0] for moves in missed)}"
             )
         return answer
 
@@ -1239,8 +1246,9 @@ def readings_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
         """Read what one reading said over a required time window, UTC:
         {"start": "2025-01-06T00:00:00Z", "end": "2025-01-13T00:00:00Z"}. Narrow by its
         `version`, `markets` (market ids), `tier` and `source`. Each row has its value or word,
-        health, computed_at and stale_after_s. Pass `next_cursor` back as `cursor` for the next
-        page; `data_ends_at` is the last recorded instant."""
+        health, computed_at and stale_after_s. A page holds `limit` rows, 1 to 500. Pass
+        `next_cursor` back as `cursor` for the next page; `data_ends_at` is the last recorded
+        instant."""
         if "start" not in window or "end" not in window:
             raise ValueError(
                 "readings_query needs a time window: pass window = {start, end}, for example "
@@ -1250,8 +1258,7 @@ def readings_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
         end = journals.parse_instant(window["end"], "end")
         if end <= start:
             raise ValueError("the window's end comes after its start")
-        if limit < 1:
-            raise ValueError("limit is 1 or more")
+        Page(limit=limit)
         door = ctx.market
         if door is None:
             raise ValueError(
@@ -1291,30 +1298,48 @@ def readings_functions(ctx: DomainContext) -> Callable[..., dict[str, Any]]:
                 "empty; ask for a window that ends before the holdout"
             )
         store = SeriesStore(root)
-        rows: list[_Reading] = []
-        last: int | None = None
+        matched: dict[str, list[_Reading]] = {}
         unreadable: list[str] = []
-        for keys in readable:
-            for index, key in enumerate(keys):
-                if not (key.start_ns < end and start < key.end_ns) and index < len(keys) - 1:
-                    continue
+
+        def matching(key: SeriesKey) -> list[_Reading]:
+            if key.text not in matched:
                 read = store.read(key)
                 if is_refusal(read):
                     unreadable.append(key.text)
-                    continue
-                for cells in read.value.rows:
-                    row = _Reading(
-                        int(cast("int", cells["t"])),
-                        key.text,
-                        int(cast("int", cells["seq"])),
-                        json.loads(str(cells["record"])),
+                    matched[key.text] = []
+                else:
+                    found = (
+                        _Reading(
+                            int(cast("int", cells["t"])),
+                            key.text,
+                            int(cast("int", cells["seq"])),
+                            json.loads(str(cells["record"])),
+                        )
+                        for cells in read.value.rows
                     )
-                    if not ask.holds(row.body):
-                        continue
-                    last = row.t if last is None else max(last, row.t)
-                    inside = start <= row.t * journals.NS_PER_MS < end
-                    if inside and (after is None or (row.t, row.partition, row.seq) > after):
-                        rows.append(row)
+                    matched[key.text] = [row for row in found if ask.holds(row.body)]
+            return matched[key.text]
+
+        rows: list[_Reading] = []
+        last: int | None = None
+        for keys in readable:
+            for key in keys:
+                if key.start_ns < end and start < key.end_ns:
+                    rows.extend(
+                        row
+                        for row in matching(key)
+                        if start <= row.t * journals.NS_PER_MS < end
+                        and (after is None or (row.t, row.partition, row.seq) > after)
+                    )
+            # A partition files every reading of its subject, so the asked one can stop months
+            # before the newest; `keys` holds opened months only, so the walk never reads past
+            # the holdout.
+            ends = next(
+                (max(r.t for r in found) for key in reversed(keys) if (found := matching(key))),
+                None,
+            )
+            if ends is not None:
+                last = ends if last is None else max(last, ends)
         rows.sort()
         page = rows[:limit]
         shown = [row.detailed() if response_format == "detailed" else row.concise() for row in page]

@@ -86,11 +86,16 @@ def record(reading: str, market: str, at: datetime, word: str) -> dict[str, obje
     )
 
 
-def harvested(root: Path, market: str, records: list[dict[str, object]]) -> None:
-    """The MIS app's reading history of one market as the records job files it: December
-    closed, January held open."""
+def harvested(
+    root: Path,
+    market: str,
+    records: list[dict[str, object]],
+    months: tuple[tuple[int, int], ...] = ((2024, 12), (2025, 1)),
+) -> None:
+    """The MIS app's reading history of one market as the records job files it: every month
+    closed but January 2025, which is held open."""
     store = SeriesStore(root / "market" / "series")
-    for year, month in ((2024, 12), (2025, 1)):
+    for year, month in months:
         key = SeriesKey.try_create(
             "journal-readings", f"mis.{market}", "reading", year, month, "live.this-pc"
         )
@@ -175,6 +180,73 @@ def test_a_window_past_the_data_answers_where_the_data_ends(week: DomainContext)
     assert answer["note"] == (
         "the data stops at 2025-01-03T12:00:00.000Z; nothing after it is recorded yet"
     )
+
+
+def test_data_ends_at_the_asked_readings_last_row_in_an_older_month(
+    context: DomainContext,
+) -> None:
+    december = [record("volatility-state", "eurusd", day + NOON, "quiet") for day in DAYS[:3]]
+    january = [record("spread-state", "eurusd", day + NOON, "wide") for day in DAYS[4:]]
+    harvested(context.root, "eurusd", [*december, *january])
+
+    february = query(
+        context,
+        reading="volatility-state",
+        window={"start": "2025-02-01T00:00:00Z", "end": "2025-02-08T00:00:00Z"},
+    )
+    november = query(
+        context,
+        reading="volatility-state",
+        window={"start": "2024-11-01T00:00:00Z", "end": "2024-11-08T00:00:00Z"},
+    )
+
+    assert (february["result"], february["data_ends_at"]) == ([], "2024-12-30T12:00:00.000Z")
+    assert february["note"] == (
+        "the data stops at 2024-12-30T12:00:00.000Z; nothing after it is recorded yet"
+    )
+    assert (november["result"], november["data_ends_at"]) == ([], "2024-12-30T12:00:00.000Z")
+
+
+def test_data_ends_at_never_reads_a_held_out_month(tmp_path: Path) -> None:
+    sealed = DomainContext(
+        root=tmp_path, market=door(tmp_path, {"holdout": True, "holdout_boundary": "2025-01"})
+    )
+    november = datetime(2024, 11, 28, 12, tzinfo=UTC)
+    harvested(
+        tmp_path,
+        "eurusd",
+        [
+            *(
+                record("volatility-state", "eurusd", november + timedelta(days=n), "quiet")
+                for n in range(3)
+            ),
+            *(record("spread-state", "eurusd", day + NOON, "wide") for day in DAYS[4:]),
+            record("spread-state", "eurusd", datetime(2024, 12, 2, 12, tzinfo=UTC), "wide"),
+            record("volatility-state", "eurusd", DAYS[5] + NOON, "stressed"),
+        ],
+        months=((2024, 11), (2024, 12), (2025, 1)),
+    )
+    try:
+        october = query(
+            sealed,
+            reading="volatility-state",
+            window={"start": "2024-10-01T00:00:00Z", "end": "2024-10-08T00:00:00Z"},
+        )
+    finally:
+        sealed.control.close()
+
+    assert (october["data_ends_at"], october["holdout_from"]) == (
+        "2024-11-30T12:00:00.000Z",
+        "2025-01-01T00:00:00.000Z",
+    )
+
+
+def test_a_page_holds_at_most_500_rows(week: DomainContext) -> None:
+    full = query(week, reading="volatility-state", window=WEEK, limit=500)
+
+    assert (len(full["result"]), full["next_cursor"]) == (6, None)
+    with pytest.raises(ValueError, match="less than or equal to 500"):
+        query(week, reading="volatility-state", window=WEEK, limit=501)
 
 
 def test_a_query_without_a_window_is_refused(week: DomainContext) -> None:
@@ -278,6 +350,7 @@ def test_instrument_get_answers_the_version_in_force_at_each_instant(
     february = get(venue="icmarkets-ctrader", symbol="EURUSD", at="2025-02-15T00:00:00Z")
     first = get(market_id="eurusd", version=1)
     before = get(venue="icmarkets-ctrader", symbol="EURUSD", at="2024-12-01T00:00:00Z")
+    past = get(market_id="eurusd", version=3)
 
     assert (january["version"], january["record"]["min_lot"], january["in_force_since"]) == (
         1,
@@ -301,6 +374,12 @@ def test_instrument_get_answers_the_version_in_force_at_each_instant(
         "nearest": ["icmarkets-ctrader:EURUSD"],
         "message": "no version of it was in force at 2024-12-01T00:00:00.000Z; its first "
         "version reached main at 2025-01-01T00:00:00Z",
+    }
+    assert past == {
+        "ok": False,
+        "code": "not_found",
+        "nearest": ["eurusd"],
+        "message": "no version 3 of it is on main; its newest version there is 2",
     }
 
 
