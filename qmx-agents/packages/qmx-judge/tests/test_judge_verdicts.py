@@ -64,9 +64,10 @@ def result(
     evidence: Mapping[str, Mapping[str, object]] = EVIDENCE,
     zero: bool = False,
     result_id: str | None = None,
+    first_day: int = 0,
 ) -> JudgedResult:
     found = tuple(
-        Trade(market, START + day * DAY, r)
+        Trade(market, START + (first_day + day) * DAY, r)
         for market, rs in sorted(trades.items())
         for day, r in enumerate(rs)
     )
@@ -172,6 +173,49 @@ def test_a_result_the_core_never_opened_is_refused() -> None:
     assert refused.value.problems == (
         "result-1 has no core run id; the judge reads only runs the core opened",
     )
+
+
+def test_one_result_of_45_trades_stays_too_thin() -> None:
+    verdict = verdict_of(result(1, markets(7, 1, 0.25, trades=45)))
+
+    assert verdict.says() == (
+        "Too thin to judge by the shipped preset. fx.m00 is too thin to judge, 45 trades of the "
+        "100 needed. Behind it: 1 try, 1 effective."
+    )
+
+
+def test_the_same_result_given_three_times_is_refused() -> None:
+    thin = result(1, markets(7, 1, 0.25, trades=45))
+
+    with pytest.raises(JudgeRefused) as refused:
+        verdict_of(thin, thin, thin)
+
+    assert refused.value.problems == ("result-1 is given 3 times; each result is judged once",)
+
+
+def test_three_reruns_over_one_market_and_window_are_refused() -> None:
+    trades = markets(7, 1, 0.25, trades=45)
+
+    with pytest.raises(JudgeRefused) as refused:
+        verdict_of(result(1, trades), result(2, trades), result(3, trades))
+
+    assert refused.value.problems == (
+        "result-1 and result-2 trade fx.m00 over the same time; a market's trades pool only "
+        "across separate windows",
+        "result-1 and result-3 trade fx.m00 over the same time; a market's trades pool only "
+        "across separate windows",
+        "result-2 and result-3 trade fx.m00 over the same time; a market's trades pool only "
+        "across separate windows",
+    )
+
+
+def test_results_over_separate_windows_of_one_market_pool() -> None:
+    early = result(1, markets(7, 1, 0.25, trades=60))
+    late = result(2, markets(8, 1, 0.25, trades=60), first_day=60)
+
+    verdict = verdict_of(early, late)
+
+    assert [(m.market, m.trades) for m in verdict.per_market] == [("fx.m00", 120)]
 
 
 def variants(seed: int) -> list[dict[str, float]]:

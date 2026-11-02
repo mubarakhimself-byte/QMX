@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
@@ -634,6 +635,34 @@ def _streams(results: Sequence[JudgedResult]) -> dict[str, list[Counted]]:
     return found
 
 
+def _pooled_twice(results: Sequence[JudgedResult]) -> list[str]:
+    """Why some trades would pool more than once: a result given twice, or two results whose
+    trades in one market span overlapping times, as reruns of one window do."""
+    given = Counter(r.result_id for r in results)
+    problems = [
+        f"{result_id} is given {times} times; each result is judged once"
+        for result_id, times in given.items()
+        if times > 1
+    ]
+    spans: dict[str, dict[str, tuple[int, int]]] = {}
+    for result in results:
+        mine = spans.setdefault(result.result_id, {})
+        for trade in result.trades:
+            low, high = mine.get(trade.market, (trade.closed_at, trade.closed_at))
+            mine[trade.market] = (min(low, trade.closed_at), max(high, trade.closed_at))
+    ids = list(spans)
+    for i, first in enumerate(ids):
+        for second in ids[i + 1 :]:
+            for market in sorted(spans[first].keys() & spans[second].keys()):
+                (a_low, a_high), (b_low, b_high) = spans[first][market], spans[second][market]
+                if a_low <= b_high and b_low <= a_high:
+                    problems.append(
+                        f"{first} and {second} trade {market} over the same time; a market's "
+                        "trades pool only across separate windows"
+                    )
+    return problems
+
+
 def judge(
     spec: StudySpec,
     *,
@@ -665,6 +694,7 @@ def judge(
     testers = sorted({r.tester for r in results})
     if len(testers) > 1:
         problems.append(f"results pool within one tester version, not {', '.join(testers)}")
+    problems += _pooled_twice(results)
     if problems:
         raise JudgeRefused(problems)
     streams = _streams([*family, *results])
