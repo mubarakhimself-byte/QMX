@@ -276,13 +276,18 @@ def test_the_published_worked_examples_hold() -> None:
 
 
 @pytest.mark.parametrize(
-    "entry_id",
-    ["offset-gated-trailing-stop", "profit-fraction-trailing-stop", "stepped-profit-stop"],
+    "case",
+    [
+        "offset-gated-trailing-stop@1",
+        "profit-fraction-trailing-stop@1",
+        "stepped-profit-stop@1 lock_1=0 lock_2=0.05 trigger_1=0.05 trigger_2=0.1",
+    ],
 )
-def test_a_trailing_stop_never_widens_inside_a_position(entry_id: str) -> None:
+def test_a_trailing_stop_never_widens_inside_a_position(case: str) -> None:
     widened: list[tuple[str, int]] = []
+    tightened = {Side.LONG: 0, Side.SHORT: 0}
     for side in (Side.LONG, Side.SHORT):
-        instance = _make(f"{entry_id}@1", side)
+        instance = _make(case, side)
         before: Decimal | None = None
         for t in range(len(_BARS)):
             level = cast("Decimal | None", instance.update(_evidence(t)))
@@ -293,10 +298,13 @@ def test_a_trailing_stop_never_widens_inside_a_position(entry_id: str) -> None:
                 level is None or (level < before if side is Side.LONG else level > before)
             ):
                 widened.append((side.value, t))
+            if before is not None and level is not None and level != before:
+                tightened[side] += 1
             before = level if level is not None else before
 
     assert widened == []
-    assert _face(entry_id).output.type is OutputType.LEVEL
+    assert min(tightened.values()) > 0, tightened
+    assert _face(case.split("@")[0]).output.type is OutputType.LEVEL
 
 
 @pytest.mark.parametrize("entry_id", _FAMILY)
