@@ -281,7 +281,7 @@ class _Fake:
 
 
 def _half_risk(evidence: Mapping[str, object]) -> Size:
-    """A risk-session sizer that is not a placeholder: a quarter of a percent at the stop."""
+    """A risk-session sizer that is not a placeholder: half the dummy's risk, 0.25% at the stop."""
     record = cast("InstrumentRecord", evidence["record"])
     entry, stop = cast("Decimal", evidence["entry_price"]), cast("Decimal", evidence["stop_price"])
     if entry == stop:
