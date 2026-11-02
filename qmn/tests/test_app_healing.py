@@ -16,11 +16,17 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from qmf.core import Ok, TypedRefusal
+from qmf.data.journal_envelope import JournalStream, JournalWorld, RowFacts
+from qmf.data.journal_kinds.unit import LIFECYCLE_SCHEMA
+from qmf.data.journal_writer import JournalWriter, WriterScope
 from qmf.data.store.refusals import storage_failure
 from qmf.venue.commands import CommandKind
 from qmn.app import stand_down
 from qmn.app.feed_keeper import Bar, Quote
 from qmn.app.healing import RUNTIME_STUCK_EXIT_CODE, Backoff
+from qmn.app.runtime import ConformanceAccount, NodeUnit
+from qmn.app.server import BUILD
 from test_app_runtime import (
     DAY,
     LIVE_FROM,
@@ -345,11 +351,13 @@ def test_a_stop_no_journal_took_reads_unsafe_to_restart_and_holds_through_a_heal
     node.runtime.step()
     node.runtime.step()
     safe = cast("dict[str, object]", status(node)["safe_to_restart"])
+    (opened,) = node.account.positions()
 
     assert held(node) == [("risk_stop", None)]
     assert safe == {
         "ok": False,
         "reasons": [
+            f"position {opened} is open at the venue",
             "Stopped by a risk rule at unit:dep-1:fx.eurusd is held in memory only: no journal"
             " took it"
         ],
@@ -375,8 +383,246 @@ def test_safe_to_restart_reads_false_while_an_order_is_in_flight(tmp_path: Path)
         "ok": False,
         "reasons": [f"order {first.client_order_id} is in flight: the venue's answer is unknown"],
     }
-    assert resolved == {"ok": True, "reasons": []}
+    assert resolved == {
+        "ok": False,
+        "reasons": [f"position {first.client_order_id} is open at the venue"],
+    }
     node.runtime.stop()
+
+
+def stuck_exit(node: Rig) -> None:
+    """The watchdog finds the pass stuck and exits the process, as ``StuckWatch.check`` does."""
+    watch = node.runtime.watch
+    exits: list[int] = []
+    watch.exit = exits.append
+    watch.began = 0
+    watch.steady_ns = lambda: 31 * SECOND
+    assert (watch.check(), exits) == ("runtime_stuck", [RUNTIME_STUCK_EXIT_CODE])
+    node.runtime.stop()
+
+
+def test_five_stuck_exits_in_ten_minutes_stand_the_next_start_down_until_his_resume(
+    tmp_path: Path,
+) -> None:
+    for cycle in range(5):
+        node = rig(tmp_path)
+        if cycle == 0:
+            deploy(node, deployment(node.data))
+        settle(node)
+        stuck_exit(node)
+    again = rig(tmp_path)
+    settle(again)
+    stood = status(again)
+    driven(again, at(1440))
+    held_a_day = entries(again)
+    value(again.node.call("resume", {"op_id": "op-resume-1", "scope": "all"}))
+    again.runtime.step()
+    cleared = status(again)
+    driven(again, at(4500), start=at(1440))
+
+    assert stood["word"] == "Stopped by a health check"
+    assert cast("list[object]", stood["reasons"])[0] == (
+        "Stopped by a health check: 5 restarts in 10 minutes. It waits for your resume."
+    )
+    assert again.runtime.alarms[0] == {
+        "alarm": "repeated_fault",
+        "restarts": 5,
+        "action": "no_new_entries",
+        "why": "5 restarts in 10 minutes, the last: runtime_stuck",
+    }
+    assert held_a_day == []
+    assert cleared["word"] == "Trading"
+    assert again.node.context.store.observed("healing.boots") == []
+    assert entries(again) == [("fx.eurusd", Decimal("0.92"))]
+    again.runtime.stop()
+
+
+def keep_venue(monkeypatch: pytest.MonkeyPatch, venue: ConformanceAccount) -> None:
+    """The restarted node finds the same venue account, which kept its positions, as a broker
+    does."""
+
+    def opened(
+        cls: type[ConformanceAccount], *args: object, **kwargs: object
+    ) -> Ok[ConformanceAccount]:
+        del cls, args, kwargs
+        return Ok(venue)
+
+    monkeypatch.setattr(ConformanceAccount, "open", classmethod(opened))
+
+
+def test_a_process_restart_with_a_position_open_manages_it_and_sends_what_an_unhealed_run_sends(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = rig(tmp_path)
+    deploy(node, deployment(node.data))
+    settle(node)
+    driven(node, at(300))
+    venue = node.account
+    (opened,) = venue.positions()
+    open_before = cast("dict[str, object]", status(node)["safe_to_restart"])
+    node.runtime.stop()
+    keep_venue(monkeypatch, venue)
+    again = rig(tmp_path)
+    settle(again)
+    driven(again, at(316), start=at(300))
+    shown = again.node.context.store.observed("runtime.positions")
+    managed = [p["position"] for p in cast("list[dict[str, object]]", shown)]
+    while_open = cast("dict[str, object]", status(again)["safe_to_restart"])
+    driven(again, LIVE_FROM + 2 * DAY, start=at(316))
+    names = [t.tags.client_order_id for t in venue.received if t.tags is not None]
+
+    assert again.account is venue
+    assert [(t.command.kind, t.quantity) for t in venue.received] == [
+        (CommandKind.PLACE_ORDER, Decimal("1.72")),
+        (CommandKind.PLACE_ORDER, Decimal("1.08")),
+        (CommandKind.PLACE_ORDER, Decimal("0.75")),
+        (CommandKind.CLOSE_POSITION, None),
+    ]
+    assert opened == names[1]
+    assert open_before == {"ok": False, "reasons": [f"position {opened} is open at the venue"]}
+    assert managed == [opened]
+    assert while_open == {"ok": False, "reasons": [f"position {opened} is open at the venue"]}
+    assert [(t["trade_id"], t["exit_kind"], t["quantity"]) for t in unit_rows(again, "trade")] == [
+        (names[0], "stop", "1.72"),
+        (names[1], "stop", "1.08"),
+        (names[2], "close", "0.75"),
+    ]
+    assert venue.positions() == {}
+    assert cast("dict[str, object]", status(again)["safe_to_restart"]) == {"ok": True, "reasons": []}
+    again.runtime.stop()
+
+
+def test_the_guard_refuses_an_entry_where_a_position_of_ours_no_unit_holds_is_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = rig(tmp_path)
+    deploy(node, deployment(node.data))
+    settle(node)
+    driven(node, at(300))
+    venue = node.account
+    (opened,) = venue.positions()
+    node.runtime.stop()
+    keep_venue(monkeypatch, venue)
+
+    def unheld(self: NodeUnit, found: object) -> None:
+        del self, found
+
+    monkeypatch.setattr(NodeUnit, "adopt", unheld)
+    again = rig(tmp_path)
+    settle(again)
+    driven(again, at(316), start=at(300))
+    guard = again.runtime.guard(again.runtime.hosted["dep-1"])
+    safe = cast("dict[str, object]", status(again)["safe_to_restart"])
+
+    assert guard("fx.eurusd") == (
+        f"a position of ours that no unit holds is open on fx.eurusd: {opened}"
+    )
+    assert guard("metal.xauusd") is None
+    assert safe == {
+        "ok": False,
+        "reasons": [f"position {opened} of ours is open and no unit holds it"],
+    }
+    again.runtime.stop()
+
+
+def test_a_kill_he_sends_during_the_back_off_ends_the_wait(tmp_path: Path) -> None:
+    node = rig(tmp_path)
+    deploy(node, deployment(node.data))
+    settle(node)
+    node.runtime.healer.backoff = Backoff(base_s=16.0)
+    slept: list[float] = []
+    sleep = node.runtime.sleep
+
+    def counted(seconds: float) -> None:
+        slept.append(seconds)
+        sleep(seconds)
+
+    node.runtime.sleep = counted
+    faults(node, 2)
+    node.runtime.step()
+    quiet = list(slept)
+    slept.clear()
+
+    def killed(seconds: float) -> None:
+        counted(seconds)
+        if len(slept) == 1:
+            value(node.node.call("kill", {"op_id": "op-kill-1", "level": "yellow", "scope": "all"}))
+
+    node.runtime.sleep = killed
+    node.runtime.step()
+    cut_short = list(slept)
+    node.runtime.step()
+
+    assert (len(quiet), sum(quiet)) == (80, 16.0)
+    assert cut_short == [0.2]
+    assert status(node)["kill_level"] == "YELLOW"
+    node.runtime.stop()
+
+
+def test_a_start_reads_stop_rows_written_before_c13_and_a_cleared_one_stays_cleared(
+    tmp_path: Path,
+) -> None:
+    node = rig(tmp_path)
+    deploy(node, deployment(node.data))
+    settle(node)
+    driven(node, at(5570))
+    unit = node.runtime.hosted["dep-1"].unit
+    assert unit is not None
+    now = node.now[0]
+    facts = RowFacts(ts_recv=now, clock_ok=False)
+    word = stand_down.TABLE[stand_down.Kind.REPEATED_FAULT]
+    journal = node.node.journal
+    assert journal is not None
+    journal.append(
+        "stand_down",
+        {
+            "event": "start",
+            "stand_down": "repeated_fault",
+            "scope": "all",
+            "word": word.word.value,
+            "cause": "5 restarts in 10 minutes",
+            "clears": word.clears.value,
+            "since_ns": now,
+        },
+        facts,
+    )
+    scope = WriterScope(
+        JournalStream.UNIT, "dummy-trend-pullback", JournalWorld.DEMO, "pc", "node", BUILD
+    )
+    writer = JournalWriter.open(
+        node.node.context.journal_root, scope, clock=lambda: now, boot_epoch_id="before-c13"
+    )
+    assert not isinstance(writer, TypedRefusal)
+    writer.value.append(
+        "lifecycle",
+        {
+            "schema": LIFECYCLE_SCHEMA,
+            "event_id": "lifecycle-before-c13",
+            "unit_id": "dummy-trend-pullback",
+            "version_ref": unit.compiled.document_fingerprint.value,
+            "compiled_fingerprint": unit.compiled.compiled_fingerprint.value,
+            "market_id": "fx.eurusd",
+            "from": "live",
+            "to": "stopped",
+            "reason": "the kill line is crossed",
+            "at": "2025-03-24T16:36:40+00:00",
+            "by": {"kind": "risk_rule", "principal": "kill-line"},
+        },
+        RowFacts(ts_recv=now, clock_ok=False, unit_id="dummy-trend-pullback", market_id="fx.eurusd"),
+    )
+    writer.value.close()
+    second = restarted(node, tmp_path)
+    after_restart = held(second)
+    second.now[0] = now + 60 * SECOND
+    value(second.node.call("resume", {"op_id": "op-resume-1", "scope": "all"}))
+    second.runtime.step()
+    after_resume = held(second)
+    third = restarted(second, tmp_path)
+
+    assert after_restart == [("repeated_fault", None), ("risk_stop", "lifecycle-before-c13")]
+    assert after_resume == []
+    assert held(third) == []
+    third.runtime.stop()
 
 
 def test_the_back_off_doubles_to_its_cap_and_starts_again_after_a_healthy_run() -> None:
