@@ -13,7 +13,7 @@
   "origin": "qml",
   "component_type": "exit",
   "definition": "Once the profit at the bar's best rate reaches offset, a stop distance below that rate of share times the profit, held between min_distance and max_distance, moved only in the trade's favour.",
-  "boundaries": "Before the offset the level is missing and the unit's own initial stop holds. The rate is the bar's high for a long and its low for a short, as freqtrade's backtest reads it, so a bar that spikes and closes back sets the stop from the spike. It never widens. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "boundaries": "Before the offset the level is missing and the unit's own initial stop holds. The rate is the bar's high for a long and its low for a short, as freqtrade's backtest reads it, so a bar that spikes and closes back sets the stop from the spike. It never widens. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does. One instance serves one position at a time on its side, and the entry price names the position: an entry price other than the one it holds starts a new position with fresh state. Two positions back to back at the very same entry price would share state until the runtime names each position.",
   "recognition": "After a set profit the stop follows the price, keeping half the profit.",
   "eligible_roles": [
     "exit"
@@ -113,8 +113,8 @@
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
-    "observations": 1
+    "observations": 2
   },
-  "fingerprint": "fp1:sha256:8eea7ce5ee0c03dddfc830e75f88b32224a840eafaaaf5fcd094a3e70c90624e",
+  "fingerprint": "fp1:sha256:b9fd3ccbb58c4e38efb50d3b66aa55ac0696d19861b54a0848cb052470ec74f5",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }

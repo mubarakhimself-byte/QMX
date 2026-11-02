@@ -8,8 +8,9 @@ since the position was given, starting at ``entry_price``. A bar that makes a ne
 hold, as in LEAN; otherwise the exit holds while ``|best - close| / best`` is above
 ``giveback``. Its value is that drawdown.
 
-One instance serves one position on its side. An update with no ``entry_price`` means no
-position is given: the exit answers missing and forgets its best.
+One instance serves one position at a time on its side, and the entry price names the position:
+an entry price other than the one held starts a new position whose best is that entry. An update
+with no ``entry_price`` means no position is given: the exit answers missing and forgets its best.
 """
 
 from __future__ import annotations
@@ -21,11 +22,12 @@ from qml.blocks.api import Side, Signal, quantise
 
 
 class _Giveback:
-    __slots__ = ("_best", "_giveback", "_side")
+    __slots__ = ("_best", "_entry", "_giveback", "_side")
 
     def __init__(self, giveback: Decimal, side: Side) -> None:
         self._giveback = giveback
         self._side = side
+        self._entry: Decimal | None = None
         self._best: Decimal | None = None
 
     @property
@@ -34,16 +36,18 @@ class _Giveback:
 
     @property
     def state_bound(self) -> int:
-        return 1
+        return 2
 
     def retained(self) -> int:
-        return 0 if self._best is None else 1
+        return sum(held is not None for held in (self._entry, self._best))
 
     def update(self, evidence: Mapping[str, object]) -> Signal | None:
         entry, bar = evidence.get("entry_price"), evidence.get("series")
         if not isinstance(entry, Decimal) or entry <= 0:
-            self._best = None
+            self._entry = self._best = None
             return None
+        if entry != self._entry:
+            self._entry, self._best = entry, None
         close = bar.get("close") if isinstance(bar, Mapping) else None  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(close, Decimal):
             return None
@@ -57,10 +61,12 @@ class _Giveback:
         return Signal(state=drawdown > self._giveback, value=quantise(drawdown))
 
     def export_state(self) -> Mapping[str, object]:
-        return {"best": None if self._best is None else str(self._best)}
+        held = {"entry": self._entry, "best": self._best}
+        return {k: None if v is None else str(v) for k, v in held.items()}
 
     def import_state(self, state: Mapping[str, object]) -> None:
-        best = state.get("best")
+        entry, best = state.get("entry"), state.get("best")
+        self._entry = Decimal(entry) if isinstance(entry, str) else None
         self._best = Decimal(best) if isinstance(best, str) else None
 
 

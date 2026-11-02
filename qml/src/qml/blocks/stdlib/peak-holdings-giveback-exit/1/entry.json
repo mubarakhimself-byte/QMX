@@ -14,7 +14,7 @@
   "origin": "qml",
   "component_type": "exit",
   "definition": "Close once the position has given back more than giveback of its best value since entry: the best close starts at the entry price, and the exit holds while |best - close| / best is above giveback.",
-  "boundaries": "With one position of fixed size LEAN's drawdown of absolute holdings value is this drawdown of price. A bar that sets a new best never closes, as in LEAN. It reads closes, not highs, so it gives back from the best close. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "boundaries": "With one position of fixed size LEAN's drawdown of absolute holdings value is this drawdown of price. A bar that sets a new best never closes, as in LEAN. It reads closes, not highs, so it gives back from the best close. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does. One instance serves one position at a time on its side, and the entry price names the position: an entry price other than the one it holds starts a new position with fresh state. Two positions back to back at the very same entry price would share state until the runtime names each position.",
   "recognition": "The trade is closed when it falls back a set share from the best it reached.",
   "eligible_roles": [
     "exit"
@@ -84,8 +84,8 @@
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
-    "observations": 1
+    "observations": 2
   },
-  "fingerprint": "fp1:sha256:e652f8700a58c5f97311e225c9a46d2cbb667cfc6c8281750125e6b4b7f3eb17",
+  "fingerprint": "fp1:sha256:3b41f23d8701464eefa2b17593cda9325717ca0c1ae43da84994e54bc5c73e12",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }

@@ -13,7 +13,7 @@
   "origin": "qml",
   "component_type": "exit",
   "definition": "Once the best rate since entry is at least entry times (1 + offset), a stop distance below that best rate (above it for a short), moved only in the trade's favour.",
-  "boundaries": "This is freqtrade's trailing_only_offset_is_reached = True form; before the offset the level is missing and the unit's own initial stop holds. The best rate is the bar's high for a long and its low for a short. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "boundaries": "This is freqtrade's trailing_only_offset_is_reached = True form; before the offset the level is missing and the unit's own initial stop holds. The best rate is the bar's high for a long and its low for a short. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does. One instance serves one position at a time on its side, and the entry price names the position: an entry price other than the one it holds starts a new position with fresh state. Two positions back to back at the very same entry price would share state until the runtime names each position.",
   "recognition": "The stop starts trailing only once the trade is a set amount in profit.",
   "eligible_roles": [
     "exit"
@@ -88,8 +88,8 @@
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
-    "observations": 1
+    "observations": 2
   },
-  "fingerprint": "fp1:sha256:03f961cb218085b0851bb294eab41ad03c534dae38a431fdde7f4ecd3e9e93cb",
+  "fingerprint": "fp1:sha256:940e84ca12de01991f67278f8af282efb387d55fe4371d1ca937edf350ad0e08",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }

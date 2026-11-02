@@ -14,7 +14,7 @@
   "origin": "qml",
   "component_type": "exit",
   "definition": "Move the stop to a fixed level beyond entry as the profit passes each step: above trigger_1 the stop locks lock_1 of the entry price in profit, above trigger_2 lock_2, above trigger_3 lock_3; the highest step passed wins and the stop never moves back.",
-  "boundaries": "Before the first step the level is missing and the unit's own initial stop holds. The profit is read at the bar's high for a long and its low for a short, as freqtrade's backtest reads it. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "boundaries": "Before the first step the level is missing and the unit's own initial stop holds. The profit is read at the bar's high for a long and its low for a short, as freqtrade's backtest reads it. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does. One instance serves one position at a time on its side, and the entry price names the position: an entry price other than the one it holds starts a new position with fresh state. Two positions back to back at the very same entry price would share state until the runtime names each position.",
   "recognition": "Each time the trade reaches a profit step the stop jumps up to lock more in.",
   "eligible_roles": [
     "exit"
@@ -129,8 +129,8 @@
   "mirroring": "supported",
   "state_bound": {
     "rule": "constant",
-    "observations": 1
+    "observations": 2
   },
-  "fingerprint": "fp1:sha256:43390a724753a86e0f50f93cd62b286d2275a438c38959b36a855008cf4fdd8f",
+  "fingerprint": "fp1:sha256:533ce1141e578ea4b6c5443288e920851a0a2e5cfb1e19d861cf3e32286cf4e3",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }

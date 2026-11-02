@@ -6,8 +6,10 @@ position is first given (bar 0), ``roi_1`` from ``bars_1`` bars held, and so on,
 force is the one with the most bars not above the bars held. The exit holds while the open
 profit ratio at the bar's close is at least the step's ratio, and its value is that ratio.
 
-One instance serves one position on its side. An update with no ``entry_price`` means no
-position is given: the exit answers missing and forgets the bars it counted.
+One instance serves one position at a time on its side, and the entry price names the position:
+an entry price other than the one held starts a new position at bar 0. An update with no
+``entry_price`` means no position is given: the exit answers missing and forgets the bars it
+counted.
 """
 
 from __future__ import annotations
@@ -45,10 +47,11 @@ class _RoiTable:
         if not isinstance(entry, Decimal) or entry <= 0:
             self._held, self._entry = -1, None
             return None
+        if entry != self._entry:
+            self._held, self._entry = -1, entry
         close = bar.get("close") if isinstance(bar, Mapping) else None  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         if not isinstance(close, Decimal):
             return None
-        self._entry = entry
         self._held += 1
         wanted = next(roi for bars, roi in reversed(self._table) if bars <= self._held)
         move = close - entry if self._side is Side.LONG else entry - close

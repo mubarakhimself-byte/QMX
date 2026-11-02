@@ -15,7 +15,7 @@
   "origin": "qml",
   "component_type": "exit",
   "definition": "Close once the open profit ratio reaches the step in force of a table that lowers the profit wanted as the position ages: roi_0 from the bar the position opens, roi_1 from bars_1 bars held, roi_2 from bars_2, roi_3 from bars_3.",
-  "boundaries": "freqtrade keys its table by minutes open; this one counts bars held, because a block reads no clock, so the defaults read freqtrade's 20, 30 and 40 minutes as bars and equal them on one-minute bars. The profit is read at the bar's close against the entry price, with no fee and no spread, and a short's profit is read on bid bars. A negative step closes at a loss after that many bars. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does.",
+  "boundaries": "freqtrade keys its table by minutes open; this one counts bars held, because a block reads no clock, so the defaults read freqtrade's 20, 30 and 40 minutes as bars and equal them on one-minute bars. The profit is read at the bar's close against the entry price, with no fee and no spread, and a short's profit is read on bid bars. A negative step closes at a loss after that many bars. Which exits and halts a unit may use, and their numbers, are the risk session's call (ledger R-04); this entry says what the rule does, not whether to use it. QML's unit runtime does not yet pass an exit its position, so inside a unit this exit stays silent until it does. One instance serves one position at a time on its side, and the entry price names the position: an entry price other than the one it holds starts a new position with fresh state. Two positions back to back at the very same entry price would share state until the runtime names each position.",
   "recognition": "The longer a trade runs, the less profit it needs before it is taken.",
   "eligible_roles": [
     "exit"
@@ -147,6 +147,6 @@
     "rule": "constant",
     "observations": 2
   },
-  "fingerprint": "fp1:sha256:f1c087756a9f46753f88b0cb14c61ba66140fba879c865c9e0723881a68a08ff",
+  "fingerprint": "fp1:sha256:55c77c2ef9f4be3abd85ae1f8eb1797fb6b5fe8465c257addf58aedc35246244",
   "tests": "qml/tests/test_wave1_exits.py, against qml/tests/golden/exits-and-halts/reference.json"
 }
