@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "accumulation-distribution",
+  "version": 1,
+  "family": "volume",
+  "aliases": [
+    "A/D",
+    "Accumulation/Distribution",
+    "AD line"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Chaikin's running total of each bar's close location ((close - low) - (high - close)) / (high - low) times its volume.",
+  "boundaries": "Starts at the first bar it is given; a bar with no range adds nothing.",
+  "recognition": "A/D rising while price falls reads as accumulation under the decline.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/volume_indicators/ad (read 2026-11-02)",
+      "quote": "is determined by the changes in price and volume",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "FX and CFD bars carry a tick count, not traded size, so the reading follows quote activity rather than volume"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": null
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:f2b4929b91b97fa7028c28f4457468cdc0323faf6e0675697010dff59e9c68dd",
+  "golden": {
+    "reference": "talib.AD 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

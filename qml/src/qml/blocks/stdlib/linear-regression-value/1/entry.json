@@ -1,0 +1,75 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "linear-regression-value",
+  "version": 1,
+  "family": "regression",
+  "aliases": [],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The least-squares line through the last period closes, read at the newest close.",
+  "boundaries": "A straight-line fit over a window; it says nothing about how well it fits.",
+  "recognition": "A rising line or positive slope reads as up, falling as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/linear-regression-forecast (read 2026-11-02)",
+      "quote": "LRF uses the least squares method, a straight line plotted through prices",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:963dd5073cade3c22b45f40a01ffbdbd3bd15f169f2a7f56182b1c08a65b4ba2",
+  "golden": {
+    "reference": "talib.LINEARREG 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

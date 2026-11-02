@@ -1,0 +1,101 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "accelerator-oscillator",
+  "version": 1,
+  "family": "bill-williams",
+  "aliases": [
+    "AC",
+    "Accelerator Oscillator",
+    "acceleration/deceleration"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The Awesome Oscillator less its own simple mean over signal values.",
+  "boundaries": "In price units; a change of the Awesome Oscillator's pace, not of price.",
+  "recognition": "Williams reads it as acceleration turning before momentum does.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/bw_indicators/ao (read 2026-11-02)",
+      "quote": "Prior to price changes, the market driving force changes its direction",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "fast": {
+      "measure": "bars",
+      "default": "5",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slow": {
+      "measure": "bars",
+      "default": "34",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "signal": {
+      "measure": "bars",
+      "default": "5",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "max(fast, slow) + signal - 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "fast + slow + signal",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:a2e37e97bf0f6a1060f0f1e5b603e1fe60c6a32d17124a933af6bae5de0c0cf1",
+  "golden": {
+    "reference": "talib.SMA over talib.MEDPRICE 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

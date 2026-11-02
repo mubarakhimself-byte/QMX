@@ -213,7 +213,7 @@ def _indicators(version: str) -> dict[str, Any]:
         "moving-average-linear-weighted@1 period=20": wma20,
         "moving-average-double-exponential@1 period=14": TA.DEMA(c, timeperiod=14),
         "moving-average-triple-exponential@1 period=14": TA.TEMA(c, timeperiod=14),
-        "moving-average-kaufman-adaptive@1 period=10": TA.KAMA(c, timeperiod=10),
+        "moving-average-kaufman-adaptive@1 period=10 fast=2 slow=30": TA.KAMA(c, timeperiod=10),
         "moving-average-hull@1 period=20": TA.WMA(2 * wma10 - wma20, timeperiod=4),
         "macd-line@1 fast=12 slow=26": macd,
         "macd-signal@1 fast=12 slow=26 signal=9": signal,

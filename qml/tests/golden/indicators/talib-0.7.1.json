@@ -1,7 +1,7 @@
 {
  "generator": "tools/dictionary/golden_talib.py",
  "talib": "0.7.1",
- "numpy": "2.5.4",
+ "numpy": "2.5.2",
  "seed": 20261102,
  "reference": {
   "talib": [
@@ -37,7 +37,7 @@
    "money-flow-index@1 period=14",
    "moving-average-double-exponential@1 period=14",
    "moving-average-hull@1 period=20",
-   "moving-average-kaufman-adaptive@1 period=10",
+   "moving-average-kaufman-adaptive@1 period=10 fast=2 slow=30",
    "moving-average-linear-weighted@1 period=20",
    "moving-average-simple@1 period=20",
    "moving-average-triple-exponential@1 period=14",
@@ -48157,7 +48157,7 @@
    "1.014070729437483",
    "1.0147148281387817"
   ],
-  "moving-average-kaufman-adaptive@1 period=10": [
+  "moving-average-kaufman-adaptive@1 period=10 fast=2 slow=30": [
    null,
    null,
    null,

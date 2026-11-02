@@ -1,0 +1,82 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "moving-average-triple-exponential",
+  "version": 1,
+  "family": "moving-average",
+  "aliases": [
+    "TEMA",
+    "triple exponential moving average"
+  ],
+  "same_word_as": [
+    "context.moving-average@1",
+    "locations.moving-average@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Mulloy's 3 x EMA - 3 x EMA of the EMA + EMA of that, each EMA seeded by a simple mean.",
+  "boundaries": "Less lag again than DEMA, and still more overshoot at turns.",
+  "recognition": "Price above a rising average reads as up, below a falling one as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/tema (read 2026-11-02)",
+      "quote": "The principle of its calculation is similar to DEMA",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "3 x period - 2",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:4c2b725b0f4592018b1c41eb2a97ff1adb4aa494a3ca02668173943095e17efc",
+  "golden": {
+    "reference": "talib.TEMA 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

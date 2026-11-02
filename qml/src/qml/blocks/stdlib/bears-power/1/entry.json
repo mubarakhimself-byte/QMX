@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bears-power",
+  "version": 1,
+  "family": "elder-ray",
+  "aliases": [
+    "Bears Power",
+    "Elder bears power"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Elder's Bears Power: the bar's low less the EMA of the close over period bars.",
+  "boundaries": "In price units; one half of Elder's ray, read beside a trend filter.",
+  "recognition": "Its sign says whether the bar's low reached past the average.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/bears (read 2026-11-02)",
+      "quote": "Bears Power as the difference between the lowest price and 13-period exponential moving average",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "13",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:f0a9865682b80355e1928257164296b6ab4eff4bf1877592653297edf4215091",
+  "golden": {
+    "reference": "talib.EMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

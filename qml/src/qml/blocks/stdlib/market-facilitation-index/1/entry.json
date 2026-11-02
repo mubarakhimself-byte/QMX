@@ -1,0 +1,78 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "market-facilitation-index",
+  "version": 1,
+  "family": "bill-williams",
+  "aliases": [
+    "BW MFI",
+    "Market Facilitation Index"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Williams' bar range (high - low) divided by the bar's volume.",
+  "boundaries": "Missing on a bar with no volume; on FX and CFD bars it is price move per tick.",
+  "recognition": "Read with volume: both up is green, both down is fade, in Williams' words.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/bw_indicators/market_facilitation (read 2026-11-02)",
+      "quote": "is the indicator which shows the change of price for one tick",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "FX and CFD bars carry a tick count, not traded size, so the reading follows quote activity rather than volume"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": null
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:60a4c05e4c4bdea22e69fe2edd71818d3f4fbb45b8d92845578203bc0b713b8a",
+  "golden": {
+    "reference": "(high - low) / volume in numpy, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

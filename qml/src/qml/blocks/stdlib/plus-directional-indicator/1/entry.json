@@ -1,0 +1,80 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "plus-directional-indicator",
+  "version": 1,
+  "family": "directional-movement",
+  "aliases": [
+    "plus DI",
+    "upward directional indicator"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Wilder's +DI: 100 x the Wilder-smoothed upward moves over the smoothed true ranges, over period bars.",
+  "boundaries": "0 while the true ranges are 0; read against its opposite line.",
+  "recognition": "+DI above -DI reads as up, below as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/admi (read 2026-11-02)",
+      "quote": "comparison of two direction indicators: the 14-period +DI one and the 14-period -DI",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:92e2747464f9640d3ba3e9e87c026ad99634b9c1b27f4eda9ebfede573341a2d",
+  "golden": {
+    "reference": "talib.PLUS_DI 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

@@ -1,0 +1,96 @@
+"""heikin-ashi-close@1: the Heikin-Ashi candle's close, the mean of the bar's open, high,
+low and close.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from decimal import Decimal
+from typing import cast
+
+from qml.blocks.api import Side, quantise
+
+
+def _floats(raw: object, what: str) -> list[float]:
+    if not isinstance(raw, list):
+        raise ValueError(f"{what} is a list of hex floats")
+    return [float.fromhex(str(v)) for v in cast("list[object]", raw)]
+
+
+def _bar(evidence: Mapping[str, object], *names: str) -> tuple[float, ...] | None:
+    """The named fields of the bar on the ``series`` port as floats, or None when one is missing."""
+    bar = evidence.get("series")
+    if not isinstance(bar, Mapping):
+        return None
+    fields = cast("Mapping[str, object]", bar)
+    found = [fields.get(name) for name in names]
+    if not all(isinstance(v, Decimal) for v in found):
+        return None
+    return tuple(float(cast("Decimal", v)) for v in found)
+
+
+class _HeikinAshi:
+    """Heikin-Ashi's open and close: the close is the bar's mean of open, high, low and close;
+    the open is the mean of the previous Heikin-Ashi open and close, and on the first bar the
+    mean of its own open and close."""
+
+    __slots__ = ("close", "open")
+
+    def __init__(self) -> None:
+        self.open: float | None = None
+        self.close = 0.0
+
+    def step(self, opened: float, high: float, low: float, close: float) -> tuple[float, float]:
+        ha_close = (opened + high + low + close) / 4
+        ha_open = (opened + close) / 2 if self.open is None else (self.open + self.close) / 2
+        self.open, self.close = ha_open, ha_close
+        return ha_open, ha_close
+
+    def state(self) -> list[str] | None:
+        return None if self.open is None else [self.open.hex(), self.close.hex()]
+
+    def restore(self, raw: object) -> None:
+        if raw is None:
+            self.open = None
+            return
+        self.open, self.close = _floats(raw, "Heikin-Ashi's state")
+
+
+class _HeikinAshiClose:
+    __slots__ = ("_ha",)
+
+    def __init__(self) -> None:
+        self._ha = _HeikinAshi()
+
+    @property
+    def warm_up_bars(self) -> int:
+        return 1
+
+    @property
+    def state_bound(self) -> int:
+        return 2
+
+    def retained(self) -> int:
+        return 0 if self._ha.open is None else 2
+
+    def update(self, evidence: Mapping[str, object]) -> Decimal | None:
+        found = _bar(evidence, "open", "high", "low", "close")
+        if found is None:
+            return None
+        return quantise(self._ha.step(*found)[1])
+
+    def export_state(self) -> Mapping[str, object]:
+        return {"ha": self._ha.state()}
+
+    def import_state(self, state: Mapping[str, object]) -> None:
+        self._ha.restore(state.get("ha"))
+
+
+class _Block:
+    def make(
+        self, params: Mapping[str, Decimal], inputs: Mapping[str, str], side: Side = Side.LONG
+    ) -> _HeikinAshiClose:
+        return _HeikinAshiClose()
+
+
+BLOCK = _Block()

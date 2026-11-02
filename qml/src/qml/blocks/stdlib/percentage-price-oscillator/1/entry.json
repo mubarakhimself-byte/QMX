@@ -1,0 +1,89 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "percentage-price-oscillator",
+  "version": 1,
+  "family": "moving-average-oscillator",
+  "aliases": [
+    "PPO"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The MACD line as a percent of the slow EMA.",
+  "boundaries": "Comparable across markets and price levels, which the MACD line is not.",
+  "recognition": "Above zero the fast average leads up, below zero it leads down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/percentage-price-oscillator-ppo (read 2026-11-02)",
+      "quote": "measures the difference between two moving averages as a percentage",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "percent"
+  },
+  "parameters": {
+    "fast": {
+      "measure": "bars",
+      "default": "12",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slow": {
+      "measure": "bars",
+      "default": "26",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "max(fast, slow)",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:717d347710d4665484152c2d7d32697694362130cfbc8d135ee0b9f38a37b7f6",
+  "golden": {
+    "reference": "talib.EMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

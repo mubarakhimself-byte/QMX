@@ -49,7 +49,8 @@ def _wave_ids() -> list[str]:
     for folder in sorted(_STDLIB.iterdir()):
         face = folder / "1" / "entry.json"
         if face.is_file():
-            golden = json.loads(face.read_text("utf-8")).get("golden") or {}
+            entry = cast("dict[str, object]", json.loads(face.read_text("utf-8")))
+            golden = cast("dict[str, object]", entry.get("golden") or {})
             if golden.get("cases") == "qml/tests/golden/indicators/talib-0.7.1.json":
                 found.append(folder.name)
     return found
@@ -72,7 +73,7 @@ def _make(case: str) -> Instance:
 
 
 def _feed(case: str) -> list[object]:
-    entry_id = case.split("@")[0]
+    entry_id = case.split("@", maxsplit=1)[0]
     return list(_BARS) if _face(entry_id).inputs[0].stream_kind == "bars" else list(_CLOSES)
 
 
@@ -132,7 +133,7 @@ def test_a_cut_restored_from_exported_state_equals_the_full_run_at_20_sampled_ba
 
 
 def _week(case: str) -> list[object]:
-    if _face(case.split("@")[0]).inputs[0].stream_kind != "bars":
+    if _face(case.split("@", maxsplit=1)[0]).inputs[0].stream_kind != "bars":
         return [_CLOSES[i % len(_CLOSES)] for i in range(_WEEK_OF_M1)]
     loop = len(_BARS) * _BAR_NS
     rows = _GOLDEN["bars"]

@@ -1,0 +1,103 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "moving-average-kaufman-adaptive",
+  "version": 1,
+  "family": "moving-average",
+  "aliases": [
+    "AMA",
+    "KAMA",
+    "Kaufman adaptive moving average"
+  ],
+  "same_word_as": [
+    "context.moving-average@1",
+    "locations.moving-average@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Kaufman's average whose step grows with the efficiency ratio: net change over the sum of absolute changes in the last period bars, between a fast and a slow constant.",
+  "boundaries": "Nearly flat in chop and close to price in a clean run; the ratio itself is a reading.",
+  "recognition": "Price above a rising average reads as up, below a falling one as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/ama (read 2026-11-02)",
+      "quote": "is used for constructing a moving average with low sensitivity to price series noises",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "10",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "fast": {
+      "measure": "bars",
+      "default": "2",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    },
+    "slow": {
+      "measure": "bars",
+      "default": "30",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + 2",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:b4186b2c1e895838f2e940c556a432ecac1ae1138c478a4cbb87aafb97764914",
+  "golden": {
+    "reference": "talib.KAMA 0.7.1 (its fast 2 and slow 30)",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

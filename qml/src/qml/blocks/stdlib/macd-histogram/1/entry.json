@@ -1,0 +1,104 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "macd-histogram",
+  "version": 1,
+  "family": "moving-average-oscillator",
+  "aliases": [
+    "OsMA",
+    "MACD histogram",
+    "moving average of oscillator"
+  ],
+  "same_word_as": [
+    "macd@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The MACD line less its signal line.",
+  "boundaries": "Zero where the line crosses its signal; its size is in price units.",
+  "recognition": "A histogram shrinking toward zero reads as momentum fading.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/mao (read 2026-11-02)",
+      "quote": "is the difference between the oscillator and oscillator smoothing",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "fast": {
+      "measure": "bars",
+      "default": "12",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slow": {
+      "measure": "bars",
+      "default": "26",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "signal": {
+      "measure": "bars",
+      "default": "9",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "max(fast, slow) + signal - 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:50f92023e40f952657782997b6fd1b51925fcd81443118b9e024594c50a6ddf6",
+  "golden": {
+    "reference": "talib.EMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

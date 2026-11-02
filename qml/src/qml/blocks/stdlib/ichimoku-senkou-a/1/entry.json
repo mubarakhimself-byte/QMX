@@ -1,0 +1,100 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "ichimoku-senkou-a",
+  "version": 1,
+  "family": "ichimoku",
+  "aliases": [
+    "Senkou Span A"
+  ],
+  "same_word_as": [
+    "ichimoku-cloud@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The mean of Tenkan-sen and Kijun-sen, drawn shift bars ahead.",
+  "boundaries": "With Senkou Span B it bounds Ichimoku's cloud; it reads only past bars.",
+  "recognition": "Price above the cloud reads as up, inside it as no trend.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/ikh (read 2026-11-02)",
+      "quote": "Senkou Span A shows the middle of the distance between two previous lines",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "tenkan": {
+      "measure": "bars",
+      "default": "9",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "kijun": {
+      "measure": "bars",
+      "default": "26",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "shift": {
+      "measure": "bars",
+      "default": "26",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "max(tenkan, kijun) + shift",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x (tenkan + kijun) + shift + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:3970d8d9765d3c10fa412b65932e3dda2ada6b3b3ee390eca7e6cd4b845fd78f",
+  "golden": {
+    "reference": "talib.MIDPRICE 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "adx",
+  "version": 1,
+  "family": "directional-movement",
+  "aliases": [
+    "ADX",
+    "Average Directional Index"
+  ],
+  "same_word_as": [
+    "trend-strength@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Wilder's Average Directional Index: the smoothed mean of 100 x |+DI - -DI| / (+DI + -DI) over period bars, from 0 to 100.",
+  "boundaries": "Strength without direction; MetaTrader's ADX smooths differently, ADXW is this.",
+  "recognition": "Above 25 reads as trending, below 20 as ranging, by convention.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "confirmation"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/trend_indicators/admi (read 2026-11-02)",
+      "quote": "helps to determine if there is a price trend",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "2 x period",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:f1f639489e0952f3755961877790fd842b0fc2bb5f51fe754418bf04fe7e93a6",
+  "golden": {
+    "reference": "talib.ADX 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bar-true-range",
+  "version": 1,
+  "family": "volatility",
+  "aliases": [
+    "TRANGE"
+  ],
+  "same_word_as": [
+    "atr@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Wilder's true range of a bar: the higher of its high and the previous close less the lower of its low and the previous close.",
+  "boundaries": "One bar's range including any gap from the previous close; no averaging.",
+  "recognition": "A bar much wider than usual is an expansion bar.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "exit",
+    "sizing_modifier"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/atr (read 2026-11-02)",
+      "quote": "True Range is the greatest of the following three values",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {},
+  "warm_up": {
+    "rule": "2",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:d39198ec4fdc05f7398c4f4cf58fcd279b6b1be95776cbd54ca89662b17527a0",
+  "golden": {
+    "reference": "talib.TRANGE 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

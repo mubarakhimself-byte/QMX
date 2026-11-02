@@ -1,0 +1,90 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "awesome-oscillator",
+  "version": 1,
+  "family": "bill-williams",
+  "aliases": [
+    "AO",
+    "Awesome Oscillator"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The fast simple mean of the median price (high + low) / 2 less the slow one.",
+  "boundaries": "In price units; the bar-to-bar colour change MetaTrader draws is not part of it.",
+  "recognition": "A cross of zero, a saucer or two peaks are Williams' signals.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/bw_indicators/awesome (read 2026-11-02)",
+      "quote": "is a 34-period simple moving average, plotted through the bars midpoints (H+L)/2",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price_distance"
+  },
+  "parameters": {
+    "fast": {
+      "measure": "bars",
+      "default": "5",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    },
+    "slow": {
+      "measure": "bars",
+      "default": "34",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "max(fast, slow)",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "fast + slow",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:6f5b2910f4ae9823c0fb2555fba0abc8d90385a1b206c09bd7a54d6c370aed9f",
+  "golden": {
+    "reference": "talib.SMA over talib.MEDPRICE 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

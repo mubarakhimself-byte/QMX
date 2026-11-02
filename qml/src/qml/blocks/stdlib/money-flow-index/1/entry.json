@@ -1,0 +1,92 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "money-flow-index",
+  "version": 1,
+  "family": "volume-oscillator",
+  "aliases": [
+    "MFI",
+    "Money Flow Index"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "A volume-weighted RSI: typical price times volume, split by whether the typical price rose or fell, as 100 x rising flow over all flow in period bars.",
+  "boundaries": "On FX and CFD bars the volume is a tick count, so it weighs by quote activity.",
+  "recognition": "Above 80 reads as overbought, below 20 as oversold, by convention.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/volume_indicators/mfi (read 2026-11-02)",
+      "quote": "indicates the rate at which money is invested into a security",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "FX and CFD bars carry a tick count, not traded size, so the reading follows quote activity rather than volume"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "14",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "2 x period + 1",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:14d939d3ebc8a773212ba8d7b8e4d2afa568871c72da9a0c1b60d5336426b531",
+  "golden": {
+    "reference": "talib.MFI 0.7.1",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

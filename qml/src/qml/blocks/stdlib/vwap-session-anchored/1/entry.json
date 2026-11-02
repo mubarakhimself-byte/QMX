@@ -1,0 +1,98 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "vwap-session-anchored",
+  "version": 1,
+  "family": "session",
+  "aliases": [
+    "anchored session VWAP"
+  ],
+  "same_word_as": [
+    "context.vwap@1",
+    "locations.vwap@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "The volume-weighted mean of the typical price (high + low + close) / 3 since the session opened. Each bar carries its close time in nanoseconds UTC as time; a session opens at session_start seconds into the UTC day and lasts a day.",
+  "boundaries": "On FX and CFD bars the volume is a tick count, so it is a quote-weighted proxy. Bars without a time are missing.",
+  "recognition": "Price above the session VWAP reads as buyers in control of the day.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/volume-weighted-average-price-vwap (read 2026-11-02)",
+      "quote": "the average price weighted by volume",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "qml/catalogue-seed/stats-2026-08-26/context-regime-and-intermarket/context-filters-confirmations.md#vwap Definition",
+      "quote": "The cumulative volume-weighted average traded price over a session",
+      "dated": "2026-08-26"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "FX and CFD bars carry a tick count, not traded size, so the reading follows quote activity rather than volume"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "session_start": {
+      "measure": "seconds",
+      "default": "0",
+      "origin": "published_convention",
+      "range": {
+        "min": "0",
+        "max": "86399",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:4c3e1ed28189f2c6eac8a51987b71e16e73a37b0df4b32d4d3150371ac487ddf",
+  "golden": {
+    "reference": "session sums in numpy, in tools/dictionary/golden_talib.py",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

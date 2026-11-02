@@ -1,0 +1,81 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "moving-average-hull",
+  "version": 1,
+  "family": "moving-average",
+  "aliases": [
+    "Hull moving average"
+  ],
+  "same_word_as": [
+    "context.moving-average@1",
+    "locations.moving-average@1"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Hull's LWMA over isqrt(period) of 2 x LWMA(period / 2) - LWMA(period).",
+  "boundaries": "Cuts the lag of a weighted average at the cost of overshoot after sharp turns.",
+  "recognition": "Price above a rising average reads as up, below a falling one as down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "location",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://alanhull.com/hull-moving-average",
+      "quote": "Traditional moving averages lag the price activity.",
+      "dated": "2025-11-08"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "price"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "20",
+      "origin": "published_convention",
+      "range": {
+        "min": "2",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + isqrt(period) - 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + isqrt(period)",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:3c7642c5d33c5e1d6701c26188975d5dcfb696562f3ea0d4d5fe21bc00ea9448",
+  "golden": {
+    "reference": "talib.WMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}

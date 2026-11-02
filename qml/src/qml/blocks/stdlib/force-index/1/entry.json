@@ -1,0 +1,92 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "force-index",
+  "version": 1,
+  "family": "volume-oscillator",
+  "aliases": [
+    "Force Index",
+    "Elder force index"
+  ],
+  "origin": "qml",
+  "component_type": "indicator",
+  "definition": "Elder's EMA of (close - previous close) x volume over period bars.",
+  "boundaries": "MetaTrader lets the average be any of its four kinds; this entry is Elder's EMA. On FX and CFD bars the volume is a tick count.",
+  "recognition": "Above zero buyers pushed price up on volume, below zero sellers down.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "trigger",
+    "confirmation",
+    "regime_detector",
+    "exit"
+  ],
+  "sources": [
+    {
+      "source_ref": "https://www.metatrader5.com/en/terminal/help/indicators/oscillators/fi (read 2026-11-02)",
+      "quote": "measures the Bulls Power at each increase, and the Bears Power",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1,
+      "splits": {
+        "volume": "exchange"
+      },
+      "fallback": [
+        {
+          "data_level": 1,
+          "splits": {
+            "volume": "tick_count"
+          },
+          "expected_loss": "FX and CFD bars carry a tick count, not traded size, so the reading follows quote activity rather than volume"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": null
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "13",
+      "origin": "published_convention",
+      "range": {
+        "min": "1",
+        "max": "500",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "transfer": {
+    "fx": "adapted",
+    "metal": "adapted",
+    "index_cfd": "not_assessed",
+    "commodity_cfd": "not_assessed",
+    "stock_cfd": "not_assessed",
+    "future": "not_assessed",
+    "perp": "not_assessed",
+    "spot_crypto": "not_assessed",
+    "stock": "not_assessed"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "constant",
+    "observations": null
+  },
+  "fingerprint": "fp1:sha256:e3fd30df1ce8d1bd136ef08c6edce8dbe2f49585e329b77ccf41210d43e6da14",
+  "golden": {
+    "reference": "talib.EMA 0.7.1 composite",
+    "cases": "qml/tests/golden/indicators/talib-0.7.1.json"
+  }
+}
