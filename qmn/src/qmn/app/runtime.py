@@ -1260,7 +1260,7 @@ class NodeUnit:
         self.orders.unknown.pop(client_order_id, None)
         if price is None:
             self._orders[intent_id] = Blocked(
-                "the venue never took the order, so it is not sent again"
+                "venue answer unknown, and the venue never took the order: not sent again"
             )
             return True
         self.placed[client_order_id] = (market, side, price)

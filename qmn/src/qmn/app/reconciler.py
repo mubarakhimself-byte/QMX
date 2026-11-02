@@ -47,8 +47,8 @@ from qmn.app.attribution import (
 __all__ = ["ReadsBack", "Reconciler", "Resolves", "journal_sends"]
 
 _STAND_DOWN = {
-    Claim.TWIN: "a twin with this node's tag trades the account, so it takes no new entry",
-    Claim.FOREIGN: "another node's tag is on the account, so it takes no new entry",
+    Claim.TWIN: "the node cannot prove the account is its own: a twin with its tag trades it",
+    Claim.FOREIGN: "the node cannot prove the account is its own: another node's tag is on it",
 }
 
 
@@ -119,7 +119,7 @@ class Reconciler:
         """Why no new entry may go on the account now, or None."""
         held = self._of(account)
         if held.session != session:
-            return "the node has not reconciled with the venue since the session opened"
+            return "the node cannot prove what the venue holds until it reconciles"
         return None if held.stand_down is None else _STAND_DOWN[held.stand_down]
 
     def shown(self) -> list[dict[str, object]]:
@@ -179,7 +179,11 @@ class Reconciler:
             "resolved": [row for row in resolved if row is not None],
             "stand_down": None if found.stand_down is None else found.stand_down.value,
         }
-        self.journal.append("reconcile", body, RowFacts(ts_recv=self.clock_ns(), clock_ok=False))
+        self.journal.append(
+            "reconcile",
+            cast("dict[str, object]", _without_none(body)),
+            RowFacts(ts_recv=self.clock_ns(), clock_ok=False),
+        )
 
     def _resolve(
         self, name: str, read: ReadBack, units: Sequence[Resolves]
@@ -217,7 +221,7 @@ class Reconciler:
         for claim, alarm in ((Claim.TWIN, "twin"), (Claim.FOREIGN, "foreign_claimant")):
             named = found.claimed(claim)
             if named:
-                records = sorted(name for name, _ in named)
+                records = sorted({name for name, _ in named})
                 self._raise(
                     (alarm, account, *records),
                     {
@@ -245,6 +249,16 @@ class Reconciler:
         if key not in self._raised:
             self._raised.add(key)
             self.on_alarm(alarm)
+
+
+def _without_none(value: object) -> object:
+    """A journal row keeps no null; a key with nothing to say is left out."""
+    if isinstance(value, dict):
+        items = cast("dict[str, object]", value).items()
+        return {key: _without_none(item) for key, item in items if item is not None}
+    if isinstance(value, list):
+        return [_without_none(item) for item in cast("list[object]", value)]
+    return value
 
 
 def _text(value: Decimal | None) -> str | None:
