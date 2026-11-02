@@ -128,7 +128,7 @@ def test_a_real_edge_passes_and_says_so_with_its_tries() -> None:
     assert verdict.overall == "pass"
     assert verdict.says() == (
         "Pass by the shipped preset. fx.m00 passes on 150 trades at 0.3226R shrunk. "
-        "Behind it: 1 tries, 1 effective."
+        "Behind it: 1 try, 1 effective."
     )
 
 
@@ -138,7 +138,7 @@ def test_a_step_no_result_could_run_leaves_the_verdict_incomplete_never_a_pass()
     assert verdict.overall == "incomplete"
     assert verdict.says() == (
         "Not judged yet by the shipped preset. fx.m00 is not judged yet: signal against random "
-        "entries, cost stress, walk-forward efficiency not run. Behind it: 1 tries, 1 effective."
+        "entries, cost stress, walk-forward efficiency not run. Behind it: 1 try, 1 effective."
     )
 
 
@@ -150,7 +150,7 @@ def test_a_zero_trade_result_never_passes() -> None:
         assert verdict.overall == "no_trades"
         assert verdict.says() == (
             "Placed no trades by the shipped preset. A result with no trades never passes. "
-            "fx.m00 placed no trades. Behind it: 1 tries, 1 effective."
+            "fx.m00 placed no trades. Behind it: 1 try, 1 effective."
         )
 
 

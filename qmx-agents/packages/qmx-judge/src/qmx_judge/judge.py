@@ -364,12 +364,11 @@ class MarketVerdict:
     def says(self, needed: int) -> str:
         if self.outcome == "no_trades":
             return f"{self.market} placed no trades"
+        trades = _count(self.trades, "trade")
         if self.outcome == "too_thin":
-            return (
-                f"{self.market} is too thin to judge, {self.trades} trades of the {needed} needed"
-            )
+            return f"{self.market} is too thin to judge, {trades} of the {needed} needed"
         if self.outcome == "pass":
-            return f"{self.market} passes on {self.trades} trades at {_text(self.shrunk_r)}R shrunk"
+            return f"{self.market} passes on {trades} at {_text(self.shrunk_r)}R shrunk"
         failed = next((s for s in self.steps if s.outcome == "failed"), None)
         if failed is not None:
             return f"{self.market} fails the {failed.rule.title}: {failed.detail}"
@@ -409,7 +408,7 @@ class Verdict:
         if self.overall == "no_trades":
             head += " A result with no trades never passes."
         markets = "; ".join(m.says(self.min_trades) for m in self.per_market)
-        tries = f"Behind it: {self.raw_tries} tries, {self.effective_tries} effective."
+        tries = f"Behind it: {_count(self.raw_tries, 'try', 'tries')}, {self.effective_tries} effective."
         return " ".join(part for part in (head, f"{markets}." if markets else "", tries) if part)
 
     def fields(self) -> dict[str, object]:
@@ -445,6 +444,10 @@ class Verdict:
         if is_refusal(named):
             raise JudgeRefused([f"the verdict's inputs do not fingerprint: {named}"])
         return f"verdict-{named.value.digest[:24]}"
+
+
+def _count(n: int, one: str, many: str = "") -> str:
+    return f"{n} {one if n == 1 else many or one + 's'}"
 
 
 def _text(value: Decimal) -> str:
