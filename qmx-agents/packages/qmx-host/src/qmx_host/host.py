@@ -190,6 +190,7 @@ from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
+from qmx_host.promote import Promoter, harvested_calibrations, promote_router
 from qmx_host.publish_collection import publish_collection_router
 from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, append_roots
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
@@ -1173,6 +1174,20 @@ async def serve(
                             if isinstance(door, MarketDoor)
                             else closed_market_router(door)
                         )
+                        if store.lifecycle is not None:
+                            promoter = Promoter(
+                                store,
+                                store.lifecycle,
+                                nodes,
+                                LanderLibrary(store),
+                                calibrations=harvested_calibrations(home, time.time_ns),
+                                trading_profile=lambda place: (
+                                    place == name
+                                    and host_facts(control, role, name, door)["trading_profile"]
+                                    is True
+                                ),
+                            )
+                            answering.append(promote_router(promoter))
                         app = compose(
                             control,
                             engine,
