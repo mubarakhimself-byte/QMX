@@ -20,7 +20,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
 import pytest
 from qmx_control.service import ControlError, ControlService, WorkflowEngine
 from qmx_engine.ledger import redact
@@ -184,7 +184,7 @@ def test_a_worsen_only_scenario_that_improves_is_refused_with_its_reason(world: 
         world.control.app_job(
             "qmb",
             "jobs/whatif.py",
-            inputs={"unit": world.dummy, **MARCH, "scenarios": improves},
+            inputs=cast("Any", {"unit": world.dummy, **MARCH, "scenarios": improves}),
             principal=CHAT,
         )
 
@@ -275,8 +275,9 @@ def signal_rows(world: World, result_id: str) -> list[dict[str, Any]]:
     blobs = world.store.get(OPERATOR, result_id).blobs
     rows: list[dict[str, Any]] = []
     for slot in sorted(s for s in blobs if s.startswith("journal/signal/")):
-        table = pq.read_table(io.BytesIO(world.store.read_blob(blobs[slot].blob_id)))
-        rows += [json.loads(r["record"])["body"] for r in table.to_pylist()]
+        read: Any = pq.read_table(io.BytesIO(world.store.read_blob(blobs[slot].blob_id)))  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        table = cast("list[dict[str, str]]", read.to_pylist())  # pyright: ignore[reportUnknownMemberType]
+        rows += [json.loads(r["record"])["body"] for r in table]
     return rows
 
 

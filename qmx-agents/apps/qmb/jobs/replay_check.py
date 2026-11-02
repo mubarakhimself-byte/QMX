@@ -15,9 +15,9 @@ import runpy
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
-import pyarrow.parquet as pq
+import pyarrow.parquet as pq  # pyright: ignore[reportMissingTypeStubs]
 from qmb.analysis.replay_diff import decision_diff
 
 import qmb_tester as tester
@@ -32,7 +32,8 @@ def _rows(folder: Path, files: list[dict[str, object]]) -> list[dict[str, object
     rows: list[dict[str, object]] = []
     for file in files:
         if str(file["slot"]).startswith(_SIGNAL):
-            table = pq.read_table(folder / str(file["path"])).to_pylist()
+            read: Any = pq.read_table(folder / str(file["path"]))  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            table = cast("list[dict[str, str]]", read.to_pylist())  # pyright: ignore[reportUnknownMemberType]
             rows += [cast("dict[str, object]", json.loads(r["record"])["body"]) for r in table]
     return rows
 

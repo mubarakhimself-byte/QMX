@@ -56,8 +56,9 @@ class Cell:
 
     def counted(self) -> dict[str, object]:
         """How the core counts this cell: by its name, and its market when it trades one."""
-        alone = self.markets is not None and len(self.markets) == 1
-        return {"name": self.name} | ({"market": self.markets[0]} if alone and self.markets else {})
+        if self.markets is None:
+            return {"name": self.name}
+        return {"name": self.name, "market": self.markets[0]}
 
 
 def unit_cells(grid: object, *, unit: str, bar_seconds: int) -> Result[tuple[Cell, ...]]:
@@ -105,7 +106,7 @@ def unit_cells(grid: object, *, unit: str, bar_seconds: int) -> Result[tuple[Cel
 
 def cell_document(document: Mapping[str, object], cell: Cell) -> Result[dict[str, object]]:
     """The unit document of one cell: its numbers' defaults set, its markets narrowed."""
-    changed = cast("dict[str, object]", copy.deepcopy(dict(document)))
+    changed = copy.deepcopy(dict(document))
     numbers = cast("dict[str, dict[str, object]]", changed.get("numbers", {}))
     for name, value in cell.numbers.items():
         if name not in numbers:

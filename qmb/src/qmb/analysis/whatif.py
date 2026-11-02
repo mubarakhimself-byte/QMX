@@ -20,7 +20,7 @@ from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 from typing import Final, Literal, TypeAlias, cast
 
-from qmf.core.refusal import Ok, Result
+from qmf.core.refusal import Ok, Result, is_refusal
 
 from qmb._refuse import invalid
 from qmb.host.unit_handler import UnitTrade
@@ -125,7 +125,9 @@ def what_if(trades: Sequence[UnitTrade], asked: object) -> Result[tuple[Outcome,
     base = expectancy([t.r for t in trades])
     made: list[Outcome] = []
     for entry in cast("list[object]", asked):
-        named = cast("Mapping[str, object]", entry) if isinstance(entry, Mapping) else {}
+        named: Mapping[str, object] = (
+            cast("Mapping[str, object]", entry) if isinstance(entry, Mapping) else {}
+        )
         name = str(named.get("name"))
         scenario = SCENARIOS.get(name)
         if scenario is None:
@@ -133,11 +135,12 @@ def what_if(trades: Sequence[UnitTrade], asked: object) -> Result[tuple[Outcome,
                 "scenarios", f"this tester runs no scenario {name}", known=list(SCENARIOS)
             )
         params = named.get("params", {})
-        left = scenario.apply(
-            trades, cast("Mapping[str, object]", params) if isinstance(params, Mapping) else {}
+        given: Mapping[str, object] = (
+            cast("Mapping[str, object]", params) if isinstance(params, Mapping) else {}
         )
-        if not isinstance(left, Ok):
+        left = scenario.apply(trades, given)
+        if is_refusal(left):
             return left
-        rs = cast("list[Decimal]", left.value)
+        rs = left.value
         made.append(Outcome(name, scenario.direction, base, expectancy(rs), len(rs)))
     return Ok(tuple(made))
