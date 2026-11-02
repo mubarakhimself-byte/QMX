@@ -286,7 +286,7 @@ class StandDowns:
         wanted = set(scopes)
         return next((held for held in self.held.values() if held.scope in wanted), None)
 
-    def document(self) -> list[Json]:
+    def document(self) -> list[dict[str, Json]]:
         return [held.document() for held in self.held.values()]
 
     # --- the rows that clear by themselves ---

@@ -1805,10 +1805,12 @@ class Runtime:
             )
             return
         path = self._path(deployment.account_id) if live else self._paper_path(hosted, venue)
+        if path is None:
+            hosted.phase, hosted.detail = Phase.REFUSED, "the paper lane's journal would not open"
+            return
         records = deployment_records(deployment)
-        if path is None or isinstance(records, str):
-            hosted.phase = Phase.REFUSED
-            hosted.detail = "the paper lane's journal would not open" if path is None else records
+        if isinstance(records, str):
+            hosted.phase, hosted.detail = Phase.REFUSED, records
             return
         world = JournalWorld.DEMO if live else JournalWorld.PAPER
         journal = RunJournal.open_live(
