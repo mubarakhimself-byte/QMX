@@ -62,17 +62,35 @@ COMPARED_REQUEST: Final = ("unit", "compiled_fp", "markets", "window", "seed", "
 """The result fields that make two runs one request, whatever tester ran them."""
 
 
-def _by_opening(trades: list[dict[str, Any]]) -> dict[tuple[str, int, str], dict[str, Any]]:
+type Opening = tuple[str, int, int, str]
+"""A trade's pairing key: market, opening instant, its order among the trades the result opened
+on that market at that instant, and the trade id of a row landed before B6."""
+
+
+def _opened_at(result_id: str, n: int, trade: dict[str, Any]) -> int:
+    value = trade.get("opened_at", 0)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.isascii() and value.isdigit():
+        return int(value)
+    raise ValueError(
+        f"{result_id}: trade {n} opens at {value!r}, not a whole number of nanoseconds"
+    )
+
+
+def _by_opening(result_id: str, trades: list[dict[str, Any]]) -> dict[Opening, dict[str, Any]]:
     """A result's trades by market and opening instant, since a unit holds one position per
-    market. A row with no opening instant, landed before B6, pairs by its trade id."""
-    return {
-        (
-            str(t.get("market_id")),
-            int(t.get("opened_at", 0)),
-            "" if "opened_at" in t else str(t.get("trade_id")),
-        ): t
-        for t in trades
-    }
+    market, then by their order, so two trades opened together never merge. A row with no
+    opening instant, landed before B6, pairs by its trade id."""
+    rows: dict[Opening, dict[str, Any]] = {}
+    seen: dict[tuple[str, int, str], int] = {}
+    for n, trade in enumerate(trades):
+        market, at = str(trade.get("market_id")), _opened_at(result_id, n, trade)
+        legacy = "" if "opened_at" in trade else str(trade.get("trade_id"))
+        order = seen.get((market, at, legacy), 0)
+        seen[market, at, legacy] = order + 1
+        rows[market, at, order, legacy] = trade
+    return rows
 
 
 def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., dict[str, Any]]]]:
@@ -254,13 +272,14 @@ def domain_functions(ctx: DomainContext) -> dict[str, dict[str, Callable[..., di
     ) -> dict[str, Any]:
         """Compare two landed results trade by trade (the parity diff): each trade only one made,
         each trade both made whose prices, size, money or R differ, and the measures that
-        differ. Trades pair by market and opening time, so two testers' names never matter."""
+        differ. Trades pair by market, opening time and their order among trades opened on
+        that market at that time, so two testers' names never matter."""
         (first, mine), (second, theirs) = _result(left), _result(right)
-        ours, other = _by_opening(mine), _by_opening(theirs)
+        ours, other = _by_opening(left, mine), _by_opening(right, theirs)
         rows: list[dict[str, Any]] = []
-        for key in sorted(ours.keys() | other.keys(), key=lambda k: (k[1], k[0], k[2])):
+        for key in sorted(ours.keys() | other.keys(), key=lambda k: (k[1], k[0], k[2], k[3])):
             a, b = ours.get(key), other.get(key)
-            trade = {"market_id": key[0], "opened_at": key[1]}
+            trade = {"market_id": key[0], "opened_at": key[1], "order": key[2]}
             if a is None or b is None:
                 rows.append({**trade, "only": "right" if a is None else "left", "row": a or b})
                 continue

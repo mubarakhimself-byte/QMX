@@ -6,11 +6,14 @@ leaves their raw rows: trades, fills, cash events and holes. The core reads thos
 result it landed, puts each in one canonical form, fingerprints the lists itself and compares
 them with the golden fingerprints. Nothing a tester says about itself counts: its measures, its
 labels and any hash it computed are never read (QB-13, QB-24). The verdict lands as the core's
-`test-report`, `check = "qmb-conformance/1"`, stamped with the tester's exact app and version.
+`test-report`, `check = "qmb-conformance/1"`, stamped with the app and version the lander
+recorded as the one that ran.
 
 `[qmb] default_tester` may name only a tester whose newest report on the current pack passed
-(`unproven`). The goldens are made by the shipped tester and written only by `write_golden`,
-which the pack's regeneration script calls in the PR that changes QML, the checker or QMB.
+(`unproven`), counting only reports the core placed on `main` over its own conformance result
+of that exact tester. The goldens are made by the shipped tester and written only by
+`write_golden`, which the pack's regeneration script calls in the PR that changes QML, the
+checker or QMB.
 """
 
 from __future__ import annotations
@@ -25,10 +28,11 @@ from typing import Final, Protocol, cast
 
 from qmf.core import fingerprint_bytes
 
-from qmx_judge.landing import TEST_REPORT, LandingPort, RunJob
+from qmx_judge.landing import TEST_REPORT, LandingPort, RunJob, run_kind
 
 __all__ = [
     "CHECK",
+    "CORE",
     "JOB",
     "LISTS",
     "OUTPUT",
@@ -40,6 +44,8 @@ __all__ = [
     "ConformanceRun",
     "Diff",
     "Pack",
+    "Placed",
+    "Proof",
     "Verdict",
     "canonical",
     "judge_output",
@@ -53,6 +59,9 @@ __all__ = [
 
 CHECK: Final = "qmb-conformance/1"
 """The `check` of a tester's conformance `test-report`."""
+CORE: Final = "operator"
+"""The principal the core lands its records as; only what it placed on `main` proves a tester."""
+MAIN: Final = "main"
 JOB: Final = "jobs/conformance.py"
 """The run kind every tester implements (CONTRACTS §1)."""
 OUTPUT: Final = "qmx.conformance.output/1"
@@ -414,15 +423,16 @@ def run_conformance(
     run_job: RunJob,
     library: ConformanceLibrary,
     principal: str,
-    writer: str = "operator",
+    writer: str = CORE,
     pack: Pack | None = None,
 ) -> ConformanceRun:
     """Run the pack on one tester through the supervisor's job path, then judge what it left.
 
     The tester's result lands through the core's lander like any run. The core reads that
     result's report blob back from the Library, judges it with `judge_output` and lands the
-    verdict as a `test-report` linked `uses` to the result. Running it again lands a new run and
-    a new report; `unproven` reads the newest."""
+    verdict as a `test-report` linked `uses` to the result. The report names the tester the
+    lander stamped on the result, and a run of any other version than `version` is refused with
+    no report. Running it again lands a new run and a new report; `unproven` reads the newest."""
     pack = pack or load_pack()
     dataset = _dataset(library, pack, writer)
     ran = run_job(app_id, JOB, pack_inputs(pack, dataset), principal)
@@ -431,6 +441,10 @@ def run_conformance(
     if result_id is None:
         raise ValueError(f"the conformance run {run_id or '(none)'} landed no result")
     fields, report = library.read(result_id)
+    tester = cast("Mapping[str, object]", fields.get("tester") or {})
+    if tester != {"app": app_id, "version": version}:
+        ran_as = f"{tester.get('app')}@{tester.get('version')}"
+        raise ValueError(f"the conformance run {run_id} ran {ran_as}, not {app_id}@{version}")
     if fields.get("status") != "finished" or report is None:
         why = fields.get("reason", "it left no report")
         verdict = Verdict(
@@ -441,13 +455,12 @@ def run_conformance(
         )
     else:
         verdict = judge_output(pack, json.loads(report))
-    tester = {"app": app_id, "version": version}
     body: dict[str, object] = {
         "check": CHECK,
         "run_id": run_id,
         "status": "finished",
-        "tester": tester,
-        "tester_pin": f"{app_id}@{version}",
+        "tester": dict(tester),
+        "tester_pin": f"{tester['app']}@{tester['version']}",
         "pack": {"id": pack.id, "fp": pack.fp},
         "verdict": "pass" if verdict.passed else "fail",
         "says": verdict.says(),
@@ -470,19 +483,52 @@ def run_conformance(
     return ConformanceRun(run_id, result_id, report_id, verdict)
 
 
-def unproven(
-    pin: str, reports: Iterable[Mapping[str, object]], pack: Pack | None = None
-) -> str | None:
+@dataclass(frozen=True, slots=True)
+class Placed:
+    """A Library object's fields and its first placement: the ref (`main` once it reached
+    `main`) and the principal that placed it."""
+
+    fields: Mapping[str, object]
+    ref: str
+    principal: str
+
+    @property
+    def by_core(self) -> bool:
+        return self.ref == MAIN and self.principal == CORE
+
+
+type Proof = tuple[Placed, Placed | None]
+"""A conformance `test-report` and the object its `result` names, None when there is none."""
+
+
+def _proves(pin: str, proof: Proof, pack: Pack) -> bool:
+    """Whether the core landed this report, over the conformance result the core landed for the
+    same tester, on the current pack."""
+    report, result = proof
+    app, _, version = pin.partition("@")
+    tester = {"app": app, "version": version}
+    asked = report.fields
+    return (
+        report.by_core
+        and result is not None
+        and result.by_core
+        and asked.get("check") == CHECK
+        and asked.get("tester_pin") == pin
+        and asked.get("tester") == tester
+        and cast("Mapping[str, object]", asked.get("pack") or {}).get("fp") == pack.fp
+        and result.fields.get("kind") == run_kind(JOB)
+        and result.fields.get("tester") == tester
+        and result.fields.get("run_id") == asked.get("run_id")
+    )
+
+
+def unproven(pin: str, proofs: Iterable[Proof], pack: Pack | None = None) -> str | None:
     """Why `pin` (`app@version`) may not be the default tester, or None when its newest report
-    on the current pack passed. `reports` are conformance `test-report` fields, oldest first."""
+    on the current pack passed. `proofs` are the conformance `test-report`s, oldest first; only a
+    report the core placed on `main`, over its own conformance result of the same tester and
+    version, counts."""
     pack = pack or load_pack()
-    mine = [
-        report
-        for report in reports
-        if report.get("check") == CHECK
-        and report.get("tester_pin") == pin
-        and cast("Mapping[str, object]", report.get("pack") or {}).get("fp") == pack.fp
-    ]
+    mine = [proof[0].fields for proof in proofs if _proves(pin, proof, pack)]
     if not mine:
         return f"{pin} has no conformance report on the pack {pack.id}; run the pack on it first"
     newest = mine[-1]

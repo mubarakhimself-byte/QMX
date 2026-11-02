@@ -31,11 +31,13 @@ import pytest
 from qmx_apps.errors import Document
 from qmx_apps.supervisor import RUNS, Supervisor
 from qmx_apps.volume import Volume
+from qmx_control.models import LibraryInput
 from qmx_control.service import ControlError, ControlService
 from qmx_engine.ledger import redact
 from qmx_host.first_start import land_dummy  # pyright: ignore[reportMissingTypeStubs]
 from qmx_host.host import LanderLibrary, landers  # pyright: ignore[reportMissingTypeStubs]
-from qmx_library.principal import Principal
+from qmx_library.port import Draft, JsonObject
+from qmx_library.principal import MAIN, Principal, agent_ref
 from qmx_library.store import Store
 from qmx_tools.functions import domain_functions
 from qmx_tools.service import DomainContext
@@ -92,7 +94,7 @@ class World:
     dummy: str
     backtest: Mapping[str, Any]
 
-    def conformance(self, app_id: str) -> ConformanceRun:
+    def conformance(self, app_id: str, version: str = "1.0.0") -> ConformanceRun:
         def run_job(
             app: str, job: str, inputs: Mapping[str, object], principal: str
         ) -> Mapping[str, object]:
@@ -101,8 +103,19 @@ class World:
             )
 
         return run_conformance(
-            app_id, "1.0.0", run_job=run_job, library=self.library, principal="operator"
+            app_id, version, run_job=run_job, library=self.library, principal="operator"
         )
+
+    def landed(self, item: str, trades: list[dict[str, Any]]) -> str:
+        """A finished backtest result on `main`, as the lander leaves one."""
+        draft = Draft(
+            "backtest-result",
+            item,
+            item,
+            fields={"run_id": item, "status": "finished"},
+            blobs={"report": json.dumps({"trades": trades}).encode()},
+        )
+        return self.store.put(OPERATOR, draft, on=MAIN, expected_head=None).object_id
 
     def fields(self, object_id: str) -> dict[str, Any]:
         return dict(self.store.get(OPERATOR, object_id).fields)
@@ -245,14 +258,97 @@ def test_two_results_of_one_request_compare_trade_by_trade(world: World) -> None
         {
             "market_id": "metal.xauusd",
             "opened_at": 1742966100000000000,
+            "order": 0,
             "differs": {"money": ["-48.37", "-48.36"]},
         },
         {
             "market_id": "metal.xauusd",
             "opened_at": 1743092100000000000,
+            "order": 0,
             "differs": {"money": ["95.38", "95.37"], "r": ["2.0013", "2.0010"]},
         },
     ]
+
+
+def test_trades_at_one_market_and_instant_pair_in_order_and_a_malformed_time_is_refused(
+    world: World,
+) -> None:
+    twin = {"market_id": "fx.eurusd", "opened_at": "1740787200000000000", "money": "1.00"}
+    left = world.landed("pair-left", [twin, {**twin, "money": "2.00"}])
+    right = world.landed("pair-right", [twin, {**twin, "money": "2.50"}])
+    malformed = world.landed("pair-malformed", [{**twin, "opened_at": "soon"}])
+
+    compared = world.backtest["backtest_compare"](left=left, right=right)
+    with pytest.raises(ValueError, match="opens at") as refused:
+        world.backtest["backtest_compare"](left=left, right=malformed)
+
+    assert compared["result"] == [
+        {
+            "market_id": "fx.eurusd",
+            "opened_at": 1740787200000000000,
+            "order": 1,
+            "differs": {"money": ["2.00", "2.50"]},
+        }
+    ]
+    assert str(refused.value) == (
+        f"{malformed}: trade 0 opens at 'soon', not a whole number of nanoseconds"
+    )
+
+
+def test_a_run_of_another_version_than_asked_lands_no_report_and_moves_no_default(
+    world: World,
+) -> None:
+    with pytest.raises(ValueError, match=r"ran qmb@1\.0\.0") as refused:
+        world.conformance("qmb", "9.9.9")
+    with pytest.raises(ControlError) as stays:
+        world.control.settings_put("qmb", {"default_tester": "qmb@9.9.9"})
+
+    run_id = str(refused.value).split()[3]
+    assert str(refused.value) == f"the conformance run {run_id} ran qmb@1.0.0, not qmb@9.9.9"
+    assert world.library.find(f"conformance/{run_id}") is None
+    assert world.store.with_field("test-report", "tester_pin", "qmb@9.9.9") == []
+    assert str(stays.value) == (
+        "[qmb] default_tester stays: qmb@9.9.9 has no conformance report on the pack "
+        "dummy-synthetic-2025-03; run the pack on it first"
+    )
+
+
+def test_a_passing_report_the_core_did_not_land_proves_nothing(world: World) -> None:
+    real = world.conformance("qmb")
+    forged: JsonObject = {
+        **world.fields(real.report_id),
+        "tester": {"app": "qmb", "version": "9.9.9"},
+        "tester_pin": "qmb@9.9.9",
+    }
+    agent = Principal("agent", "s1")
+
+    def saved() -> None:
+        world.control.library_save(
+            LibraryInput(title="Conformance of qmb@9.9.9: pass", kind="test-report", content=forged)
+        )
+
+    def by_agent() -> None:
+        on = agent_ref("s1", "forged")
+        draft = Draft("test-report", "forged", "f", fields=forged)
+        world.store.put(agent, draft, on=on, expected_head=None)
+        world.store.merge(agent, "forged", from_ref=on, into=MAIN, strategy="ff-only")
+
+    def over_another_testers_result() -> None:
+        draft = Draft("test-report", "forged-core", "f", fields=forged)
+        world.store.put(OPERATOR, draft, on=MAIN, expected_head=None)
+
+    says: list[str] = []
+    for place in (saved, by_agent, over_another_testers_result):
+        place()
+        with pytest.raises(ControlError) as stays:
+            world.control.settings_put("qmb", {"default_tester": "qmb@9.9.9"})
+        says.append(str(stays.value))
+
+    assert says == 3 * [
+        "[qmb] default_tester stays: qmb@9.9.9 has no conformance report on the pack "
+        "dummy-synthetic-2025-03; run the pack on it first"
+    ]
+    assert len(world.store.with_field("test-report", "tester_pin", "qmb@9.9.9")) == 2
 
 
 def test_nothing_a_tester_says_about_itself_counts() -> None:
