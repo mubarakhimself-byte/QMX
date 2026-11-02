@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -14,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import JsonValue
 from qmx_control.models import ControlError
-from qmx_control.service import ControlService
+from qmx_control.service import ControlService, WorkflowEngine
 from qmx_engine.control_door import PRINCIPAL, UNNAMED
 from qmx_engine.service.context import Caller
 from qmx_home import resolve
@@ -142,7 +143,7 @@ def test_only_his_click_publishes_the_collection_and_a_second_click_changes_noth
     assert mains == [cast(tuple[str, int], store.head(i, drafts_ref(i)))[0] for i in ITEMS]
 
 
-def test_a_member_his_single_publish_refuses_is_refused_with_the_same_words(
+def test_a_member_the_unit_checker_refuses_is_refused_as_his_single_publish_refuses_it(
     tmp_path: Path, store: Store
 ) -> None:
     unit = cast(dict[str, JsonValue], template())
@@ -163,6 +164,8 @@ def test_a_member_his_single_publish_refuses_is_refused_with_the_same_words(
         resolve(tmp_path / "QMX", create=True).home, secret_getter=lambda _s, _n: None
     )
     control.attach_library(store)
+    his_door = SimpleNamespace(principal=lambda: Caller("user"), workflow_runs_list=lambda _w: [])
+    control.attach_workflow_engine(cast(WorkflowEngine, his_door))
     app = FastAPI()
     app.include_router(publish_collection_router(control))
 
@@ -177,8 +180,10 @@ def test_a_member_his_single_publish_refuses_is_refused_with_the_same_words(
             from_ref=drafts_ref("u-1"),
         )
 
+    words = "unit: 500 is outside the number's range 20 to 300"
     assert (answer["published"], answer["refused"]) == (
         [first["item"]],
-        [{"item": "u-1", "code": single.value.code, "message": str(single.value)}],
+        [{"item": "u-1", "code": "check_failed", "message": words}],
     )
+    assert (single.value.code, str(single.value)) == ("check_failed", words)
     assert store.head("u-1", MAIN) is None
