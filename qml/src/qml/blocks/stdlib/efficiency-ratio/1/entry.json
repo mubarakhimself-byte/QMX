@@ -1,0 +1,137 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "efficiency-ratio",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "Kaufman efficiency ratio",
+    "KER",
+    "fractal efficiency"
+  ],
+  "same_word_as": [
+    "market-regime@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The absolute net change over period bars divided by the sum of the absolute bar-to-bar changes.",
+  "boundaries": "Kaufman's ratio as KAMA uses it. It sees trend and is blind to mean reversion; missing while the window holds no movement at all.",
+  "recognition": "Near 1 when every bar moved one way, near 0 when the moves cancel out.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/kaufmans-adaptive-moving-average-kama (read 2026-11-02)",
+      "quote": "The ER is basically the price change adjusted for the daily volatility.",
+      "dated": "2026-11-02"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "period": {
+      "measure": "bars",
+      "default": "10",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "2000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "period + 1",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 11,
+  "expected_lag_bars": 5,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "period + 1",
+    "observations": null
+  },
+  "reading": {
+    "tier": "session",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 5,
+    "minimum_sample": 11,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 28800,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "choppy",
+            "below": "0.3"
+          },
+          {
+            "word": "mixed",
+            "below": "0.6"
+          },
+          {
+            "word": "efficient"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:3bba94b1c5c7ed884752276c5542a2e6add74bb55aabe518fd9fc0979ceac8f4",
+  "golden": {
+    "reference": "the formula of the cited page, numpy 2.5.4",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}

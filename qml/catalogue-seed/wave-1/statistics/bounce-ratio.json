@@ -1,0 +1,135 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "bounce-ratio",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "bid-ask bounce ratio",
+    "noise ratio"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The standard deviation of the bid-ask noise over the standard deviation of one bar's move, for one market and bar length.",
+  "boundaries": "Not computed in QML yet: the noise is read from quote ticks. Above 0.1 a price-only mean-reversion reading is flagged, above 0.25 it is blocked, since bounce reads as false reversion.",
+  "recognition": "Higher means short-bar reversion readings on this market are less trustworthy.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "flag above 0.1; block price-only mean-reversion readings above 0.25"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "quotes",
+      "stream_kind": "quotes",
+      "measure": "price",
+      "data_level": 2,
+      "fallback": [
+        {
+          "data_level": 1,
+          "expected_loss": "bar closes only: the noise the ticks carry is unseen"
+        }
+      ]
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "1000",
+      "origin": "inferred",
+      "range": {
+        "min": "100",
+        "max": "20000",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 1000,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "reading": {
+    "tier": "day",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 2,
+    "fallback": [
+      {
+        "data_level": 1,
+        "expected_loss": "bar closes only: the noise the ticks carry is unseen"
+      }
+    ],
+    "lag_bars": 0,
+    "minimum_sample": 1000,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 86400,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "clean",
+            "below": "0.1"
+          },
+          {
+            "word": "flagged",
+            "below": "0.25"
+          },
+          {
+            "word": "blocked"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

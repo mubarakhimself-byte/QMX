@@ -1,0 +1,149 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "return-autocorrelation",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "autocorrelation of returns",
+    "serial correlation",
+    "ACF"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "The sample autocorrelation of log returns at lag bars over the last window prices.",
+  "boundaries": "Linear dependence at one lag only; bid-ask bounce on short bars reads as negative autocorrelation. Missing while the returns have no spread.",
+  "recognition": "Positive when moves follow moves, negative when they reverse.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.statsmodels.org/stable/generated/statsmodels.tsa.stattools.acf.html (read 2026-11-02)",
+      "quote": "Calculate the autocorrelation function",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "https://www.mql5.com/en/articles/14203",
+      "quote": "it may indicate serial correlation in the series changes",
+      "dated": "2024-02-08"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "series",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "100",
+      "origin": "inferred",
+      "range": {
+        "min": "4",
+        "max": "20000",
+        "step": "1"
+      }
+    },
+    "lag": {
+      "measure": "bars",
+      "default": "1",
+      "origin": "source_stated",
+      "range": {
+        "min": "1",
+        "max": "100",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 100,
+  "expected_lag_bars": 49,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "window",
+    "observations": null
+  },
+  "reading": {
+    "tier": "session",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 49,
+    "minimum_sample": 100,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 28800,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "reverting",
+            "below": "-0.1"
+          },
+          {
+            "word": "random",
+            "below": "0.1"
+          },
+          {
+            "word": "persisting"
+          }
+        ],
+        "origin": "inferred"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:0b9590b0f8f899c06705a1f40a1a7479f20d6ac8120367fad78a4a61e38e3236",
+  "golden": {
+    "reference": "statsmodels 0.15.0 acf",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}

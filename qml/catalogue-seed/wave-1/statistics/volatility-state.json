@@ -1,0 +1,131 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "volatility-state",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "volatility state",
+    "volatility bucket"
+  ],
+  "same_word_as": [
+    "range-volatility-against-usual@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "Range volatility against usual sorted into four words: quiet, normal, elevated and stressed.",
+  "boundaries": "The shipped volatility buckets under their new name; they measure volatility only and are not a trend reading. Not computed in QML yet, for the same reason as range volatility against usual.",
+  "recognition": "Stressed is the top bucket of the market's own usual range.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "Volatility state (quiet, normal, elevated, stressed)"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "bars",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "state",
+    "measure": "category"
+  },
+  "parameters": {
+    "baseline_weeks": {
+      "measure": "count",
+      "default": "20",
+      "origin": "source_stated",
+      "range": {
+        "min": "4",
+        "max": "104",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "baseline_weeks of bars at each minute of the session",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 20,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "reading": {
+    "tier": "bar",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 20,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 3600,
+    "outputs": {
+      "value": {
+        "measure": "category"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "quiet",
+            "below": "1"
+          },
+          {
+            "word": "normal",
+            "below": "2"
+          },
+          {
+            "word": "elevated",
+            "below": "3"
+          },
+          {
+            "word": "stressed"
+          }
+        ],
+        "origin": "builder_chosen"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}

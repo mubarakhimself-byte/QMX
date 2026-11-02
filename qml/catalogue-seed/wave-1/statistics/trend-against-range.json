@@ -1,0 +1,41 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "trend-against-range",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "trend against range",
+    "trend or range"
+  ],
+  "same_word_as": [
+    "market-regime@1",
+    "efficiency-ratio@1",
+    "variance-ratio@1"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "Whether the market is trending, ranging or neither on a timeframe.",
+  "boundaries": "Its rule is not settled. No single reading sees both: the efficiency ratio sees trend and misses reversion, and the variance ratio and autocorrelation see reversion and miss trend, so it combines one of each. Price-only reversion readings are fooled by bid-ask bounce on short bars.",
+  "recognition": "The word his screens call the regime.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "Trend against range (his \"regime\")"
+    }
+  ]
+}

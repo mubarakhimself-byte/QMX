@@ -1,0 +1,161 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "cusum-change-point",
+  "version": 1,
+  "family": "statistics",
+  "aliases": [
+    "CUSUM",
+    "cumulative sum change detector",
+    "Page's CUSUM"
+  ],
+  "origin": "qml",
+  "component_type": "reading",
+  "definition": "Page's two-sided tabular CUSUM on each bar's log return, standardised by the window returns before it; it holds on the bar either side's sum passes the threshold.",
+  "boundaries": "Moment 1 watches the mean of returns, moment 2 their variance. An alarm comes some bars after a change, more for a small shift; both sums restart after it holds. Missing while the window before the return has no spread.",
+  "recognition": "It holds on the bar a shift in drift or volatility is first detected.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier",
+    "trigger",
+    "invalidation"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.itl.nist.gov/div898/handbook/pmc/section3/pmc323.htm (read 2026-11-02)",
+      "quote": "more efficient in detecting small shifts in the mean of a process",
+      "dated": "2026-11-02"
+    },
+    {
+      "source_ref": "tracker/risk-sizing/architecture/parts/C-node-mis-external/MIS.md, branch plan/unit-system",
+      "dated": "2026-11-01",
+      "quote": "Change detectors (CUSUM on returns, two-scale volatility, Kalman level)"
+    }
+  ],
+  "inputs": [
+    {
+      "port": "series",
+      "stream_kind": "series",
+      "measure": "price",
+      "data_level": 1
+    }
+  ],
+  "output": {
+    "type": "event",
+    "measure": "ratio"
+  },
+  "parameters": {
+    "window": {
+      "measure": "bars",
+      "default": "100",
+      "origin": "inferred",
+      "range": {
+        "min": "2",
+        "max": "5000",
+        "step": "1"
+      }
+    },
+    "drift": {
+      "measure": "ratio",
+      "default": "0.5",
+      "origin": "source_stated",
+      "range": {
+        "min": "0",
+        "max": "5",
+        "step": "0.05"
+      }
+    },
+    "threshold": {
+      "measure": "ratio",
+      "default": "5",
+      "origin": "source_stated",
+      "range": {
+        "min": "0.5",
+        "max": "50",
+        "step": "0.5"
+      }
+    },
+    "moment": {
+      "measure": "count",
+      "default": "1",
+      "origin": "builder_chosen",
+      "range": {
+        "min": "1",
+        "max": "2",
+        "step": "1"
+      }
+    }
+  },
+  "warm_up": {
+    "rule": "window + 2",
+    "bars": null
+  },
+  "confirmation_lag_bars": 0,
+  "min_sample": 102,
+  "expected_lag_bars": 0,
+  "transfer": {
+    "fx": "direct",
+    "metal": "direct",
+    "index_cfd": "adapted",
+    "commodity_cfd": "adapted",
+    "stock_cfd": "adapted",
+    "future": "adapted",
+    "perp": "direct",
+    "spot_crypto": "direct",
+    "stock": "adapted"
+  },
+  "mirroring": "not_applicable",
+  "state_bound": {
+    "rule": "window + 1",
+    "observations": null
+  },
+  "reading": {
+    "tier": "bar",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 102,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 3600,
+    "outputs": {
+      "value": {
+        "measure": "ratio"
+      },
+      "state": {
+        "signal": {
+          "holds": "change",
+          "clear": "no_change"
+        }
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  },
+  "fingerprint": "fp1:sha256:417513a0ecb22e951c96122aee8cd2be33845564ceb8b0eaddcc05aa4b4ff529",
+  "golden": {
+    "reference": "NIST tabular CUSUM formula, numpy 2.5.4",
+    "cases": "qml/tests/golden/statistics/reference.json"
+  }
+}

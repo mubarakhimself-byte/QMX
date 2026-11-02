@@ -434,10 +434,18 @@ class Health(StrEnum):
 
 def _state(value: object, where: str, found: _Found) -> None:
     """The state output: ordered cuts on the value, each naming the word below its bound and the
-    last one with no bound, so every value has exactly one word."""
+    last one with no bound, so every value has exactly one word; or, for an event, the word
+    while it holds and the word while it does not."""
     if not _object(value, where, found):
         return
-    cuts = _list(cast("Mapping[str, object]", value).get("cuts"), f"{where}/cuts", found)
+    state = cast("Mapping[str, object]", value)
+    if "signal" in state:
+        if _object(state["signal"], f"{where}/signal", found):
+            words = cast("Mapping[str, object]", state["signal"])
+            for name in ("holds", "clear"):
+                _text(words.get(name), f"{where}/signal/{name}", found)
+        return
+    cuts = _list(state.get("cuts"), f"{where}/cuts", found)
     if not cuts:
         if cuts is not None:
             found.add(f"{where}/cuts", "the state names at least one word", "")
@@ -456,7 +464,9 @@ def _state(value: object, where: str, found: _Found) -> None:
         words.add(str(word))
         last = i == len(cuts) - 1
         if last != ("below" not in cut):
-            found.add(at, "every cut but the last has a bound below", "the last word takes the rest")
+            found.add(
+                at, "every cut but the last has a bound below", "the last word takes the rest"
+            )
             continue
         if last:
             continue
@@ -493,7 +503,8 @@ def _reading(value: object, where: str, found: _Found) -> None:
     at = f"{where}/outputs"
     if _object(said.get("value"), f"{at}/value", found):
         measure = cast("Mapping[str, object]", said["value"]).get("measure")
-        _enum(Measure)(measure, f"{at}/value/measure", found)
+        if measure != "price":
+            _enum(Measure)(measure, f"{at}/value/measure", found)
     _state(said.get("state"), f"{at}/state", found)
     if _object(said.get("health"), f"{at}/health", found):
         thin = cast("Mapping[str, object]", said["health"]).get("below_minimum_sample")

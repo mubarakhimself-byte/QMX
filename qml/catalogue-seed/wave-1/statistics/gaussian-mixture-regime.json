@@ -1,0 +1,76 @@
+{
+  "schema": "qmx.entry/1",
+  "entry_id": "gaussian-mixture-regime",
+  "version": 1,
+  "family": "models",
+  "aliases": [
+    "Gaussian mixture model",
+    "GMM regime"
+  ],
+  "same_word_as": [
+    "market-regime@1"
+  ],
+  "origin": "qml",
+  "component_type": "model",
+  "definition": "The most likely of a few Gaussian components fitted to features of the market, read as the regime the latest bar belongs to.",
+  "boundaries": "Not computed in QML yet: it is fitted to history by numerical optimisation, which belongs in the Lab's training placement; it runs in shadow in the MIS until his yes, behind the same reading shape, so no unit changes when it goes live. The features it is fitted on are a binding's choice and not written here.",
+  "recognition": "Each component is a regime with its own mean and volatility.",
+  "eligible_roles": [
+    "context",
+    "filter",
+    "regime_detector",
+    "veto",
+    "sizing_modifier"
+  ],
+  "class_meanings": {
+    "index_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "commodity_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock_cfd": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "future": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap.",
+    "stock": "A return across a session close, a weekend or a contract roll is a gap, not a bar's move; bind the statistic to bars inside one session or a back-adjusted series, or it reads the gap."
+  },
+  "sources": [
+    {
+      "source_ref": "https://www.twosigma.com/articles/a-machine-learning-approach-to-regime-modeling/",
+      "quote": "applying a Gaussian Mixture Model (a machine learning method) to the factors",
+      "dated": "2021-10-06"
+    }
+  ],
+  "reading": {
+    "tier": "day",
+    "concern": "market_state",
+    "time_base": "clock",
+    "data_level": 1,
+    "fallback": [],
+    "lag_bars": 0,
+    "minimum_sample": 1000,
+    "valid_classes": [
+      "fx",
+      "metal",
+      "index_cfd",
+      "commodity_cfd",
+      "stock_cfd",
+      "future",
+      "perp",
+      "spot_crypto",
+      "stock"
+    ],
+    "stale_after_s": 86400,
+    "outputs": {
+      "value": {
+        "measure": "category"
+      },
+      "state": {
+        "cuts": [
+          {
+            "word": "regime"
+          }
+        ],
+        "origin": "builder_chosen"
+      },
+      "health": {
+        "below_minimum_sample": "thin"
+      }
+    }
+  }
+}
