@@ -1,0 +1,56 @@
+{
+  "source": "recorded",
+  "cases": [
+    {
+      "tool": "status",
+      "arguments": {"surprise": true},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "status: unknown argument surprise"
+      }
+    },
+    {
+      "tool": "journal_tail",
+      "arguments": {"after_sequence": "x"},
+      "expected": {
+        "ok": false,
+        "code": "bad_argument",
+        "message": "journal_tail: after_sequence is an integer from -1"
+      }
+    },
+    {
+      "tool": "journal_tail",
+      "arguments": {"after_sequence": 1000000},
+      "expected": {"ok": true, "value": {"rows": [], "next_sequence": 1000000}}
+    },
+    {
+      "tool": "resume",
+      "arguments": {
+        "op_id": "proof-resume",
+        "issued_at": "2026-10-01T10:00:02+00:00",
+        "scope": {"instrument": "ROAD.PROOF"}
+      },
+      "expected": {
+        "ok": true,
+        "value": {"state": "accepted", "open_causes": []},
+        "op_id": "proof-resume"
+      }
+    },
+    {
+      "tool": "pause",
+      "arguments": {
+        "op_id": "proof-pause",
+        "issued_at": "2026-10-01T10:00:01+00:00",
+        "scope": {"instrument": "ROAD.PROOF"}
+      },
+      "expected": {
+        "ok": false,
+        "code": "superseded",
+        "message": "pause was issued before resume proof-resume, which is already applied",
+        "value": {"newer_op_id": "proof-resume"},
+        "op_id": "proof-pause"
+      }
+    }
+  ]
+}

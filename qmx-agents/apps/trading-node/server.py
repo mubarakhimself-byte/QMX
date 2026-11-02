@@ -3,7 +3,8 @@
 Each tool hands its raw arguments to `Node.call`, which answers every call and never raises, so
 a bad argument is an answer `ok = false` and never a tool error that counts toward the
 supervisor's breaker. The tools declare an open input schema for the same reason: FastMCP would
-otherwise refuse a mistyped argument before the node could answer it. The node declares no job.
+otherwise refuse a mistyped argument before the node could answer it. The six reads are marked
+read-only, which is what lets the road's shadow stage call them. The node declares no job.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.tools import Tool, ToolResult
+from mcp_types import ToolAnnotations
+from qmn.app.operations import READS
 from qmn.app.server import OPERATIONS, from_environment
 
 node = from_environment()
@@ -28,7 +31,13 @@ class NodeOperation(Tool):
 
 
 for operation in OPERATIONS:
-    mcp.add_tool(NodeOperation(name=operation, parameters={"type": "object"}))
+    mcp.add_tool(
+        NodeOperation(
+            name=operation,
+            parameters={"type": "object"},
+            annotations=ToolAnnotations(read_only_hint=operation in READS),
+        )
+    )
 
 
 if __name__ == "__main__":
