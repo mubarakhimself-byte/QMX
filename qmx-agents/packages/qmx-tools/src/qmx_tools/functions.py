@@ -493,9 +493,12 @@ def _tries(store: Store, judged: list[JudgedResult]) -> list[dict[str, Any]]:
 
 
 def _landed_results(tries: list[dict[str, Any]]) -> set[str]:
-    """The result each landed try links to, after the try it closes."""
+    """The result each landed run links to, after the try it closes. A behaviour check's try
+    links its `test-report`, which is no result to judge."""
     linked = (
-        cast("list[str]", row.get("links") or []) for row in tries if row.get("state") == "landed"
+        cast("list[str]", row.get("links") or [])
+        for row in tries
+        if row.get("state") == "landed" and row.get("kind") in ("run", "whatif_rerun")
     )
     return {links[1] for links in linked if len(links) > 1}
 

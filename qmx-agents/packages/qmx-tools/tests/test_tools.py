@@ -163,7 +163,13 @@ def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
         on=MAIN,
         expected_head=None,
     ).object_id
-    opened = {"kind": "run", "run_id": RUN, "unit": "u", "principal": "agent:unnamed"}
+    opened = {
+        "kind": "run",
+        "run_id": RUN,
+        "unit": "u",
+        "family": unit.object_id,
+        "principal": "agent:unnamed",
+    }
     store.put(
         OPERATOR,
         Draft("try", try_item(RUN, "opened"), "opened", fields={**opened, "state": "opened"}),
@@ -177,6 +183,21 @@ def _landed_run(context: DomainContext, monkeypatch: pytest.MonkeyPatch) -> str:
             try_item(RUN, "landed"),
             "landed",
             fields={**opened, "state": "landed", "links": ["opened", result]},
+        ),
+        on=MAIN,
+        expected_head=None,
+    )
+    report_id = store.put(
+        OPERATOR, Draft("test-report", "g", "g", fields={}), on=MAIN, expected_head=None
+    ).object_id
+    check = {**opened, "kind": "check", "run_id": "qmbr-pc-CHECK", "state": "landed"}
+    store.put(
+        OPERATOR,
+        Draft(
+            "try",
+            try_item("qmbr-pc-CHECK", "landed"),
+            "check",
+            fields={**check, "links": ["o", report_id]},
         ),
         on=MAIN,
         expected_head=None,
