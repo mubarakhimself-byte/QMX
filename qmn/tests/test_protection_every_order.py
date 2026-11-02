@@ -7,14 +7,17 @@ order. Runs against the conformance venue only.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from decimal import Decimal
 from pathlib import Path
 from typing import cast
 
 import pytest
 from google.protobuf import descriptor_pb2
+from qmb.runloop import RestingIntent
 from qmf.core import (
     Account,
     AccountRole,
+    Instant,
     Instrument,
     PriceDelta,
     Quantity,
@@ -31,6 +34,11 @@ from qmf.venue.commands import (
 )
 from qmf.venue.encode import encode_place_order, order_tags
 from qmf.venue.proto import SPOTWARE_PROTO_PACKAGE, compile_descriptor_set
+from qmn.app.runtime import Blocked, Placed, Sent, Ticket
+from qmn.protection.effect_matrix import PLACEHOLDER_KILL_EFFECTS
+from qmn.protection.ksa import KsaLevel
+from qmn.venue.conformance import InjectedFault
+from qmn.venue.verify import ctrader_static_declaration
 from test_app_runtime import (
     LIVE_FROM,
     Rig,
@@ -42,12 +50,6 @@ from test_app_runtime import (
     unit_rows,
     value,
 )
-
-from qmn.app.runtime import Sent, Ticket
-from qmn.protection.effect_matrix import PLACEHOLDER_KILL_EFFECTS
-from qmn.protection.ksa import KsaLevel
-from qmn.venue.conformance import InjectedFault
-from qmn.venue.verify import ctrader_static_declaration
 
 FIRST_SEND = 1_742_508_000_000_000_000
 """The bar the dummy's first entry is sent on in the recorded day (2025-03-20 22:00 UTC)."""
@@ -287,3 +289,48 @@ def test_the_node_tags_fit_ctrader_and_ride_the_encoded_order() -> None:
     assert label_long.context["reason"] == "cTrader keeps at most 100 characters in label"
     assert b"qa4dqobyh-01JPTS40R0AAXPDJ2WRTPTTH2Q" in payload
     assert b"qmx:a4dqobyh:dummy-trend-pullback" in payload
+
+
+def test_a_stop_amendment_that_widens_is_refused_and_one_that_tightens_moves_the_venue_stop(
+    tmp_path: Path,
+) -> None:
+    node = trading(tmp_path)
+    play(node, FIRST_SEND + 900_000_000_001)
+    unit = node.runtime.hosted["dep-1"].unit
+    assert unit is not None and unit.handler is not None
+    held = unit.handler.open_positions["fx.eurusd"]
+    named = unit.venue_name(held.position_id)
+    stop = node.account.stop_of(named)
+    assert stop is not None
+
+    def amend(level: Decimal, row: str) -> Placed | Blocked:
+        wire: dict[str, object] = {
+            "contract_format_version": 3,
+            "intent_family": "exit",
+            "kind": "amend_protection",
+            "position_ref": {
+                "position_id": held.position_id,
+                "instrument": {"venue": "icmarkets-ctrader", "symbol": "EURUSD"},
+                "opened_by": held.opened_by.value,
+            },
+            "reason_code": {"code": "trail", "book_family": "unit"},
+            "decision_row_id": row,
+            "stop": str(level),
+            "targets": [],
+        }
+        intent = RestingIntent.try_create(f"exit:{row}", "fx.eurusd", order=wire)
+        assert not isinstance(intent, TypedRefusal), intent
+        return unit.place(intent.value, Instant(FIRST_SEND))
+
+    widened = amend(stop + Decimal("0.00050"), "row-widen")
+    widened_sent = [t.command.kind for t in node.account.received]
+    tightened = amend(stop - Decimal("0.00010"), "row-tighten")
+
+    assert (held.side.value, widened) == (
+        "short",
+        Blocked("the amendment widens the stop, so the node refused it"),
+    )
+    assert CommandKind.AMEND_PROTECTION not in widened_sent
+    assert tightened == Placed(stop - Decimal("0.00010"))
+    assert node.account.stop_of(named) == stop - Decimal("0.00010")
+    assert node.account.received[-1].command.kind is CommandKind.AMEND_PROTECTION

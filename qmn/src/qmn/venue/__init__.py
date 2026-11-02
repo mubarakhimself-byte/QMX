@@ -60,6 +60,7 @@ from qmf.venue.connection import (
     venue_writer_id,
 )
 from qmf.venue.ctrader import RoundingMode, decode_market_data_price
+from qmf.venue.encode import OrderTags, order_tags
 from qmf.venue.events import (
     InboundVenueEvent,
     ObservationKind,
@@ -203,6 +204,7 @@ __all__ = [
     "MeasuredFactBundle",
     "ObservationKind",
     "OrderParameters",
+    "OrderTags",
     "OrderType",
     "ParentAsyncExemptionDisposition",
     "PositionModel",
@@ -257,6 +259,7 @@ __all__ = [
     "is_risk_reducing",
     "map_requote",
     "omitted_command_kind_refusal",
+    "order_tags",
     "replay_command_attempt_refused",
     "requote_error_map_row",
     "resolve_subject_terminal",

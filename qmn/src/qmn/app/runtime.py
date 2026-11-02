@@ -75,11 +75,12 @@ from qmf.core import (
     SinkResult,
     TypedRefusal,
     VenueId,
+    World,
     WriterId,
     is_refusal,
 )
 from qmf.data.journal_envelope import JournalWorld, RowFacts
-from qmf.data.journal_writer import AppendOutcome, JournalWriter
+from qmf.data.journal_writer import JournalWriter
 from qmf.risk.paper import ExecutionTarget
 from qmf.risk.unit_intent import (
     AmendProtection,
@@ -88,17 +89,6 @@ from qmf.risk.unit_intent import (
     check_amendment_tightens,
     parse_unit_intent,
 )
-from qmf.venue.capabilities import CloseScope
-from qmf.venue.commands import (
-    Command,
-    OrderParameters,
-    OrderType,
-    ProtectionAmendment,
-    ProtectionSide,
-    SubmissionOutcome,
-    TimeInForce,
-)
-from qmf.venue.encode import OrderTags, order_tags
 from qml.compile import CompileContext, CompiledUnit, compile_unit
 from qml.motion import ClosedTrade
 from qml.numbers import InstrumentRecord, lots, parse_record
@@ -114,7 +104,19 @@ from qmn.loop.driver import CommandStreamLoop
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.protection.effect_matrix import PLACEHOLDER_KILL_EFFECTS, KillEffect
 from qmn.protection.ksa import LEVEL_RANK, KsaLevel
-from qmn.venue.conformance import ConformanceDouble
+from qmn.venue import (
+    CloseScope,
+    Command,
+    ConformanceDouble,
+    OrderParameters,
+    OrderTags,
+    OrderType,
+    ProtectionAmendment,
+    ProtectionSide,
+    SubmissionOutcome,
+    TimeInForce,
+    order_tags,
+)
 
 __all__ = [
     "PROTECT_CONFIRM_NS",
@@ -164,6 +166,7 @@ class StagedFile:
     fingerprint: str
     path: str
     kind: str
+    size: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,7 +216,12 @@ def _staged(item: object) -> StagedFile:
     fingerprint = _str(entry, "fingerprint")
     if not fingerprint.startswith("sha256:"):
         raise ValueError(f"the fingerprint of {path} is sha256:<hex>")
-    return StagedFile(_str(entry, "entry_id"), version, fingerprint, path, _str(entry, "kind"))
+    size = entry.get("bytes")
+    if type(size) is not int or size < 0:
+        raise ValueError(f"the bytes of {path} is a whole number")
+    return StagedFile(
+        _str(entry, "entry_id"), version, fingerprint, path, _str(entry, "kind"), size
+    )
 
 
 def parse_deployment(document: Mapping[str, object]) -> Deployment:
@@ -262,9 +270,11 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
     """``deploy``'s refusals before it is kept, each naming what is wrong; None when it may go.
 
     A file missing from the staging folder answers ``files_missing``, which the node link's
-    outbox keeps waiting on; a file whose bytes have another fingerprint answers
-    ``file_mismatch``. There is no size limit. A kept deployment's ``lock.json`` lists every
-    staged file by fingerprint.
+    outbox keeps waiting on; a file of another size than the document states answers
+    ``file_mismatch``. Only stats are read here, so the answer stays inside the 2 s budget
+    whatever the files weigh: there is no size limit. Each file's fingerprint was verified by
+    the node link as it staged it, and the runtime verifies it again before it compiles
+    (:func:`staged_problem`). A kept deployment's ``lock.json`` lists every staged file.
     """
     try:
         deployment = parse_deployment(document)
@@ -294,12 +304,12 @@ def deploy_preflight(data: Path, document: Mapping[str, object]) -> Answer | Non
             value={"missing": cast("list[Json]", missing)},
         )
     for item in deployment.files:
-        found = file_fingerprint(folder / item.path)
-        if found != item.fingerprint:
+        size = (folder / item.path).stat().st_size
+        if size != item.size:
             return refused(
                 "file_mismatch",
-                f"deploy: staged file {item.path} has fingerprint {found}, not {item.fingerprint}",
-                value={"path": item.path, "expected": item.fingerprint, "found": found},
+                f"deploy: staged file {item.path} holds {size} bytes, not {item.size}",
+                value={"path": item.path, "expected": item.size, "found": size},
             )
     lock = [
         {"path": item.path, "fingerprint": item.fingerprint, "kind": item.kind}
@@ -404,8 +414,6 @@ class ConformanceAccount:
     def open(
         cls, account: Account, starting_equity: Decimal, *, holds_stops: bool = True
     ) -> Result[ConformanceAccount]:
-        from qmf.core import World  # noqa: PLC0415 - the double's own selector
-
         double = ConformanceDouble.try_create(World.LIVE, account.venue)
         if is_refusal(double):
             return double
@@ -553,7 +561,6 @@ class _OrderJournal:
     def __init__(self, journal: JournalWriter, clock_ns: Callable[[], int]) -> None:
         self._journal = journal
         self._clock_ns = clock_ns
-        self.repeated = False
 
     def append(self, event: object, /) -> SinkResult:
         body = dict(cast("Mapping[str, object]", event))
@@ -562,7 +569,6 @@ class _OrderJournal:
         )
         if is_refusal(written):
             return written
-        self.repeated = written.value.outcome is AppendOutcome.REPEAT
         return Ok(SinkAck())
 
 
@@ -650,6 +656,9 @@ class OrderPath:
             return Blocked(
                 "venue answer unknown for an earlier order, so no entry until it resolves"
             )
+        kind = cast("Mapping[str, object]", wire["order"]).get("type")
+        if kind != "market":
+            return Blocked(f"the venue cannot take a {kind} entry from this node yet")
         side = Side(str(wire["direction"]))
         market = str(wire["market_id"])
         stop = Decimal(str(cast("Mapping[str, object]", wire["protection"])["stop"]))
@@ -659,7 +668,7 @@ class OrderPath:
         ) or stop
         distance = reference - stop if side is Side.LONG else stop - reference
         if distance <= 0:
-            return Blocked("the stop widens the stop past the price: it is not on the loss side")
+            return Blocked("the stop is not on the loss side of the venue's price")
         instrument = Instrument(VenueId(record.venue), record.symbol)
         gap = _delta(distance, instrument)
         if is_refusal(gap):
@@ -1084,12 +1093,14 @@ class NodeUnit:
             return minted
         for intent in cast("tuple[RestingIntent, ...]", minted.value):
             if intent.intent_id not in self._orders and not self.warming:
-                self._orders[intent.intent_id] = self._send(intent, frontier)
+                self._orders[intent.intent_id] = self.place(intent, frontier)
         return minted
 
     # --- the order path for one minted intent ---
 
-    def _send(self, intent: RestingIntent, at: Instant) -> Placed | Blocked:
+    def place(self, intent: RestingIntent, at: Instant) -> Placed | Blocked:
+        """Send one minted intent through the order path: an entry with its guards and its
+        stop, an exit or a stop amendment for a position this unit holds."""
         wire = cast("Mapping[str, object]", intent.order)
         if wire.get("intent_family") == "entry":
             market = str(wire["market_id"])
@@ -1125,12 +1136,18 @@ class NodeUnit:
             case ClosePartial():
                 return Blocked("the venue cannot close part of a position")
             case AmendProtection(stop=stop):
-                return self._amend(exit_, position, held, Decimal(stop.value).scaleb(-stop.scale))
+                new_stop = Decimal(stop.value).scaleb(-stop.scale)
+                return self._amend(exit_, market, position, held, new_stop)
             case _:
                 return self.orders.close(position, market, held.side, held.entry_price, "unit")
 
     def _amend(
-        self, exit_: UnitExitIntent, position: str, held: OwnPosition, new_stop: Decimal
+        self,
+        exit_: UnitExitIntent,
+        market: str,
+        position: str,
+        held: OwnPosition,
+        new_stop: Decimal,
     ) -> Placed | Blocked:
         """A stop amendment goes to the venue only when it tightens the stop the venue holds."""
         current = self.orders.venue.client.stop_of(position)
@@ -1144,7 +1161,6 @@ class NodeUnit:
         )
         if is_refusal(tightens):
             return Blocked("the amendment widens the stop, so the node refused it")
-        market = next(m for m, p in self.handled.open_positions.items() if p is held)
         return self.orders.amend(
             position, market, held.side, new_stop, held.entry_price, current, self.records[market]
         )
@@ -1220,7 +1236,6 @@ class _Hosted:
     loop: CommandStreamLoop | None = None
     compiling: Future[CompiledUnit | str] | None = None
     venue: Venue | None = None
-    bars_driven: int = 0
 
 
 class _Sink:
@@ -1237,21 +1252,34 @@ class _Sink:
 class _LoopClock:
     boot_epoch_id: str
     clock_ns: Callable[[], int]
-    monotonic_ns: Callable[[], int]
+    steady_ns: Callable[[], int]
 
     def wall_now(self) -> Result[Instant]:
         return Instant.try_create(self.clock_ns())
 
     def monotonic_now(self) -> Result[MonotonicReading]:
-        return MonotonicReading.try_create(self.monotonic_ns(), self.boot_epoch_id)
+        return MonotonicReading.try_create(self.steady_ns(), self.boot_epoch_id)
 
 
 Compile = Callable[[Deployment, Path], "CompiledUnit | str"]
 
 
+def staged_problem(deployment: Deployment, folder: Path) -> str | None:
+    """The first staged file whose bytes have another fingerprint than the document names."""
+    for item in deployment.files:
+        found = file_fingerprint(folder / item.path)
+        if found != item.fingerprint:
+            return f"staged file {item.path} has fingerprint {found}, not {item.fingerprint}"
+    return None
+
+
 def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
-    """Compile the deployment's unit from its staged blocks through QML's one compiler, which
-    checks every pin's fingerprint; answers the compiled unit or why it did not compile."""
+    """Verify every staged file, then compile the deployment's unit from its staged blocks
+    through QML's one compiler, which checks every pin's fingerprint; answers the compiled
+    unit or why it does not trade."""
+    problem = staged_problem(deployment, folder)
+    if problem is not None:
+        return problem
     sources: dict[str, bytes] = {}
     entries: dict[str, bytes] = {}
     for item in deployment.files:
@@ -1270,7 +1298,8 @@ def compile_staged(deployment: Deployment, folder: Path) -> CompiledUnit | str:
     )
     if isinstance(compiled, CompiledUnit):
         return compiled
-    return compiled[0].message if compiled else "the unit does not compile"
+    why = compiled[0].message if compiled else "no problem named"
+    return f"the unit did not compile: {why}"
 
 
 def deployment_records(deployment: Deployment) -> dict[str, InstrumentRecord] | str:
@@ -1305,7 +1334,7 @@ class Runtime:
         machine: str,
         build: str,
         clock_ns: Callable[[], int],
-        monotonic_ns: Callable[[], int],
+        steady_ns: Callable[[], int],
         sleep: Callable[[float], None],
         boot_epoch_id: str,
         compile: Compile = compile_staged,
@@ -1317,7 +1346,7 @@ class Runtime:
         self.machine = machine
         self.build = build
         self.clock_ns = clock_ns
-        self.monotonic_ns = monotonic_ns
+        self.steady_ns = steady_ns
         self.sleep = sleep
         self.boot_epoch_id = boot_epoch_id
         self.compile = compile
@@ -1424,6 +1453,7 @@ class Runtime:
                 "scope": scope,
                 **effect.document(),
                 "positions_closed": closed,
+                # The node sends market entries only, so no entry order of its rests to cancel.
                 "resting_entries_cancelled": 0,
             }
             self.journal.append(
@@ -1509,14 +1539,14 @@ class Runtime:
             if hosted.phase is Phase.COMPILING and compiling is not None and compiling.done():
                 self._host(hosted, compiling.result())
             withdrawn = hosted.deployment.deployment_id in target.withdrawn
-            if withdrawn and hosted.unit is not None and not hosted.unit.positions():
+            if withdrawn and hosted.unit is not None and not hosted.unit.venue_open():
                 hosted.phase, hosted.detail = Phase.STOPPED, "withdrawn and flat"
 
     def _host(self, hosted: _Hosted, compiled: CompiledUnit | str) -> None:
         deployment = hosted.deployment
         hosted.compiling = None
         if isinstance(compiled, str):
-            hosted.phase, hosted.detail = Phase.REFUSED, f"the unit did not compile: {compiled}"
+            hosted.phase, hosted.detail = Phase.REFUSED, compiled
             return
         if compiled.compiled_fingerprint.value != deployment.g_fingerprint:
             hosted.phase = Phase.REFUSED
@@ -1602,7 +1632,7 @@ class Runtime:
         return CommandStreamLoop.try_create(
             accumulator=accumulator.value,
             stream_set=streams.value,
-            clock=_LoopClock(self.boot_epoch_id, self.clock_ns, self.monotonic_ns),
+            clock=_LoopClock(self.boot_epoch_id, self.clock_ns, self.steady_ns),
             max_slice_latency=latency.value,
             handler=unit,
         )
@@ -1653,7 +1683,6 @@ class Runtime:
             if is_refusal(driven):
                 hosted.phase, hosted.detail = Phase.STOPPED, _why(driven)
                 return
-            hosted.bars_driven += 1
             if unit.warming:
                 unit.warm_seen += 1
                 if unit.warm_seen >= unit.warm_needed:

@@ -32,7 +32,6 @@ from qml.blocks.api import EntryFace, parse_entry
 from qml.compile import CompiledUnit
 from qml.numbers import lots, parse_record
 from qml.protocol.unit import QuoteBar
-
 from qmn.app.feed_keeper import Bar, FeedKeeper, Quote, RecordedSource, Recording
 from qmn.app.runtime import (
     ConformanceAccount,
@@ -387,39 +386,56 @@ def test_a_missing_or_changed_staged_file_refuses_deploy_by_name_and_32_mb_deplo
 ) -> None:
     node = rig(tmp_path)
     weights = (b"0123456789abcdef" * 2 * 1024 * 1024)[: 32 * 1024 * 1024]
+    ema = (STDLIB / "ema" / "1" / "block.py").read_bytes()
     missing = deployment(node.data, "dep-missing", staged=False)
-    changed = deployment(node.data, "dep-changed")
-    stage(node.data, "dep-changed", "blocks/ema@1/block.py", b"# another block\n")
+    resized = deployment(node.data, "dep-resized")
+    stage(node.data, "dep-resized", "blocks/ema@1/block.py", b"# another block" + bytes([10]))
+    tampered = deployment(node.data, "dep-tampered")
+    stage(node.data, "dep-tampered", "blocks/ema@1/block.py", ema.replace(b'"', b"'", 3))
     heavy = deployment(node.data, "dep-heavy", extra=(("weights-1", "weights/model.bin", weights),))
 
     refused_missing = deploy(node, missing, "op-missing")
-    refused_changed = deploy(node, changed, "op-changed")
+    refused_resized = deploy(node, resized, "op-resized")
     started = time.monotonic()
     accepted = deploy(node, heavy, "op-heavy")
     answered = time.monotonic() - started
+    kept_tampered = deploy(node, tampered, "op-tampered")
+    settle(node, "dep-tampered")
+    settle(node, "dep-heavy")
 
     assert (refused_missing["code"], refused_missing["message"]) == (
         "files_missing",
         "deploy: staged file blocks/accelerator-oscillator@1/block.py is missing from in/",
     )
-    assert refused_changed["code"] == "file_mismatch"
-    assert refused_changed["message"] == (
-        "deploy: staged file blocks/ema@1/block.py has fingerprint "
-        f"{fingerprint(b'# another block\n')}, not "
-        f"{fingerprint((STDLIB / 'ema' / '1' / 'block.py').read_bytes())}"
+    assert (refused_resized["code"], refused_resized["message"]) == (
+        "file_mismatch",
+        "deploy: staged file blocks/ema@1/block.py holds 16 bytes, not 2125",
     )
     assert value(accepted) == {"deployment_id": "dep-heavy", "state": "accepted"}
     assert len(weights) == 33_554_432
     assert answered < 2.0
     lock = json.loads((node.data / "deployments" / "dep-heavy" / "lock.json").read_text("utf-8"))
     assert {
-        "fingerprint": fingerprint(weights),
+        "fingerprint": "sha256:18b4d0542a83909af6b502ecdd44d321e7aadd33aa8efe8edaa5bc0b864f4310",
         "kind": "weights",
         "path": "weights/model.bin",
     } in lock
-    assert [d["deployment_id"] for d in cast("list[dict[str, Json]]", listed(node))] == [
-        "dep-heavy"
+    assert value(kept_tampered)["state"] == "accepted"
+    assert [(d["deployment_id"], d["state"], d["detail"]) for d in shown(node)] == [
+        ("dep-heavy", "trading", ""),
+        (
+            "dep-tampered",
+            "refused",
+            "staged file blocks/ema@1/block.py has fingerprint sha256:"
+            "10a653998547d389abddea404d8b50bb79cdc0a2e3c595e085c8c87a43abcfca, not sha256:"
+            "55614bc43730e2812bbdd5996d0e9ee99f85256d56e9ffa418936b0ac7664157",
+        ),
     ]
+
+
+def shown(node: Rig) -> list[dict[str, Json]]:
+    node.runtime.tick()
+    return cast("list[dict[str, Json]]", listed(node))
 
 
 def listed(node: Rig) -> list[Json]:

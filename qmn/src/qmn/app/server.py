@@ -172,7 +172,7 @@ def open_node(
             machine=machine,
             build=BUILD,
             clock_ns=clock_ns,
-            monotonic_ns=monotonic_ns,
+            steady_ns=monotonic_ns,
             sleep=sleep,
             boot_epoch_id=boot_epoch,
         )
