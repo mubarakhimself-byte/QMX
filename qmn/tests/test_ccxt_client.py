@@ -26,7 +26,7 @@ from qml.numbers import InstrumentRecord, lots, parse_record
 from qml.unit.model import Side
 from qmn.app.attribution import Claim, attribute
 from qmn.app.feed_keeper import FeedKeeper, Quote, RecordedSource, Recording
-from qmn.app.reconciler import journal_sends
+from qmn.app.reconciler import Reconciler, journal_sends
 from qmn.app.runtime import Blocked, OrderPath, Placed, Ticket, Unknown, Venue, VenueClose, ulid
 from qmn.order.protection import require_venue_resident_protective_stop
 from qmn.venue import CloseScope, OrderParameters, OrderType, TimeInForce
@@ -52,6 +52,7 @@ VENUE = VenueId("hyperliquid-testnet")
 ACCOUNT = Account("hl-testnet-1", VENUE, AccountRole.DEMO)
 ADDRESS = "0x" + "ab" * 20
 SIGNER = "0x" + hashlib.sha256(b"c16 test signer, never a wallet").hexdigest()
+TESTNET = "https://api.hyperliquid-testnet.xyz"
 CCXT_ERRORS_4_5_85 = {
     "BaseError", "ExchangeError", "AuthenticationError", "PermissionDenied",
     "AccountNotEnabled", "AccountSuspended", "ArgumentsRequired", "BadRequest", "BadSymbol",
@@ -120,6 +121,9 @@ class FakeHyperliquid:
     """Hyperliquid as CCXT 4.5.85's unified calls answer it, in memory."""
 
     options: dict[str, object] = field(default_factory=lambda: {"sandboxMode": True})
+    urls: dict[str, object] = field(
+        default_factory=lambda: {"api": {"public": TESTNET, "private": TESTNET}}
+    )
     walletAddress: str | None = ADDRESS
     fill_price: float = 2501.0
     calls: list[tuple[object, ...]] = field(default_factory=list[tuple[object, ...]])
@@ -128,6 +132,8 @@ class FakeHyperliquid:
     orders: list[dict[str, object]] = field(default_factory=list[dict[str, object]])
     trades: list[dict[str, object]] = field(default_factory=list[dict[str, object]])
     positions: list[dict[str, object]] = field(default_factory=list[dict[str, object]])
+    lose_answers: int = 0
+    """How many of the next filled orders fill at the venue and then lose their answer."""
 
     def handle_builder_fee_approval(self) -> bool:
         self.calls.append(("approve_builder_fee",))
@@ -180,6 +186,14 @@ class FakeHyperliquid:
         self.trades.append(
             {"order": oid, "symbol": symbol, "side": side, "price": self.fill_price, "amount": size}
         )
+        if given.get("reduceOnly") is not True:
+            self.orders.append(
+                {"id": oid, "clientOrderId": given["clientOrderId"], "symbol": symbol,
+                 "filled": size, "status": "closed", "timestamp": len(self.calls)}
+            )  # fmt: skip
+        if self.lose_answers > 0:
+            self.lose_answers -= 1
+            raise RequestTimeout("the answer was lost after the fill")
         return {
             "id": oid,
             "clientOrderId": given["clientOrderId"],
@@ -262,6 +276,7 @@ class Rig:
     now: list[int]
     alarms: list[Mapping[str, object]]
     journal: Path
+    writer: JournalWriter
 
 
 def rig(tmp_path: Path, exchange: FakeHyperliquid | None = None, sent: Sequence[str] = ()) -> Rig:
@@ -295,7 +310,7 @@ def rig(tmp_path: Path, exchange: FakeHyperliquid | None = None, sent: Sequence[
     path = OrderPath(
         TAG, Venue(opened.value, feed), journal.value, lambda: now[0], sleep, alarms.append
     )
-    return Rig(venue, opened.value, path, now, alarms, tmp_path)
+    return Rig(venue, opened.value, path, now, alarms, tmp_path, journal.value)
 
 
 def enter(node: Rig, name: str = NAME, side: Side = Side.LONG, stop: str = "2475.5") -> object:
@@ -447,6 +462,44 @@ def test_no_entry_goes_while_the_account_holds_the_open_order_margin(tmp_path: P
     assert enter(rig(tmp_path / "room", room)) == Placed(Decimal("2501.0"))
 
 
+@dataclass
+class Units:
+    """The node's hosted units as reconcile resolves them."""
+
+    resolved: list[tuple[str, Decimal | None, bool]] = field(
+        default_factory=list[tuple[str, Decimal | None, bool]]
+    )
+
+    def resolve(self, client_order_id: str, price: Decimal | None, *, protected: bool) -> bool:
+        self.resolved.append((client_order_id, price, protected))
+        return True
+
+
+def test_an_entry_whose_answer_was_lost_is_reconciled_and_its_protection_close_goes_flat(
+    tmp_path: Path,
+) -> None:
+    node = rig(tmp_path)
+    node.exchange.lose_answers = 1
+    lost = enter(node)
+    units = Units()
+    reconciler = Reconciler(node.writer, tmp_path, TAG, lambda: node.now[0], node.alarms.append)
+    reconciler.run("hl-testnet-1", 1, node.client, node.path.unknown, [units])
+    closed = node.path.close(NAME, "crypto.eth", Side.LONG, Decimal("2490"), "protection")
+
+    assert lost == Unknown("venue answer unknown for this order", NAME)
+    assert units.resolved == [(NAME, Decimal("2501.0"), False)]
+    assert [a["alarm"] for a in node.alarms] == ["protection_escalation"]
+    assert closed == Placed(Decimal("2501.0"))
+    assert node.exchange.sent_orders()[1:] == [
+        (
+            "create_order", ETH, "market", "sell", "0.01", "2490",
+            {"clientOrderId": "0x716d070707070783d2558f065e537e83", "reduceOnly": True, "timeInForce": "Ioc",
+             "slippage": "0.05"},
+        ),
+    ]  # fmt: skip
+    assert node.exchange.positions == []
+
+
 def test_a_stop_that_fired_at_the_venue_reads_closed_once_per_poll(tmp_path: Path) -> None:
     node = rig(tmp_path)
     enter(node)
@@ -479,6 +532,8 @@ def test_a_restarted_client_reads_its_own_foreign_and_untagged_records(tmp_path:
         open_orders=[
             {"id": "12", "clientOrderId": cloid(f"{NAME}/stop-1"), "symbol": ETH,
              "reduceOnly": True, "triggerPrice": 2476.0, "status": "open", "filled": 0.0},
+            {"id": "22", "clientOrderId": cloid(f"{foreign}/stop-1"), "symbol": ETH,
+             "reduceOnly": True, "triggerPrice": 2600.0, "status": "open", "filled": 0.0},
         ],
         trades=[
             {"order": "11", "symbol": ETH, "side": "buy", "price": 2501.0, "amount": 0.01},
@@ -578,6 +633,7 @@ def test_the_client_binds_the_pinned_ccxt_on_testnet_for_its_own_signer_only() -
             ccxt_version=version,
             clock_ns=lambda: now,
             on_alarm=lambda _alarm: None,
+            sent=lambda: (),
         )
 
     venue = FakeHyperliquid()
@@ -588,6 +644,10 @@ def test_the_client_binds_the_pinned_ccxt_on_testnet_for_its_own_signer_only() -
     assert _refused_field(lambda: opened(FakeHyperliquid(options={}))) == "sandbox_mode"
     mainnet = FakeHyperliquid(options={"sandboxMode": False})
     assert _refused_field(lambda: opened(mainnet)) == "sandbox_mode"
+    flagged = FakeHyperliquid(
+        urls={"api": {"public": TESTNET, "private": "https://api.hyperliquid.xyz"}}
+    )
+    assert _refused_field(lambda: opened(flagged)) == "endpoints"
     other = FakeHyperliquid(walletAddress="0x" + "cd" * 20)
     assert _refused_field(lambda: opened(other)) == "wallet_address"
     late = 1_809_043_200_000_000_000

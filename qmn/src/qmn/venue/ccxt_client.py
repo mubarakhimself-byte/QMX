@@ -25,12 +25,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import inspect
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Final, Protocol, TypeVar, cast
+from urllib.parse import urlsplit
 
 from qmb.host.unit_handler import FillKind
 from qmf.core import (
@@ -58,15 +60,20 @@ __all__ = [
     "OPEN_ORDERS_MARGIN",
     "PINNED_CCXT_VERSION",
     "POLL_NS",
+    "TESTNET_HOST",
     "AgentKey",
     "AgentWallet",
+    "Buildable",
     "CcxtClient",
+    "Configurable",
     "ErrorReading",
     "Exchange",
     "agent_wallets",
+    "api_urls",
     "cloid",
     "cloid_tag",
     "hyperliquid_config",
+    "make_testnet_exchange",
     "read_error",
     "renewal_due",
 ]
@@ -86,6 +93,7 @@ MARKET_SLIPPAGE: Final = "0.05"
 """`[node] ccxt_market_slippage`, starting at CCXT's own 5%: Hyperliquid has no market order, so
 CCXT sends an IOC limit this far through the reference price."""
 SETTLE: Final = "USDC"
+TESTNET_HOST: Final = "api.hyperliquid-testnet.xyz"
 KEYS_SCHEMA: Final = "qmx.node.keys/1"
 STOP_FORMS: Final[Mapping[str, str]] = {"market": POSITION_TRIGGER_AFTER_FILL_FORM}
 
@@ -98,6 +106,7 @@ _CLOID: Final = re.compile(rf"0x{_CLOID_MARK}([0-9a-f]{{10}})([0-9a-f]{{18}})")
 _CROCKFORD: Final = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _EPOCH: Final = datetime(1970, 1, 1, tzinfo=UTC)
 _T = TypeVar("_T")
+_E = TypeVar("_E", bound="Buildable")
 
 
 # --- the agent wallet in the keys document ----------------------------------------------------
@@ -324,13 +333,25 @@ def read_error(error: BaseException) -> ErrorReading:
 # --- the exchange -------------------------------------------------------------------------------
 
 
-class Exchange(Protocol):
+class Configurable(Protocol):
+    """What the testnet setup reads and sets on any ``ccxt.hyperliquid``, ``ccxt.pro``'s
+    included."""
+
+    options: dict[str, object]
+    urls: dict[str, object]
+
+
+class Buildable(Configurable, Protocol):
+    """A ``ccxt.hyperliquid`` as :func:`make_testnet_exchange` builds it."""
+
+    def set_sandbox_mode(self, enabled: bool, /) -> None: ...
+
+
+class Exchange(Configurable, Protocol):
     """The calls this client makes on a ``ccxt.hyperliquid`` instance, by CCXT's names. Every
     call passes its arguments by position, CCXT's order."""
 
-    options: dict[str, object]
     walletAddress: str | None
-    handle_builder_fee_approval: Callable[[], bool]
 
     def create_order(
         self,
@@ -387,6 +408,58 @@ def _no_builder_fee() -> bool:
     return True
 
 
+async def _no_builder_fee_async() -> bool:
+    """:func:`_no_builder_fee` for ``ccxt.pro``, whose first order awaits the approval."""
+    return True
+
+
+def api_urls(exchange: Configurable) -> tuple[str, ...]:
+    """Every endpoint in the exchange's ``urls["api"]``, nested ones (``ccxt.pro``'s ``ws``)
+    included."""
+    found: list[str] = []
+    pending: list[object] = [exchange.urls.get("api")]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, str):
+            found.append(value)
+        elif isinstance(value, dict):
+            pending.extend(cast("dict[str, object]", value).values())
+    return tuple(sorted(found))
+
+
+def _off_testnet(exchange: Configurable) -> TypedRefusal | None:
+    """The refusal for an exchange with any endpoint off Hyperliquid's testnet, or None."""
+    urls = api_urls(exchange)
+    if urls and all(urlsplit(url).hostname == TESTNET_HOST for url in urls):
+        return None
+    return _refused("endpoints", "an endpoint is not Hyperliquid's testnet", endpoints=list(urls))
+
+
+def _quiet(exchange: Configurable) -> None:
+    """Turn off what CCXT 4.5.85 sends on the first order: a ``setReferrer`` action, and an
+    ``approveBuilderFee`` for CCXT's own builder, which then rides on every order."""
+    exchange.options["refSet"] = True
+    exchange.options["approvedBuilderFee"] = False
+    approve: object = getattr(exchange, "handle_builder_fee_approval", None)
+    stand_in = _no_builder_fee_async if inspect.iscoroutinefunction(approve) else _no_builder_fee
+    setattr(exchange, "handle_builder_fee_approval", stand_in)  # noqa: B010 - CCXT's own method
+
+
+def make_testnet_exchange(
+    make: Callable[[dict[str, object]], _E], wallet: AgentWallet
+) -> Result[_E]:
+    """``make`` (``ccxt.hyperliquid`` or ``ccxt.pro.hyperliquid``) on testnet for ``wallet``,
+    with no referrer and no builder fee. Refused when an endpoint is not testnet's. Every exchange
+    a composition root makes goes through here."""
+    exchange = make(hyperliquid_config(wallet))
+    exchange.set_sandbox_mode(True)
+    refused = _off_testnet(exchange)
+    if refused is not None:
+        return refused
+    _quiet(exchange)
+    return Ok(exchange)
+
+
 def _number(value: object) -> Decimal | None:
     if value is None or isinstance(value, bool):
         return None
@@ -440,7 +513,7 @@ class CcxtClient:
     markets: Mapping[str, str]
     clock_ns: Callable[[], int]
     on_alarm: Callable[[Mapping[str, object]], None]
-    sent: Callable[[], Iterable[str]] = lambda: ()
+    sent: Callable[[], Iterable[str]]
     subaccount: str | None = None
     open_orders_margin: int = OPEN_ORDERS_MARGIN
     poll_ns: int = POLL_NS
@@ -460,10 +533,13 @@ class CcxtClient:
         ccxt_version: str,
         clock_ns: Callable[[], int],
         on_alarm: Callable[[Mapping[str, object]], None],
-        sent: Callable[[], Iterable[str]] = lambda: (),
+        sent: Callable[[], Iterable[str]],
     ) -> Result[CcxtClient]:
         """Bind ``exchange`` for ``wallet``, refused on another CCXT version, on mainnet, for
-        another signer or for an expired wallet."""
+        another signer or for an expired wallet.
+
+        ``sent`` has no default: after a restart the journal is the only record of which
+        positions on the account the node opened, so every composition root wires it."""
         if ccxt_version != PINNED_CCXT_VERSION:
             return _refused(
                 "ccxt_version",
@@ -478,14 +554,15 @@ class CcxtClient:
                 "this client binds Hyperliquid's testnet only; a mainnet binding is the "
                 "deliberate live path",
             )
+        off_testnet = _off_testnet(exchange)
+        if off_testnet is not None:
+            return off_testnet
         signer = exchange.walletAddress
         if signer is None or signer.lower() != wallet.address.lower():
             return _refused("wallet_address", "the exchange does not sign for this agent wallet")
         if clock_ns() // 1_000_000 >= wallet.expires_at_ms:
             return _refused("expires_at", "the agent wallet has expired; approve a new one")
-        exchange.options["refSet"] = True
-        exchange.options["approvedBuilderFee"] = False
-        exchange.handle_builder_fee_approval = _no_builder_fee
+        _quiet(exchange)
         return Ok(cls(exchange, account, markets, clock_ns, on_alarm, sent, wallet.subaccount))
 
     # --- what the order path reads ---
@@ -711,8 +788,13 @@ class CcxtClient:
         Positions net per coin, so each is named by the latest filled entry on its coin that
         carries a node cloid, and read through that order; a coin with none is named by its
         symbol and reads untagged. Stop triggers and reduce-only orders are the node's protection
-        and closes: they set a position's stop and are not listed. A position this client did not
-        place but the node journal sent is adopted, so the node can close it.
+        and closes: they set a position's stop and are not listed. A position's stop is a trigger
+        carrying the same tag as the position, so a take-profit or another node's stop on the
+        coin is never read as it.
+
+        A position this client did not record as held is adopted when its entry is one this
+        client sent or the node journal holds, so the node can close it: an entry whose answer
+        was lost fills at the venue with nothing held here.
         """
         reads = self._reads
         calls: dict[str, Callable[[], Sequence[Mapping[str, object]]]] = {
@@ -727,8 +809,7 @@ class CcxtClient:
             if isinstance(answer, ErrorReading):
                 return _refused("read_back", f"the venue did not answer {call}", code=answer.code)
             got[call] = answer
-        known = {tag: name for name in self.sent() if (tag := cloid(name)) is not None}
-        self._names.update(known)
+        self._names.update({tag: name for name in self.sent() if (tag := cloid(name)) is not None})
         prices = _fill_prices(got["fetch_my_trades"])
         orders = {str(o.get("id")): o for o in got["fetch_orders"]}
         orders.update({str(o.get("id")): o for o in got["fetch_open_orders"]})
@@ -737,7 +818,7 @@ class CcxtClient:
             key=lambda o: _number(o.get("timestamp")) or Decimal(0),
         )
         stops = {
-            str(o.get("symbol")): _number(o.get("triggerPrice"))
+            (str(o.get("symbol")), _order_tag(o)): _number(o.get("triggerPrice"))
             for o in got["fetch_open_orders"]
             if _protective(o) and o.get("triggerPrice") is not None
         }
@@ -755,10 +836,10 @@ class CcxtClient:
             entry, side = _number(position.get("entryPrice")), position.get("side")
             if size is None or size == 0 or entry is None or side not in ("long", "short"):
                 continue
-            name, stop = opened.get(symbol, symbol), stops.get(symbol)
-            market = self._market_of(symbol)
+            name = opened.get(symbol, symbol)
+            stop, market = stops.get((symbol, _name_tag(name))), self._market_of(symbol)
             positions.append(VenuePosition(name, None, market, str(side), size, entry, stop))
-            if name in known.values() and name not in self._held:
+            if name in self._names.values() and name not in self._held:
                 self._held[name] = _Held(market, symbol, Side(str(side)), size, entry, stop)
         listed = tuple(
             VenueOrder(
@@ -794,7 +875,9 @@ class CcxtClient:
                     (
                         _number(o.get("triggerPrice"))
                         for o in resting
-                        if o.get("triggerPrice") is not None and o.get("symbol") == held.symbol
+                        if o.get("triggerPrice") is not None
+                        and o.get("symbol") == held.symbol
+                        and _order_tag(o) == _name_tag(name)
                     ),
                     None,
                 )
@@ -867,6 +950,16 @@ class CcxtClient:
                 "error": error,
             }
         )
+
+
+def _order_tag(order: Mapping[str, object]) -> str | None:
+    value = order.get("clientOrderId")
+    return cloid_tag(value) if isinstance(value, str) else None
+
+
+def _name_tag(name: str) -> str | None:
+    """The node tag a position name carries, None for a position named by its symbol."""
+    return cloid_tag(cloid(name))
 
 
 def _protective(order: Mapping[str, object]) -> bool:
