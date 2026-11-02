@@ -1,7 +1,8 @@
 """QMX's own maintenance, listed apart from his workflows (design 06 section 6).
 
 `GET /api/maintenance` lists the host's jobs (sync to my storage, the monthly upkeep of each
-storage, the monthly restore drill, and bringing records in) and the shipped workflows whose
+storage, the monthly restore drill, bringing records in and, on This PC, bringing node records
+home) and the shipped workflows whose
 definition is marked `meta.kind = "maintenance"`, each with its own off switch: a backup job's is
 one `[backup]` key, the records job's is `[records] on`, and a workflow's are its triggers'
 enable and disable routes. Turning one off stops it and nothing else.
@@ -129,6 +130,8 @@ def maintenance_router(
                     "output": RESULT,
                 }
             )
+            if records.pull is not None:
+                host.append(records.pull.entry(records.on()))
         workflows: list[dict[str, object]] = []
         for workflow in marked():
             found: Sequence[Mapping[str, object]] = []

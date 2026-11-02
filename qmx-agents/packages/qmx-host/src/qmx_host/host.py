@@ -191,7 +191,7 @@ from qmx_host.market_data import MarketDoor, Placement, market_router
 from qmx_host.node_link import NodeLink
 from qmx_host.process_record import STATE, recorded_host
 from qmx_host.publish_collection import publish_collection_router
-from qmx_host.records import Cadence, Harvester, Projection, Records, append_roots
+from qmx_host.records import Cadence, Harvester, Projection, Pull, Records, append_roots
 from qmx_host.sessions import RecordedHarness, SessionRecorder, write_snapshot
 from qmx_host.streams import Streams
 
@@ -1114,7 +1114,7 @@ async def serve(
                     floor=floor,
                     store=store,
                 )
-                records = records_job(home, control, role, door, store)
+                records = records_job(home, control, role, door, store, nodes)
                 # Before the engine opens: a restored folder's fires and held runs stay paused.
                 backups.hold_after_restore(store)
                 harness.doctor_from(backups.doctor_line)
@@ -1159,6 +1159,7 @@ async def serve(
                                         door.store_root if isinstance(door, MarketDoor) else None
                                     ),
                                     answers=Answers(home / ANSWERS),
+                                    door=lambda: door if isinstance(door, MarketDoor) else None,
                                 )
                             )
                         )
@@ -1607,12 +1608,18 @@ def market_door(home: Path, control: ControlService, role: Role) -> MarketDoor |
 
 
 def records_job(
-    home: Path, control: ControlService, role: Role, door: MarketDoor | TypedRefusal, store: Store
+    home: Path,
+    control: ControlService,
+    role: Role,
+    door: MarketDoor | TypedRefusal,
+    store: Store,
+    nodes: NodeLink,
 ) -> Records | None:
-    """The records job's local half on this machine: the one harvester of every app's append
-    streams, through this machine's own door (Part B AD-209). This PC also projects round trips
-    into `trade` items and scores paper lanes, since its Library is where they land. A door that
-    did not open leaves the job out; its refusal is already on stderr."""
+    """The records job on this machine: the one harvester of every app's append streams, through
+    this machine's own door (Part B AD-209). This PC also pulls each node's records home over the
+    node link's places (AD-210), projects round trips into `trade` items and scores paper lanes,
+    since its Library is where they land. A door that did not open leaves the job out; its
+    refusal is already on stderr."""
     if not isinstance(door, MarketDoor):
         return None
     folder = home / "records"
@@ -1628,6 +1635,9 @@ def records_job(
         clock=lambda: datetime.now(UTC),  # ambient-scan: allow (the host is the composition root)
         projection=projection,
         store=store,
+        pull=Pull(door, folder, here=nodes.here, places=nodes.places, key=nodes.key)
+        if role == "pc"
+        else None,
     )
 
 
