@@ -35,7 +35,7 @@ from qmx_host.host_route import ANSWERS, Answering, Answers, host_router
 from qmx_host.maintenance import maintenance_router
 from qmx_host.market_data import MarketDoor, Placement
 from qmx_host.node_link import NodeLink, Place, Unreachable
-from qmx_host.records import Cadence, Harvester, Pull, Records
+from qmx_host.records import Cadence, Fetch, Harvester, Pull, Records
 
 FAR, DOWN = "ldn-1", "fra-2"
 SERIES = f"recorder/EURUSD/bar-m1/{FAR}"
@@ -165,7 +165,7 @@ def pc_door(tmp_path: Path) -> MarketDoor:
     return MarketDoor(root=tmp_path / "pc" / "market")
 
 
-def pull(tmp_path: Path, far: Far, *, down: bool = False) -> Pull:
+def pull(tmp_path: Path, far: Far, *, down: bool = False, fetch: Fetch | None = None) -> Pull:
     places = {FAR: Place(FAR, f"http://{FAR}", ())}
     if down:
         places[DOWN] = Place(DOWN, f"http://{DOWN}", ())
@@ -176,7 +176,7 @@ def pull(tmp_path: Path, far: Far, *, down: bool = False) -> Pull:
         places=lambda: places,
         key=lambda: far.key,
         post=far.post,
-        fetch=far.fetch,
+        fetch=far.fetch if fetch is None else fetch,
     )
 
 
@@ -277,19 +277,18 @@ def test_a_resend_of_months_already_home_changes_nothing(tmp_path: Path, far: Fa
 
 def test_rows_that_do_not_match_the_listed_fingerprint_never_land(tmp_path: Path, far: Far) -> None:
     oldest = str(far.state(CLOSED[0])["fingerprint"])
-    other = far.fetch
+    newer = str(far.state(CLOSED[1])["fingerprint"])
 
     def swapped(
         url: str, body: Mapping[str, JsonValue], headers: Mapping[str, str], into: Path
     ) -> int:
-        status = other(url, body, headers, into)
+        status = far.fetch(url, body, headers, into)
         if far.fetched[-1] == oldest:
-            asked = {**body, "args": {"fingerprint": str(far.state(CLOSED[1])["fingerprint"])}}
-            status = other(url, asked, headers, into)
+            asked: dict[str, JsonValue] = {**body, "args": {"fingerprint": newer}}
+            status = far.fetch(url, asked, headers, into)
         return status
 
-    far.fetch = swapped  # type: ignore[method-assign]
-    pulling = pull(tmp_path, far)
+    pulling = pull(tmp_path, far, fetch=swapped)
 
     (first,) = pulling.round(NOW, Cadence())
 

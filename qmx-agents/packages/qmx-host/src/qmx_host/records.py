@@ -89,6 +89,7 @@ if TYPE_CHECKING:
 __all__ = [
     "JOB",
     "Cadence",
+    "Fetch",
     "Harvest",
     "HarvestRound",
     "Harvester",
