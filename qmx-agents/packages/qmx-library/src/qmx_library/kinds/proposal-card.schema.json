@@ -1,0 +1,86 @@
+{
+  "kind": "proposal-card",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "subject": {
+        "type": "string"
+      },
+      "ask": {
+        "type": "string",
+        "enum": [
+          "paper",
+          "live",
+          "admit_market",
+          "drop_market",
+          "tighten",
+          "bench"
+        ]
+      },
+      "evidence": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "verdict": {
+        "type": "string"
+      },
+      "tries": {
+        "type": "integer"
+      },
+      "preset": {
+        "type": "string"
+      },
+      "placeholders": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "cost": {
+        "type": "object"
+      },
+      "made_by": {
+        "type": "string"
+      }
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": [
+      "subject",
+      "ask",
+      "verdict",
+      "tries"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}

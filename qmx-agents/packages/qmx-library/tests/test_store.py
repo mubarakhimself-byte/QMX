@@ -273,9 +273,10 @@ def test_a_kind_is_data_and_an_unknown_or_retired_kind_is_refused(store: Store) 
         store.put(OPERATOR, Draft("workflow", "w"), on="refs/drafts/w", expected_head=None)
     kinds = sorted(p.name for p in (store.root / "kinds").iterdir())
 
-    assert len(kinds) == 43 and "workflow.schema.json" in kinds
+    assert len(kinds) == 49 and "workflow.schema.json" in kinds
     assert "trade.schema.json" in kinds
     assert "try.schema.json" in kinds
+    assert "study-spec.schema.json" in kinds and "verdict.schema.json" in kinds
 
 
 def test_a_blob_ref_reuses_stored_bytes(store: Store) -> None:

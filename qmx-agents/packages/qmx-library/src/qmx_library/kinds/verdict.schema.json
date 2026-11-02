@@ -1,0 +1,156 @@
+{
+  "kind": "verdict",
+  "schema_version": 1,
+  "class": "record",
+  "retired": false,
+  "identity": "manifest",
+  "fields": {
+    "type": "object",
+    "properties": {
+      "study": {
+        "type": "string"
+      },
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "unit": {
+        "type": "string"
+      },
+      "compiled_fp": {
+        "type": "string"
+      },
+      "principal": {
+        "type": "string"
+      },
+      "per_market": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "market": {
+              "type": "string"
+            },
+            "trades": {
+              "type": "integer"
+            },
+            "raw_r": {
+              "type": "string"
+            },
+            "shrunk_r": {
+              "type": "string"
+            },
+            "weight": {
+              "type": "string"
+            },
+            "outcome": {
+              "type": "string"
+            },
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "passed",
+                      "failed",
+                      "not_run"
+                    ]
+                  },
+                  "can_fail_on": {
+                    "type": "string"
+                  },
+                  "cannot_fail_on": {
+                    "type": "string"
+                  },
+                  "detail": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "overall": {
+        "type": "string",
+        "enum": [
+          "pass",
+          "fail",
+          "too_thin",
+          "no_trades",
+          "incomplete"
+        ]
+      },
+      "effective_tries": {
+        "type": "integer"
+      },
+      "raw_tries": {
+        "type": "integer"
+      },
+      "preset": {
+        "type": "string"
+      },
+      "versions": {
+        "type": "object",
+        "properties": {
+          "judge": {
+            "type": "string"
+          },
+          "checker": {
+            "type": "string"
+          },
+          "tester": {
+            "type": "string"
+          }
+        }
+      },
+      "says": {
+        "type": "string"
+      }
+    }
+  },
+  "blobs": {},
+  "card": {
+    "facts": [
+      "overall",
+      "effective_tries",
+      "preset",
+      "versions"
+    ],
+    "thumbnail": "icon",
+    "badge": "state"
+  },
+  "page": {
+    "tabs": [
+      {
+        "tab": "Fields",
+        "renderer": "json",
+        "source": "fields"
+      },
+      {
+        "tab": "Used in",
+        "renderer": "graph",
+        "source": "walk:*:both"
+      }
+    ]
+  },
+  "annotations": [
+    "tags",
+    "aliases",
+    "intent_key"
+  ],
+  "merge": {
+    "default": "pick-one"
+  }
+}
